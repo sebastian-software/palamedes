@@ -109,6 +109,36 @@ describe("createRemixI18nRequestScope", () => {
     expect(remixI18n.get()).toBeUndefined()
     expect(await response.text()).toBe("de:streamed.title")
   })
+
+  it("preserves fetch metadata while binding a returned response body", async () => {
+    const remixI18n = createRemixI18nRequestScope(() => createTestI18n("en"))
+    const fetched = await fetch("data:text/plain,translated")
+    Object.defineProperty(fetched, "redirected", { value: true })
+
+    const response = await remixI18n.run(new Request("https://example.test/"), () => fetched)
+    const cloned = response.clone()
+
+    expect({
+      redirected: response.redirected,
+      type: response.type,
+      url: response.url,
+    }).toStrictEqual({
+      redirected: true,
+      type: "basic",
+      url: "data:text/plain,translated",
+    })
+    expect({
+      redirected: cloned.redirected,
+      type: cloned.type,
+      url: cloned.url,
+    }).toStrictEqual({
+      redirected: true,
+      type: "basic",
+      url: "data:text/plain,translated",
+    })
+    expect(await response.text()).toBe("translated")
+    expect(await cloned.text()).toBe("translated")
+  })
 })
 
 describe("createRemixI18nServer", () => {
