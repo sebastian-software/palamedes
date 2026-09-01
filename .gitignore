@@ -47,9 +47,8 @@ benchmarks/*/.swc/
 .vitest-attachments/
 coverage/
 
-# SF plugin runtime state (config.json stays tracked)
-.sf-plugin/*
-!.sf-plugin/config.json
+# Effective Flow runtime state
+.effective-flow/
 docs/plan/
 
 # Local extraction cache (ADR-019)

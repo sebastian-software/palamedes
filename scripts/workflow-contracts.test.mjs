@@ -362,6 +362,15 @@ describe("workflow contracts", () => {
     expect(build).toContain("run: pnpm exec playwright install --with-deps chromium")
   })
 
+  it("keeps the frameworks live smoke probe independent of mutable page copy", async () => {
+    const deploySite = await readRepositoryFile(".github/workflows/deploy-site.yml")
+    const verify = job(deploySite, "verify", "__missing__")
+
+    expect(verify.split("\n").filter((line) => line.includes('check "/frameworks"'))).toEqual([
+      '          check "/frameworks" 200',
+    ])
+  })
+
   it("maps every contributor-owned repository surface in CONTRIBUTING", async () => {
     const contributing = await readRepositoryFile("CONTRIBUTING.md")
     const repositoryPaths = [
