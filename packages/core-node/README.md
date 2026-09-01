@@ -178,6 +178,13 @@ of creating an unbounded `Promise.all` fan-out. The libuv pool is shared with
 other Node filesystem and native work; `UV_THREADPOOL_SIZE` remains Node's
 process-level control.
 
+Async catalog mutations targeting the same resolved file are serialized within
+one loaded `@palamedes/core-node` process, including calls across
+`updateCatalogFileAsync` and `applyTranslationPatchesAsync`. Mutations of
+different files can still run concurrently. This in-process ordering is not a
+cross-process file lock, so separate Node processes and concurrent synchronous
+mutations must coordinate access themselves.
+
 `renderCatalogModule(messages)` exposes that same canonical native generator
 for compatibility helpers and custom integrations that already have a compiled
 message map.

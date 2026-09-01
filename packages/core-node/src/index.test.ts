@@ -10,6 +10,7 @@ import { promisify } from "node:util"
 
 import { afterEach, describe, expect, it } from "vitest"
 
+import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue"
 import {
   analyzeMdxNative,
   analyzeSourceNative,
@@ -68,6 +69,80 @@ afterEach(async () => {
 })
 
 describe("@palamedes/core-node", () => {
+  it("serializes catalog mutations per resolved target path", async () => {
+    const events: string[] = []
+    let releaseFirst: (() => void) | undefined
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+
+    const first = serializeCatalogMutation(["catalogs/de.po"], async () => {
+      events.push("first:start")
+      await firstGate
+      events.push("first:end")
+    })
+    const second = serializeCatalogMutation(["./catalogs/../catalogs/de.po"], async () => {
+      events.push("second:start")
+      events.push("second:end")
+    })
+    const independent = serializeCatalogMutation(["catalogs/fr.po"], async () => {
+      events.push("independent")
+    })
+
+    await independent
+    expect(events).toStrictEqual(["first:start", "independent"])
+    releaseFirst?.()
+    await Promise.all([first, second])
+    expect(events).toStrictEqual([
+      "first:start",
+      "independent",
+      "first:end",
+      "second:start",
+      "second:end",
+    ])
+
+    await expect(
+      serializeCatalogMutation(["catalogs/failed.po"], async () => {
+        throw new Error("failed mutation")
+      })
+    ).rejects.toThrow("failed mutation")
+    await expect(
+      serializeCatalogMutation(["catalogs/failed.po"], async () => "recovered")
+    ).resolves.toBe("recovered")
+  })
+
+  it("resolves every translation patch catalog path used by the mutation queue", () => {
+    const rootDir = path.resolve("fixtures", "project")
+    const paths = translationPatchTargetPaths({
+      config: {
+        rootDir,
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: "locales/{locale}/messages", include: ["src"] },
+          { path: "admin/{locale}.fcl", format: "Fcl", include: ["admin"] },
+        ],
+      },
+      patches: [
+        {
+          id: { catalog: "locales/{locale}/messages", locale: "de", message: "Hello" },
+          fingerprint: "first",
+          translation: { kind: "Singular", value: "Hallo" },
+        },
+        {
+          id: { catalog: "admin/{locale}.fcl", locale: "de", message: "Save" },
+          fingerprint: "second",
+          translation: { kind: "Singular", value: "Speichern" },
+        },
+      ],
+    })
+
+    expect(paths).toStrictEqual([
+      path.join(rootDir, "locales", "de", "messages.po"),
+      path.join(rootDir, "admin", "de.fcl"),
+    ])
+  })
+
   it("rejects a mismatched platform binding before exposing the native surface", () => {
     expect(() =>
       assertNativeBindingVersion("1.14.0", "@palamedes/core-node-linux-x64-gnu", {

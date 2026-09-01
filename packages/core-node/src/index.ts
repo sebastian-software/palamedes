@@ -73,6 +73,8 @@ import type {
   TranslationPatchResult as GeneratedTranslationPatchResult,
   TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
+
+import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue"
 import { loadNativeBindings, prepareNativeArgument, snapshotNativeArgument } from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
@@ -427,8 +429,9 @@ export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateR
 export async function updateCatalogFileAsync(
   request: CatalogUpdateRequest
 ): Promise<CatalogUpdateResult> {
-  const result = await native.updateCatalogFileAsync(
-    toNativeUpdateRequest("updateCatalogFileAsync", request)
+  const nativeRequest = toNativeUpdateRequest("updateCatalogFileAsync", request)
+  const result = await serializeCatalogMutation([nativeRequest.targetPath], () =>
+    native.updateCatalogFileAsync(nativeRequest)
   )
   return fromNativeCatalogUpdateResult(result)
 }
@@ -479,9 +482,10 @@ export function applyTranslationPatches(request: TranslationPatchRequest): Trans
 export async function applyTranslationPatchesAsync(
   request: TranslationPatchRequest
 ): Promise<TranslationPatchResult> {
+  const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request)
   try {
-    const result = await native.applyTranslationPatchesAsync(
-      toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request)
+    const result = await serializeCatalogMutation(translationPatchTargetPaths(nativeRequest), () =>
+      native.applyTranslationPatchesAsync(nativeRequest)
     )
     return fromNativeTranslationPatchResult(result)
   } catch (error) {
