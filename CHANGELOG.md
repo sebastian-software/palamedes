@@ -106,6 +106,13 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.22.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.22.1...palamedes-v1.22.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* **cli:** preserve graceful Windows interrupts ([#1063](https://github.com/sebastian-software/palamedes/issues/1063)) ([f39706a](https://github.com/sebastian-software/palamedes/commit/f39706a5337da708d140bb8042bc5eee891ee689))
+
 ## [1.22.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.22.0...palamedes-v1.22.1) (2026-09-01)
 
 
