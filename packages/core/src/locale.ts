@@ -96,6 +96,10 @@ export type BuildLocaleSwitchItemsOptions<TLocale extends string> = {
 const DEFAULT_LOCALE_COOKIE = "locale"
 const DEFAULT_CHOICE_COOKIE = "locale-choice"
 const CHOICE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
+const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/
+const HTTP_PROTOCOL_PATTERN = /^https?:?$/i
+const DNS_LABEL_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/
 
 // ---------------------------------------------------------------------------
 // Config-free helpers
@@ -107,9 +111,13 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   }
 
   for (const segment of cookieHeader.split(";")) {
-    const [rawKey, rawValue] = segment.split("=")
-    if (rawKey?.trim() === name) {
-      return rawValue?.trim() ?? null
+    const separator = segment.indexOf("=")
+    if (separator === -1) {
+      continue
+    }
+    const rawKey = segment.slice(0, separator)
+    if (rawKey.trim() === name) {
+      return segment.slice(separator + 1).trim()
     }
   }
 
@@ -209,6 +217,167 @@ export function buildLocaleSwitchItems<TLocale extends string>({
 // Bound controls
 // ---------------------------------------------------------------------------
 
+function isDnsLabel(value: string): boolean {
+  return DNS_LABEL_PATTERN.test(value)
+}
+
+function isDnsHost(value: string): boolean {
+  const match = /^([^:]+)(?::([0-9]{1,5}))?$/.exec(value)
+  if (!match) {
+    return false
+  }
+
+  const hostname = match[1]
+  const port = match[2]
+  if (!hostname || hostname.length > 253 || !hostname.split(".").every(isDnsLabel)) {
+    return false
+  }
+
+  return port === undefined || (Number(port) >= 1 && Number(port) <= 65_535)
+}
+
+function assertLocaleControlsConfig<TLocale extends string>(
+  config: LocaleControlsConfig<TLocale>
+): void {
+  if (!config || typeof config !== "object") {
+    throw new TypeError("defineLocaleControls: config must be an object.")
+  }
+
+  if (!Array.isArray(config.locales) || config.locales.length === 0) {
+    throw new TypeError("defineLocaleControls: locales must contain at least one locale.")
+  }
+
+  const localeSet = new Set<string>()
+  for (const [index, locale] of config.locales.entries()) {
+    if (typeof locale !== "string" || !COOKIE_VALUE_PATTERN.test(locale)) {
+      throw new TypeError(
+        `defineLocaleControls: locales[${index}] must be a non-empty, cookie-safe string.`
+      )
+    }
+    if (localeSet.has(locale)) {
+      throw new TypeError(`defineLocaleControls: locales contains duplicate locale "${locale}".`)
+    }
+    localeSet.add(locale)
+  }
+
+  if (typeof config.defaultLocale !== "string" || !localeSet.has(config.defaultLocale)) {
+    throw new TypeError("defineLocaleControls: defaultLocale must be included in locales.")
+  }
+
+  if (
+    config.cookies !== undefined &&
+    (!config.cookies || typeof config.cookies !== "object" || Array.isArray(config.cookies))
+  ) {
+    throw new TypeError("defineLocaleControls: cookies must be an object.")
+  }
+  const cookieNames = [
+    ["cookies.locale", config.cookies?.locale],
+    ["cookies.choice", config.cookies?.choice],
+  ] as const
+  for (const [field, value] of cookieNames) {
+    if (value !== undefined && (typeof value !== "string" || !COOKIE_NAME_PATTERN.test(value))) {
+      throw new TypeError(`defineLocaleControls: ${field} must be a valid cookie name.`)
+    }
+  }
+
+  if (
+    config.protocol !== undefined &&
+    (typeof config.protocol !== "string" || !HTTP_PROTOCOL_PATTERN.test(config.protocol))
+  ) {
+    throw new TypeError('defineLocaleControls: protocol must be "http" or "https".')
+  }
+
+  const hosts = config.hosts
+  if (hosts === undefined) {
+    return
+  }
+  if (!hosts || typeof hosts !== "object" || Array.isArray(hosts)) {
+    throw new TypeError("defineLocaleControls: hosts must be an object.")
+  }
+  if (hosts.mode !== undefined && !["map", "subdomain", "tld"].includes(hosts.mode)) {
+    throw new TypeError('defineLocaleControls: hosts.mode must be "map", "subdomain", or "tld".')
+  }
+
+  if (hosts.defaultHost !== undefined && hosts.defaultHost !== null) {
+    if (typeof hosts.defaultHost !== "string" || !isDnsHost(hosts.defaultHost)) {
+      throw new TypeError(
+        "defineLocaleControls: hosts.defaultHost must be a DNS hostname with an optional port."
+      )
+    }
+  }
+
+  if (hosts.locales !== undefined) {
+    if (!hosts.locales || typeof hosts.locales !== "object" || Array.isArray(hosts.locales)) {
+      throw new TypeError("defineLocaleControls: hosts.locales must be an object.")
+    }
+    for (const [locale, host] of Object.entries(hosts.locales)) {
+      if (!localeSet.has(locale)) {
+        throw new TypeError(
+          `defineLocaleControls: hosts.locales contains unsupported locale "${locale}".`
+        )
+      }
+      if (typeof host !== "string" || !isDnsHost(host)) {
+        throw new TypeError(
+          `defineLocaleControls: hosts.locales.${locale} must be a DNS hostname with an optional port.`
+        )
+      }
+    }
+  }
+
+  if (hosts.defaultTld !== undefined) {
+    if (typeof hosts.defaultTld !== "string" || !isDnsLabel(hosts.defaultTld)) {
+      throw new TypeError("defineLocaleControls: hosts.defaultTld must be a valid DNS label.")
+    }
+  }
+
+  if (hosts.tld !== undefined) {
+    if (!hosts.tld || typeof hosts.tld !== "object" || Array.isArray(hosts.tld)) {
+      throw new TypeError("defineLocaleControls: hosts.tld must be an object.")
+    }
+    for (const [tld, locale] of Object.entries(hosts.tld)) {
+      if (!isDnsLabel(tld)) {
+        throw new TypeError(
+          `defineLocaleControls: hosts.tld key "${tld}" must be a valid DNS label.`
+        )
+      }
+      if (typeof locale !== "string" || !localeSet.has(locale)) {
+        throw new TypeError(
+          `defineLocaleControls: hosts.tld.${tld} must reference a locale from locales.`
+        )
+      }
+    }
+  }
+
+  if (hosts.mode === "subdomain" || hosts.mode === "tld") {
+    for (const locale of config.locales) {
+      if (!isDnsLabel(locale)) {
+        throw new TypeError(
+          `defineLocaleControls: locale "${locale}" must be a valid DNS label for hosts.mode "${hosts.mode}".`
+        )
+      }
+    }
+  }
+}
+
+function snapshotLocaleControlsConfig<TLocale extends string>(
+  config: LocaleControlsConfig<TLocale>
+): LocaleControlsConfig<TLocale> {
+  const hosts = config.hosts
+  return {
+    ...config,
+    locales: Object.freeze([...config.locales]),
+    labels: config.labels ? { ...config.labels } : undefined,
+    cookies: config.cookies ? { ...config.cookies } : undefined,
+    hosts: hosts
+      ? {
+          ...hosts,
+          locales: hosts.locales ? { ...hosts.locales } : undefined,
+          tld: hosts.tld ? { ...hosts.tld } : undefined,
+        }
+      : undefined,
+  }
+}
+
 export type LocaleControls<TLocale extends string> = {
   readonly locales: readonly TLocale[]
   readonly defaultLocale: TLocale
@@ -267,6 +436,8 @@ export type LocaleControls<TLocale extends string> = {
 export function defineLocaleControls<TLocale extends string>(
   config: LocaleControlsConfig<TLocale>
 ): LocaleControls<TLocale> {
+  assertLocaleControlsConfig(config)
+  config = snapshotLocaleControlsConfig(config)
   const localeCookie = config.cookies?.locale ?? DEFAULT_LOCALE_COOKIE
   const choiceCookie = config.cookies?.choice ?? DEFAULT_CHOICE_COOKIE
   const labels = resolveLabels(config.locales, config.labels)

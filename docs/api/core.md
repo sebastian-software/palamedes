@@ -254,6 +254,10 @@ matrix and reusable in apps:
   subdomain, and tld strategies. Host-carrying URLs from `canonicalUrl` and
   `suggest` are protocol-relative (`//host/path`) unless the config sets
   `protocol` (e.g. `"https"`), so HTTPS pages never link users to `http://`.
+  Invalid configuration is rejected at construction time with field-specific
+  errors. Cookie names, protocols, configured hosts, and TLD labels are
+  validated; locale identifiers must be DNS-safe only for the host-based
+  `subdomain` and `tld` strategies.
 
 ## Macro Entry Point
 
