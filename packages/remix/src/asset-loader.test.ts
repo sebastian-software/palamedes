@@ -97,6 +97,22 @@ describe("createPalamedesRemixAssetLoader", () => {
     )
   })
 
+  it("targets the Remix UI compiled runtime for lowered rich messages", () => {
+    const loader = createPalamedesRemixAssetLoader()
+    const loaded = loader(pathToFileURL("/repo/app/public/rich.js").href, assetLoadContext, () => ({
+      format: "module",
+      source: [
+        'import { Trans as Message } from "@palamedes/remix/macro"',
+        'import { jsxs } from "remix/ui/jsx-runtime"',
+        'export const view = jsxs(Message, { children: ["Hello ", name] })',
+      ].join("\n"),
+    }))
+
+    expect(String(loaded.source)).toContain('import { Trans } from "@palamedes/remix/compiled"')
+    expect(String(loaded.source)).toContain('jsxs(Trans, { id: "')
+    expect(String(loaded.source)).not.toContain("@palamedes/remix/macro")
+  })
+
   it("honors browser-specific include and exclude filters", () => {
     const source = [
       'import { t } from "@palamedes/core/macro"',
@@ -125,8 +141,10 @@ function createAssetFixture(fileName: string, source: string): { rootDir: string
   const palamedesPackages = path.join(rootDir, "node_modules", "@palamedes")
   const runtimePath = path.resolve(import.meta.dirname, "../..", "runtime")
   const installedRuntimePath = path.join(palamedesPackages, "runtime")
+  const installedRemixIntegrationPath = path.join(palamedesPackages, "remix")
   mkdirSync(publicDirectory, { recursive: true })
   mkdirSync(installedRuntimePath, { recursive: true })
+  mkdirSync(installedRemixIntegrationPath, { recursive: true })
   writeFileSync(path.join(publicDirectory, fileName), source)
   copyFileSync(
     path.join(runtimePath, "package.json"),
@@ -135,5 +153,13 @@ function createAssetFixture(fileName: string, source: string): { rootDir: string
   cpSync(path.join(runtimePath, "dist"), path.join(installedRuntimePath, "dist"), {
     recursive: true,
   })
+  writeFileSync(
+    path.join(installedRemixIntegrationPath, "package.json"),
+    JSON.stringify({
+      name: "@palamedes/remix",
+      type: "module",
+      exports: { "./compiled": "./compiled.js" },
+    })
+  )
   return { rootDir }
 }

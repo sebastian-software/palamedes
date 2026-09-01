@@ -397,7 +397,7 @@ impl<'a> Visit<'a> for ImportCollector {
 
         if matches!(
             source,
-            "@palamedes/react/compiled" | "@palamedes/solid/compiled"
+            "@palamedes/react/compiled" | "@palamedes/remix/compiled" | "@palamedes/solid/compiled"
         ) && it.import_kind == ImportOrExportKind::Value
         {
             if let Some(specifiers) = &it.specifiers {

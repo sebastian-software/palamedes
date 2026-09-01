@@ -1938,22 +1938,19 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn streams_output_events_while_the_plugin_runs() {
-        use std::os::unix::fs::PermissionsExt;
         use std::path::Path;
 
         use super::invoke_binary;
 
         let root = temp_dir("streaming-plugin");
         let script = root.join("plugin");
-        fs::write(
+        write_executable_fixture(
             &script,
             "#!/bin/sh\nread _request\n\
              printf '{\"event\":\"output\",\"text\":\"one\"}\\n'\n\
              printf '{\"event\":\"output\",\"text\":\"two\"}\\n'\n\
              printf '{\"event\":\"result\",\"text\":\"done\",\"exitCode\":0}\\n'\n",
-        )
-        .expect("plugin script");
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
             binary_path: script,
@@ -1979,18 +1976,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn times_out_a_non_terminating_describe() {
-        use std::os::unix::fs::PermissionsExt;
-
         use super::invoke_binary;
 
         let root = temp_dir("describe-timeout");
         let script = root.join("plugin");
-        fs::write(
+        write_executable_fixture(
             &script,
             "#!/bin/sh\nread _request\nwhile :; do sleep 30; done\n",
-        )
-        .expect("plugin script");
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
             binary_path: script,
@@ -2013,18 +2006,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn eof_does_not_bypass_the_describe_deadline() {
-        use std::os::unix::fs::PermissionsExt;
-
         use super::invoke_binary;
 
         let root = temp_dir("describe-eof-timeout");
         let script = root.join("plugin");
-        fs::write(
+        write_executable_fixture(
             &script,
             "#!/bin/sh\nread _request\nexec 1>&-\nwhile :; do sleep 30; done\n",
-        )
-        .expect("plugin script");
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
             binary_path: script,
@@ -2049,19 +2038,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn rejects_plugin_stdout_over_the_total_byte_budget() {
-        use std::os::unix::fs::PermissionsExt;
-
         use super::invoke_binary;
 
         let root = temp_dir("stdout-budget");
         let script = root.join("plugin");
-        fs::write(
+        write_executable_fixture(
             &script,
             "#!/bin/sh\nread _request\n\
              printf '{\"event\":\"output\",\"text\":\"this is deliberately too large\"}\\n'\n",
-        )
-        .expect("plugin script");
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
             binary_path: script,
@@ -2116,7 +2101,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_broken_plugin_blocks_only_its_own_namespace() {
-        use std::os::unix::fs::PermissionsExt;
         use std::path::Path;
 
         use super::load_registry;
@@ -2131,14 +2115,12 @@ mod tests {
         )
         .expect("plugin manifest");
         let script = good.join("describe");
-        fs::write(
+        write_executable_fixture(
             &script,
             "#!/bin/sh\nread _request\n\
              printf '{\"event\":\"manifest\",\"name\":\"good\",\"protocolVersion\":1,\
              \"commands\":{\"inspect\":{\"description\":\"d\"}}}\\n'\n",
-        )
-        .expect("describe script");
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        );
         fs::write(
             root.join("palamedes.yaml"),
             r"
@@ -2166,8 +2148,6 @@ plugins:
     #[cfg(unix)]
     #[test]
     fn caches_plugin_manifests_and_redescribes_only_changed_binaries() {
-        use std::os::unix::fs::PermissionsExt;
-
         use super::{load_registry, plugin_manifest_cache_path};
 
         let root = temp_dir("manifest-cache");
@@ -2180,16 +2160,14 @@ plugins:
             )
             .expect("plugin manifest");
             let script = plugin.join("describe");
-            fs::write(
+            write_executable_fixture(
                 &script,
                 format!(
                     "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
                      printf '{{\"event\":\"manifest\",\"name\":\"{namespace}\",\
                      \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n"
                 ),
-            )
-            .expect("describe script");
-            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+            );
         }
         fs::write(
             root.join("palamedes.yaml"),
@@ -2221,7 +2199,7 @@ plugins:
         let alpha_script = root.join("alpha/describe");
         let mut changed = fs::read_to_string(&alpha_script).expect("alpha script");
         changed.push('\n');
-        fs::write(&alpha_script, changed).expect("change alpha binary identity");
+        write_executable_fixture(&alpha_script, changed);
         let refreshed =
             load_registry(&config, &root, Path::new("pmds")).expect("refreshed registry");
         assert_eq!(refreshed.plugins.len(), 2);
@@ -2235,8 +2213,6 @@ plugins:
     #[cfg(unix)]
     #[test]
     fn cached_manifests_still_enforce_namespace_collisions() {
-        use std::os::unix::fs::PermissionsExt;
-
         use super::load_registry;
 
         let root = temp_dir("cached-collision");
@@ -2249,14 +2225,12 @@ plugins:
             )
             .expect("plugin manifest");
             let script = plugin.join("describe");
-            fs::write(
+            write_executable_fixture(
                 &script,
                 "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
                  printf '{\"event\":\"manifest\",\"name\":\"shared\",\
                  \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
-            )
-            .expect("describe script");
-            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+            );
         }
         fs::write(
             root.join("palamedes.yaml"),
@@ -2377,5 +2351,29 @@ catalogs:
         ));
         fs::create_dir_all(&path).expect("temp directory");
         path
+    }
+
+    #[cfg(unix)]
+    fn write_executable_fixture(path: &Path, contents: impl AsRef<[u8]>) {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let temporary = path.with_extension(format!("fixture-{nonce}"));
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .expect("create executable fixture");
+        file.write_all(contents.as_ref())
+            .expect("write executable fixture");
+        file.sync_all().expect("sync executable fixture");
+        drop(file);
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o755))
+            .expect("chmod executable fixture");
+        fs::rename(&temporary, path).expect("publish executable fixture");
     }
 }
