@@ -44,12 +44,15 @@ when the requested namespace cannot be served.
 
 After a successful `describe`, the host caches the validated manifest in
 `.palamedes/plugin-manifests.json`. Later plugin invocations reuse manifests
-whose canonical executable path, byte length, and modification time still
-match, while continuing to validate every configured namespace and collision.
-Changing a binary, the host version, or the protocol version forces another
-`describe`. The cache is only a startup optimization: missing, corrupt, or
-unwritable cache data falls back to the normal handshake without blocking a
-plugin command.
+whose canonical executable path, byte length, modification time, and SHA-256
+content digest still match, while continuing to validate every configured
+namespace and collision. Changing a binary, the host version, or the protocol
+version forces another `describe`, including replacements that preserve file
+size and timestamps. The cache is only a startup optimization: missing,
+corrupt, or unwritable cache data falls back to the normal handshake without
+blocking a plugin command. To force a fresh handshake manually, remove
+`.palamedes/plugin-manifests.json`; the host recreates it on the next plugin
+invocation.
 
 The host consumes its own invocation flags before it forwards `args` to the
 plugin: `--json`, `--config PATH`, `-c PATH`, `--config=PATH`, and
