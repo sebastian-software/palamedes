@@ -74,6 +74,10 @@ import type {
   TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
 
+import {
+  coordinateInitialCatalogBuild,
+  selectedCatalogBuildKey,
+} from "./catalogCompilationCoordinator"
 import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue"
 import { loadNativeBindings, prepareNativeArgument, snapshotNativeArgument } from "./native-loader"
 
@@ -1027,11 +1031,14 @@ export async function compileCatalogArtifactSelectedAsync(
   compiledIds: string[]
 ): Promise<CatalogArtifactResult> {
   const request: NativeCatalogArtifactSelectedRequest = {
-    config: toNativeArtifactConfig(config),
+    config: toOwnedNativeArtifactConfig(config),
     resourcePath,
-    compiledIds,
+    compiledIds: [...compiledIds],
   }
-  return fromNativeCatalogArtifactResult(await native.compileCatalogArtifactSelectedAsync(request))
+  const key = selectedCatalogBuildKey(request.config, request.resourcePath)
+  return coordinateInitialCatalogBuild(key, async () =>
+    fromNativeCatalogArtifactResult(await native.compileCatalogArtifactSelectedAsync(request))
+  )
 }
 
 export function compileCatalogModule(

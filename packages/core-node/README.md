@@ -178,6 +178,14 @@ of creating an unbounded `Promise.all` fan-out. The libuv pool is shared with
 other Node filesystem and native work; `UV_THREADPOOL_SIZE` remains Node's
 process-level control.
 
+Concurrent selected-artifact calls for the same catalog/configuration are
+coordinated before they enter the worker pool. The first call performs an
+initial native build; callers that arrived while it was running wait in
+JavaScript and only enter native code after the cache is warm. If that initial
+build fails, its error is shared with those waiting callers instead of
+rebuilding the same broken catalog once per request. Independent catalogs can
+still compile concurrently.
+
 Async catalog mutations targeting the same resolved file are serialized within
 one loaded `@palamedes/core-node` process, including calls across
 `updateCatalogFileAsync` and `applyTranslationPatchesAsync`. Mutations of

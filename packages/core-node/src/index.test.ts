@@ -10,6 +10,10 @@ import { promisify } from "node:util"
 
 import { afterEach, describe, expect, it } from "vitest"
 
+import {
+  coordinateInitialCatalogBuild,
+  selectedCatalogBuildKey,
+} from "./catalogCompilationCoordinator"
 import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue"
 import {
   analyzeMdxNative,
@@ -69,6 +73,79 @@ afterEach(async () => {
 })
 
 describe("@palamedes/core-node", () => {
+  it("keeps same-key initial catalog builds out of the worker pool", async () => {
+    let releaseLeader: (() => void) | undefined
+    const leaderGate = new Promise<void>((resolve) => {
+      releaseLeader = resolve
+    })
+    const events: string[] = []
+
+    const leader = coordinateInitialCatalogBuild("shared", async () => {
+      events.push("leader:start")
+      await leaderGate
+      events.push("leader:end")
+      return "leader"
+    })
+    const follower = coordinateInitialCatalogBuild("shared", async () => {
+      events.push("follower:start")
+      return "follower"
+    })
+    const independent = coordinateInitialCatalogBuild("independent", async () => {
+      events.push("independent:start")
+      return "independent"
+    })
+
+    await independent
+    expect(events).toEqual(["leader:start", "independent:start"])
+    releaseLeader?.()
+    await expect(Promise.all([leader, follower])).resolves.toEqual(["leader", "follower"])
+    expect(events).toEqual(["leader:start", "independent:start", "leader:end", "follower:start"])
+  })
+
+  it("shares an initial catalog build failure with queued followers", async () => {
+    let attempts = 0
+    let rejectLeader: ((error: Error) => void) | undefined
+    const leaderGate = new Promise<never>((_resolve, reject) => {
+      rejectLeader = reject
+    })
+    const failure = new Error("broken catalog")
+
+    const leader = coordinateInitialCatalogBuild("failing", async () => {
+      attempts += 1
+      return leaderGate
+    })
+    const follower = coordinateInitialCatalogBuild("failing", async () => {
+      attempts += 1
+      return "unexpected"
+    })
+
+    await Promise.resolve()
+    expect(attempts).toBe(1)
+    rejectLeader?.(failure)
+    await expect(leader).rejects.toBe(failure)
+    await expect(follower).rejects.toBe(failure)
+    expect(attempts).toBe(1)
+  })
+
+  it("keys selected catalog builds without their selected IDs", () => {
+    const config = {
+      rootDir: "fixtures/app",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+
+    expect(selectedCatalogBuildKey(config, "fixtures/app/locales/de/messages.po")).toBe(
+      selectedCatalogBuildKey(
+        { ...config, catalogs: config.catalogs.map((catalog) => ({ ...catalog })) },
+        "fixtures/app/locales/de/messages.po"
+      )
+    )
+    expect(selectedCatalogBuildKey(config, "fixtures/app/locales/de/messages.po")).not.toBe(
+      selectedCatalogBuildKey(config, "fixtures/app/locales/fr/messages.po")
+    )
+  })
+
   it("serializes catalog mutations per resolved target path", async () => {
     const events: string[] = []
     let releaseFirst: (() => void) | undefined

@@ -68,6 +68,12 @@ the caller for bulk work; do not launch an unbounded promise fan-out. The pool
 is shared with other Node filesystem and native work, and
 `UV_THREADPOOL_SIZE` is the process-level pool control.
 
+Selected-artifact calls that target the same catalog and configuration are
+coordinated in JavaScript. Only the first cold build enters the worker pool;
+concurrent followers wait for it, then use the warmed native cache. Followers
+also observe the first build error without retrying the same broken catalog.
+Different catalogs remain concurrent.
+
 `renderCatalogModule(messages)` exposes the same native module generator for
 custom integrations that already have a compiled message map. The TypeScript
 compatibility helper delegates to this function; there is no second ICU parser
