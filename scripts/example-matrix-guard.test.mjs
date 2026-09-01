@@ -139,6 +139,13 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
     expect(selectScreenshotExamples({ framework: "vite" })).toEqual([])
   })
 
+  it("keeps the Remix cookie proof in browser selection and out of screenshots", () => {
+    expect(selectBrowserExamples({ framework: "remix" }).map((example) => example.id)).toEqual([
+      "remix-cookie",
+    ])
+    expect(selectScreenshotExamples({ framework: "remix" })).toEqual([])
+  })
+
   it("runs every browser-capable example while gating capture to the screenshot set", () => {
     const plan = planBrowserRun({}, { captureScreenshots: true, screenshotDir: "/tmp/shots" })
     const captureFor = (id) =>
@@ -148,6 +155,7 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
       selectBrowserExamples({}).map((example) => example.id)
     )
     expect(captureFor("vite-mdx")).toBe(false)
+    expect(captureFor("remix-cookie")).toBe(false)
     expect(captureFor("nextjs-cookie")).toBe(true)
     expect(plan.every(({ options }) => options.screenshotDir === "/tmp/shots")).toBe(true)
     expect(plan.filter(({ options }) => options.captureScreenshots)).toHaveLength(

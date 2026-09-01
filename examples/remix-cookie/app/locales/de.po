@@ -6,14 +6,40 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-#: examples/remix-cookie/app/page.ts#renderHomePage
-msgid "Remix v3 is rendering {locale} with Palamedes"
-msgstr "Remix v3 rendert {locale} mit Palamedes"
+#: examples/remix-cookie/app/public/interactive.tsx#ClientProof
+msgid ""
+"{audience, select, developer {Built for developers} other {Built for "
+"everyone}}"
+msgstr ""
+"{audience, select, developer {Für Entwickler gemacht} other {Für alle "
+"gemacht}}"
 
-#: examples/remix-cookie/app/page.ts#renderHomePage
-msgid "This response was translated inside a request-scoped Remix handler."
-msgstr "Diese Antwort wurde in einem request-lokalen Remix-Handler übersetzt."
+#: examples/remix-cookie/app/public/interactive.tsx#ClientProof
+msgid "{count, plural, one {# browser message} other {# browser messages}}"
+msgstr "{count, plural, one {# Browser-Nachricht} other {# Browser-Nachrichten}}"
 
 #: examples/remix-cookie/app/page.ts#renderHomePage
 msgid "{seatCount, plural, one {# seat left} other {# seats left}}"
 msgstr "{seatCount, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: examples/remix-cookie/app/public/interactive.tsx#ClientProof
+msgid "Add a browser message"
+msgstr "Browser-Nachricht hinzufügen"
+
+#: examples/remix-cookie/app/public/interactive.tsx#ClientProof
+msgid "Open the <0>Remix client guide</0>."
+msgstr "Öffne den <0>Remix-Client-Leitfaden</0>."
+
+#: examples/remix-cookie/app/public/interactive.tsx#ClientProof
+msgid "Palamedes is active in the browser"
+msgstr "Palamedes ist im Browser aktiv"
+
+#: examples/remix-cookie/app/frame-page.tsx#renderFrameDocument
+#: examples/remix-cookie/app/page.ts#renderHomePage
+msgid "Remix v3 is rendering {locale} with Palamedes"
+msgstr "Remix v3 rendert {locale} mit Palamedes"
+
+#: examples/remix-cookie/app/frame-page.tsx#renderFrameContent
+#: examples/remix-cookie/app/page.ts#renderHomePage
+msgid "This response was translated inside a request-scoped Remix handler."
+msgstr "Diese Antwort wurde in einem request-lokalen Remix-Handler übersetzt."

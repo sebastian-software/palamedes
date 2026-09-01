@@ -49,10 +49,10 @@ if (selectExamples({ framework: "vite", strategy: "client" }).length !== 1) {
   throw new Error("the Vite selector must return the single client-only proof")
 }
 if (
-  selectBrowserExamples({}).length !== 21 ||
-  selectBrowserExamples({ framework: "remix" }).length !== 0
+  selectBrowserExamples({}).length !== 22 ||
+  selectBrowserExamples({ framework: "remix" }).length !== 1
 ) {
-  throw new Error("the browser selector must include Vite and exclude Remix")
+  throw new Error("the browser selector must include Vite and the focused Remix cookie proof")
 }
 if (
   selectScreenshotExamples({}).length !== 20 ||
@@ -63,5 +63,5 @@ if (
 }
 
 console.log(
-  "Example matrix verified: 25 smoke examples; 21 browser examples; 6 server families × 4 strategies + Vite MDX."
+  "Example matrix verified: 25 smoke examples; 22 browser examples; 6 server families × 4 strategies + Vite MDX."
 )

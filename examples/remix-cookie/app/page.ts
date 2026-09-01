@@ -11,6 +11,8 @@ export type RenderHomePageOptions = {
   banner?: string | null
   locale: string | undefined
   localeLabel: string
+  clientBootstrap?: string
+  clientProof?: string
   strategyLabel?: string
   switchLinks?: LocaleSwitchLink[]
 }
@@ -19,6 +21,8 @@ export function renderHomePage({
   banner,
   locale,
   localeLabel,
+  clientBootstrap,
+  clientProof,
   strategyLabel = "cookie",
   switchLinks,
 }: RenderHomePageOptions): string {
@@ -53,8 +57,11 @@ export function renderHomePage({
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(description)}</p>
       <p>${escapeHtml(seats)}</p>
-      <p>Active locale: <strong>${escapeHtml(localeLabel)}</strong></p>
+      <p>Active locale: <strong data-testid="server-locale-value">${escapeHtml(localeLabel)}</strong></p>
+      ${clientProof ? `<div data-remix-client-proof>${clientProof}</div>` : ""}
     </main>
+    ${clientBootstrap ?? ""}
+    ${clientProof ? '<script type="module" src="/assets/app/public/client.tsx"></script>' : ""}
   </body>
 </html>`
 }
@@ -79,7 +86,7 @@ function renderLocaleSwitcher(
       }
 
       return `<form action="/locale" method="post">
-        <button aria-pressed="${active}" name="locale" type="submit" value="${escapeHtml(locale)}">
+        <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" name="locale" type="submit" value="${escapeHtml(locale)}">
           ${escapeHtml(LOCALE_LABELS[locale])}
         </button>
       </form>`
