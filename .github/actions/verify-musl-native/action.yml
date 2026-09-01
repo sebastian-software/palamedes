@@ -11,6 +11,10 @@ inputs:
   rust_target:
     description: Rust target required by a musl CLI package.
     required: true
+  cargo-cache:
+    description: Cache Cargo downloads used inside the Alpine build container.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -42,17 +46,36 @@ runs:
 
     # A core-node musl addon is a dynamically linked cdylib. Build it in the
     # same native-musl environment used to prove that it will load in Alpine.
+    - name: Restore musl container Cargo cache
+      if: startsWith(inputs.package_name, '@palamedes/core-node-') && inputs.cargo-cache == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ${{ runner.temp }}/palamedes-musl-cargo/${{ inputs.rust_target }}
+        key: palamedes-musl-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          palamedes-musl-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-
+
     - name: Build musl core-node addon (native musl toolchain)
       if: startsWith(inputs.package_name, '@palamedes/core-node-')
       shell: bash
-      run: >
-        docker run --rm
-        -v "$PWD:/workspace"
-        -w "/workspace/${{ inputs.package_dir }}"
-        -e PALAMEDES_RUST_PROFILE=release
-        rust:alpine
-        sh -c "apk add --no-cache nodejs build-base &&
-        node ../core-node/scripts/build-native.mjs"
+      run: |
+        cargo_mounts=()
+        if [ "${{ inputs.cargo-cache }}" = "true" ]; then
+          cache_root="$RUNNER_TEMP/palamedes-musl-cargo/${{ inputs.rust_target }}"
+          mkdir -p "$cache_root/registry" "$cache_root/git"
+          cargo_mounts+=(
+            -v "$cache_root/registry:/usr/local/cargo/registry"
+            -v "$cache_root/git:/usr/local/cargo/git"
+          )
+        fi
+        docker run --rm \
+          "${cargo_mounts[@]}" \
+          -v "$PWD:/workspace" \
+          -w "/workspace/${{ inputs.package_dir }}" \
+          -e PALAMEDES_RUST_PROFILE=release \
+          rust:1.95-alpine \
+          sh -c "apk add --no-cache nodejs build-base &&
+          node ../core-node/scripts/build-native.mjs"
 
     - name: Smoke-test musl native Node package
       if: startsWith(inputs.package_name, '@palamedes/core-node-')

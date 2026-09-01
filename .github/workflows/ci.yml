@@ -201,7 +201,9 @@ jobs:
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
         with:
-          rust-cache: "false"
+          # This lane publishes nothing. Cache both host and container build
+          # inputs here; the publish workflow keeps its cold-build policy.
+          rust-cache: "true"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -222,6 +224,7 @@ jobs:
           package_name: ${{ matrix.node_package }}
           package_dir: ${{ matrix.node_dir }}
           rust_target: ${{ matrix.rust_target }}
+          cargo-cache: "true"
 
   validate-rust:
     name: validate-rust (${{ matrix.os }}, Rust ${{ matrix.toolchain }})
