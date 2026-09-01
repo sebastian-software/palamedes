@@ -2090,9 +2090,13 @@ mod tests {
 
         use super::{isolate_process_group, terminate_plugin_tree};
 
-        let mut command = Command::new("/bin/sh");
+        // Use a single long-lived group leader. A shell loop would spawn
+        // `sleep` descendants whose dead process-group entries can remain
+        // visible until the runner's init process reaps them, making the
+        // immediate group-existence assertion race with unrelated reaping.
+        let mut command = Command::new("/bin/sleep");
         command
-            .args(["-c", "while :; do sleep 1; done"])
+            .arg("30")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
