@@ -109,7 +109,7 @@ impl From<ConfigLintRules> for SourceRuleOptions {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConfigCatalog {
     pub path: String,
     #[serde(default)]
@@ -239,6 +239,65 @@ fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), Co
     if let Some(key) = unknown_top_level_keys(value).into_iter().next() {
         return invalid(path, &format!("Unknown key \"{key}\"."));
     }
+    check_nested_keys(value, path)
+}
+
+fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), ConfigError> {
+    const MDX_CAMEL_CASE_KEYS: &[(&str, &str)] = &[
+        ("translatableAttributes", "translatable-attributes"),
+        ("frontMatterFields", "front-matter-fields"),
+        ("transModule", "trans-module"),
+        ("runtimeModule", "runtime-module"),
+        ("ignoreDirective", "ignore-directive"),
+        ("keepSourceFallbacks", "keep-source-fallbacks"),
+    ];
+    const MDX_KEYS: &[&str] = &[
+        "framework",
+        "translatable-attributes",
+        "translatable_attributes",
+        "front-matter-fields",
+        "front_matter_fields",
+        "trans-module",
+        "trans_module",
+        "runtime-module",
+        "runtime_module",
+        "ignore-directive",
+        "ignore_directive",
+        "keep-source-fallbacks",
+        "keep_source_fallbacks",
+    ];
+    const CATALOG_KEYS: &[&str] = &["path", "format", "po", "include", "exclude"];
+
+    if let Some(mdx) = value.get("mdx").and_then(serde_json::Value::as_object) {
+        for (camel, kebab) in MDX_CAMEL_CASE_KEYS {
+            if mdx.contains_key(*camel) {
+                return invalid(
+                    path,
+                    &format!(
+                        "Unknown key \"mdx.{camel}\". Palamedes data configs use kebab-case: \"mdx.{kebab}\"."
+                    ),
+                );
+            }
+        }
+        if let Some(key) = mdx.keys().find(|key| !MDX_KEYS.contains(&key.as_str())) {
+            return invalid(path, &format!("Unknown key \"mdx.{key}\"."));
+        }
+    }
+
+    if let Some(catalogs) = value.get("catalogs").and_then(serde_json::Value::as_array) {
+        for (index, catalog) in catalogs.iter().enumerate() {
+            let Some(catalog) = catalog.as_object() else {
+                continue;
+            };
+            if let Some(key) = catalog
+                .keys()
+                .find(|key| !CATALOG_KEYS.contains(&key.as_str()))
+            {
+                return invalid(path, &format!("Unknown key \"catalogs[{index}].{key}\"."));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -1219,6 +1278,72 @@ catalogs:
         let message = error.to_string();
         assert!(message.contains("pseudoLocale"), "got: {message}");
         assert!(message.contains("pseudo-locale"), "got: {message}");
+    }
+
+    #[test]
+    fn rejects_camel_case_mdx_keys_with_a_kebab_case_hint() {
+        let app = temp_dir("camel-mdx-config");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+mdx:
+  translatableAttributes: [alt, title]
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let error = load_config(&app, None).expect_err("camelCase MDX key must be rejected");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("mdx.translatableAttributes"),
+            "got: {message}"
+        );
+        assert!(
+            message.contains("mdx.translatable-attributes"),
+            "got: {message}"
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_nested_config_keys_with_their_paths() {
+        for (name, config, expected) in [
+            (
+                "unknown-mdx-key",
+                r#"
+locales: [en]
+source-locale: en
+mdx:
+  frontmatter-fields: [title]
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+                "mdx.frontmatter-fields",
+            ),
+            (
+                "unknown-catalog-key",
+                r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    includes: [src]
+"#,
+                "catalogs[0].includes",
+            ),
+        ] {
+            let app = temp_dir(name);
+            fs::write(app.join(CONFIG_FILENAME), config).expect("write config");
+
+            let error = load_config(&app, None).expect_err("unknown nested key must be rejected");
+            assert!(error.to_string().contains(expected), "got: {error}");
+        }
     }
 
     #[test]
