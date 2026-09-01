@@ -15,12 +15,17 @@ function assertIncludes(file, value) {
 }
 
 function productionPnpmPackages(file) {
-  return new Set(
-    read(file)
-      .split("\n")
-      .filter((line) => line.startsWith("pnpm add ") && !line.startsWith("pnpm add -D "))
-      .flatMap((line) => line.slice("pnpm add ".length).trim().split(/\s+/u))
+  const installBlock = read(file).match(
+    /^## (?:1\. Install the packages|Installation)\n\n```bash\n(?<commands>[\s\S]*?)\n```/mu
   )
+  assert.ok(installBlock?.groups?.commands, `${file} must have a canonical install block`)
+
+  const productionCommand = installBlock.groups.commands
+    .split("\n")
+    .find((line) => line.startsWith("pnpm add ") && !line.startsWith("pnpm add -D "))
+  assert.ok(productionCommand, `${file} must have a runtime install command`)
+
+  return new Set(productionCommand.slice("pnpm add ".length).trim().split(/\s+/u))
 }
 
 test("Next.js setup installs its standalone server boundary dependency", () => {
