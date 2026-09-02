@@ -33,9 +33,10 @@ pub use self::types::{
 /// Resolves a configured catalog pattern to its concrete storage file.
 ///
 /// A matching storage extension already present in the configured pattern is
-/// preserved for compatibility. Otherwise the format extension is appended to
-/// the expanded path, so dots in locale names or logical catalog names remain
-/// part of the filename.
+/// preserved for compatibility. Case variants and a trailing dot are replaced
+/// with the canonical storage extension, matching the legacy path behavior.
+/// Otherwise the format extension is appended to the expanded path, so dots in
+/// locale names or logical catalog names remain part of the filename.
 #[must_use]
 pub fn resolve_catalog_file_path(
     root_dir: &Path,
@@ -45,13 +46,18 @@ pub fn resolve_catalog_file_path(
 ) -> PathBuf {
     let expanded = root_dir.join(catalog_path.replace("{locale}", locale));
     let extension = format.extension();
-    let has_storage_extension = Path::new(catalog_path)
+    let configured_extension = Path::new(catalog_path)
         .extension()
-        .and_then(|value| value.to_str())
-        .is_some_and(|value| value == extension);
+        .and_then(|value| value.to_str());
 
-    if has_storage_extension {
+    if configured_extension == Some(extension) {
         return expanded;
+    }
+
+    if configured_extension
+        .is_some_and(|value| value.is_empty() || value.eq_ignore_ascii_case(extension))
+    {
+        return expanded.with_extension(extension);
     }
 
     let mut suffixed = expanded.into_os_string();

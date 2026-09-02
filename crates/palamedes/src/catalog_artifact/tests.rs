@@ -16,7 +16,7 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn catalog_file_paths_append_the_format_without_truncating_dots() {
+fn catalog_file_paths_preserve_logical_dots_and_canonicalize_storage_extensions() {
     let root = Path::new("workspace");
     let cases = [
         (
@@ -33,6 +33,24 @@ fn catalog_file_paths_append_the_format_without_truncating_dots() {
         ),
         (
             "locales/{locale}/messages.po",
+            "de",
+            PalamedesCatalogFormat::Po,
+            "locales/de/messages.po",
+        ),
+        (
+            "locales/{locale}/messages.PO",
+            "de",
+            PalamedesCatalogFormat::Po,
+            "locales/de/messages.po",
+        ),
+        (
+            "locales/{locale}/messages.Po",
+            "de",
+            PalamedesCatalogFormat::Po,
+            "locales/de/messages.po",
+        ),
+        (
+            "locales/{locale}/messages.",
             "de",
             PalamedesCatalogFormat::Po,
             "locales/de/messages.po",
