@@ -244,9 +244,11 @@ export function registryLookup(spec, field = "version", root = process.cwd()) {
 export function isMissingFromRegistry(output) {
   return (
     output.includes("404 Not Found") ||
+    output.includes("npm error code E404") ||
     output.includes("[ERR_PNPM_FETCH_404]") ||
     output.includes("[ERR_PNPM_PACKAGE_NOT_FOUND]") ||
     output.includes("[E404]") ||
+    output.includes("No match found for version") ||
     output.includes("No matching version found for") ||
     output.includes("is not in the npm registry")
   )

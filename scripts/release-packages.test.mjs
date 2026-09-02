@@ -3,9 +3,22 @@ import test from "node:test"
 
 import {
   dependencyOrderedWorkspacePackages,
+  isMissingFromRegistry,
   javascriptWorkspacePackages,
   publicWorkspacePackages,
 } from "./release-packages.mjs"
+
+test("recognizes current npm missing-version diagnostics without hiding other registry errors", () => {
+  assert.equal(
+    isMissingFromRegistry(`npm error code E404
+npm error 404 No match found for version 1.23.0`),
+    true
+  )
+  assert.equal(
+    isMissingFromRegistry("npm error code E401\nnpm error Incorrect or missing password."),
+    false
+  )
+})
 
 test("derives JavaScript publish packages from the public workspace scan", () => {
   const publicPackages = publicWorkspacePackages()
