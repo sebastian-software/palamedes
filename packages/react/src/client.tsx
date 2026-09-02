@@ -6,7 +6,7 @@ import {
   type CompiledCatalogMessages,
   type CompiledPalamedesI18n,
 } from "@palamedes/core/compiled"
-import { activateServerI18n, setClientI18n } from "@palamedes/runtime"
+import { activateServerI18n, isServerEnvironment, setClientI18n } from "@palamedes/runtime"
 
 export type ClientCatalogModule = {
   messages: CompiledCatalogMessages
@@ -62,7 +62,8 @@ export function createClientCatalogBoundary<TLocale extends string>({
   resolveClientLocale,
 }: CreateClientCatalogBoundaryOptions<TLocale>) {
   const serverResources = new Map<TLocale, Promise<ClientCatalogModule>>()
-  const clientLocale = typeof window === "undefined" ? undefined : resolveClientLocale()
+  const isClientEnvironment = !isServerEnvironment()
+  const clientLocale = isClientEnvironment ? resolveClientLocale() : undefined
   let clientI18nResource: Promise<CompiledPalamedesI18n> | undefined
   let clientI18nResourceRejected = false
   let clientI18nResourceError: unknown
@@ -159,25 +160,24 @@ export function createClientCatalogBoundary<TLocale extends string>({
   }
 
   function ClientCatalogContents({ children, locale }: ClientCatalogBoundaryProps<TLocale>) {
-    const isClient = typeof window !== "undefined"
-    if (isClient && locale !== clientLocale) {
+    if (isClientEnvironment && locale !== clientLocale) {
       throw new Error(
         `Palamedes client catalog boundary received locale "${locale}", but this document was initialized for "${clientLocale}". Perform a document navigation to change locale.`
       )
     }
 
     const resource = (
-      isClient ? getClientI18nResource() : getServerCatalogResource(locale)
+      isClientEnvironment ? getClientI18nResource() : getServerCatalogResource(locale)
     ) as Promise<ClientCatalogModule | CompiledPalamedesI18n>
     const catalogOrI18n = use(resource)
     const i18n = useMemo<CompiledPalamedesI18n>(() => {
-      if (isClient) {
+      if (isClientEnvironment) {
         return catalogOrI18n as CompiledPalamedesI18n
       }
       return createCatalogI18n(locale, catalogOrI18n as ClientCatalogModule, createI18nInstance)
-    }, [catalogOrI18n, isClient, locale])
+    }, [catalogOrI18n, locale])
 
-    if (!isClient) {
+    if (!isClientEnvironment) {
       activateServerI18n(i18n)
     }
 
@@ -185,7 +185,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
   }
 
   function ClientCatalogBoundary(props: ClientCatalogBoundaryProps<TLocale>) {
-    if (typeof window === "undefined") {
+    if (!isClientEnvironment) {
       return <ClientCatalogContents {...props} />
     }
     return (

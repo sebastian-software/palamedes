@@ -99,7 +99,12 @@ function isWindowlessClientEnvironment(): boolean {
   return typeof workerGlobalScope === "function" && state.self instanceof workerGlobalScope
 }
 
-function isServerEnvironment(): boolean {
+/**
+ * Classify the current runtime consistently across Palamedes packages.
+ * Browser workers are client environments even though they do not expose a
+ * `window` global.
+ */
+export function isServerEnvironment(): boolean {
   return typeof window === "undefined" && !isWindowlessClientEnvironment()
 }
 

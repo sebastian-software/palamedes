@@ -65,6 +65,45 @@ describe("createClientCatalogBoundary", () => {
   afterEach(() => {
     resetI18nRuntime()
     document.documentElement.lang = ""
+    delete (globalThis as Record<string, unknown>).importScripts
+  })
+
+  it("uses the client catalog path in windowless web workers", async () => {
+    document.documentElement.lang = "de"
+    const loadCatalog = vi.fn(() => fulfilled(catalog("Hallo aus dem Worker")))
+    const resolveClientLocale = vi.fn(() => document.documentElement.lang as Locale)
+    const state = globalThis as Record<string, unknown>
+    const browserWindow = window
+    const Boundary = (() => {
+      try {
+        state.importScripts = () => null
+        delete state.window
+        return createClientCatalogBoundary<Locale>({ loadCatalog, resolveClientLocale })
+      } finally {
+        state.window = browserWindow
+        delete state.importScripts
+      }
+    })()
+
+    function Greeting() {
+      return <span>{String(getI18n()._("greeting"))}</span>
+    }
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(
+        <Suspense fallback={<span>Loading</span>}>
+          <Boundary locale="de">
+            <Greeting />
+          </Boundary>
+        </Suspense>
+      )
+    })
+
+    await waitFor(() => expect(view.container.textContent).toBe("Hallo aus dem Worker"))
+    expect(resolveClientLocale).toHaveBeenCalledOnce()
+    expect(loadCatalog).toHaveBeenCalledOnce()
+    expect(loadCatalog).toHaveBeenCalledWith("de")
   })
 
   it("initializes the hook-free getter once before translated descendants render", async () => {
