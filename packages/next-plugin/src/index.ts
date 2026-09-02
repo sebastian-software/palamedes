@@ -328,20 +328,59 @@ function nextConfigFileFromStackFrame(frame: string): string | undefined {
   return rawPath.startsWith("file:") ? fileURLToPath(rawPath) : path.resolve(rawPath)
 }
 
+const NEXT_CLI_COMMANDS = new Set(["build", "dev", "start"])
+const NEXT_CLI_OPTIONS_WITH_VALUES = new Set([
+  "-H",
+  "--debug-build-paths",
+  "--experimental-build-mode",
+  "--experimental-https-ca",
+  "--experimental-https-cert",
+  "--experimental-https-key",
+  "--experimental-upload-trace",
+  "--experimental-upload-trace,",
+  "--hostname",
+  "--inspect",
+  "--internal-trace",
+  "--keepAliveTimeout",
+  "--port",
+  "-p",
+])
+
+function isNextCliEntry(argument: string | undefined): boolean {
+  if (!argument) {
+    return false
+  }
+
+  const normalized = argument.replaceAll("\\", "/")
+  return path.posix.basename(normalized) === "next" || normalized.includes("/next/dist/bin/")
+}
+
 function resolveNextCliProjectRoot(): string | undefined {
-  const commandIndex = process.argv.findIndex((argument) =>
-    ["dev", "build", "start"].includes(argument)
-  )
-  if (commandIndex === -1) {
+  if (!isNextCliEntry(process.argv[1]) || !NEXT_CLI_COMMANDS.has(process.argv[2] ?? "")) {
     return
   }
 
-  const directory = process.argv[commandIndex + 1]
-  if (!directory || directory.startsWith("-")) {
-    return
-  }
+  for (let index = 3; index < process.argv.length; index += 1) {
+    const argument = process.argv[index]
+    if (!argument) {
+      continue
+    }
 
-  return path.resolve(directory)
+    if (argument === "--") {
+      const directory = process.argv[index + 1]
+      return directory ? path.resolve(directory) : undefined
+    }
+
+    if (argument.startsWith("-")) {
+      const option = argument.split("=", 1)[0]
+      if (!argument.includes("=") && option && NEXT_CLI_OPTIONS_WITH_VALUES.has(option)) {
+        index += 1
+      }
+      continue
+    }
+
+    return path.resolve(argument)
+  }
 }
 
 function hasWorkspaces(packageJsonPath: string) {

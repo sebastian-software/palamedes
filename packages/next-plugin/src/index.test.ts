@@ -77,7 +77,14 @@ describe("withPalamedes turbopack config", () => {
     ])
     vi.spyOn(process, "cwd").mockReturnValue(monorepoRoot)
     originalArgv = process.argv
-    process.argv = ["node", "next", "dev", "apps/web"]
+    process.argv = [
+      "node",
+      "/workspace/node_modules/next/dist/bin/next",
+      "dev",
+      "-p",
+      "4000",
+      "apps/web",
+    ]
 
     const config = withPalamedes({}, { serverFunctions: true })
     const transformRule = getRules(config)["*"] as RuleItem[]
@@ -90,6 +97,19 @@ describe("withPalamedes turbopack config", () => {
     expect(poRule.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
     expect(config.turbopack?.root).toBe(monorepoRoot)
     expect(config.outputFileTracingRoot).toBe(monorepoRoot)
+  })
+
+  it("ignores unrelated host argv verbs when resolving the project root", () => {
+    useNextExampleProject()
+    originalArgv = process.argv
+    process.argv = ["node", "server.js", "start", "preview"]
+
+    const config = withPalamedes()
+    const transformRule = getRules(config)["*"] as RuleItem
+    const poRule = getRules(config)["*.po"] as RuleItem
+
+    expect(transformRule.loaders?.[0]?.options).toMatchObject({ cwd: nextExampleRoot })
+    expect(poRule.loaders?.[0]?.options).toMatchObject({ cwd: nextExampleRoot })
   })
 
   it("derives the app root from the config evaluation stack after Next consumes its CLI directory", async () => {
