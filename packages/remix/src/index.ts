@@ -17,7 +17,7 @@ import {
 export type PalamedesRemixRegisterOptions = {
   /**
    * Files eligible for macro transformation.
-   * @default /\.(tsx?|jsx?|mjs)$/
+   * @default /\.(tsx?|jsx?|mjs|mts)$/
    */
   include?: RegExp
 
@@ -78,7 +78,9 @@ export const PALEMEDES_REMIX_ASSET_PACKAGES = [
   "@palamedes/remix",
 ] as const
 
-const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs)$/
+// The Node loader must exclude CommonJS .cjs/.cts: macro lowering injects ESM
+// imports. Bundler integrations can safely use the wider shared default.
+const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs|mts)$/
 const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/
 const PO_FILE = /\.po$/
 const CONFIG_WATCH_QUERY_PARAM = "palamedes-config-watch"

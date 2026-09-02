@@ -12,6 +12,8 @@ describe("PALAMEDES_BUNDLER_TRANSFORM_INCLUDE", () => {
       "entry.jsx",
       "entry.mjs",
       "entry.cjs",
+      "entry.mts",
+      "entry.cts",
     ]) {
       expect(PALAMEDES_BUNDLER_TRANSFORM_INCLUDE.test(file)).toBe(true)
     }

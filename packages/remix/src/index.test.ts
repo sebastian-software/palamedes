@@ -57,31 +57,51 @@ describe("createPalamedesRemixLoadHook", () => {
     })
   })
 
-  it("transforms Palamedes JS macros after the Remix loader returns source", () => {
-    const load = createPalamedesRemixLoadHook()
-    const oldMap = Buffer.from(JSON.stringify({ version: 3, mappings: "" }), "utf8").toString(
-      "base64"
-    )
-    const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
-      format: "module",
-      shortCircuit: true,
-      source: [
-        'import { t } from "@palamedes/core/macro"',
-        "export function greeting(name) {",
-        "  return t`Hello ${name} from Remix 3`",
-        "}",
-        `//# sourceMappingURL=data:application/json;base64,${oldMap}`,
-      ].join("\n"),
-    }))
+  it.each(["home.tsx", "home.mts"])(
+    "transforms Palamedes JS macros in %s after the Remix loader returns source",
+    (file) => {
+      const load = createPalamedesRemixLoadHook()
+      const oldMap = Buffer.from(JSON.stringify({ version: 3, mappings: "" }), "utf8").toString(
+        "base64"
+      )
+      const loaded = load(new URL(`file:///repo/app/routes/${file}`).href, loadContext, () => ({
+        format: "module",
+        shortCircuit: true,
+        source: [
+          'import { t } from "@palamedes/core/macro"',
+          "export function greeting(name) {",
+          "  return t`Hello ${name} from Remix 3`",
+          "}",
+          `//# sourceMappingURL=data:application/json;base64,${oldMap}`,
+        ].join("\n"),
+      }))
 
-    expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"')
-    expect(String(loaded.source)).toContain("getI18n()._(")
-    expect(String(loaded.source)).toContain("Hello ")
-    expect(String(loaded.source)).not.toContain(oldMap)
-    expect(String(loaded.source)).toMatch(
-      /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u
-    )
-  })
+      expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"')
+      expect(String(loaded.source)).toContain("getI18n()._(")
+      expect(String(loaded.source)).toContain("Hello ")
+      expect(String(loaded.source)).not.toContain(oldMap)
+      expect(String(loaded.source)).toMatch(
+        /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u
+      )
+    }
+  )
+
+  it.each(["home.cjs", "home.cts"])(
+    "leaves CommonJS module %s untouched because macro output imports ESM",
+    (file) => {
+      const load = createPalamedesRemixLoadHook()
+      const source = [
+        'const { t } = require("@palamedes/core/macro")',
+        "exports.label = () => t`Hello`",
+      ].join("\n")
+      const loaded = load(new URL(`file:///repo/app/routes/${file}`).href, loadContext, () => ({
+        format: "commonjs",
+        source,
+      }))
+
+      expect(loaded.source).toBe(source)
+    }
+  )
 
   it("preserves source fallbacks in production unless explicitly disabled", () => {
     vi.stubEnv("NODE_ENV", "production")

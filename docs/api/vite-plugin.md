@@ -35,7 +35,7 @@ interface PalamedesPluginOptions {
 
 Defaults:
 
-- `include`: `/\.(tsx?|jsx?|mjs|cjs)$/`
+- `include`: `/\.([cm]?[jt]s|[jt]sx)$/`
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`

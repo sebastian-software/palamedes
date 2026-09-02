@@ -59,7 +59,7 @@ export const PALAMEDES_MACRO_PACKAGES = [
  * Loader-only integrations may intentionally use a narrower filter when their
  * host cannot execute the ESM imports emitted by the macro transform.
  */
-export const PALAMEDES_BUNDLER_TRANSFORM_INCLUDE = /\.(tsx?|jsx?|mjs|cjs)$/
+export const PALAMEDES_BUNDLER_TRANSFORM_INCLUDE = /\.([cm]?[jt]s|[jt]sx)$/
 
 /**
  * JS macro function names

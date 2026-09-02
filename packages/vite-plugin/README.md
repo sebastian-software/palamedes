@@ -89,7 +89,7 @@ future adapter release explicitly documents `.fcl` imports.
 import { palamedes } from "@palamedes/vite-plugin"
 
 palamedes({
-  include: /\.(tsx?|jsx?|mjs|cjs)$/,
+  include: /\.([cm]?[jt]s|[jt]sx)$/,
   exclude: /node_modules/,
   enablePoLoader: true,
   configPath: "./palamedes.yaml",
