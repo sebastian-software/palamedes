@@ -44,7 +44,7 @@ export function javascriptWorkspacePackages(root = process.cwd()) {
 // Publish order matters because pnpm turns workspace references into registry
 // ranges in the packed manifest. Keep independent packages deterministic while
 // ensuring each workspace dependency reaches npm before its dependents.
-export function dependencyOrderedWorkspacePackages(packages) {
+export function dependencyOrderedWorkspacePackages(packages, { warn = console.warn } = {}) {
   const packagesByName = new Map()
 
   for (const packageInfo of packages) {
@@ -59,23 +59,62 @@ export function dependencyOrderedWorkspacePackages(packages) {
     packagesByName.set(packageInfo.name, packageInfo)
   }
 
-  const dependents = new Map([...packagesByName.keys()].map((name) => [name, []]))
-  const dependencyCounts = new Map([...packagesByName.keys()].map((name) => [name, 0]))
-
+  const dependenciesByPackage = new Map()
   for (const packageInfo of packagesByName.values()) {
-    for (const dependencyName of workspacePublishDependencies(
-      packageInfo.manifest,
-      packagesByName
-    )) {
-      dependents.get(dependencyName).push(packageInfo.name)
-      dependencyCounts.set(packageInfo.name, dependencyCounts.get(packageInfo.name) + 1)
-    }
+    dependenciesByPackage.set(
+      packageInfo.name,
+      workspacePublishDependencies(packageInfo.manifest, packagesByName, [
+        "dependencies",
+        "optionalDependencies",
+      ])
+    )
   }
 
+  // Hard workspace dependencies must always form a valid publish order.
+  dependencyOrder(packagesByName, dependenciesByPackage)
+
+  const peerEdges = [...packagesByName.values()]
+    .flatMap((packageInfo) =>
+      [
+        ...workspacePublishDependencies(packageInfo.manifest, packagesByName, ["peerDependencies"]),
+      ].map((dependencyName) => ({ dependencyName, packageName: packageInfo.name }))
+    )
+    .sort(
+      (left, right) =>
+        left.packageName.localeCompare(right.packageName) ||
+        left.dependencyName.localeCompare(right.dependencyName)
+    )
+
+  for (const { dependencyName, packageName } of peerEdges) {
+    const dependencies = dependenciesByPackage.get(packageName)
+    if (dependencies.has(dependencyName)) {
+      continue
+    }
+    if (hasDependencyPath(dependenciesByPackage, dependencyName, packageName)) {
+      warn(
+        `Ignoring workspace peer dependency publish-order hint ${dependencyName} -> ${packageName} because it would create a cycle.`
+      )
+      continue
+    }
+    dependencies.add(dependencyName)
+  }
+
+  return dependencyOrder(packagesByName, dependenciesByPackage)
+}
+
+function dependencyOrder(packagesByName, dependenciesByPackage) {
+  const dependents = new Map([...packagesByName.keys()].map((name) => [name, []]))
+  const dependencyCounts = new Map()
+
+  for (const [packageName, dependencies] of dependenciesByPackage) {
+    dependencyCounts.set(packageName, dependencies.size)
+    for (const dependencyName of dependencies) {
+      dependents.get(dependencyName).push(packageName)
+    }
+  }
   for (const names of dependents.values()) {
     names.sort((a, b) => a.localeCompare(b))
   }
-
   const ready = [...packagesByName.keys()]
     .filter((name) => dependencyCounts.get(name) === 0)
     .sort((a, b) => a.localeCompare(b))
@@ -110,10 +149,28 @@ export function dependencyOrderedWorkspacePackages(packages) {
   return ordered
 }
 
-function workspacePublishDependencies(packageJson, packagesByName) {
+function hasDependencyPath(dependenciesByPackage, start, target) {
+  const seen = new Set()
+  const pending = [start]
+
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (current === target) {
+      return true
+    }
+    if (seen.has(current)) {
+      continue
+    }
+    seen.add(current)
+    pending.push(...dependenciesByPackage.get(current))
+  }
+  return false
+}
+
+function workspacePublishDependencies(packageJson, packagesByName, fields) {
   const dependencies = new Set()
 
-  for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+  for (const field of fields) {
     const declaredDependencies = packageJson?.[field]
     if (declaredDependencies === null || typeof declaredDependencies !== "object") {
       continue
