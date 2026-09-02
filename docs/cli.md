@@ -12,15 +12,19 @@ Plugins register a namespace plus commands. They are invoked as:
 pmds <plugin> <command> [...args]
 pmds <plugin> <command> --json [...args]
 pmds <plugin> <command> --config ./palamedes.yaml [...args]
+pmds <plugin> <command> --refresh-plugin-manifests [...args]
 ```
 
-`--json`, `--config`, and `-c` are reserved host options after the command; put
+`--json`, `--config`, `-c`, `--plugin-timeout-ms`, and
+`--refresh-plugin-manifests` are reserved host options after the command; put
 `--` before them to pass them through as plugin arguments. Unknown namespaces
 produce the native plugin host's unknown-namespace diagnostic.
 
 Plugin loading is explicit, binary-only, and applies only to non-built-in
 namespaces. Validated manifests are cached under `.palamedes`; changed binaries
 are described again, while cache failures fall back to the normal handshake.
+`--refresh-plugin-manifests` ignores the cached entries once and replaces them
+after describing every configured plugin again.
 See the [configuration field](./configuration.md#cli-plugins) and the
 [binary plugin protocol](./api/cli-binary-plugin.md).
 

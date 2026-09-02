@@ -50,15 +50,16 @@ namespace and collision. Changing a binary, the host version, or the protocol
 version forces another `describe`, including replacements that preserve file
 size and timestamps. The cache is only a startup optimization: missing,
 corrupt, or unwritable cache data falls back to the normal handshake without
-blocking a plugin command. To force a fresh handshake manually, remove
-`.palamedes/plugin-manifests.json`; the host recreates it on the next plugin
-invocation.
+blocking a plugin command. Pass `--refresh-plugin-manifests` to a plugin
+invocation to ignore the cached manifests once, describe every configured
+plugin again, and replace the cache with the validated results. Removing
+`.palamedes/plugin-manifests.json` remains an equivalent manual recovery path.
 
 The host consumes its own invocation flags before it forwards `args` to the
-plugin: `--json`, `--config PATH`, `-c PATH`, `--config=PATH`, and
-`--plugin-timeout-ms N` never appear there. A bare `--` is likewise a host
-passthrough marker rather than a plugin argument; every token after it is
-forwarded verbatim, including flag-shaped ones.
+plugin: `--json`, `--config PATH`, `-c PATH`, `--config=PATH`,
+`--plugin-timeout-ms N`, and `--refresh-plugin-manifests` never appear there. A
+bare `--` is likewise a host passthrough marker rather than a plugin argument;
+every token after it is forwarded verbatim, including flag-shaped ones.
 
 ## Protocol
 
