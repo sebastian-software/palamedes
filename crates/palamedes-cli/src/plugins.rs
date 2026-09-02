@@ -16,7 +16,6 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 #[cfg(unix)]
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc;
-#[cfg(unix)]
 use std::sync::Once;
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -46,6 +45,7 @@ const PLUGIN_SPAWN_ATTEMPTS: usize = 6;
 const PLUGIN_SPAWN_RETRY_INTERVAL: Duration = Duration::from_millis(10);
 #[cfg(unix)]
 const TEXT_FILE_BUSY_OS_ERROR: i32 = 26;
+static PLUGIN_MANIFEST_CACHE_WARNING: Once = Once::new();
 
 fn reserved_plugin_namespaces() -> BTreeSet<String> {
     command_namespace_tokens(&mut crate::cli::Cli::command())
@@ -334,7 +334,9 @@ fn load_registry(
         .retain(|key, _| active_cache_keys.contains(key));
     cache_dirty |= cache.entries.len() != cached_entry_count;
     if cache_dirty {
-        save_plugin_manifest_cache(config, &cache);
+        if let Err(error) = save_plugin_manifest_cache(config, &cache) {
+            report_plugin_manifest_cache_failure(config, &error);
+        }
     }
     if let Some(namespace) = collision {
         return Err(PluginFailure::new(
@@ -389,20 +391,48 @@ fn load_plugin_manifest_cache(config: &LoadedConfig) -> PluginManifestCache {
     cache
 }
 
-fn save_plugin_manifest_cache(config: &LoadedConfig, cache: &PluginManifestCache) {
+fn save_plugin_manifest_cache(
+    config: &LoadedConfig,
+    cache: &PluginManifestCache,
+) -> io::Result<()> {
     let path = plugin_manifest_cache_path(config);
-    let Some(parent) = path.parent() else {
-        return;
-    };
-    let Ok(raw) = serde_json::to_vec(cache) else {
-        return;
-    };
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "plugin manifest cache path has no parent directory",
+        )
+    })?;
+    let raw = serde_json::to_vec(cache).map_err(io::Error::other)?;
     // This cache is an optional startup optimization. A read-only checkout or
     // failed publication must never stop the requested plugin command; the next
     // invocation simply performs the describe handshake again.
-    if fs::create_dir_all(parent).is_ok() {
-        let _ = persist_plugin_manifest_cache(&path, &raw);
-    }
+    fs::create_dir_all(parent)?;
+    persist_plugin_manifest_cache(&path, &raw)
+}
+
+fn report_plugin_manifest_cache_failure(config: &LoadedConfig, error: &io::Error) {
+    let mut stderr = io::stderr().lock();
+    write_plugin_manifest_cache_warning_once(
+        &PLUGIN_MANIFEST_CACHE_WARNING,
+        &plugin_manifest_cache_path(config),
+        error,
+        &mut stderr,
+    );
+}
+
+fn write_plugin_manifest_cache_warning_once(
+    warning: &Once,
+    path: &Path,
+    error: &io::Error,
+    output: &mut dyn Write,
+) {
+    warning.call_once(|| {
+        let _ = writeln!(
+            output,
+            "Warning: could not write the plugin manifest cache to {}: {error}",
+            path.display()
+        );
+    });
 }
 
 fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
@@ -1695,7 +1725,7 @@ struct PackagePalamedes {
 mod tests {
     use std::fs;
     use std::path::Path;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, Once};
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     use clap::Command;
@@ -1705,10 +1735,11 @@ mod tests {
 
     use super::{
         command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
-        persist_plugin_manifest_cache, plugin_catalogs, reserved_plugin_namespaces,
-        resolve_binary_plugin, validate_manifest, validate_manifest_with_reserved_namespaces,
-        BinaryInvocation, InvocationPolicy, PluginEvent, PluginInvocation, PluginManifest,
-        ResolvedPlugin, PROTOCOL_VERSION,
+        persist_plugin_manifest_cache, plugin_catalogs, plugin_manifest_cache_path,
+        reserved_plugin_namespaces, resolve_binary_plugin, save_plugin_manifest_cache,
+        validate_manifest, validate_manifest_with_reserved_namespaces,
+        write_plugin_manifest_cache_warning_once, BinaryInvocation, InvocationPolicy, PluginEvent,
+        PluginInvocation, PluginManifest, PluginManifestCache, ResolvedPlugin, PROTOCOL_VERSION,
     };
     use crate::config::load_config;
     use palamedes_plugin::ManifestCommand;
@@ -2494,6 +2525,32 @@ catalogs:
                 .collect::<Vec<_>>(),
             [std::ffi::OsString::from("plugin-manifests.json")]
         );
+    }
+
+    #[test]
+    fn reports_plugin_manifest_cache_write_failures_once() {
+        let root = temp_dir("manifest-cache-warning");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("config");
+        let config = load_config(&root, None).expect("load config");
+        fs::write(root.join(".palamedes"), "not a directory")
+            .expect("block cache directory creation");
+
+        let error = save_plugin_manifest_cache(&config, &PluginManifestCache::fresh())
+            .expect_err("cache save must fail");
+        let path = plugin_manifest_cache_path(&config);
+        let warning = Once::new();
+        let mut output = Vec::new();
+        write_plugin_manifest_cache_warning_once(&warning, &path, &error, &mut output);
+        write_plugin_manifest_cache_warning_once(&warning, &path, &error, &mut output);
+
+        let output = String::from_utf8(output).expect("utf-8 warning");
+        assert_eq!(output.matches("Warning:").count(), 1, "{output}");
+        assert!(output.contains(&path.display().to_string()), "{output}");
+        assert!(output.contains(&error.to_string()), "{output}");
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
