@@ -165,7 +165,13 @@ export function discoverPublishedPackages(
     const manifestPath = `packages/${directory}/package.json`
     try {
       const manifest = JSON.parse(read(manifestPath))
-      if (!manifest.private && manifest.name) packages.push({ manifestPath, name: manifest.name })
+      if (!manifest.private && manifest.name) {
+        packages.push({
+          manifestPath,
+          name: manifest.name,
+          nodeEngine: manifest.engines?.node,
+        })
+      }
     } catch (error) {
       if (error.code !== "ENOENT") throw error
     }
@@ -211,6 +217,43 @@ function verifyPackages(read, listDirectories) {
     assertContains(read("llms.txt"), name, "compact package inventory: llms.txt")
   for (const file of ["llms.txt", "llms-full.txt"])
     assertContains(read(file), reservedBinContract, `${file} reserved-bin contract`)
+
+  const nodeSupportContract =
+    "Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`."
+  for (const file of ["README.md", "llms.txt", "llms-full.txt"])
+    assertContains(read(file), nodeSupportContract, `${file} Node support contract`)
+
+  const nodeEngineExceptions = packages
+    .filter(({ nodeEngine }) => nodeEngine && nodeEngine !== ">=22.0.0")
+    .map(({ name, nodeEngine }) => `${name}: ${nodeEngine}`)
+  assertSameInventory(
+    nodeEngineExceptions,
+    [
+      "@palamedes/react-router-rsc: >=22.22.0",
+      "@palamedes/remix: >=24.3.0",
+      "@palamedes/tanstack: >=22.22.0",
+      "@palamedes/waku: >=22.22.0",
+    ],
+    "Published package Node.js engine exceptions"
+  )
+
+  const missingNodeEngines = packages
+    .filter(({ name, nodeEngine }) => !nodeEngine && platformParent(name) !== "@palamedes/cli")
+    .map(({ name }) => name)
+  assertSameInventory(missingNodeEngines, [], "Published packages without a Node.js engine")
+
+  const rootNodeEngine = JSON.parse(read("package.json")).engines.node
+  assertContains(
+    read("README.md"),
+    `Repository Node ${rootNodeEngine}`,
+    "README repository Node badge"
+  )
+  const nextPluginNodeEngine = JSON.parse(read("packages/next-plugin/package.json")).engines.node
+  assertContains(
+    read("docs/nextjs-first-run.md"),
+    `Use Node.js \`${nextPluginNodeEngine}\``,
+    "Next.js first-run Node requirement"
+  )
 }
 
 function verifyCli(read) {
