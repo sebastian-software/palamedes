@@ -2057,8 +2057,6 @@ struct SourceResolutionWork {
     source_bytes_scanned: usize,
     #[cfg(test)]
     anchor_steps: usize,
-    #[cfg(test)]
-    offset_slots: usize,
 }
 
 impl SourcePositionCursor {
@@ -2088,52 +2086,31 @@ impl SourceResolutionWork {
             self.anchor_steps += 1;
         }
     }
-
-    fn visit_offset_slot(&mut self) {
-        #[cfg(test)]
-        {
-            self.offset_slots += 1;
-        }
-    }
 }
 
 /// Resolves every anchor from one linear source walk.
 ///
 /// The source-map emission order remains generated-position order below. A
-/// stable counting index orders separate anchor indices by their bounded source
-/// byte offsets. This preserves the anchors themselves (including duplicates)
-/// while making source location lookup deterministically O(document + anchors).
+/// stable comparison sort orders separate anchor indices by their bounded
+/// source byte offsets. This preserves the anchors themselves (including
+/// duplicates), bounds temporary storage by the number of anchors, and keeps
+/// source location lookup to one monotonic source walk.
 fn source_positions_for_anchors(
     anchors: &[SourceAnchor],
     source: &str,
 ) -> (Vec<SourcePosition>, SourceResolutionWork) {
-    // The extra leading slot turns each source offset into a count boundary;
-    // the final slot represents the valid offset immediately after the source.
-    let mut offset_boundaries = vec![0usize; source.len() + 2];
     let mut work = SourceResolutionWork::default();
-    for anchor in anchors {
+    let mut source_order = Vec::with_capacity(anchors.len());
+    for (index, anchor) in anchors.iter().enumerate() {
         work.visit_anchor();
         let offset = anchor.source_offset.min(source.len());
         assert!(
             source.is_char_boundary(offset),
             "source-map anchor must be on a UTF-8 boundary"
         );
-        offset_boundaries[offset + 1] += 1;
+        source_order.push(index);
     }
-
-    for slot in 1..offset_boundaries.len() {
-        work.visit_offset_slot();
-        offset_boundaries[slot] += offset_boundaries[slot - 1];
-    }
-
-    let mut source_order = vec![0usize; anchors.len()];
-    for (index, anchor) in anchors.iter().enumerate() {
-        work.visit_anchor();
-        let offset = anchor.source_offset.min(source.len());
-        let destination = offset_boundaries[offset];
-        source_order[destination] = index;
-        offset_boundaries[offset] += 1;
-    }
+    source_order.sort_by_key(|&index| anchors[index].source_offset.min(source.len()));
 
     let mut cursor = SourcePositionCursor::default();
     let mut positions = vec![SourcePosition::default(); anchors.len()];
@@ -2705,7 +2682,6 @@ See ![Diagram label](./d.png) here.
             source.len(),
             "source position resolution must scan each source byte at most once"
         );
-        assert_eq!(work.anchor_steps, anchors.len() * 3);
-        assert_eq!(work.offset_slots, source.len() + 1);
+        assert_eq!(work.anchor_steps, anchors.len() * 2);
     }
 }
