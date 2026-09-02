@@ -6,6 +6,7 @@ import {
   type I18nInstance,
   getI18n,
   initializeClientI18n,
+  isServerEnvironment,
   loadRegisteredMessages,
   registerMessageLoaderGroup,
   registerMessageLoaders,
@@ -33,11 +34,13 @@ describe("@palamedes/runtime", () => {
   })
 
   it("fails loudly when no server instance is configured", () => {
+    expect(isServerEnvironment()).toBe(true)
     expect(() => getI18n()).toThrow(/No active server i18n instance/)
   })
 
   it("fails loudly when no client instance is configured", () => {
     ;(globalThis as Record<string, unknown>).window = {}
+    expect(isServerEnvironment()).toBe(false)
     expect(() => getI18n()).toThrow(/No active client i18n instance/)
   })
 
@@ -87,6 +90,7 @@ describe("@palamedes/runtime", () => {
 
   it("initializes and resolves client instances in classic web workers", () => {
     ;(globalThis as Record<string, unknown>).importScripts = () => null
+    expect(isServerEnvironment()).toBe(false)
     const activate = vi.fn<(locale: string) => void>()
     const createI18n = vi.fn(() => ({
       locale: "",
@@ -114,6 +118,7 @@ describe("@palamedes/runtime", () => {
     state.self = new TestWorkerGlobalScope()
     const i18n = createTestI18n("worker-module")
 
+    expect(isServerEnvironment()).toBe(false)
     setClientI18n(i18n)
 
     expect(getI18n()).toBe(i18n)
