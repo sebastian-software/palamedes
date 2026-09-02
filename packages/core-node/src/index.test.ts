@@ -1084,6 +1084,14 @@ msgstr "Hallo"
     await expect(
       execFileAsync(process.execPath, [childPath, addonPath, rootDir], { timeout: 10_000 })
     ).resolves.toMatchObject({ stderr: "" })
+
+    await expect(
+      execFileAsync(process.execPath, [childPath, addonPath, rootDir, "--blocking-control"], {
+        timeout: 10_000,
+      })
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("timer ticks during native catalog work"),
+    })
   })
 
   it("performs deletion-aware three-way catalog merges across the NAPI boundary", async () => {
