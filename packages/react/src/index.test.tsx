@@ -42,7 +42,7 @@ describe("@palamedes/react", () => {
     expect(html).toBe("Bereitgestellt von <strong>Palamedes</strong>")
   })
 
-  it("reuses Trans runtimes by i18n and component identity while resetting render keys", () => {
+  it("reuses Trans runtimes by i18n and component shape while resetting render state", () => {
     const i18n = createI18n({ locale: "en" })
     const renderMessage = vi.spyOn(i18n, "renderMessage")
     const CachedTrans = createTrans(() => i18n)
@@ -60,23 +60,31 @@ describe("@palamedes/react", () => {
     ).toBe("<strong>body</strong>")
     expect(renderMessage.mock.calls[1]?.[2]).toBe(renderMessage.mock.calls[0]?.[2])
 
+    expect(
+      renderToStaticMarkup(
+        <CachedTrans id="inline-components" message="<0>body</0>" components={{ 0: <em /> }} />
+      )
+    ).toBe("<em>body</em>")
+    expect(renderMessage.mock.calls[2]?.[2]).toBe(renderMessage.mock.calls[1]?.[2])
+
     renderToStaticMarkup(
-      <CachedTrans id="new-components" message="<0>body</0>" components={{ 0: <strong /> }} />
+      <CachedTrans id="different-shape" message="<1>body</1>" components={{ 1: <strong /> }} />
     )
-    expect(renderMessage.mock.calls[2]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2])
+    expect(renderMessage.mock.calls[3]?.[2]).not.toBe(renderMessage.mock.calls[2]?.[2])
 
     i18n.activate("de")
     renderToStaticMarkup(
       <CachedTrans id="new-locale" message="<0>body</0>" components={stableComponents} />
     )
-    expect(renderMessage.mock.calls[3]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2])
+    expect(renderMessage.mock.calls[4]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2])
 
     const runtimeCache = createReactMessageRuntimeCache()
     const firstRuntime = runtimeCache.get(i18n, stableComponents)
     const firstResult = firstRuntime.tag("0", firstRuntime.join("body"))
-    const secondRuntime = runtimeCache.get(i18n, stableComponents)
+    const secondRuntime = runtimeCache.get(i18n, { 0: <em /> })
     const secondResult = secondRuntime.tag("0", secondRuntime.join("body"))
     expect(secondRuntime).toBe(firstRuntime)
+    expect(isValidElement(secondResult[0]) && secondResult[0].type).toBe("em")
     expect([
       isValidElement(firstResult[0]) ? firstResult[0].key : null,
       isValidElement(secondResult[0]) ? secondResult[0].key : null,
