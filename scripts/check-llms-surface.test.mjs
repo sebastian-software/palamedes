@@ -103,6 +103,15 @@ test("keeps the Next.js first-run floor aligned with the plugin manifest", () =>
   )
 })
 
+test("requires adapter fallback and advanced Next guidance in both assistant surfaces", () => {
+  for (const file of ["llms.txt", "llms-full.txt"])
+    expectRejected(
+      file,
+      (text) => text.replace("initializeServerFunctionI18n", "initializeI18n"),
+      /nextAdvancedOptions context is missing required surface: initializeServerFunctionI18n/u
+    )
+})
+
 test("requires reserved-bin failure semantics in both assistant surfaces", () => {
   for (const file of ["llms.txt", "llms-full.txt"])
     expectRejected(

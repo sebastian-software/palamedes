@@ -431,13 +431,27 @@ See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
 
 ## Framework guidance
 
+Vite, Next, and Remix keep authored source fallbacks in production by default
+so missing catalogs and deploy skew remain readable. Set
+`keepSourceFallbacks: false` to opt into smaller hash-only output. The
+parser-free `@palamedes/core/compiled` runtime returns retained ICU source
+patterns literally; use the `@palamedes/core` root with `onMissing` when the
+fallback itself must parse and interpolate.
+
 ### Vite
 
 Use `@palamedes/vite-plugin`. Put `palamedes()` in the Vite plugin list alongside the host framework plugin.
 
 ### Next.js
 
-Use `@palamedes/next-plugin`. Keep Next-specific behavior in the adapter; do not move catalog semantics into application code.
+Use `@palamedes/next-plugin`. Keep Next-specific behavior in the adapter; do
+not move catalog semantics into application code. Set `messageSplitting: true`
+to split client messages with the Next module graph. Set `serverFunctions: true`
+to initialize request-local i18n for recognized Server Functions and Actions;
+that mode requires exactly one `palamedes.server` module in the project root or
+`src`, exporting `initializeServerFunctionI18n`. The initializer should load
+and activate a fresh request-local instance and be request-memoized or
+idempotent.
 
 ### Remix v3
 

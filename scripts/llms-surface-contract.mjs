@@ -93,4 +93,11 @@ export const featureNarrative = {
   extractCheck: ["pmds extract --check --json", "--no-cache"],
   mergeDriver: ["deletion-aware", "three-way merge"],
   binaryPlugins: ["binary-only", "binary plugin protocol"],
+  adapterSourceFallbacks: ["keepSourceFallbacks: false", "@palamedes/core/compiled", "onMissing"],
+  nextAdvancedOptions: [
+    "messageSplitting: true",
+    "serverFunctions: true",
+    "palamedes.server",
+    "initializeServerFunctionI18n",
+  ],
 }
