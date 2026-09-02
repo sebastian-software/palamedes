@@ -89,7 +89,7 @@
     "./palamedes-po-loader": "./palamedes-po-loader.cjs"
   },
   "dependencies": {
-    "@jridgewell/sourcemap-codec": "1.5.5",
+    "@jridgewell/sourcemap-codec": "1.6.0",
     "@palamedes/config": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
@@ -99,9 +99,9 @@
     "next": "^16"
   },
   "devDependencies": {
-    "next": "16.3.0",
+    "next": "16.3.4",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

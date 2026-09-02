@@ -13,23 +13,23 @@
   "dependencies": {
     "@base-ui/react": "1.7.0",
     "@palamedes/site-ui": "workspace:*",
-    "@react-router/node": "8.3.0",
+    "@react-router/node": "8.3.1",
     "ardo": "4.2.0",
-    "isbot": "^5.2.1",
-    "lucide-react": "^1.31.0",
+    "isbot": "^5.2.2",
+    "lucide-react": "^1.39.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "8.3.0"
+    "react-router": "8.3.1"
   },
   "devDependencies": {
-    "@react-router/dev": "8.3.0",
+    "@react-router/dev": "8.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.5",
     "sirv-cli": "^3.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   }
 }

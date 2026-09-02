@@ -27,9 +27,9 @@
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "@solidjs/vite-plugin": "3.0.0-next.34",
+    "@solidjs/vite-plugin": "3.0.0-next.37",
     "filesystem-routing": "0.2.1",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   }
 }

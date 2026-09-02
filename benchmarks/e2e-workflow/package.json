@@ -13,14 +13,14 @@
     "validate": "node ./src/run.mjs --validate-only --profile small"
   },
   "dependencies": {
-    "@formatjs/cli": "6.16.16",
+    "@formatjs/cli": "6.16.22",
     "@lingui/cli": "6.6.0",
     "@lingui/conf": "6.6.0",
     "@lingui/format-po": "6.6.0",
-    "@nkzw/fbtee-cli": "3.0.1",
-    "fbtee": "3.0.1",
-    "gt-react": "11.1.6",
-    "gtx-cli": "2.16.4",
-    "i18next-cli": "1.69.0"
+    "@nkzw/fbtee-cli": "4.0.0",
+    "fbtee": "4.0.0",
+    "gt-react": "11.1.18",
+    "gtx-cli": "2.17.2",
+    "i18next-cli": "1.72.1"
   }
 }

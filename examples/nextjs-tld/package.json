@@ -14,7 +14,7 @@
     "@palamedes/next-plugin": "workspace:^",
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "next": "^16.3.0",
+    "next": "^16.3.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "server-only": "^0.0.1"
@@ -24,7 +24,7 @@
     "@palamedes/config": "workspace:^",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.5",
     "typescript": "^7.0.2"
   }
 }

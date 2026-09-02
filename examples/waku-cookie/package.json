@@ -15,7 +15,7 @@
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/waku": "workspace:^",
-    "hono": "^4.13.1",
+    "hono": "^4.13.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-server-dom-webpack": "^19.2.8",
@@ -26,9 +26,9 @@
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   }
 }
