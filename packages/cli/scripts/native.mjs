@@ -77,7 +77,10 @@ export async function spawnNative(args, options = {}) {
     }
 
     child.once("error", (error) => settle(() => reject(error)))
-    child.once("exit", (code, signal) => {
+    // `exit` can precede the final data events from piped stdio. `close`
+    // guarantees both streams have drained, while the inherited-stdio path can
+    // keep its existing process-exit semantics.
+    child.once(captureOutput ? "close" : "exit", (code, signal) => {
       settle(() => {
         const exitCode = signal ? signalExitCode(signal) : (code ?? 1)
         resolve(captureOutput ? { exitCode, stdout, stderr } : exitCode)

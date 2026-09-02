@@ -340,6 +340,32 @@ test("native signal listeners are removed after the child exits or fails", async
   assert.deepEqual(signalListenerCounts(), before)
 })
 
+test("captured output waits for inherited stdio pipes to close", async () => {
+  const workerSource = `setTimeout(() => {
+  process.stdout.write("stdout-tail")
+  process.stderr.write("stderr-tail")
+}, 100)`
+  const parentSource = `
+const { spawn } = require("node:child_process")
+const worker = spawn(process.execPath, ["-e", ${JSON.stringify(workerSource)}], {
+  detached: true,
+  stdio: ["ignore", "inherit", "inherit"],
+})
+worker.unref()
+`
+
+  const result = await spawnNative(["-e", parentSource], {
+    nativeExecutable: process.execPath,
+    captureOutput: true,
+  })
+
+  assert.deepEqual(result, {
+    exitCode: 0,
+    stdout: "stdout-tail",
+    stderr: "stderr-tail",
+  })
+})
+
 async function waitFor(predicate, timeout) {
   const deadline = Date.now() + timeout
   while (!predicate()) {
