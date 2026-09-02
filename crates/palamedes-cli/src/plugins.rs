@@ -127,7 +127,12 @@ fn run_invocation(
             format!("Could not resolve the running pmds executable: {error}"),
         )
     })?;
-    let registry = load_registry(&config, &cwd, &native_executable)?;
+    let registry = load_registry(
+        &config,
+        &cwd,
+        &native_executable,
+        !invocation.refresh_plugin_manifests,
+    )?;
     let Some(plugin) = registry.plugins.get(&invocation.namespace) else {
         if registry.skipped.is_empty() {
             return Err(PluginFailure::with_exit_code(
@@ -251,6 +256,7 @@ fn load_registry(
     config: &LoadedConfig,
     cwd: &Path,
     native_executable: &Path,
+    reuse_cached_manifests: bool,
 ) -> Result<PluginRegistry, PluginFailure> {
     let mut registry = PluginRegistry::default();
     let mut cache = load_plugin_manifest_cache(config);
@@ -274,6 +280,9 @@ fn load_registry(
         let cache_identity = plugin_cache_identity(&resolved);
         let manifest = match cache_identity.as_ref().and_then(|(key, stamp)| {
             active_cache_keys.insert(key.clone());
+            if !reuse_cached_manifests {
+                return None;
+            }
             cache
                 .entries
                 .get(key)
@@ -1452,6 +1461,7 @@ struct PluginInvocation {
     config_path: Option<PathBuf>,
     json: bool,
     plugin_timeout: Option<Duration>,
+    refresh_plugin_manifests: bool,
 }
 
 impl PluginInvocation {
@@ -1464,6 +1474,7 @@ impl PluginInvocation {
         let mut config_path = None;
         let mut json = false;
         let mut plugin_timeout = None;
+        let mut refresh_plugin_manifests = false;
         let mut passthrough = false;
         let mut index = 2;
         while index < args.len() {
@@ -1474,6 +1485,8 @@ impl PluginInvocation {
                 passthrough = true;
             } else if value == "--json" {
                 json = true;
+            } else if value == "--refresh-plugin-manifests" {
+                refresh_plugin_manifests = true;
             } else if value == "--plugin-timeout-ms" {
                 let Some(next) = args.get(index + 1) else {
                     return Err(plugin_timeout_argument_failure());
@@ -1512,6 +1525,7 @@ impl PluginInvocation {
             config_path,
             json,
             plugin_timeout,
+            refresh_plugin_manifests,
         })
     }
 }
@@ -1681,6 +1695,7 @@ struct PackagePalamedes {
 mod tests {
     use std::fs;
     use std::path::Path;
+    use std::sync::Mutex;
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     use clap::Command;
@@ -1697,6 +1712,8 @@ mod tests {
     };
     use crate::config::load_config;
     use palamedes_plugin::ManifestCommand;
+
+    static PLUGIN_REGISTRY_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn reserved_plugin_namespaces_match_the_built_clap_command_tree() {
@@ -1770,22 +1787,28 @@ mod tests {
             "inspect".to_owned(),
             "--json".to_owned(),
             "--plugin-timeout-ms=250".to_owned(),
+            "--refresh-plugin-manifests".to_owned(),
             "--config=palamedes.yaml".to_owned(),
             "first".to_owned(),
             "--".to_owned(),
+            "--refresh-plugin-manifests".to_owned(),
             "--json".to_owned(),
         ])
         .expect("invocation");
 
         assert_eq!(invocation.namespace, "acme");
         assert_eq!(invocation.command.as_deref(), Some("inspect"));
-        assert_eq!(invocation.command_args, ["first", "--json"]);
+        assert_eq!(
+            invocation.command_args,
+            ["first", "--refresh-plugin-manifests", "--json"]
+        );
         assert_eq!(
             invocation.config_path.as_deref(),
             Some(Path::new("palamedes.yaml"))
         );
         assert!(invocation.json);
         assert_eq!(invocation.plugin_timeout, Some(Duration::from_millis(250)));
+        assert!(invocation.refresh_plugin_manifests);
     }
 
     #[test]
@@ -2184,6 +2207,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_broken_plugin_blocks_only_its_own_namespace() {
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         use std::path::Path;
 
         use super::load_registry;
@@ -2220,7 +2246,8 @@ plugins:
         .expect("config");
 
         let config = load_config(&root, None).expect("config with plugins");
-        let registry = load_registry(&config, &root, Path::new("pmds")).expect("degraded registry");
+        let registry =
+            load_registry(&config, &root, Path::new("pmds"), true).expect("degraded registry");
 
         assert!(registry.plugins.contains_key("good"));
         assert_eq!(registry.skipped.len(), 1);
@@ -2230,28 +2257,58 @@ plugins:
 
     #[cfg(unix)]
     #[test]
-    fn caches_plugin_manifests_and_redescribes_only_changed_binaries() {
-        use super::{load_registry, plugin_manifest_cache_path};
+    fn caches_plugin_manifests_and_supports_explicit_refresh() {
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        use super::{load_registry, plugin_cache_identity, plugin_manifest_cache_path};
 
         let root = temp_dir("manifest-cache");
-        for namespace in ["alpha", "beta"] {
-            let plugin = root.join(namespace);
-            fs::create_dir_all(&plugin).expect("plugin directory");
-            fs::write(
-                plugin.join("package.json"),
-                r#"{"palamedes":{"pluginBinary":"./describe"}}"#,
-            )
-            .expect("plugin manifest");
-            let script = plugin.join("describe");
-            write_executable_fixture(
-                &script,
-                format!(
-                    "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
-                     printf '{{\"event\":\"manifest\",\"name\":\"{namespace}\",\
-                     \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n"
-                ),
-            );
-        }
+        let plugin = root.join("alpha");
+        fs::create_dir_all(&plugin).expect("plugin directory");
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./describe"}}"#,
+        )
+        .expect("plugin manifest");
+        let script = plugin.join("describe");
+        write_executable_fixture(
+            &script,
+            "#!/bin/sh\n# variant-a\n. \"$(dirname \"$0\")/implementation\"\n",
+        );
+        let implementation = plugin.join("implementation");
+        fs::write(
+            &implementation,
+            "read _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
+             printf '{\"event\":\"manifest\",\"name\":\"alpha\",\
+             \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
+        )
+        .expect("plugin implementation");
+
+        let resolved = ResolvedPlugin {
+            specifier: "./alpha".to_owned(),
+            binary_path: script.clone(),
+        };
+        let (_, original_stamp) = plugin_cache_identity(&resolved).expect("original cache stamp");
+        let original_metadata = fs::metadata(&script).expect("plugin script metadata");
+        let original_mtime = original_metadata.modified().expect("plugin script mtime");
+        let changed = fs::read_to_string(&script)
+            .expect("plugin script")
+            .replace("variant-a", "variant-b");
+        assert_eq!(changed.len() as u64, original_metadata.len());
+        write_executable_fixture(&script, changed);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&script)
+            .expect("plugin script")
+            .set_times(fs::FileTimes::new().set_modified(original_mtime))
+            .expect("restore plugin script mtime");
+        let (_, replacement_stamp) =
+            plugin_cache_identity(&resolved).expect("replacement cache stamp");
+        let replacement_metadata = fs::metadata(&script).expect("replacement metadata");
+        assert_eq!(replacement_metadata.len(), original_metadata.len());
+        assert_eq!(replacement_metadata.modified().unwrap(), original_mtime);
+        assert_ne!(replacement_stamp, original_stamp);
         fs::write(
             root.join("palamedes.yaml"),
             r"
@@ -2262,53 +2319,56 @@ catalogs:
     include: [src]
 plugins:
   - './alpha'
-  - './beta'
 ",
         )
         .expect("config");
-        let config = load_config(&root, None).expect("config with plugins");
+        let config = load_config(&root, None).expect("config with plugin");
 
-        let first = load_registry(&config, &root, Path::new("pmds")).expect("initial registry");
-        assert_eq!(first.plugins.len(), 2);
-        assert_eq!(fs::read_to_string(root.join("alpha/counter")).unwrap(), "x");
-        assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
+        let first =
+            load_registry(&config, &root, Path::new("pmds"), true).expect("initial registry");
+        assert_eq!(first.plugins.len(), 1);
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
         assert!(plugin_manifest_cache_path(&config).is_file());
 
-        let warm = load_registry(&config, &root, Path::new("pmds")).expect("cached registry");
-        assert_eq!(warm.plugins.len(), 2);
-        assert_eq!(fs::read_to_string(root.join("alpha/counter")).unwrap(), "x");
-        assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
+        let warm = load_registry(&config, &root, Path::new("pmds"), true).expect("cached registry");
+        assert_eq!(warm.plugins.len(), 1);
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
 
-        let alpha_script = root.join("alpha/describe");
-        let original_metadata = fs::metadata(&alpha_script).expect("alpha script metadata");
-        let original_mtime = original_metadata.modified().expect("alpha script mtime");
-        let changed = fs::read_to_string(&alpha_script)
-            .expect("alpha script")
-            .replace("read _request", "read _payload");
-        assert_eq!(changed.len() as u64, original_metadata.len());
-        write_executable_fixture(&alpha_script, changed);
-        fs::OpenOptions::new()
-            .write(true)
-            .open(&alpha_script)
-            .expect("alpha script")
-            .set_times(fs::FileTimes::new().set_modified(original_mtime))
-            .expect("restore alpha script mtime");
-        let replacement_metadata = fs::metadata(&alpha_script).expect("replacement metadata");
-        assert_eq!(replacement_metadata.len(), original_metadata.len());
-        assert_eq!(replacement_metadata.modified().unwrap(), original_mtime);
-        let refreshed =
-            load_registry(&config, &root, Path::new("pmds")).expect("refreshed registry");
-        assert_eq!(refreshed.plugins.len(), 2);
-        assert_eq!(
-            fs::read_to_string(root.join("alpha/counter")).unwrap(),
-            "xx"
-        );
-        assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
+        let changed = fs::read_to_string(&implementation)
+            .expect("plugin implementation")
+            .replace("inspect", "refreshed");
+        fs::write(&implementation, changed).expect("change plugin implementation");
+        let stale = load_registry(&config, &root, Path::new("pmds"), true)
+            .expect("unchanged shim stays cached");
+        assert!(stale.plugins["alpha"]
+            .manifest
+            .commands
+            .contains_key("inspect"));
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
+
+        let explicitly_refreshed = load_registry(&config, &root, Path::new("pmds"), false)
+            .expect("explicitly refreshed registry");
+        assert!(explicitly_refreshed.plugins["alpha"]
+            .manifest
+            .commands
+            .contains_key("refreshed"));
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
+
+        let warm = load_registry(&config, &root, Path::new("pmds"), true)
+            .expect("refreshed cache is reusable");
+        assert!(warm.plugins["alpha"]
+            .manifest
+            .commands
+            .contains_key("refreshed"));
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
     }
 
     #[cfg(unix)]
     #[test]
     fn cached_manifests_still_enforce_namespace_collisions() {
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         use super::load_registry;
 
         let root = temp_dir("cached-collision");
@@ -2345,7 +2405,7 @@ plugins:
         let config = load_config(&root, None).expect("config with plugins");
 
         for attempt in 1..=2 {
-            let error = load_registry(&config, &root, Path::new("pmds"))
+            let error = load_registry(&config, &root, Path::new("pmds"), true)
                 .expect_err("duplicate namespace rejected");
             assert_eq!(error.code, "PLUGIN_NAMESPACE_COLLISION");
             assert_eq!(
