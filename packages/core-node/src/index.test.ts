@@ -1051,6 +1051,19 @@ export function greeting() {
     })
   })
 
+  it("rejects an already-aborted catalog task before entering native code", async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      compileCatalogArtifactAsync(
+        { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] },
+        "fixture.po",
+        { signal: controller.signal }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" })
+  })
+
   it("keeps the event loop responsive while catalog compilation runs off-thread", async () => {
     const rootDir = await createTempDir()
     const sourceCatalogDir = path.join(rootDir, "locales", "en")
@@ -1092,6 +1105,44 @@ msgstr "Hallo"
     ).rejects.toMatchObject({
       stderr: expect.stringContaining("timer ticks during native catalog work"),
     })
+  })
+
+  it("cancels catalog work that is still queued in the native worker pool", async () => {
+    const rootDir = await createTempDir()
+    const sourceCatalogDir = path.join(rootDir, "locales", "en")
+    const catalogDir = path.join(rootDir, "locales", "de")
+    await mkdir(sourceCatalogDir, { recursive: true })
+    await mkdir(catalogDir, { recursive: true })
+    await writeFile(
+      path.join(sourceCatalogDir, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "Hello"
+msgstr "Hello"
+`
+    )
+    await writeFile(
+      path.join(catalogDir, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Hello"
+msgstr "Hallo"
+`
+    )
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
+    const addonPath = await testSupportAddonPath(repoRoot)
+    const childPath = path.join(repoRoot, "packages/core-node/scripts/abort-async-task-child.mjs")
+
+    await expect(
+      execFileAsync(process.execPath, [childPath, addonPath, rootDir], {
+        env: { ...process.env, UV_THREADPOOL_SIZE: "1" },
+        timeout: 10_000,
+      })
+    ).resolves.toMatchObject({ stderr: "" })
   })
 
   it("performs deletion-aware three-way catalog merges across the NAPI boundary", async () => {
@@ -1754,7 +1805,8 @@ async function createTempDir(): Promise<string> {
 type TestSupportBindings = Pick<GeneratedNativeBindings, "listTranslationCandidates"> & {
   compileCatalogArtifactWithDelayForTestSupport(
     request: Parameters<GeneratedNativeBindings["compileCatalogArtifact"]>[0],
-    delayMs: number
+    delayMs: number,
+    signal?: AbortSignal
   ): Promise<Awaited<ReturnType<GeneratedNativeBindings["compileCatalogArtifactAsync"]>>>
   applyTranslationPatchesWithInjectedWriteFailure(
     request: GeneratedTranslationPatchRequest,
