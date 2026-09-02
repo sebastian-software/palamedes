@@ -62,13 +62,13 @@
     "vite": "^3 || ^4 || ^5 || ^6 || ^7 || ^8"
   },
   "devDependencies": {
-    "@solidjs/vite-plugin": "3.0.0-next.34",
+    "@solidjs/vite-plugin": "3.0.0-next.37",
     "@solidjs/web": "2.0.0-rc.3",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "solid-js": "2.0.0-rc.3",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
-    "vite": "8.2.1",
-    "vitest": "^4.1.10"
+    "vite": "8.2.2",
+    "vitest": "^4.1.11"
   }
 }

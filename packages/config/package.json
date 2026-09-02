@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "jiti": "^2.7.0",
-    "picomatch": "^4.0.5",
+    "picomatch": "^4.0.7",
     "smol-toml": "^1.8.0",
     "yaml": "^2.9.0"
   },
@@ -58,6 +58,6 @@
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

@@ -47,10 +47,10 @@
     "@tanstack/react-start": "^1.168.38"
   },
   "devDependencies": {
-    "@tanstack/react-start": "1.168.44",
+    "@tanstack/react-start": "1.168.49",
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

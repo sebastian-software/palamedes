@@ -12,22 +12,22 @@
     "@palamedes/core": "workspace:^",
     "@palamedes/react-router-rsc": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "@react-router/serve": "8.3.0",
-    "@remix-run/node-fetch-server": "0.14.0",
+    "@react-router/serve": "8.3.1",
+    "@remix-run/node-fetch-server": "0.14.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "8.3.0"
+    "react-router": "8.3.1"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "@react-router/dev": "8.3.0",
+    "@react-router/dev": "8.3.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-rsc": "0.5.34",
     "react-server-dom-webpack": "^19.2.8",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   }
 }
