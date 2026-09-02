@@ -96,11 +96,11 @@ console.log(po.headers.Language)
 - `getNativeInfo()`
 - `parsePo(source)`
 - `updateCatalogFile(request)`
-- `updateCatalogFileAsync(request)`
+- `updateCatalogFileAsync(request, taskOptions?)`
 - `parseCatalog(request)`
 - `listTranslationCandidates(request)`
 - `applyTranslationPatches(request)`
-- `applyTranslationPatchesAsync(request)`
+- `applyTranslationPatchesAsync(request, taskOptions?)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
@@ -111,17 +111,17 @@ console.log(po.headers.Language)
 - `mergeCatalogsThreeWay(request)`
 - `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
-- `compileCatalogArtifactAsync(config, resourcePath)`
+- `compileCatalogArtifactAsync(config, resourcePath, taskOptions?)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
-- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds)`
+- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds, taskOptions?)`
 - `compileCatalogModule(config, resourcePath, options)`
-- `compileCatalogModuleAsync(config, resourcePath, options)`
+- `compileCatalogModuleAsync(config, resourcePath, options, taskOptions?)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
-- `extractCatalogMessagesFromFilesAsync(request)`
+- `extractCatalogMessagesFromFilesAsync(request, taskOptions?)`
 - `transformMacrosNative(source, filename, options?)`
 
 `analyzeMdxNative()` and `transformMacrosNative()` omit authored source-message
@@ -172,11 +172,13 @@ result and error shapes, but schedule one owned operation on Node's shared
 libuv worker pool. The first-party Vite and Next loaders await these variants;
 the Remix synchronous module hook keeps the compatible synchronous API.
 
-These promises do not cancel native work after it is queued. When custom
-tooling starts many independent operations, limit its own concurrency instead
-of creating an unbounded `Promise.all` fan-out. The libuv pool is shared with
-other Node filesystem and native work; `UV_THREADPOOL_SIZE` remains Node's
-process-level control.
+The six async APIs accept an optional `{ signal }` task-options object. Aborting
+the signal rejects work that is still queued for a libuv worker with an
+`AbortError`; native work that has already started finishes normally. When
+custom tooling starts many independent operations, still limit its own
+concurrency instead of creating an unbounded `Promise.all` fan-out. The libuv
+pool is shared with other Node filesystem and native work;
+`UV_THREADPOOL_SIZE` remains Node's process-level control.
 
 Concurrent selected-artifact calls for the same catalog/configuration are
 coordinated before they enter the worker pool. The first call performs an

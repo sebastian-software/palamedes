@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use napi::bindgen_prelude::{AsyncTask, Either, JsObjectValue, Result, ToNapiValue};
+use napi::bindgen_prelude::{AbortSignal, AsyncTask, Either, JsObjectValue, Result, ToNapiValue};
 use napi::{Env, Error, Status};
 use napi_derive::napi;
 
@@ -1720,12 +1720,12 @@ fn update_catalog_file_impl(request: CatalogUpdateRequest) -> Result<CatalogUpda
 /// Updates a catalog on the libuv worker pool without blocking the Node event loop.
 pub fn update_catalog_file_async(
     request: CatalogUpdateRequest,
+    signal: Option<AbortSignal>,
 ) -> AsyncTask<BlockingTask<CatalogUpdateRequest, CatalogUpdateResult>> {
-    AsyncTask::new(BlockingTask::new(
-        "updateCatalogFileAsync",
-        request,
-        update_catalog_file_impl,
-    ))
+    AsyncTask::with_optional_signal(
+        BlockingTask::new("updateCatalogFileAsync", request, update_catalog_file_impl),
+        signal,
+    )
 }
 
 #[napi(catch_unwind)]
@@ -1838,10 +1838,14 @@ impl napi::Task for ApplyTranslationPatchesTask {
 /// the core representation.
 pub fn apply_translation_patches_async(
     request: TranslationPatchRequest,
+    signal: Option<AbortSignal>,
 ) -> Result<AsyncTask<ApplyTranslationPatchesTask>> {
-    Ok(AsyncTask::new(ApplyTranslationPatchesTask {
-        operation: Some(ApplyTranslationPatchesOperation::Apply(request.try_into()?)),
-    }))
+    Ok(AsyncTask::with_optional_signal(
+        ApplyTranslationPatchesTask {
+            operation: Some(ApplyTranslationPatchesOperation::Apply(request.try_into()?)),
+        },
+        signal,
+    ))
 }
 
 #[cfg(feature = "test-support")]
@@ -2057,12 +2061,16 @@ fn compile_catalog_artifact_impl(request: CatalogArtifactRequest) -> Result<Cata
 /// Compiles a full catalog artifact on the libuv worker pool.
 pub fn compile_catalog_artifact_async(
     request: CatalogArtifactRequest,
+    signal: Option<AbortSignal>,
 ) -> AsyncTask<BlockingTask<CatalogArtifactRequest, CatalogArtifactResult>> {
-    AsyncTask::new(BlockingTask::new(
-        "compileCatalogArtifactAsync",
-        request,
-        compile_catalog_artifact_impl,
-    ))
+    AsyncTask::with_optional_signal(
+        BlockingTask::new(
+            "compileCatalogArtifactAsync",
+            request,
+            compile_catalog_artifact_impl,
+        ),
+        signal,
+    )
 }
 
 #[napi(catch_unwind)]
@@ -2114,12 +2122,16 @@ fn compile_catalog_module_impl(request: CatalogModuleRequest) -> Result<CatalogM
 /// Compiles and renders a catalog module on the libuv worker pool.
 pub fn compile_catalog_module_async(
     request: CatalogModuleRequest,
+    signal: Option<AbortSignal>,
 ) -> AsyncTask<BlockingTask<CatalogModuleRequest, CatalogModuleResult>> {
-    AsyncTask::new(BlockingTask::new(
-        "compileCatalogModuleAsync",
-        request,
-        compile_catalog_module_impl,
-    ))
+    AsyncTask::with_optional_signal(
+        BlockingTask::new(
+            "compileCatalogModuleAsync",
+            request,
+            compile_catalog_module_impl,
+        ),
+        signal,
+    )
 }
 
 #[napi(catch_unwind)]
@@ -2150,12 +2162,16 @@ fn compile_catalog_artifact_selected_impl(
 /// Compiles selected catalog IDs on the libuv worker pool.
 pub fn compile_catalog_artifact_selected_async(
     request: CatalogArtifactSelectedRequest,
+    signal: Option<AbortSignal>,
 ) -> AsyncTask<BlockingTask<CatalogArtifactSelectedRequest, CatalogArtifactResult>> {
-    AsyncTask::new(BlockingTask::new(
-        "compileCatalogArtifactSelectedAsync",
-        request,
-        compile_catalog_artifact_selected_impl,
-    ))
+    AsyncTask::with_optional_signal(
+        BlockingTask::new(
+            "compileCatalogArtifactSelectedAsync",
+            request,
+            compile_catalog_artifact_selected_impl,
+        ),
+        signal,
+    )
 }
 
 #[cfg(feature = "test-support")]
@@ -2172,12 +2188,16 @@ fn compile_catalog_artifact_with_delay_for_test_support_impl(
 pub fn compile_catalog_artifact_with_delay_for_test_support(
     request: CatalogArtifactRequest,
     delay_ms: u32,
+    signal: Option<AbortSignal>,
 ) -> AsyncTask<BlockingTask<(CatalogArtifactRequest, u32), CatalogArtifactResult>> {
-    AsyncTask::new(BlockingTask::new(
-        "compileCatalogArtifactWithDelayForTestSupport",
-        (request, delay_ms),
-        compile_catalog_artifact_with_delay_for_test_support_impl,
-    ))
+    AsyncTask::with_optional_signal(
+        BlockingTask::new(
+            "compileCatalogArtifactWithDelayForTestSupport",
+            (request, delay_ms),
+            compile_catalog_artifact_with_delay_for_test_support_impl,
+        ),
+        signal,
+    )
 }
 
 fn create_catalog_module_result(

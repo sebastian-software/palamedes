@@ -82,6 +82,10 @@ import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalog
 import { loadNativeBindings, prepareNativeArgument, snapshotNativeArgument } from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
+export type AsyncTaskOptions = {
+  /** Cancel the native task while it is still waiting for a libuv worker. */
+  signal?: AbortSignal
+}
 export type ParsedPoItem = GeneratedParsedPoItem
 export type ParsedPoFile = GeneratedParsedPoFile
 export type CatalogOrigin = GeneratedCatalogOrigin
@@ -431,11 +435,14 @@ export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateR
 
 /** Run the catalog read/update/write cycle on Node's shared libuv worker pool. */
 export async function updateCatalogFileAsync(
-  request: CatalogUpdateRequest
+  request: CatalogUpdateRequest,
+  options?: AsyncTaskOptions
 ): Promise<CatalogUpdateResult> {
   const nativeRequest = toNativeUpdateRequest("updateCatalogFileAsync", request)
   const result = await serializeCatalogMutation([nativeRequest.targetPath], () =>
-    native.updateCatalogFileAsync(nativeRequest)
+    startAbortableNativeTask(options, (signal) =>
+      native.updateCatalogFileAsync(nativeRequest, signal)
+    )
   )
   return fromNativeCatalogUpdateResult(result)
 }
@@ -484,12 +491,15 @@ export function applyTranslationPatches(request: TranslationPatchRequest): Trans
 
 /** Run translation patch validation and catalog replacement on the libuv worker pool. */
 export async function applyTranslationPatchesAsync(
-  request: TranslationPatchRequest
+  request: TranslationPatchRequest,
+  options?: AsyncTaskOptions
 ): Promise<TranslationPatchResult> {
   const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request)
   try {
     const result = await serializeCatalogMutation(translationPatchTargetPaths(nativeRequest), () =>
-      native.applyTranslationPatchesAsync(nativeRequest)
+      startAbortableNativeTask(options, (signal) =>
+        native.applyTranslationPatchesAsync(nativeRequest, signal)
+      )
     )
     return fromNativeTranslationPatchResult(result)
   } catch (error) {
@@ -1002,13 +1012,18 @@ export function compileCatalogArtifact(
 /** Compile a full catalog artifact on Node's shared libuv worker pool. */
 export async function compileCatalogArtifactAsync(
   config: CatalogArtifactConfig,
-  resourcePath: string
+  resourcePath: string,
+  options?: AsyncTaskOptions
 ): Promise<CatalogArtifactResult> {
   const request: NativeCatalogArtifactRequest = {
     config: toNativeArtifactConfig(config),
     resourcePath,
   }
-  return fromNativeCatalogArtifactResult(await native.compileCatalogArtifactAsync(request))
+  return fromNativeCatalogArtifactResult(
+    await startAbortableNativeTask(options, (signal) =>
+      native.compileCatalogArtifactAsync(request, signal)
+    )
+  )
 }
 
 export function compileCatalogArtifactSelected(
@@ -1028,7 +1043,8 @@ export function compileCatalogArtifactSelected(
 export async function compileCatalogArtifactSelectedAsync(
   config: CatalogArtifactConfig,
   resourcePath: string,
-  compiledIds: string[]
+  compiledIds: string[],
+  options?: AsyncTaskOptions
 ): Promise<CatalogArtifactResult> {
   const request: NativeCatalogArtifactSelectedRequest = {
     config: toOwnedNativeArtifactConfig(config),
@@ -1037,7 +1053,11 @@ export async function compileCatalogArtifactSelectedAsync(
   }
   const key = selectedCatalogBuildKey(request.config, request.resourcePath)
   return coordinateInitialCatalogBuild(key, async () =>
-    fromNativeCatalogArtifactResult(await native.compileCatalogArtifactSelectedAsync(request))
+    fromNativeCatalogArtifactResult(
+      await startAbortableNativeTask(options, (signal) =>
+        native.compileCatalogArtifactSelectedAsync(request, signal)
+      )
+    )
   )
 }
 
@@ -1064,7 +1084,8 @@ export function compileCatalogModule(
 export async function compileCatalogModuleAsync(
   config: CatalogArtifactConfig,
   resourcePath: string,
-  options: CatalogModuleOptions
+  options: CatalogModuleOptions,
+  taskOptions?: AsyncTaskOptions
 ): Promise<CatalogModuleResult> {
   const request: NativeCatalogModuleRequest = {
     config: toNativeArtifactConfig(config),
@@ -1077,7 +1098,9 @@ export async function compileCatalogModuleAsync(
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
   }
-  return native.compileCatalogModuleAsync(request)
+  return startAbortableNativeTask(taskOptions, (signal) =>
+    native.compileCatalogModuleAsync(request, signal)
+  )
 }
 
 /** Render an already-compiled message map through the canonical native generator. */
@@ -1168,12 +1191,26 @@ export function extractCatalogMessagesFromFiles(
 
 /** Read and extract source files on Node's shared libuv worker pool. */
 export async function extractCatalogMessagesFromFilesAsync(
-  request: ExtractCatalogMessagesRequest
+  request: ExtractCatalogMessagesRequest,
+  options?: AsyncTaskOptions
 ): Promise<ExtractCatalogMessagesResult> {
-  return native.extractCatalogMessagesFromFilesAsync({
-    ...request,
-    mdx: toNativeMdxOptions(request.mdx),
-  })
+  return startAbortableNativeTask(options, (signal) =>
+    native.extractCatalogMessagesFromFilesAsync(
+      {
+        ...request,
+        mdx: toNativeMdxOptions(request.mdx),
+      },
+      signal
+    )
+  )
+}
+
+function startAbortableNativeTask<TResult>(
+  options: AsyncTaskOptions | undefined,
+  operation: (signal: AbortSignal | undefined) => Promise<TResult>
+): Promise<TResult> {
+  options?.signal?.throwIfAborted()
+  return operation(options?.signal)
 }
 
 export function transformMacrosNative(

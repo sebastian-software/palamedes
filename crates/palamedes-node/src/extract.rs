@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use napi::bindgen_prelude::{AsyncTask, Result};
+use napi::bindgen_prelude::{AbortSignal, AsyncTask, Result};
 use napi_derive::napi;
 
 use crate::catalog::CatalogUpdateMessage;
@@ -163,10 +163,14 @@ fn extract_catalog_messages_from_files_impl(
 /// Extracts catalog messages from files on the libuv worker pool.
 pub fn extract_catalog_messages_from_files_async(
     request: ExtractCatalogMessagesRequest,
+    signal: Option<AbortSignal>,
 ) -> AsyncTask<BlockingTask<ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult>> {
-    AsyncTask::new(BlockingTask::new(
-        "extractCatalogMessagesFromFilesAsync",
-        request,
-        extract_catalog_messages_from_files_impl,
-    ))
+    AsyncTask::with_optional_signal(
+        BlockingTask::new(
+            "extractCatalogMessagesFromFilesAsync",
+            request,
+            extract_catalog_messages_from_files_impl,
+        ),
+        signal,
+    )
 }
