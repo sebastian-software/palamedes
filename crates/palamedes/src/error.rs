@@ -142,7 +142,11 @@ pub enum PalamedesError {
     /// Catalog updates require non-empty messages.
     #[error("Catalog messages must not be empty")]
     EmptyCatalogMessage,
-    /// Parsing source text into an AST failed.
+    /// Legacy parser error without module context.
+    ///
+    /// Palamedes no longer emits this variant. Match [`Self::ParseModuleSource`]
+    /// to classify source parser failures while retaining filename diagnostics.
+    #[deprecated(note = "use PalamedesError::ParseModuleSource instead")]
     #[error("Parse error: {messages}")]
     ParseSource {
         /// Joined parser diagnostics.
