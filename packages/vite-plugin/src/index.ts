@@ -352,6 +352,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     })
   }
 
+  function transformErrorMessage(sourceId: string, error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error)
+    return `Palamedes transform error in ${sourceId}: ${message}`
+  }
+
   async function getConfigLazy() {
     if (!config) {
       config = await loadPalamedesConfig(configLoaderOptions)
@@ -604,8 +609,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           })
         }
 
+        let transformedCode: string
+        try {
+          transformedCode = await withSidecarImport(result.code, cleanId, result.compiledIds)
+        } catch (error) {
+          this.error(transformErrorMessage(cleanId, error))
+        }
+
         return {
-          code: await withSidecarImport(result.code, cleanId, result.compiledIds),
+          code: transformedCode,
           map: result.map,
           ...((mdx.framework ?? "react") === "react" ? { moduleType: "jsx" as const } : {}),
         }
@@ -707,13 +719,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             map: result.map as any,
           }
         }
-        return sidecarCode.then((transformedCode) => ({
-          code: transformedCode,
-          map: result.map as any,
-        }))
+        return sidecarCode.then(
+          (transformedCode) => ({
+            code: transformedCode,
+            map: result.map as any,
+          }),
+          (error) => this.error(transformErrorMessage(cleanId, error))
+        )
       } catch (error) {
-        const err = error as Error
-        this.error(`Palamedes transform error in ${cleanId}: ${err.message}`)
+        this.error(transformErrorMessage(cleanId, error))
       }
     },
   })

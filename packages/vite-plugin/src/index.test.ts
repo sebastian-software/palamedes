@@ -665,7 +665,17 @@ describe("experimental graph splitting", () => {
         ["id-a"],
         "C:\\shared\\label.ts"
       )
-    ).rejects.toThrow(/different filesystem volume/)
+    ).rejects.toThrow(
+      /Palamedes transform error in C:\\shared\\label\.ts:.*different filesystem volume/
+    )
+  })
+
+  it("wraps asynchronous sidecar config failures with the transformed file", async () => {
+    mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"))
+
+    await expect(
+      runMacroTransform({ experimentalGraphSplitting: true }, undefined, ["id-a"])
+    ).rejects.toThrow("Palamedes transform error in /repo/src/label.ts: Invalid Palamedes config")
   })
 
   it("rejects Windows UNC sources on a different share before deriving a relative key", async () => {
@@ -786,6 +796,22 @@ describe("experimental graph splitting", () => {
     // reports the same compiledIds, so the module carries its own messages.
     expect(result?.code).toMatch(/import "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/)
     expect(result?.code).toContain("export default function MDXContent()")
+  })
+
+  it("wraps asynchronous MDX sidecar failures with the transformed file", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "D:\\checkout\\project\\palamedes.yaml",
+      rootDir: "D:\\checkout\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    await expect(
+      runMdxTransform({}, { experimentalGraphSplitting: true }, undefined, "C:\\shared\\guide.mdx")
+    ).rejects.toThrow(
+      /Palamedes transform error in C:\\shared\\guide\.mdx:.*different filesystem volume/
+    )
   })
 
   it("leaves MDX modules without messages untouched", async () => {
@@ -1259,7 +1285,11 @@ function runMacroTransform(
   }
 
   return transform.call(
-    { error: vi.fn() } as never,
+    {
+      error(message: unknown) {
+        throw message instanceof Error ? message : new Error(String(message))
+      },
+    } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
     sourceId
   )
@@ -1290,7 +1320,8 @@ async function runPoTransform(
 async function runMdxTransform(
   context: Record<string, unknown> = {},
   options: Parameters<typeof palamedes>[0] = {},
-  command?: "build" | "serve"
+  command?: "build" | "serve",
+  sourceId = "/repo/src/guide.mdx"
 ) {
   const plugins = palamedes(options)
   if (command) {
@@ -1313,10 +1344,13 @@ async function runMdxTransform(
   return transform.call(
     {
       addWatchFile() {},
+      error(message: unknown) {
+        throw message instanceof Error ? message : new Error(String(message))
+      },
       ...context,
     } as any,
     "# Welcome",
-    "/repo/src/guide.mdx"
+    sourceId
   )
 }
 
