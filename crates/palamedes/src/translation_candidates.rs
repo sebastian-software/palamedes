@@ -929,7 +929,6 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
         }],
         ..PoFile::default()
     };
-    let mut identities = BTreeSet::new();
     let mut previous_collated_key: Option<FclCollatedKey> = None;
     for (line_index, line) in lines {
         if line.is_empty() {
@@ -949,16 +948,16 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
                 line_index + 1
             ))
         })?;
-        if !identities.insert((item.msgid.clone(), item.msgctxt.clone())) {
-            return Err(ferrocat::ApiError::Conflict(format!(
-                "duplicate FCL entry for id {:?} and context {:?}",
-                item.msgid, item.msgctxt
-            ))
-            .into());
-        }
         if let Some(previous) = po.items.last() {
             let identity_order = (item.msgid.as_str(), item.msgctxt.as_deref())
                 .cmp(&(previous.msgid.as_str(), previous.msgctxt.as_deref()));
+            if identity_order.is_eq() {
+                return Err(ferrocat::ApiError::Conflict(format!(
+                    "duplicate FCL entry for id {:?} and context {:?}",
+                    item.msgid, item.msgctxt
+                ))
+                .into());
+            }
             if order == FclOrder::LegacyBytewise && identity_order.is_lt() {
                 return Err(ferrocat::ApiError::InvalidArguments(format!(
                     "FCL entries must be sorted by (id, ctxt); line {} is out of order",
@@ -1929,6 +1928,13 @@ mod tests {
                 "en",
                 "de",
                 "declared collated order",
+                true,
+            ),
+            (
+                "%FCL1\tsource=en\tlocale=de\torder=collated\nAlpha\t\tA\nAlpha\t\tB\n",
+                "en",
+                "de",
+                "duplicate identity",
                 true,
             ),
         ];
