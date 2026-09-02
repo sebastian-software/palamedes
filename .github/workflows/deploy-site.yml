@@ -145,18 +145,18 @@ jobs:
           # Keep this live probe content-agnostic so copy changes do not block a deploy.
           check "/" 200
           check "/frameworks" 200
-          check "/proof" 200 "Claims you can re-run."
-          check "/get-started" 200 "First working translation"
-          check "/compare" 200 "Compare it properly."
-          check "/blog" 200 "Building i18n tooling"
-          check "/blog/measuring-palamedes-honestly" 200 "Measuring Palamedes Honestly"
-          check "/docs" 200 "Documentation"
-          check "/docs/cli" 200 "CLI Reference"
-          check "/docs/example-screenshots" 200 "Example Screenshots"
-          check "/decisions" 200 "Decision Records"
-          check "/decisions/003-source-string-first-message-identity" 200 "ADR-003: Source-String-First Message Identity"
-          check "/api-reference" 200 "Generated API Reference"
-          check "/api-reference/core" 200 "Core"
+          check "/proof" 200
+          check "/get-started" 200
+          check "/compare" 200
+          check "/blog" 200
+          check "/blog/measuring-palamedes-honestly" 200
+          check "/docs" 200
+          check "/docs/cli" 200
+          check "/docs/example-screenshots" 200
+          check "/decisions" 200
+          check "/decisions/003-source-string-first-message-identity" 200
+          check "/api-reference" 200
+          check "/api-reference/core" 200
           check "/llms.txt" 200 "palamedes.yaml"
           check "/llms-full.txt" 200 "palamedes.yaml"
           check "/sitemap.xml" 200 "https://palamedes.dev/proof"
