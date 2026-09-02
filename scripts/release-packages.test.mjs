@@ -66,6 +66,53 @@ test("rejects workspace dependency cycles instead of returning an unsafe publish
   )
 })
 
-function packageInfo(name, dependencies = {}) {
-  return { name, manifest: { dependencies } }
+test("keeps acyclic peer dependencies as publish-order hints", () => {
+  const packages = [
+    packageInfo(
+      "@example/adapter",
+      {},
+      { peerDependencies: { "@example/runtime": "workspace:^" } }
+    ),
+    packageInfo("@example/runtime"),
+  ]
+
+  assert.deepEqual(
+    dependencyOrderedWorkspacePackages(packages).map((packageInfo) => packageInfo.name),
+    ["@example/runtime", "@example/adapter"]
+  )
+})
+
+test("drops only peer ordering hints that would close a dependency cycle", () => {
+  const packages = [
+    packageInfo("@example/a", {}, { peerDependencies: { "@example/b": "workspace:^" } }),
+    packageInfo("@example/b", {}, { peerDependencies: { "@example/a": "workspace:^" } }),
+    packageInfo("@example/c", { "@example/a": "workspace:^" }),
+  ]
+  const warnings = []
+
+  assert.deepEqual(
+    dependencyOrderedWorkspacePackages(packages, { warn: (warning) => warnings.push(warning) }).map(
+      (packageInfo) => packageInfo.name
+    ),
+    ["@example/b", "@example/a", "@example/c"]
+  )
+  assert.deepEqual(warnings, [
+    "Ignoring workspace peer dependency publish-order hint @example/a -> @example/b because it would create a cycle.",
+  ])
+})
+
+test("still rejects cycles made only from hard optional dependencies", () => {
+  const packages = [
+    packageInfo("@example/a", {}, { optionalDependencies: { "@example/b": "workspace:^" } }),
+    packageInfo("@example/b", {}, { optionalDependencies: { "@example/a": "workspace:^" } }),
+  ]
+
+  assert.throws(
+    () => dependencyOrderedWorkspacePackages(packages),
+    /dependency cycle detected among @example\/a, @example\/b/u
+  )
+})
+
+function packageInfo(name, dependencies = {}, manifest = {}) {
+  return { name, manifest: { ...manifest, dependencies } }
 }
