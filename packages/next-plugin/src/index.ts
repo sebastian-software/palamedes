@@ -110,7 +110,7 @@ function appendTurbopackRule(
 export type WithPalamedesOptions = {
   /**
    * Pattern to include files for transformation.
-   * @default /\.(tsx?|jsx?|mjs|cjs)$/
+   * @default /\.([cm]?[jt]s|[jt]sx)$/
    */
   include?: RegExp
 

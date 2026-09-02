@@ -79,7 +79,7 @@ interface PalamedesRemixRegisterOptions {
 
 Defaults:
 
-- `include`: `/\.(tsx?|jsx?|mjs)$/`
+- `include`: `/\.(tsx?|jsx?|mjs|mts)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true`
@@ -88,14 +88,14 @@ Defaults:
 - `failOnMissing` / `failOnCompileError`: `false` — missing translations and
   catalog diagnostics warn instead of failing `.po` compilation
 
-The default intentionally excludes `.cjs` because the macro transform injects
-ESM imports. Pass a custom `include` only if your hook also provides a
-CommonJS-compatible runtime binding.
+The default intentionally excludes `.cjs` and `.cts` because the macro
+transform injects ESM imports. Pass a custom `include` only if your hook also
+provides a CommonJS-compatible runtime binding.
 
 Vite and Next use the shared bundler default from `@palamedes/transform`, which
-also includes `.cjs`. Remix keeps this narrower loader-only exception because
-Node executes a `.cjs` load result as CommonJS rather than passing it through a
-bundler.
+also includes `.cjs` and `.cts`. Remix keeps this narrower loader-only
+exception because Node executes those load results as CommonJS rather than
+passing them through a bundler. ESM-typed `.mts` files use the Remix default.
 
 Macro calls use the plain, framework-neutral getter; locale changes require
 document navigation.

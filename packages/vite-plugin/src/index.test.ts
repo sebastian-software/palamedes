@@ -104,11 +104,14 @@ beforeEach(() => {
 })
 
 describe("palamedes vite plugin", () => {
-  it.each(["label.mjs", "label.cjs"])("transforms %s with the shared bundler default", (file) => {
-    expect(runMacroTransform({}, undefined, [], `/repo/src/${file}`)).toMatchObject({
-      code: "transformed",
-    })
-  })
+  it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
+    "transforms %s with the shared bundler default",
+    (file) => {
+      expect(runMacroTransform({}, undefined, [], `/repo/src/${file}`)).toMatchObject({
+        code: "transformed",
+      })
+    }
+  )
 
   it("compiles PO files and registers watch dependencies", async () => {
     const addWatchFile = vi.fn()

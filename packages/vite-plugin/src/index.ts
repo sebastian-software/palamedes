@@ -178,7 +178,7 @@ function catalogArtifactConfig(
 export type PalamedesPluginOptions = {
   /**
    * Pattern to include files for transformation.
-   * @default /\.(tsx?|jsx?|mjs|cjs)$/
+   * @default /\.([cm]?[jt]s|[jt]sx)$/
    */
   include?: FilterPattern
 

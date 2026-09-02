@@ -43,7 +43,7 @@ function conditionList(rule: RuleItem): unknown[] {
 }
 
 describe("withPalamedes turbopack config", () => {
-  it("matches ESM and CommonJS JavaScript extensions with the shared bundler default", () => {
+  it("matches ESM and CommonJS TypeScript and JavaScript extensions with the shared default", () => {
     const rule = getRules(withPalamedes())["*"] as RuleItem
     const include = (
       conditionList(rule).find(
@@ -51,7 +51,16 @@ describe("withPalamedes turbopack config", () => {
       ) as { path: RegExp }
     ).path
 
-    for (const file of ["page.ts", "page.tsx", "page.js", "page.jsx", "page.mjs", "page.cjs"]) {
+    for (const file of [
+      "page.ts",
+      "page.tsx",
+      "page.js",
+      "page.jsx",
+      "page.mjs",
+      "page.cjs",
+      "page.mts",
+      "page.cts",
+    ]) {
       expect(include.test(file)).toBe(true)
     }
     expect(include.test("page.css")).toBe(false)

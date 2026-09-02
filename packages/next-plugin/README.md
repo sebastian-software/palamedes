@@ -299,7 +299,7 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 module.exports = withPalamedes(
   {},
   {
-    include: /\.(tsx?|jsx?|mjs|cjs)$/,
+    include: /\.([cm]?[jt]s|[jt]sx)$/,
     exclude: /node_modules/,
     enablePoLoader: true,
     configPath: "./palamedes.yaml",
@@ -332,7 +332,7 @@ directory layout can behave differently:
 - Turbopack tests **its own internal path representation** for the module,
   which is not guaranteed to be that absolute OS path
 
-Patterns matching a file extension (`/\.(tsx?|jsx?|mjs|cjs)$/`) or a path segment
+Patterns matching a file extension (`/\.([cm]?[jt]s|[jt]sx)$/`) or a path segment
 (`/[/\\]generated[/\\]/`) work the same under both. Patterns anchored with `^`,
 or built from an absolute directory, are the ones that can match under webpack
 and silently miss under Turbopack — prefer segment-based patterns and verify
