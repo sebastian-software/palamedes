@@ -158,6 +158,11 @@ export function prepareNativeArgument<T extends object>(operation: string, value
   return markPreparedNativeArgument(value)
 }
 
+/**
+ * Trusts an already validated, wrapper-owned plain-data tree at the guarded
+ * native boundary. Only use this for values derived exclusively from a
+ * `snapshotNativeArgument` result and wrapper-introduced constants.
+ */
 export function markPreparedNativeArgument<T extends object>(value: T): T {
   preparedNativeArguments.add(value)
   return value

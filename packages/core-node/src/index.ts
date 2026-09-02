@@ -79,7 +79,11 @@ import {
   selectedCatalogBuildKey,
 } from "./catalogCompilationCoordinator"
 import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue"
-import { loadNativeBindings, prepareNativeArgument, snapshotNativeArgument } from "./native-loader"
+import {
+  loadNativeBindings,
+  markPreparedNativeArgument,
+  snapshotNativeArgument,
+} from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
 export type AsyncTaskOptions = {
@@ -512,7 +516,7 @@ function toNativeTranslationPatchRequest(
   request: TranslationPatchRequest
 ): NativeTranslationPatchRequest {
   const source = snapshotNativeArgument(operation, request)
-  return prepareNativeArgument(operation, {
+  return markPreparedNativeArgument({
     config: toOwnedNativeArtifactConfig(source.config),
     patches: source.patches.map(toNativeTranslationPatch),
     po: toNativePoOptions(source.po),
@@ -746,7 +750,7 @@ function toNativeCombineRequest(
   const source = snapshotNativeArgument(operation, request)
   const conflictStrategy = source.conflictStrategy
   const selection = source.selection
-  return prepareNativeArgument(operation, {
+  return markPreparedNativeArgument({
     inputs: source.inputs.map((input) => ({ content: input.content, label: input.label })),
     sourceLocale: source.sourceLocale,
     locale: source.locale,
@@ -858,7 +862,7 @@ function toNativeUpdateRequest(
 ): NativeCatalogUpdateRequest {
   const source = snapshotNativeArgument(operation, request)
   const format = source.format
-  return prepareNativeArgument(operation, {
+  return markPreparedNativeArgument({
     targetPath: source.targetPath,
     locale: source.locale,
     sourceLocale: source.sourceLocale,

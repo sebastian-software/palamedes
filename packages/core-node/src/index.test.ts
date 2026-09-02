@@ -507,6 +507,38 @@ describe("@palamedes/core-node", () => {
     ).toThrow(/combineCatalogs\.argument\[0\]\.selection/u)
   })
 
+  it("does not descriptor-walk a rebuilt 10k-message update request", async () => {
+    const updateRoot = await createTempDir()
+    const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor
+    let descriptorReads = 0
+    let pending: Promise<unknown> | undefined
+
+    Object.getOwnPropertyDescriptor = ((
+      ...arguments_: Parameters<typeof Object.getOwnPropertyDescriptor>
+    ) => {
+      descriptorReads += 1
+      return originalGetOwnPropertyDescriptor(...arguments_)
+    }) as typeof Object.getOwnPropertyDescriptor
+    try {
+      pending = updateCatalogFileAsync({
+        targetPath: path.join(updateRoot, "messages.po"),
+        locale: "en",
+        sourceLocale: "en",
+        clean: false,
+        messages: Array.from({ length: 10_000 }, (_, index) => ({
+          message: `message-${index}`,
+          extractedComments: [],
+          origins: [],
+        })),
+      })
+    } finally {
+      Object.getOwnPropertyDescriptor = originalGetOwnPropertyDescriptor
+    }
+
+    expect(descriptorReads).toBe(0)
+    await pending
+  })
+
   it("uses one stable snapshot while converting bulk wrapper requests", async () => {
     const updateRoot = await createTempDir()
     const updatePath = path.join(updateRoot, "messages.po")
