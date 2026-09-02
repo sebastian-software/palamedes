@@ -698,7 +698,7 @@ mod tests {
             vec![("HOME", "/tmp/home"), ("PALAMEDES_UPDATE_CHECK", "0")],
         ] {
             assert!(Settings::from_environment(
-                "https://version.sebastian-software.dev/check",
+                "https://version-service.sebastian-software.de/check",
                 environment(&values)
             )
             .is_none());
@@ -708,7 +708,7 @@ mod tests {
     #[test]
     fn settings_seed_the_payload_and_place_the_cohort_beside_the_cache() {
         let settings = Settings::from_environment(
-            "https://version.sebastian-software.dev/check",
+            "https://version-service.sebastian-software.de/check",
             environment(&[
                 ("HOME", "/home/alex"),
                 ("XDG_CACHE_HOME", "/xdg"),

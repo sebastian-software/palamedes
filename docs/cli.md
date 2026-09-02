@@ -404,7 +404,7 @@ binaries keep it disabled until the shared endpoint has valid DNS/TLS and a
 verified deployment. Enabling a release is an explicit build step; a binary
 without that release-time endpoint makes no update-check request and writes no
 update-check cache. A configured build fails unless the value is exactly the
-owned HTTPS route `https://version.sebastian-software.dev/check`; malformed,
+owned HTTPS route `https://version-service.sebastian-software.de/check`; malformed,
 alternate-host, credentialed, port-qualified, query, and fragment values cannot
 produce a release binary. The server half of the contract lives in the public
 [version-service](https://github.com/sebastian-software/version-service)

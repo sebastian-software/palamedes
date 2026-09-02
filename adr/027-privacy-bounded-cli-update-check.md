@@ -2,7 +2,8 @@
 
 - Status: Accepted; rollout gated on endpoint readiness
 - Date: 2026-08-22 (amended 2026-08-27: shared service, project and cohort
-  fields — [#1036](https://github.com/sebastian-software/palamedes/issues/1036))
+  fields; amended 2026-09-02: production hostname —
+  [#1036](https://github.com/sebastian-software/palamedes/issues/1036))
 - Issue: [#855](https://github.com/sebastian-software/palamedes/issues/855)
 
 ## Context
@@ -14,12 +15,13 @@ trust-sensitive network side effect: an automatic request can reveal more than
 its JSON body through application logging, stable identifiers, repeated
 attempts, or accidental command and filesystem context.
 
-The endpoint does not exist yet. `version.sebastian-software.dev/check` is the
-agreed shared route for all Sebastian Software CLIs, owned by the public
+The production hostname now exists at
+`version-service.sebastian-software.de`, owned by the public
 [version-service](https://github.com/sebastian-software/version-service)
-repository, and is not deployed. Shipping a hard-coded call to that hostname
-before deployment would add a broken network request and falsely imply that
-the server-side privacy contract was in operation.
+repository. The application endpoint is not yet published or live-contract
+verified. Shipping a hard-coded call before that verification would add a
+broken network request and falsely imply that the server-side privacy contract
+was in operation.
 
 The no-identifier boundary has one important measurement consequence. A
 24-hour client cache rate-limits requests from one installation, but the server
@@ -37,7 +39,7 @@ The native `pmds` binary owns one advisory update-check mechanism:
    daemon, service, postinstall hook, or separate scheduled process.
 2. Release builds enable the mechanism only when
    `PALAMEDES_UPDATE_ENDPOINT` is exactly the owned HTTPS route
-   `https://version.sebastian-software.dev/check`. Missing values keep it
+   `https://version-service.sebastian-software.de/check`. Missing values keep it
    disabled; malformed, alternate-origin, credentialed, port-qualified, query,
    or fragment values fail the build. The release workflow must not set that
    build variable until the production endpoint passes the deployment guide in
