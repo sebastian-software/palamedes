@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url"
 
 import { chromium } from "@playwright/test"
 import { startSiteStaticServer } from "./site-static-server.mjs"
+import { isExpectedSkippedViewTransitionError } from "./verify-site-route-errors.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
@@ -248,11 +249,18 @@ async function checkRoutes(context, label, { expectHydration }) {
   console.log(`— pass: ${label}`)
   const consoleErrors = []
   const knownHydrationWarnings = []
+  const skippedViewTransitions = []
 
   if (!expectHydration) {
     for (const path of sitemapPaths) {
       const page = await context.newPage()
-      trackPageErrors(page, () => path, consoleErrors, knownHydrationWarnings)
+      trackPageErrors(
+        page,
+        () => path,
+        consoleErrors,
+        knownHydrationWarnings,
+        skippedViewTransitions
+      )
       const response = await gotoAndSettle(page, path, { settleMs: 100 })
       if (response?.status() !== 200) {
         fail(`${label} ${path}: expected HTTP 200, got ${response?.status() ?? "no response"}`)
@@ -270,7 +278,13 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   for (const route of ROUTE_EXPECTATIONS) {
     const routePage = await context.newPage()
-    trackPageErrors(routePage, () => route.path, consoleErrors, knownHydrationWarnings)
+    trackPageErrors(
+      routePage,
+      () => route.path,
+      consoleErrors,
+      knownHydrationWarnings,
+      skippedViewTransitions
+    )
     await gotoAndSettle(routePage, route.path, { settleMs: 1500 })
     const h1 = await routePage.locator("h1").first().textContent()
     if (!h1?.trim()) {
@@ -299,7 +313,13 @@ async function checkRoutes(context, label, { expectHydration }) {
   }
 
   const proofPage = await context.newPage()
-  trackPageErrors(proofPage, () => "/proof", consoleErrors, knownHydrationWarnings)
+  trackPageErrors(
+    proofPage,
+    () => "/proof",
+    consoleErrors,
+    knownHydrationWarnings,
+    skippedViewTransitions
+  )
   await gotoAndSettle(proofPage, "/proof", { settleMs: expectHydration ? 500 : 100 })
   await checkProofStructure(proofPage, label)
   if (expectHydration) {
@@ -325,7 +345,13 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   const page = await context.newPage()
   let currentPath = "(startup)"
-  trackPageErrors(page, () => currentPath, consoleErrors, knownHydrationWarnings)
+  trackPageErrors(
+    page,
+    () => currentPath,
+    consoleErrors,
+    knownHydrationWarnings,
+    skippedViewTransitions
+  )
 
   if (expectHydration) {
     currentPath = "/"
@@ -422,7 +448,13 @@ async function checkRoutes(context, label, { expectHydration }) {
     // The rival template leads with a verdict; the native-toolchain argument
     // belongs on the hub, not repeated on every rival page.
     const comparePage = await context.newPage()
-    trackPageErrors(comparePage, () => "/compare", consoleErrors, knownHydrationWarnings)
+    trackPageErrors(
+      comparePage,
+      () => "/compare",
+      consoleErrors,
+      knownHydrationWarnings,
+      skippedViewTransitions
+    )
     await gotoAndSettle(comparePage, "/compare", { settleMs: 1500 })
     const ledgerHeaders = await comparePage
       .locator("table")
@@ -669,6 +701,13 @@ async function checkRoutes(context, label, { expectHydration }) {
   if (knownHydrationWarnings.length > 0) {
     console.warn(
       `  known ARDO breadcrumb hydration warnings filtered: ${knownHydrationWarnings
+        .slice(0, 5)
+        .join(" | ")}`
+    )
+  }
+  if (skippedViewTransitions.length > 0) {
+    console.warn(
+      `  known skipped View Transition page errors filtered: ${skippedViewTransitions
         .slice(0, 5)
         .join(" | ")}`
     )
@@ -1046,11 +1085,19 @@ async function checkProgressiveOutlineAnchors(browser) {
   await context.close()
 }
 
-function trackPageErrors(page, getPath, consoleErrors, knownHydrationWarnings) {
+function trackPageErrors(
+  page,
+  getPath,
+  consoleErrors,
+  knownHydrationWarnings,
+  skippedViewTransitions
+) {
   page.on("pageerror", (error) => {
     const message = error.message
     const path = getPath()
-    if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
+    if (isExpectedSkippedViewTransitionError("pageerror", error)) {
+      skippedViewTransitions.push(path)
+    } else if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
       knownHydrationWarnings.push(path)
     } else {
       consoleErrors.push(`${path}: ${message}`)
