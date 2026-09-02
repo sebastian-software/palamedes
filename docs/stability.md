@@ -16,7 +16,7 @@ platform shells intentionally leave Node compatibility to their `@palamedes/cli`
 wrapper and therefore omit an engine declaration; the `@palamedes/core-node-*`
 native addons are loaded directly by Node and declare `>=22.0.0`. The repository
 development and CI floor is stricter: contributors should use Node.js `>=22.22`,
-matching the root `package.json`, README badge, and contribution guide.
+matching the root `package.json`, repository Node badge, and contribution guide.
 
 From 1.0 onward:
 

@@ -77,6 +77,32 @@ test("rejects a renamed published package outside the compact inventory", () => 
   )
 })
 
+test("rejects drift between published Node engines and the documented exceptions", () => {
+  expectRejected(
+    "packages/waku/package.json",
+    (text) => text.replace('"node": ">=22.22.0"', '"node": ">=22.0.0"'),
+    /Published package Node\.js engine exceptions changed/u
+  )
+})
+
+test("requires the shared Node support contract in both assistant surfaces", () => {
+  for (const file of ["llms.txt", "llms-full.txt"])
+    expectRejected(
+      file,
+      (text) =>
+        text.replace("Most published packages require Node.js", "Published packages use Node.js"),
+      new RegExp(`${file.replace(".", "\\.")} Node support contract`, "u")
+    )
+})
+
+test("keeps the Next.js first-run floor aligned with the plugin manifest", () => {
+  expectRejected(
+    "docs/nextjs-first-run.md",
+    (text) => text.replace("Use Node.js `>=22.0.0`", "Use Node.js `>=22.22.0`"),
+    /Next\.js first-run Node requirement/u
+  )
+})
+
 test("requires reserved-bin failure semantics in both assistant surfaces", () => {
   for (const file of ["llms.txt", "llms-full.txt"])
     expectRejected(

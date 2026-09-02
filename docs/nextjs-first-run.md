@@ -7,7 +7,7 @@ runtime. The [Next.js package README](../packages/next-plugin/README.md) and
 and production options after this first path works.
 
 Before installing the native CLI, check [Platform support](./platform-support.md).
-Use Node.js `>=22.22` and an application on one of the published targets.
+Use Node.js `>=22.0.0` and an application on one of the published targets.
 
 ## 1. Install the packages
 

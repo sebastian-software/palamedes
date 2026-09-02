@@ -1,7 +1,7 @@
 # Palamedes
 
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
-[![Node >=22.22](https://img.shields.io/badge/node-%3E%3D22.22-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
+[![Repository Node >=22.22.0](https://img.shields.io/badge/repository%20node-%3E%3D22.22.0-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 [![palamedes version](https://img.shields.io/npm/v/palamedes?label=palamedes)](https://www.npmjs.com/package/palamedes)
@@ -29,6 +29,11 @@ merging, and compilation, one runtime model, and first-party integrations for
 supported hosts.
 
 ## Start Here
+
+Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`,
+`@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`,
+while `@palamedes/remix` requires `>=24.3.0`. The badge above describes the
+stricter repository development and CI floor, not every published package.
 
 For the shortest supported path, install the shared Vite packages:
 
