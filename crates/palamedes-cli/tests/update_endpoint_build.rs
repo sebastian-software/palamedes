@@ -9,7 +9,7 @@ use std::process::{Command, Output};
 
 use update_endpoint::{validate, UPDATE_ENDPOINT_ENV};
 
-const VALID_ENDPOINT: &str = "https://version.sebastian-software.dev/check";
+const VALID_ENDPOINT: &str = "https://version-service.sebastian-software.de/check";
 
 #[test]
 fn build_contract_accepts_only_the_owned_https_route() {
@@ -17,18 +17,19 @@ fn build_contract_accepts_only_the_owned_https_route() {
 
     for endpoint in [
         "",
-        "http://version.sebastian-software.dev/check",
+        "http://version-service.sebastian-software.de/check",
         "https://",
-        "https://version.sebastian-software.dev",
-        "https://version.sebastian-software.dev/",
-        "https://version.sebastian-software.dev/other",
-        "https://user@version.sebastian-software.dev/check",
-        "https://version.sebastian-software.dev:443/check",
-        "https://version.sebastian-software.dev/check?channel=stable",
-        "https://version.sebastian-software.dev/check#latest",
+        "https://version-service.sebastian-software.de",
+        "https://version-service.sebastian-software.de/",
+        "https://version-service.sebastian-software.de/other",
+        "https://user@version-service.sebastian-software.de/check",
+        "https://version-service.sebastian-software.de:443/check",
+        "https://version-service.sebastian-software.de/check?channel=stable",
+        "https://version-service.sebastian-software.de/check#latest",
         "https://updates.example/check",
         "https://version.palamedes.dev/check",
-        " https://version.sebastian-software.dev/check",
+        "https://version.sebastian-software.dev/check",
+        " https://version-service.sebastian-software.de/check",
     ] {
         assert!(validate(endpoint).is_err(), "accepted {endpoint:?}");
     }

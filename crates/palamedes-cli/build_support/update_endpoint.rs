@@ -3,7 +3,7 @@ use std::env;
 pub const UPDATE_ENDPOINT_ENV: &str = "PALAMEDES_UPDATE_ENDPOINT";
 pub const VALIDATED_UPDATE_ENDPOINT_ENV: &str = "PALAMEDES_VALIDATED_UPDATE_ENDPOINT";
 pub const UPDATE_ENDPOINT_CFG: &str = "palamedes_update_endpoint";
-pub const ALLOWED_UPDATE_HOST: &str = "version.sebastian-software.dev";
+pub const ALLOWED_UPDATE_HOST: &str = "version-service.sebastian-software.de";
 pub const ALLOWED_UPDATE_PATH: &str = "check";
 
 pub fn configure() {
@@ -40,7 +40,9 @@ pub fn validate(endpoint: &str) -> Result<(), &'static str> {
         return Err("a non-empty path is required");
     };
     if authority != ALLOWED_UPDATE_HOST {
-        return Err("the host must be version.sebastian-software.dev without userinfo or a port");
+        return Err(
+            "the host must be version-service.sebastian-software.de without userinfo or a port",
+        );
     }
     if path.is_empty() {
         return Err("a non-empty path is required");
