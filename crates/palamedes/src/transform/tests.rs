@@ -1035,29 +1035,38 @@ const message = t({
 }
 
 #[test]
-fn escapes_carriage_returns_in_generated_runtime_strings() {
+fn escapes_javascript_line_terminators_in_generated_runtime_strings() {
     assert_eq!(
-        super::messages::escape_string("quote\" slash\\ line\nreturn\r"),
-        "quote\\\" slash\\\\ line\\nreturn\\r"
+        super::messages::escape_string(
+            "quote\" slash\\ line\nreturn\rline\u{2028}paragraph\u{2029}"
+        ),
+        "quote\\\" slash\\\\ line\\nreturn\\rline\\u2028paragraph\\u2029"
     );
 
-    let descriptor = transform_macros(
-        r#"import { t } from "@palamedes/core/macro";
+    let descriptor_source = r#"import { t } from "@palamedes/core/macro";
 const message = t({
-  message: "Line1\rLine2",
-  context: "dialog\rtitle",
-  comment: "Translator\rnote",
+  message: "Line1\rLine2<LS>Line3<PS>Line4",
+  context: "dialog\rtitle<LS>wide",
+  comment: "Translator\rnote<PS>continued",
 });
-"#,
-        "test.ts",
-        None,
-    )
-    .expect("descriptor with carriage returns should transform");
+"#
+    .replace("<LS>", "\u{2028}")
+    .replace("<PS>", "\u{2029}");
+    let descriptor = transform_macros(&descriptor_source, "test.ts", None)
+        .expect("descriptor with line terminators should transform");
 
-    assert!(descriptor.code.contains(r#"message: "Line1\rLine2""#));
-    assert!(descriptor.code.contains(r#"context: "dialog\rtitle""#));
-    assert!(descriptor.code.contains(r#"comment: "Translator\rnote""#));
-    assert!(!descriptor.code.contains('\r'));
+    assert!(descriptor
+        .code
+        .contains(r#"message: "Line1\rLine2\u2028Line3\u2029Line4""#));
+    assert!(descriptor
+        .code
+        .contains(r#"context: "dialog\rtitle\u2028wide""#));
+    assert!(descriptor
+        .code
+        .contains(r#"comment: "Translator\rnote\u2029continued""#));
+    for line_terminator in ['\r', '\u{2028}', '\u{2029}'] {
+        assert!(!descriptor.code.contains(line_terminator));
+    }
 
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &descriptor.code, SourceType::ts()).parse();
@@ -1067,20 +1076,25 @@ const message = t({
         parsed.diagnostics
     );
 
-    let jsx = transform_macros(
-        r#"import { Plural, Trans } from "@palamedes/react/macro";
-const rich = <Trans message={"Line1\rLine2"} context={"dialog\rtitle"} />;
-const choice = <Plural value={count} one="item" other="items" comment={"Translator\rnote"} context={"count\rlabel"} />;
-"#,
-        "test.tsx",
-        None,
-    )
-    .expect("JSX attributes with carriage returns should transform");
+    let jsx_source = r#"import { Plural, Trans } from "@palamedes/react/macro";
+const rich = <Trans message={"Line1\rLine2<LS>Line3<PS>Line4"} context={"dialog\rtitle<LS>wide"} />;
+const choice = <Plural value={count} one="item" other="items" comment={"Translator\rnote<PS>continued"} context={"count\rlabel<LS>wide"} />;
+"#
+    .replace("<LS>", "\u{2028}")
+    .replace("<PS>", "\u{2029}");
+    let jsx = transform_macros(&jsx_source, "test.tsx", None)
+        .expect("JSX attributes with line terminators should transform");
 
-    assert!(jsx.code.contains(r#"message={"Line1\rLine2"}"#));
-    assert!(jsx.code.contains(r#"context: "count\rlabel""#));
-    assert!(jsx.code.contains(r#"comment: "Translator\rnote""#));
-    assert!(!jsx.code.contains('\r'));
+    assert!(jsx
+        .code
+        .contains(r#"message={"Line1\rLine2\u2028Line3\u2029Line4"}"#));
+    assert!(jsx.code.contains(r#"context: "count\rlabel\u2028wide""#));
+    assert!(jsx
+        .code
+        .contains(r#"comment: "Translator\rnote\u2029continued""#));
+    for line_terminator in ['\r', '\u{2028}', '\u{2029}'] {
+        assert!(!jsx.code.contains(line_terminator));
+    }
 
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &jsx.code, SourceType::tsx()).parse();
