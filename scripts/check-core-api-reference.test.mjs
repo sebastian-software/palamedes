@@ -43,27 +43,27 @@ test("preserves aliased named export names and kinds", () => {
 })
 
 test("rejects root export forms it cannot inventory", () => {
-  assert.throws(() => collectExports('export * from "./other"'), /unsupported root export form/)
+  assert.throws(() => collectExports('export * from "./other"'), /unsupported public export form/)
   assert.throws(
     () => collectExports('export * as namespaceExport from "./other"'),
-    /unsupported root export form/
+    /unsupported public export form/
   )
   assert.throws(
     () => collectExports("export default function named() {}"),
-    /unsupported root export form/
+    /unsupported public export form/
   )
-  assert.throws(() => collectExports("export default {}"), /unsupported root export form/)
+  assert.throws(() => collectExports("export default {}"), /unsupported public export form/)
   assert.throws(
     () => collectExports('export import legacy = require("./other")'),
-    /unsupported root export form/
+    /unsupported public export form/
   )
   assert.throws(
     () => collectExports("export const { publicValue } = source"),
-    /unsupported root export form/
+    /unsupported public export form/
   )
   assert.throws(
     () => collectExports("export const [publicValue] = source"),
-    /unsupported root export form/
+    /unsupported public export form/
   )
 })
 
@@ -109,4 +109,13 @@ test("renders an Oxfmt-compatible root export block idempotently", () => {
     ].join("\n")
   )
   assert.equal(replaceExportBlock(block, block), block)
+})
+
+test("renders and replaces an independently marked subpath export block", () => {
+  const marker = "core-compiled-exports"
+  const block = renderExportBlock([{ name: "createI18n", kind: "runtime" }], marker)
+  const docs = `Before\n\n<!-- ${marker}:start -->\nstale\n<!-- ${marker}:end -->\n\nAfter`
+
+  assert.match(block, /<!-- core-compiled-exports:start -->/u)
+  assert.equal(replaceExportBlock(docs, block, marker), `Before\n\n${block}\n\nAfter`)
 })
