@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::Write;
@@ -763,8 +764,13 @@ fn load_catalog(
         validate_icu_native_po_item(item)?;
         parse_machine_metadata(item)?;
         let key = CatalogMessageKey::new(item.msgid.clone(), item.msgctxt.clone());
-        if messages.insert(key.clone(), index).is_some() {
-            ambiguous_messages.insert(key);
+        match messages.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(index);
+            }
+            Entry::Occupied(entry) => {
+                ambiguous_messages.insert(entry.key().clone());
+            }
         }
     }
     let po_item_indexes = po_item_indexes(&po);
@@ -2096,6 +2102,46 @@ msgstr "placeholder"
                 .map(String::as_str),
             Some("First metadata")
         );
+    }
+
+    #[test]
+    fn duplicate_identity_indexes_build_candidates_from_the_same_first_item() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        fs::create_dir_all(path.parent().expect("catalog directory")).expect("catalog directory");
+        fs::write(
+            &path,
+            "#. First metadata\n#: src/first.ts:1\n#, fuzzy\nmsgctxt \"menu\"\nmsgid \"Open\"\nmsgstr \"Erste\"\n\n#. Second metadata\n#: src/second.ts:2\nmsgctxt \"menu\"\nmsgid \"Open\"\nmsgstr \"Zweite\"\n",
+        )
+        .expect("duplicate catalog");
+        let catalog = CatalogConfig {
+            path: "messages/{locale}".to_owned(),
+            format: PalamedesCatalogFormat::Po,
+        };
+        let loaded = load_catalog(&po_config(fixture.path()), &catalog, "de")
+            .expect("load duplicate catalog");
+        let key = CatalogMessageKey::with_context("Open", "menu");
+
+        assert!(loaded.ambiguous_messages.contains(&key));
+        assert_eq!(loaded.messages[&key], loaded.po_item_indexes[&key].first);
+        assert_eq!(loaded.messages[&key], 0);
+
+        let candidate = build_candidate(
+            &loaded,
+            &key,
+            &loaded.po.items[loaded.messages[&key]],
+            usize::MAX,
+        )
+        .expect("build first duplicate candidate");
+        assert_eq!(
+            candidate.translation,
+            TranslationValue::Singular {
+                value: "Erste".to_owned(),
+            }
+        );
+        assert_eq!(candidate.comments, ["First metadata"]);
+        assert_eq!(candidate.origins[0].file, "src/first.ts");
+        assert!(candidate.review.fuzzy);
     }
 
     #[test]
