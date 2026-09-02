@@ -150,7 +150,8 @@ export function validateNativeArgument(operation: string, value: unknown): void 
 /**
  * Marks a wrapper-owned plain-data tree after validating its public source
  * without creating a second copy. The wrapper must own every nested object and
- * array in `value`; native bindings may read the prepared tree directly.
+ * array in `value`; record prototypes and property descriptors enforce that
+ * contract before native bindings may read the prepared tree directly.
  */
 export function prepareNativeArgument<T extends object>(operation: string, value: T): T {
   validateNativeArgument(operation, value)
@@ -189,6 +190,16 @@ function validateStableNativeArguments(operation: string, arguments_: unknown[])
     if (classification.kind === "map") {
       throw nativeBoundaryUnsupportedMapError(currentPath)
     }
+    if (
+      classification.kind === "record" &&
+      classification.prototype !== null &&
+      classification.prototype !== Object.prototype
+    ) {
+      throw nativeBoundaryReadError(
+        currentPath,
+        new TypeError("Prepared native argument records must be wrapper-owned plain data.")
+      )
+    }
     const keys =
       classification.kind === "array"
         ? enumerablePropertyNames(value, currentPath)
@@ -199,14 +210,25 @@ function validateStableNativeArguments(operation: string, arguments_: unknown[])
         classification.kind === "array" ? arrayPropertyPath(key) : `.${key}`
       )
       assertWellFormedPropertyName(key, propertyPath)
-      let propertyValue: unknown
-      try {
-        propertyValue = Reflect.get(value, key)
-      } catch (error) {
-        throw nativeBoundaryReadError(propertyPath, error)
-      }
+      const propertyValue = readPreparedDataProperty(value, key, propertyPath)
       pending.push({ value: propertyValue, path: propertyPath })
     }
+  }
+}
+
+function readPreparedDataProperty(
+  value: object,
+  key: string,
+  argumentPath: NativeArgumentPath
+): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (!descriptor || !("value" in descriptor)) {
+      throw new TypeError("Prepared native arguments must contain only own data properties.")
+    }
+    return descriptor.value
+  } catch (error) {
+    throw nativeBoundaryReadError(argumentPath, error)
   }
 }
 

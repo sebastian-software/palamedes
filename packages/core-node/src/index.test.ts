@@ -370,6 +370,40 @@ describe("@palamedes/core-node", () => {
         labels: new Map([["catalog", "primary"]]),
       })
     ).toThrow(/rejected a Map/u)
+
+    let preparedAccessorReads = 0
+    const accessorInput = {}
+    Object.defineProperty(accessorInput, "content", {
+      enumerable: true,
+      get() {
+        preparedAccessorReads += 1
+        return 'msgid "unstable"'
+      },
+    })
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        inputs: [accessorInput],
+      })
+    ).toThrow(/could not read combineCatalogs\.argument\[0\]\.inputs\[0\]\.content/u)
+    expect(preparedAccessorReads).toBe(0)
+
+    class BorrowedInput {
+      public content = 'msgid "borrowed"'
+    }
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        inputs: [new BorrowedInput()],
+      })
+    ).toThrow(/could not read combineCatalogs\.argument\[0\]\.inputs\[0\]/u)
+
+    const nullPrototypeInput = Object.assign(Object.create(null) as Record<string, string>, {
+      content: 'msgid "owned"',
+    })
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        inputs: [nullPrototypeInput],
+      })
+    ).not.toThrow()
   })
 
   it("validates wrapper-owned bulk payloads before the native call", () => {
