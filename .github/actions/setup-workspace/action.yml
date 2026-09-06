@@ -35,7 +35,7 @@ runs:
   using: composite
   steps:
     - name: Set up Node.js
-      uses: actions/setup-node@v7
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
       with:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
@@ -47,18 +47,18 @@ runs:
     # Corepack has to run before setup-node asks pnpm for the cache directory.
     - name: Restore pnpm cache
       if: inputs.pnpm-cache == 'true'
-      uses: actions/setup-node@v7
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
       with:
         node-version: ${{ inputs.node-version }}
         cache: pnpm
 
     - name: Set up Rust
       if: inputs.rust == 'true'
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
 
     - name: Cache Rust build artifacts
       if: inputs.rust == 'true' && inputs.rust-cache == 'true'
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2

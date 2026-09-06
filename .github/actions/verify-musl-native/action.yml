@@ -48,7 +48,7 @@ runs:
     # same native-musl environment used to prove that it will load in Alpine.
     - name: Restore musl container Cargo cache
       if: startsWith(inputs.package_name, '@palamedes/core-node-') && inputs.cargo-cache == 'true'
-      uses: actions/cache@v5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
       with:
         path: ${{ runner.temp }}/palamedes-musl-cargo/${{ inputs.rust_target }}
         key: palamedes-musl-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-${{ hashFiles('Cargo.lock') }}
