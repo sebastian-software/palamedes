@@ -1,0 +1,31 @@
+# Seeded by @sebastian-software/standards. Widen it with narrow, reviewed
+# exceptions — never by loosening the org allow-list below.
+
+[graph]
+all-features = true
+
+[advisories]
+# A yanked crate still builds from Cargo.lock; it must not ship unnoticed.
+yanked = "deny"
+# Flag unmaintained crates anywhere in the graph, not only in the workspace.
+unmaintained = "all"
+# Each entry needs a comment naming the advisory and why it is accepted.
+ignore = []
+
+[licenses]
+# Permissive licenses compatible with `MIT OR Apache-2.0` distribution.
+allow = ["Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0", "Zlib"]
+# Crate-scoped grants that stay narrower than the allow-list above.
+exceptions = []
+confidence-threshold = 0.8
+
+[bans]
+# Duplicates are surfaced for maintenance review without blocking a safe build.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
