@@ -105,3 +105,10 @@ not currently support custom parsers or file formats. Use `pmds lint` for MDX.
 The implementation rationale, benchmark, packaging risks, and reproducible LSP
 verification are documented in
 [Native diagnostics through ESLint and Oxlint](../../docs/research/oxlint-eslint-adapter.md).
+
+<!-- ferramenta-family:start -->
+
+**palamedes** is part of the [Ferramenta](https://ferramenta.dev) family — Rust-native developer tools that keep the APIs the ecosystem already knows.
+
+Siblings: [ferroni](https://sebastian-software.github.io/ferroni/) · [ferriki](https://github.com/sebastian-software/ferriki) · [ferromark](https://sebastian-software.github.io/ferromark/) · [ferrolex](https://github.com/sebastian-software/ferrolex) · [ferrocat](https://ferrocat.dev) · [ferrovia](https://github.com/sebastian-software/ferrovia) · [ferralk](https://github.com/sebastian-software/ferralk) · [ferrugo](https://github.com/sebastian-software/ferrugo).
+<!-- ferramenta-family:end -->
