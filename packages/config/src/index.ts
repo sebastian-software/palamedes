@@ -754,7 +754,7 @@ function catalogSourcePattern(
  * Whether a source file belongs to a configured catalog.
  *
  * This is shared by the Vite and Next integrations. Dot-prefixed source path
- * segments intentionally match, matching Vite's historic filter behaviour.
+ * segments intentionally match, matching Vite's historic filter behavior.
  */
 export function catalogMatchesSource(
   config: Pick<LoadedPalamedesConfig, "rootDir">,

@@ -30,10 +30,10 @@ supported hosts.
 
 ## Start Here
 
-Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`,
-`@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`,
-while `@palamedes/remix` requires `>=24.3.0`. The badge above describes the
-stricter repository development and CI floor, not every published package.
+Node.js floors differ per package, so the
+[platform support table](docs/platform-support.md#nodejs-requirements) is the
+canonical list. The badge above describes the stricter repository development
+and CI floor, not every published package.
 
 For the shortest supported path, install the shared Vite packages:
 
@@ -66,10 +66,13 @@ We are not asking you to trust a slogan. The repo shows the work.
 The current proof:
 
 - Six framework families, each with cookie, route, subdomain, and tld locale
-  strategies, plus Vite MDX: all 25 are smoke-verified on relevant PRs and
+  strategies, plus Vite MDX: those 25 make up the verification matrix in
+  `scripts/example-matrix.mjs` and are smoke-verified on relevant PRs and
   `main`; five UI-adapter families, Vite, and the focused Remix cookie proof
   make 22 browser-capable examples for the scheduled Playwright flow. The
-  other three Remix locale strategies retain smoke coverage.
+  other three Remix locale strategies retain smoke coverage. `examples/` holds
+  26 apps: those 25 plus the focused React Router RSC cookie fixture, which
+  sits outside the matrix and has its own verifier.
 - The image above is one demo in three locales: switch language and the copy,
   plural seat counts, currency, and dates all change together. The 20
   UI-adapter examples have versioned captures in
@@ -101,7 +104,7 @@ their warm runs cost what their cold runs cost. That makes this a capability
 difference rather than a race, which is exactly why it is kept out of every
 speedup number we publish.
 
-**Try it live.** Next.js, TanStack Start, SolidStart, Waku, and React Router have live cookie, route, subdomain, and TLD demos; the TLD demos cover `.com`, `.de`, `.es`, and `.fr`. The full-stack Remix proof is available as repository source and CI output but is not publicly hosted. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
+**Try it live.** Next.js, TanStack Start, Solid, Waku, and React Router have live cookie, route, subdomain, and TLD demos; the TLD demos cover `.com`, `.de`, `.es`, and `.fr`. The full-stack Remix proof is available as repository source and CI output but is not publicly hosted. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
@@ -138,10 +141,12 @@ easier to review, and easier to carry from one framework to the next.
 ## Current Status
 
 - Recommended for new projects and teams that want cleaner i18n foundations
-- All 25 examples are smoke-verified on relevant PRs and `main`; 22
-  browser-capable examples across Next.js, TanStack Start, Solid, Waku,
-  React Router, Vite, and the focused Remix v3 cookie flow run Playwright
-  weekly or manually. Remix requires Node.js `>=24.3`
+- All 25 examples of the verification matrix are smoke-verified on relevant
+  PRs and `main`; 22 browser-capable examples across Next.js, TanStack Start,
+  Solid, Waku, React Router, Vite, and the focused Remix v3 cookie flow run
+  Playwright weekly or manually. The 26th app in `examples/`, the focused
+  React Router RSC cookie fixture, has its own verifier. Remix requires
+  Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet; their bins link to the quickstart and exit non-zero rather than silently succeeding
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
@@ -218,7 +223,7 @@ Evidence:
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)                   | Runtime bridge for transformed code    | App teams        |
 
 Both UI packages also expose headless frontend helpers for locale sync and
-locale-switch modelling. The example matrix uses those public helpers directly
+locale-switch modeling. The example matrix uses those public helpers directly
 instead of hiding everything in example-local code.
 
 ## Quick Start With Vite
