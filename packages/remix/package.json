@@ -3,23 +3,34 @@
   "version": "1.23.0",
   "description": "Full-stack Remix v3 i18n with server and browser macro transforms",
   "keywords": [
-    "remix",
     "browser",
     "i18n",
-    "oxc",
     "internationalization",
     "localization",
+    "oxc",
+    "remix",
     "translation"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/remix"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "files": [
+    "README.md",
+    "dist/"
+  ],
   "type": "module",
+  "sideEffects": [
+    "./dist/register.mjs",
+    "./dist/register.cjs"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -82,27 +93,13 @@
       }
     }
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "sideEffects": [
-    "./dist/register.mjs",
-    "./dist/register.cjs"
-  ],
-  "files": [
-    "README.md",
-    "dist/"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "unbuild",
     "test": "vitest run --globals src/*.test.ts",
     "stub": "unbuild --stub"
-  },
-  "engines": {
-    "node": ">=24.3.0"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@palamedes/config": "workspace:^",
@@ -112,6 +109,13 @@
     "@palamedes/transform": "workspace:^",
     "source-map-js": "^1.2.1"
   },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "remix": "3.0.0-rc.1",
+    "typescript": "^7.0.2",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.11"
+  },
   "peerDependencies": {
     "remix": "^3.0.0-rc.1"
   },
@@ -120,11 +124,7 @@
       "optional": true
     }
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "remix": "3.0.0-rc.1",
-    "typescript": "^7.0.2",
-    "unbuild": "^3.6.1",
-    "vitest": "^4.1.11"
+  "engines": {
+    "node": ">=24.3.0"
   }
 }

@@ -1,6 +1,6 @@
-import assert from "node:assert/strict"
-import test from "node:test"
-import { assertDualExportsUseFormatSpecificTargets } from "./published-export-contracts.mjs"
+import assert from "node:assert/strict";
+import test from "node:test";
+import { assertDualExportsUseFormatSpecificTargets } from "./published-export-contracts.mjs";
 
 function packageWithDualExport() {
   return {
@@ -19,29 +19,29 @@ function packageWithDualExport() {
         },
       },
     },
-  }
+  };
 }
 
 test("accepts format-specific declaration and runtime targets", () => {
-  assert.doesNotThrow(() => assertDualExportsUseFormatSpecificTargets([packageWithDualExport()]))
-})
+  assert.doesNotThrow(() => assertDualExportsUseFormatSpecificTargets([packageWithDualExport()]));
+});
 
 test("rejects an ESM runtime target routed through require", () => {
-  const packageEntry = packageWithDualExport()
-  packageEntry.manifest.exports["."].require.default = "./dist/index.mjs"
+  const packageEntry = packageWithDualExport();
+  packageEntry.manifest.exports["."].require.default = "./dist/index.mjs";
 
   assert.throws(
     () => assertDualExportsUseFormatSpecificTargets([packageEntry]),
-    /\.require\.default must reference a \.cjs runtime target\./
-  )
-})
+    /\.require\.default must reference a \.cjs runtime target\./,
+  );
+});
 
 test("rejects a CommonJS runtime target routed through import", () => {
-  const packageEntry = packageWithDualExport()
-  packageEntry.manifest.exports["."].import.default = "./dist/index.cjs"
+  const packageEntry = packageWithDualExport();
+  packageEntry.manifest.exports["."].import.default = "./dist/index.cjs";
 
   assert.throws(
     () => assertDualExportsUseFormatSpecificTargets([packageEntry]),
-    /\.import\.default must reference a \.mjs runtime target\./
-  )
-})
+    /\.import\.default must reference a \.mjs runtime target\./,
+  );
+});

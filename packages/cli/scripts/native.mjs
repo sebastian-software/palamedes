@@ -1,18 +1,18 @@
-import { spawn } from "node:child_process"
-import { constants } from "node:os"
+import { spawn } from "node:child_process";
+import { constants } from "node:os";
 
 export async function spawnNative(args, options = {}) {
-  const executable = options.nativeExecutable
+  const executable = options.nativeExecutable;
   if (!executable) {
-    throw new Error("Palamedes native CLI executable is not configured.")
+    throw new Error("Palamedes native CLI executable is not configured.");
   }
   if (options.signal?.aborted) {
-    return abortExitCode(options.signal.reason)
+    return abortExitCode(options.signal.reason);
   }
 
   return new Promise((resolve, reject) => {
-    const captureOutput = options.captureOutput === true
-    const isolatedSignalGroup = process.platform !== "win32"
+    const captureOutput = options.captureOutput === true;
+    const isolatedSignalGroup = process.platform !== "win32";
     const child = spawn(executable, args, {
       cwd: options.cwd,
       stdio: captureOutput ? ["inherit", "pipe", "pipe"] : "inherit",
@@ -20,93 +20,93 @@ export async function spawnNative(args, options = {}) {
       // signals reach this launcher once and are forwarded to that group once,
       // instead of reaching the child directly and then being duplicated.
       detached: isolatedSignalGroup,
-    })
-    let stdout = ""
-    let stderr = ""
-    let settled = false
-    child.stdout?.setEncoding("utf8")
-    child.stderr?.setEncoding("utf8")
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
     child.stdout?.on("data", (chunk) => {
-      stdout += chunk
-    })
+      stdout += chunk;
+    });
     child.stderr?.on("data", (chunk) => {
-      stderr += chunk
-    })
+      stderr += chunk;
+    });
     const forwardSignal = (signal) => {
-      if (settled) return false
+      if (settled) return false;
       try {
         if (isolatedSignalGroup && child.pid) {
-          process.kill(-child.pid, signal)
+          process.kill(-child.pid, signal);
         } else {
-          child.kill(signal)
+          child.kill(signal);
         }
       } catch (error) {
-        if (error?.code !== "ESRCH") throw error
+        if (error?.code !== "ESRCH") throw error;
       }
-      return true
-    }
-    const onAbort = () => forwardSignal(options.signal?.reason?.signal ?? "SIGTERM")
+      return true;
+    };
+    const onAbort = () => forwardSignal(options.signal?.reason?.signal ?? "SIGTERM");
     // Forward direct and terminal signals to the isolated native process group
     // so killing the launcher never orphans native subprocesses. On Windows,
     // the launcher and native child share a console, so CTRL_C_EVENT already
     // reaches both. Keep the listener alive while the native child shuts down,
     // but do not turn that cooperative interrupt into child.kill("SIGINT"),
     // which libuv implements as a hard TerminateProcess.
-    const forwardInterrupt = () => forwardTerminalInterrupt(process.platform, forwardSignal)
-    const forwardTerminate = () => forwardSignal("SIGTERM")
+    const forwardInterrupt = () => forwardTerminalInterrupt(process.platform, forwardSignal);
+    const forwardTerminate = () => forwardSignal("SIGTERM");
     // A terminal hangup reaches the npm launcher but not its detached native
     // process group. Keep the launcher alive until the native process has
     // handled that hangup and exited.
-    const forwardHangup = () => forwardSignal("SIGHUP")
+    const forwardHangup = () => forwardSignal("SIGHUP");
     // `process.exit()` and uncaught failures still run this synchronous hook.
     // SIGKILL cannot be intercepted; a native parent-death mechanism would be
     // platform-specific and belongs outside this JavaScript wrapper.
-    const onParentExit = () => forwardSignal("SIGTERM")
+    const onParentExit = () => forwardSignal("SIGTERM");
     const cleanup = () => {
-      options.signal?.removeEventListener("abort", onAbort)
-      process.off("SIGINT", forwardInterrupt)
-      process.off("SIGTERM", forwardTerminate)
-      if (isolatedSignalGroup) process.off("SIGHUP", forwardHangup)
-      process.off("exit", onParentExit)
-    }
+      options.signal?.removeEventListener("abort", onAbort);
+      process.off("SIGINT", forwardInterrupt);
+      process.off("SIGTERM", forwardTerminate);
+      if (isolatedSignalGroup) process.off("SIGHUP", forwardHangup);
+      process.off("exit", onParentExit);
+    };
     const settle = (callback) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      callback()
-    }
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
 
-    child.once("error", (error) => settle(() => reject(error)))
+    child.once("error", (error) => settle(() => reject(error)));
     // `exit` can precede the final data events from piped stdio. `close`
     // guarantees both streams have drained, while the inherited-stdio path can
     // keep its existing process-exit semantics.
     child.once(captureOutput ? "close" : "exit", (code, signal) => {
       settle(() => {
-        const exitCode = signal ? signalExitCode(signal) : (code ?? 1)
-        resolve(captureOutput ? { exitCode, stdout, stderr } : exitCode)
-      })
-    })
+        const exitCode = signal ? signalExitCode(signal) : (code ?? 1);
+        resolve(captureOutput ? { exitCode, stdout, stderr } : exitCode);
+      });
+    });
 
-    options.signal?.addEventListener("abort", onAbort, { once: true })
-    process.on("SIGINT", forwardInterrupt)
-    process.on("SIGTERM", forwardTerminate)
-    if (isolatedSignalGroup) process.on("SIGHUP", forwardHangup)
-    process.once("exit", onParentExit)
-    if (options.signal?.aborted) onAbort()
-  })
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    process.on("SIGINT", forwardInterrupt);
+    process.on("SIGTERM", forwardTerminate);
+    if (isolatedSignalGroup) process.on("SIGHUP", forwardHangup);
+    process.once("exit", onParentExit);
+    if (options.signal?.aborted) onAbort();
+  });
 }
 
 export function forwardTerminalInterrupt(platform, forwardSignal) {
-  if (platform === "win32") return false
-  return forwardSignal("SIGINT")
+  if (platform === "win32") return false;
+  return forwardSignal("SIGINT");
 }
 
 function signalExitCode(signal) {
-  const signalNumber = constants.signals[signal]
-  return Number.isInteger(signalNumber) ? 128 + signalNumber : 1
+  const signalNumber = constants.signals[signal];
+  return Number.isInteger(signalNumber) ? 128 + signalNumber : 1;
 }
 
 function abortExitCode(reason) {
-  if (Number.isInteger(reason?.exitCode)) return reason.exitCode
-  return reason?.signal === "SIGTERM" ? 143 : 130
+  if (Number.isInteger(reason?.exitCode)) return reason.exitCode;
+  return reason?.signal === "SIGTERM" ? 143 : 130;
 }

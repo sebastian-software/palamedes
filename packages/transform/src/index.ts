@@ -5,24 +5,24 @@
  * Transforms Palamedes macros to runtime calls without Babel.
  */
 
-export { transformPalamedesMacros } from "./transform"
-export type { TransformOptions, TransformResult, SourceMap } from "./types"
+export { transformPalamedesMacros } from "./transform";
+export type { TransformOptions, TransformResult, SourceMap } from "./types";
 export {
   PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
   PALAMEDES_MACRO_PACKAGES,
   JS_MACROS,
   JSX_MACROS,
-} from "./types"
-export { mightContainPalamedesMacros, findMacroImports } from "./detect"
-export { resolveMacroRuntimeModule, mdxFrameworkFor } from "./framework"
-export type { PalamedesFramework } from "./framework"
+} from "./types";
+export { mightContainPalamedesMacros, findMacroImports } from "./detect";
+export { resolveMacroRuntimeModule, mdxFrameworkFor } from "./framework";
+export type { PalamedesFramework } from "./framework";
 export {
   createCatalogLoaderResult,
   createCompileErrorMessage,
   createDiagnosticMessage,
   createMissingErrorMessage,
   renderCatalogModule,
-} from "./catalogLoader"
+} from "./catalogLoader";
 export type {
   CatalogCompileArtifactResult,
   CatalogDiagnostic,
@@ -30,4 +30,4 @@ export type {
   CatalogLoaderResult,
   CatalogSourceKey,
   MissingCatalogMessage,
-} from "./catalogLoader"
+} from "./catalogLoader";

@@ -8,20 +8,20 @@ import {
   stat,
   utimes,
   writeFile,
-} from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { DEFAULT_SEED, PROFILE_DEFINITIONS, createWorkflowCorpus } from "./corpus.mjs"
-import { runCommand } from "./exec.mjs"
-import { parsePoMsgids } from "./po.mjs"
+import { DEFAULT_SEED, PROFILE_DEFINITIONS, createWorkflowCorpus } from "./corpus.mjs";
+import { runCommand } from "./exec.mjs";
+import { parsePoMsgids } from "./po.mjs";
 
-const __dirname = import.meta.dirname
-const benchmarkRoot = path.resolve(__dirname, "..")
-const repoRoot = path.resolve(benchmarkRoot, "..", "..")
-const resultsDir = path.join(benchmarkRoot, "results")
-const PALAMEDES_TIMING_MARKER = "__PALAMEDES_TIMINGS__"
+const __dirname = import.meta.dirname;
+const benchmarkRoot = path.resolve(__dirname, "..");
+const repoRoot = path.resolve(benchmarkRoot, "..", "..");
+const resultsDir = path.join(benchmarkRoot, "results");
+const PALAMEDES_TIMING_MARKER = "__PALAMEDES_TIMINGS__";
 
 const TOOL_LABELS = {
   palamedes: "Palamedes",
@@ -30,9 +30,9 @@ const TOOL_LABELS = {
   fbtee: "fbtee",
   i18nextCli: "i18next-cli",
   gt: "General Translation",
-}
+};
 
-const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "fbtee", "i18nextCli", "gt"]
+const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "fbtee", "i18nextCli", "gt"];
 /*
  * Paths any measured tool may leave behind as reusable or generated state.
  * Only Palamedes writes a reusable cache today. fbtee's collector artifacts
@@ -45,26 +45,26 @@ const TOOL_STATE_PATHS = [
   "node_modules/.cache",
   ".enum_manifest.json",
   "source_strings.json",
-]
+];
 // Files touched before each warm run, modelling a small edit.
-const WARM_TOUCHED_FILES = 5
+const WARM_TOUCHED_FILES = 5;
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(2));
   const environment = {
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
     generatedAt: new Date().toISOString(),
-  }
-  const toolPaths = await resolveToolPaths(args)
-  const versions = await readVersions(toolPaths)
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-e2e-workflow-"))
+  };
+  const toolPaths = await resolveToolPaths(args);
+  const versions = await readVersions(toolPaths);
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-e2e-workflow-"));
 
   try {
-    const profiles = []
-    const results = []
-    const comparisons = []
+    const profiles = [];
+    const results = [];
+    const comparisons = [];
 
     for (const profileName of args.profiles) {
       const corpus = await createWorkflowCorpus({
@@ -72,9 +72,9 @@ async function main() {
         rootDir: tempRoot,
         seed: args.seed,
         toolPaths,
-      })
-      const validation = await validateCorpus(corpus, toolPaths)
-      const profileResults = []
+      });
+      const validation = await validateCorpus(corpus, toolPaths);
+      const profileResults = [];
 
       if (!args.validateOnly) {
         for (const tool of TOOL_ORDER) {
@@ -84,8 +84,8 @@ async function main() {
             toolPaths,
             warmup: args.warmup,
             runs: args.runs,
-          })
-          const result = toResultEntry({ tool, corpus, measurement, versions, args })
+          });
+          const result = toResultEntry({ tool, corpus, measurement, versions, args });
 
           const warmMeasurement = await benchmarkToolWarm({
             tool,
@@ -93,19 +93,19 @@ async function main() {
             toolPaths,
             warmup: args.warmup,
             runs: args.runs,
-          })
+          });
           result.warm = {
             medianMs: warmMeasurement.medianMs,
             samplesMs: warmMeasurement.samplesMs,
             touchedFiles: warmMeasurement.touchedFiles,
             palamedesTiming: warmMeasurement.toolTimings.at(-1) ?? null,
-          }
+          };
 
-          profileResults.push(result)
-          results.push(result)
+          profileResults.push(result);
+          results.push(result);
         }
 
-        comparisons.push(...createComparisons(profileName, profileResults))
+        comparisons.push(...createComparisons(profileName, profileResults));
       }
 
       profiles.push({
@@ -113,7 +113,7 @@ async function main() {
         corpus: summarizeCorpus(corpus),
         validation,
         results: profileResults,
-      })
+      });
     }
 
     const report = {
@@ -148,13 +148,13 @@ async function main() {
       profiles,
       results,
       comparisons,
-    }
+    };
 
-    const outputPaths = await writeOutputs(report)
-    printConsoleSummary(report, outputPaths)
+    const outputPaths = await writeOutputs(report);
+    printConsoleSummary(report, outputPaths);
   } finally {
     if (!args.keepTemp) {
-      await rm(tempRoot, { recursive: true, force: true })
+      await rm(tempRoot, { recursive: true, force: true });
     }
   }
 }
@@ -168,42 +168,42 @@ function parseArgs(argv) {
     validateOnly: argv.includes("--validate-only"),
     keepTemp: argv.includes("--keep-temp"),
     pmdsBin: readStringArg(argv, "pmds-bin", null),
-  }
+  };
 }
 
 function readProfiles(argv) {
-  const index = argv.indexOf("--profile")
+  const index = argv.indexOf("--profile");
   if (index === -1) {
-    return ["small", "medium", "realistic"]
+    return ["small", "medium", "realistic"];
   }
 
-  const value = argv[index + 1]
+  const value = argv[index + 1];
   if (!value || value === "all") {
-    return Object.keys(PROFILE_DEFINITIONS)
+    return Object.keys(PROFILE_DEFINITIONS);
   }
 
   return value
     .split(",")
     .map((profile) => profile.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 function readNumberArg(argv, name, fallback) {
-  const index = argv.indexOf(`--${name}`)
-  if (index === -1) return fallback
-  const value = Number(argv[index + 1])
-  return Number.isFinite(value) ? value : fallback
+  const index = argv.indexOf(`--${name}`);
+  if (index === -1) return fallback;
+  const value = Number(argv[index + 1]);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function readStringArg(argv, name, fallback) {
-  const index = argv.indexOf(`--${name}`)
-  if (index === -1) return fallback
-  return argv[index + 1] ?? fallback
+  const index = argv.indexOf(`--${name}`);
+  if (index === -1) return fallback;
+  return argv[index + 1] ?? fallback;
 }
 
 async function resolveToolPaths(args) {
-  const commandSuffix = process.platform === "win32" ? ".cmd" : ""
-  const binarySuffix = process.platform === "win32" ? ".exe" : ""
+  const commandSuffix = process.platform === "win32" ? ".cmd" : "";
+  const binarySuffix = process.platform === "win32" ? ".exe" : "";
   const paths = {
     palamedes: args.pmdsBin ?? path.join(repoRoot, "target", "release", `pmds${binarySuffix}`),
     lingui: path.join(benchmarkRoot, "node_modules", ".bin", `lingui${commandSuffix}`),
@@ -211,22 +211,22 @@ async function resolveToolPaths(args) {
     fbtee: path.join(benchmarkRoot, "node_modules", ".bin", `fbtee${commandSuffix}`),
     i18nextCli: path.join(benchmarkRoot, "node_modules", ".bin", `i18next-cli${commandSuffix}`),
     gt: path.join(benchmarkRoot, "node_modules", ".bin", `gtx-cli${commandSuffix}`),
-  }
+  };
 
   for (const [tool, filename] of Object.entries(paths)) {
-    await assertExecutable(tool, filename)
+    await assertExecutable(tool, filename);
   }
 
-  return paths
+  return paths;
 }
 
 async function assertExecutable(tool, filename) {
   try {
-    await stat(filename)
+    await stat(filename);
   } catch {
     throw new Error(
-      `Missing ${TOOL_LABELS[tool]} executable at ${filename}. Run the repo-level benchmark script so dependencies and the release pmds binary are available.`
-    )
+      `Missing ${TOOL_LABELS[tool]} executable at ${filename}. Run the repo-level benchmark script so dependencies and the release pmds binary are available.`,
+    );
   }
 }
 
@@ -251,7 +251,7 @@ async function readVersions(toolPaths) {
     readJson(path.join(benchmarkRoot, "node_modules", "gt-react", "package.json")),
     readJson(path.join(benchmarkRoot, "package.json")),
     readCommandVersion(toolPaths.palamedes, ["version"]),
-  ])
+  ]);
 
   return {
     benchmarkPackage: benchmarkPackage.name,
@@ -275,23 +275,23 @@ async function readVersions(toolPaths) {
       cli: gtxCli.version,
       react: gtReact.version,
     },
-  }
+  };
 }
 
 async function validateCorpus(corpus, toolPaths) {
-  const tools = {}
+  const tools = {};
   for (const tool of TOOL_ORDER) {
-    await resetWorkspace(corpus.roots[tool])
-    await runTool(tool, corpus.roots[tool], toolPaths)
-    const activeMessagesByTarget = {}
+    await resetWorkspace(corpus.roots[tool]);
+    await runTool(tool, corpus.roots[tool], toolPaths);
+    const activeMessagesByTarget = {};
     for (const target of validationTargets(tool)) {
-      const activeMessages = await readActiveMessages(tool, corpus.roots[tool], target)
+      const activeMessages = await readActiveMessages(tool, corpus.roots[tool], target);
       assertMessageSet(
         `${corpus.profileName}/${tool}/${target}`,
         corpus.currentMessages,
-        activeMessages
-      )
-      activeMessagesByTarget[target] = activeMessages.length
+        activeMessages,
+      );
+      activeMessagesByTarget[target] = activeMessages.length;
     }
     tools[tool] = {
       activeMessagesByTarget,
@@ -301,29 +301,29 @@ async function validateCorpus(corpus, toolPaths) {
       ...(tool === "gt"
         ? { preservedTranslations: await readGtPreservedTranslations(corpus) }
         : {}),
-    }
+    };
   }
 
   return {
     expectedActiveMessages: corpus.currentMessages.length,
     tools,
-  }
+  };
 }
 
 async function readFbteePreservedTranslations(corpus) {
-  const catalog = await readJson(path.join(corpus.roots.fbtee, "src", "locales", "de.json"))
+  const catalog = await readJson(path.join(corpus.roots.fbtee, "src", "locales", "de.json"));
   const preserved = Object.values(catalog.translations).filter((entry) =>
-    entry.translations.some((variation) => variation.translation.startsWith("[de] "))
-  ).length
-  const expected = corpus.sourceMessageCount - corpus.changedCount - corpus.newCount
+    entry.translations.some((variation) => variation.translation.startsWith("[de] ")),
+  ).length;
+  const expected = corpus.sourceMessageCount - corpus.changedCount - corpus.newCount;
 
   if (preserved !== expected) {
     throw new Error(
-      `${corpus.profileName}/fbtee: expected the merge to preserve ${expected} existing translations, found ${preserved}`
-    )
+      `${corpus.profileName}/fbtee: expected the merge to preserve ${expected} existing translations, found ${preserved}`,
+    );
   }
 
-  return preserved
+  return preserved;
 }
 
 /*
@@ -334,17 +334,17 @@ async function readFbteePreservedTranslations(corpus) {
  * still pass. Counting surviving translations pins that down.
  */
 async function readGtPreservedTranslations(corpus) {
-  const catalog = await readJson(path.join(corpus.roots.gt, "src", "locales", "de.json"))
-  const preserved = Object.values(catalog).filter((value) => value.startsWith("[de] ")).length
-  const expected = corpus.sourceMessageCount - corpus.changedCount - corpus.newCount
+  const catalog = await readJson(path.join(corpus.roots.gt, "src", "locales", "de.json"));
+  const preserved = Object.values(catalog).filter((value) => value.startsWith("[de] ")).length;
+  const expected = corpus.sourceMessageCount - corpus.changedCount - corpus.newCount;
 
   if (preserved !== expected) {
     throw new Error(
-      `${corpus.profileName}/gt: expected the merge to preserve ${expected} existing translations, found ${preserved}`
-    )
+      `${corpus.profileName}/gt: expected the merge to preserve ${expected} existing translations, found ${preserved}`,
+    );
   }
 
-  return preserved
+  return preserved;
 }
 
 /*
@@ -359,34 +359,34 @@ async function readGtPreservedTranslations(corpus) {
  * deliberately kept out of the speedup table.
  */
 async function benchmarkToolWarm({ tool, corpus, toolPaths, warmup, runs }) {
-  const root = corpus.roots[tool]
-  await resetWorkspace(root)
-  await runTool(tool, root, toolPaths)
+  const root = corpus.roots[tool];
+  await resetWorkspace(root);
+  await runTool(tool, root, toolPaths);
 
-  let touchedFiles = 0
+  let touchedFiles = 0;
   for (let index = 0; index < warmup; index += 1) {
-    await resetCatalogs(root)
-    touchedFiles = await touchSources(root, WARM_TOUCHED_FILES)
-    await runTool(tool, root, toolPaths)
+    await resetCatalogs(root);
+    touchedFiles = await touchSources(root, WARM_TOUCHED_FILES);
+    await runTool(tool, root, toolPaths);
   }
 
-  const samplesMs = []
-  const toolTimings = []
-  let lastOutcome = null
+  const samplesMs = [];
+  const toolTimings = [];
+  let lastOutcome = null;
 
   for (let index = 0; index < runs; index += 1) {
-    await resetCatalogs(root)
-    touchedFiles = await touchSources(root, WARM_TOUCHED_FILES)
-    const startedAt = process.hrtime.bigint()
-    lastOutcome = await runTool(tool, root, toolPaths)
-    const finishedAt = process.hrtime.bigint()
-    samplesMs.push(Number(finishedAt - startedAt) / 1_000_000)
+    await resetCatalogs(root);
+    touchedFiles = await touchSources(root, WARM_TOUCHED_FILES);
+    const startedAt = process.hrtime.bigint();
+    lastOutcome = await runTool(tool, root, toolPaths);
+    const finishedAt = process.hrtime.bigint();
+    samplesMs.push(Number(finishedAt - startedAt) / 1_000_000);
     if (lastOutcome.palamedesTiming) {
-      toolTimings.push(lastOutcome.palamedesTiming)
+      toolTimings.push(lastOutcome.palamedesTiming);
     }
   }
 
-  samplesMs.sort((left, right) => left - right)
+  samplesMs.sort((left, right) => left - right);
 
   return {
     medianMs: samplesMs[Math.floor(samplesMs.length / 2)],
@@ -394,45 +394,45 @@ async function benchmarkToolWarm({ tool, corpus, toolPaths, warmup, runs }) {
     lastOutcome,
     toolTimings,
     touchedFiles,
-  }
+  };
 }
 
 async function benchmarkTool({ tool, corpus, toolPaths, warmup, runs }) {
   for (let index = 0; index < warmup; index += 1) {
-    await resetWorkspace(corpus.roots[tool])
-    await runTool(tool, corpus.roots[tool], toolPaths)
+    await resetWorkspace(corpus.roots[tool]);
+    await runTool(tool, corpus.roots[tool], toolPaths);
   }
 
-  const samplesMs = []
-  const toolTimings = []
-  let lastOutcome = null
+  const samplesMs = [];
+  const toolTimings = [];
+  let lastOutcome = null;
 
   for (let index = 0; index < runs; index += 1) {
-    await resetWorkspace(corpus.roots[tool])
-    const startedAt = process.hrtime.bigint()
-    lastOutcome = await runTool(tool, corpus.roots[tool], toolPaths)
-    const finishedAt = process.hrtime.bigint()
-    samplesMs.push(Number(finishedAt - startedAt) / 1_000_000)
+    await resetWorkspace(corpus.roots[tool]);
+    const startedAt = process.hrtime.bigint();
+    lastOutcome = await runTool(tool, corpus.roots[tool], toolPaths);
+    const finishedAt = process.hrtime.bigint();
+    samplesMs.push(Number(finishedAt - startedAt) / 1_000_000);
     if (lastOutcome.palamedesTiming) {
-      toolTimings.push(lastOutcome.palamedesTiming)
+      toolTimings.push(lastOutcome.palamedesTiming);
     }
   }
 
-  samplesMs.sort((left, right) => left - right)
+  samplesMs.sort((left, right) => left - right);
 
   return {
     medianMs: samplesMs[Math.floor(samplesMs.length / 2)],
     samplesMs,
     lastOutcome,
     toolTimings,
-  }
+  };
 }
 
 async function resetCatalogs(rootDir) {
-  const localeDir = path.join(rootDir, "src", "locales")
-  const baselineDir = path.join(rootDir, ".baseline-locales")
-  await rm(localeDir, { recursive: true, force: true })
-  await cp(baselineDir, localeDir, { recursive: true })
+  const localeDir = path.join(rootDir, "src", "locales");
+  const baselineDir = path.join(rootDir, ".baseline-locales");
+  await rm(localeDir, { recursive: true, force: true });
+  await cp(baselineDir, localeDir, { recursive: true });
 }
 
 /*
@@ -442,9 +442,9 @@ async function resetCatalogs(rootDir) {
  * reported cold medians would silently become warm ones.
  */
 async function resetWorkspace(rootDir) {
-  await resetCatalogs(rootDir)
+  await resetCatalogs(rootDir);
   for (const statePath of TOOL_STATE_PATHS) {
-    await rm(path.join(rootDir, statePath), { recursive: true, force: true })
+    await rm(path.join(rootDir, statePath), { recursive: true, force: true });
   }
 }
 
@@ -454,18 +454,18 @@ async function resetWorkspace(rootDir) {
  * applies — while invalidating exactly the cache entries a real edit would.
  */
 async function touchSources(rootDir, count) {
-  const generatedDir = path.join(rootDir, "src", "generated")
-  const entries = await readdir(generatedDir, { recursive: true, withFileTypes: true })
+  const generatedDir = path.join(rootDir, "src", "generated");
+  const entries = await readdir(generatedDir, { recursive: true, withFileTypes: true });
   const files = entries
     .filter((entry) => entry.isFile() && /\.(ts|tsx|js|jsx)$/.test(entry.name))
     .map((entry) => path.join(entry.parentPath ?? entry.path, entry.name))
-    .sort()
-  const now = new Date()
-  const touched = files.slice(0, count)
+    .sort();
+  const now = new Date();
+  const touched = files.slice(0, count);
   for (const file of touched) {
-    await utimes(file, now, now)
+    await utimes(file, now, now);
   }
-  return touched.length
+  return touched.length;
 }
 
 async function runTool(tool, cwd, toolPaths) {
@@ -477,15 +477,15 @@ async function runTool(tool, cwd, toolPaths) {
         {
           cwd,
           env: { PALAMEDES_TIMING_JSON: "1" },
-        }
-      )
+        },
+      );
       return {
         ...result,
         palamedesTiming: parsePalamedesTiming(result.stdout),
-      }
+      };
     }
     case "lingui": {
-      return runCommand(toolPaths.lingui, ["extract", "--config", "lingui.config.mjs"], { cwd })
+      return runCommand(toolPaths.lingui, ["extract", "--config", "lingui.config.mjs"], { cwd });
     }
     case "formatjs": {
       return runCommand(
@@ -498,8 +498,8 @@ async function runTool(tool, cwd, toolPaths) {
           "--id-interpolation-pattern",
           "[sha512:contenthash:base64:6]",
         ],
-        { cwd }
-      )
+        { cwd },
+      );
     }
     case "fbtee": {
       const collected = await runCommand(
@@ -513,8 +513,8 @@ async function runTool(tool, cwd, toolPaths) {
           "--include-default-strings=false",
           "--disable-babel-config",
         ],
-        { cwd }
-      )
+        { cwd },
+      );
       const prepared = await runCommand(
         toolPaths.fbtee,
         [
@@ -527,25 +527,25 @@ async function runTool(tool, cwd, toolPaths) {
           "en",
           "de",
         ],
-        { cwd }
-      )
+        { cwd },
+      );
       return {
         stdout: `${collected.stdout}${prepared.stdout}`,
         stderr: `${collected.stderr}${prepared.stderr}`,
-      }
+      };
     }
     case "i18nextCli": {
       return runCommand(
         toolPaths.i18nextCli,
         ["extract", "--config", "i18next.config.mjs", "--sync-all", "--trust-derived", "--quiet"],
-        { cwd }
-      )
+        { cwd },
+      );
     }
     case "gt": {
-      return runCommand(toolPaths.gt, ["generate", "--quiet"], { cwd })
+      return runCommand(toolPaths.gt, ["generate", "--quiet"], { cwd });
     }
     default: {
-      throw new Error(`Unknown tool: ${tool}`)
+      throw new Error(`Unknown tool: ${tool}`);
     }
   }
 }
@@ -553,37 +553,39 @@ async function runTool(tool, cwd, toolPaths) {
 function parsePalamedesTiming(stdout) {
   const line = stdout
     .split(/\r?\n/)
-    .find((candidate) => candidate.startsWith(PALAMEDES_TIMING_MARKER))
+    .find((candidate) => candidate.startsWith(PALAMEDES_TIMING_MARKER));
 
-  if (!line) return null
-  return JSON.parse(line.slice(PALAMEDES_TIMING_MARKER.length))
+  if (!line) return null;
+  return JSON.parse(line.slice(PALAMEDES_TIMING_MARKER.length));
 }
 
 async function readActiveMessages(tool, rootDir, locale) {
   if (tool === "formatjs") {
-    const catalog = await readJson(path.join(rootDir, "src", "locales", "extracted.json"))
+    const catalog = await readJson(path.join(rootDir, "src", "locales", "extracted.json"));
     return Object.values(catalog)
       .map((descriptor) => descriptor.defaultMessage)
-      .sort()
+      .sort();
   }
 
   if (tool === "i18nextCli") {
-    const catalog = await readJson(path.join(rootDir, "src", "locales", locale, "translation.json"))
-    return Object.keys(catalog).sort()
+    const catalog = await readJson(
+      path.join(rootDir, "src", "locales", locale, "translation.json"),
+    );
+    return Object.keys(catalog).sort();
   }
 
   if (tool === "fbtee") {
-    const sourceStrings = await readJson(path.join(rootDir, "source_strings.json"))
-    const messagesByKey = new Map()
+    const sourceStrings = await readJson(path.join(rootDir, "source_strings.json"));
+    const messagesByKey = new Map();
     for (const phrase of sourceStrings.phrases ?? []) {
       for (const [key, leaf] of Object.entries(phrase.hashToLeaf ?? {})) {
-        messagesByKey.set(key, leaf.text)
+        messagesByKey.set(key, leaf.text);
       }
     }
-    const catalog = await readJson(path.join(rootDir, "src", "locales", `${locale}.json`))
+    const catalog = await readJson(path.join(rootDir, "src", "locales", `${locale}.json`));
     return Object.keys(catalog.translations)
       .map((key) => messagesByKey.get(key) ?? `<key ${key} missing from source_strings.json>`)
-      .sort()
+      .sort();
   }
 
   /*
@@ -593,39 +595,39 @@ async function readActiveMessages(tool, rootDir, locale) {
    * set, which is the same check the PO lanes get from comparing msgids.
    */
   if (tool === "gt") {
-    const source = await readJson(path.join(rootDir, "src", "locales", "en.json"))
+    const source = await readJson(path.join(rootDir, "src", "locales", "en.json"));
     if (locale === "en") {
-      return Object.values(source).sort()
+      return Object.values(source).sort();
     }
-    const catalog = await readJson(path.join(rootDir, "src", "locales", `${locale}.json`))
+    const catalog = await readJson(path.join(rootDir, "src", "locales", `${locale}.json`));
     return Object.keys(catalog)
       .map((key) => source[key] ?? `<key ${key} missing from the source catalog>`)
-      .sort()
+      .sort();
   }
 
-  const source = await readFile(path.join(rootDir, "src", "locales", `${locale}.po`), "utf8")
-  return parsePoMsgids(source).sort()
+  const source = await readFile(path.join(rootDir, "src", "locales", `${locale}.po`), "utf8");
+  return parsePoMsgids(source).sort();
 }
 
 function validationTargets(tool) {
-  return tool === "formatjs" ? ["source"] : ["en", "de"]
+  return tool === "formatjs" ? ["source"] : ["en", "de"];
 }
 
 function assertMessageSet(label, expectedInput, actualInput) {
-  const expected = [...expectedInput].sort()
-  const actual = [...actualInput].sort()
+  const expected = [...expectedInput].sort();
+  const actual = [...actualInput].sort();
 
   if (expected.length !== actual.length) {
     throw new Error(
-      `${label}: expected ${expected.length} active messages, received ${actual.length}`
-    )
+      `${label}: expected ${expected.length} active messages, received ${actual.length}`,
+    );
   }
 
   for (let index = 0; index < expected.length; index += 1) {
     if (expected[index] !== actual[index]) {
       throw new Error(
-        `${label}: first active-message mismatch at ${index}: expected ${JSON.stringify(expected[index])}, received ${JSON.stringify(actual[index])}`
-      )
+        `${label}: first active-message mismatch at ${index}: expected ${JSON.stringify(expected[index])}, received ${JSON.stringify(actual[index])}`,
+      );
     }
   }
 }
@@ -652,39 +654,39 @@ function toResultEntry({ tool, corpus, measurement, versions, args }) {
       measurement.toolTimings.length > 0
         ? medianPalamedesTiming(measurement.toolTimings)
         : undefined,
-  }
+  };
 }
 
 function toolVersion(tool, versions) {
-  if (tool === "palamedes") return versions.palamedes.cli
-  if (tool === "lingui") return versions.lingui.cli
-  if (tool === "formatjs") return versions.formatjs.cli
-  if (tool === "fbtee") return versions.fbtee.cli
-  if (tool === "gt") return versions.gt.cli
-  return versions.i18nextCli.cli
+  if (tool === "palamedes") return versions.palamedes.cli;
+  if (tool === "lingui") return versions.lingui.cli;
+  if (tool === "formatjs") return versions.formatjs.cli;
+  if (tool === "fbtee") return versions.fbtee.cli;
+  if (tool === "gt") return versions.gt.cli;
+  return versions.i18nextCli.cli;
 }
 
 function medianPalamedesTiming(timings) {
-  const fields = ["totalMs", "globMs", "extractMs", "writeMs"]
-  const result = {}
+  const fields = ["totalMs", "globMs", "extractMs", "writeMs"];
+  const result = {};
 
   for (const field of fields) {
-    const values = timings.map((timing) => timing[field]).sort((left, right) => left - right)
-    result[field] = values[Math.floor(values.length / 2)]
+    const values = timings.map((timing) => timing[field]).sort((left, right) => left - right);
+    result[field] = values[Math.floor(values.length / 2)];
   }
 
-  result.totalMessages = timings.at(-1)?.totalMessages
-  result.totalFiles = timings.at(-1)?.totalFiles
-  return result
+  result.totalMessages = timings.at(-1)?.totalMessages;
+  result.totalFiles = timings.at(-1)?.totalFiles;
+  return result;
 }
 
 function createComparisons(profileName, profileResults) {
-  const palamedes = profileResults.find((result) => result.tool === "palamedes")
+  const palamedes = profileResults.find((result) => result.tool === "palamedes");
 
   return profileResults
     .filter((result) => result.tool !== "palamedes")
     .map((result) => {
-      const fasterTool = palamedes.medianMs <= result.medianMs ? "palamedes" : result.tool
+      const fasterTool = palamedes.medianMs <= result.medianMs ? "palamedes" : result.tool;
       return {
         profile: profileName,
         baselineTool: "palamedes",
@@ -696,8 +698,8 @@ function createComparisons(profileName, profileResults) {
           fasterTool === "palamedes"
             ? result.medianMs / palamedes.medianMs
             : palamedes.medianMs / result.medianMs,
-      }
-    })
+      };
+    });
 }
 
 function summarizeCorpus(corpus) {
@@ -710,26 +712,26 @@ function summarizeCorpus(corpus) {
     newCount: corpus.newCount,
     removedCount: corpus.removedCount,
     sourceBytes: corpus.sourceBytes,
-  }
+  };
 }
 
 async function writeOutputs(report) {
-  await mkdir(resultsDir, { recursive: true })
+  await mkdir(resultsDir, { recursive: true });
 
-  const stamp = report.generatedAt.replaceAll(/[:.]/g, "-")
-  const jsonFilename = path.join(resultsDir, `${stamp}.json`)
-  const markdownFilename = path.join(resultsDir, `${stamp}.md`)
-  const latestJson = path.join(resultsDir, "latest.json")
-  const latestMarkdown = path.join(resultsDir, "latest.md")
-  const json = JSON.stringify(report, null, 2)
-  const markdown = renderMarkdown(report)
+  const stamp = report.generatedAt.replaceAll(/[:.]/g, "-");
+  const jsonFilename = path.join(resultsDir, `${stamp}.json`);
+  const markdownFilename = path.join(resultsDir, `${stamp}.md`);
+  const latestJson = path.join(resultsDir, "latest.json");
+  const latestMarkdown = path.join(resultsDir, "latest.md");
+  const json = JSON.stringify(report, null, 2);
+  const markdown = renderMarkdown(report);
 
-  await writeFile(jsonFilename, json, "utf8")
-  await writeFile(markdownFilename, markdown, "utf8")
+  await writeFile(jsonFilename, json, "utf8");
+  await writeFile(markdownFilename, markdown, "utf8");
 
   if (!report.validateOnly) {
-    await writeFile(latestJson, json, "utf8")
-    await writeFile(latestMarkdown, markdown, "utf8")
+    await writeFile(latestJson, json, "utf8");
+    await writeFile(latestMarkdown, markdown, "utf8");
   }
 
   return {
@@ -739,7 +741,7 @@ async function writeOutputs(report) {
     latestMarkdown: report.validateOnly ? null : latestMarkdown,
     primaryJson: report.validateOnly ? jsonFilename : latestJson,
     primaryMarkdown: report.validateOnly ? markdownFilename : latestMarkdown,
-  }
+  };
 }
 
 function renderMarkdown(report) {
@@ -773,150 +775,150 @@ function renderMarkdown(report) {
     `- fbtee scope: ${report.methodology.toolScopes.fbtee}`,
     `- General Translation scope: ${report.methodology.toolScopes.gt}`,
     `- Other tool scope: ${report.methodology.toolScopes.otherTools}`,
-  ]
+  ];
 
   for (const profile of report.profiles) {
-    lines.push("")
-    lines.push(`## ${capitalize(profile.profile)}`)
-    lines.push("")
+    lines.push("");
+    lines.push(`## ${capitalize(profile.profile)}`);
+    lines.push("");
     lines.push(
-      `- Corpus: ${profile.corpus.fileCount} files, ${profile.corpus.sourceMessageCount} current messages, ${profile.corpus.baselineMessageCount} baseline messages`
-    )
+      `- Corpus: ${profile.corpus.fileCount} files, ${profile.corpus.sourceMessageCount} current messages, ${profile.corpus.baselineMessageCount} baseline messages`,
+    );
     lines.push(
-      `- Inventory mix: ${profile.corpus.changedCount} changed, ${profile.corpus.newCount} new, ${profile.corpus.removedCount} removed`
-    )
+      `- Inventory mix: ${profile.corpus.changedCount} changed, ${profile.corpus.newCount} new, ${profile.corpus.removedCount} removed`,
+    );
     lines.push(
-      `- Semantic validation: ${profile.validation.expectedActiveMessages} active messages per catalog target and tool`
-    )
+      `- Semantic validation: ${profile.validation.expectedActiveMessages} active messages per catalog target and tool`,
+    );
 
     if (profile.results.length === 0) {
-      lines.push("- Validation-only run. No timings captured.")
-      continue
+      lines.push("- Validation-only run. No timings captured.");
+      continue;
     }
 
-    lines.push("")
-    lines.push("### Cold")
-    lines.push("")
-    lines.push("| Tool | Median | Samples |")
-    lines.push("| --- | ---: | --- |")
+    lines.push("");
+    lines.push("### Cold");
+    lines.push("");
+    lines.push("| Tool | Median | Samples |");
+    lines.push("| --- | ---: | --- |");
     for (const result of profile.results) {
       lines.push(
         `| ${TOOL_LABELS[result.tool]} | ${formatMs(result.medianMs)} | ${result.rawSamplesMs
           .map(formatMs)
-          .join(", ")} |`
-      )
+          .join(", ")} |`,
+      );
     }
 
     const profileComparisons = report.comparisons.filter(
-      (comparison) => comparison.profile === profile.profile
-    )
-    lines.push("")
-    lines.push("| Comparison | Faster | Speedup |")
-    lines.push("| --- | --- | ---: |")
+      (comparison) => comparison.profile === profile.profile,
+    );
+    lines.push("");
+    lines.push("| Comparison | Faster | Speedup |");
+    lines.push("| --- | --- | ---: |");
     for (const comparison of profileComparisons) {
       lines.push(
-        `| Palamedes vs ${TOOL_LABELS[comparison.comparedTool]} | ${TOOL_LABELS[comparison.fasterTool]} | ${comparison.speedupFactor.toFixed(2)}x |`
-      )
+        `| Palamedes vs ${TOOL_LABELS[comparison.comparedTool]} | ${TOOL_LABELS[comparison.fasterTool]} | ${comparison.speedupFactor.toFixed(2)}x |`,
+      );
     }
 
-    const warmResults = profile.results.filter((result) => result.warm)
+    const warmResults = profile.results.filter((result) => result.warm);
     if (warmResults.length > 0) {
-      const touched = warmResults[0].warm.touchedFiles
-      lines.push("")
-      lines.push("### Warm")
-      lines.push("")
+      const touched = warmResults[0].warm.touchedFiles;
+      lines.push("");
+      lines.push("### Warm");
+      lines.push("");
       lines.push(
-        `Repeat run after touching ${touched} source files, with catalogs reset but tool caches kept.`
-      )
-      lines.push("")
+        `Repeat run after touching ${touched} source files, with catalogs reset but tool caches kept.`,
+      );
+      lines.push("");
       lines.push(
-        "This lane is **not** a like-for-like speed comparison and is deliberately excluded from the speedup table above. Palamedes reuses an extraction cache here; the other tools re-extract in full because they have no comparable local cache, so their warm and cold numbers are the same by design. Read it as a capability difference, not as a claim that the same work is done faster."
-      )
-      lines.push("")
-      lines.push("| Tool | Median | Samples |")
-      lines.push("| --- | ---: | --- |")
+        "This lane is **not** a like-for-like speed comparison and is deliberately excluded from the speedup table above. Palamedes reuses an extraction cache here; the other tools re-extract in full because they have no comparable local cache, so their warm and cold numbers are the same by design. Read it as a capability difference, not as a claim that the same work is done faster.",
+      );
+      lines.push("");
+      lines.push("| Tool | Median | Samples |");
+      lines.push("| --- | ---: | --- |");
       for (const result of warmResults) {
         lines.push(
           `| ${TOOL_LABELS[result.tool]} | ${formatMs(result.warm.medianMs)} | ${result.warm.samplesMs
             .map(formatMs)
-            .join(", ")} |`
-        )
+            .join(", ")} |`,
+        );
       }
     }
   }
 
-  lines.push("")
-  lines.push("## Notes")
-  lines.push("")
-  lines.push("- These are machine-local CLI workflow timings, not universal cross-machine claims.")
+  lines.push("");
+  lines.push("## Notes");
+  lines.push("");
+  lines.push("- These are machine-local CLI workflow timings, not universal cross-machine claims.");
   lines.push(
-    "- Cold runs clear every tool cache alongside the catalogs. The source corpus is generated once per profile and never changes, so a retained cache would be hit by every run after the first and would silently turn the cold medians into warm ones."
-  )
+    "- Cold runs clear every tool cache alongside the catalogs. The source corpus is generated once per profile and never changes, so a retained cache would be hit by every run after the first and would silently turn the cold medians into warm ones.",
+  );
   lines.push(
-    "- The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
-  )
+    "- The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes.",
+  );
   lines.push(
-    "- **React Intl covers less work than every other lane.** `formatjs extract` writes one aggregated extracted-message JSON artifact and never reads or merges a locale catalog, so its median is not comparable to the catalog-update medians around it and must not be read as one."
-  )
+    "- **React Intl covers less work than every other lane.** `formatjs extract` writes one aggregated extracted-message JSON artifact and never reads or merges a locale catalog, so its median is not comparable to the catalog-update medians around it and must not be read as one.",
+  );
   lines.push(
-    "- The fbtee lane times its official two-command local workflow: `fbtee collect` followed by `fbtee prepare-translations`. It updates en/de JSON catalogs like the full lanes, but pays two Node process startups and drops removed hash entries instead of retaining obsolete catalog history."
-  )
+    "- The fbtee lane times its official two-command local workflow: `fbtee collect` followed by `fbtee prepare-translations`. It updates en/de JSON catalogs like the full lanes, but pays two Node process startups and drops removed hash entries instead of retaining obsolete catalog history.",
+  );
   lines.push(
-    "- The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is General Translation's path for teams handling their own translations; General Translation's default workflow (`gtx-cli translate`) sends content to the General Translation API and is deliberately out of scope here."
-  )
+    "- The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is General Translation's path for teams handling their own translations; General Translation's default workflow (`gtx-cli translate`) sends content to the General Translation API and is deliberately out of scope here.",
+  );
   lines.push(
-    "- The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result."
-  )
+    "- The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result.",
+  );
   lines.push(
-    "- Raw samples and Palamedes timing breakdowns are stored in the accompanying JSON output."
-  )
+    "- Raw samples and Palamedes timing breakdowns are stored in the accompanying JSON output.",
+  );
   if (report.validateOnly) {
     lines.push(
-      "- Validate-only runs write timestamped outputs but do not replace the latest full benchmark result."
-    )
+      "- Validate-only runs write timestamped outputs but do not replace the latest full benchmark result.",
+    );
   }
 
-  return lines.join("\n")
+  return lines.join("\n");
 }
 
 function printConsoleSummary(report, outputPaths) {
-  console.log("# End-to-End Extraction Workflow Benchmark")
-  console.log(`Generated: ${report.generatedAt}`)
-  console.log(`Results: ${outputPaths.primaryJson}`)
+  console.log("# End-to-End Extraction Workflow Benchmark");
+  console.log(`Generated: ${report.generatedAt}`);
+  console.log(`Results: ${outputPaths.primaryJson}`);
 
   for (const profile of report.profiles) {
     if (profile.results.length === 0) {
-      console.log(`- ${profile.profile}: validation only`)
-      continue
+      console.log(`- ${profile.profile}: validation only`);
+      continue;
     }
 
     const results = profile.results
       .map((result) => `${TOOL_LABELS[result.tool]} ${formatMs(result.medianMs)}`)
-      .join("; ")
-    console.log(`- ${profile.profile}: ${results}`)
+      .join("; ");
+    console.log(`- ${profile.profile}: ${results}`);
   }
 }
 
 function formatMs(value) {
-  return `${value.toFixed(2)} ms`
+  return `${value.toFixed(2)} ms`;
 }
 
 function capitalize(value) {
-  return value.slice(0, 1).toUpperCase() + value.slice(1)
+  return value.slice(0, 1).toUpperCase() + value.slice(1);
 }
 
 async function readJson(filename) {
-  return JSON.parse(await readFile(filename, "utf8"))
+  return JSON.parse(await readFile(filename, "utf8"));
 }
 
 async function readCommandVersion(command, args) {
-  const result = await runCommand(command, args, { cwd: repoRoot })
-  return result.stdout
+  const result = await runCommand(command, args, { cwd: repoRoot });
+  return result.stdout;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(error)
-    process.exitCode = 1
-  })
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

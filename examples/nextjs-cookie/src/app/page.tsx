@@ -1,41 +1,41 @@
-import { t } from "@palamedes/core/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { ClientReady } from "@/components/ClientReady"
-import { ClientNavigationProbe } from "@/components/ClientNavigationProbe"
-import { LocaleSwitcher } from "@/components/LocaleSwitcher"
-import { ProofPanel } from "@/components/ProofPanel"
-import { TicketPanel } from "@/components/TicketPanel"
-import { createActiveServerI18n, runWithServerI18n } from "@/lib/i18n.server"
-import { getLocaleLabel } from "@/lib/i18n"
+import { t } from "@palamedes/core/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { ClientReady } from "@/components/ClientReady";
+import { ClientNavigationProbe } from "@/components/ClientNavigationProbe";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { ProofPanel } from "@/components/ProofPanel";
+import { TicketPanel } from "@/components/TicketPanel";
+import { createActiveServerI18n, runWithServerI18n } from "@/lib/i18n.server";
+import { getLocaleLabel } from "@/lib/i18n";
 
 // These functions run only inside `runWithServerI18n()`'s request-local scope.
 function translateEyebrow(): string {
-  return t`Localized for this document with Palamedes`
+  return t`Localized for this document with Palamedes`;
 }
 
 function translateHeadline(): string {
-  return t`Book your seat at Frontend Stage 2026`
+  return t`Book your seat at Frontend Stage 2026`;
 }
 
 function translateGreeting(attendeeName: string): string {
-  return t`Welcome back, ${attendeeName}.`
+  return t`Welcome back, ${attendeeName}.`;
 }
 
 function translateLede(): string {
-  return t`Three days of talks on the craft of building for the web. Choose your tickets below.`
+  return t`Three days of talks on the craft of building for the web. Choose your tickets below.`;
 }
 
 function translateRenderedWith(): string {
-  return t`Rendered with Next.js`
+  return t`Rendered with Next.js`;
 }
 
 function translateServerLocale(): string {
-  return t`server locale`
+  return t`server locale`;
 }
 
 export default async function Home() {
-  const { i18n, locale } = await createActiveServerI18n()
-  const localeLabel = getLocaleLabel(locale)
+  const { i18n, locale } = await createActiveServerI18n();
+  const localeLabel = getLocaleLabel(locale);
 
   return runWithServerI18n(i18n, () => (
     <main className="page-shell">
@@ -72,5 +72,5 @@ export default async function Home() {
       <ClientReady />
       <ClientNavigationProbe />
     </main>
-  ))
+  ));
 }

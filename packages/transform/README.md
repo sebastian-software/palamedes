@@ -40,7 +40,7 @@ dependency when using the catalog-loader helpers.
 ## Minimal Example
 
 ```ts
-import { transformPalamedesMacros } from "@palamedes/transform"
+import { transformPalamedesMacros } from "@palamedes/transform";
 
 const result = transformPalamedesMacros(
   'import { t } from "@palamedes/core/macro"; function message(name) { return t`Hello ${name}` }',
@@ -48,10 +48,10 @@ const result = transformPalamedesMacros(
   {
     runtimeModule: "@palamedes/runtime",
     keepSourceFallbacks: false,
-  }
-)
+  },
+);
 
-console.log(result.code)
+console.log(result.code);
 ```
 
 The transform strips authored source messages from generated runtime calls and

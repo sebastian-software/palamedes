@@ -1,14 +1,14 @@
-import { execFileSync } from "node:child_process"
-import { resolve } from "node:path"
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
 
-import tailwindcss from "@tailwindcss/vite"
-import { ardo } from "ardo/vite"
-import { defineConfig, type Plugin } from "vite"
+import tailwindcss from "@tailwindcss/vite";
+import { ardo } from "ardo/vite";
+import { defineConfig, type Plugin } from "vite";
 
 function gitHash(): string {
-  const githubSha = process.env.GITHUB_SHA?.trim()
+  const githubSha = process.env.GITHUB_SHA?.trim();
   if (githubSha && /^[0-9a-f]{8,40}$/iu.test(githubSha)) {
-    return githubSha.slice(0, 8).toLowerCase()
+    return githubSha.slice(0, 8).toLowerCase();
   }
 
   try {
@@ -19,9 +19,9 @@ function gitHash(): string {
     })
       .trim()
       .slice(0, 8)
-      .toLowerCase()
+      .toLowerCase();
   } catch {
-    return "unknown"
+    return "unknown";
   }
 }
 
@@ -37,20 +37,20 @@ function gitHash(): string {
  * ordering upstream.
  */
 function markdownRouteMeta(): Plugin {
-  const routesDir = resolve(import.meta.dirname, "app/routes")
-  const metaModule = resolve(import.meta.dirname, "app/lib/meta.ts")
+  const routesDir = resolve(import.meta.dirname, "app/routes");
+  const metaModule = resolve(import.meta.dirname, "app/lib/meta.ts");
   return {
     name: "palamedes-markdown-route-meta",
     enforce: "post",
     transform(code, id) {
-      const [file] = id.split("?", 1)
-      if (!/\.(md|mdx)$/u.test(file) || !file.startsWith(routesDir)) return
-      if (!code.includes("export const frontmatter")) return
-      if (code.includes("export const meta") || code.includes("export function meta")) return
+      const [file] = id.split("?", 1);
+      if (!/\.(md|mdx)$/u.test(file) || !file.startsWith(routesDir)) return;
+      if (!code.includes("export const frontmatter")) return;
+      if (code.includes("export const meta") || code.includes("export function meta")) return;
       const route = file
         .slice(routesDir.length)
         .replace(/\.(md|mdx)$/u, "")
-        .replace(/\/index$/u, "")
+        .replace(/\/index$/u, "");
       return {
         code: [
           code,
@@ -62,9 +62,9 @@ function markdownRouteMeta(): Plugin {
           "    : []",
         ].join("\n"),
         map: null,
-      }
+      };
     },
-  }
+  };
 }
 
 export default defineConfig({
@@ -125,4 +125,4 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
     tsconfigPaths: true,
   },
-})
+});

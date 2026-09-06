@@ -1,4 +1,4 @@
-import { repoHref } from "./links"
+import { repoHref } from "./links";
 
 /*
  * Cells carry EXPLICIT links and a per-cell hosting status — never a generated
@@ -10,28 +10,28 @@ import { repoHref } from "./links"
  * smoke proofs, but no public hosting.
  */
 
-export type MatrixStatus = "live" | "provisioning"
+export type MatrixStatus = "live" | "provisioning";
 
 export interface DemoLink {
-  label: string
-  href: string
+  label: string;
+  href: string;
 }
 
 export interface MatrixCell {
-  framework: string
-  strategy: StrategySlug
-  verified: true
-  status: MatrixStatus
-  demoLinks?: DemoLink[]
-  sourceHref: string
+  framework: string;
+  strategy: StrategySlug;
+  verified: true;
+  status: MatrixStatus;
+  demoLinks?: DemoLink[];
+  sourceHref: string;
 }
 
 export interface MatrixAxis<TSlug extends string = string> {
-  name: string
-  slug: TSlug
+  name: string;
+  slug: TSlug;
 }
 
-export type StrategySlug = "cookie" | "route" | "subdomain" | "tld"
+export type StrategySlug = "cookie" | "route" | "subdomain" | "tld";
 
 export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Next.js", slug: "nextjs" },
@@ -40,17 +40,17 @@ export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
   { name: "Remix v3", slug: "remix" },
-]
+];
 
 export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
   { name: "Cookie", slug: "cookie" },
   { name: "Route", slug: "route" },
   { name: "Subdomain", slug: "subdomain" },
   { name: "TLD", slug: "tld" },
-]
+];
 
-const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"])
-const TLD_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"])
+const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"]);
+const TLD_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"]);
 
 export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework }) => [
   {
@@ -104,12 +104,12 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
       : undefined,
     sourceHref: repoHref(`examples/${framework}-tld`, "tree"),
   },
-])
+]);
 
 export function cellFor(framework: string, strategy: StrategySlug): MatrixCell {
-  const cell = MATRIX_CELLS.find((c) => c.framework === framework && c.strategy === strategy)
+  const cell = MATRIX_CELLS.find((c) => c.framework === framework && c.strategy === strategy);
   if (!cell) {
-    throw new Error(`No matrix cell for ${framework}/${strategy}`)
+    throw new Error(`No matrix cell for ${framework}/${strategy}`);
   }
-  return cell
+  return cell;
 }

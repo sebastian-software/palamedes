@@ -11,13 +11,13 @@ export const compactCommandInventory = [
   "pmds lint",
   "pmds catalog merge",
   "pmds catalog merge-driver",
-]
+];
 
 export const compactPackageInventory = [
   "@palamedes/cli",
   "@palamedes/core-node",
   "@palamedes/eslint-plugin",
-]
+];
 
 // Every public package is intentionally enumerated. Platform binaries remain
 // discoverable through their parent package in the full context, while an
@@ -41,9 +41,9 @@ export const publishedPackageInventory = [
   "@palamedes/waku",
   "create-palamedes",
   "palamedes",
-]
+];
 
-export const platformPackageParents = ["@palamedes/cli", "@palamedes/core-node"]
+export const platformPackageParents = ["@palamedes/cli", "@palamedes/core-node"];
 
 export const platformPackageInventory = [
   "@palamedes/cli-darwin-arm64",
@@ -58,7 +58,7 @@ export const platformPackageInventory = [
   "@palamedes/core-node-linux-x64-gnu",
   "@palamedes/core-node-linux-x64-musl",
   "@palamedes/core-node-win32-x64-msvc",
-]
+];
 
 // The candidate/patch API is a deliberately bounded public workflow. The
 // checker also discovers all matching exports, so additions need both an
@@ -76,16 +76,16 @@ export const translationApiInventory = [
   "TranslationPatchRequest",
   "TranslationPatchResult",
   "TranslationPatchWriteError",
-]
+];
 
-export const translationPatchOutcomeInventory = ["applied", "unchanged", "rejected", "notApplied"]
+export const translationPatchOutcomeInventory = ["applied", "unchanged", "rejected", "notApplied"];
 
 export const compactTranslationApiInventory = [
   "listTranslationCandidates",
   "applyTranslationPatches",
   "TranslationPatch",
   "fingerprint",
-]
+];
 
 export const featureNarrative = {
   lint: ["non-mutating", "MDX"],
@@ -100,4 +100,4 @@ export const featureNarrative = {
     "palamedes.server",
     "initializeServerFunctionI18n",
   ],
-}
+};

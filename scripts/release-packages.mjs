@@ -1,26 +1,26 @@
-import { spawnSync } from "node:child_process"
-import { existsSync, readFileSync, readdirSync } from "node:fs"
-import path from "node:path"
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 
 // On Windows the package manager binaries resolve to `npm.cmd`. Node refuses to
 // spawn `.cmd`/`.bat` files without a shell (CVE-2024-27980), so run through the
 // shell there; POSIX keeps the direct, unquoted spawn.
-const useShell = process.platform === "win32"
+const useShell = process.platform === "win32";
 
 export function publicWorkspacePackages(root = process.cwd()) {
   return readdirSync(path.join(root, "packages"))
     .map((directory) => {
-      const packagePath = path.join("packages", directory)
-      const packageJsonPath = path.join(root, packagePath, "package.json")
+      const packagePath = path.join("packages", directory);
+      const packageJsonPath = path.join(root, packagePath, "package.json");
 
       if (!existsSync(packageJsonPath)) {
-        return null
+        return null;
       }
 
-      const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"))
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 
       if (packageJson.private) {
-        return null
+        return null;
       }
 
       return {
@@ -29,108 +29,108 @@ export function publicWorkspacePackages(root = process.cwd()) {
         name: packageJson.name,
         nativeArtifact: nativeArtifact(packageJson),
         version: packageJson.version,
-      }
+      };
     })
     .filter(Boolean)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function javascriptWorkspacePackages(root = process.cwd()) {
   return dependencyOrderedWorkspacePackages(
-    publicWorkspacePackages(root).filter((packageInfo) => !packageInfo.nativeArtifact)
-  )
+    publicWorkspacePackages(root).filter((packageInfo) => !packageInfo.nativeArtifact),
+  );
 }
 
 // Publish order matters because pnpm turns workspace references into registry
 // ranges in the packed manifest. Keep independent packages deterministic while
 // ensuring each workspace dependency reaches npm before its dependents.
 export function dependencyOrderedWorkspacePackages(packages, { warn = console.warn } = {}) {
-  const packagesByName = new Map()
+  const packagesByName = new Map();
 
   for (const packageInfo of packages) {
     if (typeof packageInfo.name !== "string" || packageInfo.name.length === 0) {
-      throw new Error("Cannot order workspace packages without a package name.")
+      throw new Error("Cannot order workspace packages without a package name.");
     }
 
     if (packagesByName.has(packageInfo.name)) {
-      throw new Error(`Cannot order workspace packages with duplicate name ${packageInfo.name}.`)
+      throw new Error(`Cannot order workspace packages with duplicate name ${packageInfo.name}.`);
     }
 
-    packagesByName.set(packageInfo.name, packageInfo)
+    packagesByName.set(packageInfo.name, packageInfo);
   }
 
-  const dependenciesByPackage = new Map()
+  const dependenciesByPackage = new Map();
   for (const packageInfo of packagesByName.values()) {
     dependenciesByPackage.set(
       packageInfo.name,
       workspacePublishDependencies(packageInfo.manifest, packagesByName, [
         "dependencies",
         "optionalDependencies",
-      ])
-    )
+      ]),
+    );
   }
 
   // Hard workspace dependencies must always form a valid publish order.
-  dependencyOrder(packagesByName, dependenciesByPackage)
+  dependencyOrder(packagesByName, dependenciesByPackage);
 
   const peerEdges = [...packagesByName.values()]
     .flatMap((packageInfo) =>
       [
         ...workspacePublishDependencies(packageInfo.manifest, packagesByName, ["peerDependencies"]),
-      ].map((dependencyName) => ({ dependencyName, packageName: packageInfo.name }))
+      ].map((dependencyName) => ({ dependencyName, packageName: packageInfo.name })),
     )
     .sort(
       (left, right) =>
         left.packageName.localeCompare(right.packageName) ||
-        left.dependencyName.localeCompare(right.dependencyName)
-    )
+        left.dependencyName.localeCompare(right.dependencyName),
+    );
 
   for (const { dependencyName, packageName } of peerEdges) {
-    const dependencies = dependenciesByPackage.get(packageName)
+    const dependencies = dependenciesByPackage.get(packageName);
     if (dependencies.has(dependencyName)) {
-      continue
+      continue;
     }
     if (hasDependencyPath(dependenciesByPackage, dependencyName, packageName)) {
       warn(
-        `Ignoring workspace peer dependency publish-order hint ${dependencyName} -> ${packageName} because it would create a cycle.`
-      )
-      continue
+        `Ignoring workspace peer dependency publish-order hint ${dependencyName} -> ${packageName} because it would create a cycle.`,
+      );
+      continue;
     }
-    dependencies.add(dependencyName)
+    dependencies.add(dependencyName);
   }
 
-  return dependencyOrder(packagesByName, dependenciesByPackage)
+  return dependencyOrder(packagesByName, dependenciesByPackage);
 }
 
 function dependencyOrder(packagesByName, dependenciesByPackage) {
-  const dependents = new Map([...packagesByName.keys()].map((name) => [name, []]))
-  const dependencyCounts = new Map()
+  const dependents = new Map([...packagesByName.keys()].map((name) => [name, []]));
+  const dependencyCounts = new Map();
 
   for (const [packageName, dependencies] of dependenciesByPackage) {
-    dependencyCounts.set(packageName, dependencies.size)
+    dependencyCounts.set(packageName, dependencies.size);
     for (const dependencyName of dependencies) {
-      dependents.get(dependencyName).push(packageName)
+      dependents.get(dependencyName).push(packageName);
     }
   }
   for (const names of dependents.values()) {
-    names.sort((a, b) => a.localeCompare(b))
+    names.sort((a, b) => a.localeCompare(b));
   }
   const ready = [...packagesByName.keys()]
     .filter((name) => dependencyCounts.get(name) === 0)
-    .sort((a, b) => a.localeCompare(b))
-  const ordered = []
+    .sort((a, b) => a.localeCompare(b));
+  const ordered = [];
 
   while (ready.length > 0) {
-    const name = ready.shift()
-    ordered.push(packagesByName.get(name))
+    const name = ready.shift();
+    ordered.push(packagesByName.get(name));
 
     for (const dependent of dependents.get(name)) {
-      const remainingDependencies = dependencyCounts.get(dependent) - 1
-      dependencyCounts.set(dependent, remainingDependencies)
+      const remainingDependencies = dependencyCounts.get(dependent) - 1;
+      dependencyCounts.set(dependent, remainingDependencies);
 
       if (remainingDependencies === 0) {
-        ready.push(dependent)
-        ready.sort((a, b) => a.localeCompare(b))
+        ready.push(dependent);
+        ready.sort((a, b) => a.localeCompare(b));
       }
     }
   }
@@ -139,41 +139,41 @@ function dependencyOrder(packagesByName, dependenciesByPackage) {
     const cycle = [...dependencyCounts]
       .filter(([, count]) => count > 0)
       .map(([name]) => name)
-      .sort((a, b) => a.localeCompare(b))
+      .sort((a, b) => a.localeCompare(b));
 
     throw new Error(
-      `Cannot publish workspace packages in dependency order: dependency cycle detected among ${cycle.join(", ")}.`
-    )
+      `Cannot publish workspace packages in dependency order: dependency cycle detected among ${cycle.join(", ")}.`,
+    );
   }
 
-  return ordered
+  return ordered;
 }
 
 function hasDependencyPath(dependenciesByPackage, start, target) {
-  const seen = new Set()
-  const pending = [start]
+  const seen = new Set();
+  const pending = [start];
 
   while (pending.length > 0) {
-    const current = pending.pop()
+    const current = pending.pop();
     if (current === target) {
-      return true
+      return true;
     }
     if (seen.has(current)) {
-      continue
+      continue;
     }
-    seen.add(current)
-    pending.push(...dependenciesByPackage.get(current))
+    seen.add(current);
+    pending.push(...dependenciesByPackage.get(current));
   }
-  return false
+  return false;
 }
 
 function workspacePublishDependencies(packageJson, packagesByName, fields) {
-  const dependencies = new Set()
+  const dependencies = new Set();
 
   for (const field of fields) {
-    const declaredDependencies = packageJson?.[field]
+    const declaredDependencies = packageJson?.[field];
     if (declaredDependencies === null || typeof declaredDependencies !== "object") {
-      continue
+      continue;
     }
 
     for (const [name, version] of Object.entries(declaredDependencies)) {
@@ -182,12 +182,12 @@ function workspacePublishDependencies(packageJson, packagesByName, fields) {
         version.startsWith("workspace:") &&
         packagesByName.has(name)
       ) {
-        dependencies.add(name)
+        dependencies.add(name);
       }
     }
   }
 
-  return dependencies
+  return dependencies;
 }
 
 function nativeArtifact(packageJson) {
@@ -196,18 +196,18 @@ function nativeArtifact(packageJson) {
     (packageJson.name.startsWith("@palamedes/core-node-") ||
       packageJson.name.startsWith("@palamedes/cli-")) &&
     Array.isArray(packageJson.os) &&
-    Array.isArray(packageJson.cpu)
+    Array.isArray(packageJson.cpu);
 
   if (!isPlatformPackage) {
-    return null
+    return null;
   }
 
   if (typeof packageJson.bin === "object" && packageJson.bin !== null) {
-    const artifact = Object.values(packageJson.bin).find((value) => typeof value === "string")
-    return artifact?.replace(/^\.\//, "") ?? null
+    const artifact = Object.values(packageJson.bin).find((value) => typeof value === "string");
+    return artifact?.replace(/^\.\//, "") ?? null;
   }
 
-  return typeof packageJson.main === "string" ? packageJson.main.replace(/^\.\//, "") : null
+  return typeof packageJson.main === "string" ? packageJson.main.replace(/^\.\//, "") : null;
 }
 
 // `npm view` exits non-zero both for "this does not exist" and for transport or
@@ -221,24 +221,24 @@ export function registryLookup(spec, field = "version", root = process.cwd()) {
       cwd: root,
       encoding: "utf8",
       shell: useShell,
-    }
-  )
+    },
+  );
 
   if (result.error) {
-    return { state: "error", detail: String(result.error) }
+    return { state: "error", detail: String(result.error) };
   }
 
   if (result.status === 0) {
-    return { state: "found", value: (result.stdout ?? "").trim() }
+    return { state: "found", value: (result.stdout ?? "").trim() };
   }
 
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 
   if (isMissingFromRegistry(output)) {
-    return { state: "missing", detail: output.trim() }
+    return { state: "missing", detail: output.trim() };
   }
 
-  return { state: "error", detail: output.trim() }
+  return { state: "error", detail: output.trim() };
 }
 
 export function isMissingFromRegistry(output) {
@@ -249,5 +249,5 @@ export function isMissingFromRegistry(output) {
     output.includes("[E404]") ||
     output.includes("No matching version found for") ||
     output.includes("is not in the npm registry")
-  )
+  );
 }

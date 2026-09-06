@@ -1,5 +1,5 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
 
 export function ServerPage({ localeLabel }: { localeLabel: string }) {
   return (
@@ -9,5 +9,5 @@ export function ServerPage({ localeLabel }: { localeLabel: string }) {
         <Trans>This benchmark fixture mirrors a server-rendered page entry.</Trans>
       </p>
     </section>
-  )
+  );
 }

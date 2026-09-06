@@ -49,14 +49,14 @@ import {
   mergeCatalogFilesThreeWay,
   parsePo,
   updateCatalogFile,
-} from "@palamedes/core-node"
+} from "@palamedes/core-node";
 
-const info = getNativeInfo()
+const info = getNativeInfo();
 const po = parsePo(`
 msgid ""
 msgstr ""
 "Language: en\\n"
-`)
+`);
 updateCatalogFile({
   targetPath: "src/locales/en.po",
   locale: "en",
@@ -64,13 +64,13 @@ updateCatalogFile({
   clean: false,
   po: { lineBreaks: "off" },
   messages: [{ message: "Hello {name}", extractedComments: [], origins: [] }],
-})
+});
 combineCatalogFiles({
   inputPaths: ["src/locales/de.po", "incoming/de.po"],
   outputPath: "src/locales/de.po",
   format: "po",
   sourceLocale: "en",
-})
+});
 mergeCatalogFilesThreeWay({
   ancestorPath: "git/base/de.po",
   oursPath: "src/locales/de.po",
@@ -79,16 +79,16 @@ mergeCatalogFilesThreeWay({
   format: "po",
   sourceLocale: "en",
   conflictStrategy: "useFirst",
-})
+});
 combineCatalogFiles({
   inputPaths: ["src/locales/de.fcl", "incoming/de.fcl"],
   outputPath: "src/locales/de.fcl",
   format: "fcl",
   sourceLocale: "en",
-})
+});
 
-console.log(info.palamedesVersion)
-console.log(po.headers.Language)
+console.log(info.palamedesVersion);
+console.log(po.headers.Language);
 ```
 
 ## Available APIs

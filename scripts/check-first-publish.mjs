@@ -10,68 +10,68 @@
 // A dry run publishes nothing, so it passes `--warn-only`: blocking it would
 // make a newly added platform package impossible to build-verify before its
 // first publish, which is exactly when the verification matters most.
-import { publicWorkspacePackages, registryLookup } from "./release-packages.mjs"
+import { publicWorkspacePackages, registryLookup } from "./release-packages.mjs";
 
-const warnOnly = process.argv.includes("--warn-only")
-const packages = publicWorkspacePackages()
-const unpublished = []
-const failures = []
+const warnOnly = process.argv.includes("--warn-only");
+const packages = publicWorkspacePackages();
+const unpublished = [];
+const failures = [];
 
 for (const packageInfo of packages) {
-  const lookup = registryLookup(packageInfo.name, "name")
+  const lookup = registryLookup(packageInfo.name, "name");
 
   if (lookup.state === "missing") {
-    unpublished.push(packageInfo)
+    unpublished.push(packageInfo);
   } else if (lookup.state === "error") {
-    failures.push({ name: packageInfo.name, detail: lookup.detail })
+    failures.push({ name: packageInfo.name, detail: lookup.detail });
   }
 }
 
 if (failures.length > 0) {
-  console.error("Could not determine the registry state for every package:")
+  console.error("Could not determine the registry state for every package:");
   for (const failure of failures) {
-    console.error(`  ${failure.name}: ${failure.detail}`)
+    console.error(`  ${failure.name}: ${failure.detail}`);
   }
-  process.exit(1)
+  process.exit(1);
 }
 
 if (unpublished.length === 0) {
   console.log(
-    `All ${packages.length} public packages exist on the registry; trusted publishing can mint tokens for each.`
-  )
-  process.exit(0)
+    `All ${packages.length} public packages exist on the registry; trusted publishing can mint tokens for each.`,
+  );
+  process.exit(0);
 }
 
 console.error(
-  `${unpublished.length} package(s) have never been published, so this release would fail partway through:`
-)
+  `${unpublished.length} package(s) have never been published, so this release would fail partway through:`,
+);
 for (const packageInfo of unpublished) {
-  console.error(`  ${packageInfo.name} (${packageInfo.directory})`)
+  console.error(`  ${packageInfo.name} (${packageInfo.directory})`);
 }
-console.error("")
-console.error("Publish each one manually once, then let CI take over:")
-console.error("")
-console.error("  pnpm install --frozen-lockfile")
+console.error("");
+console.error("Publish each one manually once, then let CI take over:");
+console.error("");
+console.error("  pnpm install --frozen-lockfile");
 for (const packageInfo of unpublished) {
-  console.error(`  pnpm -r --filter "./${packageInfo.directory}..." build`)
+  console.error(`  pnpm -r --filter "./${packageInfo.directory}..." build`);
 }
 for (const packageInfo of unpublished) {
   console.error(
-    `  pnpm --filter ./${packageInfo.directory} publish --access public --no-git-checks`
-  )
+    `  pnpm --filter ./${packageInfo.directory} publish --access public --no-git-checks`,
+  );
 }
-console.error("")
+console.error("");
 console.error(
-  "Then configure a trusted publisher for each package on npmjs.com (repository sebastian-software/palamedes, workflow publish.yml, no environment) and re-run this workflow with force_publish."
-)
+  "Then configure a trusted publisher for each package on npmjs.com (repository sebastian-software/palamedes, workflow publish.yml, no environment) and re-run this workflow with force_publish.",
+);
 
 if (warnOnly) {
-  console.error("")
+  console.error("");
   console.error(
-    `::warning title=First-publish setup required::${unpublished.length} package(s) need a manual bootstrap publish and npm trusted-publisher configuration before a release can succeed.`
-  )
-  console.error("Reported only: this run does not publish anything.")
-  process.exit(0)
+    `::warning title=First-publish setup required::${unpublished.length} package(s) need a manual bootstrap publish and npm trusted-publisher configuration before a release can succeed.`,
+  );
+  console.error("Reported only: this run does not publish anything.");
+  process.exit(0);
 }
 
-process.exit(1)
+process.exit(1);

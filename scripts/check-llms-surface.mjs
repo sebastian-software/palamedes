@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs"
-import path from "node:path"
-import process from "node:process"
-import { pathToFileURL } from "node:url"
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 import {
   compactCommandInventory,
@@ -13,7 +13,7 @@ import {
   publishedPackageInventory,
   translationApiInventory,
   translationPatchOutcomeInventory,
-} from "./llms-surface-contract.mjs"
+} from "./llms-surface-contract.mjs";
 
 const commandSources = {
   Extract: {
@@ -42,7 +42,7 @@ const commandSources = {
     type: "CatalogCommand",
   },
   Version: { command: "pmds version" },
-}
+};
 
 const catalogCommandSources = {
   Merge: {
@@ -60,172 +60,172 @@ const catalogCommandSources = {
     file: "crates/palamedes-cli/src/commands/catalog/convert.rs",
     type: "ConvertOptions",
   },
-}
+};
 
 export function normalize(text) {
-  return text.replaceAll(/\s+/gu, " ").trim()
+  return text.replaceAll(/\s+/gu, " ").trim();
 }
 
 function assertContains(text, expected, label) {
   if (!normalize(text).includes(normalize(expected))) {
-    throw new Error(`${label} is missing required surface: ${expected}`)
+    throw new Error(`${label} is missing required surface: ${expected}`);
   }
 }
 
 function assertSameInventory(actual, expected, label) {
-  const actualSorted = [...actual].sort()
-  const expectedSorted = [...expected].sort()
+  const actualSorted = [...actual].sort();
+  const expectedSorted = [...expected].sort();
   if (actualSorted.join("\n") !== expectedSorted.join("\n")) {
     throw new Error(
-      `${label} changed; update the intentional LLMS inventory. Expected ${expectedSorted.join(", ")}; found ${actualSorted.join(", ")}`
-    )
+      `${label} changed; update the intentional LLMS inventory. Expected ${expectedSorted.join(", ")}; found ${actualSorted.join(", ")}`,
+    );
   }
 }
 
 function blockFor(text, startPattern) {
-  const start = text.search(startPattern)
-  if (start === -1) return ""
-  const open = text.indexOf("{", start)
-  if (open === -1) return ""
-  let depth = 0
+  const start = text.search(startPattern);
+  if (start === -1) return "";
+  const open = text.indexOf("{", start);
+  if (open === -1) return "";
+  let depth = 0;
   for (let index = open; index < text.length; index += 1) {
-    if (text[index] === "{") depth += 1
+    if (text[index] === "{") depth += 1;
     if (text[index] === "}") {
-      depth -= 1
-      if (depth === 0) return text.slice(open + 1, index)
+      depth -= 1;
+      if (depth === 0) return text.slice(open + 1, index);
     }
   }
-  return ""
+  return "";
 }
 
 function kebabCase(name) {
   return name
     .replaceAll(/([a-z0-9])([A-Z])/gu, "$1-$2")
     .replaceAll("_", "-")
-    .toLowerCase()
+    .toLowerCase();
 }
 
 export function discoverClapOptions(source, type) {
-  const body = blockFor(source, new RegExp(`pub struct ${type}\\b`, "u"))
-  if (!body) throw new Error(`Could not discover Clap options for ${type}`)
+  const body = blockFor(source, new RegExp(`pub struct ${type}\\b`, "u"));
+  if (!body) throw new Error(`Could not discover Clap options for ${type}`);
   return [...body.matchAll(/#\[arg\(([^\]]*)\)\]\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gu)]
     .filter(([, attributes]) => attributes.includes("long"))
-    .map((match) => `--${kebabCase(match[2])}`)
+    .map((match) => `--${kebabCase(match[2])}`);
 }
 
 function discoverEnumVariants(source, enumName) {
-  const body = blockFor(source, new RegExp(`(?:pub )?enum ${enumName}\\b`, "u"))
-  if (!body) throw new Error(`Could not discover ${enumName}`)
+  const body = blockFor(source, new RegExp(`(?:pub )?enum ${enumName}\\b`, "u"));
+  if (!body) throw new Error(`Could not discover ${enumName}`);
   return [
     ...body.matchAll(
-      /^\s*(?:\/\/\/[^\n]*\n\s*)*(?:#\[[^\]]+\]\s*)*([A-Z][A-Za-z0-9_]*)\s*(?:\([^)]*\))?,/gmu
+      /^\s*(?:\/\/\/[^\n]*\n\s*)*(?:#\[[^\]]+\]\s*)*([A-Z][A-Za-z0-9_]*)\s*(?:\([^)]*\))?,/gmu,
     ),
-  ].map(([, variant]) => variant)
+  ].map(([, variant]) => variant);
 }
 
 export function discoverCliInventory(read) {
   const rootCommands = discoverEnumVariants(
     read("crates/palamedes-cli/src/cli.rs"),
-    "Command"
-  ).filter((variant) => variant !== "Plugin")
-  assertSameInventory(rootCommands, Object.keys(commandSources), "Built-in pmds command inventory")
+    "Command",
+  ).filter((variant) => variant !== "Plugin");
+  assertSameInventory(rootCommands, Object.keys(commandSources), "Built-in pmds command inventory");
 
   const commands = rootCommands.map((variant) => {
-    const source = commandSources[variant]
+    const source = commandSources[variant];
     return {
       command: source.command,
       flags: source.file ? discoverClapOptions(read(source.file), source.type) : [],
-    }
-  })
+    };
+  });
   const catalogVariants = discoverEnumVariants(
     read("crates/palamedes-cli/src/commands/catalog/mod.rs"),
-    "CatalogSubcommand"
-  )
+    "CatalogSubcommand",
+  );
   assertSameInventory(
     catalogVariants,
     Object.keys(catalogCommandSources),
-    "pmds catalog subcommand inventory"
-  )
+    "pmds catalog subcommand inventory",
+  );
   for (const variant of catalogVariants) {
-    const source = catalogCommandSources[variant]
+    const source = catalogCommandSources[variant];
     commands.push({
       command: source.command,
       flags: discoverClapOptions(read(source.file), source.type),
-    })
+    });
   }
-  return commands
+  return commands;
 }
 
 export function discoverPublishedPackages(
   read,
-  listDirectories = (directory) => readdirSync(directory)
+  listDirectories = (directory) => readdirSync(directory),
 ) {
-  const packages = []
+  const packages = [];
   for (const directory of listDirectories("packages")) {
-    const manifestPath = `packages/${directory}/package.json`
+    const manifestPath = `packages/${directory}/package.json`;
     try {
-      const manifest = JSON.parse(read(manifestPath))
+      const manifest = JSON.parse(read(manifestPath));
       if (!manifest.private && manifest.name) {
         packages.push({
           manifestPath,
           name: manifest.name,
           nodeEngine: manifest.engines?.node,
-        })
+        });
       }
     } catch (error) {
-      if (error.code !== "ENOENT") throw error
+      if (error.code !== "ENOENT") throw error;
     }
   }
-  return packages
+  return packages;
 }
 
 function platformParent(packageName) {
-  if (!platformPackageInventory.includes(packageName)) return
-  return platformPackageParents.find((parent) => packageName.startsWith(`${parent}-`))
+  if (!platformPackageInventory.includes(packageName)) return;
+  return platformPackageParents.find((parent) => packageName.startsWith(`${parent}-`));
 }
 
 export function discoverTranslationApi(source) {
   const names = [
     ...source.matchAll(
-      /^export (?:type )?(Translation(?:Candidate|Patch)[A-Za-z0-9_]*)\b|^export function (listTranslationCandidates|applyTranslationPatches)\b/gmu
+      /^export (?:type )?(Translation(?:Candidate|Patch)[A-Za-z0-9_]*)\b|^export function (listTranslationCandidates|applyTranslationPatches)\b/gmu,
     ),
-  ].map(([, typeName, functionName]) => typeName ?? functionName)
-  const outcome = source.match(/export type TranslationPatchOutcomeStatus\s*=\s*([^\n;]+)/u)
-  if (!outcome) throw new Error("Could not discover TranslationPatchOutcomeStatus")
-  const outcomes = [...outcome[1].matchAll(/"([^"]+)"/gu)].map(([, value]) => value)
-  return { names, outcomes }
+  ].map(([, typeName, functionName]) => typeName ?? functionName);
+  const outcome = source.match(/export type TranslationPatchOutcomeStatus\s*=\s*([^\n;]+)/u);
+  if (!outcome) throw new Error("Could not discover TranslationPatchOutcomeStatus");
+  const outcomes = [...outcome[1].matchAll(/"([^"]+)"/gu)].map(([, value]) => value);
+  return { names, outcomes };
 }
 
 function verifyPackages(read, listDirectories) {
   const reservedBinContract =
-    "The reserved `palamedes` and `create-palamedes` bins do not perform work: both print `https://palamedes.dev/docs/first-working-translation` to stderr, exit 1 when invoked without arguments, and exit 2 when arguments are supplied."
-  const packages = discoverPublishedPackages(read, listDirectories)
+    "The reserved `palamedes` and `create-palamedes` bins do not perform work: both print `https://palamedes.dev/docs/first-working-translation` to stderr, exit 1 when invoked without arguments, and exit 2 when arguments are supplied.";
+  const packages = discoverPublishedPackages(read, listDirectories);
   const directPackages = packages
     .filter(({ name }) => !platformParent(name))
-    .map(({ name }) => name)
+    .map(({ name }) => name);
   const platformPackages = packages
     .filter(({ name }) => platformParent(name))
-    .map(({ name }) => name)
-  assertSameInventory(directPackages, publishedPackageInventory, "Published package inventory")
-  assertSameInventory(platformPackages, platformPackageInventory, "Platform package inventory")
+    .map(({ name }) => name);
+  assertSameInventory(directPackages, publishedPackageInventory, "Published package inventory");
+  assertSameInventory(platformPackages, platformPackageInventory, "Platform package inventory");
 
   for (const { name } of packages) {
-    const parent = platformParent(name)
-    assertContains(read("llms-full.txt"), parent ?? name, "published packages: llms-full.txt")
+    const parent = platformParent(name);
+    assertContains(read("llms-full.txt"), parent ?? name, "published packages: llms-full.txt");
   }
   for (const name of compactPackageInventory)
-    assertContains(read("llms.txt"), name, "compact package inventory: llms.txt")
+    assertContains(read("llms.txt"), name, "compact package inventory: llms.txt");
   for (const file of ["llms.txt", "llms-full.txt"])
-    assertContains(read(file), reservedBinContract, `${file} reserved-bin contract`)
+    assertContains(read(file), reservedBinContract, `${file} reserved-bin contract`);
 
   const nodeSupportContract =
-    "Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`."
+    "Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`.";
   for (const file of ["README.md", "llms.txt", "llms-full.txt"])
-    assertContains(read(file), nodeSupportContract, `${file} Node support contract`)
+    assertContains(read(file), nodeSupportContract, `${file} Node support contract`);
 
   const nodeEngineExceptions = packages
     .filter(({ nodeEngine }) => nodeEngine && nodeEngine !== ">=22.0.0")
-    .map(({ name, nodeEngine }) => `${name}: ${nodeEngine}`)
+    .map(({ name, nodeEngine }) => `${name}: ${nodeEngine}`);
   assertSameInventory(
     nodeEngineExceptions,
     [
@@ -234,118 +234,119 @@ function verifyPackages(read, listDirectories) {
       "@palamedes/tanstack: >=22.22.0",
       "@palamedes/waku: >=22.22.0",
     ],
-    "Published package Node.js engine exceptions"
-  )
+    "Published package Node.js engine exceptions",
+  );
 
   const missingNodeEngines = packages
     .filter(({ name, nodeEngine }) => !nodeEngine && platformParent(name) !== "@palamedes/cli")
-    .map(({ name }) => name)
-  assertSameInventory(missingNodeEngines, [], "Published packages without a Node.js engine")
+    .map(({ name }) => name);
+  assertSameInventory(missingNodeEngines, [], "Published packages without a Node.js engine");
 
-  const rootNodeEngine = JSON.parse(read("package.json")).engines.node
+  const rootNodeEngine = JSON.parse(read("package.json")).engines.node;
   assertContains(
     read("README.md"),
     `Repository Node ${rootNodeEngine}`,
-    "README repository Node badge"
-  )
-  const nextPluginNodeEngine = JSON.parse(read("packages/next-plugin/package.json")).engines.node
+    "README repository Node badge",
+  );
+  const nextPluginNodeEngine = JSON.parse(read("packages/next-plugin/package.json")).engines.node;
   assertContains(
     read("docs/nextjs-first-run.md"),
     `Use Node.js \`${nextPluginNodeEngine}\``,
-    "Next.js first-run Node requirement"
-  )
+    "Next.js first-run Node requirement",
+  );
 }
 
 function verifyCli(read) {
-  const commands = discoverCliInventory(read)
-  const full = read("llms-full.txt")
-  const cliDocs = read("docs/cli.md")
+  const commands = discoverCliInventory(read);
+  const full = read("llms-full.txt");
+  const cliDocs = read("docs/cli.md");
   for (const { command, flags } of commands) {
-    assertContains(cliDocs, command, "CLI reference")
-    assertContains(full, command, "complete CLI inventory: llms-full.txt")
+    assertContains(cliDocs, command, "CLI reference");
+    assertContains(full, command, "complete CLI inventory: llms-full.txt");
     for (const flag of flags) {
-      assertContains(cliDocs, flag, `CLI reference for ${command}`)
-      assertContains(full, flag, `complete CLI option inventory: llms-full.txt`)
+      assertContains(cliDocs, flag, `CLI reference for ${command}`);
+      assertContains(full, flag, `complete CLI option inventory: llms-full.txt`);
     }
   }
   for (const command of compactCommandInventory)
-    assertContains(read("llms.txt"), command, "compact CLI inventory: llms.txt")
+    assertContains(read("llms.txt"), command, "compact CLI inventory: llms.txt");
 }
 
 function verifyTranslationApi(read) {
-  const { names, outcomes } = discoverTranslationApi(read("packages/core-node/src/index.ts"))
-  assertSameInventory(names, translationApiInventory, "Translation candidate/patch API inventory")
+  const { names, outcomes } = discoverTranslationApi(read("packages/core-node/src/index.ts"));
+  assertSameInventory(names, translationApiInventory, "Translation candidate/patch API inventory");
   assertSameInventory(
     outcomes,
     translationPatchOutcomeInventory,
-    "Translation patch outcome inventory"
-  )
-  const full = read("llms-full.txt")
-  for (const name of names) assertContains(full, name, "translation API inventory: llms-full.txt")
+    "Translation patch outcome inventory",
+  );
+  const full = read("llms-full.txt");
+  for (const name of names) assertContains(full, name, "translation API inventory: llms-full.txt");
   for (const outcome of outcomes)
-    assertContains(full, outcome, "translation patch outcomes: llms-full.txt")
+    assertContains(full, outcome, "translation patch outcomes: llms-full.txt");
   for (const name of compactTranslationApiInventory) {
-    assertContains(read("llms.txt"), name, "compact translation API inventory: llms.txt")
+    assertContains(read("llms.txt"), name, "compact translation API inventory: llms.txt");
   }
 }
 
 function verifyFeatureNarrative(read) {
-  const concise = read("llms.txt")
-  const full = read("llms-full.txt")
+  const concise = read("llms.txt");
+  const full = read("llms-full.txt");
   for (const [feature, terms] of Object.entries(featureNarrative)) {
     for (const document of [concise, full]) {
-      for (const term of terms) assertContains(document, term, `${feature} context`)
+      for (const term of terms) assertContains(document, term, `${feature} context`);
     }
   }
 }
 
 function verifyAdrInventory(read, listDirectories) {
-  const full = read("llms-full.txt")
-  const adrSection = full.split("ADRs:\n", 2)[1]?.split("## Development commands\n", 2)[0]
-  if (!adrSection) throw new Error("llms-full.txt is missing its ADR inventory")
+  const full = read("llms-full.txt");
+  const adrSection = full.split("ADRs:\n", 2)[1]?.split("## Development commands\n", 2)[0];
+  if (!adrSection) throw new Error("llms-full.txt is missing its ADR inventory");
   const documented = [...adrSection.matchAll(/^- `\/adr\/([\w-]+)\.md`$/gmu)].map(
-    ([, filename]) => filename
-  )
+    ([, filename]) => filename,
+  );
   const adrInventory = listDirectories("adr")
     .filter((file) => file.endsWith(".md"))
-    .map((file) => file.slice(0, -3))
-  assertSameInventory(documented, adrInventory, "LLMS ADR inventory")
+    .map((file) => file.slice(0, -3));
+  assertSameInventory(documented, adrInventory, "LLMS ADR inventory");
 }
 
 function assertMatches(text, expression, expectedCount, label) {
-  const matches = text.match(expression) ?? []
+  const matches = text.match(expression) ?? [];
   if (matches.length !== expectedCount) {
     throw new Error(
-      `${label} must contain ${expectedCount} matching surface${expectedCount === 1 ? "" : "s"}; found ${matches.length}`
-    )
+      `${label} must contain ${expectedCount} matching surface${expectedCount === 1 ? "" : "s"}; found ${matches.length}`,
+    );
   }
 }
 
 function verifyCanonicalQuickstart(read) {
-  const compiledRuntime = 'import { createI18n } from "@palamedes/core/compiled"'
-  const compiledMessages = 'import type { CompiledCatalogMessages } from "@palamedes/core/compiled"'
+  const compiledRuntime = 'import { createI18n } from "@palamedes/core/compiled"';
+  const compiledMessages =
+    'import type { CompiledCatalogMessages } from "@palamedes/core/compiled"';
   const documentSurfaces = [
     "README.md",
     "docs/first-working-translation.md",
     "llms.txt",
     "llms-full.txt",
     "docs/migrate-from-lingui.md",
-  ]
+  ];
 
   for (const file of documentSurfaces) {
-    const text = read(file)
-    assertContains(text, compiledRuntime, `${file} quickstart runtime`)
-    assertContains(text, compiledMessages, `${file} quickstart .po declaration`)
+    const text = read(file);
+    assertContains(text, compiledRuntime, `${file} quickstart runtime`);
+    assertContains(text, compiledMessages, `${file} quickstart .po declaration`);
   }
 
-  const siteSteps = read("site/app/data/steps.ts")
-  assertContains(siteSteps, compiledMessages, "site quickstart .po declaration")
+  const siteSteps = read("site/app/data/steps.ts");
+  assertContains(siteSteps, compiledMessages, "site quickstart .po declaration");
   assertMatches(
     siteSteps,
     /import \{ createI18n \} from "@palamedes\/core\/compiled"/gu,
     4,
-    "site quickstart compiled runtime imports"
-  )
+    "site quickstart compiled runtime imports",
+  );
 
   for (const [file, text] of [
     ...documentSurfaces.map((file) => [file, read(file)]),
@@ -353,8 +354,8 @@ function verifyCanonicalQuickstart(read) {
   ]) {
     if (text.includes('import { createI18n } from "@palamedes/core"')) {
       throw new Error(
-        `${file} quickstart must use @palamedes/core/compiled for generated .po catalogs`
-      )
+        `${file} quickstart must use @palamedes/core/compiled for generated .po catalogs`,
+      );
     }
   }
 }
@@ -363,107 +364,107 @@ function codeExamples(text) {
   const fenced = [...text.matchAll(/^```[^\r\n]*\r?\n([\s\S]*?)^```/gmu)].map(([, example]) => ({
     example,
     fenced: true,
-  }))
-  const withoutFencedExamples = text.replaceAll(/^```[^\r\n]*\r?\n[\s\S]*?^```/gmu, "")
+  }));
+  const withoutFencedExamples = text.replaceAll(/^```[^\r\n]*\r?\n[\s\S]*?^```/gmu, "");
   const inline = [...withoutFencedExamples.matchAll(/`([^`]*)`/gu)].map(([, example]) => ({
     example,
     fenced: false,
-  }))
-  return [...fenced, ...inline]
+  }));
+  return [...fenced, ...inline];
 }
 
 function hasShellContinuation(line) {
-  const trimmed = line.trimEnd()
-  let trailingBackslashes = 0
+  const trimmed = line.trimEnd();
+  let trailingBackslashes = 0;
   for (let index = trimmed.length - 1; index >= 0 && trimmed[index] === "\\"; index -= 1) {
-    trailingBackslashes += 1
+    trailingBackslashes += 1;
   }
-  return trailingBackslashes % 2 === 1
+  return trailingBackslashes % 2 === 1;
 }
 
 function logicalShellCommands(example) {
-  const commands = []
-  let command = ""
+  const commands = [];
+  let command = "";
   for (const line of example.split(/\r?\n/u)) {
-    const continued = hasShellContinuation(line)
-    const part = continued ? line.trimEnd().slice(0, -1) : line
-    command = command.length === 0 ? part : `${command} ${part.trimStart()}`
+    const continued = hasShellContinuation(line);
+    const part = continued ? line.trimEnd().slice(0, -1) : line;
+    command = command.length === 0 ? part : `${command} ${part.trimStart()}`;
     if (!continued) {
-      if (command.trim()) commands.push(command.trim())
-      command = ""
+      if (command.trim()) commands.push(command.trim());
+      command = "";
     }
   }
-  if (command.trim()) commands.push(command.trim())
-  return commands
+  if (command.trim()) commands.push(command.trim());
+  return commands;
 }
 
 function mergeDriverCommands(text) {
-  const commands = []
+  const commands = [];
   for (const { example, fenced } of codeExamples(text)) {
-    const candidates = fenced ? logicalShellCommands(example) : [example]
+    const candidates = fenced ? logicalShellCommands(example) : [example];
     for (const command of candidates) {
-      if (!/\bpmds\s+catalog\s+merge-driver\b/u.test(command)) continue
+      if (!/\bpmds\s+catalog\s+merge-driver\b/u.test(command)) continue;
       if (fenced || /(?:^|\s)(?:%[OABP]|--(?:format|path)\b)/u.test(command)) {
-        commands.push(command)
+        commands.push(command);
       }
     }
   }
-  return commands
+  return commands;
 }
 
 function commandTokens(command) {
-  return command.split(/\s+/u).map((token) => token.replace(/^["']+|["']+$/gu, ""))
+  return command.split(/\s+/u).map((token) => token.replace(/^["']+|["']+$/gu, ""));
 }
 
 function optionValues(tokens, name) {
-  const option = `--${name}`
-  const values = []
+  const option = `--${name}`;
+  const values = [];
   for (const [index, token] of tokens.entries()) {
-    if (token === option && tokens[index + 1]) values.push(tokens[index + 1])
-    if (token.startsWith(`${option}=`)) values.push(token.slice(option.length + 1))
+    if (token === option && tokens[index + 1]) values.push(tokens[index + 1]);
+    if (token.startsWith(`${option}=`)) values.push(token.slice(option.length + 1));
   }
-  return values
+  return values;
 }
 
 function verifyMergeDriverGuidance(read) {
-  const surfaces = ["packages/cli/README.md", "llms.txt", "llms-full.txt"]
+  const surfaces = ["packages/cli/README.md", "llms.txt", "llms-full.txt"];
   for (const file of surfaces) {
-    const commands = mergeDriverCommands(read(file))
-    if (commands.length === 0) throw new Error(`${file} is missing merge-driver guidance`)
+    const commands = mergeDriverCommands(read(file));
+    if (commands.length === 0) throw new Error(`${file} is missing merge-driver guidance`);
     for (const command of commands) {
-      const tokens = commandTokens(command)
+      const tokens = commandTokens(command);
       if (optionValues(tokens, "format").some((value) => /^(po|fcl)$/iu.test(value))) {
-        throw new Error(`${file} must not hard-code a merge-driver format`)
+        throw new Error(`${file} must not hard-code a merge-driver format`);
       }
       if (optionValues(tokens, "path").every((value) => value !== "%P")) {
-        throw new Error(`${file} merge-driver guidance must pass --path %P`)
+        throw new Error(`${file} merge-driver guidance must pass --path %P`);
       }
-      const placeholders = tokens.filter((token) => ["%O", "%A", "%B"].includes(token))
+      const placeholders = tokens.filter((token) => ["%O", "%A", "%B"].includes(token));
       if (placeholders.join(" ") !== "%O %A %B %A") {
-        throw new Error(`${file} merge-driver guidance must pass Git placeholders %O %A %B %A`)
+        throw new Error(`${file} merge-driver guidance must pass Git placeholders %O %A %B %A`);
       }
     }
   }
 }
 
 export function checkLlmsSurface({ read, listDirectories } = {}) {
-  const readFile = read ?? ((file) => readFileSync(path.join(process.cwd(), file), "utf8"))
-  const list = listDirectories ?? ((directory) => readdirSync(path.join(process.cwd(), directory)))
-  verifyPackages(readFile, list)
-  verifyCli(readFile)
-  verifyTranslationApi(readFile)
-  verifyFeatureNarrative(readFile)
-  verifyAdrInventory(readFile, list)
-  verifyMergeDriverGuidance(readFile)
-  verifyCanonicalQuickstart(readFile)
+  const readFile = read ?? ((file) => readFileSync(path.join(process.cwd(), file), "utf8"));
+  const list = listDirectories ?? ((directory) => readdirSync(path.join(process.cwd(), directory)));
+  verifyPackages(readFile, list);
+  verifyCli(readFile);
+  verifyTranslationApi(readFile);
+  verifyFeatureNarrative(readFile);
+  verifyAdrInventory(readFile, list);
+  verifyMergeDriverGuidance(readFile);
+  verifyCanonicalQuickstart(readFile);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
-    checkLlmsSurface()
-    console.log("LLMS public-surface inventories are current.")
+    checkLlmsSurface();
+    console.log("LLMS public-surface inventories are current.");
   } catch (error) {
-    console.error(`check-llms-surface: ${error.message}`)
-    process.exitCode = 1
+    console.error(`check-llms-surface: ${error.message}`);
+    process.exitCode = 1;
   }
 }

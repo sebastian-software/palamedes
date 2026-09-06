@@ -1,12 +1,12 @@
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 
-import { AdrChip } from "~/components/architecture/AdrChip"
-import { CtaBand } from "~/components/home/CtaBand"
-import { StreamlineIcon } from "~/components/icons/StreamlineIcon"
-import { decisionHref, repoHref } from "~/data/links"
-import { pageMeta } from "~/lib/meta"
+import { AdrChip } from "~/components/architecture/AdrChip";
+import { CtaBand } from "~/components/home/CtaBand";
+import { StreamlineIcon } from "~/components/icons/StreamlineIcon";
+import { decisionHref, repoHref } from "~/data/links";
+import { pageMeta } from "~/lib/meta";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
@@ -14,7 +14,7 @@ export function meta() {
     description:
       "How Palamedes keeps extraction, catalog operations, compilation, and runtime artifacts coherent across TypeScript application hosts.",
     path: "/architecture",
-  })
+  });
 }
 
 const MECHANISMS = [
@@ -98,7 +98,7 @@ const MECHANISMS = [
     href: repoHref("scripts/verify-site-bench-data.mjs"),
     adr: ["019", "026"],
   },
-] as const
+] as const;
 
 const MACHINE_LAYERS = [
   {
@@ -131,13 +131,13 @@ const MACHINE_LAYERS = [
     title: "Runtime",
     body: "Request-scoped lookup and formatting",
   },
-] as const
+] as const;
 
 // Exact output from `renderCatalogModule()` for a catalog containing a greeting
 // and a plural message. Generated with the local native renderer on 2026-08-13;
 // its source and contract tests are linked from mechanism 02 below.
 const COMPILED_CATALOG_ARTIFACT =
-  'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";const __pm0=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pb0=(v,r,p)=>r.join(r.pound(p)," Nachricht");const __pb1=(v,r,p)=>r.join(r.pound(p)," Nachrichten");const __pc0={["one"]:__pb0,["other"]:__pb1};const __pm1=(v,r)=>r.plural(v,"count",0,"plural",__pc0);export const messages=__palamedesDefineCompiledCatalog({["greeting"]:__pm0,["inbox"]:__pm1});export default { messages };'
+  'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";const __pm0=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pb0=(v,r,p)=>r.join(r.pound(p)," Nachricht");const __pb1=(v,r,p)=>r.join(r.pound(p)," Nachrichten");const __pc0={["one"]:__pb0,["other"]:__pb1};const __pm1=(v,r)=>r.plural(v,"count",0,"plural",__pc0);export const messages=__palamedesDefineCompiledCatalog({["greeting"]:__pm0,["inbox"]:__pm1});export default { messages };';
 
 export default function Architecture() {
   return (
@@ -269,5 +269,5 @@ export default function Architecture() {
         secondary={{ label: "Choose your framework", href: "/frameworks" }}
       />
     </Page>
-  )
+  );
 }

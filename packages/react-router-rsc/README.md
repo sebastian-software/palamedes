@@ -32,14 +32,14 @@ Router requires its RSC plugin before `rsc()`:
 
 ```ts
 // vite.config.ts
-import { unstable_reactRouterRSC as reactRouterRSC } from "@react-router/dev/vite"
-import { palamedes } from "@palamedes/vite-plugin"
-import rsc from "@vitejs/plugin-rsc"
-import { defineConfig } from "vite"
+import { unstable_reactRouterRSC as reactRouterRSC } from "@react-router/dev/vite";
+import { palamedes } from "@palamedes/vite-plugin";
+import rsc from "@vitejs/plugin-rsc";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [palamedes(), reactRouterRSC(), rsc()],
-})
+});
 ```
 
 Create `app/entry.rsc.tsx`. The resolver receives React Router's original
@@ -47,38 +47,38 @@ Fetch `Request`, including `headers` and `cookies`; it owns locale negotiation,
 catalog loading, and activation of a **fresh** i18n instance.
 
 ```tsx
-import defaultEntry from "@react-router/dev/config/default-rsc-entries/entry.rsc"
-import { createReactRouterRscI18nRequestScope } from "@palamedes/react-router-rsc"
-import type { RouterContextProvider } from "react-router"
+import defaultEntry from "@react-router/dev/config/default-rsc-entries/entry.rsc";
+import { createReactRouterRscI18nRequestScope } from "@palamedes/react-router-rsc";
+import type { RouterContextProvider } from "react-router";
 
-import { createRequestI18n } from "./i18n"
+import { createRequestI18n } from "./i18n";
 
-const palamedesI18n = createReactRouterRscI18nRequestScope(createRequestI18n)
+const palamedesI18n = createReactRouterRscI18nRequestScope(createRequestI18n);
 
 export default {
   fetch(request: Request, requestContext?: RouterContextProvider) {
-    return palamedesI18n.run(request, () => defaultEntry.fetch(request, requestContext))
+    return palamedesI18n.run(request, () => defaultEntry.fetch(request, requestContext));
   },
-}
+};
 
 if (import.meta.hot) {
-  import.meta.hot.accept()
+  import.meta.hot.accept();
 }
 ```
 
 `createRequestI18n()` should load only the active locale before returning:
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { messages as de } from "./locales/de.po"
-import { messages as en } from "./locales/en.po"
+import { createI18n } from "@palamedes/core";
+import { messages as de } from "./locales/de.po";
+import { messages as en } from "./locales/en.po";
 
 export function createRequestI18n(request: Request) {
-  const locale = request.headers.get("cookie")?.includes("locale=de") ? "de" : "en"
-  const i18n = createI18n()
-  i18n.load(locale, locale === "de" ? de : en)
-  i18n.activate(locale)
-  return i18n
+  const locale = request.headers.get("cookie")?.includes("locale=de") ? "de" : "en";
+  const i18n = createI18n();
+  i18n.load(locale, locale === "de" ? de : en);
+  i18n.activate(locale);
+  return i18n;
 }
 ```
 

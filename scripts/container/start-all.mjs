@@ -7,38 +7,38 @@
 // Run with an init process (e.g. `podman run --init`) so reparented grandchild
 // processes are reaped correctly when Node runs as PID 1.
 
-import { spawn } from "node:child_process"
-import process from "node:process"
-import { EXAMPLE_MATRIX } from "../example-matrix.mjs"
-import { buildStartArgs, buildStartEnv } from "./start-plan.mjs"
+import { spawn } from "node:child_process";
+import process from "node:process";
+import { EXAMPLE_MATRIX } from "../example-matrix.mjs";
+import { buildStartArgs, buildStartEnv } from "./start-plan.mjs";
 
-const FORCE_KILL_TIMEOUT_MS = 5000
-const children = []
-let shuttingDown = false
+const FORCE_KILL_TIMEOUT_MS = 5000;
+const children = [];
+let shuttingDown = false;
 
 function log(message) {
-  process.stdout.write(`[supervisor] ${message}\n`)
+  process.stdout.write(`[supervisor] ${message}\n`);
 }
 
 // Prefix each child line with its example id so the interleaved server output
 // stays readable.
 function prefixOutput(stream, id) {
-  const tag = `[${id}] `
-  let buffer = ""
-  stream.setEncoding("utf8")
+  const tag = `[${id}] `;
+  let buffer = "";
+  stream.setEncoding("utf8");
   stream.on("data", (chunk) => {
-    buffer += chunk
-    const lines = buffer.split("\n")
-    buffer = lines.pop() ?? ""
+    buffer += chunk;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
     for (const line of lines) {
-      process.stdout.write(`${tag}${line}\n`)
+      process.stdout.write(`${tag}${line}\n`);
     }
-  })
+  });
   stream.on("end", () => {
     if (buffer.length > 0) {
-      process.stdout.write(`${tag}${buffer}\n`)
+      process.stdout.write(`${tag}${buffer}\n`);
     }
-  })
+  });
 }
 
 function startExample(example) {
@@ -47,93 +47,93 @@ function startExample(example) {
     detached: true,
     env: buildStartEnv(example, process.env),
     stdio: ["ignore", "pipe", "pipe"],
-  })
+  });
 
-  prefixOutput(child.stdout, example.id)
-  prefixOutput(child.stderr, example.id)
-  return child
+  prefixOutput(child.stdout, example.id);
+  prefixOutput(child.stderr, example.id);
+  return child;
 }
 
 function terminateGroup(child, signal) {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
-    return
+    return;
   }
   try {
     // Negative pid targets the whole detached process group (pnpm + the server).
-    process.kill(-child.pid, signal)
+    process.kill(-child.pid, signal);
   } catch {
     // The process group is already gone; nothing left to terminate.
   }
 }
 
 function allStopped() {
-  return children.every(({ child }) => child.exitCode !== null || child.signalCode !== null)
+  return children.every(({ child }) => child.exitCode !== null || child.signalCode !== null);
 }
 
 // Fail-fast shutdown: terminate every server, escalate to SIGKILL after a
 // timeout, then exit once all have stopped.
 function shutdown(reason, exitCode) {
   if (shuttingDown) {
-    return
+    return;
   }
-  shuttingDown = true
+  shuttingDown = true;
   // Set the exit code up front so it holds however the event loop drains: the
   // children can die and release every active handle (stdio pipes reaching EOF)
   // before the unref'd poll below ever fires, which would otherwise let the
   // process exit 0 and defeat restart-on-failure policies.
-  process.exitCode = exitCode
-  log(`shutting down (${reason})`)
+  process.exitCode = exitCode;
+  log(`shutting down (${reason})`);
 
   for (const { child } of children) {
-    terminateGroup(child, "SIGTERM")
+    terminateGroup(child, "SIGTERM");
   }
 
   const forceTimer = setTimeout(() => {
     for (const { child } of children) {
-      terminateGroup(child, "SIGKILL")
+      terminateGroup(child, "SIGKILL");
     }
-  }, FORCE_KILL_TIMEOUT_MS)
-  forceTimer.unref()
+  }, FORCE_KILL_TIMEOUT_MS);
+  forceTimer.unref();
 
   // Poll + backstop only flush buffered stdout (incl. the crash reason) and
   // guarantee the process exits; the exit code is already set above.
   const poll = setInterval(() => {
     if (allStopped()) {
-      clearInterval(poll)
-      clearTimeout(forceTimer)
-      setTimeout(() => process.exit(exitCode), 200).unref()
+      clearInterval(poll);
+      clearTimeout(forceTimer);
+      setTimeout(() => process.exit(exitCode), 200).unref();
     }
-  }, 100)
-  poll.unref()
+  }, 100);
+  poll.unref();
 }
 
 function main() {
-  log(`starting ${EXAMPLE_MATRIX.length} example servers`)
+  log(`starting ${EXAMPLE_MATRIX.length} example servers`);
 
   for (const example of EXAMPLE_MATRIX) {
-    const child = startExample(example)
-    children.push({ child, example })
-    log(`started ${example.id} on port ${example.port} (pid ${child.pid ?? "unknown"})`)
+    const child = startExample(example);
+    children.push({ child, example });
+    log(`started ${example.id} on port ${example.port} (pid ${child.pid ?? "unknown"})`);
 
     child.on("exit", (code, signal) => {
       if (shuttingDown) {
-        return
+        return;
       }
-      log(`${example.id} exited unexpectedly (code ${code}, signal ${signal})`)
-      shutdown(`${example.id} exited`, 1)
-    })
+      log(`${example.id} exited unexpectedly (code ${code}, signal ${signal})`);
+      shutdown(`${example.id} exited`, 1);
+    });
 
     child.on("error", (error) => {
       if (shuttingDown) {
-        return
+        return;
       }
-      log(`failed to start ${example.id}: ${error.message}`)
-      shutdown(`${example.id} error`, 1)
-    })
+      log(`failed to start ${example.id}: ${error.message}`);
+      shutdown(`${example.id} error`, 1);
+    });
   }
 
-  process.on("SIGTERM", () => shutdown("SIGTERM", 0))
-  process.on("SIGINT", () => shutdown("SIGINT", 0))
+  process.on("SIGTERM", () => shutdown("SIGTERM", 0));
+  process.on("SIGINT", () => shutdown("SIGINT", 0));
 }
 
-main()
+main();

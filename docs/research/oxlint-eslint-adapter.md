@@ -89,10 +89,10 @@ The host owns suppression syntax and severity:
 
 ```tsx
 // eslint-disable-next-line palamedes/no-placeholder-only-message
-const eslintValue = t`${status}`
+const eslintValue = t`${status}`;
 
 // oxlint-disable-next-line palamedes/no-placeholder-only-message
-const oxlintValue = t`${status}`
+const oxlintValue = t`${status}`;
 ```
 
 `pmds lint` suppressions stay separate because the native CLI also supports

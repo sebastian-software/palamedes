@@ -23,7 +23,7 @@ export const HOME_FAQ = [
     q: "Can a team migrate from an existing i18n library?",
     a: "Yes, but migration depends on the source model, catalog format, runtime usage, and framework host. Palamedes provides a Lingui migration guide and comparison pages for selected tools; use them to establish the exact boundary before planning a migration.",
   },
-] as const
+] as const;
 
 export function HomeFaq() {
   return (
@@ -46,5 +46,5 @@ export function HomeFaq() {
         </details>
       ))}
     </div>
-  )
+  );
 }

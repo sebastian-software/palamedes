@@ -8,52 +8,52 @@
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { chromium } from "@playwright/test"
-import { startSiteStaticServer } from "./site-static-server.mjs"
-import { isExpectedSkippedViewTransitionError } from "./verify-site-route-errors.mjs"
+import { chromium } from "@playwright/test";
+import { startSiteStaticServer } from "./site-static-server.mjs";
+import { isExpectedSkippedViewTransitionError } from "./verify-site-route-errors.mjs";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
-const clientDir = join(repoRoot, "site/build/client")
-const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const clientDir = join(repoRoot, "site/build/client");
+const generatedDocsDir = join(repoRoot, "site/app/routes/docs");
 function portFromEnv(name, fallback) {
-  const configured = process.env[name]
-  if (configured === undefined) return fallback
-  const port = Number(configured)
+  const configured = process.env[name];
+  if (configured === undefined) return fallback;
+  const port = Number(configured);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(
-      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`
-    )
+      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`,
+    );
   }
-  return port
+  return port;
 }
 
-const PORT = portFromEnv("SITE_VERIFY_PORT", 4102)
-const packageScripts = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).scripts
+const PORT = portFromEnv("SITE_VERIFY_PORT", 4102);
+const packageScripts = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).scripts;
 const legacySolidRedirect = readFileSync(
   join(clientDir, "frameworks/solidstart/index.html"),
-  "utf8"
-)
+  "utf8",
+);
 
 function hasHtmlTagWithAttributes(html, tagName, expectedAttributes) {
-  const tagPattern = new RegExp(`<${tagName}\\b([^>]*)/?>`, "giu")
-  const attributePattern = /([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gu
+  const tagPattern = new RegExp(`<${tagName}\\b([^>]*)/?>`, "giu");
+  const attributePattern = /([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gu;
 
   return [...html.matchAll(tagPattern)].some((tagMatch) => {
     const attributes = new Map(
       [...tagMatch[1].matchAll(attributePattern)].map((attributeMatch) => [
         attributeMatch[1].toLowerCase(),
         attributeMatch[2] ?? attributeMatch[3] ?? attributeMatch[4],
-      ])
-    )
+      ]),
+    );
 
     return Object.entries(expectedAttributes).every(
-      ([name, value]) => attributes.get(name.toLowerCase()) === value
-    )
-  })
+      ([name, value]) => attributes.get(name.toLowerCase()) === value,
+    );
+  });
 }
 
 if (
@@ -67,12 +67,12 @@ if (
   })
 ) {
   throw new Error(
-    "verify-site-routes: legacy SolidStart page must redirect and canonicalize to /frameworks/solid"
-  )
+    "verify-site-routes: legacy SolidStart page must redirect and canonicalize to /frameworks/solid",
+  );
 }
 
 if (packageScripts["bench:e2e"] !== "pnpm benchmark:e2e-workflow") {
-  throw new Error("verify-site-routes: pnpm bench:e2e must run the checked end-to-end workflow")
+  throw new Error("verify-site-routes: pnpm bench:e2e must run the checked end-to-end workflow");
 }
 
 /*
@@ -82,12 +82,12 @@ if (packageScripts["bench:e2e"] !== "pnpm benchmark:e2e-workflow") {
  * were refreshed), which is exactly the failure this script exists to catch.
  */
 const linguiRatio = (() => {
-  const benchTs = readFileSync(join(repoRoot, "site/app/data/bench.ts"), "utf8")
-  const realistic = benchTs.slice(benchTs.indexOf("export const BENCH_REALISTIC"))
-  const match = realistic.match(/lingui: "([\d.]+×)"/u)
-  if (!match) throw new Error("verify-site-routes: cannot read BENCH_REALISTIC lingui ratio")
-  return `${Math.floor(Number.parseFloat(match[1]))}×`
-})()
+  const benchTs = readFileSync(join(repoRoot, "site/app/data/bench.ts"), "utf8");
+  const realistic = benchTs.slice(benchTs.indexOf("export const BENCH_REALISTIC"));
+  const match = realistic.match(/lingui: "([\d.]+×)"/u);
+  if (!match) throw new Error("verify-site-routes: cannot read BENCH_REALISTIC lingui ratio");
+  return `${Math.floor(Number.parseFloat(match[1]))}×`;
+})();
 
 const ROUTE_EXPECTATIONS = [
   // The homepage is verified through its real structural and interaction
@@ -177,7 +177,7 @@ const ROUTE_EXPECTATIONS = [
   { path: "/api-reference/config", h1: "Config" },
   { path: "/api-reference/config/functions", h1: "Functions" },
   { path: "/api-reference/config/types", h1: "Types" },
-]
+];
 
 const IA_DISCOVERY_PATHS = [
   "/architecture",
@@ -187,28 +187,28 @@ const IA_DISCOVERY_PATHS = [
   "/i18n-performance",
   "/icu-messageformat",
   "/locale-routing",
-]
+];
 
-const sitemapPaths = readSitemapPaths()
-const missingDiscoveryPaths = IA_DISCOVERY_PATHS.filter((path) => !sitemapPaths.includes(path))
+const sitemapPaths = readSitemapPaths();
+const missingDiscoveryPaths = IA_DISCOVERY_PATHS.filter((path) => !sitemapPaths.includes(path));
 if (missingDiscoveryPaths.length > 0) {
   throw new Error(
-    `verify-site-routes: sitemap is missing IA routes: ${missingDiscoveryPaths.join(", ")}`
-  )
+    `verify-site-routes: sitemap is missing IA routes: ${missingDiscoveryPaths.join(", ")}`,
+  );
 }
 
 const staticServer = process.env.PALAMEDES_SITE_URL
   ? null
-  : await startSiteStaticServer({ clientDir, port: PORT })
-const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl
+  : await startSiteStaticServer({ clientDir, port: PORT });
+const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl;
 
 if (
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE &&
   !existsSync(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE)
 ) {
   console.warn(
-    `  !! PLAYWRIGHT_CHROMIUM_EXECUTABLE is set but does not exist: ${process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}`
-  )
+    `  !! PLAYWRIGHT_CHROMIUM_EXECUTABLE is set but does not exist: ${process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}`,
+  );
 }
 
 const chromiumExecutable = [
@@ -216,187 +216,189 @@ const chromiumExecutable = [
   "/opt/pw-browsers/chromium",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
-].find((path) => path && existsSync(path))
+].find((path) => path && existsSync(path));
 
 const browser = await chromium.launch(
-  chromiumExecutable ? { executablePath: chromiumExecutable } : undefined
-)
-let failures = 0
+  chromiumExecutable ? { executablePath: chromiumExecutable } : undefined,
+);
+let failures = 0;
 
 function fail(message) {
-  failures += 1
-  console.error(`  !! ${message}`)
+  failures += 1;
+  console.error(`  !! ${message}`);
 }
 
 function readSitemapPaths() {
-  const sitemapPath = join(clientDir, "sitemap.xml")
+  const sitemapPath = join(clientDir, "sitemap.xml");
   if (!existsSync(sitemapPath)) {
-    console.error(`missing ${sitemapPath}; run pnpm build:site first`)
-    process.exit(1)
+    console.error(`missing ${sitemapPath}; run pnpm build:site first`);
+    process.exit(1);
   }
-  const sitemap = readFileSync(sitemapPath, "utf8")
+  const sitemap = readFileSync(sitemapPath, "utf8");
   const paths = [...sitemap.matchAll(/<loc>https:\/\/palamedes\.dev([^<]+)<\/loc>/gu)]
     .map((match) => match[1])
-    .filter((path) => path !== "/404")
+    .filter((path) => path !== "/404");
   if (paths.length === 0) {
-    console.error("sitemap.xml did not contain any palamedes.dev routes")
-    process.exit(1)
+    console.error("sitemap.xml did not contain any palamedes.dev routes");
+    process.exit(1);
   }
-  return [...new Set(paths)].sort((left, right) => left.localeCompare(right))
+  return [...new Set(paths)].sort((left, right) => left.localeCompare(right));
 }
 
 async function checkRoutes(context, label, { expectHydration }) {
-  console.log(`— pass: ${label}`)
-  const consoleErrors = []
-  const knownHydrationWarnings = []
-  const skippedViewTransitions = []
+  console.log(`— pass: ${label}`);
+  const consoleErrors = [];
+  const knownHydrationWarnings = [];
+  const skippedViewTransitions = [];
 
   if (!expectHydration) {
     for (const path of sitemapPaths) {
-      const page = await context.newPage()
+      const page = await context.newPage();
       trackPageErrors(
         page,
         () => path,
         consoleErrors,
         knownHydrationWarnings,
-        skippedViewTransitions
-      )
-      const response = await gotoAndSettle(page, path, { settleMs: 100 })
+        skippedViewTransitions,
+      );
+      const response = await gotoAndSettle(page, path, { settleMs: 100 });
       if (response?.status() !== 200) {
-        fail(`${label} ${path}: expected HTTP 200, got ${response?.status() ?? "no response"}`)
-        await page.close()
-        continue
+        fail(`${label} ${path}: expected HTTP 200, got ${response?.status() ?? "no response"}`);
+        await page.close();
+        continue;
       }
-      const bodyText = await page.locator("body").innerText()
+      const bodyText = await page.locator("body").innerText();
       if (bodyText.trim().length === 0) {
-        fail(`${label} ${path}: empty body`)
+        fail(`${label} ${path}: empty body`);
       }
-      await page.close()
+      await page.close();
     }
-    console.log(`  ok crawled ${sitemapPaths.length} sitemap routes`)
+    console.log(`  ok crawled ${sitemapPaths.length} sitemap routes`);
   }
 
   for (const route of ROUTE_EXPECTATIONS) {
-    const routePage = await context.newPage()
+    const routePage = await context.newPage();
     trackPageErrors(
       routePage,
       () => route.path,
       consoleErrors,
       knownHydrationWarnings,
-      skippedViewTransitions
-    )
-    await gotoAndSettle(routePage, route.path, { settleMs: 1500 })
-    const h1 = await routePage.locator("h1").first().textContent()
+      skippedViewTransitions,
+    );
+    await gotoAndSettle(routePage, route.path, { settleMs: 1500 });
+    const h1 = await routePage.locator("h1").first().textContent();
     if (!h1?.trim()) {
-      fail(`${label} ${route.path}: missing heading`)
+      fail(`${label} ${route.path}: missing heading`);
     } else if (route.h1 && !h1.includes(route.h1)) {
-      fail(`${label} ${route.path}: h1 mismatch, got "${h1}"`)
+      fail(`${label} ${route.path}: h1 mismatch, got "${h1}"`);
     } else {
-      console.log(`  ok ${route.path} — "${h1.trim().slice(0, 48)}"`)
+      console.log(`  ok ${route.path} — "${h1.trim().slice(0, 48)}"`);
     }
     if (route.path === "/proof" || IA_DISCOVERY_PATHS.includes(route.path)) {
-      const expectedUrl = `https://palamedes.dev${route.path}`
+      const expectedUrl = `https://palamedes.dev${route.path}`;
       const metadata = await routePage.evaluate(() => ({
         canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href"),
         ogImage: document.querySelector('meta[property="og:image"]')?.getAttribute("content"),
         ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute("content"),
         ogUrl: document.querySelector('meta[property="og:url"]')?.getAttribute("content"),
-      }))
+      }));
       if (metadata.canonical !== expectedUrl || metadata.ogUrl !== expectedUrl) {
-        fail(`${label} ${route.path}: canonical/OG URL does not match ${expectedUrl}`)
+        fail(`${label} ${route.path}: canonical/OG URL does not match ${expectedUrl}`);
       }
       if (!metadata.ogTitle || !metadata.ogImage?.startsWith("https://palamedes.dev/")) {
-        fail(`${label} ${route.path}: Open Graph title or image is missing`)
+        fail(`${label} ${route.path}: Open Graph title or image is missing`);
       }
     }
-    await routePage.close()
+    await routePage.close();
   }
 
-  const proofPage = await context.newPage()
+  const proofPage = await context.newPage();
   trackPageErrors(
     proofPage,
     () => "/proof",
     consoleErrors,
     knownHydrationWarnings,
-    skippedViewTransitions
-  )
-  await gotoAndSettle(proofPage, "/proof", { settleMs: expectHydration ? 500 : 100 })
-  await checkProofStructure(proofPage, label)
+    skippedViewTransitions,
+  );
+  await gotoAndSettle(proofPage, "/proof", { settleMs: expectHydration ? 500 : 100 });
+  await checkProofStructure(proofPage, label);
   if (expectHydration) {
     const performanceHref = await proofPage
       .getByRole("link", { name: "i18n performance", exact: true })
-      .getAttribute("href")
+      .getAttribute("href");
     if (performanceHref !== "/i18n-performance") {
-      fail(`proof ${label}: performance evidence link drifted (${performanceHref ?? "missing"})`)
+      fail(`proof ${label}: performance evidence link drifted (${performanceHref ?? "missing"})`);
     }
-    await gotoAndSettle(proofPage, "/i18n-performance", { settleMs: 100 })
-    await proofPage.goBack({ waitUntil: "networkidle" })
-    await proofPage.getByRole("heading", { level: 1, name: "Claims you can re-run." }).waitFor()
-    await checkProofStructure(proofPage, `${label} history return`)
-    await proofPage.goForward({ waitUntil: "networkidle" })
+    await gotoAndSettle(proofPage, "/i18n-performance", { settleMs: 100 });
+    await proofPage.goBack({ waitUntil: "networkidle" });
+    await proofPage.getByRole("heading", { level: 1, name: "Claims you can re-run." }).waitFor();
+    await checkProofStructure(proofPage, `${label} history return`);
+    await proofPage.goForward({ waitUntil: "networkidle" });
     await proofPage
       .getByRole("heading", {
         level: 1,
         name: "Extraction should not be the slow part of your build.",
       })
-      .waitFor()
+      .waitFor();
   }
-  await proofPage.close()
+  await proofPage.close();
 
-  const page = await context.newPage()
-  let currentPath = "(startup)"
+  const page = await context.newPage();
+  let currentPath = "(startup)";
   trackPageErrors(
     page,
     () => currentPath,
     consoleErrors,
     knownHydrationWarnings,
-    skippedViewTransitions
-  )
+    skippedViewTransitions,
+  );
 
   if (expectHydration) {
-    currentPath = "/"
-    await gotoAndSettle(page, "/", { settleMs: 1500 })
+    currentPath = "/";
+    await gotoAndSettle(page, "/", { settleMs: 1500 });
     // The framework matrix (the second home table) renders all 24 cells.
-    const cells = await page.locator("table").nth(1).locator("tbody td").count()
+    const cells = await page.locator("table").nth(1).locator("tbody td").count();
     if (cells !== 24) {
-      fail(`home matrix: expected 24 cells, got ${cells}`)
+      fail(`home matrix: expected 24 cells, got ${cells}`);
     }
     // Homepage completion blocks: real routing destinations, a reproducible
     // benchmark command, and the six FAQ entries must remain present together.
-    const integrationSection = page.getByRole("region", { name: "First-party integrations" })
-    const integrationLinks = await integrationSection.locator("ul a").count()
+    const integrationSection = page.getByRole("region", { name: "First-party integrations" });
+    const integrationLinks = await integrationSection.locator("ul a").count();
     if (integrationLinks !== 9) {
-      fail(`home integration band: expected 9 linked entries, got ${integrationLinks}`)
+      fail(`home integration band: expected 9 linked entries, got ${integrationLinks}`);
     }
     const frontendIntegrations = await integrationSection
       .getByRole("list", { name: "Frontend and full-stack adapters" })
       .getByRole("listitem")
-      .count()
+      .count();
     const backendIntegrations = await integrationSection
       .getByRole("list", { name: "Backend integrations" })
       .getByRole("listitem")
-      .count()
+      .count();
     if (frontendIntegrations !== 7 || backendIntegrations !== 2) {
       fail(
-        `home integration hierarchy: expected 7 frontend/full-stack and 2 backend entries, got ${frontendIntegrations} and ${backendIntegrations}`
-      )
+        `home integration hierarchy: expected 7 frontend/full-stack and 2 backend entries, got ${frontendIntegrations} and ${backendIntegrations}`,
+      );
     }
-    const integrationLogos = integrationSection.locator("li img")
-    const logoCount = await integrationLogos.count()
+    const integrationLogos = integrationSection.locator("li img");
+    const logoCount = await integrationLogos.count();
     if (logoCount !== 9) {
-      fail(`home integration band: expected 9 marks, got ${logoCount}`)
+      fail(`home integration band: expected 9 marks, got ${logoCount}`);
     } else {
       const unloadedLogos = await integrationLogos.evaluateAll((images) =>
-        images.filter((image) => image.naturalWidth === 0).map((image) => image.getAttribute("src"))
-      )
+        images
+          .filter((image) => image.naturalWidth === 0)
+          .map((image) => image.getAttribute("src")),
+      );
       if (unloadedLogos.length > 0) {
-        fail(`home integration band: marks did not load: ${unloadedLogos.join(", ")}`)
+        fail(`home integration band: marks did not load: ${unloadedLogos.join(", ")}`);
       }
     }
-    const decisionPaths = page.getByRole("list", { name: "Decision paths" })
-    const questionRoutes = await decisionPaths.locator(":scope > li").count()
+    const decisionPaths = page.getByRole("list", { name: "Decision paths" });
+    const questionRoutes = await decisionPaths.locator(":scope > li").count();
     if (questionRoutes !== 4) {
-      fail(`home question routing: expected four first-level decisions, got ${questionRoutes}`)
+      fail(`home question routing: expected four first-level decisions, got ${questionRoutes}`);
     }
     const contextualRoutes = [
       "/frameworks#frontend-frameworks",
@@ -412,71 +414,75 @@ async function checkRoutes(context, label, { expectHydration }) {
       "/guides",
       "/docs/migrate-from-lingui",
       "/docs",
-    ]
-    const missingContextualRoutes = []
+    ];
+    const missingContextualRoutes = [];
     for (const href of contextualRoutes) {
       if ((await decisionPaths.locator(`a[href="${href}"]`).count()) === 0) {
-        missingContextualRoutes.push(href)
+        missingContextualRoutes.push(href);
       }
     }
     if (missingContextualRoutes.length > 0) {
-      fail(`home question routing: missing contextual routes ${missingContextualRoutes.join(", ")}`)
+      fail(
+        `home question routing: missing contextual routes ${missingContextualRoutes.join(", ")}`,
+      );
     }
     const hierarchy = await page.evaluate(() => {
       const question = [...document.querySelectorAll("section")].find((section) =>
-        section.textContent?.includes("Start from your question")
-      )
-      const proofStrip = document.querySelector(".hairline-grid")
-      const integration = document.querySelector('section[aria-label="First-party integrations"]')
+        section.textContent?.includes("Start from your question"),
+      );
+      const proofStrip = document.querySelector(".hairline-grid");
+      const integration = document.querySelector('section[aria-label="First-party integrations"]');
       return {
         questionAfterProof: Boolean(
           question &&
           proofStrip &&
-          proofStrip.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING
+          proofStrip.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING,
         ),
         questionBeforeIntegration: Boolean(
           question &&
           integration &&
-          question.compareDocumentPosition(integration) & Node.DOCUMENT_POSITION_FOLLOWING
+          question.compareDocumentPosition(integration) & Node.DOCUMENT_POSITION_FOLLOWING,
         ),
-      }
-    })
+      };
+    });
     if (!hierarchy.questionAfterProof || !hierarchy.questionBeforeIntegration) {
-      fail("home hierarchy: question routing must follow the proof strip and precede deep evidence")
+      fail(
+        "home hierarchy: question routing must follow the proof strip and precede deep evidence",
+      );
     }
     // Comparison pages distinguish measured workflows from dated research.
     // The rival template leads with a verdict; the native-toolchain argument
     // belongs on the hub, not repeated on every rival page.
-    const comparePage = await context.newPage()
+    const comparePage = await context.newPage();
     trackPageErrors(
       comparePage,
       () => "/compare",
       consoleErrors,
       knownHydrationWarnings,
-      skippedViewTransitions
-    )
-    await gotoAndSettle(comparePage, "/compare", { settleMs: 1500 })
+      skippedViewTransitions,
+    );
+    await gotoAndSettle(comparePage, "/compare", { settleMs: 1500 });
     const ledgerHeaders = await comparePage
       .locator("table")
       .first()
       .locator("thead th")
-      .allTextContents()
+      .allTextContents();
     if (!ledgerHeaders.includes("Measured") || !ledgerHeaders.includes("Researched")) {
-      fail("compare ledger: measured and researched columns missing")
+      fail("compare ledger: measured and researched columns missing");
     }
     const noClaim = await comparePage
       .getByText("Not measured — no claim implied.", { exact: true })
-      .count()
+      .count();
     if (noClaim === 0) {
-      fail("compare ledger: explicit no-claim cell missing")
+      fail("compare ledger: explicit no-claim cell missing");
     }
     const hubShift = await comparePage
       .getByRole("heading", {
         name: "The toolchain already moved. i18n tooling mostly hasn't.",
       })
-      .count()
+      .count();
     if (hubShift !== 1) {
-      fail("compare hub: native-toolchain explanation missing")
+      fail("compare hub: native-toolchain explanation missing");
     }
     const rivalPaths = [
       "/compare/lingui",
@@ -487,25 +493,25 @@ async function checkRoutes(context, label, { expectHydration }) {
       "/compare/paraglide",
       "/compare/tolgee",
       "/compare/intlayer",
-    ]
+    ];
     for (const path of rivalPaths) {
-      await gotoAndSettle(comparePage, path, { settleMs: 1500 })
-      const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents()
+      await gotoAndSettle(comparePage, path, { settleMs: 1500 });
+      const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents();
       if (
         sectionNumbers[0]?.trim() !== "01 — Decide" ||
         sectionNumbers[1]?.trim() !== "02 — Daily work"
       ) {
         fail(
-          `${path}: decision and workflow outcomes must precede supporting detail (${sectionNumbers.join(", ")})`
-        )
+          `${path}: decision and workflow outcomes must precede supporting detail (${sectionNumbers.join(", ")})`,
+        );
       }
       if (
         (await comparePage.getByRole("heading", { name: /Pick Palamedes when/u }).count()) !== 1
       ) {
-        fail(`${path}: missing Palamedes decision path`)
+        fail(`${path}: missing Palamedes decision path`);
       }
       if ((await comparePage.locator("details").count()) !== 5) {
-        fail(`${path}: expected five comparison-specific FAQs`)
+        fail(`${path}: expected five comparison-specific FAQs`);
       }
       const faqSchemaCount = await comparePage
         .locator('script[type="application/ld+json"]')
@@ -514,359 +520,359 @@ async function checkRoutes(context, label, { expectHydration }) {
             scripts
               .map((script) => JSON.parse(script.textContent ?? "{}"))
               .filter((entry) => entry["@type"] === "FAQPage")
-              .flatMap((entry) => entry.mainEntity ?? []).length
-        )
+              .flatMap((entry) => entry.mainEntity ?? []).length,
+        );
       if (faqSchemaCount !== 5) {
-        fail(`${path}: FAQ schema must match the five visible questions`)
+        fail(`${path}: FAQ schema must match the five visible questions`);
       }
     }
     const repeatedShift = await comparePage
       .getByRole("heading", {
         name: "The toolchain already moved. i18n tooling mostly hasn't.",
       })
-      .count()
+      .count();
     if (repeatedShift > 0) {
-      fail("rival template: repeated shift or obsolete section remains")
+      fail("rival template: repeated shift or obsolete section remains");
     }
-    await comparePage.close()
+    await comparePage.close();
     const benchmarkCommand = await page
       .getByText("$ pnpm benchmark:e2e-workflow", { exact: false })
-      .isVisible()
+      .isVisible();
     if (!benchmarkCommand) {
-      fail("home benchmark: reproducible command missing")
+      fail("home benchmark: reproducible command missing");
     }
     const warmLaneCopy = await page
       .getByText(/cached re-run after 5 changed source files/u)
       .first()
-      .isVisible()
+      .isVisible();
     if (!warmLaneCopy) {
-      fail("home benchmark: changed-source-files copy collapsed or missing")
+      fail("home benchmark: changed-source-files copy collapsed or missing");
     }
-    const faqEntries = await page.locator("details").count()
+    const faqEntries = await page.locator("details").count();
     if (faqEntries !== 6) {
-      fail(`home FAQ: expected 6 entries, got ${faqEntries}`)
+      fail(`home FAQ: expected 6 entries, got ${faqEntries}`);
     }
     const faqSchemaCount = await page.locator('script[type="application/ld+json"]').evaluateAll(
       (scripts) =>
         scripts
           .map((script) => JSON.parse(script.textContent ?? "{}"))
           .filter((entry) => entry["@type"] === "FAQPage")
-          .flatMap((entry) => entry.mainEntity ?? []).length
-    )
+          .flatMap((entry) => entry.mainEntity ?? []).length,
+    );
     if (faqSchemaCount !== 6) {
-      fail(`home FAQ schema: expected 6 answers, got ${faqSchemaCount}`)
+      fail(`home FAQ schema: expected 6 answers, got ${faqSchemaCount}`);
     }
     // Code showcase tabs toggle.
-    await page.getByRole("tab", { name: "Translate" }).click()
-    const poVisible = await page.getByText('msgid "Your trip to Lisbon"').isVisible()
+    await page.getByRole("tab", { name: "Translate" }).click();
+    const poVisible = await page.getByText('msgid "Your trip to Lisbon"').isVisible();
     if (!poVisible) {
-      fail("code showcase: Translate tab did not reveal .po pane")
+      fail("code showcase: Translate tab did not reveal .po pane");
     }
     // Get-started keeps the diagram, stack picker, and forward route as distinct
     // numbered sections. Each stack gives the package caveat its own numbered
     // step immediately after the install command.
-    currentPath = "/get-started"
-    await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
-    await checkGetStartedStructure(page, label)
-    const reactTab = page.getByRole("tab", { name: "Vite + React" })
-    const solidTab = page.getByRole("tab", { name: "Vite + Solid" })
-    await reactTab.focus()
-    await page.keyboard.press("ArrowRight")
+    currentPath = "/get-started";
+    await gotoAndSettle(page, "/get-started", { settleMs: 1500 });
+    await checkGetStartedStructure(page, label);
+    const reactTab = page.getByRole("tab", { name: "Vite + React" });
+    const solidTab = page.getByRole("tab", { name: "Vite + Solid" });
+    await reactTab.focus();
+    await page.keyboard.press("ArrowRight");
     if (!(await solidTab.evaluate((element) => element === document.activeElement))) {
-      fail(`get-started ${label}: ArrowRight did not focus the Solid stack tab`)
+      fail(`get-started ${label}: ArrowRight did not focus the Solid stack tab`);
     }
-    await page.keyboard.press("Enter")
+    await page.keyboard.press("Enter");
     if ((await solidTab.getAttribute("aria-selected")) !== "true") {
-      fail(`get-started ${label}: Enter did not select the focused Solid stack tab`)
+      fail(`get-started ${label}: Enter did not select the focused Solid stack tab`);
     }
-    const solidVisible = await page.getByText("@solidjs/vite-plugin").first().isVisible()
+    const solidVisible = await page.getByText("@solidjs/vite-plugin").first().isVisible();
     if (!solidVisible) {
-      fail("get-started: Solid tab did not reveal Solid setup")
+      fail("get-started: Solid tab did not reveal Solid setup");
     }
-    await page.getByRole("tab", { name: "Next.js" }).click()
-    const nextVisible = await page.getByText("@palamedes/next-plugin").first().isVisible()
+    await page.getByRole("tab", { name: "Next.js" }).click();
+    const nextVisible = await page.getByText("@palamedes/next-plugin").first().isVisible();
     if (!nextVisible) {
-      fail("get-started: Next.js tab did not reveal Next setup")
+      fail("get-started: Next.js tab did not reveal Next setup");
     }
     // Client-side nav via the top navigation. With viewTransition the URL
     // updates before the render commits, so wait for the target heading.
-    await page.getByRole("banner").getByRole("link", { name: "Architecture", exact: true }).click()
+    await page.getByRole("banner").getByRole("link", { name: "Architecture", exact: true }).click();
     try {
       await page
         .getByRole("heading", { level: 1, name: "“Written in Rust” is the boring half." })
-        .waitFor({ timeout: 5000 })
+        .waitFor({ timeout: 5000 });
     } catch {
-      fail("client-side navigation to /architecture failed")
+      fail("client-side navigation to /architecture failed");
     }
 
     // Regression for #863: generated docs must survive a marketing-to-docs
     // client transition as well as history navigation and reload. The issue
     // presented as a failed dynamic import followed by an invalid hook call in
     // ArdoPageDataProvider, both of which are captured by trackPageErrors.
-    currentPath = "/"
-    await gotoAndSettle(page, "/", { settleMs: 500 })
-    await page.getByRole("banner").getByRole("link", { name: "Docs", exact: true }).click()
-    currentPath = "/docs"
-    await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor()
-    await page.getByRole("link", { name: "First Working Translation" }).first().click()
-    currentPath = "/docs/first-working-translation"
-    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
-    await page.goBack({ waitUntil: "networkidle" })
-    currentPath = "/docs"
-    await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor()
-    await page.goForward({ waitUntil: "networkidle" })
-    currentPath = "/docs/first-working-translation"
-    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
-    await page.reload({ waitUntil: "networkidle" })
-    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
+    currentPath = "/";
+    await gotoAndSettle(page, "/", { settleMs: 500 });
+    await page.getByRole("banner").getByRole("link", { name: "Docs", exact: true }).click();
+    currentPath = "/docs";
+    await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor();
+    await page.getByRole("link", { name: "First Working Translation" }).first().click();
+    currentPath = "/docs/first-working-translation";
+    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor();
+    await page.goBack({ waitUntil: "networkidle" });
+    currentPath = "/docs";
+    await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor();
+    await page.goForward({ waitUntil: "networkidle" });
+    currentPath = "/docs/first-working-translation";
+    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor();
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor();
 
     // The guide hub remains the active resource for direct topic entry and
     // browser history, while search still reaches the generated docs index.
-    currentPath = "/icu-messageformat"
-    await gotoAndSettle(page, "/icu-messageformat", { settleMs: 500 })
+    currentPath = "/icu-messageformat";
+    await gotoAndSettle(page, "/icu-messageformat", { settleMs: 500 });
     const guidesNavigation = page
       .getByRole("banner")
-      .getByRole("link", { name: "Guides", exact: true })
+      .getByRole("link", { name: "Guides", exact: true });
     if ((await guidesNavigation.getAttribute("aria-current")) !== "page") {
-      fail("topic navigation: Guides is not exposed as the current resource")
+      fail("topic navigation: Guides is not exposed as the current resource");
     }
-    await guidesNavigation.click()
-    currentPath = "/guides"
-    await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor()
-    await page.locator('a[href="/react-server-components-i18n"]').first().click()
-    currentPath = "/react-server-components-i18n"
-    await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor()
-    await page.goBack({ waitUntil: "networkidle" })
-    currentPath = "/guides"
-    await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor()
-    await page.goForward({ waitUntil: "networkidle" })
-    currentPath = "/react-server-components-i18n"
-    await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor()
+    await guidesNavigation.click();
+    currentPath = "/guides";
+    await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor();
+    await page.locator('a[href="/react-server-components-i18n"]').first().click();
+    currentPath = "/react-server-components-i18n";
+    await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor();
+    await page.goBack({ waitUntil: "networkidle" });
+    currentPath = "/guides";
+    await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor();
+    await page.goForward({ waitUntil: "networkidle" });
+    currentPath = "/react-server-components-i18n";
+    await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor();
 
-    currentPath = "/"
-    await gotoAndSettle(page, "/", { settleMs: 500 })
-    const search = page.getByRole("combobox", { name: "Search" })
-    await search.fill("First Working Translation")
-    const searchResults = page.getByRole("listbox", { name: "Search results" })
+    currentPath = "/";
+    await gotoAndSettle(page, "/", { settleMs: 500 });
+    const search = page.getByRole("combobox", { name: "Search" });
+    await search.fill("First Working Translation");
+    const searchResults = page.getByRole("listbox", { name: "Search results" });
     if ((await searchResults.getByRole("option").count()) === 0) {
-      fail("header search: expected a result for First Working Translation")
+      fail("header search: expected a result for First Working Translation");
     }
   } else {
     // No-JS completeness: the new proof strip and ledger must be static HTML.
-    currentPath = "/"
-    await gotoAndSettle(page, "/", { settleMs: 100 })
-    const statText = await page.getByText("first-party server-framework integrations").isVisible()
-    const stat = await page.getByText(linguiRatio, { exact: false }).first().isVisible()
+    currentPath = "/";
+    await gotoAndSettle(page, "/", { settleMs: 100 });
+    const statText = await page.getByText("first-party server-framework integrations").isVisible();
+    const stat = await page.getByText(linguiRatio, { exact: false }).first().isVisible();
     if (!statText || !stat) {
-      fail("no-JS: proof-strip stats missing from prerendered HTML")
+      fail("no-JS: proof-strip stats missing from prerendered HTML");
     }
-    const ledger = await page.getByText("Checked result ledger", { exact: false }).isVisible()
+    const ledger = await page.getByText("Checked result ledger", { exact: false }).isVisible();
     if (!ledger) {
-      fail("no-JS: benchmark ledger missing from prerendered HTML")
+      fail("no-JS: benchmark ledger missing from prerendered HTML");
     }
     const integrationBand = await page
       .getByRole("region", { name: "First-party integrations" })
-      .isVisible()
-    const questionRouting = await page.getByText("Where does Palamedes need to run?").isVisible()
-    const faq = await page.getByText("Is Palamedes ready for production use?").isVisible()
+      .isVisible();
+    const questionRouting = await page.getByText("Where does Palamedes need to run?").isVisible();
+    const faq = await page.getByText("Is Palamedes ready for production use?").isVisible();
     if (!integrationBand || !questionRouting || !faq) {
-      fail("no-JS: homepage completion blocks missing from prerendered HTML")
+      fail("no-JS: homepage completion blocks missing from prerendered HTML");
     }
     const firstLevelNavigation = await page
       .getByRole("banner")
       .getByRole("navigation")
       .getByRole("link")
-      .allTextContents()
+      .allTextContents();
     if (firstLevelNavigation.join("|") !== "Frameworks|Architecture|Guides|Docs") {
-      fail(`no-JS: first-level navigation drifted (${firstLevelNavigation.join(", ")})`)
+      fail(`no-JS: first-level navigation drifted (${firstLevelNavigation.join(", ")})`);
     }
-    currentPath = "/get-started"
-    await gotoAndSettle(page, "/get-started", { settleMs: 100 })
-    await checkGetStartedStructure(page, label)
-    currentPath = "/guides"
-    await gotoAndSettle(page, "/guides", { settleMs: 100 })
+    currentPath = "/get-started";
+    await gotoAndSettle(page, "/get-started", { settleMs: 100 });
+    await checkGetStartedStructure(page, label);
+    currentPath = "/guides";
+    await gotoAndSettle(page, "/guides", { settleMs: 100 });
     const guideTopicLinks = await page
       .locator(
-        'a[href="/react-server-components-i18n"], a[href="/i18n-performance"], a[href="/icu-messageformat"], a[href="/locale-routing"]'
+        'a[href="/react-server-components-i18n"], a[href="/i18n-performance"], a[href="/icu-messageformat"], a[href="/locale-routing"]',
       )
-      .count()
+      .count();
     if (guideTopicLinks !== 4) {
-      fail(`no-JS: guides hub expected four topic links, got ${guideTopicLinks}`)
+      fail(`no-JS: guides hub expected four topic links, got ${guideTopicLinks}`);
     }
   }
 
   if (consoleErrors.length > 0) {
-    fail(`${label}: console errors: ${consoleErrors.slice(0, 3).join(" | ")}`)
+    fail(`${label}: console errors: ${consoleErrors.slice(0, 3).join(" | ")}`);
   }
   if (knownHydrationWarnings.length > 0) {
     console.warn(
       `  known ARDO breadcrumb hydration warnings filtered: ${knownHydrationWarnings
         .slice(0, 5)
-        .join(" | ")}`
-    )
+        .join(" | ")}`,
+    );
   }
   if (skippedViewTransitions.length > 0) {
     console.warn(
       `  known skipped View Transition page errors filtered: ${skippedViewTransitions
         .slice(0, 5)
-        .join(" | ")}`
-    )
+        .join(" | ")}`,
+    );
   }
-  await page.close()
+  await page.close();
 }
 
 async function checkProofStructure(page, label) {
-  const command = page.getByText("pnpm bench:e2e", { exact: true })
+  const command = page.getByText("pnpm bench:e2e", { exact: true });
   if ((await command.count()) !== 2) {
-    fail(`proof ${label}: expected the short re-run command in the hero and honest note`)
+    fail(`proof ${label}: expected the short re-run command in the hero and honest note`);
   }
 
   const corpusLedger = page.getByRole("region", {
     name: "Cold, warm, and same-scope benchmark summary",
-  })
+  });
   const headers = (await corpusLedger.getByRole("columnheader").allTextContents()).map((text) =>
-    text.trim()
-  )
-  const expectedHeaders = ["Corpus", "Palamedes cold", "Palamedes warm", "Same-scope tools"]
+    text.trim(),
+  );
+  const expectedHeaders = ["Corpus", "Palamedes cold", "Palamedes warm", "Same-scope tools"];
   if (!expectedHeaders.every((header, index) => headers[index]?.startsWith(header))) {
-    fail(`proof ${label}: corpus ledger columns drifted (${headers.join(", ")})`)
+    fail(`proof ${label}: corpus ledger columns drifted (${headers.join(", ")})`);
   }
   if ((await corpusLedger.getByRole("row").count()) !== 4) {
-    fail(`proof ${label}: expected one header and three corpus rows`)
+    fail(`proof ${label}: expected one header and three corpus rows`);
   }
   const environmentHeader = await page
     .getByText(/Node v\d+\.\d+\.\d+ · \S+\/\S+ · median of \d+/u)
-    .count()
+    .count();
   if (environmentHeader !== 1) {
-    fail(`proof ${label}: BENCH_META environment header missing or duplicated`)
+    fail(`proof ${label}: BENCH_META environment header missing or duplicated`);
   }
 
-  const decisionLedger = page.getByRole("region", { name: "Architecture decision ledger" })
+  const decisionLedger = page.getByRole("region", { name: "Architecture decision ledger" });
   const decisionHeadings = (
     await decisionLedger.locator(":scope > div").first().locator("span").allTextContents()
   )
     .join(" ")
     .replaceAll(/\s+/gu, " ")
-    .trim()
+    .trim();
   if (decisionHeadings !== "No. Decision Status") {
-    fail(`proof ${label}: decision ledger headings drifted (${decisionHeadings})`)
+    fail(`proof ${label}: decision ledger headings drifted (${decisionHeadings})`);
   }
   if ((await decisionLedger.locator("ol > li").count()) === 0) {
-    fail(`proof ${label}: decision ledger has no numbered records`)
+    fail(`proof ${label}: decision ledger has no numbered records`);
   }
 
-  const emphasisRails = page.locator(".pmds-editorial-rail--emphasis")
+  const emphasisRails = page.locator(".pmds-editorial-rail--emphasis");
   if (
     (await emphasisRails.count()) !== 2 ||
     (await emphasisRails.getByText("Honest note", { exact: true }).count()) !== 1 ||
     (await emphasisRails.getByText("Exact boundary", { exact: true }).count()) !== 1
   ) {
-    fail(`proof ${label}: honest-note or exact-boundary editorial rail drifted`)
+    fail(`proof ${label}: honest-note or exact-boundary editorial rail drifted`);
   }
   if ((await page.getByText(/5[- ]minute/u).count()) > 0) {
-    fail(`proof ${label}: completion-time promise returned`)
+    fail(`proof ${label}: completion-time promise returned`);
   }
 }
 
 async function checkGetStartedStructure(page, label) {
   const sectionNumbers = (await page.locator(".pmds-section-number").allTextContents()).map(
-    (text) => text.trim()
-  )
-  const expectedSections = ["01 — The loop", "02 — Choose a host", "03 — Next"]
+    (text) => text.trim(),
+  );
+  const expectedSections = ["01 — The loop", "02 — Choose a host", "03 — Next"];
   if (sectionNumbers.join("|") !== expectedSections.join("|")) {
-    fail(`get-started ${label}: numbered sections drifted (${sectionNumbers.join(", ")})`)
+    fail(`get-started ${label}: numbered sections drifted (${sectionNumbers.join(", ")})`);
   }
 
-  const visiblePanel = page.getByRole("tabpanel").first()
-  const listItems = visiblePanel.getByRole("listitem")
+  const visiblePanel = page.getByRole("tabpanel").first();
+  const listItems = visiblePanel.getByRole("listitem");
   const expectedSteps = [
     { number: "01", heading: "Install" },
     { number: "02", heading: "Use the scoped packages" },
     { number: "03", heading: "Configure" },
-  ]
+  ];
   for (const [index, expected] of expectedSteps.entries()) {
-    const item = listItems.nth(index)
-    const numberCount = await item.getByText(expected.number, { exact: true }).count()
+    const item = listItems.nth(index);
+    const numberCount = await item.getByText(expected.number, { exact: true }).count();
     const headingCount = await item
       .getByRole("heading", { name: expected.heading, exact: true })
-      .count()
+      .count();
     if (numberCount !== 1 || headingCount !== 1) {
       fail(
-        `get-started ${label}: step ${index + 1} order drifted (number ${numberCount}, heading ${headingCount})`
-      )
+        `get-started ${label}: step ${index + 1} order drifted (number ${numberCount}, heading ${headingCount})`,
+      );
     }
   }
-  const listItemCount = await listItems.count()
+  const listItemCount = await listItems.count();
   if (listItemCount !== 7) {
-    fail(`get-started ${label}: expected seven guided steps, got ${listItemCount}`)
+    fail(`get-started ${label}: expected seven guided steps, got ${listItemCount}`);
   }
   if ((await listItems.nth(1).getByText("Package boundary", { exact: true }).count()) !== 1) {
-    fail(`get-started ${label}: package boundary rail is missing from step 02`)
+    fail(`get-started ${label}: package boundary rail is missing from step 02`);
   }
 
   const loopHref = await page
     .getByRole("link", { name: "See the local loop", exact: true })
-    .getAttribute("href")
+    .getAttribute("href");
   if (
     loopHref !== "#loop" ||
     (await page.locator("#loop").count()) !== 1 ||
     (await page.locator("#install").count()) !== 1
   ) {
-    fail(`get-started ${label}: preserved loop/install anchors drifted`)
+    fail(`get-started ${label}: preserved loop/install anchors drifted`);
   }
 
   const frameworkHref = await page
     .getByRole("link", { name: "Choose your framework", exact: true })
-    .getAttribute("href")
+    .getAttribute("href");
   const localeHref = await page
     .getByRole("link", { name: "Explore locale architecture", exact: true })
-    .getAttribute("href")
+    .getAttribute("href");
   if (frameworkHref !== "/frameworks" || localeHref !== "/locale-routing") {
     fail(
-      `get-started ${label}: closing CTA must move forward (${frameworkHref ?? "missing"}, ${localeHref ?? "missing"})`
-    )
+      `get-started ${label}: closing CTA must move forward (${frameworkHref ?? "missing"}, ${localeHref ?? "missing"})`,
+    );
   }
 }
 
 async function checkGetStartedTextResize(browser) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
-  })
-  const page = await context.newPage()
-  const response = await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
+  });
+  const page = await context.newPage();
+  const response = await gotoAndSettle(page, "/get-started", { settleMs: 1500 });
   if (response?.status() !== 200) {
     fail(
-      `get-started 390px/200% text: expected HTTP 200, got ${response?.status() ?? "no response"}`
-    )
-    await context.close()
-    return
+      `get-started 390px/200% text: expected HTTP 200, got ${response?.status() ?? "no response"}`,
+    );
+    await context.close();
+    return;
   }
 
-  await page.addStyleTag({ content: ":root { font-size: 200% !important; }" })
-  await page.waitForTimeout(100)
+  await page.addStyleTag({ content: ":root { font-size: 200% !important; }" });
+  await page.waitForTimeout(100);
 
   const metrics = await page.evaluate(() => ({
     contentWidth: document.documentElement.scrollWidth,
     rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
     tabLabels: [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
     tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => {
-      const rect = tab.getBoundingClientRect()
-      return { height: rect.height, left: rect.left, right: rect.right, width: rect.width }
+      const rect = tab.getBoundingClientRect();
+      return { height: rect.height, left: rect.left, right: rect.right, width: rect.width };
     }),
     viewportWidth: document.documentElement.clientWidth,
-  }))
+  }));
 
   if (metrics.rootFontSize !== 32) {
-    fail(`get-started 390px/200% text: expected 32px root font, got ${metrics.rootFontSize}px`)
+    fail(`get-started 390px/200% text: expected 32px root font, got ${metrics.rootFontSize}px`);
   }
   if (metrics.contentWidth > metrics.viewportWidth + 1) {
     fail(
-      `get-started 390px/200% text: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`
-    )
+      `get-started 390px/200% text: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`,
+    );
   }
-  const expectedLabels = ["Vite + React", "Vite + Solid", "Next.js"]
+  const expectedLabels = ["Vite + React", "Vite + Solid", "Next.js"];
   if (metrics.tabLabels.join("|") !== expectedLabels.join("|")) {
-    fail(`get-started 390px/200% text: tab source order drifted (${metrics.tabLabels.join(", ")})`)
+    fail(`get-started 390px/200% text: tab source order drifted (${metrics.tabLabels.join(", ")})`);
   }
   for (const [index, box] of metrics.tabs.entries()) {
     if (
@@ -876,173 +882,173 @@ async function checkGetStartedTextResize(browser) {
       box.height < 44
     ) {
       fail(
-        `get-started 390px/200% text: tab ${index + 1} is not viewport-contained and 44px reachable (${JSON.stringify(box)})`
-      )
+        `get-started 390px/200% text: tab ${index + 1} is not viewport-contained and 44px reachable (${JSON.stringify(box)})`,
+      );
     }
   }
 
-  const reactTab = page.getByRole("tab", { name: "Vite + React" })
-  const solidTab = page.getByRole("tab", { name: "Vite + Solid" })
-  const nextTab = page.getByRole("tab", { name: "Next.js" })
-  await reactTab.focus()
-  await page.keyboard.press("ArrowRight")
+  const reactTab = page.getByRole("tab", { name: "Vite + React" });
+  const solidTab = page.getByRole("tab", { name: "Vite + Solid" });
+  const nextTab = page.getByRole("tab", { name: "Next.js" });
+  await reactTab.focus();
+  await page.keyboard.press("ArrowRight");
   if (!(await solidTab.evaluate((element) => element === document.activeElement))) {
-    fail("get-started 390px/200% text: ArrowRight did not reach the Solid tab")
+    fail("get-started 390px/200% text: ArrowRight did not reach the Solid tab");
   }
-  await page.keyboard.press("Enter")
-  await page.keyboard.press("ArrowRight")
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowRight");
   if (!(await nextTab.evaluate((element) => element === document.activeElement))) {
-    fail("get-started 390px/200% text: ArrowRight did not reach the wrapped Next.js tab")
+    fail("get-started 390px/200% text: ArrowRight did not reach the wrapped Next.js tab");
   }
   const focusStyle = await nextTab.evaluate((element) => {
-    const style = getComputedStyle(element)
-    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth }
-  })
+    const style = getComputedStyle(element);
+    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+  });
   if (focusStyle.outlineStyle === "none" || focusStyle.outlineWidth === "0px") {
-    fail("get-started 390px/200% text: wrapped Next.js tab has no visible keyboard focus")
+    fail("get-started 390px/200% text: wrapped Next.js tab has no visible keyboard focus");
   }
-  await page.keyboard.press("Enter")
+  await page.keyboard.press("Enter");
   if ((await nextTab.getAttribute("aria-selected")) !== "true") {
-    fail("get-started 390px/200% text: Enter did not select the wrapped Next.js tab")
+    fail("get-started 390px/200% text: Enter did not select the wrapped Next.js tab");
   }
   if (!(await page.getByText("@palamedes/next-plugin").first().isVisible())) {
-    fail("get-started 390px/200% text: wrapped Next.js tab did not reveal its panel")
+    fail("get-started 390px/200% text: wrapped Next.js tab did not reveal its panel");
   }
 
   console.log(
-    `  get-started 390px/200% text: ${metrics.contentWidth}px content, all tabs keyboard-reachable`
-  )
-  await context.close()
+    `  get-started 390px/200% text: ${metrics.contentWidth}px content, all tabs keyboard-reachable`,
+  );
+  await context.close();
 }
 
 async function checkProofViewport(browser, width, { textScale = 1 } = {}) {
-  const label = `proof ${width}px${textScale === 2 ? "/200% text" : ""}`
-  const context = await browser.newContext({ viewport: { width, height: 844 } })
-  const page = await context.newPage()
-  const response = await gotoAndSettle(page, "/proof", { settleMs: 500 })
+  const label = `proof ${width}px${textScale === 2 ? "/200% text" : ""}`;
+  const context = await browser.newContext({ viewport: { width, height: 844 } });
+  const page = await context.newPage();
+  const response = await gotoAndSettle(page, "/proof", { settleMs: 500 });
   if (response?.status() !== 200) {
-    fail(`${label}: expected HTTP 200, got ${response?.status() ?? "no response"}`)
-    await context.close()
-    return
+    fail(`${label}: expected HTTP 200, got ${response?.status() ?? "no response"}`);
+    await context.close();
+    return;
   }
   if (textScale === 2) {
-    await page.addStyleTag({ content: ":root { font-size: 200% !important; }" })
-    await page.waitForTimeout(100)
+    await page.addStyleTag({ content: ":root { font-size: 200% !important; }" });
+    await page.waitForTimeout(100);
   }
 
-  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" })
+  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" });
   const corpusLedger = page.getByRole("region", {
     name: "Cold, warm, and same-scope benchmark summary",
-  })
+  });
   const metrics = await page.evaluate(() => ({
     contentWidth: document.documentElement.scrollWidth,
     rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
     viewportWidth: document.documentElement.clientWidth,
-  }))
+  }));
   if (metrics.contentWidth > metrics.viewportWidth + 1) {
-    fail(`${label}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`)
+    fail(`${label}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`);
   }
   if (textScale === 2 && metrics.rootFontSize !== 32) {
-    fail(`${label}: expected 32px root font, got ${metrics.rootFontSize}px`)
+    fail(`${label}: expected 32px root font, got ${metrics.rootFontSize}px`);
   }
 
-  const copyBox = await copyButton.boundingBox()
+  const copyBox = await copyButton.boundingBox();
   if (!copyBox || copyBox.height < 44 || copyBox.x < -1 || copyBox.x + copyBox.width > width + 1) {
-    fail(`${label}: copy control is not viewport-contained and at least 44px tall`)
+    fail(`${label}: copy control is not viewport-contained and at least 44px tall`);
   }
   const ledgerMetrics = await corpusLedger.evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
-  }))
+  }));
   if (ledgerMetrics.scrollWidth <= ledgerMetrics.clientWidth) {
-    fail(`${label}: wide corpus ledger is not exposed as a local scroll region`)
+    fail(`${label}: wide corpus ledger is not exposed as a local scroll region`);
   }
-  await corpusLedger.focus()
-  const initialScroll = await corpusLedger.evaluate((element) => element.scrollLeft)
-  await page.keyboard.press("ArrowRight")
-  await page.waitForTimeout(100)
+  await corpusLedger.focus();
+  const initialScroll = await corpusLedger.evaluate((element) => element.scrollLeft);
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(100);
   if ((await corpusLedger.evaluate((element) => element.scrollLeft)) <= initialScroll) {
-    fail(`${label}: keyboard did not scroll the focused corpus ledger`)
+    fail(`${label}: keyboard did not scroll the focused corpus ledger`);
   }
 
-  console.log(`  ${label}: responsive ledger and copy control passed`)
-  await context.close()
+  console.log(`  ${label}: responsive ledger and copy control passed`);
+  await context.close();
 }
 
 async function checkHomepageDecisionViewport(browser, width) {
   const context = await browser.newContext({
     viewport: { width, height: 844 },
-  })
-  const page = await context.newPage()
-  const response = await gotoAndSettle(page, "/", { settleMs: 1500 })
+  });
+  const page = await context.newPage();
+  const response = await gotoAndSettle(page, "/", { settleMs: 1500 });
   if (response?.status() !== 200) {
-    fail(`home ${width}px: expected HTTP 200, got ${response?.status() ?? "no response"}`)
+    fail(`home ${width}px: expected HTTP 200, got ${response?.status() ?? "no response"}`);
   } else {
     const metrics = await page.evaluate(() => {
       const question = [...document.querySelectorAll("section")].find((section) =>
-        section.textContent?.includes("Start from your question")
-      )
-      const firstDecision = question?.querySelector('a[href="/frameworks"]')
+        section.textContent?.includes("Start from your question"),
+      );
+      const firstDecision = question?.querySelector('a[href="/frameworks"]');
       const absoluteTop = (element) =>
-        Math.round(element.getBoundingClientRect().top + window.scrollY)
+        Math.round(element.getBoundingClientRect().top + window.scrollY);
 
       return {
         pageHeight: document.documentElement.scrollHeight,
         firstDecisionTop: firstDecision ? absoluteTop(firstDecision) : null,
-      }
-    })
+      };
+    });
     if (metrics.firstDecisionTop === null || metrics.firstDecisionTop >= metrics.pageHeight * 0.2) {
-      fail(`home ${width}px: first decision route is not within the first fifth of the page`)
+      fail(`home ${width}px: first decision route is not within the first fifth of the page`);
     }
     console.log(
-      `  homepage ${width}px: first decision at ${metrics.firstDecisionTop}px of ${metrics.pageHeight}px`
-    )
+      `  homepage ${width}px: first decision at ${metrics.firstDecisionTop}px of ${metrics.pageHeight}px`,
+    );
   }
-  await context.close()
+  await context.close();
 }
 
 async function checkProgressiveDocsOutline(browser) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
-  const page = await context.newPage()
-  await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 })
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 });
 
-  const outline = page.locator(".pmds-progressive-outline")
+  const outline = page.locator(".pmds-progressive-outline");
   if ((await outline.count()) !== 1) {
-    fail("progressive docs outline: missing on a long direct-entry page")
+    fail("progressive docs outline: missing on a long direct-entry page");
   } else {
-    const links = outline.locator('a[href^="#"]')
+    const links = outline.locator('a[href^="#"]');
     if ((await links.count()) !== 11) {
-      fail(`progressive docs outline: expected 11 anchor links, got ${await links.count()}`)
+      fail(`progressive docs outline: expected 11 anchor links, got ${await links.count()}`);
     }
-    const details = outline.locator("details")
+    const details = outline.locator("details");
     if (await details.evaluate((element) => element.hasAttribute("open"))) {
-      fail("progressive docs outline: additional sections must start collapsed")
+      fail("progressive docs outline: additional sections must start collapsed");
     }
-    const summary = details.locator("summary")
-    await summary.focus()
-    await page.keyboard.press("Enter")
+    const summary = details.locator("summary");
+    await summary.focus();
+    await page.keyboard.press("Enter");
     if (!(await details.evaluate((element) => element.hasAttribute("open")))) {
-      fail("progressive docs outline: keyboard did not open additional sections")
+      fail("progressive docs outline: keyboard did not open additional sections");
     }
-    const target = details.getByRole("link", { name: "Other Data Formats", exact: true })
-    await target.click()
+    const target = details.getByRole("link", { name: "Other Data Formats", exact: true });
+    await target.click();
     if (new URL(page.url()).hash !== "#other-data-formats") {
-      fail("progressive docs outline: a disclosed anchor did not update the URL")
+      fail("progressive docs outline: a disclosed anchor did not update the URL");
     }
   }
-  await context.close()
+  await context.close();
 
-  const noJsContext = await browser.newContext({ javaScriptEnabled: false })
-  const noJsPage = await noJsContext.newPage()
-  await gotoAndSettle(noJsPage, "/docs/configuration", { settleMs: 100 })
-  const noJsOutline = noJsPage.locator(".pmds-progressive-outline")
+  const noJsContext = await browser.newContext({ javaScriptEnabled: false });
+  const noJsPage = await noJsContext.newPage();
+  await gotoAndSettle(noJsPage, "/docs/configuration", { settleMs: 100 });
+  const noJsOutline = noJsPage.locator(".pmds-progressive-outline");
   if (
     (await noJsOutline.count()) !== 1 ||
     (await noJsOutline.locator('a[href^="#"]').count()) !== 11
   ) {
-    fail("progressive docs outline: direct no-JS entry lost its anchors")
+    fail("progressive docs outline: direct no-JS entry lost its anchors");
   }
-  await noJsContext.close()
+  await noJsContext.close();
 }
 
 async function checkProgressiveOutlineAnchors(browser) {
@@ -1052,37 +1058,37 @@ async function checkProgressiveOutlineAnchors(browser) {
       entry,
       source: readFileSync(join(generatedDocsDir, entry), "utf8"),
     }))
-    .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
+    .filter(({ source }) => source.includes('className="pmds-progressive-outline"'));
 
   if (docs.length !== 23) {
-    fail(`progressive docs outline: expected 23 generated long docs, got ${docs.length}`)
+    fail(`progressive docs outline: expected 23 generated long docs, got ${docs.length}`);
   }
   if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/remix/index.md")) {
-    fail("progressive docs outline: Remix API guide is missing its generated outline")
+    fail("progressive docs outline: Remix API guide is missing its generated outline");
   }
 
-  const context = await browser.newContext()
-  const page = await context.newPage()
+  const context = await browser.newContext();
+  const page = await context.newPage();
   for (const { entry, source } of docs) {
     const routeEntry = entry
       .replaceAll("\\", "/")
       .replace(/\.mdx?$/u, "")
-      .replace(/\/index$/u, "")
-    const path = `/docs/${routeEntry}`
-    const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1])
-    await gotoAndSettle(page, path, { settleMs: 200 })
+      .replace(/\/index$/u, "");
+    const path = `/docs/${routeEntry}`;
+    const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1]);
+    await gotoAndSettle(page, path, { settleMs: 200 });
     const missingIds = await page.evaluate(
       (ids) => ids.filter((id) => document.getElementById(id) == null),
-      expectedIds
-    )
+      expectedIds,
+    );
     if (missingIds.length > 0) {
       fail(
-        `progressive docs outline: ${path} links to missing heading IDs: ${missingIds.join(", ")}`
-      )
+        `progressive docs outline: ${path} links to missing heading IDs: ${missingIds.join(", ")}`,
+      );
     }
   }
-  console.log(`  progressive outline heading IDs verified across ${docs.length} generated docs`)
-  await context.close()
+  console.log(`  progressive outline heading IDs verified across ${docs.length} generated docs`);
+  await context.close();
 }
 
 function trackPageErrors(
@@ -1090,35 +1096,35 @@ function trackPageErrors(
   getPath,
   consoleErrors,
   knownHydrationWarnings,
-  skippedViewTransitions
+  skippedViewTransitions,
 ) {
   page.on("pageerror", (error) => {
-    const message = error.message
-    const path = getPath()
+    const message = error.message;
+    const path = getPath();
     if (isExpectedSkippedViewTransitionError("pageerror", error)) {
-      skippedViewTransitions.push(path)
+      skippedViewTransitions.push(path);
     } else if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
-      knownHydrationWarnings.push(path)
+      knownHydrationWarnings.push(path);
     } else {
-      consoleErrors.push(`${path}: ${message}`)
+      consoleErrors.push(`${path}: ${message}`);
     }
-  })
+  });
   page.on("console", (message) => {
     if (message.type() === "error") {
-      const text = message.text()
-      const path = getPath()
+      const text = message.text();
+      const path = getPath();
       if (isKnownArdoBreadcrumbHydrationWarning(path, text)) {
-        knownHydrationWarnings.push(path)
+        knownHydrationWarnings.push(path);
       } else {
-        consoleErrors.push(`${path}: ${text}`)
+        consoleErrors.push(`${path}: ${text}`);
       }
     }
-  })
+  });
   page.on("response", (response) => {
     if (response.status() >= 400) {
-      consoleErrors.push(`${getPath()}: HTTP ${response.status()} ${response.url()}`)
+      consoleErrors.push(`${getPath()}: HTTP ${response.status()} ${response.url()}`);
     }
-  })
+  });
 }
 
 function isKnownArdoBreadcrumbHydrationWarning(path, message) {
@@ -1126,7 +1132,7 @@ function isKnownArdoBreadcrumbHydrationWarning(path, message) {
     isArdoGeneratedContentRoute(path) &&
     message.includes("Minified React error #418") &&
     message.includes("args[]=HTML")
-  )
+  );
 }
 
 function isArdoGeneratedContentRoute(path) {
@@ -1138,40 +1144,40 @@ function isArdoGeneratedContentRoute(path) {
     path === "/api-reference" ||
     path.startsWith("/api-reference/") ||
     path.startsWith("/blog/")
-  )
+  );
 }
 
 async function gotoAndSettle(page, path, { settleMs }) {
-  const response = await page.goto(`${baseUrl}${path}`)
-  await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {})
-  await page.waitForTimeout(settleMs)
-  return response
+  const response = await page.goto(`${baseUrl}${path}`);
+  await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(settleMs);
+  return response;
 }
 
 await checkRoutes(await browser.newContext(), "default", {
   expectHydration: true,
-})
+});
 await checkRoutes(await browser.newContext({ reducedMotion: "reduce" }), "reduced-motion", {
   expectHydration: true,
-})
+});
 await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js", {
   expectHydration: false,
-})
-await checkGetStartedTextResize(browser)
-await checkProofViewport(browser, 320)
-await checkProofViewport(browser, 390)
-await checkProofViewport(browser, 430)
-await checkProofViewport(browser, 390, { textScale: 2 })
-await checkHomepageDecisionViewport(browser, 320)
-await checkHomepageDecisionViewport(browser, 390)
-await checkProgressiveDocsOutline(browser)
-await checkProgressiveOutlineAnchors(browser)
+});
+await checkGetStartedTextResize(browser);
+await checkProofViewport(browser, 320);
+await checkProofViewport(browser, 390);
+await checkProofViewport(browser, 430);
+await checkProofViewport(browser, 390, { textScale: 2 });
+await checkHomepageDecisionViewport(browser, 320);
+await checkHomepageDecisionViewport(browser, 390);
+await checkProgressiveDocsOutline(browser);
+await checkProgressiveOutlineAnchors(browser);
 
-await browser.close()
-await staticServer?.close()
+await browser.close();
+await staticServer?.close();
 
 if (failures > 0) {
-  console.error(`verify-site-routes: ${failures} failure(s)`)
-  process.exit(1)
+  console.error(`verify-site-routes: ${failures} failure(s)`);
+  process.exit(1);
 }
-console.log("verify-site-routes: all checks passed")
+console.log("verify-site-routes: all checks passed");

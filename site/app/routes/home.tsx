@@ -1,28 +1,28 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
-import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix"
-import { CodeShowcase } from "~/components/home/CodeShowcase"
-import { CompleteProof } from "~/components/home/CompleteProof"
-import { CtaBand } from "~/components/home/CtaBand"
-import { BenchmarkCommand } from "~/components/home/BenchmarkCommand"
-import { HomeHero } from "~/components/home/HomeHero"
-import { HomeFaq, HOME_FAQ } from "~/components/home/HomeFaq"
-import { IntegrationBand } from "~/components/home/IntegrationBand"
-import { ProofStrip } from "~/components/home/ProofStrip"
-import { QuickInstall } from "~/components/home/QuickInstall"
-import { QuestionRoutes } from "~/components/home/QuestionRoutes"
-import { StatementBand } from "~/components/home/StatementBand"
-import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
-import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
-import contentStats from "~/data/generated/content-stats.json"
-import { decisionHref, REPO } from "~/data/links"
-import { pageMeta } from "~/lib/meta"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix";
+import { CodeShowcase } from "~/components/home/CodeShowcase";
+import { CompleteProof } from "~/components/home/CompleteProof";
+import { CtaBand } from "~/components/home/CtaBand";
+import { BenchmarkCommand } from "~/components/home/BenchmarkCommand";
+import { HomeHero } from "~/components/home/HomeHero";
+import { HomeFaq, HOME_FAQ } from "~/components/home/HomeFaq";
+import { IntegrationBand } from "~/components/home/IntegrationBand";
+import { ProofStrip } from "~/components/home/ProofStrip";
+import { QuickInstall } from "~/components/home/QuickInstall";
+import { QuestionRoutes } from "~/components/home/QuestionRoutes";
+import { StatementBand } from "~/components/home/StatementBand";
+import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger";
+import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench";
+import contentStats from "~/data/generated/content-stats.json";
+import { decisionHref, REPO } from "~/data/links";
+import { pageMeta } from "~/lib/meta";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
-  const title = "Palamedes — a durable i18n foundation for TypeScript"
+  const title = "Palamedes — a durable i18n foundation for TypeScript";
   const description =
-    "A clear, complete, and fast TypeScript i18n foundation with source-local messages, repository-owned catalogs, native tooling, and first-party integrations for modern frameworks."
+    "A clear, complete, and fast TypeScript i18n foundation with source-local messages, repository-owned catalogs, native tooling, and first-party integrations for modern frameworks.";
 
   return [
     ...pageMeta({ title, description, path: "/" }),
@@ -37,7 +37,7 @@ export function meta() {
         })),
       },
     },
-  ]
+  ];
 }
 
 export default function Home() {
@@ -171,5 +171,5 @@ export default function Home() {
         secondary={{ label: "Read the migration guide", href: "/docs/migrate-from-lingui" }}
       />
     </Page>
-  )
+  );
 }

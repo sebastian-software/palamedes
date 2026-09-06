@@ -13,13 +13,13 @@ processes it. Install the framework package and use the Palamedes plugin before
 the framework Vite plugin:
 
 ```ts
-import react from "@vitejs/plugin-react"
-import { palamedes } from "@palamedes/vite-plugin"
-import { defineConfig } from "vite"
+import react from "@vitejs/plugin-react";
+import { palamedes } from "@palamedes/vite-plugin";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [palamedes(), react()],
-})
+});
 ```
 
 For React, Palamedes marks generated `.mdx` modules as JSX automatically. Vite
@@ -30,13 +30,13 @@ For Solid 2, set `framework: "solid"` on the plugin and opt `.mdx` into
 `@solidjs/vite-plugin` explicitly:
 
 ```ts
-import solid from "@solidjs/vite-plugin"
-import { palamedes } from "@palamedes/vite-plugin"
-import { defineConfig } from "vite"
+import solid from "@solidjs/vite-plugin";
+import { palamedes } from "@palamedes/vite-plugin";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
-})
+});
 ```
 
 The plugin compiles for React unless told otherwise, so this option is required

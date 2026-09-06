@@ -1,16 +1,16 @@
-import { createSignal, Show } from "solid-js"
-import { Trans } from "@palamedes/solid/macro"
-import { type Locale, locales } from "../lib/i18n"
+import { createSignal, Show } from "solid-js";
+import { Trans } from "@palamedes/solid/macro";
+import { type Locale, locales } from "../lib/i18n";
 
 type SuggestionBannerProps = {
-  currentLocale: Locale
-  description: string
-  recommendedLocale: Locale
-  recommendedUrl: string
-}
+  currentLocale: Locale;
+  description: string;
+  recommendedLocale: Locale;
+  recommendedUrl: string;
+};
 
 export function SuggestionBanner(props: SuggestionBannerProps) {
-  const [dismissed, setDismissed] = createSignal(false)
+  const [dismissed, setDismissed] = createSignal(false);
 
   return (
     <Show when={!dismissed()}>
@@ -25,7 +25,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
           // router opt-out as the switcher above.
           rel="external"
           onClick={() => {
-            document.cookie = locales.serializeChoice(props.recommendedLocale)
+            document.cookie = locales.serializeChoice(props.recommendedLocale);
           }}
         >
           <Trans>Switch to the recommended locale</Trans>
@@ -35,8 +35,8 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
           class="notice-dismiss"
           data-testid="locale-suggestion-dismiss"
           onClick={() => {
-            document.cookie = locales.serializeChoice(props.currentLocale)
-            setDismissed(true)
+            document.cookie = locales.serializeChoice(props.currentLocale);
+            setDismissed(true);
           }}
           type="button"
         >
@@ -44,5 +44,5 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         </button>
       </div>
     </Show>
-  )
+  );
 }

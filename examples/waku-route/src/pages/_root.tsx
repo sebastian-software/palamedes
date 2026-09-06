@@ -1,11 +1,11 @@
-import type { ReactNode } from "react"
-import { unstable_getRequest } from "waku/router/server"
-import "@palamedes/example-ui/styles.css"
-import { normalizeLocale } from "../lib/i18n"
+import type { ReactNode } from "react";
+import { unstable_getRequest } from "waku/router/server";
+import "@palamedes/example-ui/styles.css";
+import { normalizeLocale } from "../lib/i18n";
 
 export default function Root({ children }: { children: ReactNode }) {
-  const pathname = new URL(unstable_getRequest().url).pathname
-  const locale = normalizeLocale(pathname.split("/").filter(Boolean)[0])
+  const pathname = new URL(unstable_getRequest().url).pathname;
+  const locale = normalizeLocale(pathname.split("/").filter(Boolean)[0]);
 
   return (
     <html lang={locale}>
@@ -15,11 +15,11 @@ export default function Root({ children }: { children: ReactNode }) {
       </head>
       <body>{children}</body>
     </html>
-  )
+  );
 }
 
 export async function getConfig() {
   return {
     render: "dynamic",
-  } as const
+  } as const;
 }

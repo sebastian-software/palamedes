@@ -1,8 +1,8 @@
-import { createRequire } from "node:module"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import type { NativeBindings, NativeInfo } from "./generated/palamedes-node-types"
+import type { NativeBindings, NativeInfo } from "./generated/palamedes-node-types";
 
 const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-darwin-arm64",
@@ -11,128 +11,128 @@ const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-linux-x64-gnu",
   "@palamedes/core-node-linux-x64-musl",
   "@palamedes/core-node-win32-x64-msvc",
-] as const
+] as const;
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
   if (process.platform !== "linux") {
-    return null
+    return null;
   }
 
   const report = process.report?.getReport?.() as
     | { header?: { glibcVersionRuntime?: string }; sharedObjects?: string[] }
-    | undefined
-  const glibcVersion = report?.header?.glibcVersionRuntime
+    | undefined;
+  const glibcVersion = report?.header?.glibcVersionRuntime;
 
   if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
-    return "gnu"
+    return "gnu";
   }
 
-  const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : []
+  const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : [];
   if (sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
-    return "musl"
+    return "musl";
   }
   if (
     sharedObjects.some(
-      (sharedObject) => sharedObject.includes("libc.so.6") || sharedObject.includes("ld-linux")
+      (sharedObject) => sharedObject.includes("libc.so.6") || sharedObject.includes("ld-linux"),
     )
   ) {
-    return "gnu"
+    return "gnu";
   }
 
-  return null
+  return null;
 }
 
 function getPlatformTriple(): string {
-  const libc = detectLinuxLibc()
+  const libc = detectLinuxLibc();
   return libc
     ? `${process.platform}-${process.arch}-${libc}`
-    : `${process.platform}-${process.arch}`
+    : `${process.platform}-${process.arch}`;
 }
 
 function getNativePackageName(): string {
-  const linuxLibc = detectLinuxLibc()
+  const linuxLibc = detectLinuxLibc();
 
   if (process.platform === "darwin" && process.arch === "arm64") {
-    return "@palamedes/core-node-darwin-arm64"
+    return "@palamedes/core-node-darwin-arm64";
   }
   if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "gnu") {
-    return "@palamedes/core-node-linux-x64-gnu"
+    return "@palamedes/core-node-linux-x64-gnu";
   }
   if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "musl") {
-    return "@palamedes/core-node-linux-x64-musl"
+    return "@palamedes/core-node-linux-x64-musl";
   }
   if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "gnu") {
-    return "@palamedes/core-node-linux-arm64-gnu"
+    return "@palamedes/core-node-linux-arm64-gnu";
   }
   if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "musl") {
-    return "@palamedes/core-node-linux-arm64-musl"
+    return "@palamedes/core-node-linux-arm64-musl";
   }
   if (process.platform === "win32" && process.arch === "x64") {
-    return "@palamedes/core-node-win32-x64-msvc"
+    return "@palamedes/core-node-win32-x64-msvc";
   }
 
   throw new Error(
-    `No Palamedes native bindings package is available for ${getPlatformTriple()}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}. If you need to build from source, run \`cargo build --workspace\` in the Palamedes repository.`
-  )
+    `No Palamedes native bindings package is available for ${getPlatformTriple()}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}. If you need to build from source, run \`cargo build --workspace\` in the Palamedes repository.`,
+  );
 }
 
-type ModuleLoader = (specifier: string) => unknown
+type ModuleLoader = (specifier: string) => unknown;
 
 export type LoadNativeBindingsOptions = {
-  packageDir?: string
-  nativePackageName?: string
-  require?: ModuleLoader
-}
+  packageDir?: string;
+  nativePackageName?: string;
+  require?: ModuleLoader;
+};
 
 function packageVersion(require: ModuleLoader, packageDir: string): string {
-  const manifest = require(path.join(packageDir, "package.json")) as { version?: unknown }
+  const manifest = require(path.join(packageDir, "package.json")) as { version?: unknown };
   if (typeof manifest.version !== "string" || manifest.version.length === 0) {
-    throw new Error(`Unable to read the @palamedes/core-node version from ${packageDir}.`)
+    throw new Error(`Unable to read the @palamedes/core-node version from ${packageDir}.`);
   }
-  return manifest.version
+  return manifest.version;
 }
 
 export function assertNativeBindingVersion(
   wrapperVersion: string,
   nativePackageName: string,
-  nativeInfo: NativeInfo
+  nativeInfo: NativeInfo,
 ): void {
-  const nativeVersion = nativeInfo.palamedesVersion
+  const nativeVersion = nativeInfo.palamedesVersion;
   if (nativeVersion === wrapperVersion) {
-    return
+    return;
   }
 
   throw new Error(
-    `Palamedes native binding version mismatch: @palamedes/core-node@${wrapperVersion} loaded ${nativePackageName} with native version ${nativeVersion || "<missing>"}. Reinstall @palamedes/core-node so its exact optional platform dependency is refreshed, or install matching ${nativePackageName}@${wrapperVersion}.`
-  )
+    `Palamedes native binding version mismatch: @palamedes/core-node@${wrapperVersion} loaded ${nativePackageName} with native version ${nativeVersion || "<missing>"}. Reinstall @palamedes/core-node so its exact optional platform dependency is refreshed, or install matching ${nativePackageName}@${wrapperVersion}.`,
+  );
 }
 
 function isWellFormed(value: string): boolean {
   const nativeIsWellFormed = (
     String.prototype as unknown as { isWellFormed?: (this: string) => boolean }
-  ).isWellFormed
+  ).isWellFormed;
   if (typeof nativeIsWellFormed === "function") {
-    return nativeIsWellFormed.call(value)
+    return nativeIsWellFormed.call(value);
   }
 
   for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index)
+    const codeUnit = value.charCodeAt(index);
     if (codeUnit >= 55_296 && codeUnit <= 56_319) {
-      if (index + 1 >= value.length) return false
-      const next = value.charCodeAt(index + 1)
-      if (next < 56_320 || next > 57_343) return false
-      index += 1
+      if (index + 1 >= value.length) return false;
+      const next = value.charCodeAt(index + 1);
+      if (next < 56_320 || next > 57_343) return false;
+      index += 1;
     } else if (codeUnit >= 56_320 && codeUnit <= 57_343) {
-      return false
+      return false;
     }
   }
-  return true
+  return true;
 }
 
-const preparedNativeArguments = new WeakSet<object>()
+const preparedNativeArguments = new WeakSet<object>();
 
 export function assertWellFormedNativeArguments(operation: string, arguments_: unknown[]): void {
-  snapshotNativeArguments(operation, arguments_)
+  snapshotNativeArguments(operation, arguments_);
 }
 
 /**
@@ -140,11 +140,11 @@ export function assertWellFormedNativeArguments(operation: string, arguments_: u
  * converts it into the native request shape.
  */
 export function snapshotNativeArgument<T extends object>(operation: string, value: T): T {
-  return snapshotNativeArguments(operation, [value])[0] as T
+  return snapshotNativeArguments(operation, [value])[0] as T;
 }
 
 export function validateNativeArgument(operation: string, value: unknown): void {
-  validateStableNativeArguments(operation, [value])
+  validateStableNativeArguments(operation, [value]);
 }
 
 /**
@@ -154,8 +154,8 @@ export function validateNativeArgument(operation: string, value: unknown): void 
  * contract before native bindings may read the prepared tree directly.
  */
 export function prepareNativeArgument<T extends object>(operation: string, value: T): T {
-  validateNativeArgument(operation, value)
-  return markPreparedNativeArgument(value)
+  validateNativeArgument(operation, value);
+  return markPreparedNativeArgument(value);
 }
 
 /**
@@ -164,36 +164,36 @@ export function prepareNativeArgument<T extends object>(operation: string, value
  * `snapshotNativeArgument` result and wrapper-introduced constants.
  */
 export function markPreparedNativeArgument<T extends object>(value: T): T {
-  preparedNativeArguments.add(value)
-  return value
+  preparedNativeArguments.add(value);
+  return value;
 }
 
 function validateStableNativeArguments(operation: string, arguments_: unknown[]): void {
-  const seen = new Set<object>()
+  const seen = new Set<object>();
   const pending: Array<{ value: unknown; path: NativeArgumentPath }> = arguments_.map(
     (value, index) => ({
       value,
       path: { segment: `${operation}.argument[${index}]` },
-    })
-  )
+    }),
+  );
 
   while (pending.length > 0) {
-    const current = pending.pop()
-    if (!current) continue
+    const current = pending.pop();
+    if (!current) continue;
 
-    const { path: currentPath, value } = current
+    const { path: currentPath, value } = current;
     if (typeof value === "string") {
-      assertWellFormedString(value, currentPath, operation)
-      continue
+      assertWellFormedString(value, currentPath, operation);
+      continue;
     }
     if (value === null || typeof value !== "object" || seen.has(value)) {
-      continue
+      continue;
     }
-    seen.add(value)
+    seen.add(value);
 
-    const classification = classifySnapshotObject(value, currentPath)
+    const classification = classifySnapshotObject(value, currentPath);
     if (classification.kind === "map") {
-      throw nativeBoundaryUnsupportedMapError(currentPath)
+      throw nativeBoundaryUnsupportedMapError(currentPath);
     }
     if (
       classification.kind === "record" &&
@@ -202,21 +202,21 @@ function validateStableNativeArguments(operation: string, arguments_: unknown[])
     ) {
       throw nativeBoundaryReadError(
         currentPath,
-        new TypeError("Prepared native argument records must be wrapper-owned plain data.")
-      )
+        new TypeError("Prepared native argument records must be wrapper-owned plain data."),
+      );
     }
     const keys =
       classification.kind === "array"
         ? enumerablePropertyNames(value, currentPath)
-        : nativeVisiblePropertyNames(value, classification, currentPath)
+        : nativeVisiblePropertyNames(value, classification, currentPath);
     for (const key of keys) {
       const propertyPath = appendNativeArgumentPath(
         currentPath,
-        classification.kind === "array" ? arrayPropertyPath(key) : `.${key}`
-      )
-      assertWellFormedPropertyName(key, propertyPath)
-      const propertyValue = readPreparedDataProperty(value, key, propertyPath)
-      pending.push({ value: propertyValue, path: propertyPath })
+        classification.kind === "array" ? arrayPropertyPath(key) : `.${key}`,
+      );
+      assertWellFormedPropertyName(key, propertyPath);
+      const propertyValue = readPreparedDataProperty(value, key, propertyPath);
+      pending.push({ value: propertyValue, path: propertyPath });
     }
   }
 }
@@ -224,29 +224,29 @@ function validateStableNativeArguments(operation: string, arguments_: unknown[])
 function readPreparedDataProperty(
   value: object,
   key: string,
-  argumentPath: NativeArgumentPath
+  argumentPath: NativeArgumentPath,
 ): unknown {
   try {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor || !("value" in descriptor)) {
-      throw new TypeError("Prepared native arguments must contain only own data properties.")
+      throw new TypeError("Prepared native arguments must contain only own data properties.");
     }
-    return descriptor.value
+    return descriptor.value;
   } catch (error) {
-    throw nativeBoundaryReadError(argumentPath, error)
+    throw nativeBoundaryReadError(argumentPath, error);
   }
 }
 
 function assertWellFormedString(
   value: string,
   argumentPath: NativeArgumentPath,
-  operation: string
+  operation: string,
 ): void {
   if (!isWellFormed(value)) {
-    const field = formatNativeArgumentPath(argumentPath)
+    const field = formatNativeArgumentPath(argumentPath);
     throw new TypeError(
-      `Palamedes native boundary rejected malformed Unicode in ${field}; replace the unpaired UTF-16 surrogate before calling ${operation}.`
-    )
+      `Palamedes native boundary rejected malformed Unicode in ${field}; replace the unpaired UTF-16 surrogate before calling ${operation}.`,
+    );
   }
 }
 
@@ -256,177 +256,177 @@ function assertWellFormedString(
  * different string after it has passed Unicode validation.
  */
 export function snapshotNativeArguments(operation: string, arguments_: unknown[]): unknown[] {
-  const snapshots = new Map<object, unknown>()
-  const result: unknown[] = Array.from({ length: arguments_.length })
+  const snapshots = new Map<object, unknown>();
+  const result: unknown[] = Array.from({ length: arguments_.length });
   const pending: SnapshotTask[] = arguments_
     .map((value, index) => ({
       kind: "value" as const,
       value,
       path: { segment: `${operation}.argument[${index}]` },
       assign(snapshot: unknown) {
-        result[index] = snapshot
+        result[index] = snapshot;
       },
     }))
-    .reverse()
+    .reverse();
 
   while (pending.length > 0) {
-    const current = pending.pop()
-    if (!current) continue
+    const current = pending.pop();
+    if (!current) continue;
 
     if (current.kind === "property") {
-      let propertyValue: unknown
+      let propertyValue: unknown;
       try {
-        propertyValue = Reflect.get(current.source, current.key)
+        propertyValue = Reflect.get(current.source, current.key);
       } catch (error) {
-        throw nativeBoundaryReadError(current.path, error)
+        throw nativeBoundaryReadError(current.path, error);
       }
       pending.push({
         kind: "value",
         value: propertyValue,
         path: current.path,
         assign: current.assign,
-      })
-      continue
+      });
+      continue;
     }
 
-    const { path: currentPath, value } = current
+    const { path: currentPath, value } = current;
 
     if (typeof value === "string") {
-      assertWellFormedString(value, currentPath, operation)
-      current.assign(value)
-      continue
+      assertWellFormedString(value, currentPath, operation);
+      current.assign(value);
+      continue;
     }
     if (value === null || typeof value !== "object") {
-      current.assign(value)
-      continue
+      current.assign(value);
+      continue;
     }
 
-    const existingSnapshot = snapshots.get(value)
+    const existingSnapshot = snapshots.get(value);
     if (existingSnapshot !== undefined) {
-      current.assign(existingSnapshot)
-      continue
+      current.assign(existingSnapshot);
+      continue;
     }
 
-    const classification = classifySnapshotObject(value, currentPath)
+    const classification = classifySnapshotObject(value, currentPath);
     if (classification.kind === "map") {
-      throw nativeBoundaryUnsupportedMapError(currentPath)
+      throw nativeBoundaryUnsupportedMapError(currentPath);
     }
     if (classification.kind === "array") {
-      const arraySnapshot: unknown[] = []
-      arraySnapshot.length = classification.length
-      snapshots.set(value, arraySnapshot)
-      current.assign(arraySnapshot)
+      const arraySnapshot: unknown[] = [];
+      arraySnapshot.length = classification.length;
+      snapshots.set(value, arraySnapshot);
+      current.assign(arraySnapshot);
       for (const key of enumerablePropertyNames(value, currentPath).reverse()) {
-        const propertyPath = appendNativeArgumentPath(currentPath, arrayPropertyPath(key))
-        assertWellFormedPropertyName(key, propertyPath)
+        const propertyPath = appendNativeArgumentPath(currentPath, arrayPropertyPath(key));
+        assertWellFormedPropertyName(key, propertyPath);
         pending.push({
           kind: "property",
           source: value,
           key,
           path: propertyPath,
           assign(snapshotValue: unknown) {
-            defineSnapshotProperty(arraySnapshot, key, snapshotValue)
+            defineSnapshotProperty(arraySnapshot, key, snapshotValue);
           },
-        })
+        });
       }
-      continue
+      continue;
     }
 
-    const recordSnapshot: Record<string, unknown> = {}
-    snapshots.set(value, recordSnapshot)
-    current.assign(recordSnapshot)
+    const recordSnapshot: Record<string, unknown> = {};
+    snapshots.set(value, recordSnapshot);
+    current.assign(recordSnapshot);
     for (const key of nativeVisiblePropertyNames(value, classification, currentPath).reverse()) {
-      const propertyPath = appendNativeArgumentPath(currentPath, `.${key}`)
-      assertWellFormedPropertyName(key, propertyPath)
+      const propertyPath = appendNativeArgumentPath(currentPath, `.${key}`);
+      assertWellFormedPropertyName(key, propertyPath);
       pending.push({
         kind: "property",
         source: value,
         key,
         path: propertyPath,
         assign(snapshotValue: unknown) {
-          defineSnapshotProperty(recordSnapshot, key, snapshotValue)
+          defineSnapshotProperty(recordSnapshot, key, snapshotValue);
         },
-      })
+      });
     }
   }
 
-  return result
+  return result;
 }
 
 type SnapshotTask =
   | {
-      kind: "value"
-      value: unknown
-      path: NativeArgumentPath
-      assign: (snapshot: unknown) => void
+      kind: "value";
+      value: unknown;
+      path: NativeArgumentPath;
+      assign: (snapshot: unknown) => void;
     }
   | {
-      kind: "property"
-      source: object
-      key: string
-      path: NativeArgumentPath
-      assign: (snapshot: unknown) => void
-    }
+      kind: "property";
+      source: object;
+      key: string;
+      path: NativeArgumentPath;
+      assign: (snapshot: unknown) => void;
+    };
 
 type NativeArgumentPath = {
-  parent?: NativeArgumentPath
-  segment: string
-}
+  parent?: NativeArgumentPath;
+  segment: string;
+};
 
 function appendNativeArgumentPath(parent: NativeArgumentPath, segment: string): NativeArgumentPath {
-  return { parent, segment }
+  return { parent, segment };
 }
 
 function formatNativeArgumentPath(argumentPath: NativeArgumentPath): string {
-  const segments: string[] = []
+  const segments: string[] = [];
   for (
     let current: NativeArgumentPath | undefined = argumentPath;
     current;
     current = current.parent
   ) {
-    segments.push(current.segment)
+    segments.push(current.segment);
   }
-  return segments.reverse().join("")
+  return segments.reverse().join("");
 }
 
 function arrayPropertyPath(key: string): string {
-  return /^(?:0|[1-9]\d*)$/u.test(key) ? `[${key}]` : `.${key}`
+  return /^(?:0|[1-9]\d*)$/u.test(key) ? `[${key}]` : `.${key}`;
 }
 
 type SnapshotObjectClassification =
   | { kind: "array"; length: number }
   | { kind: "map" }
-  | { kind: "record"; prototype: object | null }
+  | { kind: "record"; prototype: object | null };
 
 function classifySnapshotObject(
   value: object,
-  argumentPath: NativeArgumentPath
+  argumentPath: NativeArgumentPath,
 ): SnapshotObjectClassification {
   try {
     if (Array.isArray(value)) {
-      return { kind: "array", length: readArrayLength(value) }
+      return { kind: "array", length: readArrayLength(value) };
     }
 
-    const prototype = Object.getPrototypeOf(value)
-    return isMapPrototype(prototype) ? { kind: "map" } : { kind: "record", prototype }
+    const prototype = Object.getPrototypeOf(value);
+    return isMapPrototype(prototype) ? { kind: "map" } : { kind: "record", prototype };
   } catch (error) {
-    throw nativeBoundaryReadError(argumentPath, error)
+    throw nativeBoundaryReadError(argumentPath, error);
   }
 }
 
 function readArrayLength(value: object): number {
-  const length = Reflect.get(value, "length")
+  const length = Reflect.get(value, "length");
   if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) {
-    throw new TypeError("Array length must be a non-negative safe integer.")
+    throw new TypeError("Array length must be a non-negative safe integer.");
   }
-  return length
+  return length;
 }
 
 function isMapPrototype(prototype: object | null): boolean {
   for (let current = prototype; current !== null; current = Object.getPrototypeOf(current)) {
-    if (current === Map.prototype) return true
+    if (current === Map.prototype) return true;
   }
-  return false
+  return false;
 }
 
 /**
@@ -440,43 +440,43 @@ function isMapPrototype(prototype: object | null): boolean {
 function nativeVisiblePropertyNames(
   value: object,
   classification: SnapshotObjectClassification,
-  argumentPath: NativeArgumentPath
+  argumentPath: NativeArgumentPath,
 ): string[] {
   try {
-    const names = Object.keys(value)
+    const names = Object.keys(value);
     if (
       classification.kind !== "record" ||
       classification.prototype === null ||
       classification.prototype === Object.prototype
     ) {
-      return names
+      return names;
     }
 
-    const seen = new Set(names)
+    const seen = new Set(names);
     for (
       let prototype = classification.prototype;
       prototype !== null && prototype !== Object.prototype;
       prototype = Object.getPrototypeOf(prototype)
     ) {
       for (const name of Object.getOwnPropertyNames(prototype)) {
-        if (name === "constructor" || seen.has(name)) continue
-        const descriptor = Object.getOwnPropertyDescriptor(prototype, name)
-        if (typeof descriptor?.get !== "function") continue
-        seen.add(name)
-        names.push(name)
+        if (name === "constructor" || seen.has(name)) continue;
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+        if (typeof descriptor?.get !== "function") continue;
+        seen.add(name);
+        names.push(name);
       }
     }
-    return names
+    return names;
   } catch (error) {
-    throw nativeBoundaryReadError(argumentPath, error)
+    throw nativeBoundaryReadError(argumentPath, error);
   }
 }
 
 function enumerablePropertyNames(value: object, argumentPath: NativeArgumentPath): string[] {
   try {
-    return Object.keys(value)
+    return Object.keys(value);
   } catch (error) {
-    throw nativeBoundaryReadError(argumentPath, error)
+    throw nativeBoundaryReadError(argumentPath, error);
   }
 }
 
@@ -486,14 +486,14 @@ function defineSnapshotProperty(target: object, key: string, value: unknown): vo
     enumerable: true,
     value,
     writable: true,
-  })
+  });
 }
 
 function assertWellFormedPropertyName(key: string, argumentPath: NativeArgumentPath): void {
   if (!isWellFormed(key)) {
     throw new TypeError(
-      `Palamedes native boundary rejected malformed Unicode in ${formatNativeArgumentPath(argumentPath)}.<key>; replace the unpaired UTF-16 surrogate in the property name.`
-    )
+      `Palamedes native boundary rejected malformed Unicode in ${formatNativeArgumentPath(argumentPath)}.<key>; replace the unpaired UTF-16 surrogate in the property name.`,
+    );
   }
 }
 
@@ -504,71 +504,71 @@ function assertWellFormedPropertyName(key: string, argumentPath: NativeArgumentP
  */
 function nativeBoundaryUnsupportedMapError(argumentPath: NativeArgumentPath): TypeError {
   return new TypeError(
-    `Palamedes native boundary rejected a Map in ${formatNativeArgumentPath(argumentPath)}; the native bindings read plain objects, so pass a record such as Object.fromEntries(map).`
-  )
+    `Palamedes native boundary rejected a Map in ${formatNativeArgumentPath(argumentPath)}; the native bindings read plain objects, so pass a record such as Object.fromEntries(map).`,
+  );
 }
 
 function nativeBoundaryReadError(argumentPath: NativeArgumentPath, cause: unknown): TypeError {
   return new TypeError(
     `Palamedes native boundary could not read ${formatNativeArgumentPath(argumentPath)}; accessors and Proxies must return a stable value.`,
-    { cause }
-  )
+    { cause },
+  );
 }
 
 function guardNativeBindings(bindings: NativeBindings): NativeBindings {
   return new Proxy(bindings, {
     get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver)
+      const value = Reflect.get(target, property, receiver);
       if (typeof property !== "string" || typeof value !== "function") {
-        return value
+        return value;
       }
       return (...arguments_: unknown[]) => {
         const prepared = arguments_.every(
           (argument) =>
             argument === null ||
             typeof argument !== "object" ||
-            preparedNativeArguments.has(argument)
-        )
+            preparedNativeArguments.has(argument),
+        );
         if (!prepared) {
-          return Reflect.apply(value, target, snapshotNativeArguments(property, arguments_))
+          return Reflect.apply(value, target, snapshotNativeArguments(property, arguments_));
         }
         for (const [index, argument] of arguments_.entries()) {
           if (typeof argument === "string") {
             assertWellFormedString(
               argument,
               { segment: `${property}.argument[${index}]` },
-              property
-            )
+              property,
+            );
           }
         }
-        const nativeArguments = arguments_
-        return Reflect.apply(value, target, nativeArguments)
-      }
+        const nativeArguments = arguments_;
+        return Reflect.apply(value, target, nativeArguments);
+      };
     },
-  })
+  });
 }
 
 export function loadNativeBindings(options: LoadNativeBindingsOptions = {}): NativeBindings {
-  const require = options.require ?? createRequire(import.meta.url)
+  const require = options.require ?? createRequire(import.meta.url);
   const packageDir =
-    options.packageDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-  const nativePackageName = options.nativePackageName ?? getNativePackageName()
-  let bindings: NativeBindings
+    options.packageDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const nativePackageName = options.nativePackageName ?? getNativePackageName();
+  let bindings: NativeBindings;
 
   try {
-    bindings = require(nativePackageName) as NativeBindings
+    bindings = require(nativePackageName) as NativeBindings;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Failed to load Palamedes native bindings from ${nativePackageName} for ${getPlatformTriple()} in package ${packageDir}: ${message}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}.`,
-      { cause: error }
-    )
+      { cause: error },
+    );
   }
 
   assertNativeBindingVersion(
     packageVersion(require, packageDir),
     nativePackageName,
-    bindings.getNativeInfo()
-  )
-  return guardNativeBindings(bindings)
+    bindings.getNativeInfo(),
+  );
+  return guardNativeBindings(bindings);
 }

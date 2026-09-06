@@ -173,9 +173,9 @@ always ignored so documentation examples cannot become unused suppressions.
 
 ```tsx
 // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
-const label = t`${status}`
+const label = t`${status}`;
 
-const inline = t`${status}` // palamedes-lint-disable-line pmds/no-placeholder-only-message
+const inline = t`${status}`; // palamedes-lint-disable-line pmds/no-placeholder-only-message
 ```
 
 Unknown codes, directives without a code, and valid suppressions that no longer

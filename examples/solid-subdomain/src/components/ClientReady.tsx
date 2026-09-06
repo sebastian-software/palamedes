@@ -1,14 +1,14 @@
-import { createSignal, onSettled, Show } from "solid-js"
-import { isServer } from "@solidjs/web"
+import { createSignal, onSettled, Show } from "solid-js";
+import { isServer } from "@solidjs/web";
 
 export function ClientReady() {
-  const [ready, setReady] = createSignal(false)
+  const [ready, setReady] = createSignal(false);
 
   onSettled(() => {
     if (!isServer) {
-      setReady(true)
+      setReady(true);
     }
-  })
+  });
 
   return (
     <Show when={ready()}>
@@ -16,5 +16,5 @@ export function ClientReady() {
         ready
       </span>
     </Show>
-  )
+  );
 }

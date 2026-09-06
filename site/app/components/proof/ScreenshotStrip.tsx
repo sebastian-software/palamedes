@@ -1,13 +1,13 @@
-import nextjsRoute from "~/assets/screenshots/nextjs-route-interactive.png"
-import reactRouterCookie from "~/assets/screenshots/react-router-cookie-interactive.png"
-import solidRoute from "~/assets/screenshots/solid-route-interactive.png"
-import wakuCookie from "~/assets/screenshots/waku-cookie-interactive.png"
-import { docsHref } from "~/data/links"
+import nextjsRoute from "~/assets/screenshots/nextjs-route-interactive.png";
+import reactRouterCookie from "~/assets/screenshots/react-router-cookie-interactive.png";
+import solidRoute from "~/assets/screenshots/solid-route-interactive.png";
+import wakuCookie from "~/assets/screenshots/waku-cookie-interactive.png";
+import { docsHref } from "~/data/links";
 
 interface Shot {
-  src: string
-  caption: string
-  url: string
+  src: string;
+  caption: string;
+  url: string;
 }
 
 const SHOTS: Shot[] = [
@@ -19,7 +19,7 @@ const SHOTS: Shot[] = [
   },
   { src: solidRoute, caption: "solid-route · /de · CI run", url: "solid-route…/de" },
   { src: wakuCookie, caption: "waku-cookie · de · CI run", url: "waku-cookie…" },
-]
+];
 
 /*
  * Filmstrip of real, versioned Playwright captures — the "diffable artifact"
@@ -63,5 +63,5 @@ export function ScreenshotStrip() {
         All versioned screenshots →
       </a>
     </div>
-  )
+  );
 }

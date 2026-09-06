@@ -1,95 +1,95 @@
-"use strict"
+"use strict";
 
-const { createHash } = require("node:crypto")
-const { readFileSync, realpathSync } = require("node:fs")
-const path = require("node:path")
-const { decode, encode } = require("@jridgewell/sourcemap-codec")
+const { createHash } = require("node:crypto");
+const { readFileSync, realpathSync } = require("node:fs");
+const path = require("node:path");
+const { decode, encode } = require("@jridgewell/sourcemap-codec");
 const {
   catalogMatchesSource,
   catalogResourcePath,
   loadPalamedesConfigSync,
-} = require("@palamedes/config")
-const { transformPalamedesMacros } = require("@palamedes/transform")
-const { loadConfigCachedSync } = require("./palamedes-config-cache.cjs")
-const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
+} = require("@palamedes/config");
+const { transformPalamedesMacros } = require("@palamedes/transform");
+const { loadConfigCachedSync } = require("./palamedes-config-cache.cjs");
+const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs");
 
-const SELECTED_MESSAGES_QUERY = "palamedes-selected"
+const SELECTED_MESSAGES_QUERY = "palamedes-selected";
 
 function resolveLoaderCwd(context, options) {
   if (typeof options.cwd === "string" && options.cwd.length > 0) {
-    return path.resolve(options.cwd)
+    return path.resolve(options.cwd);
   }
   if (typeof context.rootContext === "string" && context.rootContext.length > 0) {
-    return path.resolve(context.rootContext)
+    return path.resolve(context.rootContext);
   }
 }
 
 function canonicalPath(value) {
   try {
-    return realpathSync.native(value)
+    return realpathSync.native(value);
   } catch {
-    return path.resolve(value)
+    return path.resolve(value);
   }
 }
 
 function normalizePath(value) {
-  return value.split(path.sep).join("/")
+  return value.split(path.sep).join("/");
 }
 
 function nextCatalogResourcePath(config, catalog, locale) {
-  const extension = catalog.format ?? "po"
+  const extension = catalog.format ?? "po";
   if (extension !== "po") {
     throw new Error(
-      `Palamedes Next message splitting currently supports PO catalogs only. Catalog ${catalog.path} uses format ${extension}.`
-    )
+      `Palamedes Next message splitting currently supports PO catalogs only. Catalog ${catalog.path} uses format ${extension}.`,
+    );
   }
-  return catalogResourcePath(config, catalog, locale)
+  return catalogResourcePath(config, catalog, locale);
 }
 
 function selectedMessageImports(config, sourcePath, compiledIds) {
   const catalogs = config.catalogs.filter((catalog) =>
-    catalogMatchesSource(config, catalog, sourcePath)
-  )
+    catalogMatchesSource(config, catalog, sourcePath),
+  );
   if (catalogs.length === 0) {
-    return null
+    return null;
   }
 
-  const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url")
+  const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url");
   return catalogs.map((catalog) =>
     config.locales.map((locale) => {
-      const resourcePath = nextCatalogResourcePath(config, catalog, locale)
+      const resourcePath = nextCatalogResourcePath(config, catalog, locale);
       return {
         locale,
         specifier: `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`,
-      }
-    })
-  )
+      };
+    }),
+  );
 }
 
 function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailureMode) {
-  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
+  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds);
   if (!importsByCatalog) {
-    return null
+    return null;
   }
 
   const loaderGroups = importsByCatalog.map((imports) => {
     const loaders = imports
       .map(
         ({ locale, specifier }) =>
-          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)})`
+          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)})`,
       )
-      .join(", ")
-    return `{ ${loaders} }`
-  })
-  const supportedLocales = config.locales.map((locale) => JSON.stringify(locale)).join(", ")
+      .join(", ");
+    return `{ ${loaders} }`;
+  });
+  const supportedLocales = config.locales.map((locale) => JSON.stringify(locale)).join(", ");
   const modulePath = normalizePath(
-    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
-  )
-  const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`
+    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
+  );
+  const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`;
   const fragmentFailurePrefix = JSON.stringify(
-    `Palamedes client graph message splitting failed to load a catalog fragment for ${modulePath} (`
-  )
-  const fragmentFailureSuffix = JSON.stringify("). Continuing without that fragment.")
+    `Palamedes client graph message splitting failed to load a catalog fragment for ${modulePath} (`,
+  );
+  const fragmentFailureSuffix = JSON.stringify("). Continuing without that fragment.");
 
   const imports =
     `const ${identifier}_modules = await Promise.all([\n` +
@@ -102,7 +102,7 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
     `} catch {\n` +
     `  // No client i18n has been installed yet.\n` +
     `}\n` +
-    `const ${identifier}_locale = ${identifier}_existingI18n?.locale ?? document.documentElement.lang;\n`
+    `const ${identifier}_locale = ${identifier}_existingI18n?.locale ?? document.documentElement.lang;\n`;
   // Fragments are imported in parallel but registered in loader-group order, so
   // two catalogs carrying the same message id resolve to the same winner in
   // both failure modes. Degrading isolates a failure; it does not reorder.
@@ -118,7 +118,7 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
     `  } catch {\n` +
     `    // Logging must not prevent the client graph from hydrating.\n` +
     `  }\n` +
-    `};\n`
+    `};\n`;
   const fragmentImports =
     fragmentFailureMode === "degrade"
       ? `${reportFragmentFailure}const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
@@ -129,7 +129,7 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
         `    return null;\n` +
         `  }\n` +
         `}));\n`
-      : `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));\n`
+      : `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));\n`;
 
   const fragmentRegistration =
     fragmentFailureMode === "degrade"
@@ -144,18 +144,18 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
       : `for (const fragment of ${identifier}_fragments) {\n` +
         `  const { messages } = fragment;\n` +
         `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
-        `}\n`
+        `}\n`;
 
   const initialize = `const ${identifier}_i18n = ${identifier}_existingI18n ?? ${identifier}_modules[1].initializeClientI18n(
   ${identifier}_locale,
   ${identifier}_modules[0].createI18n,
 );
-`
-  const unsupportedLocale = `new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`)`
+`;
+  const unsupportedLocale = `new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`)`;
   const unsupportedLocaleHandling =
     fragmentFailureMode === "degrade"
       ? `try {\n  console.error(${unsupportedLocale});\n} catch {\n  // Logging must not prevent the client graph from hydrating.\n}\n`
-      : `throw ${unsupportedLocale};\n`
+      : `throw ${unsupportedLocale};\n`;
 
   return `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
 ${imports}
@@ -164,124 +164,124 @@ if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {
   ${unsupportedLocaleHandling}}
 else {
 ${initialize}${fragmentImports}${fragmentRegistration}}
-`
+`;
 }
 
 function skipTrivia(code, index) {
-  let current = index
-  let sawLineTerminator = false
+  let current = index;
+  let sawLineTerminator = false;
 
   while (current < code.length) {
-    const character = code[current]
+    const character = code[current];
     if (character === "\r" || character === "\n") {
-      sawLineTerminator = true
-      current += 1
-      continue
+      sawLineTerminator = true;
+      current += 1;
+      continue;
     }
     if (/\s/u.test(character)) {
-      current += 1
-      continue
+      current += 1;
+      continue;
     }
     if (code.startsWith("//", current)) {
-      const lineEnd = code.indexOf("\n", current + 2)
+      const lineEnd = code.indexOf("\n", current + 2);
       if (lineEnd === -1) {
-        return { index: code.length, sawLineTerminator }
+        return { index: code.length, sawLineTerminator };
       }
-      sawLineTerminator = true
-      current = lineEnd + 1
-      continue
+      sawLineTerminator = true;
+      current = lineEnd + 1;
+      continue;
     }
     if (code.startsWith("/*", current)) {
-      const commentEnd = code.indexOf("*/", current + 2)
+      const commentEnd = code.indexOf("*/", current + 2);
       if (commentEnd === -1) {
-        return { index: code.length, sawLineTerminator }
+        return { index: code.length, sawLineTerminator };
       }
-      const comment = code.slice(current, commentEnd + 2)
+      const comment = code.slice(current, commentEnd + 2);
       if (/\r|\n/u.test(comment)) {
-        sawLineTerminator = true
+        sawLineTerminator = true;
       }
-      current = commentEnd + 2
-      continue
+      current = commentEnd + 2;
+      continue;
     }
-    break
+    break;
   }
 
-  return { index: current, sawLineTerminator }
+  return { index: current, sawLineTerminator };
 }
 
 function directivePrologueEnd(code) {
-  let current = code.charCodeAt(0) === 0xfe_ff ? 1 : 0
+  let current = code.charCodeAt(0) === 0xfe_ff ? 1 : 0;
   if (code.startsWith("#!", current)) {
-    const lineEnd = code.indexOf("\n", current + 2)
-    current = lineEnd === -1 ? code.length : lineEnd + 1
+    const lineEnd = code.indexOf("\n", current + 2);
+    current = lineEnd === -1 ? code.length : lineEnd + 1;
   }
 
-  let end = current
+  let end = current;
   while (current < code.length) {
-    const beforeDirective = skipTrivia(code, current)
-    const quote = code[beforeDirective.index]
+    const beforeDirective = skipTrivia(code, current);
+    const quote = code[beforeDirective.index];
     if (quote !== '"' && quote !== "'") {
-      break
+      break;
     }
 
-    let stringEnd = beforeDirective.index + 1
+    let stringEnd = beforeDirective.index + 1;
     while (stringEnd < code.length) {
       if (code[stringEnd] === "\\") {
-        stringEnd += 2
-        continue
+        stringEnd += 2;
+        continue;
       }
       if (code[stringEnd] === quote) {
-        break
+        break;
       }
-      stringEnd += 1
+      stringEnd += 1;
     }
     if (stringEnd >= code.length) {
-      break
+      break;
     }
 
-    const afterString = skipTrivia(code, stringEnd + 1)
+    const afterString = skipTrivia(code, stringEnd + 1);
     if (code[afterString.index] === ";") {
-      const afterSemicolon = skipTrivia(code, afterString.index + 1)
-      end = afterSemicolon.index
-      current = afterSemicolon.index
-      continue
+      const afterSemicolon = skipTrivia(code, afterString.index + 1);
+      end = afterSemicolon.index;
+      current = afterSemicolon.index;
+      continue;
     }
     if (afterString.index === code.length || afterString.sawLineTerminator) {
-      end = afterString.index
-      current = afterString.index
-      continue
+      end = afterString.index;
+      current = afterString.index;
+      continue;
     }
-    break
+    break;
   }
 
-  return end
+  return end;
 }
 
 function generatedPositionForText(text) {
-  const line = text.split("\n").length - 1
-  return { line, column: text.length - text.lastIndexOf("\n") - 1 }
+  const line = text.split("\n").length - 1;
+  return { line, column: text.length - text.lastIndexOf("\n") - 1 };
 }
 
 function compareGeneratedPositions(left, right) {
   if (left.line !== right.line) {
-    return left.line - right.line
+    return left.line - right.line;
   }
-  return left.column - right.column
+  return left.column - right.column;
 }
 
 function insertionMetrics(insertion) {
-  const position = generatedPositionForText(insertion)
-  return { addedLines: position.line, finalLineLength: position.column }
+  const position = generatedPositionForText(insertion);
+  return { addedLines: position.line, finalLineLength: position.column };
 }
 
 function shiftedGeneratedPosition(position, insertionPosition, insertion, metrics) {
   if (compareGeneratedPositions(position, insertionPosition) < 0) {
-    return position
+    return position;
   }
   if (metrics.addedLines === 0) {
     return position.line === insertionPosition.line
       ? { line: position.line, column: position.column + insertion.length }
-      : position
+      : position;
   }
   return {
     line: position.line + metrics.addedLines,
@@ -289,7 +289,7 @@ function shiftedGeneratedPosition(position, insertionPosition, insertion, metric
       position.line === insertionPosition.line
         ? metrics.finalLineLength + position.column - insertionPosition.column
         : position.column,
-  }
+  };
 }
 
 function isGeneratedPosition(position) {
@@ -300,16 +300,16 @@ function isGeneratedPosition(position) {
     position.line >= 0 &&
     Number.isInteger(position.column) &&
     position.column >= 0
-  )
+  );
 }
 
 function offsetFlatSourceMap(sourceMap, insertionPosition, insertion, metrics) {
   if (sourceMap.mappings === "") {
-    return sourceMap
+    return sourceMap;
   }
 
-  const mappings = decode(sourceMap.mappings)
-  const shifted = Array.from({ length: mappings.length + metrics.addedLines }, () => [])
+  const mappings = decode(sourceMap.mappings);
+  const shifted = Array.from({ length: mappings.length + metrics.addedLines }, () => []);
 
   for (const [lineIndex, segments] of mappings.entries()) {
     for (const segment of segments) {
@@ -317,33 +317,33 @@ function offsetFlatSourceMap(sourceMap, insertionPosition, insertion, metrics) {
         { line: lineIndex, column: segment[0] },
         insertionPosition,
         insertion,
-        metrics
-      )
-      const shiftedSegment = [...segment]
-      shiftedSegment[0] = position.column
-      shifted[position.line].push(shiftedSegment)
+        metrics,
+      );
+      const shiftedSegment = [...segment];
+      shiftedSegment[0] = position.column;
+      shifted[position.line].push(shiftedSegment);
     }
   }
 
-  return { ...sourceMap, mappings: encode(shifted) }
+  return { ...sourceMap, mappings: encode(shifted) };
 }
 
 function offsetIndexedSourceMap(sourceMap, insertionPosition, insertion, metrics) {
-  const sections = sourceMap.sections
+  const sections = sourceMap.sections;
   if (!sections.every((section) => section && isGeneratedPosition(section.offset))) {
-    return sourceMap
+    return sourceMap;
   }
 
-  let activeSectionIndex = -1
+  let activeSectionIndex = -1;
   for (const [sectionIndex, section] of sections.entries()) {
     // A section starting exactly at the insertion belongs to the original body
     // and moves with it; only the preceding section can span the insertion.
     if (compareGeneratedPositions(section.offset, insertionPosition) < 0) {
-      activeSectionIndex = sectionIndex
+      activeSectionIndex = sectionIndex;
     }
   }
 
-  let changed = false
+  let changed = false;
   const shiftedSections = sections.map((section, sectionIndex) => {
     if (sectionIndex === activeSectionIndex) {
       const localInsertionPosition = {
@@ -352,88 +352,93 @@ function offsetIndexedSourceMap(sourceMap, insertionPosition, insertion, metrics
           insertionPosition.line === section.offset.line
             ? insertionPosition.column - section.offset.column
             : insertionPosition.column,
-      }
-      const map = offsetSourceMapAtPosition(section.map, localInsertionPosition, insertion, metrics)
+      };
+      const map = offsetSourceMapAtPosition(
+        section.map,
+        localInsertionPosition,
+        insertion,
+        metrics,
+      );
       if (map !== section.map) {
-        changed = true
-        return { ...section, map }
+        changed = true;
+        return { ...section, map };
       }
-      return section
+      return section;
     }
 
     if (compareGeneratedPositions(section.offset, insertionPosition) >= 0) {
-      changed = true
+      changed = true;
       return {
         ...section,
         offset: shiftedGeneratedPosition(section.offset, insertionPosition, insertion, metrics),
-      }
+      };
     }
-    return section
-  })
+    return section;
+  });
 
-  return changed ? { ...sourceMap, sections: shiftedSections } : sourceMap
+  return changed ? { ...sourceMap, sections: shiftedSections } : sourceMap;
 }
 
 function offsetSourceMapAtPosition(sourceMap, insertionPosition, insertion, metrics) {
   if (!sourceMap || typeof sourceMap !== "object") {
-    return sourceMap
+    return sourceMap;
   }
   if (typeof sourceMap.mappings === "string") {
-    return offsetFlatSourceMap(sourceMap, insertionPosition, insertion, metrics)
+    return offsetFlatSourceMap(sourceMap, insertionPosition, insertion, metrics);
   }
   if (Array.isArray(sourceMap.sections)) {
-    return offsetIndexedSourceMap(sourceMap, insertionPosition, insertion, metrics)
+    return offsetIndexedSourceMap(sourceMap, insertionPosition, insertion, metrics);
   }
-  return sourceMap
+  return sourceMap;
 }
 
 function offsetSourceMapForInsertion(sourceMap, insertionOffset, insertion) {
   if (insertion.length === 0) {
-    return sourceMap
+    return sourceMap;
   }
   return offsetSourceMapAtPosition(
     sourceMap,
     generatedPositionForText(insertionOffset.source),
     insertion,
-    insertionMetrics(insertion)
-  )
+    insertionMetrics(insertion),
+  );
 }
 
 function prependClientMessageBootstrap(code, bootstrap) {
-  const insertionIndex = directivePrologueEnd(code)
-  const prefix = code.slice(0, insertionIndex)
-  const insertion = `${prefix.length > 0 && !prefix.endsWith("\n") ? "\n" : ""}${bootstrap}`
+  const insertionIndex = directivePrologueEnd(code);
+  const prefix = code.slice(0, insertionIndex);
+  const insertion = `${prefix.length > 0 && !prefix.endsWith("\n") ? "\n" : ""}${bootstrap}`;
 
   return {
     code: `${prefix}${insertion}${code.slice(insertionIndex)}`,
     insertion: { source: prefix, value: insertion },
-  }
+  };
 }
 
 function relativeImport(fromFile, targetFile) {
-  let relative = normalizePath(path.relative(path.dirname(fromFile), targetFile))
+  let relative = normalizePath(path.relative(path.dirname(fromFile), targetFile));
   if (!relative.startsWith(".")) {
-    relative = `./${relative}`
+    relative = `./${relative}`;
   }
-  return relative
+  return relative;
 }
 
 function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatchedRegistration) {
-  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
+  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds);
   const modulePath = normalizePath(
-    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
-  )
-  const moduleKey = createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
+    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
+  );
+  const moduleKey = createHash("sha256").update(modulePath).digest("hex").slice(0, 12);
   if (!importsByCatalog) {
     if (!clearUnmatchedRegistration) {
-      return null
+      return null;
     }
     return {
       code:
         `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime";\n` +
         `registerMessageLoaderGroup(${JSON.stringify(moduleKey)}, []);\n`,
       matchesCatalog: false,
-    }
+    };
   }
 
   const registrations =
@@ -443,11 +448,11 @@ function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatch
           const loaders = imports
             .map(
               ({ locale, specifier }) =>
-                `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
+                `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`,
             )
-            .join(", ")
-          return `{ ${loaders} }`
-        })
+            .join(", ");
+          return `{ ${loaders} }`;
+        });
 
   return {
     code:
@@ -455,13 +460,13 @@ function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatch
       `const __pmds_releaseMessageLoaders = registerMessageLoaderGroup(${JSON.stringify(moduleKey)}, [${registrations.join(", ")}]);\n` +
       `if (import.meta.webpackHot) import.meta.webpackHot.dispose(__pmds_releaseMessageLoaders);\n`,
     matchesCatalog: true,
-  }
+  };
 }
 
 module.exports = function palamedesLoader(source, inputSourceMap) {
-  const callback = this.async ? this.async() : null
-  const options = typeof this.getOptions === "function" ? this.getOptions() : {}
-  let result
+  const callback = this.async ? this.async() : null;
+  const options = typeof this.getOptions === "function" ? this.getOptions() : {};
+  let result;
 
   try {
     result = transformPalamedesMacros(String(source), this.resourcePath, {
@@ -470,67 +475,71 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
       stripNonEssentialProps: options.stripNonEssentialProps,
       serverFunctions: options.serverFunctions,
       sourceMap: this.sourceMap,
-    })
+    });
   } catch (error) {
     if (callback) {
-      callback(error)
-      return
+      callback(error);
+      return;
     }
-    throw error
+    throw error;
   }
 
-  const serverMessageSplitting = options.serverMessageSplitting === true
-  const clientMessageSplitting = options.clientMessageSplitting === true
-  const clearsServerRegistration = serverMessageSplitting && process.env.NODE_ENV !== "production"
+  const serverMessageSplitting = options.serverMessageSplitting === true;
+  const clientMessageSplitting = options.clientMessageSplitting === true;
+  const clearsServerRegistration = serverMessageSplitting && process.env.NODE_ENV !== "production";
   if (
     (!serverMessageSplitting && !clientMessageSplitting) ||
     !Array.isArray(result.compiledIds) ||
     (!result.compiledIds?.length && !clearsServerRegistration)
   ) {
     if (callback) {
-      callback(null, result.code, result.map ?? inputSourceMap ?? null)
-      return
+      callback(null, result.code, result.map ?? inputSourceMap ?? null);
+      return;
     }
-    return result.code
+    return result.code;
   }
 
   try {
     const config = loadConfigCachedSync(
       options.configPath,
       loadPalamedesConfigSync,
-      resolveLoaderCwd(this, options)
-    )
+      resolveLoaderCwd(this, options),
+    );
     if (typeof this.addDependency === "function" && config.configPath) {
       const dependencies = Array.isArray(config.configDependencies)
         ? config.configDependencies
-        : [config.configPath]
-      dependencies.forEach((dependency) => this.addDependency(dependency))
+        : [config.configPath];
+      dependencies.forEach((dependency) => this.addDependency(dependency));
     } else {
-      warnMissingAddDependency(this)
+      warnMissingAddDependency(this);
     }
     const registration = serverMessageSplitting
       ? messageLoaderRegistration(
           config,
           this.resourcePath,
           result.compiledIds,
-          clearsServerRegistration
+          clearsServerRegistration,
         )
       : clientMessageBootstrap(
           config,
           this.resourcePath,
           result.compiledIds,
-          options.clientFragmentFailureMode === "degrade" ? "degrade" : "throw"
-        )
-    let code = result.code
-    let sourceMap = result.map ?? inputSourceMap ?? null
+          options.clientFragmentFailureMode === "degrade" ? "degrade" : "throw",
+        );
+    let code = result.code;
+    let sourceMap = result.map ?? inputSourceMap ?? null;
     if (registration) {
-      const registrationCode = serverMessageSplitting ? registration.code : registration
+      const registrationCode = serverMessageSplitting ? registration.code : registration;
       if (clientMessageSplitting) {
-        const output = prependClientMessageBootstrap(code, registrationCode)
-        code = output.code
-        sourceMap = offsetSourceMapForInsertion(sourceMap, output.insertion, output.insertion.value)
+        const output = prependClientMessageBootstrap(code, registrationCode);
+        code = output.code;
+        sourceMap = offsetSourceMapForInsertion(
+          sourceMap,
+          output.insertion,
+          output.insertion.value,
+        );
       } else {
-        code += registrationCode
+        code += registrationCode;
       }
     }
     if (
@@ -541,26 +550,26 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     ) {
       this.emitWarning(
         new Error(
-          `Palamedes Server Function message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
-        )
-      )
+          `Palamedes Server Function message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`,
+        ),
+      );
     } else if (!registration && typeof this.emitWarning === "function") {
       this.emitWarning(
         new Error(
-          `Palamedes client graph message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
-        )
-      )
+          `Palamedes client graph message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`,
+        ),
+      );
     }
     if (callback) {
-      callback(null, code, sourceMap)
-      return
+      callback(null, code, sourceMap);
+      return;
     }
-    return code
+    return code;
   } catch (error) {
     if (callback) {
-      callback(error)
-      return
+      callback(error);
+      return;
     }
-    throw error
+    throw error;
   }
-}
+};

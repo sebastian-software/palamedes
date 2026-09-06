@@ -10,9 +10,6 @@
     "start": "node .output/server/index.mjs",
     "extract": "pmds extract"
   },
-  "engines": {
-    "node": ">=24"
-  },
   "dependencies": {
     "@palamedes/core": "workspace:^",
     "@palamedes/example-ui": "workspace:^",
@@ -31,5 +28,8 @@
     "filesystem-routing": "0.2.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

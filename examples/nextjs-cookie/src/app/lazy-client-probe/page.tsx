@@ -1,5 +1,5 @@
-import { LazyClientProbe } from "./LazyClientProbe"
+import { LazyClientProbe } from "./LazyClientProbe";
 
 export default function LazyClientProbePage() {
-  return <LazyClientProbe />
+  return <LazyClientProbe />;
 }

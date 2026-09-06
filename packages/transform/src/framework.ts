@@ -14,7 +14,7 @@
  *
  * This selects component and MDX compilation contracts only.
  */
-export type PalamedesFramework = "react" | "solid" | "none"
+export type PalamedesFramework = "react" | "solid" | "none";
 
 /**
  * Resolve the module the macro transform imports the runtime getter from.
@@ -22,7 +22,7 @@ export type PalamedesFramework = "react" | "solid" | "none"
  * An explicit `runtimeModule` always wins, preserving advanced custom bindings.
  */
 export function resolveMacroRuntimeModule(runtimeModule?: string): string {
-  return runtimeModule ?? "@palamedes/runtime"
+  return runtimeModule ?? "@palamedes/runtime";
 }
 
 /**
@@ -30,5 +30,5 @@ export function resolveMacroRuntimeModule(runtimeModule?: string): string {
  * is not compiling for a UI framework and MDX should keep its own default.
  */
 export function mdxFrameworkFor(framework: PalamedesFramework): "react" | "solid" | undefined {
-  return framework === "none" ? undefined : framework
+  return framework === "none" ? undefined : framework;
 }

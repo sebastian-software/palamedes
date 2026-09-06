@@ -1,8 +1,8 @@
-import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import test from "node:test"
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
 
 import {
   assertSameExports,
@@ -10,7 +10,7 @@ import {
   collectExports,
   renderExportBlock,
   replaceExportBlock,
-} from "./check-core-api-reference.mjs"
+} from "./check-core-api-reference.mjs";
 
 test("includes direct type declarations in the public API inventory", () => {
   assert.deepEqual(
@@ -23,9 +23,9 @@ test("includes direct type declarations in the public API inventory", () => {
       { name: "DirectAlias", kind: "type" },
       { name: "DirectInterface", kind: "type" },
       { name: "directValue", kind: "runtime" },
-    ]
-  )
-})
+    ],
+  );
+});
 
 test("preserves aliased named export names and kinds", () => {
   assert.deepEqual(
@@ -38,61 +38,61 @@ test("preserves aliased named export names and kinds", () => {
       { name: "PublicElementType", kind: "type" },
       { name: "PublicType", kind: "type" },
       { name: "publicValue", kind: "runtime" },
-    ]
-  )
-})
+    ],
+  );
+});
 
 test("rejects root export forms it cannot inventory", () => {
-  assert.throws(() => collectExports('export * from "./other"'), /unsupported public export form/)
+  assert.throws(() => collectExports('export * from "./other"'), /unsupported public export form/);
   assert.throws(
     () => collectExports('export * as namespaceExport from "./other"'),
-    /unsupported public export form/
-  )
+    /unsupported public export form/,
+  );
   assert.throws(
     () => collectExports("export default function named() {}"),
-    /unsupported public export form/
-  )
-  assert.throws(() => collectExports("export default {}"), /unsupported public export form/)
+    /unsupported public export form/,
+  );
+  assert.throws(() => collectExports("export default {}"), /unsupported public export form/);
   assert.throws(
     () => collectExports('export import legacy = require("./other")'),
-    /unsupported public export form/
-  )
+    /unsupported public export form/,
+  );
   assert.throws(
     () => collectExports("export const { publicValue } = source"),
-    /unsupported public export form/
-  )
+    /unsupported public export form/,
+  );
   assert.throws(
     () => collectExports("export const [publicValue] = source"),
-    /unsupported public export form/
-  )
-})
+    /unsupported public export form/,
+  );
+});
 
 test("rejects declaration kind drift that would break a runtime import", (context) => {
-  const directory = mkdtempSync(path.join(os.tmpdir(), "palamedes-core-api-kind-"))
-  context.after(() => rmSync(directory, { recursive: true, force: true }))
-  const declarationPath = path.join(directory, "index.d.mts")
-  const expected = [{ name: "createI18n", kind: "runtime" }]
+  const directory = mkdtempSync(path.join(os.tmpdir(), "palamedes-core-api-kind-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const declarationPath = path.join(directory, "index.d.mts");
+  const expected = [{ name: "createI18n", kind: "runtime" }];
 
-  writeFileSync(declarationPath, "declare function createI18n(): void; export { createI18n };\n")
-  assert.deepEqual(collectDeclarationExports(declarationPath), expected)
+  writeFileSync(declarationPath, "declare function createI18n(): void; export { createI18n };\n");
+  assert.deepEqual(collectDeclarationExports(declarationPath), expected);
 
   writeFileSync(
     declarationPath,
-    "declare function createI18n(): void; export type { createI18n };\n"
-  )
-  const drifted = collectDeclarationExports(declarationPath)
-  assert.deepEqual(drifted, [{ name: "createI18n", kind: "type" }])
+    "declare function createI18n(): void; export type { createI18n };\n",
+  );
+  const drifted = collectDeclarationExports(declarationPath);
+  assert.deepEqual(drifted, [{ name: "createI18n", kind: "type" }]);
   assert.throws(
     () => assertSameExports(expected, drifted, declarationPath),
-    /createI18n is type, expected runtime/u
-  )
-})
+    /createI18n is type, expected runtime/u,
+  );
+});
 
 test("renders an Oxfmt-compatible root export block idempotently", () => {
   const block = renderExportBlock([
     { name: "buildChoiceMessage", kind: "runtime" },
     { name: "ChoiceComponentProps", kind: "type" },
-  ])
+  ]);
 
   assert.equal(
     block,
@@ -106,16 +106,16 @@ test("renders an Oxfmt-compatible root export block idempotently", () => {
       "| `ChoiceComponentProps` | Type-only |",
       "",
       "<!-- core-root-exports:end -->",
-    ].join("\n")
-  )
-  assert.equal(replaceExportBlock(block, block), block)
-})
+    ].join("\n"),
+  );
+  assert.equal(replaceExportBlock(block, block), block);
+});
 
 test("renders and replaces an independently marked subpath export block", () => {
-  const marker = "core-compiled-exports"
-  const block = renderExportBlock([{ name: "createI18n", kind: "runtime" }], marker)
-  const docs = `Before\n\n<!-- ${marker}:start -->\nstale\n<!-- ${marker}:end -->\n\nAfter`
+  const marker = "core-compiled-exports";
+  const block = renderExportBlock([{ name: "createI18n", kind: "runtime" }], marker);
+  const docs = `Before\n\n<!-- ${marker}:start -->\nstale\n<!-- ${marker}:end -->\n\nAfter`;
 
-  assert.match(block, /<!-- core-compiled-exports:start -->/u)
-  assert.equal(replaceExportBlock(docs, block, marker), `Before\n\n${block}\n\nAfter`)
-})
+  assert.match(block, /<!-- core-compiled-exports:start -->/u);
+  assert.equal(replaceExportBlock(docs, block, marker), `Before\n\n${block}\n\nAfter`);
+});

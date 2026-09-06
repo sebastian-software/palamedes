@@ -248,24 +248,24 @@ pnpm add -D @solidjs/vite-plugin
 
 ```ts
 // vite.config.ts (React)
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes(), react()],
-})
+});
 ```
 
 ```ts
 // vite.config.ts (Solid)
-import { defineConfig } from "vite"
-import solid from "@solidjs/vite-plugin"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import solid from "@solidjs/vite-plugin";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
-})
+});
 ```
 
 ```yaml
@@ -279,19 +279,19 @@ catalogs:
 
 ```ts
 // src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core/compiled";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
-setClientI18n(i18n)
+const i18n = createI18n();
+setClientI18n(i18n);
 ```
 
 ```ts
 // src/po.d.ts
 declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 
-  export const messages: CompiledCatalogMessages
+  export const messages: CompiledCatalogMessages;
 }
 ```
 

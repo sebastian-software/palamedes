@@ -1,13 +1,13 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { createLargeCatalogFixture } from "../benchmarks/large-catalog/fixture.mjs"
+import { createLargeCatalogFixture } from "../benchmarks/large-catalog/fixture.mjs";
 
-const __dirname = import.meta.dirname
-const repoRoot = path.resolve(__dirname, "..")
-const fixtureRoot = path.join(repoRoot, "benchmarks", "proof-fixtures")
+const __dirname = import.meta.dirname;
+const repoRoot = path.resolve(__dirname, "..");
+const fixtureRoot = path.join(repoRoot, "benchmarks", "proof-fixtures");
 
 const fixtureFiles = [
   path.join(fixtureRoot, "src", "client-app.tsx"),
@@ -15,7 +15,7 @@ const fixtureFiles = [
   path.join(fixtureRoot, "src", "server-page.tsx"),
   path.join(fixtureRoot, "src", "counter-widget.tsx"),
   path.join(fixtureRoot, "src", "locale-switcher.tsx"),
-]
+];
 
 const catalogShape = {
   locales: ["en", "de"],
@@ -26,11 +26,11 @@ const catalogShape = {
       include: ["src"],
     },
   ],
-}
+};
 
 const coreNode = await import(
   pathToFileURL(path.join(repoRoot, "packages", "core-node", "dist", "index.mjs")).href
-)
+);
 
 const {
   analyzeSourceNative,
@@ -39,17 +39,17 @@ const {
   getNativeInfo,
   transformMacrosNative,
   updateCatalogFile,
-} = coreNode
+} = coreNode;
 
 function parseArg(name, fallback) {
-  const index = process.argv.indexOf(`--${name}`)
-  if (index === -1) return fallback
-  const value = Number(process.argv[index + 1])
-  return Number.isFinite(value) ? value : fallback
+  const index = process.argv.indexOf(`--${name}`);
+  if (index === -1) return fallback;
+  const value = Number(process.argv[index + 1]);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function formatBytes(bytes) {
-  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 }
 
 async function loadFixtures() {
@@ -57,16 +57,16 @@ async function loadFixtures() {
     fixtureFiles.map(async (filename) => ({
       filename,
       source: await readFile(filename, "utf8"),
-    }))
-  )
+    })),
+  );
 }
 
 async function collectMessages(fixtures) {
-  const deduped = new Map()
+  const deduped = new Map();
 
   for (const fixture of fixtures) {
     for (const message of extractMessagesNative(fixture.source, fixture.filename)) {
-      const key = `${message.context ?? ""}\u0000${message.message}`
+      const key = `${message.context ?? ""}\u0000${message.message}`;
       if (!deduped.has(key)) {
         deduped.set(key, {
           message: message.message,
@@ -78,41 +78,41 @@ async function collectMessages(fixtures) {
               line: message.origin[1],
             },
           ],
-        })
+        });
       }
     }
   }
 
-  return [...deduped.values()]
+  return [...deduped.values()];
 }
 
 async function benchmark(name, fn, warmup, runs) {
-  let peakRssBytes = process.memoryUsage().rss
+  let peakRssBytes = process.memoryUsage().rss;
 
   for (let i = 0; i < warmup; i += 1) {
-    await fn()
-    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss)
+    await fn();
+    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss);
   }
 
-  const samples = []
+  const samples = [];
 
   for (let i = 0; i < runs; i += 1) {
-    const start = process.hrtime.bigint()
-    await fn()
-    const end = process.hrtime.bigint()
-    samples.push(Number(end - start) / 1_000_000)
-    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss)
+    const start = process.hrtime.bigint();
+    await fn();
+    const end = process.hrtime.bigint();
+    samples.push(Number(end - start) / 1_000_000);
+    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss);
   }
 
-  samples.sort((a, b) => a - b)
-  const median = samples[Math.floor(samples.length / 2)]
+  samples.sort((a, b) => a - b);
+  const median = samples[Math.floor(samples.length / 2)];
 
   return {
     name,
     medianMs: median,
     samplesMs: samples,
     peakRssBytes,
-  }
+  };
 }
 
 function writeCatalogs({ benchmarkLocaleDir, compileResourcePath, messages }) {
@@ -122,7 +122,7 @@ function writeCatalogs({ benchmarkLocaleDir, compileResourcePath, messages }) {
     sourceLocale: "en",
     clean: true,
     messages,
-  })
+  });
 
   updateCatalogFile({
     targetPath: compileResourcePath,
@@ -130,7 +130,7 @@ function writeCatalogs({ benchmarkLocaleDir, compileResourcePath, messages }) {
     sourceLocale: "en",
     clean: true,
     messages,
-  })
+  });
 }
 
 function printResults(results) {
@@ -138,208 +138,208 @@ function printResults(results) {
     console.log(
       `- ${result.name}: median ${result.medianMs.toFixed(2)} ms; sampled peak RSS ${formatBytes(result.peakRssBytes)} (${result.samplesMs
         .map((value) => value.toFixed(2))
-        .join(", ")})`
-    )
+        .join(", ")})`,
+    );
   }
 }
 
 async function runLargeCatalogBenchmark({ messageCount, sourceFileCount, warmup, runs, tempDir }) {
   if (messageCount <= 0) {
-    return
+    return;
   }
 
-  const largeFixture = createLargeCatalogFixture({ messageCount, sourceFileCount })
-  const benchmarkRoot = path.join(tempDir, "large-fixture")
-  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales")
-  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po")
-  const updateTargetPath = path.join(tempDir, "de-large-update.po")
-  const totalBytes = largeFixture.fixtures.reduce((sum, fixture) => sum + fixture.source.length, 0)
+  const largeFixture = createLargeCatalogFixture({ messageCount, sourceFileCount });
+  const benchmarkRoot = path.join(tempDir, "large-fixture");
+  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales");
+  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po");
+  const updateTargetPath = path.join(tempDir, "de-large-update.po");
+  const totalBytes = largeFixture.fixtures.reduce((sum, fixture) => sum + fixture.source.length, 0);
 
-  await mkdir(benchmarkLocaleDir, { recursive: true })
+  await mkdir(benchmarkLocaleDir, { recursive: true });
   writeCatalogs({
     benchmarkLocaleDir,
     compileResourcePath,
     messages: largeFixture.messages,
-  })
+  });
 
-  const baselineCatalog = await readFile(compileResourcePath, "utf8")
+  const baselineCatalog = await readFile(compileResourcePath, "utf8");
   const catalogConfig = {
     ...catalogShape,
     rootDir: benchmarkRoot,
-  }
+  };
 
   const transformResult = await benchmark(
     "large-transform",
     () => {
       for (const fixture of largeFixture.fixtures) {
-        transformMacrosNative(fixture.source, fixture.filename)
+        transformMacrosNative(fixture.source, fixture.filename);
       }
     },
     warmup,
-    runs
-  )
+    runs,
+  );
 
   const extractResult = await benchmark(
     "large-extract",
     () => {
       for (const fixture of largeFixture.fixtures) {
-        extractMessagesNative(fixture.source, fixture.filename)
+        extractMessagesNative(fixture.source, fixture.filename);
       }
     },
     warmup,
-    runs
-  )
+    runs,
+  );
 
   const analyzeResult = await benchmark(
     "large-source-analysis",
     () => {
       for (const fixture of largeFixture.fixtures) {
-        analyzeSourceNative(fixture.source, fixture.filename)
+        analyzeSourceNative(fixture.source, fixture.filename);
       }
     },
     warmup,
-    runs
-  )
+    runs,
+  );
 
   const updateResult = await benchmark(
     "large-catalog-update",
     async () => {
-      await writeFile(updateTargetPath, baselineCatalog, "utf8")
+      await writeFile(updateTargetPath, baselineCatalog, "utf8");
       updateCatalogFile({
         targetPath: updateTargetPath,
         locale: "de",
         sourceLocale: "en",
         clean: false,
         messages: largeFixture.messages,
-      })
+      });
     },
     warmup,
-    runs
-  )
+    runs,
+  );
 
   const artifactResult = await benchmark(
     "large-catalog-artifact-compile",
     async () => {
-      compileCatalogArtifact(catalogConfig, compileResourcePath)
+      compileCatalogArtifact(catalogConfig, compileResourcePath);
     },
     warmup,
-    runs
-  )
+    runs,
+  );
 
-  console.log("")
-  console.log("## Large Catalog Fixture")
-  console.log("")
+  console.log("");
+  console.log("## Large Catalog Fixture");
+  console.log("");
   console.log(
-    `Generated: ${largeFixture.messageCount} messages across ${largeFixture.sourceFileCount} source files, ${totalBytes} source bytes`
-  )
-  console.log("Fixture generator: benchmarks/large-catalog/fixture.mjs")
-  console.log("")
-  printResults([transformResult, extractResult, analyzeResult, updateResult, artifactResult])
+    `Generated: ${largeFixture.messageCount} messages across ${largeFixture.sourceFileCount} source files, ${totalBytes} source bytes`,
+  );
+  console.log("Fixture generator: benchmarks/large-catalog/fixture.mjs");
+  console.log("");
+  printResults([transformResult, extractResult, analyzeResult, updateResult, artifactResult]);
 }
 
 async function main() {
-  const warmup = parseArg("warmup", 3)
-  const runs = parseArg("runs", 7)
-  const largeMessages = parseArg("large-messages", 0)
-  const largeSourceFiles = parseArg("large-source-files", 20)
-  const fixtures = await loadFixtures()
-  const messages = await collectMessages(fixtures)
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "palamedes-bench-"))
-  const benchmarkRoot = path.join(tempDir, "fixture")
-  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales")
-  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po")
-  const updateTargetPath = path.join(tempDir, "de-update.po")
+  const warmup = parseArg("warmup", 3);
+  const runs = parseArg("runs", 7);
+  const largeMessages = parseArg("large-messages", 0);
+  const largeSourceFiles = parseArg("large-source-files", 20);
+  const fixtures = await loadFixtures();
+  const messages = await collectMessages(fixtures);
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "palamedes-bench-"));
+  const benchmarkRoot = path.join(tempDir, "fixture");
+  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales");
+  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po");
+  const updateTargetPath = path.join(tempDir, "de-update.po");
 
-  await mkdir(benchmarkLocaleDir, { recursive: true })
+  await mkdir(benchmarkLocaleDir, { recursive: true });
 
   writeCatalogs({
     benchmarkLocaleDir,
     compileResourcePath,
     messages,
-  })
+  });
 
-  const baselineCatalog = await readFile(compileResourcePath, "utf8")
+  const baselineCatalog = await readFile(compileResourcePath, "utf8");
   const catalogConfig = {
     ...catalogShape,
     rootDir: benchmarkRoot,
-  }
+  };
 
   try {
     const transformResult = await benchmark(
       "transform",
       () => {
         for (const fixture of fixtures) {
-          transformMacrosNative(fixture.source, fixture.filename)
+          transformMacrosNative(fixture.source, fixture.filename);
         }
       },
       warmup,
-      runs
-    )
+      runs,
+    );
 
     const extractResult = await benchmark(
       "extract",
       () => {
         for (const fixture of fixtures) {
-          extractMessagesNative(fixture.source, fixture.filename)
+          extractMessagesNative(fixture.source, fixture.filename);
         }
       },
       warmup,
-      runs
-    )
+      runs,
+    );
 
     const analyzeResult = await benchmark(
       "source-analysis",
       () => {
         for (const fixture of fixtures) {
-          analyzeSourceNative(fixture.source, fixture.filename)
+          analyzeSourceNative(fixture.source, fixture.filename);
         }
       },
       warmup,
-      runs
-    )
+      runs,
+    );
 
     const updateResult = await benchmark(
       "catalog-update",
       async () => {
-        await writeFile(updateTargetPath, baselineCatalog, "utf8")
+        await writeFile(updateTargetPath, baselineCatalog, "utf8");
         updateCatalogFile({
           targetPath: updateTargetPath,
           locale: "de",
           sourceLocale: "en",
           clean: false,
           messages,
-        })
+        });
       },
       warmup,
-      runs
-    )
+      runs,
+    );
 
     const artifactResult = await benchmark(
       "catalog-artifact-compile",
       async () => {
-        compileCatalogArtifact(catalogConfig, compileResourcePath)
+        compileCatalogArtifact(catalogConfig, compileResourcePath);
       },
       warmup,
-      runs
-    )
+      runs,
+    );
 
-    const nativeInfo = getNativeInfo()
-    const totalBytes = fixtures.reduce((sum, fixture) => sum + fixture.source.length, 0)
+    const nativeInfo = getNativeInfo();
+    const totalBytes = fixtures.reduce((sum, fixture) => sum + fixture.source.length, 0);
 
-    console.log("# Palamedes Benchmark Proof")
-    console.log("")
-    console.log(`Node: ${process.version}`)
-    console.log(`Platform: ${process.platform}/${process.arch}`)
-    console.log(`Palamedes core: ${nativeInfo.palamedesVersion}`)
-    console.log(`Ferrocat: ${nativeInfo.ferrocatVersion}`)
-    console.log(`Fixtures: ${fixtures.length} files, ${totalBytes} source bytes`)
-    console.log(`Catalog messages for update: ${messages.length}`)
-    console.log(`Large catalog messages: ${largeMessages > 0 ? largeMessages : "disabled"}`)
-    console.log(`Warmup: ${warmup}`)
-    console.log(`Runs: ${runs}`)
-    console.log("")
+    console.log("# Palamedes Benchmark Proof");
+    console.log("");
+    console.log(`Node: ${process.version}`);
+    console.log(`Platform: ${process.platform}/${process.arch}`);
+    console.log(`Palamedes core: ${nativeInfo.palamedesVersion}`);
+    console.log(`Ferrocat: ${nativeInfo.ferrocatVersion}`);
+    console.log(`Fixtures: ${fixtures.length} files, ${totalBytes} source bytes`);
+    console.log(`Catalog messages for update: ${messages.length}`);
+    console.log(`Large catalog messages: ${largeMessages > 0 ? largeMessages : "disabled"}`);
+    console.log(`Warmup: ${warmup}`);
+    console.log(`Runs: ${runs}`);
+    console.log("");
 
-    printResults([transformResult, extractResult, analyzeResult, updateResult, artifactResult])
+    printResults([transformResult, extractResult, analyzeResult, updateResult, artifactResult]);
 
     await runLargeCatalogBenchmark({
       messageCount: largeMessages,
@@ -347,13 +347,13 @@ async function main() {
       warmup,
       runs,
       tempDir,
-    })
+    });
   } finally {
-    await rm(tempDir, { recursive: true, force: true })
+    await rm(tempDir, { recursive: true, force: true });
   }
 }
 
 main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+  console.error(error);
+  process.exitCode = 1;
+});

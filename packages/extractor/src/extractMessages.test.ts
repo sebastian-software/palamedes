@@ -1,38 +1,38 @@
-import { createExtractor, extractMessages, extractor, type ExtractedMessageInfo } from "./index"
+import { createExtractor, extractMessages, extractor, type ExtractedMessageInfo } from "./index";
 
 it("matches MDX modules as first-class extraction inputs", () => {
-  expect(extractor.match("content/guide.mdx")).toBe(true)
-  expect(extractor.match("content/guide.md")).toBe(false)
-})
+  expect(extractor.match("content/guide.mdx")).toBe(true);
+  expect(extractor.match("content/guide.md")).toBe(false);
+});
 
 it("forwards configured MDX attributes and frontmatter through both public APIs", async () => {
-  const source = '---\npageTitle: Settings guide\n---\n\n<Card title="Open settings" />'
+  const source = '---\npageTitle: Settings guide\n---\n\n<Card title="Open settings" />';
   const mdx = {
     translatableAttributes: ["alt", "title"],
     frontMatterFields: ["pageTitle"],
-  }
+  };
 
-  expect(extractMessages(source, "content/guide.mdx")).toStrictEqual([])
+  expect(extractMessages(source, "content/guide.mdx")).toStrictEqual([]);
   expect(extractMessages(source, "content/guide.mdx", mdx)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ message: "Settings guide" }),
       expect.objectContaining({ message: "Open settings" }),
-    ])
-  )
+    ]),
+  );
 
-  const configured = createExtractor({ mdx })
-  const extracted: ExtractedMessageInfo[] = []
-  await configured.extract("content/guide.mdx", source, (message) => extracted.push(message))
+  const configured = createExtractor({ mdx });
+  const extracted: ExtractedMessageInfo[] = [];
+  await configured.extract("content/guide.mdx", source, (message) => extracted.push(message));
   expect(extracted).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ message: "Settings guide" }),
       expect.objectContaining({ message: "Open settings" }),
-    ])
-  )
-})
+    ]),
+  );
+});
 
 function extract(code: string) {
-  return extractMessages(code, "test.tsx")
+  return extractMessages(code, "test.tsx");
 }
 
 describe("extractMessages", () => {
@@ -53,9 +53,9 @@ describe("extractMessages", () => {
       ['import { t } from "@palamedes/core/macro"\nclass Formatter { label = t`Hello` }', "t"],
     ])("rejects top-level %s usage", (code, macroName) => {
       expect(() => extractMessages(code, "test.tsx")).toThrow(
-        new RegExp(`Translation macro \`${macroName}\` must be used inside a function`)
-      )
-    })
+        new RegExp(`Translation macro \`${macroName}\` must be used inside a function`),
+      );
+    });
 
     it("allows eager macros inside functions, methods, and callbacks", () => {
       const code = `
@@ -70,104 +70,104 @@ describe("extractMessages", () => {
         class Formatter { label() { return t\`Class method\` } }
         items.map((item) => t\`Item \${item.name}\`)
         function View() { return <Select value={kind} other="Other" /> }
-      `
+      `;
 
-      expect(() => extractMessages(code, "test.tsx")).not.toThrow()
-    })
+      expect(() => extractMessages(code, "test.tsx")).not.toThrow();
+    });
 
     it("keeps Trans safe at module scope", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const value = <Trans>Hello</Trans>
-      `
+      `;
 
-      expect(extractMessages(code, "test.tsx")).toHaveLength(1)
-    })
-  })
+      expect(extractMessages(code, "test.tsx")).toHaveLength(1);
+    });
+  });
 
   describe("JSX Trans", () => {
     it("extracts simple Trans", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello World</Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello World")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello World");
+    });
 
     it("ignores JSX comments inside Trans", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello {/* translator note */} world</Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
       expect(messages[0]).toMatchObject({
         message: "Hello world",
-      })
-    })
+      });
+    });
 
     it("extracts Trans with interpolation", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello {name}</Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello {name}")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello {name}");
+    });
 
     it("extracts Trans with nested elements", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello <b>World</b></Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello <0>World</0>")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello <0>World</0>");
+    });
 
     it("deduplicates same-tag component placeholders with different props", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">privacy</a></Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Accept <0>terms</0> and <1>privacy</1>")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Accept <0>terms</0> and <1>privacy</1>");
+    });
 
     it("uses Lingui-compatible self-closing placeholders for empty rich-text children", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>I agree to the <a href={COMMERCIAL_TERMS_URL}>Commercial Terms <ExternalLink className="inline" /></a></Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("I agree to the <0>Commercial Terms<1/></0>")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("I agree to the <0>Commercial Terms<1/></0>");
+    });
 
     it("preserves inline whitespace before self-closing placeholders with trailing text", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Foo <Icon /> bar</Trans>
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
 
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Foo <0/> bar")
-    })
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Foo <0/> bar");
+    });
 
     it("extracts Solid Trans macros with the same semantics", () => {
       const code = `
         import { Trans } from "@palamedes/solid/macro"
         const x = <Trans>Hello {name}</Trans>
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello {name}")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello {name}");
+    });
 
     it("decodes JSX entities before deriving extracted messages", () => {
       const code = `
@@ -176,14 +176,14 @@ describe("extractMessages", () => {
         const b = <Trans message="Decision &quot;Model&quot; &#x26; review" />
         const c = <Trans>{"A &amp; B"}</Trans>
         const d = <Trans message={"Literal &amp; Value"} />
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(4)
-      expect(messages[0].message).toBe("Green-e® applies to US & Canada only")
-      expect(messages[1].message).toBe('Decision "Model" & review')
-      expect(messages[2].message).toBe("A &amp; B")
-      expect(messages[3].message).toBe("Literal &amp; Value")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(4);
+      expect(messages[0].message).toBe("Green-e® applies to US & Canada only");
+      expect(messages[1].message).toBe('Decision "Model" & review');
+      expect(messages[2].message).toBe("A &amp; B");
+      expect(messages[3].message).toBe("Literal &amp; Value");
+    });
 
     it("normalizes rich-text placeholder boundary whitespace", () => {
       const code = `
@@ -197,8 +197,8 @@ describe("extractMessages", () => {
           .
         </Trans>
         const literalBraces = <Trans>{"{name}"} .</Trans>
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
 
       expect(messages.map((message) => message.message)).toStrictEqual([
         "Reach out to your <0>advisor</0> for help.",
@@ -207,23 +207,23 @@ describe("extractMessages", () => {
         "Delete <0>{selectedProjectName}</0>? This action cannot be undone.",
         "Tailored to your {volume} MWh of annual electricity use in {countryName}.",
         "{name} .",
-      ])
-    })
+      ]);
+    });
 
     it("preserves leading separator spacing", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const price = <Trans> · \${priceFormatted}/MWh</Trans>
         const manager = <Trans> — no manager</Trans>
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
 
       expect(messages.map((message) => message.message)).toStrictEqual([
         " · ${priceFormatted}/MWh",
         " — no manager",
-      ])
-    })
-  })
+      ]);
+    });
+  });
 
   describe("macro calls", () => {
     it("extracts descriptor messages", () => {
@@ -232,13 +232,13 @@ describe("extractMessages", () => {
         const one = t({ message: "Hello" })
         const two = t({ message: "Hello {name}", context: "email.subject" }, { name })
         }
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(2)
-      expect(messages[0].message).toBe("Hello")
-      expect(messages[1].message).toBe("Hello {name}")
-      expect(messages[1].context).toBe("email.subject")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(2);
+      expect(messages[0].message).toBe("Hello");
+      expect(messages[1].message).toBe("Hello {name}");
+      expect(messages[1].context).toBe("email.subject");
+    });
 
     it("extracts interpolated descriptor templates with placeholder metadata", () => {
       const code = `
@@ -249,43 +249,43 @@ describe("extractMessages", () => {
         })
         const two = t({ message: \`Locale \${resolved.locale}\` })
         }
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
 
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(2);
       expect(messages[0]).toMatchObject({
         message: "Descriptor {name}",
         context: "probe context",
         placeholders: { name: "name" },
-      })
+      });
       expect(messages[1]).toMatchObject({
         message: "Locale {locale}",
         placeholders: { locale: "resolved.locale" },
-      })
-    })
+      });
+    });
 
     it.each(["msg", "defineMessage"])("rejects removed %s imports", (macroName) => {
       const code = `import { t, ${macroName} as deferred } from "@palamedes/core/macro"
 const message = t\`Hello\`
-`
+`;
 
       expect(() => extract(code)).toThrow(
         new RegExp(
-          `Unsupported \`${macroName}\` macro usage at test\\.tsx:1:1.*deferred message macro has been removed`
-        )
-      )
-    })
+          `Unsupported \`${macroName}\` macro usage at test\\.tsx:1:1.*deferred message macro has been removed`,
+        ),
+      );
+    });
 
     it("rejects dynamic descriptor messages with a source location", () => {
       const code = `import { t } from "@palamedes/core/macro"; function message() {
 const descriptor = t({ message })
 }
-`
+`;
 
       expect(() => extract(code)).toThrow(
-        /Unsupported `t` macro usage at test\.tsx:2:20.*string literal or template literal/
-      )
-    })
+        /Unsupported `t` macro usage at test\.tsx:2:20.*string literal or template literal/,
+      );
+    });
 
     it("extracts plural and select messages", () => {
       const code = `
@@ -293,12 +293,12 @@ const descriptor = t({ message })
         const one = plural(count, { one: "# item", other: "# items" })
         const two = select(gender, { male: "He", female: "She", other: "They" })
         }
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(2)
-      expect(messages[0].message).toBe("{count, plural, one {# item} other {# items}}")
-      expect(messages[1].message).toBe("{gender, select, male {He} female {She} other {They}}")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(2);
+      expect(messages[0].message).toBe("{count, plural, one {# item} other {# items}}");
+      expect(messages[1].message).toBe("{gender, select, male {He} female {She} other {They}}");
+    });
 
     it("extracts static plural offsets and rejects invalid choice metadata", () => {
       const code = `
@@ -307,27 +307,27 @@ const descriptor = t({ message })
         const call = plural(count, { offset: 1, one: "# item", other: "# items" })
         const jsx = <Plural value={count} offset={1} one="# item" other="# items" />
         }
-      `
+      `;
 
       expect(extract(code).map((message) => message.message)).toStrictEqual([
         "{count, plural, offset:1 one {# item} other {# items}}",
         "{count, plural, offset:1 one {# item} other {# items}}",
-      ])
+      ]);
       expect(() =>
         extract(`
           import { plural } from "@palamedes/core/macro"; function messages() {
           plural(count, { offset: dynamicOffset, one: "# item", other: "# items" })
           }
-        `)
-      ).toThrow(/`offset` must be a static non-negative integer/)
+        `),
+      ).toThrow(/`offset` must be a static non-negative integer/);
       expect(() =>
         extract(`
           import { plural } from "@palamedes/core/macro"; function messages() {
           plural(count, { invalid: "broken", other: "# items" })
           }
-        `)
-      ).toThrow(/`invalid` is not a valid plural category/)
-    })
+        `),
+      ).toThrow(/`invalid` is not a valid plural category/);
+    });
 
     it("extracts interpolated plural branches with placeholder metadata", () => {
       const code = `
@@ -343,48 +343,48 @@ const descriptor = t({ message })
           other={\`# items will be archived because \${planLabel} allows a maximum of \${max}\`}
         />
         }
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
       const expected =
-        "{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}"
+        "{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}";
 
-      expect(messages.map((message) => message.message)).toStrictEqual([expected, expected])
+      expect(messages.map((message) => message.message)).toStrictEqual([expected, expected]);
       expect(messages.map((message) => message.placeholders)).toStrictEqual([
         { max: "max", planLabel: "planLabel" },
         { max: "max", planLabel: "planLabel" },
-      ])
-    })
-  })
+      ]);
+    });
+  });
 
   describe("runtime calls", () => {
     it("extracts i18n._ string authoring as source message", () => {
       const code = `
         const x = i18n._("Hello World")
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello World")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello World");
+    });
 
     it("prefers descriptor message for transformed runtime output", () => {
       const code = `
         const x = i18n._("compiled-id", { name }, { message: "Hello {name}", context: "greeting" })
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello {name}")
-      expect(messages[0].context).toBe("greeting")
-    })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello {name}");
+      expect(messages[0].context).toBe("greeting");
+    });
 
     it("extracts i18n.t tagged templates as source messages", () => {
       const code = `
         const x = i18n.t\`Hello World\`
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello World")
-    })
-  })
+      `;
+      const messages = extract(code);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello World");
+    });
+  });
 
   describe("placeholder metadata", () => {
     it("keeps source expressions for template literal placeholder hints", () => {
@@ -392,17 +392,17 @@ const descriptor = t({ message })
         import { t } from "@palamedes/core/macro"; function message() {
         const message = t\`Hello \${name}, \${resolved.locale}\`
         }
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
 
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello {name}, {locale}")
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello {name}, {locale}");
       expect(messages[0].placeholders).toStrictEqual({
         name: "name",
         locale: "resolved.locale",
-      })
-    })
-  })
+      });
+    });
+  });
 
   describe("source extractor", () => {
     it("extracts directly from source without a caller-provided AST", async () => {
@@ -411,20 +411,20 @@ const descriptor = t({ message })
         function message() {
           return t\`Hello \${name}\`
         }
-      `
-      const messages: ExtractedMessageInfo[] = []
+      `;
+      const messages: ExtractedMessageInfo[] = [];
 
       await extractor.extract("test.ts", code, (message) => {
-        messages.push(message)
-      })
+        messages.push(message);
+      });
 
-      expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello {name}")
+      expect(messages).toHaveLength(1);
+      expect(messages[0].message).toBe("Hello {name}");
       expect(messages[0].placeholders).toStrictEqual({
         name: "name",
-      })
-      expect(messages[0].origin[0]).toBe("test.ts")
-    })
+      });
+      expect(messages[0].origin[0]).toBe("test.ts");
+    });
 
     it("exposes stable origin scope when extraction finds a named container", async () => {
       const code = `
@@ -432,17 +432,17 @@ const descriptor = t({ message })
         export function CheckoutButton() {
           return <Trans>Start checkout</Trans>
         }
-      `
-      const messages: ExtractedMessageInfo[] = []
+      `;
+      const messages: ExtractedMessageInfo[] = [];
 
       await extractor.extract("test.tsx", code, (message) => {
-        messages.push(message)
-      })
+        messages.push(message);
+      });
 
-      expect(messages).toHaveLength(1)
-      expect(messages[0].origin[0]).toBe("test.tsx")
-      expect(messages[0].origin.scope).toBe("CheckoutButton")
-    })
+      expect(messages).toHaveLength(1);
+      expect(messages[0].origin[0]).toBe("test.tsx");
+      expect(messages[0].origin.scope).toBe("CheckoutButton");
+    });
 
     it("does not hide fatal native extraction errors", async () => {
       const code = `
@@ -450,13 +450,13 @@ const descriptor = t({ message })
         function test() {
           return t({ id: "greeting", message: "Hello" })
         }
-      `
+      `;
 
       await expect(extractor.extract("test.ts", code, () => {})).rejects.toThrow(
-        /Explicit message ids/
-      )
-    })
-  })
+        /Explicit message ids/,
+      );
+    });
+  });
 
   describe("breaking changes", () => {
     it("rejects explicit ids in macros", () => {
@@ -464,81 +464,81 @@ const descriptor = t({ message })
         import { t } from "@palamedes/core/macro"; function message() {
         const x = t({ id: "greeting", message: "Hello" })
         }
-      `
+      `;
 
-      expect(() => extract(code)).toThrow(/Explicit message ids/)
-    })
+      expect(() => extract(code)).toThrow(/Explicit message ids/);
+    });
 
     it("rejects object-form runtime messages", () => {
       const code = `
         const x = i18n._({ id: "greeting", message: "Hello" })
-      `
+      `;
 
-      expect(() => extract(code)).toThrow(/object-form runtime messages have been removed/)
-    })
+      expect(() => extract(code)).toThrow(/object-form runtime messages have been removed/);
+    });
 
     it("rejects unnamed template placeholders", () => {
       const code = [
         `import { t } from "@palamedes/core/macro"; function message() {`,
         "const x = t`Hello ${firstName + lastName}`",
         "}",
-      ].join("\n")
+      ].join("\n");
 
-      expect(() => extract(code)).toThrow(/stable placeholder name/)
-    })
+      expect(() => extract(code)).toThrow(/stable placeholder name/);
+    });
 
     it("rejects unnamed JSX placeholders", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello {firstName + lastName}</Trans>
-      `
+      `;
 
-      expect(() => extract(code)).toThrow(/stable placeholder name/)
-    })
+      expect(() => extract(code)).toThrow(/stable placeholder name/);
+    });
 
     it("rejects nested JSX message macros", () => {
       const code = `
         import { Plural, Trans } from "@palamedes/react/macro"; function Message() {
         const x = <Trans><Plural value={contractCount} one="# contract" other="# contracts" /> ({capacityMW} MW)</Trans>
         }
-      `
+      `;
 
       expect(() => extract(code)).toThrow(
-        /Nested i18n macro is not extractable as a single message at test\.tsx:3:\d+/
-      )
-    })
+        /Nested i18n macro is not extractable as a single message at test\.tsx:3:\d+/,
+      );
+    });
 
     it("rejects nested JSX message macros in expression containers", () => {
       const cases = [
         `<Trans>{showCount ? <Plural value={count} one="one" other="other" /> : null}</Trans>`,
         `<Trans>{showCount && <Plural value={count} one="one" other="other" />}</Trans>`,
         `<Trans>{items.map((item) => <Plural value={item.count} one="one" other="other" />)}</Trans>`,
-      ]
+      ];
 
       for (const jsx of cases) {
         const code = `
           import { Plural, Trans } from "@palamedes/react/macro"; function Message() {
           const x = ${jsx}
           }
-        `
+        `;
 
         expect(() => extract(code)).toThrow(
-          /Nested i18n macro is not extractable as a single message/
-        )
-        expect(() => extract(code)).not.toThrow(/stable placeholder name/)
+          /Nested i18n macro is not extractable as a single message/,
+        );
+        expect(() => extract(code)).not.toThrow(/stable placeholder name/);
       }
-    })
+    });
 
     it("allows nested JSX message macros in render prop attributes", () => {
       const code = `
         import { Plural, Trans } from "@palamedes/react/macro"
         const x = <Trans><List renderItem={() => <Plural value={count} one="one" other="other" />} /></Trans>
-      `
+      `;
 
-      const messages = extract(code)
+      const messages = extract(code);
 
-      expect(messages[0].message).toBe("<0/>")
-    })
+      expect(messages[0].message).toBe("<0/>");
+    });
 
     it("accepts computed, defaulted, and literal choice values", () => {
       const code = `
@@ -548,14 +548,14 @@ const descriptor = t({ message })
         const literal = plural(21, { one: "# month", other: "# months" })
         const jsx = <Plural value={node.locationCount ?? 0} one="# location" other="# locations" />
         }
-      `
-      const messages = extract(code)
+      `;
+      const messages = extract(code);
 
       expect(messages.map((message) => message.message)).toEqual([
         "{period, plural, one {# entry} other {# entries}}",
         "{value, plural, one {# month} other {# months}}",
         "{locationCount, plural, one {# location} other {# locations}}",
-      ])
-    })
-  })
-})
+      ]);
+    });
+  });
+});

@@ -48,11 +48,11 @@ Fix:
 Create the i18n instance during app startup and register it once:
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
-setClientI18n(i18n)
+const i18n = createI18n();
+setClientI18n(i18n);
 ```
 
 Load the active locale's catalog and call `activate()` if it differs from the
@@ -84,9 +84,9 @@ Fix:
 Direct server runtimes can register the getter explicitly:
 
 ```ts
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { setServerI18nGetter } from "@palamedes/runtime";
 
-setServerI18nGetter(() => getRequestScopedI18n())
+setServerI18nGetter(() => getRequestScopedI18n());
 ```
 
 ## `.po` Import Fails

@@ -1,4 +1,4 @@
-import { decisionHref } from "~/data/links"
+import { decisionHref } from "~/data/links";
 
 const ADR_SLUGS: Record<string, string> = {
   "002": "002-rust-first-core-with-thin-host-adapters",
@@ -19,11 +19,11 @@ const ADR_SLUGS: Record<string, string> = {
   "023": "023-generated-production-runtime-is-parser-free",
   "025": "025-react-router-rsc-entry-request-scope",
   "026": "026-editorial-visual-brand-system",
-}
+};
 
 export function AdrChip({ number }: { number: string }) {
-  const slug = ADR_SLUGS[number]
-  if (!slug) throw new Error(`Missing architecture ADR slug for ${number}`)
+  const slug = ADR_SLUGS[number];
+  if (!slug) throw new Error(`Missing architecture ADR slug for ${number}`);
 
   return (
     <a
@@ -32,5 +32,5 @@ export function AdrChip({ number }: { number: string }) {
     >
       ADR-{number}
     </a>
-  )
+  );
 }

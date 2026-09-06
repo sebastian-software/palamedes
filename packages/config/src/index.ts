@@ -1,11 +1,11 @@
-import path from "node:path"
-import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs"
-import { readFile } from "node:fs/promises"
-import { access } from "node:fs/promises"
-import { createJiti } from "jiti"
-import picomatch from "picomatch"
-import { parse as parseToml } from "smol-toml"
-import { parse as parseYaml } from "yaml"
+import path from "node:path";
+import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
+import { createJiti } from "jiti";
+import picomatch from "picomatch";
+import { parse as parseToml } from "smol-toml";
+import { parse as parseYaml } from "yaml";
 
 export const CONFIG_FILENAMES = [
   "palamedes.yaml",
@@ -16,151 +16,151 @@ export const CONFIG_FILENAMES = [
   "palamedes.config.js",
   "palamedes.config.mjs",
   "palamedes.config.cjs",
-] as const
+] as const;
 
-export type PalamedesFallbackLocales = string[] | Record<string, string[]>
-export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string & {})
+export type PalamedesFallbackLocales = string[] | Record<string, string[]>;
+export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string & {});
 
 export type PalamedesPoOutputOptions = {
-  lineBreaks?: "auto" | "off"
-}
+  lineBreaks?: "auto" | "off";
+};
 
 export type PalamedesCatalogConfig = {
-  path: string
-  format?: "po" | "fcl"
-  po?: PalamedesPoOutputOptions
-  include: string[]
-  exclude?: string[]
-}
+  path: string;
+  format?: "po" | "fcl";
+  po?: PalamedesPoOutputOptions;
+  include: string[];
+  exclude?: string[];
+};
 
 export type PalamedesMdxConfig = {
-  framework?: "react" | "solid"
-  translatableAttributes?: string[]
-  frontMatterFields?: string[]
-  transModule?: string
-  runtimeModule?: string
-  ignoreDirective?: string
-  keepSourceFallbacks?: boolean
-}
+  framework?: "react" | "solid";
+  translatableAttributes?: string[];
+  frontMatterFields?: string[];
+  transModule?: string;
+  runtimeModule?: string;
+  ignoreDirective?: string;
+  keepSourceFallbacks?: boolean;
+};
 
-export type PalamedesSourceRuleLevel = "off" | "info" | "warning" | "error"
+export type PalamedesSourceRuleLevel = "off" | "info" | "warning" | "error";
 
 export type PalamedesLintConfig = {
   rules?: {
-    placeholderOnly?: PalamedesSourceRuleLevel
-    emptyComponentOnly?: PalamedesSourceRuleLevel
-    preferTransInJsx?: PalamedesSourceRuleLevel
-  }
-}
+    placeholderOnly?: PalamedesSourceRuleLevel;
+    emptyComponentOnly?: PalamedesSourceRuleLevel;
+    preferTransInJsx?: PalamedesSourceRuleLevel;
+  };
+};
 
-export type PalamedesPluginDeclaration = string | readonly [specifier: string, options: unknown]
+export type PalamedesPluginDeclaration = string | readonly [specifier: string, options: unknown];
 
 export type PalamedesConfig = {
-  locales: string[]
-  sourceLocale: string
-  fallbackLocales?: PalamedesFallbackLocales
-  pseudoLocale?: string
-  sourceReferenceRoot?: PalamedesSourceReferenceRoot
-  referenceScopes?: boolean
-  mdx?: PalamedesMdxConfig
-  lint?: PalamedesLintConfig
-  catalogs: PalamedesCatalogConfig[]
-  plugins?: PalamedesPluginDeclaration[]
-}
+  locales: string[];
+  sourceLocale: string;
+  fallbackLocales?: PalamedesFallbackLocales;
+  pseudoLocale?: string;
+  sourceReferenceRoot?: PalamedesSourceReferenceRoot;
+  referenceScopes?: boolean;
+  mdx?: PalamedesMdxConfig;
+  lint?: PalamedesLintConfig;
+  catalogs: PalamedesCatalogConfig[];
+  plugins?: PalamedesPluginDeclaration[];
+};
 
 type PalamedesDataConfig = {
-  $schema?: unknown
-  locales?: unknown
-  "source-locale"?: unknown
-  source_locale?: unknown
-  "fallback-locales"?: unknown
-  fallback_locales?: unknown
-  "pseudo-locale"?: unknown
-  pseudo_locale?: unknown
-  "source-reference-root"?: unknown
-  source_reference_root?: unknown
-  "reference-scopes"?: unknown
-  reference_scopes?: unknown
-  mdx?: unknown
-  lint?: unknown
-  catalogs?: unknown
-  plugins?: unknown
+  $schema?: unknown;
+  locales?: unknown;
+  "source-locale"?: unknown;
+  source_locale?: unknown;
+  "fallback-locales"?: unknown;
+  fallback_locales?: unknown;
+  "pseudo-locale"?: unknown;
+  pseudo_locale?: unknown;
+  "source-reference-root"?: unknown;
+  source_reference_root?: unknown;
+  "reference-scopes"?: unknown;
+  reference_scopes?: unknown;
+  mdx?: unknown;
+  lint?: unknown;
+  catalogs?: unknown;
+  plugins?: unknown;
   // These data-only CLI options are intentionally ignored by the JavaScript
   // loader, but remain valid in shared config files.
-  "extract-threads"?: unknown
-  extract_threads?: unknown
-  "extract-cache"?: unknown
-  extract_cache?: unknown
-}
+  "extract-threads"?: unknown;
+  extract_threads?: unknown;
+  "extract-cache"?: unknown;
+  extract_cache?: unknown;
+};
 
 export type LoadedPalamedesConfig = {
   /**
    * Real paths whose contents contributed to this resolved configuration.
    * Populated by the loaders; optional for compatibility with caller-created values.
    */
-  configDependencies?: string[]
-  configPath: string
-  rootDir: string
-  sourceReferenceRoot: string
-  referenceScopes: boolean
-} & Omit<PalamedesConfig, "sourceReferenceRoot" | "referenceScopes">
+  configDependencies?: string[];
+  configPath: string;
+  rootDir: string;
+  sourceReferenceRoot: string;
+  referenceScopes: boolean;
+} & Omit<PalamedesConfig, "sourceReferenceRoot" | "referenceScopes">;
 
 export type LoadPalamedesConfigOptions = {
-  cwd?: string
-  configPath?: string
-  skipValidation?: boolean
-}
+  cwd?: string;
+  configPath?: string;
+  skipValidation?: boolean;
+};
 
 export function defineConfig(config: PalamedesConfig): PalamedesConfig {
-  return config
+  return config;
 }
 
 export async function loadPalamedesConfig(
-  options: LoadPalamedesConfigOptions = {}
+  options: LoadPalamedesConfigOptions = {},
 ): Promise<LoadedPalamedesConfig> {
-  const cwd = path.resolve(options.cwd ?? process.cwd())
-  const configPath = await resolveConfigPath(cwd, options.configPath)
-  const loaded = await loadConfigFile(configPath, !options.skipValidation)
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const configPath = await resolveConfigPath(cwd, options.configPath);
+  const loaded = await loadConfigFile(configPath, !options.skipValidation);
 
   if (!options.skipValidation) {
-    validateConfig(loaded.config, configPath)
+    validateConfig(loaded.config, configPath);
   }
 
-  return normalizeConfig(loaded.config as PalamedesConfig, configPath, loaded.dependencies)
+  return normalizeConfig(loaded.config as PalamedesConfig, configPath, loaded.dependencies);
 }
 
 export function loadPalamedesConfigSync(
-  options: LoadPalamedesConfigOptions = {}
+  options: LoadPalamedesConfigOptions = {},
 ): LoadedPalamedesConfig {
-  const cwd = path.resolve(options.cwd ?? process.cwd())
-  const configPath = resolveConfigPathSync(cwd, options.configPath)
-  const loaded = loadConfigFileSync(configPath, !options.skipValidation)
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const configPath = resolveConfigPathSync(cwd, options.configPath);
+  const loaded = loadConfigFileSync(configPath, !options.skipValidation);
 
   if (!options.skipValidation) {
-    validateConfig(loaded.config, configPath)
+    validateConfig(loaded.config, configPath);
   }
 
-  return normalizeConfigSync(loaded.config as PalamedesConfig, configPath, loaded.dependencies)
+  return normalizeConfigSync(loaded.config as PalamedesConfig, configPath, loaded.dependencies);
 }
 
 type LoadedConfigFile = {
-  config: unknown
-  dependencies: string[]
-}
+  config: unknown;
+  dependencies: string[];
+};
 
 async function loadConfigFile(
   configPath: string,
-  validateDataKeys: boolean
+  validateDataKeys: boolean,
 ): Promise<LoadedConfigFile> {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
     return loadedDataConfig(
       normalizeDataConfig(
         parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
         configPath,
-        validateDataKeys
+        validateDataKeys,
       ),
-      configPath
-    )
+      configPath,
+    );
   }
 
   if (configPath.endsWith(".json")) {
@@ -168,10 +168,10 @@ async function loadConfigFile(
       normalizeDataConfig(
         JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig,
         configPath,
-        validateDataKeys
+        validateDataKeys,
       ),
-      configPath
-    )
+      configPath,
+    );
   }
 
   if (configPath.endsWith(".toml")) {
@@ -179,13 +179,13 @@ async function loadConfigFile(
       normalizeDataConfig(
         parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
         configPath,
-        validateDataKeys
+        validateDataKeys,
       ),
-      configPath
-    )
+      configPath,
+    );
   }
 
-  return loadExecutableConfig(configPath)
+  return loadExecutableConfig(configPath);
 }
 
 function loadConfigFileSync(configPath: string, validateDataKeys: boolean): LoadedConfigFile {
@@ -194,10 +194,10 @@ function loadConfigFileSync(configPath: string, validateDataKeys: boolean): Load
       normalizeDataConfig(
         parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
         configPath,
-        validateDataKeys
+        validateDataKeys,
       ),
-      configPath
-    )
+      configPath,
+    );
   }
 
   if (configPath.endsWith(".json")) {
@@ -205,10 +205,10 @@ function loadConfigFileSync(configPath: string, validateDataKeys: boolean): Load
       normalizeDataConfig(
         JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
         configPath,
-        validateDataKeys
+        validateDataKeys,
       ),
-      configPath
-    )
+      configPath,
+    );
   }
 
   if (configPath.endsWith(".toml")) {
@@ -216,102 +216,102 @@ function loadConfigFileSync(configPath: string, validateDataKeys: boolean): Load
       normalizeDataConfig(
         parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
         configPath,
-        validateDataKeys
+        validateDataKeys,
       ),
-      configPath
-    )
+      configPath,
+    );
   }
 
-  return loadExecutableConfig(configPath)
+  return loadExecutableConfig(configPath);
 }
 
 function loadedDataConfig(config: unknown, configPath: string): LoadedConfigFile {
   return {
     config,
     dependencies: [canonicalConfigDependencyPath(configPath)],
-  }
+  };
 }
 
 function loadExecutableConfig(configPath: string): LoadedConfigFile {
   const jiti = createJiti(import.meta.url, {
     interopDefault: true,
-  })
-  const cachedBefore = new Set(Object.values(jiti.cache))
-  let modules = new Set<ConfigModule>()
+  });
+  const cachedBefore = new Set(Object.values(jiti.cache));
+  let modules = new Set<ConfigModule>();
 
   try {
-    const config = unwrapModule(jiti(configPath) as unknown)
-    modules = collectLocalConfigModules(jiti.cache, configPath)
+    const config = unwrapModule(jiti(configPath) as unknown);
+    modules = collectLocalConfigModules(jiti.cache, configPath);
     if (modules.size === 0) {
-      modules = collectNewLocalConfigModules(jiti.cache, cachedBefore)
+      modules = collectNewLocalConfigModules(jiti.cache, cachedBefore);
     }
-    const canonicalConfigPath = canonicalConfigDependencyPath(configPath)
+    const canonicalConfigPath = canonicalConfigDependencyPath(configPath);
     const transitiveDependencies = new Set(
-      [...modules].map((module) => canonicalConfigDependencyPath(module.filename))
-    )
-    transitiveDependencies.delete(canonicalConfigPath)
-    const dependencies = [canonicalConfigPath, ...[...transitiveDependencies].sort()]
+      [...modules].map((module) => canonicalConfigDependencyPath(module.filename)),
+    );
+    transitiveDependencies.delete(canonicalConfigPath);
+    const dependencies = [canonicalConfigPath, ...[...transitiveDependencies].sort()];
 
-    return { config, dependencies }
+    return { config, dependencies };
   } finally {
     if (modules.size === 0) {
-      modules = collectNewLocalConfigModules(jiti.cache, cachedBefore)
+      modules = collectNewLocalConfigModules(jiti.cache, cachedBefore);
     }
     for (const [cacheKey, module] of Object.entries(jiti.cache)) {
       if (modules.has(module)) {
-        delete jiti.cache[cacheKey]
+        delete jiti.cache[cacheKey];
       }
     }
   }
 }
 
-type ConfigModule = ReturnType<typeof createJiti>["cache"][string]
+type ConfigModule = ReturnType<typeof createJiti>["cache"][string];
 
 function collectLocalConfigModules(
   cache: ReturnType<typeof createJiti>["cache"],
-  configPath: string
+  configPath: string,
 ): Set<ConfigModule> {
-  const canonicalConfigPath = canonicalConfigDependencyPath(configPath)
+  const canonicalConfigPath = canonicalConfigDependencyPath(configPath);
   const root = Object.values(cache).find(
-    (module) => canonicalConfigDependencyPath(module.filename) === canonicalConfigPath
-  )
-  const modules = new Set<ConfigModule>()
+    (module) => canonicalConfigDependencyPath(module.filename) === canonicalConfigPath,
+  );
+  const modules = new Set<ConfigModule>();
 
   function visit(module: ConfigModule): void {
     if (modules.has(module) || isNodeModulesPath(module.filename)) {
-      return
+      return;
     }
-    modules.add(module)
-    module.children.forEach(visit)
+    modules.add(module);
+    module.children.forEach(visit);
   }
 
   if (root) {
-    visit(root)
+    visit(root);
   }
-  return modules
+  return modules;
 }
 
 function collectNewLocalConfigModules(
   cache: ReturnType<typeof createJiti>["cache"],
-  cachedBefore: Set<ConfigModule>
+  cachedBefore: Set<ConfigModule>,
 ): Set<ConfigModule> {
   return new Set(
     Object.values(cache).filter(
-      (module) => !cachedBefore.has(module) && !isNodeModulesPath(module.filename)
-    )
-  )
+      (module) => !cachedBefore.has(module) && !isNodeModulesPath(module.filename),
+    ),
+  );
 }
 
 function canonicalConfigDependencyPath(value: string): string {
   try {
-    return realpathSync.native(value)
+    return realpathSync.native(value);
   } catch {
-    return path.resolve(value)
+    return path.resolve(value);
   }
 }
 
 function isNodeModulesPath(value: string): boolean {
-  return value.split(path.sep).includes("node_modules")
+  return value.split(path.sep).includes("node_modules");
 }
 
 const CAMEL_CASE_DATA_KEYS: [string, string][] = [
@@ -322,7 +322,7 @@ const CAMEL_CASE_DATA_KEYS: [string, string][] = [
   ["referenceScopes", "reference-scopes"],
   ["extractThreads", "extract-threads"],
   ["extractCache", "extract-cache"],
-]
+];
 
 const DATA_CONFIG_KEYS = [
   "locales",
@@ -344,7 +344,7 @@ const DATA_CONFIG_KEYS = [
   "lint",
   "catalogs",
   "plugins",
-] as const
+] as const;
 
 const CONFIG_KEYS = [
   "locales",
@@ -357,7 +357,7 @@ const CONFIG_KEYS = [
   "lint",
   "catalogs",
   "plugins",
-] as const
+] as const;
 
 const MDX_DATA_CONFIG_KEYS = [
   "framework",
@@ -373,7 +373,7 @@ const MDX_DATA_CONFIG_KEYS = [
   "ignore_directive",
   "keep-source-fallbacks",
   "keep_source_fallbacks",
-] as const
+] as const;
 
 const MDX_CONFIG_KEYS = [
   "framework",
@@ -383,22 +383,26 @@ const MDX_CONFIG_KEYS = [
   "runtimeModule",
   "ignoreDirective",
   "keepSourceFallbacks",
-] as const
+] as const;
 
-const LINT_CONFIG_KEYS = ["rules"] as const
+const LINT_CONFIG_KEYS = ["rules"] as const;
 
 const LINT_RULE_DATA_CONFIG_KEYS = [
   "placeholder-only",
   "empty-component-only",
   "prefer-trans-in-jsx",
-] as const
+] as const;
 
-const LINT_RULE_CONFIG_KEYS = ["placeholderOnly", "emptyComponentOnly", "preferTransInJsx"] as const
+const LINT_RULE_CONFIG_KEYS = [
+  "placeholderOnly",
+  "emptyComponentOnly",
+  "preferTransInJsx",
+] as const;
 
-const CATALOG_CONFIG_KEYS = ["path", "format", "po", "include", "exclude"] as const
+const CATALOG_CONFIG_KEYS = ["path", "format", "po", "include", "exclude"] as const;
 
-const PO_DATA_CONFIG_KEYS = ["line-breaks", "line_breaks"] as const
-const PO_CONFIG_KEYS = ["lineBreaks"] as const
+const PO_DATA_CONFIG_KEYS = ["line-breaks", "line_breaks"] as const;
+const PO_CONFIG_KEYS = ["lineBreaks"] as const;
 
 /*
  * Data configs are kebab-case (with snake_case aliases). Lingui-style
@@ -410,8 +414,8 @@ function rejectCamelCaseDataKeys(config: PalamedesDataConfig, configPath: string
   for (const [camel, kebab] of CAMEL_CASE_DATA_KEYS) {
     if (camel in config) {
       throw new Error(
-        `Invalid Palamedes config in ${configPath}: unknown key "${camel}". Data configs use kebab-case: "${kebab}".`
-      )
+        `Invalid Palamedes config in ${configPath}: unknown key "${camel}". Data configs use kebab-case: "${kebab}".`,
+      );
     }
   }
 }
@@ -421,84 +425,84 @@ function rejectUnknownKeys(
   configPath: string,
   fieldPath: string,
   knownKeys: readonly string[],
-  allowDataMetadata = false
+  allowDataMetadata = false,
 ): void {
   for (const key of Object.keys(record)) {
     if (knownKeys.includes(key) || (allowDataMetadata && isDataMetadataKey(key))) {
-      continue
+      continue;
     }
 
-    const suggestion = suggestKnownKey(key, knownKeys)
-    const suggestionMessage = suggestion === undefined ? "" : ` Did you mean "${suggestion}"?`
+    const suggestion = suggestKnownKey(key, knownKeys);
+    const suggestionMessage = suggestion === undefined ? "" : ` Did you mean "${suggestion}"?`;
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: unknown key "${fieldPath}${key}".${suggestionMessage}`
-    )
+      `Invalid Palamedes config in ${configPath}: unknown key "${fieldPath}${key}".${suggestionMessage}`,
+    );
   }
 }
 
 function isDataMetadataKey(key: string): boolean {
-  return key === "$schema" || key.startsWith("x-") || key.startsWith(".")
+  return key === "$schema" || key.startsWith("x-") || key.startsWith(".");
 }
 
 function suggestKnownKey(key: string, knownKeys: readonly string[]): string | undefined {
-  const maxDistance = Math.max(1, Math.floor(key.length / 3))
-  let bestMatch: string | undefined
-  let bestDistance = Number.POSITIVE_INFINITY
+  const maxDistance = Math.max(1, Math.floor(key.length / 3));
+  let bestMatch: string | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const knownKey of knownKeys) {
-    const distance = levenshteinDistance(key, knownKey)
+    const distance = levenshteinDistance(key, knownKey);
     if (distance < bestDistance) {
-      bestMatch = knownKey
-      bestDistance = distance
+      bestMatch = knownKey;
+      bestDistance = distance;
     }
   }
 
-  return bestDistance <= maxDistance ? bestMatch : undefined
+  return bestDistance <= maxDistance ? bestMatch : undefined;
 }
 
 function levenshteinDistance(left: string, right: string): number {
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index)
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
 
   for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    const current = [leftIndex]
+    const current = [leftIndex];
     for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
       current[rightIndex] = Math.min(
         current[rightIndex - 1]! + 1,
         previous[rightIndex]! + 1,
-        previous[rightIndex - 1]! + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
-      )
+        previous[rightIndex - 1]! + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
     }
-    previous = current
+    previous = current;
   }
 
-  return previous[right.length]!
+  return previous[right.length]!;
 }
 
 function normalizeDataConfig(
   config: PalamedesDataConfig,
   configPath: string,
-  validateDataKeys: boolean
+  validateDataKeys: boolean,
 ): PalamedesConfig {
   if (validateDataKeys) {
-    rejectCamelCaseDataKeys(config, configPath)
-    rejectUnknownKeys(config, configPath, "", DATA_CONFIG_KEYS, true)
+    rejectCamelCaseDataKeys(config, configPath);
+    rejectUnknownKeys(config, configPath, "", DATA_CONFIG_KEYS, true);
   }
-  const fallbackLocales = getConfigValue(config, "fallback-locales", "fallback_locales")
-  const pseudoLocale = getConfigValue(config, "pseudo-locale", "pseudo_locale")
+  const fallbackLocales = getConfigValue(config, "fallback-locales", "fallback_locales");
+  const pseudoLocale = getConfigValue(config, "pseudo-locale", "pseudo_locale");
   const sourceReferenceRoot = getConfigValue(
     config,
     "source-reference-root",
-    "source_reference_root"
-  )
-  const referenceScopes = getConfigValue(config, "reference-scopes", "reference_scopes")
+    "source_reference_root",
+  );
+  const referenceScopes = getConfigValue(config, "reference-scopes", "reference_scopes");
   const mdx =
     config.mdx === undefined
       ? undefined
-      : normalizeMdxDataConfig(config.mdx, configPath, validateDataKeys)
+      : normalizeMdxDataConfig(config.mdx, configPath, validateDataKeys);
   const lint =
     config.lint === undefined
       ? undefined
-      : normalizeLintDataConfig(config.lint, configPath, validateDataKeys)
+      : normalizeLintDataConfig(config.lint, configPath, validateDataKeys);
 
   return {
     locales: config.locales as string[],
@@ -516,62 +520,62 @@ function normalizeDataConfig(
     catalogs: normalizeDataCatalogs(
       config.catalogs,
       configPath,
-      validateDataKeys
+      validateDataKeys,
     ) as PalamedesCatalogConfig[],
     ...(config.plugins !== undefined
       ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
       : {}),
-  }
+  };
 }
 
 function normalizeDataCatalogs(
   value: unknown,
   configPath: string,
-  validateDataKeys: boolean
+  validateDataKeys: boolean,
 ): unknown {
   if (!Array.isArray(value)) {
-    return value
+    return value;
   }
   return value.map((catalog, index) => {
     if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) {
-      return catalog
+      return catalog;
     }
-    const record = catalog as Record<string, unknown>
+    const record = catalog as Record<string, unknown>;
     if (validateDataKeys) {
-      rejectUnknownKeys(record, configPath, `catalogs[${index}].`, CATALOG_CONFIG_KEYS)
+      rejectUnknownKeys(record, configPath, `catalogs[${index}].`, CATALOG_CONFIG_KEYS);
     }
     if (record.po === undefined) {
-      return catalog
+      return catalog;
     }
     return {
       ...record,
       po: normalizePoDataConfig(record.po, configPath, index, validateDataKeys),
-    }
-  })
+    };
+  });
 }
 
 function normalizePoDataConfig(
   value: unknown,
   configPath: string,
   catalogIndex: number,
-  validateDataKeys: boolean
+  validateDataKeys: boolean,
 ): PalamedesPoOutputOptions {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value as PalamedesPoOutputOptions
+    return value as PalamedesPoOutputOptions;
   }
-  const record = value as Record<string, unknown>
+  const record = value as Record<string, unknown>;
   if (validateDataKeys) {
     for (const [camel, kebab] of [["lineBreaks", "line-breaks"]]) {
       if (camel in record) {
         throw new Error(
-          `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${camel}". Data configs use kebab-case: "catalogs[${catalogIndex}].po.${kebab}".`
-        )
+          `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${camel}". Data configs use kebab-case: "catalogs[${catalogIndex}].po.${kebab}".`,
+        );
       }
     }
-    rejectUnknownKeys(record, configPath, `catalogs[${catalogIndex}].po.`, PO_DATA_CONFIG_KEYS)
+    rejectUnknownKeys(record, configPath, `catalogs[${catalogIndex}].po.`, PO_DATA_CONFIG_KEYS);
   }
-  const lineBreaks = record["line-breaks"] ?? record.line_breaks
-  return lineBreaks === undefined ? {} : { lineBreaks: normalizeLineBreaksDataValue(lineBreaks) }
+  const lineBreaks = record["line-breaks"] ?? record.line_breaks;
+  return lineBreaks === undefined ? {} : { lineBreaks: normalizeLineBreaksDataValue(lineBreaks) };
 }
 
 /*
@@ -583,20 +587,20 @@ function normalizePoDataConfig(
  */
 function normalizeLineBreaksDataValue(value: unknown): PalamedesPoOutputOptions["lineBreaks"] {
   if (value === false) {
-    return "off"
+    return "off";
   }
-  return value as PalamedesPoOutputOptions["lineBreaks"]
+  return value as PalamedesPoOutputOptions["lineBreaks"];
 }
 
 function normalizeMdxDataConfig(
   value: unknown,
   configPath: string,
-  validateDataKeys: boolean
+  validateDataKeys: boolean,
 ): PalamedesMdxConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`)
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`);
   }
-  const record = value as Record<string, unknown>
+  const record = value as Record<string, unknown>;
   if (validateDataKeys) {
     for (const [camel, kebab] of [
       ["translatableAttributes", "translatable-attributes"],
@@ -608,20 +612,20 @@ function normalizeMdxDataConfig(
     ]) {
       if (camel in record) {
         throw new Error(
-          `Invalid Palamedes config in ${configPath}: unknown key "mdx.${camel}". Data configs use kebab-case: "mdx.${kebab}".`
-        )
+          `Invalid Palamedes config in ${configPath}: unknown key "mdx.${camel}". Data configs use kebab-case: "mdx.${kebab}".`,
+        );
       }
     }
-    rejectUnknownKeys(record, configPath, "mdx.", MDX_DATA_CONFIG_KEYS)
+    rejectUnknownKeys(record, configPath, "mdx.", MDX_DATA_CONFIG_KEYS);
   }
-  const read = (kebab: string, snake: string) => record[kebab] ?? record[snake]
-  const framework = record.framework
-  const translatableAttributes = read("translatable-attributes", "translatable_attributes")
-  const frontMatterFields = read("front-matter-fields", "front_matter_fields")
-  const transModule = read("trans-module", "trans_module")
-  const runtimeModule = read("runtime-module", "runtime_module")
-  const ignoreDirective = read("ignore-directive", "ignore_directive")
-  const keepSourceFallbacks = read("keep-source-fallbacks", "keep_source_fallbacks")
+  const read = (kebab: string, snake: string) => record[kebab] ?? record[snake];
+  const framework = record.framework;
+  const translatableAttributes = read("translatable-attributes", "translatable_attributes");
+  const frontMatterFields = read("front-matter-fields", "front_matter_fields");
+  const transModule = read("trans-module", "trans_module");
+  const runtimeModule = read("runtime-module", "runtime_module");
+  const ignoreDirective = read("ignore-directive", "ignore_directive");
+  const keepSourceFallbacks = read("keep-source-fallbacks", "keep_source_fallbacks");
 
   return {
     ...(framework !== undefined ? { framework: framework as "react" | "solid" } : {}),
@@ -637,31 +641,31 @@ function normalizeMdxDataConfig(
     ...(keepSourceFallbacks !== undefined
       ? { keepSourceFallbacks: keepSourceFallbacks as boolean }
       : {}),
-  }
+  };
 }
 
 function normalizeLintDataConfig(
   value: unknown,
   configPath: string,
-  validateDataKeys: boolean
+  validateDataKeys: boolean,
 ): PalamedesLintConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`)
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`);
   }
-  const lint = value as Record<string, unknown>
+  const lint = value as Record<string, unknown>;
   if (validateDataKeys) {
-    rejectUnknownKeys(lint, configPath, "lint.", LINT_CONFIG_KEYS)
+    rejectUnknownKeys(lint, configPath, "lint.", LINT_CONFIG_KEYS);
   }
-  const rules = lint.rules
+  const rules = lint.rules;
   if (rules === undefined) {
-    return {}
+    return {};
   }
   if (!rules || typeof rules !== "object" || Array.isArray(rules)) {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "lint.rules" must be an object.`
-    )
+      `Invalid Palamedes config in ${configPath}: "lint.rules" must be an object.`,
+    );
   }
-  const record = rules as Record<string, unknown>
+  const record = rules as Record<string, unknown>;
   if (validateDataKeys) {
     for (const [camel, kebab] of [
       ["placeholderOnly", "placeholder-only"],
@@ -670,11 +674,11 @@ function normalizeLintDataConfig(
     ]) {
       if (camel in record) {
         throw new Error(
-          `Invalid Palamedes config in ${configPath}: unknown key "lint.rules.${camel}". Data configs use kebab-case: "lint.rules.${kebab}".`
-        )
+          `Invalid Palamedes config in ${configPath}: unknown key "lint.rules.${camel}". Data configs use kebab-case: "lint.rules.${kebab}".`,
+        );
       }
     }
-    rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_DATA_CONFIG_KEYS)
+    rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_DATA_CONFIG_KEYS);
   }
   return {
     rules: {
@@ -688,62 +692,62 @@ function normalizeLintDataConfig(
         ? { preferTransInJsx: record["prefer-trans-in-jsx"] as PalamedesSourceRuleLevel }
         : {}),
     },
-  }
+  };
 }
 
 function getConfigValue(
   config: PalamedesDataConfig,
   canonicalKey: keyof PalamedesDataConfig,
-  legacyKey: keyof PalamedesDataConfig
+  legacyKey: keyof PalamedesDataConfig,
 ): unknown {
-  return config[canonicalKey] ?? config[legacyKey]
+  return config[canonicalKey] ?? config[legacyKey];
 }
 
 export function resolveCatalogPath(
   config: Pick<LoadedPalamedesConfig, "rootDir">,
   catalogPath: string,
-  locale: string
+  locale: string,
 ): string {
   // Every placeholder occurrence, matching the Rust resolver's `str::replace`
   // and the Next loader; a path may name the locale in a directory and a file.
-  return path.resolve(config.rootDir, catalogPath.replaceAll("{locale}", locale))
+  return path.resolve(config.rootDir, catalogPath.replaceAll("{locale}", locale));
 }
 
 export function resolveConfigPattern(
   config: Pick<LoadedPalamedesConfig, "rootDir">,
-  pattern: string
+  pattern: string,
 ): string {
-  return path.resolve(config.rootDir, pattern)
+  return path.resolve(config.rootDir, pattern);
 }
 
 function canonicalCatalogPath(value: string): string {
   try {
-    return realpathSync.native(value)
+    return realpathSync.native(value);
   } catch {
-    return path.resolve(value)
+    return path.resolve(value);
   }
 }
 
 function normalizeCatalogPath(value: string): string {
-  return value.replaceAll("\\", "/")
+  return value.replaceAll("\\", "/");
 }
 
 function catalogSourcePattern(
   rootDir: string,
   pattern: string,
-  expandBareDirectory: boolean
+  expandBareDirectory: boolean,
 ): string {
-  const absolute = path.resolve(rootDir, pattern)
+  const absolute = path.resolve(rootDir, pattern);
   if (expandBareDirectory) {
     try {
       if (statSync(absolute).isDirectory()) {
-        return `${normalizeCatalogPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`
+        return `${normalizeCatalogPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`;
       }
     } catch {
       // Keep non-existent paths and explicit glob patterns unchanged.
     }
   }
-  return normalizeCatalogPath(absolute)
+  return normalizeCatalogPath(absolute);
 }
 
 /**
@@ -755,118 +759,118 @@ function catalogSourcePattern(
 export function catalogMatchesSource(
   config: Pick<LoadedPalamedesConfig, "rootDir">,
   catalog: PalamedesCatalogConfig,
-  sourcePath: string
+  sourcePath: string,
 ): boolean {
-  const rootDir = canonicalCatalogPath(config.rootDir)
-  const source = normalizeCatalogPath(canonicalCatalogPath(sourcePath))
-  const include = catalog.include.map((pattern) => catalogSourcePattern(rootDir, pattern, true))
+  const rootDir = canonicalCatalogPath(config.rootDir);
+  const source = normalizeCatalogPath(canonicalCatalogPath(sourcePath));
+  const include = catalog.include.map((pattern) => catalogSourcePattern(rootDir, pattern, true));
   const exclude = (catalog.exclude ?? ["**/node_modules/**"]).map((pattern) =>
-    catalogSourcePattern(rootDir, pattern, false)
-  )
-  const options = { dot: true }
+    catalogSourcePattern(rootDir, pattern, false),
+  );
+  const options = { dot: true };
 
   return (
     include.some((pattern) => picomatch.isMatch(source, pattern, options)) &&
     !exclude.some((pattern) => picomatch.isMatch(source, pattern, options))
-  )
+  );
 }
 
 /** Resolve a configured catalog to its locale-specific on-disk resource path. */
 export function catalogResourcePath(
   config: Pick<LoadedPalamedesConfig, "rootDir">,
   catalog: PalamedesCatalogConfig,
-  locale: string
+  locale: string,
 ): string {
-  const extension = catalog.format ?? "po"
-  const configuredPath = resolveCatalogPath(config, catalog.path, locale)
+  const extension = catalog.format ?? "po";
+  const configuredPath = resolveCatalogPath(config, catalog.path, locale);
   if (path.extname(catalog.path) === `.${extension}`) {
-    return configuredPath
+    return configuredPath;
   }
-  return `${configuredPath}.${extension}`
+  return `${configuredPath}.${extension}`;
 }
 
 export function expandFallbackLocales(
   locales: readonly string[],
-  fallbackLocales?: PalamedesFallbackLocales
+  fallbackLocales?: PalamedesFallbackLocales,
 ): Record<string, string[]> {
   if (!fallbackLocales) {
-    return {}
+    return {};
   }
 
   if (Array.isArray(fallbackLocales)) {
     return locales.reduce<Record<string, string[]>>((acc, locale) => {
-      const chain = fallbackLocales.filter((fallback) => fallback !== locale)
+      const chain = fallbackLocales.filter((fallback) => fallback !== locale);
       if (chain.length > 0) {
-        acc[locale] = [...chain]
+        acc[locale] = [...chain];
       }
-      return acc
-    }, {})
+      return acc;
+    }, {});
   }
 
   return Object.fromEntries(
     Object.entries(fallbackLocales).map(([locale, chain]) => [
       locale,
       chain.filter((fallback) => fallback !== locale),
-    ])
-  )
+    ]),
+  );
 }
 
 async function resolveConfigPath(cwd: string, explicitPath?: string): Promise<string> {
   if (explicitPath) {
-    const resolved = path.resolve(cwd, explicitPath)
-    await assertFileExists(resolved)
-    return resolved
+    const resolved = path.resolve(cwd, explicitPath);
+    await assertFileExists(resolved);
+    return resolved;
   }
 
-  let current = cwd
+  let current = cwd;
 
   while (true) {
     for (const name of CONFIG_FILENAMES) {
-      const candidate = path.join(current, name)
+      const candidate = path.join(current, name);
       if (await fileExists(candidate)) {
-        return candidate
+        return candidate;
       }
     }
 
-    const parent = path.dirname(current)
+    const parent = path.dirname(current);
     if (parent === current) {
-      break
+      break;
     }
-    current = parent
+    current = parent;
   }
 
   throw new Error(
-    `Could not find a Palamedes config. Expected one of ${CONFIG_FILENAMES.join(", ")}.`
-  )
+    `Could not find a Palamedes config. Expected one of ${CONFIG_FILENAMES.join(", ")}.`,
+  );
 }
 
 function resolveConfigPathSync(cwd: string, explicitPath?: string): string {
   if (explicitPath) {
-    const resolved = path.resolve(cwd, explicitPath)
-    assertFileExistsSync(resolved)
-    return resolved
+    const resolved = path.resolve(cwd, explicitPath);
+    assertFileExistsSync(resolved);
+    return resolved;
   }
 
-  let current = cwd
+  let current = cwd;
 
   while (true) {
     for (const name of CONFIG_FILENAMES) {
-      const candidate = path.join(current, name)
+      const candidate = path.join(current, name);
       if (fileExistsSync(candidate)) {
-        return candidate
+        return candidate;
       }
     }
 
-    const parent = path.dirname(current)
+    const parent = path.dirname(current);
     if (parent === current) {
-      break
+      break;
     }
-    current = parent
+    current = parent;
   }
 
   throw new Error(
-    `Could not find a Palamedes config. Expected one of ${CONFIG_FILENAMES.join(", ")}.`
-  )
+    `Could not find a Palamedes config. Expected one of ${CONFIG_FILENAMES.join(", ")}.`,
+  );
 }
 
 function unwrapModule(loaded: unknown): unknown {
@@ -876,18 +880,18 @@ function unwrapModule(loaded: unknown): unknown {
     "default" in loaded &&
     (loaded as { default: unknown }).default !== undefined
   ) {
-    return (loaded as { default: unknown }).default
+    return (loaded as { default: unknown }).default;
   }
 
-  return loaded
+  return loaded;
 }
 
 async function normalizeConfig(
   config: PalamedesConfig,
   configPath: string,
-  configDependencies: string[]
+  configDependencies: string[],
 ): Promise<LoadedPalamedesConfig> {
-  const rootDir = path.dirname(configPath)
+  const rootDir = path.dirname(configPath);
   return {
     configDependencies,
     configPath,
@@ -908,15 +912,15 @@ async function normalizeConfig(
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
     ...(config.plugins ? { plugins: clonePluginDeclarations(config.plugins) } : {}),
-  }
+  };
 }
 
 function normalizeConfigSync(
   config: PalamedesConfig,
   configPath: string,
-  configDependencies: string[]
+  configDependencies: string[],
 ): LoadedPalamedesConfig {
-  const rootDir = path.dirname(configPath)
+  const rootDir = path.dirname(configPath);
   return {
     configDependencies,
     configPath,
@@ -937,7 +941,7 @@ function normalizeConfigSync(
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
     ...(config.plugins ? { plugins: clonePluginDeclarations(config.plugins) } : {}),
-  }
+  };
 }
 
 function cloneMdxConfig(config: PalamedesMdxConfig): PalamedesMdxConfig {
@@ -947,129 +951,129 @@ function cloneMdxConfig(config: PalamedesMdxConfig): PalamedesMdxConfig {
       ? { translatableAttributes: [...config.translatableAttributes] }
       : {}),
     ...(config.frontMatterFields ? { frontMatterFields: [...config.frontMatterFields] } : {}),
-  }
+  };
 }
 
 function cloneLintConfig(config: PalamedesLintConfig): PalamedesLintConfig {
   return {
     ...config,
     ...(config.rules ? { rules: { ...config.rules } } : {}),
-  }
+  };
 }
 
 function clonePluginDeclarations(
-  plugins: readonly PalamedesPluginDeclaration[]
+  plugins: readonly PalamedesPluginDeclaration[],
 ): PalamedesPluginDeclaration[] {
-  return plugins.map((plugin) => (typeof plugin === "string" ? plugin : [plugin[0], plugin[1]]))
+  return plugins.map((plugin) => (typeof plugin === "string" ? plugin : [plugin[0], plugin[1]]));
 }
 
 async function resolveSourceReferenceRoot(
   value: PalamedesSourceReferenceRoot | undefined,
-  rootDir: string
+  rootDir: string,
 ): Promise<string> {
   if (value === undefined || value === "git") {
-    return (await findGitRoot(rootDir)) ?? rootDir
+    return (await findGitRoot(rootDir)) ?? rootDir;
   }
 
   if (value === "lingui" || value === "config") {
-    return rootDir
+    return rootDir;
   }
 
-  return path.resolve(rootDir, value)
+  return path.resolve(rootDir, value);
 }
 
 function resolveSourceReferenceRootSync(
   value: PalamedesSourceReferenceRoot | undefined,
-  rootDir: string
+  rootDir: string,
 ): string {
   if (value === undefined || value === "git") {
-    return findGitRootSync(rootDir) ?? rootDir
+    return findGitRootSync(rootDir) ?? rootDir;
   }
 
   if (value === "lingui" || value === "config") {
-    return rootDir
+    return rootDir;
   }
 
-  return path.resolve(rootDir, value)
+  return path.resolve(rootDir, value);
 }
 
 async function findGitRoot(startDir: string): Promise<string | undefined> {
-  let current = path.resolve(startDir)
+  let current = path.resolve(startDir);
 
   while (true) {
     if (await fileExists(path.join(current, ".git"))) {
-      return current
+      return current;
     }
 
-    const parent = path.dirname(current)
+    const parent = path.dirname(current);
     if (parent === current) {
-      return undefined
+      return undefined;
     }
-    current = parent
+    current = parent;
   }
 }
 
 function findGitRootSync(startDir: string): string | undefined {
-  let current = path.resolve(startDir)
+  let current = path.resolve(startDir);
 
   while (true) {
     if (fileExistsSync(path.join(current, ".git"))) {
-      return current
+      return current;
     }
 
-    const parent = path.dirname(current)
+    const parent = path.dirname(current);
     if (parent === current) {
-      return undefined
+      return undefined;
     }
-    current = parent
+    current = parent;
   }
 }
 
 function validateConfig(config: unknown, configPath: string): asserts config is PalamedesConfig {
   if (!config || typeof config !== "object" || Array.isArray(config)) {
-    throw new Error(`Invalid Palamedes config in ${configPath}: expected an object export.`)
+    throw new Error(`Invalid Palamedes config in ${configPath}: expected an object export.`);
   }
 
-  const record = config as Record<string, unknown>
-  rejectUnknownKeys(record, configPath, "", CONFIG_KEYS)
+  const record = config as Record<string, unknown>;
+  rejectUnknownKeys(record, configPath, "", CONFIG_KEYS);
 
   if (
     !Array.isArray(record.locales) ||
     record.locales.some((locale) => typeof locale !== "string")
   ) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "locales" must be an array of strings.`
-    )
+      `Invalid Palamedes config in ${configPath}: "locales" must be an array of strings.`,
+    );
   }
 
   if (typeof record.sourceLocale !== "string" || record.sourceLocale.length === 0) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "sourceLocale" must be a non-empty string.`
-    )
+      `Invalid Palamedes config in ${configPath}: "sourceLocale" must be a non-empty string.`,
+    );
   }
 
   if (!record.locales.includes(record.sourceLocale)) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "sourceLocale" must be included in "locales".`
-    )
+      `Invalid Palamedes config in ${configPath}: "sourceLocale" must be included in "locales".`,
+    );
   }
 
   if (!Array.isArray(record.catalogs)) {
-    throw new TypeError(`Invalid Palamedes config in ${configPath}: "catalogs" must be an array.`)
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "catalogs" must be an array.`);
   }
 
   if (record.pseudoLocale !== undefined && typeof record.pseudoLocale !== "string") {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "pseudoLocale" must be a string when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "pseudoLocale" must be a string when provided.`,
+    );
   }
 
   // Documented behavior: a pseudo-locale outside `locales` is ignored. Make
   // the ignore visible instead of silent.
   if (typeof record.pseudoLocale === "string" && !record.locales.includes(record.pseudoLocale)) {
     console.warn(
-      `Palamedes config ${configPath}: "pseudoLocale" (${record.pseudoLocale}) is not included in "locales" and will be ignored.`
-    )
+      `Palamedes config ${configPath}: "pseudoLocale" (${record.pseudoLocale}) is not included in "locales" and will be ignored.`,
+    );
   }
 
   if (
@@ -1077,116 +1081,116 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
     (typeof record.sourceReferenceRoot !== "string" || record.sourceReferenceRoot.length === 0)
   ) {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "sourceReferenceRoot" must be a non-empty string when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "sourceReferenceRoot" must be a non-empty string when provided.`,
+    );
   }
 
   if (record.referenceScopes !== undefined && typeof record.referenceScopes !== "boolean") {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "referenceScopes" must be a boolean when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "referenceScopes" must be a boolean when provided.`,
+    );
   }
 
-  validateMdx(record.mdx, configPath)
-  validateLint(record.lint, configPath)
-  validateFallbackLocales(record.fallbackLocales, configPath, record.locales as string[])
-  validatePlugins(record.plugins, configPath)
+  validateMdx(record.mdx, configPath);
+  validateLint(record.lint, configPath);
+  validateFallbackLocales(record.fallbackLocales, configPath, record.locales as string[]);
+  validatePlugins(record.plugins, configPath);
 
   for (const [index, catalog] of record.catalogs.entries()) {
-    validateCatalog(catalog, configPath, index)
+    validateCatalog(catalog, configPath, index);
   }
 }
 
 function validateMdx(value: unknown, configPath: string): void {
   if (value === undefined) {
-    return
+    return;
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`)
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`);
   }
-  const record = value as Record<string, unknown>
-  rejectUnknownKeys(record, configPath, "mdx.", MDX_CONFIG_KEYS)
+  const record = value as Record<string, unknown>;
+  rejectUnknownKeys(record, configPath, "mdx.", MDX_CONFIG_KEYS);
   if (
     record.framework !== undefined &&
     record.framework !== "react" &&
     record.framework !== "solid"
   ) {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "mdx.framework" must be "react" or "solid".`
-    )
+      `Invalid Palamedes config in ${configPath}: "mdx.framework" must be "react" or "solid".`,
+    );
   }
   for (const field of ["translatableAttributes", "frontMatterFields"] as const) {
-    const values = record[field]
+    const values = record[field];
     if (
       values !== undefined &&
       (!Array.isArray(values) ||
         values.some((entry) => typeof entry !== "string" || entry.trim().length === 0))
     ) {
       throw new TypeError(
-        `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be an array of non-empty strings.`
-      )
+        `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be an array of non-empty strings.`,
+      );
     }
   }
   for (const field of ["transModule", "runtimeModule", "ignoreDirective"] as const) {
-    const fieldValue = record[field]
+    const fieldValue = record[field];
     if (
       fieldValue !== undefined &&
       (typeof fieldValue !== "string" || fieldValue.trim().length === 0)
     ) {
       throw new TypeError(
-        `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be a non-empty string.`
-      )
+        `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be a non-empty string.`,
+      );
     }
   }
   if (record.keepSourceFallbacks !== undefined && typeof record.keepSourceFallbacks !== "boolean") {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "mdx.keepSourceFallbacks" must be a boolean when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "mdx.keepSourceFallbacks" must be a boolean when provided.`,
+    );
   }
 }
 
 function validateLint(value: unknown, configPath: string): void {
   if (value === undefined) {
-    return
+    return;
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`)
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`);
   }
-  const lint = value as Record<string, unknown>
-  rejectUnknownKeys(lint, configPath, "lint.", LINT_CONFIG_KEYS)
-  const rules = lint.rules
+  const lint = value as Record<string, unknown>;
+  rejectUnknownKeys(lint, configPath, "lint.", LINT_CONFIG_KEYS);
+  const rules = lint.rules;
   if (rules === undefined) {
-    return
+    return;
   }
   if (!rules || typeof rules !== "object" || Array.isArray(rules)) {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "lint.rules" must be an object.`
-    )
+      `Invalid Palamedes config in ${configPath}: "lint.rules" must be an object.`,
+    );
   }
-  const record = rules as Record<string, unknown>
-  rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_CONFIG_KEYS)
+  const record = rules as Record<string, unknown>;
+  rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_CONFIG_KEYS);
   for (const field of ["placeholderOnly", "emptyComponentOnly", "preferTransInJsx"] as const) {
-    const level = record[field]
+    const level = record[field];
     if (level !== undefined && !["off", "info", "warning", "error"].includes(level as string)) {
       throw new TypeError(
-        `Invalid Palamedes config in ${configPath}: "lint.rules.${field}" must be "off", "info", "warning", or "error".`
-      )
+        `Invalid Palamedes config in ${configPath}: "lint.rules.${field}" must be "off", "info", "warning", or "error".`,
+      );
     }
   }
 }
 
 function validatePlugins(value: unknown, configPath: string): void {
   if (value === undefined) {
-    return
+    return;
   }
 
   if (!Array.isArray(value)) {
-    throw new TypeError(`Invalid Palamedes config in ${configPath}: "plugins" must be an array.`)
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "plugins" must be an array.`);
   }
 
   for (const [index, declaration] of value.entries()) {
     if (typeof declaration === "string" && declaration.trim().length > 0) {
-      continue
+      continue;
     }
     if (
       Array.isArray(declaration) &&
@@ -1194,105 +1198,105 @@ function validatePlugins(value: unknown, configPath: string): void {
       typeof declaration[0] === "string" &&
       declaration[0].trim().length > 0
     ) {
-      continue
+      continue;
     }
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "plugins[${index}]" must be a non-empty package specifier or [specifier, options].`
-    )
+      `Invalid Palamedes config in ${configPath}: "plugins[${index}]" must be a non-empty package specifier or [specifier, options].`,
+    );
   }
 }
 
 function validateFallbackLocales(value: unknown, configPath: string, locales: string[]): void {
   if (value === undefined) {
-    return
+    return;
   }
 
   if (Array.isArray(value)) {
     if (value.some((locale) => typeof locale !== "string")) {
       throw new Error(
-        `Invalid Palamedes config in ${configPath}: "fallbackLocales" arrays must only contain strings.`
-      )
+        `Invalid Palamedes config in ${configPath}: "fallbackLocales" arrays must only contain strings.`,
+      );
     }
     for (const fallback of value as string[]) {
       if (!locales.includes(fallback)) {
         throw new Error(
-          `Invalid Palamedes config in ${configPath}: "fallbackLocales" entry "${fallback}" must be included in "locales".`
-        )
+          `Invalid Palamedes config in ${configPath}: "fallbackLocales" entry "${fallback}" must be included in "locales".`,
+        );
       }
     }
-    return
+    return;
   }
 
   if (value && typeof value === "object") {
     for (const [locale, fallbacks] of Object.entries(value as Record<string, unknown>)) {
       if (!Array.isArray(fallbacks) || fallbacks.some((fallback) => typeof fallback !== "string")) {
         throw new Error(
-          `Invalid Palamedes config in ${configPath}: "fallbackLocales.${locale}" must be an array of strings.`
-        )
+          `Invalid Palamedes config in ${configPath}: "fallbackLocales.${locale}" must be an array of strings.`,
+        );
       }
       if (locale !== "default" && !locales.includes(locale)) {
         throw new Error(
-          `Invalid Palamedes config in ${configPath}: "fallbackLocales" key "${locale}" must be "default" or included in "locales".`
-        )
+          `Invalid Palamedes config in ${configPath}: "fallbackLocales" key "${locale}" must be "default" or included in "locales".`,
+        );
       }
       for (const fallback of fallbacks as string[]) {
         if (!locales.includes(fallback)) {
           throw new Error(
-            `Invalid Palamedes config in ${configPath}: "fallbackLocales.${locale}" entry "${fallback}" must be included in "locales".`
-          )
+            `Invalid Palamedes config in ${configPath}: "fallbackLocales.${locale}" entry "${fallback}" must be included in "locales".`,
+          );
         }
       }
     }
-    return
+    return;
   }
 
   throw new Error(
-    `Invalid Palamedes config in ${configPath}: "fallbackLocales" must be an array of strings or a record of string arrays.`
-  )
+    `Invalid Palamedes config in ${configPath}: "fallbackLocales" must be an array of strings or a record of string arrays.`,
+  );
 }
 
 function validateCatalog(catalog: unknown, configPath: string, index: number): void {
   if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}]" must be an object.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}]" must be an object.`,
+    );
   }
 
-  const record = catalog as Record<string, unknown>
-  rejectUnknownKeys(record, configPath, `catalogs[${index}].`, CATALOG_CONFIG_KEYS)
+  const record = catalog as Record<string, unknown>;
+  rejectUnknownKeys(record, configPath, `catalogs[${index}].`, CATALOG_CONFIG_KEYS);
 
   if (typeof record.path !== "string" || record.path.length === 0) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].path" must be a non-empty string.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].path" must be a non-empty string.`,
+    );
   }
 
   if (!Array.isArray(record.include) || record.include.some((value) => typeof value !== "string")) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].include" must be an array of strings.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].include" must be an array of strings.`,
+    );
   }
 
   if (record.format !== undefined && record.format !== "po" && record.format !== "fcl") {
     if (record.format === "ndjson") {
       throw new Error(
-        `Invalid Palamedes config in ${configPath}: "catalogs[${index}].format" value "ndjson" is no longer supported; use "fcl" for Ferrocat Catalog Lines.`
-      )
+        `Invalid Palamedes config in ${configPath}: "catalogs[${index}].format" value "ndjson" is no longer supported; use "fcl" for Ferrocat Catalog Lines.`,
+      );
     }
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].format" must be "po" or "fcl" when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].format" must be "po" or "fcl" when provided.`,
+    );
   }
 
-  validatePoOutputOptions(record.po, record.format, configPath, index)
+  validatePoOutputOptions(record.po, record.format, configPath, index);
 
   if (
     record.exclude !== undefined &&
     (!Array.isArray(record.exclude) || record.exclude.some((value) => typeof value !== "string"))
   ) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].exclude" must be an array of strings when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].exclude" must be an array of strings when provided.`,
+    );
   }
 }
 
@@ -1300,56 +1304,56 @@ function validatePoOutputOptions(
   value: unknown,
   format: unknown,
   configPath: string,
-  index: number
+  index: number,
 ): void {
   if (value === undefined) {
-    return
+    return;
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po" must be an object.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po" must be an object.`,
+    );
   }
   if (format === "fcl") {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po" can only be used when the catalog format is "po".`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po" can only be used when the catalog format is "po".`,
+    );
   }
-  const po = value as Record<string, unknown>
-  rejectUnknownKeys(po, configPath, `catalogs[${index}].po.`, PO_CONFIG_KEYS)
+  const po = value as Record<string, unknown>;
+  rejectUnknownKeys(po, configPath, `catalogs[${index}].po.`, PO_CONFIG_KEYS);
   if (po.lineBreaks !== undefined && po.lineBreaks !== "auto" && po.lineBreaks !== "off") {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.lineBreaks" must be "auto" or "off" when provided.`
-    )
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.lineBreaks" must be "auto" or "off" when provided.`,
+    );
   }
 }
 
 async function assertFileExists(filePath: string): Promise<void> {
   if (!(await fileExists(filePath))) {
-    throw new Error(`Could not find Palamedes config at ${filePath}.`)
+    throw new Error(`Could not find Palamedes config at ${filePath}.`);
   }
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
-    await access(filePath, constants.F_OK)
-    return true
+    await access(filePath, constants.F_OK);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 function assertFileExistsSync(filePath: string): void {
   if (!fileExistsSync(filePath)) {
-    throw new Error(`Could not find Palamedes config at ${filePath}.`)
+    throw new Error(`Could not find Palamedes config at ${filePath}.`);
   }
 }
 
 function fileExistsSync(filePath: string): boolean {
   try {
-    accessSync(filePath, constants.F_OK)
-    return true
+    accessSync(filePath, constants.F_OK);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }

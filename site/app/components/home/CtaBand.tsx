@@ -1,8 +1,8 @@
-import { ButtonLink } from "@palamedes/site-ui"
+import { ButtonLink } from "@palamedes/site-ui";
 
 interface Cta {
-  label: string
-  href: string
+  label: string;
+  href: string;
 }
 
 export function CtaBand({
@@ -10,9 +10,9 @@ export function CtaBand({
   primary,
   secondary,
 }: {
-  headline: string
-  primary: Cta
-  secondary?: Cta
+  headline: string;
+  primary: Cta;
+  secondary?: Cta;
 }) {
   return (
     <section className="grid grid-cols-[1fr_auto] items-center gap-10 border-t border-hair px-8 py-14 max-tight:grid-cols-1 max-tight:px-5">
@@ -29,5 +29,5 @@ export function CtaBand({
       </div>
       <img src="/logo.svg" alt="" aria-hidden className="w-32 max-tight:hidden" />
     </section>
-  )
+  );
 }

@@ -1,8 +1,8 @@
-import { nitro } from "nitro/vite"
-import { defineConfig } from "vite"
-import solid from "@solidjs/vite-plugin"
-import { fileRoutes } from "filesystem-routing/vite"
-import { palamedes } from "@palamedes/vite-plugin"
+import { nitro } from "nitro/vite";
+import { defineConfig } from "vite";
+import solid from "@solidjs/vite-plugin";
+import { fileRoutes } from "filesystem-routing/vite";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   // Select Solid's component contract for compiled rich messages. Macro
@@ -18,4 +18,4 @@ export default defineConfig({
     fileRoutes(),
     nitro(),
   ],
-})
+});

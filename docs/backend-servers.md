@@ -24,9 +24,9 @@ Palamedes-transformed code calls `getI18n()` from `@palamedes/runtime`.
 On the server, that means you must register a getter:
 
 ```ts
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { setServerI18nGetter } from "@palamedes/runtime";
 
-setServerI18nGetter(() => getRequestScopedI18n())
+setServerI18nGetter(() => getRequestScopedI18n());
 ```
 
 In backend servers, the cleanest way to do that is `AsyncLocalStorage`.
@@ -34,22 +34,22 @@ In backend servers, the cleanest way to do that is `AsyncLocalStorage`.
 ## Canonical Node Pattern
 
 ```ts
-import { createI18n, type CatalogMessages } from "@palamedes/core"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createI18n, type CatalogMessages } from "@palamedes/core";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 
-type Locale = "en" | "de"
+type Locale = "en" | "de";
 
 const CATALOGS: Record<Locale, CatalogMessages> = {
   en: { "Welcome to Palamedes": "Welcome to Palamedes" },
   de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
-}
+};
 
-const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 
 function createRequestI18n(locale: Locale) {
-  const i18n = createI18n({ locale })
-  i18n.load(locale, CATALOGS[locale])
-  return i18n
+  const i18n = createI18n({ locale });
+  i18n.load(locale, CATALOGS[locale]);
+  return i18n;
 }
 ```
 
@@ -75,35 +75,35 @@ Hono is a strong fit for this pattern because it keeps the request flow small
 and explicit while still running on Node.js.
 
 ```ts
-import { Hono } from "hono"
-import { createI18n, type CatalogMessages } from "@palamedes/core"
-import { defineLocaleControls } from "@palamedes/core/locale"
-import { getI18n } from "@palamedes/runtime"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { Hono } from "hono";
+import { createI18n, type CatalogMessages } from "@palamedes/core";
+import { defineLocaleControls } from "@palamedes/core/locale";
+import { getI18n } from "@palamedes/runtime";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 
-type Locale = "en" | "de"
-const app = new Hono()
+type Locale = "en" | "de";
+const app = new Hono();
 const localeControls = defineLocaleControls({
   locales: ["en", "de"],
   defaultLocale: "en",
-})
+});
 const CATALOGS: Record<Locale, CatalogMessages> = {
   en: { "Welcome to Palamedes": "Welcome to Palamedes" },
   de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
-}
-const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
+};
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 
 app.use(async (c, next) => {
-  const locale = localeControls.preferredLocale(c.req.header("accept-language")) as Locale
-  const i18n = createI18n({ locale })
-  i18n.load(locale, CATALOGS[locale])
+  const locale = localeControls.preferredLocale(c.req.header("accept-language")) as Locale;
+  const i18n = createI18n({ locale });
+  i18n.load(locale, CATALOGS[locale]);
 
-  await serverI18n.run(i18n, next)
-})
+  await serverI18n.run(i18n, next);
+});
 
 app.get("/", (c) => {
-  return c.text(getI18n()._("Welcome to Palamedes"))
-})
+  return c.text(getI18n()._("Welcome to Palamedes"));
+});
 ```
 
 This same pattern also works when the locale comes from:
@@ -116,35 +116,35 @@ This same pattern also works when the locale comes from:
 ## Express Example
 
 ```ts
-import express from "express"
-import { createI18n, type CatalogMessages } from "@palamedes/core"
-import { defineLocaleControls } from "@palamedes/core/locale"
-import { getI18n } from "@palamedes/runtime"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import express from "express";
+import { createI18n, type CatalogMessages } from "@palamedes/core";
+import { defineLocaleControls } from "@palamedes/core/locale";
+import { getI18n } from "@palamedes/runtime";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 
-type Locale = "en" | "de"
-const app = express()
+type Locale = "en" | "de";
+const app = express();
 const localeControls = defineLocaleControls({
   locales: ["en", "de"],
   defaultLocale: "en",
-})
+});
 const CATALOGS: Record<Locale, CatalogMessages> = {
   en: { "Welcome to Palamedes": "Welcome to Palamedes" },
   de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
-}
-const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
+};
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 
 app.use((req, res, next) => {
-  const locale = localeControls.preferredLocale(req.header("accept-language")) as Locale
-  const i18n = createI18n({ locale })
-  i18n.load(locale, CATALOGS[locale])
+  const locale = localeControls.preferredLocale(req.header("accept-language")) as Locale;
+  const i18n = createI18n({ locale });
+  i18n.load(locale, CATALOGS[locale]);
 
-  serverI18n.run(i18n, next)
-})
+  serverI18n.run(i18n, next);
+});
 
 app.get("/", (req, res) => {
-  res.send(getI18n()._("Welcome to Palamedes"))
-})
+  res.send(getI18n()._("Welcome to Palamedes"));
+});
 ```
 
 ## Where Locale Can Come From

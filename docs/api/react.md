@@ -48,8 +48,8 @@ external-store subscriptions or update independently after an i18n-instance
 replacement; changing locale requires a document navigation.
 
 ```tsx
-import { Trans } from "@palamedes/react"
-;<Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />
+import { Trans } from "@palamedes/react";
+<Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />;
 ```
 
 For authoring source strings, prefer macro imports from
@@ -87,13 +87,13 @@ override.
 ## Locale Switch Helpers
 
 ```ts
-import { buildLocaleSwitchItems } from "@palamedes/react"
+import { buildLocaleSwitchItems } from "@palamedes/react";
 
 const items = buildLocaleSwitchItems({
   currentLocale: "de",
   labels: { de: "Deutsch", en: "English" },
   locales: ["en", "de"],
-})
+});
 ```
 
 Initialize the client i18n before hydration when translated client components
@@ -107,20 +107,20 @@ For the recommended document-reload model, create a boundary once in a
 `"use client"` module:
 
 ```tsx
-import { createI18n } from "@palamedes/core/compiled"
-import { createClientCatalogBoundary } from "@palamedes/react/client"
+import { createI18n } from "@palamedes/core/compiled";
+import { createClientCatalogBoundary } from "@palamedes/react/client";
 
-type Locale = "en" | "de"
+type Locale = "en" | "de";
 
 export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
   createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
-    const locale = document.documentElement.lang
-    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
-    return locale
+    const locale = document.documentElement.lang;
+    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`);
+    return locale;
   },
-})
+});
 ```
 
 The optional `createI18n` factory is used for both server rendering and client

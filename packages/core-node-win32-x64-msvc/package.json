@@ -3,34 +3,34 @@
   "version": "1.23.0",
   "description": "Windows x64 native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/core-node-win32-x64-msvc"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
-  "type": "commonjs",
-  "main": "./palamedes-node.node",
   "files": [
     "LICENSE",
     "README.md",
     "palamedes-node.node"
   ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "type": "commonjs",
+  "main": "./palamedes-node.node",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node ../core-node/scripts/build-native.mjs --if-compatible",
     "prepublishOnly": "node ../../scripts/assert-native-artifact.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "os": [
-    "win32"
-  ],
-  "cpu": [
-    "x64"
-  ]
+  }
 }

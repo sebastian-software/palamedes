@@ -1,19 +1,19 @@
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const ROOT = path.resolve(import.meta.dirname, "..")
+export const ROOT = path.resolve(import.meta.dirname, "..");
 
 // These public identities are deliberately independent of EXAMPLE_MATRIX.
 // The guard compares matrix-derived values to them so a whole-family or
 // whole-strategy rename cannot preserve cardinality while breaking selectors.
-export const SERVER_FRAMEWORKS = ["nextjs", "tanstack", "waku", "react-router", "solid", "remix"]
-export const LOCALE_STRATEGIES = ["cookie", "route", "subdomain", "tld"]
-export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-mdx" }
+export const SERVER_FRAMEWORKS = ["nextjs", "tanstack", "waku", "react-router", "solid", "remix"];
+export const LOCALE_STRATEGIES = ["cookie", "route", "subdomain", "tld"];
+export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-mdx" };
 
 // Focused production fixtures are intentionally outside the cross-framework
 // locale-strategy matrix. They have dedicated verifiers and must remain
 // discoverable by tooling that inventories the examples directory.
-export const FOCUSED_EXAMPLES = ["react-router-rsc-cookie"]
+export const FOCUSED_EXAMPLES = ["react-router-rsc-cookie"];
 
 export const EXAMPLE_MATRIX = [
   {
@@ -692,66 +692,66 @@ export const EXAMPLE_MATRIX = [
       },
     ],
   },
-]
+];
 
 export function parseExampleArgs(argv) {
-  const filters = {}
+  const filters = {};
   for (let index = 2; index < argv.length; index += 1) {
-    const value = argv[index]
+    const value = argv[index];
     if (value === "--id") {
-      filters.id = argv[index + 1]
-      index += 1
-      continue
+      filters.id = argv[index + 1];
+      index += 1;
+      continue;
     }
     if (value === "--framework") {
-      filters.framework = argv[index + 1]
-      index += 1
-      continue
+      filters.framework = argv[index + 1];
+      index += 1;
+      continue;
     }
     if (value === "--strategy") {
-      filters.strategy = argv[index + 1]
-      index += 1
+      filters.strategy = argv[index + 1];
+      index += 1;
     }
   }
-  return filters
+  return filters;
 }
 
 export function selectExamples(filters) {
   return EXAMPLE_MATRIX.filter((example) => {
     if (filters.id && example.id !== filters.id) {
-      return false
+      return false;
     }
     if (filters.framework && example.framework !== filters.framework) {
-      return false
+      return false;
     }
     if (filters.strategy && example.strategy !== filters.strategy) {
-      return false
+      return false;
     }
-    return true
-  })
+    return true;
+  });
 }
 
 // The server matrix is six framework families by four locale strategies. Vite
 // is an additional client-only MDX proof, rather than a seventh server family
 // or a fifth locale strategy.
 export const SERVER_EXAMPLES = EXAMPLE_MATRIX.filter((example) =>
-  SERVER_FRAMEWORKS.includes(example.framework)
-)
+  SERVER_FRAMEWORKS.includes(example.framework),
+);
 
 // The cookie example is Remix v3's focused full-stack browser proof. The other
 // three strategies retain smoke coverage until their UI variants need a client.
 export function selectBrowserExamples(filters) {
   return selectExamples(filters).filter(
-    (example) => example.framework !== "remix" || example.id === "remix-cookie"
-  )
+    (example) => example.framework !== "remix" || example.id === "remix-cookie",
+  );
 }
 
 // The checked-in screenshot set records the established UI-adapter matrix.
 // Vite and the focused Remix proof have browser contracts but no capture artifact.
 export function selectScreenshotExamples(filters) {
   return selectExamples(filters).filter(
-    (example) => example.framework !== "remix" && example.framework !== "vite"
-  )
+    (example) => example.framework !== "remix" && example.framework !== "vite",
+  );
 }
 
 // The browser lane verifies every browser-capable example and gates capture per
@@ -759,7 +759,7 @@ export function selectScreenshotExamples(filters) {
 // the two selections here keeps that rule testable instead of leaving it inside
 // the runner script.
 export function planBrowserRun(filters, browserOptions) {
-  const screenshotIds = new Set(selectScreenshotExamples(filters).map((example) => example.id))
+  const screenshotIds = new Set(selectScreenshotExamples(filters).map((example) => example.id));
 
   return selectBrowserExamples(filters).map((example) => ({
     example,
@@ -768,5 +768,5 @@ export function planBrowserRun(filters, browserOptions) {
       captureScreenshots:
         Boolean(browserOptions.captureScreenshots) && screenshotIds.has(example.id),
     },
-  }))
+  }));
 }

@@ -3,14 +3,10 @@
   "private": true,
   "description": "Rust-powered i18n tooling for TypeScript with one coherent source-to-runtime architecture",
   "homepage": "https://palamedes.dev",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git"
-  },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "packageManager": "pnpm@11.25.0",
-  "engines": {
-    "node": ">=22.22.0"
   },
   "scripts": {
     "test:llms": "node --test ./scripts/check-llms-surface.test.mjs",
@@ -87,5 +83,9 @@
     "oxlint": "^1.81.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
-  }
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "packageManager": "pnpm@11.25.0"
 }

@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { Trans } from "@palamedes/react/macro"
+import { useEffect, useState } from "react";
+import { Trans } from "@palamedes/react/macro";
 
 /** Renders a hidden marker once the app has hydrated, for browser verification. */
 export function ClientReady() {
-  const [ready, setReady] = useState(false)
-  useEffect(() => setReady(true), [])
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
   if (!ready) {
-    return null
+    return null;
   }
   return (
     <>
@@ -17,5 +17,5 @@ export function ClientReady() {
         <Trans>Add to cart</Trans>
       </span>
     </>
-  )
+  );
 }

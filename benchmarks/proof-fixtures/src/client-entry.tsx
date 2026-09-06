@@ -1,13 +1,13 @@
-import { StrictMode } from "react"
-import { createRoot } from "react-dom/client"
-import { ClientApp } from "./client-app"
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { ClientApp } from "./client-app";
 
-const container = document.getElementById("root")
+const container = document.getElementById("root");
 
 if (container) {
   createRoot(container).render(
     <StrictMode>
       <ClientApp name="Palamedes" />
-    </StrictMode>
-  )
+    </StrictMode>,
+  );
 }

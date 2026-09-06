@@ -1,32 +1,32 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useTransition } from "react"
-import { plural, t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Locale } from "@/lib/i18n"
-import { getServerActionProof } from "@/lib/actions"
+import { useEffect, useState, useTransition } from "react";
+import { plural, t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Locale } from "@/lib/i18n";
+import { getServerActionProof } from "@/lib/actions";
 
 type ProofPanelProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function ProofPanel({ locale }: ProofPanelProps) {
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const [message, setMessage] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const [message, setMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function refresh() {
     startTransition(async () => {
-      const result = await getServerActionProof()
-      setMessage(result.message)
-    })
+      const result = await getServerActionProof();
+      setMessage(result.message);
+    });
   }
 
   useEffect(() => {
-    refresh()
-  }, [locale])
+    refresh();
+  }, [locale]);
 
   return (
     <aside className="aside">
@@ -107,5 +107,5 @@ export function ProofPanel({ locale }: ProofPanelProps) {
         </button>
       </div>
     </aside>
-  )
+  );
 }

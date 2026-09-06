@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useRouter } from "next/navigation"
+import { useRouter } from "next/navigation";
 
 export function ClientNavigationProbe() {
-  const router = useRouter()
+  const router = useRouter();
 
   return (
     <button
@@ -14,5 +14,5 @@ export function ClientNavigationProbe() {
     >
       Open lazy client probe
     </button>
-  )
+  );
 }

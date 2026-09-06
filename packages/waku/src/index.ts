@@ -1,12 +1,12 @@
-import type { I18nInstance } from "@palamedes/runtime"
-import { unstable_getRequest, type HandlerInterceptor } from "waku/router/server"
+import type { I18nInstance } from "@palamedes/runtime";
+import { unstable_getRequest, type HandlerInterceptor } from "waku/router/server";
 
-import { createScopedWakuI18nRunner } from "./scope"
+import { createScopedWakuI18nRunner } from "./scope";
 
 /** Creates one fresh request-local i18n instance from Waku's original Fetch request. */
 export type WakuI18nResolver<T extends I18nInstance = I18nInstance> = (
-  request: Request
-) => T | Promise<T>
+  request: Request,
+) => T | Promise<T>;
 
 /**
  * Creates a Waku handler interceptor that activates i18n around the complete
@@ -14,21 +14,21 @@ export type WakuI18nResolver<T extends I18nInstance = I18nInstance> = (
  * using `fsRouter()`.
  */
 export function createWakuI18nInterceptor<T extends I18nInstance = I18nInstance>(
-  resolveI18n: WakuI18nResolver<T>
+  resolveI18n: WakuI18nResolver<T>,
 ): HandlerInterceptor {
-  const runner = createScopedWakuI18nRunner(resolveI18n)
+  const runner = createScopedWakuI18nRunner(resolveI18n);
 
   return async <Result>(next: () => Promise<Result>) => {
-    let request: Request
+    let request: Request;
     try {
-      request = unstable_getRequest()
+      request = unstable_getRequest();
     } catch {
       // Waku exposes no stable error type or code for its intentionally
       // unstable request accessor. A throw means this interceptor is running
       // outside a request phase, so preserve the documented pass-through path
       // without coupling it to an upstream diagnostic sentence.
-      return await next()
+      return await next();
     }
-    return await runner.run(request, next)
-  }
+    return await runner.run(request, next);
+  };
 }

@@ -1,21 +1,21 @@
-import { plural, t } from "@palamedes/core/macro"
+import { plural, t } from "@palamedes/core/macro";
 
-import { LOCALES, LOCALE_LABELS, type Locale } from "./i18n.ts"
+import { LOCALES, LOCALE_LABELS, type Locale } from "./i18n.ts";
 
 export type LocaleSwitchLink = {
-  href?: string
-  locale: Locale
-}
+  href?: string;
+  locale: Locale;
+};
 
 export type RenderHomePageOptions = {
-  banner?: string | null
-  locale: string | undefined
-  localeLabel: string
-  clientBootstrap?: string
-  clientProof?: string
-  strategyLabel?: string
-  switchLinks?: LocaleSwitchLink[]
-}
+  banner?: string | null;
+  locale: string | undefined;
+  localeLabel: string;
+  clientBootstrap?: string;
+  clientProof?: string;
+  strategyLabel?: string;
+  switchLinks?: LocaleSwitchLink[];
+};
 
 export function renderHomePage({
   banner,
@@ -26,11 +26,11 @@ export function renderHomePage({
   strategyLabel = "cookie",
   switchLinks,
 }: RenderHomePageOptions): string {
-  const seatCount = 3
-  const title = t`Remix v3 is rendering ${locale ?? "en"} with Palamedes`
-  const seats = plural(seatCount, { one: "# seat left", other: "# seats left" })
-  const description = t`This response was translated inside a request-scoped Remix handler.`
-  const currentLocale = normalizePageLocale(locale)
+  const seatCount = 3;
+  const title = t`Remix v3 is rendering ${locale ?? "en"} with Palamedes`;
+  const seats = plural(seatCount, { one: "# seat left", other: "# seats left" });
+  const description = t`This response was translated inside a request-scoped Remix handler.`;
+  const currentLocale = normalizePageLocale(locale);
 
   return `<!doctype html>
 <html lang="${escapeHtml(currentLocale)}">
@@ -63,35 +63,35 @@ export function renderHomePage({
     ${clientBootstrap ?? ""}
     ${clientProof ? '<script type="module" src="/assets/app/public/client.tsx"></script>' : ""}
   </body>
-</html>`
+</html>`;
 }
 
 function normalizePageLocale(locale: string | undefined): Locale {
-  return LOCALES.includes(locale as Locale) ? (locale as Locale) : "en"
+  return LOCALES.includes(locale as Locale) ? (locale as Locale) : "en";
 }
 
 function renderLocaleSwitcher(
   currentLocale: Locale,
-  switchLinks: LocaleSwitchLink[] | undefined
+  switchLinks: LocaleSwitchLink[] | undefined,
 ): string {
-  const links: LocaleSwitchLink[] = switchLinks ?? LOCALES.map((locale) => ({ locale }))
+  const links: LocaleSwitchLink[] = switchLinks ?? LOCALES.map((locale) => ({ locale }));
   return links
     .map((item) => {
-      const locale = item.locale
-      const active = locale === currentLocale
+      const locale = item.locale;
+      const active = locale === currentLocale;
       if (item.href) {
         return `<a aria-current="${active ? "page" : "false"}" href="${escapeHtml(item.href)}">
         ${escapeHtml(LOCALE_LABELS[locale])}
-      </a>`
+      </a>`;
       }
 
       return `<form action="/locale" method="post">
         <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" name="locale" type="submit" value="${escapeHtml(locale)}">
           ${escapeHtml(LOCALE_LABELS[locale])}
         </button>
-      </form>`
+      </form>`;
     })
-    .join("")
+    .join("");
 }
 
 function escapeHtml(value: unknown): string {
@@ -99,5 +99,5 @@ function escapeHtml(value: unknown): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
+    .replaceAll('"', "&quot;");
 }

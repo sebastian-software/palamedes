@@ -1,10 +1,10 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { createHash } from "node:crypto"
-import path from "node:path"
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import path from "node:path";
 
-import { runCommand } from "./exec.mjs"
+import { runCommand } from "./exec.mjs";
 
-export const DEFAULT_SEED = 20_260_703
+export const DEFAULT_SEED = 20_260_703;
 
 export const PROFILE_DEFINITIONS = {
   small: {
@@ -46,13 +46,31 @@ export const PROFILE_DEFINITIONS = {
     newCount: 576,
     removedCount: 432,
   },
-}
+};
 
-const AREAS = ["queue", "billing", "review", "reporting", "settings", "timeline", "portal", "audit"]
-const ACTIONS = ["approve", "publish", "archive", "sync", "route", "stage", "assign", "close"]
-const SURFACES = ["toolbar", "panel", "modal", "summary", "sidebar", "header", "detail", "overview"]
-const linguiFormatPoImport = JSON.stringify(import.meta.resolve("@lingui/format-po"))
-const FBTEE_DESCRIPTION = "Workflow benchmark message"
+const AREAS = [
+  "queue",
+  "billing",
+  "review",
+  "reporting",
+  "settings",
+  "timeline",
+  "portal",
+  "audit",
+];
+const ACTIONS = ["approve", "publish", "archive", "sync", "route", "stage", "assign", "close"];
+const SURFACES = [
+  "toolbar",
+  "panel",
+  "modal",
+  "summary",
+  "sidebar",
+  "header",
+  "detail",
+  "overview",
+];
+const linguiFormatPoImport = JSON.stringify(import.meta.resolve("@lingui/format-po"));
+const FBTEE_DESCRIPTION = "Workflow benchmark message";
 
 export async function createWorkflowCorpus({
   profileName,
@@ -60,15 +78,15 @@ export async function createWorkflowCorpus({
   seed = DEFAULT_SEED,
   toolPaths,
 }) {
-  const profile = PROFILE_DEFINITIONS[profileName]
+  const profile = PROFILE_DEFINITIONS[profileName];
 
   if (!profile) {
-    throw new Error(`Unknown workflow benchmark profile: ${profileName}`)
+    throw new Error(`Unknown workflow benchmark profile: ${profileName}`);
   }
 
-  const messageCount = profile.messages ?? profile.fileCount * profile.messagesPerFile
-  const generated = createMessageInventory({ messageCount, profile, seed })
-  const profileRoot = path.join(rootDir, profileName)
+  const messageCount = profile.messages ?? profile.fileCount * profile.messagesPerFile;
+  const generated = createMessageInventory({ messageCount, profile, seed });
+  const profileRoot = path.join(rootDir, profileName);
   const toolRoots = {
     palamedes: path.join(profileRoot, "palamedes"),
     lingui: path.join(profileRoot, "lingui"),
@@ -76,13 +94,13 @@ export async function createWorkflowCorpus({
     fbtee: path.join(profileRoot, "fbtee"),
     i18nextCli: path.join(profileRoot, "i18next-cli"),
     gt: path.join(profileRoot, "gt"),
-  }
+  };
 
   await Promise.all(
     Object.values(toolRoots).map((toolRoot) =>
-      mkdir(path.join(toolRoot, "src", "generated"), { recursive: true })
-    )
-  )
+      mkdir(path.join(toolRoot, "src", "generated"), { recursive: true }),
+    ),
+  );
 
   await Promise.all([
     writePalamedesWorkspace(toolRoots.palamedes, generated, profile),
@@ -91,10 +109,12 @@ export async function createWorkflowCorpus({
     writeFbteeWorkspace(toolRoots.fbtee, generated, profile, toolPaths?.fbtee),
     writeI18nextCliWorkspace(toolRoots.i18nextCli, generated, profile),
     writeGtWorkspace(toolRoots.gt, generated, profile, toolPaths?.gt),
-  ])
+  ]);
 
   const fileCount =
-    profile.layout === "realistic" ? profile.markedFiles + profile.unmarkedFiles : profile.fileCount
+    profile.layout === "realistic"
+      ? profile.markedFiles + profile.unmarkedFiles
+      : profile.fileCount;
 
   return {
     profileName,
@@ -110,44 +130,44 @@ export async function createWorkflowCorpus({
     newCount: profile.newCount,
     removedCount: profile.removedCount,
     sourceBytes: generated.sourceBytes,
-  }
+  };
 }
 
 function createMessageInventory({ messageCount, profile, seed }) {
-  const sourceMessages = []
-  const baselineMessages = []
-  const newStart = profile.changedCount
-  const stableStart = profile.changedCount + profile.newCount
+  const sourceMessages = [];
+  const baselineMessages = [];
+  const newStart = profile.changedCount;
+  const stableStart = profile.changedCount + profile.newCount;
 
   for (let index = 0; index < messageCount; index += 1) {
-    const current = makeMessage(seed, index, "current")
+    const current = makeMessage(seed, index, "current");
 
     if (index < newStart) {
-      const previous = makeMessage(seed, index, "previous")
-      sourceMessages.push({ current, previous, state: "changed" })
-      baselineMessages.push(previous)
+      const previous = makeMessage(seed, index, "previous");
+      sourceMessages.push({ current, previous, state: "changed" });
+      baselineMessages.push(previous);
     } else if (index < stableStart) {
-      sourceMessages.push({ current, previous: null, state: "new" })
+      sourceMessages.push({ current, previous: null, state: "new" });
     } else {
-      sourceMessages.push({ current, previous: current, state: "unchanged" })
-      baselineMessages.push(current)
+      sourceMessages.push({ current, previous: current, state: "unchanged" });
+      baselineMessages.push(current);
     }
   }
 
   for (let index = 0; index < profile.removedCount; index += 1) {
-    baselineMessages.push(makeRemovedMessage(seed, index))
+    baselineMessages.push(makeRemovedMessage(seed, index));
   }
 
   const sourceBytes = sourceMessages.reduce(
     (sum, entry) => sum + Buffer.byteLength(entry.current),
-    0
-  )
+    0,
+  );
 
   return {
     sourceMessages,
     baselineMessages,
     sourceBytes,
-  }
+  };
 }
 
 async function writePalamedesWorkspace(rootDir, inventory, profile) {
@@ -162,10 +182,10 @@ async function writePalamedesWorkspace(rootDir, inventory, profile) {
       "    include: [src/generated]",
       "",
     ].join("\n"),
-    "utf8"
-  )
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderPalamedesSource)
-  await writePoCatalogs(rootDir, inventory.baselineMessages, "palamedes-e2e-workflow")
+    "utf8",
+  );
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderPalamedesSource);
+  await writePoCatalogs(rootDir, inventory.baselineMessages, "palamedes-e2e-workflow");
 }
 
 async function writeLinguiWorkspace(rootDir, inventory, profile) {
@@ -184,15 +204,15 @@ async function writeLinguiWorkspace(rootDir, inventory, profile) {
       "}",
       "",
     ].join("\n"),
-    "utf8"
-  )
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderLinguiSource)
-  await writePoCatalogs(rootDir, inventory.baselineMessages, "lingui-e2e-workflow")
+    "utf8",
+  );
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderLinguiSource);
+  await writePoCatalogs(rootDir, inventory.baselineMessages, "lingui-e2e-workflow");
 }
 
 async function writeFormatJsWorkspace(rootDir, inventory, profile) {
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFormatJsSource)
-  await writeFormatJsCatalog(rootDir, inventory.baselineMessages)
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFormatJsSource);
+  await writeFormatJsCatalog(rootDir, inventory.baselineMessages);
 }
 
 /*
@@ -204,10 +224,10 @@ async function writeFormatJsWorkspace(rootDir, inventory, profile) {
  */
 async function writeFbteeWorkspace(rootDir, inventory, profile, fbteeCliPath) {
   if (!fbteeCliPath) {
-    throw new Error("The fbtee lane needs a resolved @nkzw/fbtee-cli path")
+    throw new Error("The fbtee lane needs a resolved @nkzw/fbtee-cli path");
   }
 
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFbteeSource)
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFbteeSource);
   await runCommand(
     fbteeCliPath,
     [
@@ -219,20 +239,20 @@ async function writeFbteeWorkspace(rootDir, inventory, profile, fbteeCliPath) {
       "--include-default-strings=false",
       "--disable-babel-config",
     ],
-    { cwd: rootDir }
-  )
+    { cwd: rootDir },
+  );
 
   const sourceStrings = JSON.parse(
-    await readFile(path.join(rootDir, "source_strings.json"), "utf8")
-  )
-  const currentKeysByMessage = invertFbteeSourceStrings(sourceStrings)
+    await readFile(path.join(rootDir, "source_strings.json"), "utf8"),
+  );
+  const currentKeysByMessage = invertFbteeSourceStrings(sourceStrings);
   await Promise.all([
     rm(path.join(rootDir, "source_strings.json"), { force: true }),
     rm(path.join(rootDir, ".enum_manifest.json"), { force: true }),
-  ])
+  ]);
 
-  const localeRoot = path.join(rootDir, "src", "locales")
-  await mkdir(localeRoot, { recursive: true })
+  const localeRoot = path.join(rootDir, "src", "locales");
+  await mkdir(localeRoot, { recursive: true });
   await Promise.all(
     ["en", "de"].map((locale) =>
       writeFile(
@@ -243,47 +263,47 @@ async function writeFbteeWorkspace(rootDir, inventory, profile, fbteeCliPath) {
             translations: toFbteeBaselineTranslations(
               inventory.baselineMessages,
               currentKeysByMessage,
-              locale
+              locale,
             ),
           },
           null,
-          2
+          2,
         )}\n`,
-        "utf8"
-      )
-    )
-  )
-  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+        "utf8",
+      ),
+    ),
+  );
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true });
 }
 
 function invertFbteeSourceStrings(sourceStrings) {
-  const keysByMessage = new Map()
+  const keysByMessage = new Map();
 
   for (const phrase of sourceStrings.phrases ?? []) {
     for (const [key, leaf] of Object.entries(phrase.hashToLeaf ?? {})) {
       if (keysByMessage.has(leaf.text)) {
-        throw new Error(`fbtee extracted ${JSON.stringify(leaf.text)} under two keys`)
+        throw new Error(`fbtee extracted ${JSON.stringify(leaf.text)} under two keys`);
       }
-      keysByMessage.set(leaf.text, key)
+      keysByMessage.set(leaf.text, key);
     }
   }
 
-  return keysByMessage
+  return keysByMessage;
 }
 
 export function fbteeTextHash(message) {
   return createHash("md5")
     .update(message + FBTEE_DESCRIPTION)
-    .digest("base64")
+    .digest("base64");
 }
 
 export function toFbteeBaselineTranslations(baselineMessages, currentKeysByMessage, locale) {
-  const translations = {}
+  const translations = {};
 
   for (const message of baselineMessages) {
-    const key = currentKeysByMessage.get(message) ?? fbteeTextHash(message)
+    const key = currentKeysByMessage.get(message) ?? fbteeTextHash(message);
     if (translations[key]) {
-      throw new Error(`fbtee baseline key collision at ${key}`)
+      throw new Error(`fbtee baseline key collision at ${key}`);
     }
     translations[key] = {
       description: FBTEE_DESCRIPTION,
@@ -291,10 +311,10 @@ export function toFbteeBaselineTranslations(baselineMessages, currentKeysByMessa
       tokens: [],
       translations: [{ translation: translate(locale, message), variations: {} }],
       types: [],
-    }
+    };
   }
 
-  return translations
+  return translations;
 }
 
 async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
@@ -316,10 +336,10 @@ async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
       "}",
       "",
     ].join("\n"),
-    "utf8"
-  )
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderI18nextSource)
-  await writeJsonCatalogs(rootDir, inventory.baselineMessages)
+    "utf8",
+  );
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderI18nextSource);
+  await writeJsonCatalogs(rootDir, inventory.baselineMessages);
 }
 
 /*
@@ -339,7 +359,7 @@ async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
  */
 async function writeGtWorkspace(rootDir, inventory, profile, gtxCliPath) {
   if (!gtxCliPath) {
-    throw new Error("The General Translation lane needs a resolved gtx-cli path")
+    throw new Error("The General Translation lane needs a resolved gtx-cli path");
   }
 
   await writeFile(
@@ -352,10 +372,10 @@ async function writeGtWorkspace(rootDir, inventory, profile, gtxCliPath) {
         dependencies: { "gt-react": await readGtReactVersion() },
       },
       null,
-      2
+      2,
     )}\n`,
-    "utf8"
-  )
+    "utf8",
+  );
   await writeFile(
     path.join(rootDir, "gt.config.json"),
     `${JSON.stringify(
@@ -366,106 +386,106 @@ async function writeGtWorkspace(rootDir, inventory, profile, gtxCliPath) {
         files: { gt: { output: "src/locales/[locale].json" } },
       },
       null,
-      2
+      2,
     )}\n`,
-    "utf8"
-  )
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderGtSource)
+    "utf8",
+  );
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderGtSource);
 
-  const localeRoot = path.join(rootDir, "src", "locales")
-  await runCommand(gtxCliPath, ["generate", "--quiet"], { cwd: rootDir })
+  const localeRoot = path.join(rootDir, "src", "locales");
+  await runCommand(gtxCliPath, ["generate", "--quiet"], { cwd: rootDir });
   const currentKeysByMessage = invertGtCatalog(
-    JSON.parse(await readFile(path.join(localeRoot, "en.json"), "utf8"))
-  )
-  await rm(localeRoot, { recursive: true, force: true })
+    JSON.parse(await readFile(path.join(localeRoot, "en.json"), "utf8")),
+  );
+  await rm(localeRoot, { recursive: true, force: true });
 
-  const baseline = toGtBaselineCatalog(inventory.baselineMessages, currentKeysByMessage)
-  await mkdir(localeRoot, { recursive: true })
+  const baseline = toGtBaselineCatalog(inventory.baselineMessages, currentKeysByMessage);
+  await mkdir(localeRoot, { recursive: true });
   await Promise.all(
     ["en", "de"].map((locale) =>
       writeFile(
         path.join(localeRoot, `${locale}.json`),
         `${JSON.stringify(
           Object.fromEntries(
-            Object.entries(baseline).map(([key, message]) => [key, translate(locale, message)])
+            Object.entries(baseline).map(([key, message]) => [key, translate(locale, message)]),
           ),
           null,
-          2
+          2,
         )}\n`,
-        "utf8"
-      )
-    )
-  )
-  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+        "utf8",
+      ),
+    ),
+  );
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true });
 }
 
 async function readGtReactVersion() {
-  const manifest = new URL("../node_modules/gt-react/package.json", import.meta.url)
+  const manifest = new URL("../node_modules/gt-react/package.json", import.meta.url);
   try {
-    return JSON.parse(await readFile(manifest, "utf8")).version
+    return JSON.parse(await readFile(manifest, "utf8")).version;
   } catch {
     throw new Error(
-      "Missing gt-react in the benchmark workspace. Run the repo-level benchmark script so dependencies are installed."
-    )
+      "Missing gt-react in the benchmark workspace. Run the repo-level benchmark script so dependencies are installed.",
+    );
   }
 }
 
 function invertGtCatalog(catalog) {
-  const keysByMessage = new Map()
+  const keysByMessage = new Map();
   for (const [key, message] of Object.entries(catalog)) {
     if (typeof message !== "string") {
       throw new TypeError(
-        `General Translation extracted a non-string source for ${key}; the corpus is meant to stay flat`
-      )
+        `General Translation extracted a non-string source for ${key}; the corpus is meant to stay flat`,
+      );
     }
     if (keysByMessage.has(message)) {
-      throw new Error(`General Translation extracted ${JSON.stringify(message)} under two keys`)
+      throw new Error(`General Translation extracted ${JSON.stringify(message)} under two keys`);
     }
-    keysByMessage.set(message, key)
+    keysByMessage.set(message, key);
   }
-  return keysByMessage
+  return keysByMessage;
 }
 
 export function toGtBaselineCatalog(baselineMessages, currentKeysByMessage) {
-  const catalog = {}
+  const catalog = {};
   for (const message of baselineMessages) {
-    const key = currentKeysByMessage.get(message) ?? syntheticGtKey(message)
+    const key = currentKeysByMessage.get(message) ?? syntheticGtKey(message);
     if (catalog[key]) {
-      throw new Error(`General Translation baseline key collision at ${key}`)
+      throw new Error(`General Translation baseline key collision at ${key}`);
     }
-    catalog[key] = message
+    catalog[key] = message;
   }
-  return catalog
+  return catalog;
 }
 
 /* Stale entries are only ever looked up by key, so any stable 16-hex key models
  * one. Hashing the raw text keeps it deterministic; General Translation hashes
  * a structured source descriptor instead, so the two cannot coincide. */
 function syntheticGtKey(message) {
-  return createHash("sha256").update(`stale:${message}`).digest("hex").slice(0, 16)
+  return createHash("sha256").update(`stale:${message}`).digest("hex").slice(0, 16);
 }
 
 async function writeToolSourceFiles(rootDir, sourceMessages, profile, renderer) {
   if (profile.layout === "realistic") {
-    await writeRealisticSourceFiles(rootDir, sourceMessages, profile, renderer)
-    return
+    await writeRealisticSourceFiles(rootDir, sourceMessages, profile, renderer);
+    return;
   }
 
-  const files = Array.from({ length: profile.fileCount }, (_, fileIndex) => [])
+  const files = Array.from({ length: profile.fileCount }, (_, fileIndex) => []);
 
   for (let index = 0; index < sourceMessages.length; index += 1) {
-    files[Math.floor(index / profile.messagesPerFile)].push(sourceMessages[index])
+    files[Math.floor(index / profile.messagesPerFile)].push(sourceMessages[index]);
   }
 
   for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
-    const extension = fileIndex % 3 === 0 ? "tsx" : "ts"
+    const extension = fileIndex % 3 === 0 ? "tsx" : "ts";
     const filename = path.join(
       rootDir,
       "src",
       "generated",
-      `fixture-${String(fileIndex).padStart(4, "0")}.${extension}`
-    )
-    await writeFile(filename, renderer(fileIndex, files[fileIndex], extension), "utf8")
+      `fixture-${String(fileIndex).padStart(4, "0")}.${extension}`,
+    );
+    await writeFile(filename, renderer(fileIndex, files[fileIndex], extension), "utf8");
   }
 }
 
@@ -477,62 +497,66 @@ async function writeToolSourceFiles(rootDir, sourceMessages, profile, renderer) 
  * all-messages fixture.
  */
 async function writeRealisticSourceFiles(rootDir, sourceMessages, profile, renderer) {
-  const marked = Array.from({ length: profile.markedFiles }, () => [])
+  const marked = Array.from({ length: profile.markedFiles }, () => []);
   for (let index = 0; index < sourceMessages.length; index += 1) {
-    marked[index % profile.markedFiles].push(sourceMessages[index])
+    marked[index % profile.markedFiles].push(sourceMessages[index]);
   }
 
-  const generatedDir = path.join(rootDir, "src", "generated")
+  const generatedDir = path.join(rootDir, "src", "generated");
   /*
    * Pending write thunks, flushed in bounded batches below. All four tool
    * workspaces are generated concurrently, so an unbounded Promise.all here
    * can hold thousands of file descriptors at once and fail with EMFILE on
    * hosts with a conservative open-file limit.
    */
-  const writes = []
-  let fileIndex = 0
+  const writes = [];
+  let fileIndex = 0;
 
   /* Marked files stay .ts: message calls extract reliably next to filler,
    * whereas .tsx + filler + <Trans> hits a JSX parse edge in the extractor. */
   for (let i = 0; i < profile.markedFiles; i += 1) {
-    const filename = path.join(generatedDir, `fixture-${String(fileIndex).padStart(4, "0")}.ts`)
-    const renderedIndex = fileIndex
+    const filename = path.join(generatedDir, `fixture-${String(fileIndex).padStart(4, "0")}.ts`);
+    const renderedIndex = fileIndex;
     writes.push(() =>
-      writeFile(filename, renderer(renderedIndex, marked[i], "ts", profile.markedFileLines), "utf8")
-    )
-    fileIndex += 1
+      writeFile(
+        filename,
+        renderer(renderedIndex, marked[i], "ts", profile.markedFileLines),
+        "utf8",
+      ),
+    );
+    fileIndex += 1;
   }
 
   for (let j = 0; j < profile.unmarkedFiles; j += 1) {
-    const extension = fileIndex % 3 === 0 ? "tsx" : "ts"
+    const extension = fileIndex % 3 === 0 ? "tsx" : "ts";
     const filename = path.join(
       generatedDir,
-      `fixture-${String(fileIndex).padStart(4, "0")}.${extension}`
-    )
-    const renderedIndex = fileIndex
+      `fixture-${String(fileIndex).padStart(4, "0")}.${extension}`,
+    );
+    const renderedIndex = fileIndex;
     writes.push(() =>
-      writeFile(filename, renderFillerModule(renderedIndex, profile.unmarkedFileLines), "utf8")
-    )
-    fileIndex += 1
+      writeFile(filename, renderFillerModule(renderedIndex, profile.unmarkedFileLines), "utf8"),
+    );
+    fileIndex += 1;
   }
 
-  const batchSize = 128
+  const batchSize = 128;
   for (let start = 0; start < writes.length; start += batchSize) {
-    await Promise.all(writes.slice(start, start + batchSize).map((write) => write()))
+    await Promise.all(writes.slice(start, start + batchSize).map((write) => write()));
   }
 }
 
-const FILLER_UNIT_LINES = 13
+const FILLER_UNIT_LINES = 13;
 
 /* Deterministic non-i18n source: imports, interfaces and helpers with no
  * translation markers. Emits whole units only (never cuts a declaration in
  * half — that would be a syntax error the extractor bails on), then pads with
  * comment lines to hit `lineCount` exactly so file size stays realistic. */
 function fillerLines(fileIndex, lineCount) {
-  const lines = ['import { useMemo } from "react"', ""]
-  let unit = 0
+  const lines = ['import { useMemo } from "react"', ""];
+  let unit = 0;
   while (lines.length + FILLER_UNIT_LINES <= lineCount) {
-    const n = unit + 1
+    const n = unit + 1;
     lines.push(
       `interface Record${fileIndex}_${unit} {`,
       "  id: number",
@@ -546,24 +570,24 @@ function fillerLines(fileIndex, lineCount) {
       `  const weight = Math.round((id / ${n}) * 100) / 100`,
       "  return { id, slug, weight }",
       "}",
-      ""
-    )
-    unit += 1
+      "",
+    );
+    unit += 1;
   }
   while (lines.length < lineCount) {
-    lines.push(`// filler line ${lines.length}`)
+    lines.push(`// filler line ${lines.length}`);
   }
-  return lines
+  return lines;
 }
 
 function renderFillerModule(fileIndex, lineCount) {
-  return `${fillerLines(fileIndex, lineCount).join("\n")}\n`
+  return `${fillerLines(fileIndex, lineCount).join("\n")}\n`;
 }
 
 export function renderPalamedesSource(fileIndex, messages, extension, targetLines) {
-  const imports = ['import { t } from "@palamedes/core/macro"']
+  const imports = ['import { t } from "@palamedes/core/macro"'];
   if (extension === "tsx") {
-    imports.push('import { Trans } from "@palamedes/react/macro"')
+    imports.push('import { Trans } from "@palamedes/react/macro"');
   }
 
   return renderMacroSource({
@@ -574,13 +598,13 @@ export function renderPalamedesSource(fileIndex, messages, extension, targetLine
     fileIndex,
     targetLines,
     authorMessage: authorPalamedesMessage,
-  })
+  });
 }
 
 export function renderLinguiSource(fileIndex, messages, extension, targetLines) {
-  const imports = ['import { defineMessage, t } from "@lingui/core/macro"']
+  const imports = ['import { defineMessage, t } from "@lingui/core/macro"'];
   if (extension === "tsx") {
-    imports.push('import { Trans } from "@lingui/react/macro"')
+    imports.push('import { Trans } from "@lingui/react/macro"');
   }
 
   return renderMacroSource({
@@ -590,7 +614,7 @@ export function renderLinguiSource(fileIndex, messages, extension, targetLines) 
     extension,
     fileIndex,
     targetLines,
-  })
+  });
 }
 
 /* Lingui lane: variable messages ({name}) are authored with defineMessage —
@@ -598,9 +622,9 @@ export function renderLinguiSource(fileIndex, messages, extension, targetLines) 
  * t/defineMessage mix. */
 function authorLinguiMessage(message, index) {
   if (message.includes("{name}") || index % 3 !== 0) {
-    return `    defineMessage({ message: ${JSON.stringify(message)} }).message,`
+    return `    defineMessage({ message: ${JSON.stringify(message)} }).message,`;
   }
-  return `    t({ message: ${JSON.stringify(message)} }),`
+  return `    t({ message: ${JSON.stringify(message)} }),`;
 }
 
 /*
@@ -616,7 +640,7 @@ function authorLinguiMessage(message, index) {
  * what the harness's semantic validation compares.
  */
 function authorPalamedesMessage(message) {
-  return `    t({ message: ${JSON.stringify(message)} }),`
+  return `    t({ message: ${JSON.stringify(message)} }),`;
 }
 
 function renderMacroSource({
@@ -628,52 +652,52 @@ function renderMacroSource({
   targetLines,
   authorMessage = authorLinguiMessage,
 }) {
-  const body = [`export function ${functionName}() {`, "  const values = ["]
+  const body = [`export function ${functionName}() {`, "  const values = ["];
 
   for (let index = 0; index < messages.length; index += 1) {
-    body.push(authorMessage(messages[index].current, index))
+    body.push(authorMessage(messages[index].current, index));
   }
 
-  body.push("  ]")
+  body.push("  ]");
 
   if (extension === "tsx") {
     /* Trans wraps a plain message — {name} in JSX text would be read as an
      * expression, not message content. */
-    const trans = messages.find((entry) => !entry.current.includes("{name}")) ?? messages[0]
+    const trans = messages.find((entry) => !entry.current.includes("{name}")) ?? messages[0];
     body.push(
       "  return (",
       "    <section>",
       `      <Trans>${escapeJsxText(trans.current)}</Trans>`,
       "      <span>{values.length}</span>",
       "    </section>",
-      "  )"
-    )
+      "  )",
+    );
   } else {
-    body.push('  return values.join("\\n")')
+    body.push('  return values.join("\\n")');
   }
 
-  body.push("}", "")
-  return withFiller(imports, body, fileIndex, targetLines)
+  body.push("}", "");
+  return withFiller(imports, body, fileIndex, targetLines);
 }
 
 function renderFormatJsSource(fileIndex, messages, extension, targetLines) {
-  const imports = ['import { defineMessages } from "react-intl"']
+  const imports = ['import { defineMessages } from "react-intl"'];
   if (extension === "tsx") {
-    imports[0] = 'import { defineMessages, FormattedMessage } from "react-intl"'
+    imports[0] = 'import { defineMessages, FormattedMessage } from "react-intl"';
   }
 
   const body = [
     `export const formatJsMessages${String(fileIndex).padStart(4, "0")} = defineMessages({`,
-  ]
+  ];
   for (let index = 0; index < messages.length; index += 1) {
     body.push(
-      `  message${String(index).padStart(4, "0")}: { defaultMessage: ${JSON.stringify(messages[index].current)} },`
-    )
+      `  message${String(index).padStart(4, "0")}: { defaultMessage: ${JSON.stringify(messages[index].current)} },`,
+    );
   }
-  body.push("})", "")
+  body.push("})", "");
 
   if (extension === "tsx") {
-    const formatted = messages[0]
+    const formatted = messages[0];
     body.push(
       `export function FormatJsFixture${String(fileIndex).padStart(4, "0")}() {`,
       "  return (",
@@ -683,28 +707,28 @@ function renderFormatJsSource(fileIndex, messages, extension, targetLines) {
       "    </section>",
       "  )",
       "}",
-      ""
-    )
+      "",
+    );
   }
 
-  return withFiller(imports, body, fileIndex, targetLines)
+  return withFiller(imports, body, fileIndex, targetLines);
 }
 
 export function renderFbteeSource(fileIndex, messages, extension, targetLines) {
-  const suffix = String(fileIndex).padStart(4, "0")
+  const suffix = String(fileIndex).padStart(4, "0");
   const fbtMessage =
     extension === "tsx"
       ? (messages.find((entry) => !entry.current.includes("{name}")) ?? null)
-      : null
-  const imports = ['import { fbs } from "fbtee"']
-  const body = [`export function fbteeFixture${suffix}() {`, "  const values = ["]
+      : null;
+  const imports = ['import { fbs } from "fbtee"'];
+  const body = [`export function fbteeFixture${suffix}() {`, "  const values = ["];
 
   for (const entry of messages) {
-    if (entry === fbtMessage) continue
-    body.push(`    fbs(${JSON.stringify(entry.current)}, ${JSON.stringify(FBTEE_DESCRIPTION)}),`)
+    if (entry === fbtMessage) continue;
+    body.push(`    fbs(${JSON.stringify(entry.current)}, ${JSON.stringify(FBTEE_DESCRIPTION)}),`);
   }
 
-  body.push("  ]")
+  body.push("  ]");
 
   if (extension === "tsx") {
     body.push(
@@ -717,41 +741,41 @@ export function renderFbteeSource(fileIndex, messages, extension, targetLines) {
         : []),
       "      <span>{values.length}</span>",
       "    </section>",
-      "  )"
-    )
+      "  )",
+    );
   } else {
-    body.push('  return values.join("\\n")')
+    body.push('  return values.join("\\n")');
   }
 
-  body.push("}", "")
-  return withFiller(imports, body, fileIndex, targetLines)
+  body.push("}", "");
+  return withFiller(imports, body, fileIndex, targetLines);
 }
 
 function renderI18nextSource(fileIndex, messages, extension, targetLines) {
-  const imports = ['import i18next from "i18next"']
+  const imports = ['import i18next from "i18next"'];
   const body = [
     `export function i18nextFixture${String(fileIndex).padStart(4, "0")}() {`,
     "  const values = [",
-  ]
+  ];
 
   for (const entry of messages) {
-    body.push(`    i18next.t(${JSON.stringify(entry.current)}),`)
+    body.push(`    i18next.t(${JSON.stringify(entry.current)}),`);
   }
 
-  body.push("  ]")
+  body.push("  ]");
 
   if (extension === "tsx") {
-    body.push('  return <section>{values.join("\\\\n")}</section>')
+    body.push('  return <section>{values.join("\\\\n")}</section>');
   } else {
-    body.push('  return values.join("\\n")')
+    body.push('  return values.join("\\n")');
   }
 
-  body.push("}", "")
-  return withFiller(imports, body, fileIndex, targetLines)
+  body.push("}", "");
+  return withFiller(imports, body, fileIndex, targetLines);
 }
 
 export function renderGtSource(fileIndex, messages, extension, targetLines) {
-  const suffix = String(fileIndex).padStart(4, "0")
+  const suffix = String(fileIndex).padStart(4, "0");
 
   /*
    * <T> only wraps a plain message. General Translation rejects a `{name}`
@@ -766,21 +790,21 @@ export function renderGtSource(fileIndex, messages, extension, targetLines) {
   const transMessage =
     extension === "tsx"
       ? (messages.find((entry) => !entry.current.includes("{name}")) ?? null)
-      : null
+      : null;
 
-  const imports = [`import { ${transMessage ? "T, " : ""}useGT } from "gt-react"`]
+  const imports = [`import { ${transMessage ? "T, " : ""}useGT } from "gt-react"`];
   const body = [
     `export function ${extension === "tsx" ? "G" : "g"}tFixture${suffix}() {`,
     "  const t = useGT()",
     "  const values = [",
-  ]
+  ];
 
   for (const entry of messages) {
-    if (entry === transMessage) continue
-    body.push(`    t(${JSON.stringify(entry.current)}),`)
+    if (entry === transMessage) continue;
+    body.push(`    t(${JSON.stringify(entry.current)}),`);
   }
 
-  body.push("  ]")
+  body.push("  ]");
 
   if (extension === "tsx") {
     body.push(
@@ -789,14 +813,14 @@ export function renderGtSource(fileIndex, messages, extension, targetLines) {
       ...(transMessage ? [`      <T>${escapeJsxText(transMessage.current)}</T>`] : []),
       "      <span>{values.length}</span>",
       "    </section>",
-      "  )"
-    )
+      "  )",
+    );
   } else {
-    body.push('  return values.join("\\n")')
+    body.push('  return values.join("\\n")');
   }
 
-  body.push("}", "")
-  return withFiller(imports, body, fileIndex, targetLines)
+  body.push("}", "");
+  return withFiller(imports, body, fileIndex, targetLines);
 }
 
 /* Assemble a source file. In the realistic layout (targetLines set) the message
@@ -804,51 +828,51 @@ export function renderGtSource(fileIndex, messages, extension, targetLines) {
  * otherwise the dense small/medium fixture shape is kept. */
 function withFiller(imports, body, fileIndex, targetLines) {
   if (!targetLines) {
-    return [...imports, "", ...body].join("\n")
+    return [...imports, "", ...body].join("\n");
   }
-  const fillerCount = Math.max(0, targetLines - imports.length - 1 - body.length)
-  return [...imports, "", ...fillerLines(fileIndex, fillerCount), ...body].join("\n")
+  const fillerCount = Math.max(0, targetLines - imports.length - 1 - body.length);
+  return [...imports, "", ...fillerLines(fileIndex, fillerCount), ...body].join("\n");
 }
 
 async function writePoCatalogs(rootDir, messages, generator) {
-  const localeRoot = path.join(rootDir, "src", "locales")
-  await mkdir(localeRoot, { recursive: true })
+  const localeRoot = path.join(rootDir, "src", "locales");
+  await mkdir(localeRoot, { recursive: true });
   await Promise.all([
     writeFile(path.join(localeRoot, "en.po"), renderPo("en", messages, generator), "utf8"),
     writeFile(path.join(localeRoot, "de.po"), renderPo("de", messages, generator), "utf8"),
-  ])
-  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+  ]);
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true });
 }
 
 async function writeFormatJsCatalog(rootDir, messages) {
-  const localeRoot = path.join(rootDir, "src", "locales")
-  await mkdir(localeRoot, { recursive: true })
+  const localeRoot = path.join(rootDir, "src", "locales");
+  await mkdir(localeRoot, { recursive: true });
   await writeFile(
     path.join(localeRoot, "extracted.json"),
     `${JSON.stringify(toFormatJsCatalog(messages), null, 2)}\n`,
-    "utf8"
-  )
-  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+    "utf8",
+  );
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true });
 }
 
 async function writeJsonCatalogs(rootDir, messages) {
-  const localeRoot = path.join(rootDir, "src", "locales")
-  const enDir = path.join(localeRoot, "en")
-  const deDir = path.join(localeRoot, "de")
-  await Promise.all([mkdir(enDir, { recursive: true }), mkdir(deDir, { recursive: true })])
+  const localeRoot = path.join(rootDir, "src", "locales");
+  const enDir = path.join(localeRoot, "en");
+  const deDir = path.join(localeRoot, "de");
+  await Promise.all([mkdir(enDir, { recursive: true }), mkdir(deDir, { recursive: true })]);
   await Promise.all([
     writeFile(
       path.join(enDir, "translation.json"),
       `${JSON.stringify(toJsonCatalog(messages, "en"), null, 2)}\n`,
-      "utf8"
+      "utf8",
     ),
     writeFile(
       path.join(deDir, "translation.json"),
       `${JSON.stringify(toJsonCatalog(messages, "de"), null, 2)}\n`,
-      "utf8"
+      "utf8",
     ),
-  ])
-  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+  ]);
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true });
 }
 
 function renderPo(locale, messages, generator) {
@@ -860,85 +884,85 @@ function renderPo(locale, messages, generator) {
     '"Content-Transfer-Encoding: 8bit\\n"',
     `"X-Generator: ${generator}\\n"`,
     "",
-  ]
+  ];
 
   for (const message of messages) {
-    lines.push(`msgid ${quotePo(message)}`)
-    lines.push(`msgstr ${quotePo(translate(locale, message))}`)
-    lines.push("")
+    lines.push(`msgid ${quotePo(message)}`);
+    lines.push(`msgstr ${quotePo(translate(locale, message))}`);
+    lines.push("");
   }
 
-  return lines.join("\n")
+  return lines.join("\n");
 }
 
 function toJsonCatalog(messages, locale) {
-  return Object.fromEntries(messages.map((message) => [message, translate(locale, message)]))
+  return Object.fromEntries(messages.map((message) => [message, translate(locale, message)]));
 }
 
 export function toFormatJsCatalog(messages) {
-  const catalog = {}
+  const catalog = {};
   for (const message of messages) {
-    const id = formatJsId(message)
+    const id = formatJsId(message);
     if (catalog[id] && catalog[id].defaultMessage !== message) {
-      throw new Error(`React Intl content-hash collision for ${JSON.stringify(message)} at ${id}`)
+      throw new Error(`React Intl content-hash collision for ${JSON.stringify(message)} at ${id}`);
     }
-    catalog[id] = { defaultMessage: message }
+    catalog[id] = { defaultMessage: message };
   }
-  return catalog
+  return catalog;
 }
 
 export function formatJsId(message) {
-  return createHash("sha512").update(message).digest("base64").slice(0, 6)
+  return createHash("sha512").update(message).digest("base64").slice(0, 6);
 }
 
 function translate(locale, message) {
-  return locale === "en" ? message : `[de] ${message}`
+  return locale === "en" ? message : `[de] ${message}`;
 }
 
 /* ~15% of messages carry a simple {name} variable, the rest are plain (plurals
  * are deferred — see issue #355 / PR #358). Keyed off index % 100 so the split
  * is exact and stable across the current/previous variants of a message. */
 function isVariableMessage(index) {
-  return index % 100 < 15
+  return index % 100 < 15;
 }
 
 function makeMessage(seed, index, variant) {
-  const area = pick(AREAS, seed, index, 1)
-  const action = pick(ACTIONS, seed, index, 2)
-  const surface = pick(SURFACES, seed, index, 3)
-  const token = `${String(index).padStart(5, "0")}-${variant === "previous" ? "old" : "now"}`
+  const area = pick(AREAS, seed, index, 1);
+  const action = pick(ACTIONS, seed, index, 2);
+  const surface = pick(SURFACES, seed, index, 3);
+  const token = `${String(index).padStart(5, "0")}-${variant === "previous" ? "old" : "now"}`;
   if (isVariableMessage(index)) {
-    return `${capitalize(action)} ${area} ${surface} for {name} ${token}`
+    return `${capitalize(action)} ${area} ${surface} for {name} ${token}`;
   }
-  return `${capitalize(action)} ${area} ${surface} item ${token}`
+  return `${capitalize(action)} ${area} ${surface} item ${token}`;
 }
 
 function makeRemovedMessage(seed, index) {
-  const area = pick(AREAS, seed, index, 4)
-  const surface = pick(SURFACES, seed, index, 5)
-  return `Remove stale ${area} ${surface} item ${String(index).padStart(5, "0")}`
+  const area = pick(AREAS, seed, index, 4);
+  const surface = pick(SURFACES, seed, index, 5);
+  return `Remove stale ${area} ${surface} item ${String(index).padStart(5, "0")}`;
 }
 
 function pick(values, seed, index, salt) {
-  return values[Math.abs(numberHash(seed + index * 33 + salt * 97)) % values.length]
+  return values[Math.abs(numberHash(seed + index * 33 + salt * 97)) % values.length];
 }
 
 function numberHash(value) {
-  let state = value >>> 0
-  state ^= state << 13
-  state ^= state >>> 17
-  state ^= state << 5
-  return state | 0
+  let state = value >>> 0;
+  state ^= state << 13;
+  state ^= state >>> 17;
+  state ^= state << 5;
+  return state | 0;
 }
 
 function quotePo(value) {
-  return `"${value.replaceAll(/\\/g, "\\\\").replaceAll(/"/g, '\\"').replaceAll(/\n/g, "\\n")}"`
+  return `"${value.replaceAll(/\\/g, "\\\\").replaceAll(/"/g, '\\"').replaceAll(/\n/g, "\\n")}"`;
 }
 
 function escapeJsxText(value) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function capitalize(value) {
-  return value.slice(0, 1).toUpperCase() + value.slice(1)
+  return value.slice(0, 1).toUpperCase() + value.slice(1);
 }

@@ -1,12 +1,12 @@
-import { runNodeScript } from "./example-process.mjs"
+import { runNodeScript } from "./example-process.mjs";
 
 async function main() {
-  const args = process.argv.slice(2)
-  await runNodeScript("./scripts/verify-examples.mjs", args)
-  await runNodeScript("./scripts/verify-examples-browser.mjs", args)
+  const args = process.argv.slice(2);
+  await runNodeScript("./scripts/verify-examples.mjs", args);
+  await runNodeScript("./scripts/verify-examples-browser.mjs", args);
 }
 
 main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+  console.error(error);
+  process.exitCode = 1;
+});

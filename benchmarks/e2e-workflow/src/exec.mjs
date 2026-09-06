@@ -1,5 +1,5 @@
-import path from "node:path"
-import { spawn } from "node:child_process"
+import path from "node:path";
+import { spawn } from "node:child_process";
 
 /*
  * Shared by the measured runs in run.mjs and by corpus generation, which has to
@@ -15,29 +15,29 @@ export async function runCommand(command, args, options) {
         ...options.env,
       },
       stdio: ["ignore", "pipe", "pipe"],
-    })
-    let stdout = ""
-    let stderr = ""
+    });
+    let stdout = "";
+    let stderr = "";
 
-    child.stdout.setEncoding("utf8")
-    child.stderr.setEncoding("utf8")
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      stdout += chunk
-    })
+      stdout += chunk;
+    });
     child.stderr.on("data", (chunk) => {
-      stderr += chunk
-    })
-    child.on("error", reject)
+      stderr += chunk;
+    });
+    child.on("error", reject);
     child.on("close", (code, signal) => {
       if (code !== 0) {
         reject(
           new Error(
-            `${path.basename(command)} ${args.join(" ")} failed with ${signal ?? code}\n${stdout}\n${stderr}`
-          )
-        )
-        return
+            `${path.basename(command)} ${args.join(" ")} failed with ${signal ?? code}\n${stdout}\n${stderr}`,
+          ),
+        );
+        return;
       }
-      resolve({ stdout, stderr })
-    })
-  })
+      resolve({ stdout, stderr });
+    });
+  });
 }

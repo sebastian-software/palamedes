@@ -19,7 +19,7 @@
  *    as a deliberate tradeoff, because that is what it is, not as an apology.
  */
 
-import { BENCH_REALISTIC } from "./bench"
+import { BENCH_REALISTIC } from "./bench";
 
 /*
  * Keep comparison data importable by its contract test without a site
@@ -27,90 +27,90 @@ import { BENCH_REALISTIC } from "./bench"
  * surfaces; these named, supported hosts are the durable comparison fact.
  */
 const SUPPORTED_SERVER_FRAMEWORKS =
-  "Next.js, TanStack Start, Solid, Waku, React Router and Remix v3"
+  "Next.js, TanStack Start, Solid, Waku, React Router and Remix v3";
 
 export interface RivalFact {
-  label: string
-  value: string
+  label: string;
+  value: string;
 }
 
 export interface RivalDifference {
-  title: string
-  body: string
+  title: string;
+  body: string;
 }
 
 export interface RivalRow {
-  criterion: string
-  rival: string
-  palamedes: string
+  criterion: string;
+  rival: string;
+  palamedes: string;
 }
 
 export interface RivalCode {
-  caption: string
-  rivalLabel: string
-  rivalCode: string
-  palamedesLabel: string
-  palamedesCode: string
-  note?: string
+  caption: string;
+  rivalLabel: string;
+  rivalCode: string;
+  palamedesLabel: string;
+  palamedesCode: string;
+  note?: string;
 }
 
 export interface RivalEvaluation {
-  title: string
-  body: string
-  label: string
-  href: string
+  title: string;
+  body: string;
+  label: string;
+  href: string;
 }
 
 export interface RivalFaq {
-  q: string
-  a: string
+  q: string;
+  a: string;
 }
 
 export interface Rival {
-  slug: string
-  name: string
+  slug: string;
+  name: string;
   /** Package or project the numbers refer to. */
-  subject: string
-  researched: string
-  metaTitle: string
-  metaDescription: string
-  eyebrow: string
-  headline: string
-  lede: string
+  subject: string;
+  researched: string;
+  metaTitle: string;
+  metaDescription: string;
+  eyebrow: string;
+  headline: string;
+  lede: string;
   /** One-line positioning for the /compare hub card. */
-  card: string
-  facts: RivalFact[]
+  card: string;
+  facts: RivalFact[];
   /** The confident statement of position, shown directly under the hero. */
-  thesis: string
+  thesis: string;
   /** The evaluation situation this comparison is written to help resolve. */
-  audience: string
+  audience: string;
   /** One proof artifact placed beside the workflow outcomes. */
-  outcomeProof: { label: string; href: string }
-  respectTitle: string
-  respect: string[]
-  flipsideTitle: string
+  outcomeProof: { label: string; href: string };
+  respectTitle: string;
+  respect: string[];
+  flipsideTitle: string;
   /** What those strengths cost the people using them. Sourced, not snide. */
-  flipside: string[]
-  differences: RivalDifference[]
-  rows: RivalRow[]
-  code: RivalCode
-  pickRival: string[]
-  pickPalamedes: string[]
-  honest: string
-  migration?: { body: string; label: string; href: string }
+  flipside: string[];
+  differences: RivalDifference[];
+  rows: RivalRow[];
+  code: RivalCode;
+  pickRival: string[];
+  pickPalamedes: string[];
+  honest: string;
+  migration?: { body: string; label: string; href: string };
   /** A bounded, reversible way to learn whether a switch is justified. */
-  evaluation: RivalEvaluation
+  evaluation: RivalEvaluation;
   /** Visible comparison questions; route metadata derives FAQPage schema from these. */
-  faq: RivalFaq[]
+  faq: RivalFaq[];
 }
 
-type RivalSource = Omit<Rival, "audience" | "outcomeProof" | "evaluation" | "faq">
+type RivalSource = Omit<Rival, "audience" | "outcomeProof" | "evaluation" | "faq">;
 
 function speedup(tool: string): string {
-  const row = BENCH_REALISTIC.rows.find((candidate) => candidate.tool === tool)
-  const palamedes = BENCH_REALISTIC.rows.find((candidate) => candidate.tool === "Palamedes")
-  if (!row || !palamedes) throw new Error(`rivals.ts: no realistic bench row for ${tool}`)
-  return `${Math.round(row.medianMs)} ms vs ${Math.round(palamedes.medianMs)} ms`
+  const row = BENCH_REALISTIC.rows.find((candidate) => candidate.tool === tool);
+  const palamedes = BENCH_REALISTIC.rows.find((candidate) => candidate.tool === "Palamedes");
+  if (!row || !palamedes) throw new Error(`rivals.ts: no realistic bench row for ${tool}`);
+  return `${Math.round(row.medianMs)} ms vs ${Math.round(palamedes.medianMs)} ms`;
 }
 
 /*
@@ -119,11 +119,11 @@ function speedup(tool: string): string {
  * never presented with false precision in a headline or decision prompt.
  */
 function publicFactor(key: keyof typeof BENCH_REALISTIC.ratios): string {
-  return `${Math.floor(Number.parseFloat(BENCH_REALISTIC.ratios[key]))}×`
+  return `${Math.floor(Number.parseFloat(BENCH_REALISTIC.ratios[key]))}×`;
 }
 
 const NO_BENCHMARK =
-  "Not measured. The checked harness covers Lingui, React Intl, fbtee, i18next-cli, and General Translation; anything else would be a guess."
+  "Not measured. The checked harness covers Lingui, React Intl, fbtee, i18next-cli, and General Translation; anything else would be a guess.";
 
 /*
  * The argument that applies to every page: extraction and catalog work is
@@ -134,7 +134,7 @@ const NO_BENCHMARK =
 export const NATIVE_SHIFT = {
   title: "The toolchain already moved. i18n tooling mostly hasn't.",
   body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation. In the checked benchmark it is 5× faster than the narrower extraction-only React Intl lane and 30× to 100× faster than the four catalog-update workflows.`,
-}
+};
 
 const RIVAL_SOURCE: RivalSource[] = [
   {
@@ -1088,7 +1088,7 @@ function buyLabel(seats) {
     honest:
       "Intlayer covers far more UI frameworks than Palamedes, and removing the scanner eliminates a category of failure — nothing can drift out of a catalog you wrote by hand. The technical tradeoff is repeated keyed dictionary work for every message versus one extraction compiler in the build. Which model fits depends on the team's authoring workflow.",
   },
-]
+];
 
 /*
  * Acquisition content lives beside the researched comparison facts rather
@@ -1187,7 +1187,7 @@ const RIVAL_SUPPORT: Record<string, Omit<Rival, keyof RivalSource | "faq">> = {
       href: "/get-started",
     },
   },
-}
+};
 
 function comparisonFaqs(rival: Omit<Rival, "faq">): RivalFaq[] {
   return [
@@ -1211,19 +1211,19 @@ function comparisonFaqs(rival: Omit<Rival, "faq">): RivalFaq[] {
       q: `What do we give up by choosing Palamedes over ${rival.name}?`,
       a: rival.honest,
     },
-  ]
+  ];
 }
 
 export const RIVALS: Rival[] = RIVAL_SOURCE.map((rival) => {
-  const supported = { ...rival, ...RIVAL_SUPPORT[rival.slug] }
-  return { ...supported, faq: comparisonFaqs(supported) }
-})
+  const supported = { ...rival, ...RIVAL_SUPPORT[rival.slug] };
+  return { ...supported, faq: comparisonFaqs(supported) };
+});
 
 export function rivalBySlug(slug: string): Rival {
-  const rival = RIVALS.find((candidate) => candidate.slug === slug)
-  if (!rival) throw new Error(`rivals.ts: unknown rival ${slug}`)
-  return rival
+  const rival = RIVALS.find((candidate) => candidate.slug === slug);
+  if (!rival) throw new Error(`rivals.ts: unknown rival ${slug}`);
+  return rival;
 }
 
 export const BENCH_FOOTNOTE =
-  "¹ Median of 7 runs on the realistic corpus (1,500 files, ~400k lines, 6,000 messages — half the files carry no i18n marker), one machine-local run, same semantic validation for every tool. The full report and the harness are in the repository, and the site build fails if these numbers drift from it."
+  "¹ Median of 7 runs on the realistic corpus (1,500 files, ~400k lines, 6,000 messages — half the files carry no i18n marker), one machine-local run, same semantic validation for every tool. The full report and the harness are in the repository, and the site build fails if these numbers drift from it.";

@@ -1,25 +1,25 @@
-import type { ParentProps } from "solid-js"
-import { getRequestEvent, HydrationScript } from "@solidjs/web"
-import { initializeClientI18n, locales, type Locale } from "./lib/i18n"
-import { resolveHostLocale } from "./lib/server"
+import type { ParentProps } from "solid-js";
+import { getRequestEvent, HydrationScript } from "@solidjs/web";
+import { initializeClientI18n, locales, type Locale } from "./lib/i18n";
+import { resolveHostLocale } from "./lib/server";
 
 function resolveDocumentLocale(): Locale {
   if (typeof document !== "undefined") {
-    const locale = document.documentElement.lang
+    const locale = document.documentElement.lang;
     if (!locales.isLocale(locale)) {
       throw new Error(
-        `Expected a supported server document locale, received ${JSON.stringify(locale)}`
-      )
+        `Expected a supported server document locale, received ${JSON.stringify(locale)}`,
+      );
     }
-    return locale
+    return locale;
   }
 
-  return resolveHostLocale(getRequestEvent()?.request).locale
+  return resolveHostLocale(getRequestEvent()?.request).locale;
 }
 
 export default function Document(props: ParentProps) {
-  const locale = resolveDocumentLocale()
-  initializeClientI18n(locale)
+  const locale = resolveDocumentLocale();
+  initializeClientI18n(locale);
 
   return (
     <html lang={locale}>
@@ -30,5 +30,5 @@ export default function Document(props: ParentProps) {
       </head>
       <body>{props.children}</body>
     </html>
-  )
+  );
 }

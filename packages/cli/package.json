@@ -3,20 +3,19 @@
   "version": "1.23.0",
   "description": "Palamedes CLI for extraction, audits, reports, catalog workflows, and native command plugins",
   "keywords": [
+    "cli",
     "i18n",
     "internationalization",
-    "cli",
     "palamedes"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/cli"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
-  "type": "module",
   "bin": {
     "pmds": "./bin/pmds"
   },
@@ -28,15 +27,17 @@
     "scripts/platform.mjs",
     "scripts/native.mjs"
   ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node ./scripts/build.mjs",
     "test": "node --test ./scripts/platform.test.mjs ./scripts/native.test.mjs && node ./scripts/smoke.mjs"
   },
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
   },
   "optionalDependencies": {
     "@palamedes/cli-darwin-arm64": "workspace:*",
@@ -46,8 +47,7 @@
     "@palamedes/cli-linux-x64-musl": "workspace:*",
     "@palamedes/cli-win32-x64-msvc": "workspace:*"
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^7.0.2"
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

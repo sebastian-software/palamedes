@@ -1,7 +1,7 @@
-import "server-only"
+import "server-only";
 
-import { t } from "@palamedes/core/macro"
+import { t } from "@palamedes/core/macro";
 
 export function crossModuleServerFunctionMessage() {
-  return t`Cross-module helper confirmed locale.`
+  return t`Cross-module helper confirmed locale.`;
 }

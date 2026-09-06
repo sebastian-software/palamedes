@@ -1,13 +1,13 @@
-import type { CSSProperties } from "react"
+import type { CSSProperties } from "react";
 
-import { SiteLink } from "./SiteUiProvider"
-import type { SiteBuildMetadata, SiteConfig } from "./types"
-import { Wordmark } from "./Wordmark"
+import { SiteLink } from "./SiteUiProvider";
+import type { SiteBuildMetadata, SiteConfig } from "./types";
+import { Wordmark } from "./Wordmark";
 
 function formatBuildTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
 export function SiteFooter({ config, build }: { config: SiteConfig; build?: SiteBuildMetadata }) {
@@ -19,7 +19,7 @@ export function SiteFooter({ config, build }: { config: SiteConfig; build?: Site
           links: [{ label: config.counterpart.label, href: config.counterpart.href }],
         },
       ]
-    : config.footerColumns
+    : config.footerColumns;
 
   return (
     <footer className="pmds-footer">
@@ -56,5 +56,5 @@ export function SiteFooter({ config, build }: { config: SiteConfig; build?: Site
         <Wordmark className="pmds-footer-wordmark">{config.footerWordmark ?? config.name}</Wordmark>
       </div>
     </footer>
-  )
+  );
 }

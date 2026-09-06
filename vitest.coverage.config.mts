@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config"
+import { defineConfig } from "vitest/config";
 
 const standardPackages = [
   "config",
@@ -16,7 +16,7 @@ const standardPackages = [
   "transform",
   "vite-plugin",
   "waku",
-]
+];
 
 export default defineConfig({
   test: {
@@ -41,4 +41,4 @@ export default defineConfig({
       reportOnFailure: true,
     },
   },
-})
+});

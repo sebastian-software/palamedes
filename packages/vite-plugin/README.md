@@ -50,23 +50,23 @@ pnpm add -D @solidjs/vite-plugin
 ## Minimal Setup
 
 ```ts
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes(), react()],
-})
+});
 ```
 
 ```ts
-import { defineConfig } from "vite"
-import solid from "@solidjs/vite-plugin"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import solid from "@solidjs/vite-plugin";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
-})
+});
 ```
 
 ```yaml
@@ -86,7 +86,7 @@ future adapter release explicitly documents `.fcl` imports.
 ## Options
 
 ```ts
-import { palamedes } from "@palamedes/vite-plugin"
+import { palamedes } from "@palamedes/vite-plugin";
 
 palamedes({
   include: /\.([cm]?[jt]s|[jt]sx)$/,
@@ -103,7 +103,7 @@ palamedes({
     translatableAttributes: ["alt", "title"],
     frontMatterFields: ["title", "description"],
   },
-})
+});
 ```
 
 `keepSourceFallbacks` defaults to `true`, including `vite build`, so a missing

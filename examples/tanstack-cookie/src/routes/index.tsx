@@ -1,20 +1,20 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { TicketPanel } from "../components/TicketPanel"
-import { loadHomePageData } from "../lib/server-functions"
+import { createFileRoute } from "@tanstack/react-router";
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { TicketPanel } from "../components/TicketPanel";
+import { loadHomePageData } from "../lib/server-functions";
 
 export const Route = createFileRoute("/")({
   loader: () => loadHomePageData(),
   component: Home,
-})
+});
 
 function Home() {
-  const { locale, localeLabel } = Route.useLoaderData()
+  const { locale, localeLabel } = Route.useLoaderData();
   return (
     <main className="page-shell">
       <header className="topbar">
@@ -56,5 +56,5 @@ function Home() {
 
       <ClientReady />
     </main>
-  )
+  );
 }

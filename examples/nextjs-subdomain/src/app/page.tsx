@@ -1,47 +1,47 @@
-import { t } from "@palamedes/core/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary"
-import { ClientReady } from "@/components/ClientReady"
-import { LocaleSwitcher } from "@/components/LocaleSwitcher"
-import { ProofPanel } from "@/components/ProofPanel"
-import { SuggestionBanner } from "@/components/SuggestionBanner"
-import { TicketPanel } from "@/components/TicketPanel"
-import { createActiveServerI18n, getSubdomainLocale, runWithServerI18n } from "@/lib/i18n.server"
-import { getLocaleLabel, type Locale } from "@/lib/i18n"
+import { t } from "@palamedes/core/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary";
+import { ClientReady } from "@/components/ClientReady";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { ProofPanel } from "@/components/ProofPanel";
+import { SuggestionBanner } from "@/components/SuggestionBanner";
+import { TicketPanel } from "@/components/TicketPanel";
+import { createActiveServerI18n, getSubdomainLocale, runWithServerI18n } from "@/lib/i18n.server";
+import { getLocaleLabel, type Locale } from "@/lib/i18n";
 
 // These functions run only inside `runWithServerI18n()`'s request-local scope.
 function translateEyebrow(): string {
-  return t`Localized for this document with Palamedes`
+  return t`Localized for this document with Palamedes`;
 }
 
 function translateHeadline(): string {
-  return t`Book your seat at Frontend Stage 2026`
+  return t`Book your seat at Frontend Stage 2026`;
 }
 
 function translateGreeting(attendeeName: string): string {
-  return t`Welcome back, ${attendeeName}.`
+  return t`Welcome back, ${attendeeName}.`;
 }
 
 function translateLede(): string {
-  return t`Three days of talks on the craft of building for the web. Choose your tickets below.`
+  return t`Three days of talks on the craft of building for the web. Choose your tickets below.`;
 }
 
 function translateRenderedWith(): string {
-  return t`Rendered with Next.js`
+  return t`Rendered with Next.js`;
 }
 
 function translateServerLocale(): string {
-  return t`server locale`
+  return t`server locale`;
 }
 
 function translateSwitchToRecommended(): string {
-  return t`Switch to the recommended locale`
+  return t`Switch to the recommended locale`;
 }
 
 export default async function SubdomainHome() {
-  const { banner, host, locale } = await getSubdomainLocale()
-  const { i18n } = await createActiveServerI18n(locale as Locale)
-  const localeLabel = getLocaleLabel(locale)
+  const { banner, host, locale } = await getSubdomainLocale();
+  const { i18n } = await createActiveServerI18n(locale as Locale);
+  const localeLabel = getLocaleLabel(locale);
 
   return runWithServerI18n(i18n, () => (
     <ClientLocaleBoundary locale={locale}>
@@ -89,5 +89,5 @@ export default async function SubdomainHome() {
         <ClientReady />
       </main>
     </ClientLocaleBoundary>
-  ))
+  ));
 }

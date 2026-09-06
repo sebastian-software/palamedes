@@ -1,42 +1,42 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import path from "node:path"
-import { pathToFileURL } from "node:url"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type * as CoreNode from "@palamedes/core-node"
+import type * as CoreNode from "@palamedes/core-node";
 
-import { createPalamedesRemixLoadHook } from "./index"
+import { createPalamedesRemixLoadHook } from "./index";
 
 const mocks = vi.hoisted(() => ({
   compileCatalogModule: vi.fn(),
   loadPalamedesConfigSync: vi.fn(),
-}))
+}));
 
 vi.mock("@palamedes/config", () => ({
   loadPalamedesConfigSync: mocks.loadPalamedesConfigSync,
-}))
+}));
 
 vi.mock("@palamedes/core-node", async (importOriginal) => ({
   ...(await importOriginal<typeof CoreNode>()),
   compileCatalogModule: mocks.compileCatalogModule,
-}))
+}));
 
 const loadContext = {
   conditions: ["node", "import"],
   format: "module",
   importAttributes: {},
-}
+};
 
-const tempDirectories: string[] = []
+const tempDirectories: string[] = [];
 
 afterEach(() => {
-  vi.unstubAllEnvs()
+  vi.unstubAllEnvs();
   for (const directory of tempDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true })
+    rmSync(directory, { force: true, recursive: true });
   }
-})
+});
 
 describe("createPalamedesRemixLoadHook", () => {
   beforeEach(() => {
@@ -49,21 +49,21 @@ describe("createPalamedesRemixLoadHook", () => {
       pseudoLocale: undefined,
       fallbackLocales: undefined,
       catalogs: [{ path: "app/locales/{locale}", include: ["app"] }],
-    })
+    });
     mocks.compileCatalogModule.mockReset().mockReturnValue({
       code: 'export const messages={"greeting":"Hallo"};export default { messages };',
       warnings: [],
       watchFiles: ["/repo/app/locales/en.po"],
-    })
-  })
+    });
+  });
 
   it.each(["home.tsx", "home.mts"])(
     "transforms Palamedes JS macros in %s after the Remix loader returns source",
     (file) => {
-      const load = createPalamedesRemixLoadHook()
+      const load = createPalamedesRemixLoadHook();
       const oldMap = Buffer.from(JSON.stringify({ version: 3, mappings: "" }), "utf8").toString(
-        "base64"
-      )
+        "base64",
+      );
       const loaded = load(new URL(`file:///repo/app/routes/${file}`).href, loadContext, () => ({
         format: "module",
         shortCircuit: true,
@@ -74,62 +74,62 @@ describe("createPalamedesRemixLoadHook", () => {
           "}",
           `//# sourceMappingURL=data:application/json;base64,${oldMap}`,
         ].join("\n"),
-      }))
+      }));
 
-      expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"')
-      expect(String(loaded.source)).toContain("getI18n()._(")
-      expect(String(loaded.source)).toContain("Hello ")
-      expect(String(loaded.source)).not.toContain(oldMap)
+      expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"');
+      expect(String(loaded.source)).toContain("getI18n()._(");
+      expect(String(loaded.source)).toContain("Hello ");
+      expect(String(loaded.source)).not.toContain(oldMap);
       expect(String(loaded.source)).toMatch(
-        /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u
-      )
-    }
-  )
+        /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u,
+      );
+    },
+  );
 
   it.each(["home.cjs", "home.cts"])(
     "leaves CommonJS module %s untouched because macro output imports ESM",
     (file) => {
-      const load = createPalamedesRemixLoadHook()
+      const load = createPalamedesRemixLoadHook();
       const source = [
         'const { t } = require("@palamedes/core/macro")',
         "exports.label = () => t`Hello`",
-      ].join("\n")
+      ].join("\n");
       const loaded = load(new URL(`file:///repo/app/routes/${file}`).href, loadContext, () => ({
         format: "commonjs",
         source,
-      }))
+      }));
 
-      expect(loaded.source).toBe(source)
-    }
-  )
+      expect(loaded.source).toBe(source);
+    },
+  );
 
   it("preserves source fallbacks in production unless explicitly disabled", () => {
-    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("NODE_ENV", "production");
     const source = [
       'import { t } from "@palamedes/core/macro"',
       "export function label() {",
       "  return t`Production fallback`",
       "}",
-    ].join("\n")
-    const loadDefault = createPalamedesRemixLoadHook()
+    ].join("\n");
+    const loadDefault = createPalamedesRemixLoadHook();
     const preserved = loadDefault(
       new URL("file:///repo/app/routes/home.tsx").href,
       loadContext,
-      () => ({ format: "module", source })
-    )
-    const loadCompact = createPalamedesRemixLoadHook({ keepSourceFallbacks: false })
+      () => ({ format: "module", source }),
+    );
+    const loadCompact = createPalamedesRemixLoadHook({ keepSourceFallbacks: false });
     const stripped = loadCompact(
       new URL("file:///repo/app/routes/home.tsx").href,
       loadContext,
-      () => ({ format: "module", source })
-    )
+      () => ({ format: "module", source }),
+    );
 
-    expect(String(preserved.source)).toContain('message: "Production fallback"')
-    expect(String(stripped.source)).not.toContain('message: "Production fallback"')
-  })
+    expect(String(preserved.source)).toContain('message: "Production fallback"');
+    expect(String(stripped.source)).not.toContain('message: "Production fallback"');
+  });
 
   it("targets the hook-free runtime", () => {
-    const load = createPalamedesRemixLoadHook()
+    const load = createPalamedesRemixLoadHook();
     const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
       format: "module",
       shortCircuit: true,
@@ -139,62 +139,62 @@ describe("createPalamedesRemixLoadHook", () => {
         "  return t`Hello`",
         "}",
       ].join("\n"),
-    }))
+    }));
 
-    expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"')
-  })
+    expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"');
+  });
 
   it("compiles PO catalog imports without delegating to the default loader", () => {
-    const load = createPalamedesRemixLoadHook()
-    const nextLoad = vi.fn()
+    const load = createPalamedesRemixLoadHook();
+    const nextLoad = vi.fn();
 
-    const loaded = load(new URL("file:///repo/app/locales/de.po").href, loadContext, nextLoad)
+    const loaded = load(new URL("file:///repo/app/locales/de.po").href, loadContext, nextLoad);
 
-    expect(nextLoad).not.toHaveBeenCalled()
+    expect(nextLoad).not.toHaveBeenCalled();
     expect(loaded).toMatchObject({
       format: "module",
       shortCircuit: true,
-    })
+    });
     expect(String(loaded.source)).toBe(
       'import "file:///repo/palamedes.yaml?palamedes-config-watch="\n' +
         'import "file:///repo/config/settings.ts?palamedes-config-watch="\n' +
-        'export const messages={"greeting":"Hallo"};export default { messages };'
-    )
+        'export const messages={"greeting":"Hallo"};export default { messages };',
+    );
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,
       cwd: "/repo/app/locales",
-    })
+    });
     expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/app/locales/de.po",
-      expect.objectContaining({ locale: "de" })
-    )
-  })
+      expect.objectContaining({ locale: "de" }),
+    );
+  });
 
   it("loads the config dependency as an empty module for node watch mode", () => {
-    const load = createPalamedesRemixLoadHook()
-    const nextLoad = vi.fn()
+    const load = createPalamedesRemixLoadHook();
+    const nextLoad = vi.fn();
 
     const loaded = load(
       "file:///repo/palamedes.yaml?palamedes-config-watch=",
       loadContext,
-      nextLoad
-    )
+      nextLoad,
+    );
 
-    expect(nextLoad).not.toHaveBeenCalled()
-    expect(loaded).toStrictEqual({ format: "module", shortCircuit: true, source: "" })
-  })
+    expect(nextLoad).not.toHaveBeenCalled();
+    expect(loaded).toStrictEqual({ format: "module", shortCircuit: true, source: "" });
+  });
 
   it("reloads a cached config when an imported dependency changes", () => {
-    const directory = mkdtempSync(path.join(tmpdir(), "palamedes-remix-config-cache-"))
-    tempDirectories.push(directory)
-    const configPath = path.join(directory, "palamedes.yaml")
-    const dependencyPath = path.join(directory, "settings.ts")
-    const catalogPath = path.join(directory, "de.po")
-    writeFileSync(configPath, "unchanged config")
-    writeFileSync(dependencyPath, "first")
+    const directory = mkdtempSync(path.join(tmpdir(), "palamedes-remix-config-cache-"));
+    tempDirectories.push(directory);
+    const configPath = path.join(directory, "palamedes.yaml");
+    const dependencyPath = path.join(directory, "settings.ts");
+    const catalogPath = path.join(directory, "de.po");
+    writeFileSync(configPath, "unchanged config");
+    writeFileSync(dependencyPath, "first");
     mocks.loadPalamedesConfigSync.mockImplementation(() => {
-      const changed = readFileSync(dependencyPath, "utf8") === "second"
+      const changed = readFileSync(dependencyPath, "utf8") === "second";
       return {
         configDependencies: [configPath, dependencyPath],
         configPath,
@@ -204,85 +204,85 @@ describe("createPalamedesRemixLoadHook", () => {
         pseudoLocale: undefined,
         fallbackLocales: changed ? { fr: ["en"] } : undefined,
         catalogs: [{ path: "{locale}", include: ["app"] }],
-      }
-    })
-    const load = createPalamedesRemixLoadHook({ configPath })
-    const catalogUrl = pathToFileURL(catalogPath).href
+      };
+    });
+    const load = createPalamedesRemixLoadHook({ configPath });
+    const catalogUrl = pathToFileURL(catalogPath).href;
 
-    load(catalogUrl, loadContext, vi.fn())
-    load(catalogUrl, loadContext, vi.fn())
-    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledOnce()
+    load(catalogUrl, loadContext, vi.fn());
+    load(catalogUrl, loadContext, vi.fn());
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledOnce();
 
-    writeFileSync(dependencyPath, "second")
-    load(catalogUrl, loadContext, vi.fn())
+    writeFileSync(dependencyPath, "second");
+    load(catalogUrl, loadContext, vi.fn());
 
-    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledTimes(2)
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledTimes(2);
     expect(mocks.compileCatalogModule).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ locales: ["en", "de"], fallbackLocales: undefined }),
       catalogPath,
-      expect.any(Object)
-    )
+      expect.any(Object),
+    );
     expect(mocks.compileCatalogModule).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({ locales: ["en", "fr"], fallbackLocales: { fr: ["en"] } }),
       catalogPath,
-      expect.any(Object)
-    )
-  })
+      expect.any(Object),
+    );
+  });
 
   it("skips CommonJS files by default because runtime injection is ESM", () => {
     const source =
-      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }'
-    const load = createPalamedesRemixLoadHook()
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }';
+    const load = createPalamedesRemixLoadHook();
 
     const loaded = load(new URL("file:///repo/app/legacy.cjs").href, loadContext, () => ({
       format: "commonjs",
       source,
-    }))
+    }));
 
-    expect(loaded.source).toBe(source)
-  })
+    expect(loaded.source).toBe(source);
+  });
 
   it("delegates unchanged source when a module has no Palamedes macros", () => {
-    const source = "export const value = 1"
-    const load = createPalamedesRemixLoadHook()
+    const source = "export const value = 1";
+    const load = createPalamedesRemixLoadHook();
 
     const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
       format: "module",
       shortCircuit: true,
       source,
-    }))
+    }));
 
-    expect(loaded.source).toBe(source)
-  })
+    expect(loaded.source).toBe(source);
+  });
 
   it("skips non-file urls and node_modules", () => {
     const source =
-      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }'
-    const load = createPalamedesRemixLoadHook()
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }';
+    const load = createPalamedesRemixLoadHook();
 
     const virtual = load("data:text/javascript,export{}", loadContext, () => ({
       format: "module",
       source,
-    }))
+    }));
     const dependency = load(
       new URL("file:///repo/node_modules/demo/index.ts").href,
       loadContext,
       () => ({
         format: "module",
         source,
-      })
-    )
+      }),
+    );
 
-    expect(virtual.source).toBe(source)
-    expect(dependency.source).toBe(source)
-  })
+    expect(virtual.source).toBe(source);
+    expect(dependency.source).toBe(source);
+  });
 
   it("does not exclude paths that only contain node_modules as a substring", () => {
     const source =
-      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }'
-    const load = createPalamedesRemixLoadHook()
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }';
+    const load = createPalamedesRemixLoadHook();
 
     const loaded = load(
       new URL("file:///repo/my_node_modules_demo/index.ts").href,
@@ -290,9 +290,9 @@ describe("createPalamedesRemixLoadHook", () => {
       () => ({
         format: "module",
         source,
-      })
-    )
+      }),
+    );
 
-    expect(String(loaded.source)).toContain("getI18n()._(")
-  })
-})
+    expect(String(loaded.source)).toContain("getI18n()._(");
+  });
+});

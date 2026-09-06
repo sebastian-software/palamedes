@@ -1,7 +1,7 @@
-import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage"
-import type { FrameworkLanding } from "~/data/framework-landing"
-import { docsHref, NPM, repoHref } from "~/data/links"
-import { frameworkMeta } from "~/lib/meta"
+import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage";
+import type { FrameworkLanding } from "~/data/framework-landing";
+import { docsHref, NPM, repoHref } from "~/data/links";
+import { frameworkMeta } from "~/lib/meta";
 
 const page: FrameworkLanding = {
   name: "TanStack Start",
@@ -166,9 +166,9 @@ export const getStatus = createServerFn({ method: "GET" })
       href: NPM("@palamedes/vite-plugin"),
     },
   },
-}
+};
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return frameworkMeta({
@@ -177,9 +177,9 @@ export function meta() {
     path: page.path,
     framework: page.name,
     faq: page.faq,
-  })
+  });
 }
 
 export default function TanstackStartI18n() {
-  return <FrameworkLandingPage page={page} />
+  return <FrameworkLandingPage page={page} />;
 }

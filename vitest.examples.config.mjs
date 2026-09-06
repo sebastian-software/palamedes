@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config"
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
@@ -6,4 +6,4 @@ export default defineConfig({
     retry: process.env.PALAMEDES_BROWSER_RETRY === "1" ? 1 : 0,
     testTimeout: 60_000,
   },
-})
+});

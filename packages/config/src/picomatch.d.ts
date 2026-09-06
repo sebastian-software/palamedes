@@ -1,11 +1,11 @@
 declare module "picomatch" {
   type PicomatchOptions = {
-    dot?: boolean
-  }
+    dot?: boolean;
+  };
 
   const picomatch: {
-    isMatch(input: string, pattern: string, options?: PicomatchOptions): boolean
-  }
+    isMatch(input: string, pattern: string, options?: PicomatchOptions): boolean;
+  };
 
-  export default picomatch
+  export default picomatch;
 }

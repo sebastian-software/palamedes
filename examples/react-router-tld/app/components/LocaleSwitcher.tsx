@@ -1,19 +1,19 @@
-import { buildLocaleSwitchItems } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import type { Locale } from "~/lib/i18n"
-import { LOCALES, LOCALE_LABELS, locales } from "~/lib/i18n"
+import { buildLocaleSwitchItems } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import type { Locale } from "~/lib/i18n";
+import { LOCALES, LOCALE_LABELS, locales } from "~/lib/i18n";
 
 type LocaleSwitcherProps = {
-  host: string | null
-  locale: Locale
-}
+  host: string | null;
+  locale: Locale;
+};
 
 export function LocaleSwitcher({ host, locale }: LocaleSwitcherProps) {
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
-  })
+  });
 
   // TLD strategy: switching the locale means loading a different host, so we
   // build the target URL from the request host (the core control swaps the
@@ -21,7 +21,7 @@ export function LocaleSwitcher({ host, locale }: LocaleSwitcherProps) {
   // load. canonicalUrl returns protocol-relative URLs, correct on http (local)
   // and https (deployed).
   function hrefFor(target: Locale): string {
-    return locales.canonicalUrl({ locale: target, pathname: "/", requestHost: host })
+    return locales.canonicalUrl({ locale: target, pathname: "/", requestHost: host });
   }
 
   return (
@@ -37,7 +37,7 @@ export function LocaleSwitcher({ host, locale }: LocaleSwitcherProps) {
             aria-current={item.active ? "page" : undefined}
             href={hrefFor(item.locale)}
             onClick={() => {
-              document.cookie = locales.serializeChoice(item.locale)
+              document.cookie = locales.serializeChoice(item.locale);
             }}
           >
             {item.locale.toUpperCase()}
@@ -45,5 +45,5 @@ export function LocaleSwitcher({ host, locale }: LocaleSwitcherProps) {
         ))}
       </div>
     </div>
-  )
+  );
 }

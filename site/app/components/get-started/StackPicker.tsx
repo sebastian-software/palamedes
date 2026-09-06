@@ -1,6 +1,6 @@
-import { Tabs } from "@base-ui/react/tabs"
-import { StepFlow } from "~/components/get-started/StepFlow"
-import { QUICKSTART_STEPS, STACKS } from "~/data/steps"
+import { Tabs } from "@base-ui/react/tabs";
+import { StepFlow } from "~/components/get-started/StepFlow";
+import { QUICKSTART_STEPS, STACKS } from "~/data/steps";
 
 export function StackPicker() {
   return (
@@ -22,5 +22,5 @@ export function StackPicker() {
         </Tabs.Panel>
       ))}
     </Tabs.Root>
-  )
+  );
 }

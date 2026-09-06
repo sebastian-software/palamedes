@@ -23,7 +23,7 @@ which import `defineCompiledCatalog()` from its `compiled` entrypoint.
 ## Minimal Example
 
 ```tsx
-import { Trans } from "@palamedes/react/macro"
+import { Trans } from "@palamedes/react/macro";
 
 export function Footer() {
   return (
@@ -32,7 +32,7 @@ export function Footer() {
         Powered by <strong>Palamedes</strong>
       </Trans>
     </footer>
-  )
+  );
 }
 ```
 
@@ -76,14 +76,14 @@ primitives that repeat across apps:
 - building render-ready locale switch models for buttons, links, or forms
 
 ```tsx
-import { buildLocaleSwitchItems } from "@palamedes/react"
+import { buildLocaleSwitchItems } from "@palamedes/react";
 
 function LocaleToolbar({ locale }: { locale: "en" | "de" }) {
   const items = buildLocaleSwitchItems({
     locales: ["en", "de"] as const,
     currentLocale: locale,
     labels: { en: "English", de: "Deutsch" },
-  })
+  });
 
   return (
     <nav>
@@ -93,7 +93,7 @@ function LocaleToolbar({ locale }: { locale: "en" | "de" }) {
         </a>
       ))}
     </nav>
-  )
+  );
 }
 ```
 
@@ -104,22 +104,22 @@ chunks while giving translated Client Components the right catalog on their
 first hydration render. Define the boundary once in a `"use client"` module:
 
 ```tsx
-"use client"
+"use client";
 
-import { createI18n } from "@palamedes/core/compiled"
-import { createClientCatalogBoundary } from "@palamedes/react/client"
+import { createI18n } from "@palamedes/core/compiled";
+import { createClientCatalogBoundary } from "@palamedes/react/client";
 
-type Locale = "en" | "de"
+type Locale = "en" | "de";
 
 export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
   createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
-    const locale = document.documentElement.lang
-    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
-    return locale
+    const locale = document.documentElement.lang;
+    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`);
+    return locale;
   },
-})
+});
 ```
 
 Use the same `createI18n` options in the server factory. In particular, a
@@ -130,13 +130,13 @@ locale. In Next.js, use the render-lifetime scope from
 `@palamedes/next-plugin/server`:
 
 ```tsx
-const { locale } = await createActiveServerI18n()
+const { locale } = await createActiveServerI18n();
 
 return (
   <ClientCatalogBoundary locale={locale}>
     <TranslatedClientContent />
   </ClientCatalogBoundary>
-)
+);
 ```
 
 The dynamic import keeps executable generated messages in a module chunk; they

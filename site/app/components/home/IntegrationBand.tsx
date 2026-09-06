@@ -1,13 +1,13 @@
-import { frameworkLandingHref } from "~/data/framework-landing"
+import { frameworkLandingHref } from "~/data/framework-landing";
 
 type Integration = {
-  name: string
-  href: string
-  logo: string
-  logoClass: string
-  suffix?: string
-  note?: string
-}
+  name: string;
+  href: string;
+  logo: string;
+  logoClass: string;
+  suffix?: string;
+  note?: string;
+};
 
 const FRONTEND_INTEGRATIONS: readonly Integration[] = [
   {
@@ -55,7 +55,7 @@ const FRONTEND_INTEGRATIONS: readonly Integration[] = [
     logo: "/framework-logos/vite.svg",
     logoClass: "h-4 w-auto max-w-[5rem]",
   },
-]
+];
 
 const BACKEND_INTEGRATIONS: readonly Integration[] = [
   {
@@ -73,14 +73,14 @@ const BACKEND_INTEGRATIONS: readonly Integration[] = [
     logoClass: "h-5 w-auto max-w-[6rem]",
     note: "backend",
   },
-]
+];
 
 function IntegrationList({
   integrations,
   label,
 }: {
-  integrations: readonly Integration[]
-  label: string
+  integrations: readonly Integration[];
+  label: string;
 }) {
   return (
     <div className="grid grid-cols-[minmax(10rem,0.7fr)_3fr] max-tight:grid-cols-1">
@@ -128,7 +128,7 @@ function IntegrationList({
         ))}
       </ul>
     </div>
-  )
+  );
 }
 
 // Assets are downloaded unmodified from the project-controlled sources recorded
@@ -160,5 +160,5 @@ export function IntegrationBand() {
         </div>
       </div>
     </section>
-  )
+  );
 }

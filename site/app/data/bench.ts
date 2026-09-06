@@ -9,28 +9,28 @@
  */
 
 export interface BenchRow {
-  tool: string
-  medianMs: number
-  accent?: boolean
+  tool: string;
+  medianMs: number;
+  accent?: boolean;
   /** Public presentation metadata. Every measured tool must state its scope. */
-  displayName: string
-  scope: string
-  sameScope: boolean
-  order: number
+  displayName: string;
+  scope: string;
+  sameScope: boolean;
+  order: number;
 }
 
 export interface BenchCorpus {
-  id: "small" | "medium" | "realistic"
-  title: string
-  corpus: string
-  rows: BenchRow[]
+  id: "small" | "medium" | "realistic";
+  title: string;
+  corpus: string;
+  rows: BenchRow[];
   /*
    * Speedup ratios. The public ledger derives deliberately rounded factors
    * from the exact medians. These exact ratios are asserted against the
    * checked-in report by scripts/verify-site-bench-data.mjs, so numbers quoted
    * in prose can't silently drift.
    */
-  ratios: { lingui: string; formatjs: string; fbtee: string; i18nextCli: string; gt: string }
+  ratios: { lingui: string; formatjs: string; fbtee: string; i18nextCli: string; gt: string };
 }
 
 /*
@@ -46,12 +46,12 @@ export interface BenchCorpus {
  * touched-file count against the report.
  */
 export interface BenchWarm {
-  id: "small" | "medium" | "realistic"
-  corpus: string
+  id: "small" | "medium" | "realistic";
+  corpus: string;
   /** Source files edited before each warm run, per the report's warm lane. */
-  touchedFiles: number
-  coldMs: number
-  warmMs: number
+  touchedFiles: number;
+  coldMs: number;
+  warmMs: number;
 }
 
 export const BENCH_META = {
@@ -60,7 +60,7 @@ export const BENCH_META = {
   platform: "darwin/arm64",
   runs: 7,
   reportPath: "benchmarks/e2e-workflow/results/latest.md",
-}
+};
 
 /*
  * Only BENCH_REALISTIC is charted on the site (home + proof). BENCH_SMALL and
@@ -131,7 +131,7 @@ export const BENCH_SMALL: BenchCorpus = {
     i18nextCli: "27.39×",
     gt: "37.22×",
   },
-}
+};
 
 export const BENCH_MEDIUM: BenchCorpus = {
   id: "medium",
@@ -195,7 +195,7 @@ export const BENCH_MEDIUM: BenchCorpus = {
     i18nextCli: "24.57×",
     gt: "24.19×",
   },
-}
+};
 
 export const BENCH_REALISTIC: BenchCorpus = {
   id: "realistic",
@@ -259,7 +259,7 @@ export const BENCH_REALISTIC: BenchCorpus = {
     i18nextCli: "80.19×",
     gt: "70.41×",
   },
-}
+};
 
 /*
  * Only BENCH_REALISTIC_WARM is rendered — it is passed to BenchmarkLedger on
@@ -273,7 +273,7 @@ export const BENCH_SMALL_WARM: BenchWarm = {
   touchedFiles: 5,
   coldMs: 11.93,
   warmMs: 9.09,
-}
+};
 
 export const BENCH_MEDIUM_WARM: BenchWarm = {
   id: "medium",
@@ -281,7 +281,7 @@ export const BENCH_MEDIUM_WARM: BenchWarm = {
   touchedFiles: 5,
   coldMs: 21.12,
   warmMs: 12.87,
-}
+};
 
 export const BENCH_REALISTIC_WARM: BenchWarm = {
   id: "realistic",
@@ -289,19 +289,19 @@ export const BENCH_REALISTIC_WARM: BenchWarm = {
   touchedFiles: 5,
   coldMs: 72.55,
   warmMs: 46.72,
-}
+};
 
 export function displayBenchmarkTime(ms: number): string {
-  const roundedMs = Math.round(ms)
+  const roundedMs = Math.round(ms);
   if (roundedMs < 1000) {
-    return `${roundedMs.toLocaleString("en-US")} ms`
+    return `${roundedMs.toLocaleString("en-US")} ms`;
   }
   // Pick the unit from the whole-millisecond public value so 999.5 ms does
   // not surface as "1000 ms". Once in seconds, keep the source precision for
   // the one-decimal display instead of introducing a second rounding step.
-  return `${(ms / 1000).toFixed(1)} s`
+  return `${(ms / 1000).toFixed(1)} s`;
 }
 
 export function displayBenchmarkFactor(row: BenchRow, baselineMs: number): string {
-  return row.accent ? "1×" : `${Math.floor(row.medianMs / baselineMs)}×`
+  return row.accent ? "1×" : `${Math.floor(row.medianMs / baselineMs)}×`;
 }

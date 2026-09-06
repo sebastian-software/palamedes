@@ -1,45 +1,45 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useTransition } from "react"
-import { plural } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Locale } from "../lib/i18n"
+import { useEffect, useState, useTransition } from "react";
+import { plural } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Locale } from "../lib/i18n";
 
 type ProbeResult = {
-  handledAt: string
-  locale: Locale
-  localeLabel: string
+  handledAt: string;
+  locale: Locale;
+  localeLabel: string;
   messages: Record<
     "asynchronous" | "crossModule" | "defaultParameter" | "direct" | "synchronous",
     string
-  >
-}
+  >;
+};
 
 type ProofPanelProps = {
-  runProbe: () => Promise<ProbeResult>
-}
+  runProbe: () => Promise<ProbeResult>;
+};
 
 export function ProofPanel({ runProbe }: ProofPanelProps) {
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const [messages, setMessages] = useState<ProbeResult["messages"] | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const [messages, setMessages] = useState<ProbeResult["messages"] | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function refresh() {
     startTransition(async () => {
-      const result = await runProbe()
-      setMessages(result.messages)
-    })
+      const result = await runProbe();
+      setMessages(result.messages);
+    });
   }
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await runProbe()
-      setMessages(result.messages)
-    })
-  }, [runProbe])
+      const result = await runProbe();
+      setMessages(result.messages);
+    });
+  }, [runProbe]);
 
   return (
     <aside className="aside">
@@ -135,5 +135,5 @@ export function ProofPanel({ runProbe }: ProofPanelProps) {
         </button>
       </div>
     </aside>
-  )
+  );
 }

@@ -4,15 +4,15 @@ import {
   displayBenchmarkTime,
   type BenchCorpus,
   type BenchWarm,
-} from "~/data/bench"
-import { decisionHref, docsHref } from "~/data/links"
+} from "~/data/bench";
+import { decisionHref, docsHref } from "~/data/links";
 
 const COMPARISON_HREFS: Readonly<Partial<Record<string, string>>> = {
   Lingui: "/compare/lingui",
   "React Intl": "/compare/react-intl",
   fbtee: "/compare/fbtee",
   "i18next-cli": "/compare/i18next",
-}
+};
 
 /*
  * The benchmark is a result ledger rather than a proportional chart. At the
@@ -22,12 +22,12 @@ const COMPARISON_HREFS: Readonly<Partial<Record<string, string>>> = {
  * honest rounded public values. Exact medians remain in the checked source.
  */
 export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: BenchWarm }) {
-  const baseline = corpus.rows.find((row) => row.tool === "Palamedes")
+  const baseline = corpus.rows.find((row) => row.tool === "Palamedes");
   if (!baseline) {
-    throw new Error(`Benchmark corpus ${corpus.id} has no Palamedes baseline`)
+    throw new Error(`Benchmark corpus ${corpus.id} has no Palamedes baseline`);
   }
 
-  const rows = [...corpus.rows].sort((left, right) => left.order - right.order)
+  const rows = [...corpus.rows].sort((left, right) => left.order - right.order);
 
   return (
     <div className="border border-hair">
@@ -76,8 +76,8 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
           </thead>
           <tbody>
             {rows.map((row) => {
-              const accent = row.accent
-              const comparisonHref = COMPARISON_HREFS[row.tool]
+              const accent = row.accent;
+              const comparisonHref = COMPARISON_HREFS[row.tool];
               return (
                 <tr
                   key={row.tool}
@@ -106,7 +106,7 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
                     {displayBenchmarkFactor(row, baseline.medianMs)}
                   </td>
                 </tr>
-              )
+              );
             })}
           </tbody>
         </table>
@@ -132,5 +132,5 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
         {BENCH_META.node}, {BENCH_META.generated}, median of {BENCH_META.runs} runs.
       </p>
     </div>
-  )
+  );
 }

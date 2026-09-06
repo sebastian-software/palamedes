@@ -1,5 +1,5 @@
-import npmStats from "~/data/generated/npm-stats.json"
-import { NPM } from "~/data/links"
+import npmStats from "~/data/generated/npm-stats.json";
+import { NPM } from "~/data/links";
 
 const PACKAGE_BY_PATH: Record<string, string> = {
   "/frameworks/nextjs": "@palamedes/next-plugin",
@@ -9,24 +9,24 @@ const PACKAGE_BY_PATH: Record<string, string> = {
   "/frameworks/tanstack-start": "@palamedes/tanstack",
   "/frameworks/vite": "@palamedes/vite-plugin",
   "/frameworks/waku": "@palamedes/waku",
-}
+};
 
 const downloadsFormat = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
-})
+});
 
 export function FrameworkPackageStats({ path }: { path: string }) {
-  const packageName = PACKAGE_BY_PATH[path]
-  const stats = npmStats.packages.find((entry) => entry.name === packageName)
-  if (!packageName || !stats) return null
-  const hasNpmVersion = stats.source !== "unavailable" && stats.version
+  const packageName = PACKAGE_BY_PATH[path];
+  const stats = npmStats.packages.find((entry) => entry.name === packageName);
+  if (!packageName || !stats) return null;
+  const hasNpmVersion = stats.source !== "unavailable" && stats.version;
   const snapshotLabel =
     stats.source === "npm"
       ? "npm package"
       : stats.source === "npm-partial"
         ? "npm package · partial snapshot"
-        : "npm package · snapshot unavailable"
+        : "npm package · snapshot unavailable";
 
   return (
     <a
@@ -49,5 +49,5 @@ export function FrameworkPackageStats({ path }: { path: string }) {
           : `${downloadsFormat.format(stats.monthlyDownloads)} downloads / month`}
       </span>
     </a>
-  )
+  );
 }

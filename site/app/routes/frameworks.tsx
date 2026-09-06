@@ -1,16 +1,16 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
-import { pageMeta } from "~/lib/meta"
-import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix"
-import { FwPanels } from "~/components/frameworks/FwPanels"
-import { CtaBand } from "~/components/home/CtaBand"
-import { FeatureGrid } from "~/components/home/FeatureGrid"
-import { STRATEGY_CARDS } from "~/data/features"
-import contentStats from "~/data/generated/content-stats.json"
-import { DEMO_NEXTJS_COOKIE, docsHref } from "~/data/links"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { pageMeta } from "~/lib/meta";
+import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix";
+import { FwPanels } from "~/components/frameworks/FwPanels";
+import { CtaBand } from "~/components/home/CtaBand";
+import { FeatureGrid } from "~/components/home/FeatureGrid";
+import { STRATEGY_CARDS } from "~/data/features";
+import contentStats from "~/data/generated/content-stats.json";
+import { DEMO_NEXTJS_COOKIE, docsHref } from "~/data/links";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
@@ -18,7 +18,7 @@ export function meta() {
     description:
       "Verified frontend and full-stack i18n adapters for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite, plus request-local backend integration guidance for Hono and Express.",
     path: "/frameworks",
-  })
+  });
 }
 
 export default function Frameworks() {
@@ -106,5 +106,5 @@ export default function Frameworks() {
         secondary={{ label: "Get started", href: "/get-started" }}
       />
     </Page>
-  )
+  );
 }

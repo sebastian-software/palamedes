@@ -1,7 +1,7 @@
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
-import { CtaBand } from "~/components/home/CtaBand"
-import { StatementBand } from "~/components/home/StatementBand"
-import { BENCH_FOOTNOTE, type Rival, type RivalCode, type RivalRow } from "~/data/rivals"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { CtaBand } from "~/components/home/CtaBand";
+import { StatementBand } from "~/components/home/StatementBand";
+import { BENCH_FOOTNOTE, type Rival, type RivalCode, type RivalRow } from "~/data/rivals";
 
 /*
  * One layout for every /compare/* page, driven by data/rivals.ts.
@@ -14,13 +14,13 @@ import { BENCH_FOOTNOTE, type Rival, type RivalCode, type RivalRow } from "~/dat
  */
 
 function toLines(code: string): { no: number; text: string }[] {
-  return code.split("\n").map((text, index) => ({ no: index + 1, text }))
+  return code.split("\n").map((text, index) => ({ no: index + 1, text }));
 }
 
 function toneFor(line: string): string {
-  if (line.startsWith("import ") || line.startsWith("export ")) return "text-accent-soft"
-  if (line.startsWith("//") || line.startsWith("#")) return "text-paper/70"
-  return "text-paper/85"
+  if (line.startsWith("import ") || line.startsWith("export ")) return "text-accent-soft";
+  if (line.startsWith("//") || line.startsWith("#")) return "text-paper/70";
+  return "text-paper/85";
 }
 
 function CodePane({ label, code }: { label: string; code: string }) {
@@ -45,7 +45,7 @@ function CodePane({ label, code }: { label: string; code: string }) {
         ))}
       </pre>
     </div>
-  )
+  );
 }
 
 function CodeCompare({ code }: { code: RivalCode }) {
@@ -59,7 +59,7 @@ function CodeCompare({ code }: { code: RivalCode }) {
         <p className="mt-4 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">{code.note}</p>
       ) : null}
     </div>
-  )
+  );
 }
 
 function RivalMatrix({ rival, rows }: { rival: string; rows: RivalRow[] }) {
@@ -101,7 +101,7 @@ function RivalMatrix({ rival, rows }: { rival: string; rows: RivalRow[] }) {
         </tbody>
       </table>
     </div>
-  )
+  );
 }
 
 /*
@@ -115,10 +115,10 @@ function LedgerColumn({
   items,
   accent,
 }: {
-  label: string
-  title: string
-  items: string[]
-  accent?: boolean
+  label: string;
+  title: string;
+  items: string[];
+  accent?: boolean;
 }) {
   return (
     <div className="bg-paper px-6 py-6">
@@ -135,7 +135,7 @@ function LedgerColumn({
         ))}
       </ul>
     </div>
-  )
+  );
 }
 
 function PickList({ title, items, accent }: { title: string; items: string[]; accent?: boolean }) {
@@ -153,7 +153,7 @@ function PickList({ title, items, accent }: { title: string; items: string[]; ac
         ))}
       </ul>
     </div>
-  )
+  );
 }
 
 function RivalFaq({ rival }: { rival: Rival }) {
@@ -177,16 +177,16 @@ function RivalFaq({ rival }: { rival: Rival }) {
         </details>
       ))}
     </div>
-  )
+  );
 }
 
 export function RivalPage({ rival }: { rival: Rival }) {
-  const usesBenchmark = rival.rows.some((row) => row.palamedes.includes("¹"))
+  const usesBenchmark = rival.rows.some((row) => row.palamedes.includes("¹"));
   /*
    * Column count follows the item count so the hairline grid never ends on a
    * half-empty row: three differences read best as thirds, four as halves.
    */
-  const differenceCols = rival.differences.length % 3 === 0 ? "grid-cols-3" : "grid-cols-2"
+  const differenceCols = rival.differences.length % 3 === 0 ? "grid-cols-3" : "grid-cols-2";
 
   return (
     <Page>
@@ -333,5 +333,5 @@ export function RivalPage({ rival }: { rival: Rival }) {
         secondary={{ label: "Compare another model", href: "/compare" }}
       />
     </Page>
-  )
+  );
 }

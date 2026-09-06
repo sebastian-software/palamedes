@@ -1,13 +1,13 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Route } from "./+types/home"
-import { ClientReady } from "~/components/ClientReady"
-import { LocaleSwitcher } from "~/components/LocaleSwitcher"
-import { ProofPanel } from "~/components/ProofPanel"
-import { SuggestionBanner } from "~/components/SuggestionBanner"
-import { TicketPanel } from "~/components/TicketPanel"
-import { activateServerI18n, DEFAULT_LOCALE, getLocaleLabel, resolveTldLocale } from "~/lib/i18n"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Route } from "./+types/home";
+import { ClientReady } from "~/components/ClientReady";
+import { LocaleSwitcher } from "~/components/LocaleSwitcher";
+import { ProofPanel } from "~/components/ProofPanel";
+import { SuggestionBanner } from "~/components/SuggestionBanner";
+import { TicketPanel } from "~/components/TicketPanel";
+import { activateServerI18n, DEFAULT_LOCALE, getLocaleLabel, resolveTldLocale } from "~/lib/i18n";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -16,24 +16,24 @@ export function meta({ loaderData }: Route.MetaArgs) {
       name: "description",
       content: "TLD-driven Palamedes locale proof for React Router framework mode.",
     },
-  ]
+  ];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const { banner, host, locale } = resolveTldLocale(request)
-  activateServerI18n(locale)
+  const { banner, host, locale } = resolveTldLocale(request);
+  activateServerI18n(locale);
 
   return {
     banner,
     host,
     locale,
     localeLabel: getLocaleLabel(locale),
-  }
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const { locale } = resolveTldLocale(request)
-  activateServerI18n(locale)
+  const { locale } = resolveTldLocale(request);
+  activateServerI18n(locale);
 
   return {
     proof: {
@@ -42,11 +42,11 @@ export async function action({ request }: Route.ActionArgs) {
       localeLabel: getLocaleLabel(locale),
       message: t`Server action confirmed locale ${locale}.`,
     },
-  }
+  };
 }
 
 export default function LocaleHome({ loaderData }: Route.ComponentProps) {
-  const { banner, host, locale, localeLabel } = loaderData
+  const { banner, host, locale, localeLabel } = loaderData;
 
   return (
     <main className="page-shell">
@@ -98,5 +98,5 @@ export default function LocaleHome({ loaderData }: Route.ComponentProps) {
 
       <ClientReady />
     </main>
-  )
+  );
 }

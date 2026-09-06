@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import { usePrefersReducedMotion } from "./usePrefersReducedMotion"
+import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 /*
  * Interval-based index cycler for the locale cycle and terminal sequence.
@@ -8,35 +8,35 @@ import { usePrefersReducedMotion } from "./usePrefersReducedMotion"
  * is false (e.g. out of view).
  */
 export function useCycle(length: number, intervalMs: number, active = true): number {
-  const reducedMotion = usePrefersReducedMotion()
-  const [index, setIndex] = useState(0)
+  const reducedMotion = usePrefersReducedMotion();
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     if (reducedMotion || !active || length <= 1) {
-      return
+      return;
     }
-    let timer: ReturnType<typeof setInterval> | undefined
+    let timer: ReturnType<typeof setInterval> | undefined;
     const start = () => {
-      timer = setInterval(() => setIndex((i) => (i + 1) % length), intervalMs)
-    }
+      timer = setInterval(() => setIndex((i) => (i + 1) % length), intervalMs);
+    };
     const stop = () => {
       if (timer) {
-        clearInterval(timer)
+        clearInterval(timer);
       }
-    }
+    };
     const onVisibility = () => {
-      stop()
+      stop();
       if (!document.hidden) {
-        start()
+        start();
       }
-    }
-    start()
-    document.addEventListener("visibilitychange", onVisibility)
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      stop()
-      document.removeEventListener("visibilitychange", onVisibility)
-    }
-  }, [length, intervalMs, active, reducedMotion])
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [length, intervalMs, active, reducedMotion]);
 
-  return reducedMotion ? 0 : index
+  return reducedMotion ? 0 : index;
 }

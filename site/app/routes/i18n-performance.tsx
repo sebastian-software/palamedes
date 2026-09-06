@@ -1,10 +1,10 @@
-import { TopicPage } from "~/components/topic/TopicPage"
-import { topicMeta } from "~/lib/meta"
-import { topicBySlug } from "~/data/topics"
+import { TopicPage } from "~/components/topic/TopicPage";
+import { topicMeta } from "~/lib/meta";
+import { topicBySlug } from "~/data/topics";
 
-const topic = topicBySlug("i18n-performance")
+const topic = topicBySlug("i18n-performance");
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return topicMeta({
@@ -13,9 +13,9 @@ export function meta() {
     path: "/i18n-performance",
     faq: topic.faq,
     slug: topic.slug,
-  })
+  });
 }
 
 export default function TopicI18nPerformance() {
-  return <TopicPage topic={topic} />
+  return <TopicPage topic={topic} />;
 }

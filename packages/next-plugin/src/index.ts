@@ -5,36 +5,38 @@
  * No Babel required!
  */
 
-import { existsSync, readFileSync } from "node:fs"
-import path from "node:path"
-import { createRequire } from "node:module"
-import { fileURLToPath } from "node:url"
-import type { NextConfig } from "next"
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import type { NextConfig } from "next";
 
 import {
   PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
   PALAMEDES_MACRO_PACKAGES,
   resolveMacroRuntimeModule,
-} from "@palamedes/transform"
+} from "@palamedes/transform";
 
-const require = createRequire(import.meta.url)
+const require = createRequire(import.meta.url);
 
-type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>
-type TurbopackRuleConfigItem = Extract<TurbopackRules[string], { loaders?: unknown }>
-type TurbopackRuleCollectionEntry = Extract<TurbopackRules[string], unknown[]>[number]
-type TurbopackLoaderItem = Exclude<TurbopackRuleConfigItem["loaders"], undefined>[number]
+type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>;
+type TurbopackRuleConfigItem = Extract<TurbopackRules[string], { loaders?: unknown }>;
+type TurbopackRuleCollectionEntry = Extract<TurbopackRules[string], unknown[]>[number];
+type TurbopackLoaderItem = Exclude<TurbopackRuleConfigItem["loaders"], undefined>[number];
 
 /*
  * Derived from the canonical macro package list so the content pre-filter can
  * never drift from the transform (it previously omitted @palamedes/solid/macro).
  */
 const MACRO_CONTENT_PATTERN = new RegExp(
-  PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join("|")
-)
-const SERVER_FUNCTION_CONTENT_PATTERN = /["']use server["']/
-const SERVER_FUNCTION_INITIALIZER_MODULE = "@palamedes/next-plugin/server-function-initializer"
-const SERVER_FUNCTION_ENTRY_MODULE = "@palamedes/next-plugin/server-function-entry"
-const SERVER_FUNCTION_INITIALIZER_EXPORT = "initializeServerFunctionI18n"
+  PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join(
+    "|",
+  ),
+);
+const SERVER_FUNCTION_CONTENT_PATTERN = /["']use server["']/;
+const SERVER_FUNCTION_INITIALIZER_MODULE = "@palamedes/next-plugin/server-function-initializer";
+const SERVER_FUNCTION_ENTRY_MODULE = "@palamedes/next-plugin/server-function-entry";
+const SERVER_FUNCTION_INITIALIZER_EXPORT = "initializeServerFunctionI18n";
 const SERVER_FUNCTION_ENTRY_EXTENSIONS = [
   ".ts",
   ".tsx",
@@ -44,7 +46,7 @@ const SERVER_FUNCTION_ENTRY_EXTENSIONS = [
   ".mjs",
   ".cts",
   ".cjs",
-] as const
+] as const;
 
 /*
  * A Turbopack rule array is either the loader "shorthand" (a flat list of
@@ -57,34 +59,34 @@ const SERVER_FUNCTION_ENTRY_EXTENSIONS = [
 function isTurbopackLoaderItem(entry: TurbopackRuleCollectionEntry): entry is TurbopackLoaderItem {
   return (
     typeof entry === "string" || (typeof entry === "object" && entry !== null && "loader" in entry)
-  )
+  );
 }
 
 function normalizeTurbopackRuleCollection(
-  entries: readonly TurbopackRuleCollectionEntry[]
+  entries: readonly TurbopackRuleCollectionEntry[],
 ): TurbopackRuleConfigItem[] {
-  const normalized: TurbopackRuleConfigItem[] = []
-  let pendingLoaders: TurbopackLoaderItem[] = []
+  const normalized: TurbopackRuleConfigItem[] = [];
+  let pendingLoaders: TurbopackLoaderItem[] = [];
 
   const flushLoaders = (): void => {
     if (pendingLoaders.length > 0) {
-      normalized.push({ loaders: pendingLoaders })
-      pendingLoaders = []
+      normalized.push({ loaders: pendingLoaders });
+      pendingLoaders = [];
     }
-  }
+  };
 
   for (const entry of entries) {
     if (isTurbopackLoaderItem(entry)) {
       // Loader order within a shorthand run is significant; keep the run intact.
-      pendingLoaders.push(entry)
-      continue
+      pendingLoaders.push(entry);
+      continue;
     }
-    flushLoaders()
-    normalized.push(entry)
+    flushLoaders();
+    normalized.push(entry);
   }
-  flushLoaders()
+  flushLoaders();
 
-  return normalized
+  return normalized;
 }
 
 /*
@@ -95,16 +97,16 @@ function normalizeTurbopackRuleCollection(
 function appendTurbopackRule(
   rules: TurbopackRules,
   glob: string,
-  rule: TurbopackRuleConfigItem
+  rule: TurbopackRuleConfigItem,
 ): void {
-  const existing = rules[glob]
+  const existing = rules[glob];
   if (existing === undefined) {
-    rules[glob] = rule
-    return
+    rules[glob] = rule;
+    return;
   }
   rules[glob] = Array.isArray(existing)
     ? [...normalizeTurbopackRuleCollection(existing), rule]
-    : [existing, rule]
+    : [existing, rule];
 }
 
 export type WithPalamedesOptions = {
@@ -112,54 +114,54 @@ export type WithPalamedesOptions = {
    * Pattern to include files for transformation.
    * @default /\.([cm]?[jt]s|[jt]sx)$/
    */
-  include?: RegExp
+  include?: RegExp;
 
   /**
    * Pattern to exclude files from transformation.
    * @default /node_modules/
    */
-  exclude?: RegExp
+  exclude?: RegExp;
 
   /**
    * Enable .po file compilation loader.
    * @default true
    */
-  enablePoLoader?: boolean
+  enablePoLoader?: boolean;
 
   /**
    * Path to a Palamedes config file.
    * Relative paths resolve from the Next project root. If not provided,
    * Palamedes searches for config automatically from that root.
    */
-  configPath?: string
+  configPath?: string;
 
   /**
    * Absolute or relative Next project directory. Set this when Next's project
    * directory cannot be derived automatically, for example in a custom host.
    * `cwd` is an alias for compatibility with loader terminology.
    */
-  projectRoot?: string
+  projectRoot?: string;
 
   /** @deprecated Use projectRoot instead. */
-  cwd?: string
+  cwd?: string;
 
   /**
    * If true, fail compilation on missing translations.
    * @default false
    */
-  failOnMissing?: boolean
+  failOnMissing?: boolean;
 
   /**
    * If true, fail compilation on message compilation errors.
    * @default false
    */
-  failOnCompileError?: boolean
+  failOnCompileError?: boolean;
 
   /**
    * Advanced override for the module that exports the runtime getter.
    * @default "@palamedes/runtime"
    */
-  runtimeModule?: string
+  runtimeModule?: string;
 
   /**
    * Preserve authored source messages as runtime fallbacks.
@@ -167,14 +169,14 @@ export type WithPalamedesOptions = {
    * hash-only output when bundle size or embedding authored source text is a
    * concern.
    */
-  keepSourceFallbacks?: boolean
+  keepSourceFallbacks?: boolean;
 
   /**
    * Monorepo workspace root to use for Turbopack and output file tracing.
    * If omitted, Palamedes will try to detect a workspace root from the Next
    * project root.
    */
-  workspaceRoot?: string
+  workspaceRoot?: string;
 
   /**
    * Initialize request-local i18n at the start of every recognized Next.js
@@ -183,7 +185,7 @@ export type WithPalamedesOptions = {
    *
    * @default false
    */
-  serverFunctions?: boolean
+  serverFunctions?: boolean;
 
   /**
    * Split client messages with the Next.js module graph. Each transformed
@@ -192,46 +194,46 @@ export type WithPalamedesOptions = {
    *
    * @default false
    */
-  messageSplitting?: boolean
-}
+  messageSplitting?: boolean;
+};
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
-  if (!enabled) return
+  if (!enabled) return;
 
   const candidates = ["src", ""].flatMap((directory) =>
     SERVER_FUNCTION_ENTRY_EXTENSIONS.map((extension) =>
-      path.join(projectRoot, directory, `palamedes.server${extension}`)
-    )
-  )
-  const matches = candidates.filter((candidate) => existsSync(candidate))
+      path.join(projectRoot, directory, `palamedes.server${extension}`),
+    ),
+  );
+  const matches = candidates.filter((candidate) => existsSync(candidate));
 
   if (matches.length === 0) {
     throw new Error(
-      "Palamedes Server Function instrumentation requires a palamedes.server module in the project root or src directory. Export initializeServerFunctionI18n from that module."
-    )
+      "Palamedes Server Function instrumentation requires a palamedes.server module in the project root or src directory. Export initializeServerFunctionI18n from that module.",
+    );
   }
   if (matches.length > 1) {
     throw new Error(
-      `Palamedes found multiple Server Function entry modules: ${matches.join(", ")}. Keep exactly one palamedes.server module.`
-    )
+      `Palamedes found multiple Server Function entry modules: ${matches.join(", ")}. Keep exactly one palamedes.server module.`,
+    );
   }
 
   return {
     absolutePath: matches[0]!,
     turbopackAlias: `./${path.relative(projectRoot, matches[0]!).split(path.sep).join("/")}`,
-  }
+  };
 }
 
 function resolveWorkspaceRoot(projectRoot: string, explicitRoot?: string) {
   if (explicitRoot) {
-    return path.resolve(projectRoot, explicitRoot)
+    return path.resolve(projectRoot, explicitRoot);
   }
 
-  let currentDir = projectRoot
-  const initialDir = currentDir
+  let currentDir = projectRoot;
+  const initialDir = currentDir;
 
   while (true) {
-    const packageJsonPath = path.join(currentDir, "package.json")
+    const packageJsonPath = path.join(currentDir, "package.json");
 
     if (
       hasWorkspaces(packageJsonPath) ||
@@ -239,96 +241,96 @@ function resolveWorkspaceRoot(projectRoot: string, explicitRoot?: string) {
       existsSync(path.join(currentDir, "turbo.json")) ||
       existsSync(path.join(currentDir, ".git"))
     ) {
-      return currentDir === initialDir ? undefined : currentDir
+      return currentDir === initialDir ? undefined : currentDir;
     }
 
-    const parentDir = path.dirname(currentDir)
+    const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
-      return
+      return;
     }
-    currentDir = parentDir
+    currentDir = parentDir;
   }
 }
 
-type NextConfigWithResolvedPath = NextConfig & { configFile?: string }
-type WebpackContextWithDir = { dir?: unknown }
+type NextConfigWithResolvedPath = NextConfig & { configFile?: string };
+type WebpackContextWithDir = { dir?: unknown };
 
 function resolveProjectRoot(
   options: Pick<WithPalamedesOptions, "projectRoot" | "cwd">,
   baseConfig: NextConfig,
-  context?: WebpackContextWithDir
+  context?: WebpackContextWithDir,
 ): string {
-  const explicitProjectRoot = options.projectRoot
-  const explicitCwd = options.cwd
+  const explicitProjectRoot = options.projectRoot;
+  const explicitCwd = options.cwd;
   if (explicitProjectRoot && explicitCwd) {
-    const projectRoot = path.resolve(explicitProjectRoot)
-    const cwd = path.resolve(explicitCwd)
+    const projectRoot = path.resolve(explicitProjectRoot);
+    const cwd = path.resolve(explicitCwd);
     if (projectRoot !== cwd) {
-      throw new TypeError("withPalamedes projectRoot and cwd must resolve to the same directory.")
+      throw new TypeError("withPalamedes projectRoot and cwd must resolve to the same directory.");
     }
   }
   if (explicitProjectRoot || explicitCwd) {
-    return path.resolve(explicitProjectRoot ?? explicitCwd!)
+    return path.resolve(explicitProjectRoot ?? explicitCwd!);
   }
 
   if (typeof context?.dir === "string" && context.dir.length > 0) {
-    return path.resolve(context.dir)
+    return path.resolve(context.dir);
   }
 
-  const configFile = (baseConfig as NextConfigWithResolvedPath).configFile
+  const configFile = (baseConfig as NextConfigWithResolvedPath).configFile;
   if (typeof configFile === "string" && configFile.length > 0) {
-    return path.dirname(path.resolve(configFile))
+    return path.dirname(path.resolve(configFile));
   }
 
-  const configProjectRoot = resolveNextConfigProjectRoot()
+  const configProjectRoot = resolveNextConfigProjectRoot();
   if (configProjectRoot) {
-    return configProjectRoot
+    return configProjectRoot;
   }
 
-  const cliProjectRoot = resolveNextCliProjectRoot()
+  const cliProjectRoot = resolveNextCliProjectRoot();
   if (cliProjectRoot) {
-    return cliProjectRoot
+    return cliProjectRoot;
   }
 
-  return process.cwd()
+  return process.cwd();
 }
 
 function resolveNextConfigProjectRoot(): string | undefined {
-  const stack = new Error("Resolve the Next config evaluation stack.").stack
+  const stack = new Error("Resolve the Next config evaluation stack.").stack;
   if (!stack) {
-    return
+    return;
   }
 
   for (const frame of stack.split("\n")) {
-    const configFile = nextConfigFileFromStackFrame(frame)
+    const configFile = nextConfigFileFromStackFrame(frame);
     if (configFile) {
-      return path.dirname(configFile)
+      return path.dirname(configFile);
     }
   }
 }
 
 function nextConfigFileFromStackFrame(frame: string): string | undefined {
-  const configFileName = frame.match(/next\.config\.(?:[cm]?[jt]s)/u)?.[0]
+  const configFileName = frame.match(/next\.config\.(?:[cm]?[jt]s)/u)?.[0];
   if (!configFileName) {
-    return
+    return;
   }
 
-  const configFileEnd = frame.indexOf(configFileName) + configFileName.length
-  const prefix = frame.slice(0, configFileEnd)
-  const openingParenthesis = prefix.lastIndexOf("(")
+  const configFileEnd = frame.indexOf(configFileName) + configFileName.length;
+  const prefix = frame.slice(0, configFileEnd);
+  const openingParenthesis = prefix.lastIndexOf("(");
   const rawPath = prefix
     .slice(openingParenthesis === -1 ? 0 : openingParenthesis + 1)
     .trim()
-    .replace(/^at\s+(?:async\s+)?/u, "")
+    .replace(/^at\s+(?:async\s+)?/u, "");
 
   if (!rawPath) {
-    return
+    return;
   }
 
-  return rawPath.startsWith("file:") ? fileURLToPath(rawPath) : path.resolve(rawPath)
+  return rawPath.startsWith("file:") ? fileURLToPath(rawPath) : path.resolve(rawPath);
 }
 
-const NEXT_CLI_COMMANDS = new Set(["build", "dev", "start"])
+const NEXT_CLI_COMMANDS = new Set(["build", "dev", "start"]);
 const NEXT_CLI_OPTIONS_WITH_VALUES = new Set([
   "-H",
   "--debug-build-paths",
@@ -344,57 +346,57 @@ const NEXT_CLI_OPTIONS_WITH_VALUES = new Set([
   "--keepAliveTimeout",
   "--port",
   "-p",
-])
+]);
 
 function isNextCliEntry(argument: string | undefined): boolean {
   if (!argument) {
-    return false
+    return false;
   }
 
-  const normalized = argument.replaceAll("\\", "/")
-  return path.posix.basename(normalized) === "next" || normalized.includes("/next/dist/bin/")
+  const normalized = argument.replaceAll("\\", "/");
+  return path.posix.basename(normalized) === "next" || normalized.includes("/next/dist/bin/");
 }
 
 function resolveNextCliProjectRoot(): string | undefined {
   if (!isNextCliEntry(process.argv[1]) || !NEXT_CLI_COMMANDS.has(process.argv[2] ?? "")) {
-    return
+    return;
   }
 
   for (let index = 3; index < process.argv.length; index += 1) {
-    const argument = process.argv[index]
+    const argument = process.argv[index];
     if (!argument) {
-      continue
+      continue;
     }
 
     if (argument === "--") {
-      const directory = process.argv[index + 1]
-      return directory ? path.resolve(directory) : undefined
+      const directory = process.argv[index + 1];
+      return directory ? path.resolve(directory) : undefined;
     }
 
     if (argument.startsWith("-")) {
-      const option = argument.split("=", 1)[0]
+      const option = argument.split("=", 1)[0];
       if (!argument.includes("=") && option && NEXT_CLI_OPTIONS_WITH_VALUES.has(option)) {
-        index += 1
+        index += 1;
       }
-      continue
+      continue;
     }
 
-    return path.resolve(argument)
+    return path.resolve(argument);
   }
 }
 
 function hasWorkspaces(packageJsonPath: string) {
   if (!existsSync(packageJsonPath)) {
-    return false
+    return false;
   }
 
   try {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
-      workspaces?: unknown
-    }
+      workspaces?: unknown;
+    };
 
     if (Array.isArray(packageJson.workspaces)) {
-      return packageJson.workspaces.length > 0
+      return packageJson.workspaces.length > 0;
     }
 
     if (
@@ -402,12 +404,12 @@ function hasWorkspaces(packageJsonPath: string) {
       typeof packageJson.workspaces === "object" &&
       Array.isArray((packageJson.workspaces as { packages?: unknown }).packages)
     ) {
-      return (packageJson.workspaces as { packages: unknown[] }).packages.length > 0
+      return (packageJson.workspaces as { packages: unknown[] }).packages.length > 0;
     }
 
-    return false
+    return false;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -426,7 +428,7 @@ function hasWorkspaces(packageJsonPath: string) {
  */
 export function withPalamedes(
   baseConfig: NextConfig = {},
-  options: WithPalamedesOptions = {}
+  options: WithPalamedesOptions = {},
 ): NextConfig {
   const {
     include = PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
@@ -442,45 +444,45 @@ export function withPalamedes(
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
     messageSplitting = false,
-  } = options
+  } = options;
 
-  const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
+  const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Production catalog chunks can lag code during a deploy or be loaded
   // independently when message splitting is enabled. Preserve source text by
   // default so a miss is readable rather than a compiled hash; applications
   // with stricter source-text or bundle-size constraints can opt out.
-  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? true
-  const stripNonEssentialProps = process.env.NODE_ENV === "production"
+  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? true;
+  const stripNonEssentialProps = process.env.NODE_ENV === "production";
   const projectRoot = resolveProjectRoot(
     { projectRoot: explicitProjectRoot, cwd: explicitCwd },
-    baseConfig
-  )
-  const resolvedConfigPath = configPath ? path.resolve(projectRoot, configPath) : undefined
-  const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions, projectRoot)
+    baseConfig,
+  );
+  const resolvedConfigPath = configPath ? path.resolve(projectRoot, configPath) : undefined;
+  const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions, projectRoot);
   const serverFunctions = serverFunctionEntry
     ? {
         initializerModule: SERVER_FUNCTION_INITIALIZER_MODULE,
         initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
       }
-    : undefined
-  const workspaceRoot = resolveWorkspaceRoot(projectRoot, explicitWorkspaceRoot)
+    : undefined;
+  const workspaceRoot = resolveWorkspaceRoot(projectRoot, explicitWorkspaceRoot);
   const configuredTurbopackRoot =
     typeof baseConfig.turbopack?.root === "string"
       ? path.resolve(projectRoot, baseConfig.turbopack.root)
-      : workspaceRoot
+      : workspaceRoot;
   const outputFileTracingRoot =
     baseConfig.outputFileTracingRoot ??
-    (typeof configuredTurbopackRoot === "string" ? configuredTurbopackRoot : undefined)
+    (typeof configuredTurbopackRoot === "string" ? configuredTurbopackRoot : undefined);
 
   // Resolve loader paths
-  const oxcLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-loader")
-  const poLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-po-loader")
+  const oxcLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-loader");
+  const poLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-po-loader");
   const poLoaderOptions = {
     failOnMissing,
     failOnCompileError,
     cwd: projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
-  }
+  };
   const transformLoaderOptions = {
     runtimeModule,
     keepSourceFallbacks,
@@ -488,13 +490,13 @@ export function withPalamedes(
     cwd: projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
     ...(serverFunctions ? { serverFunctions } : {}),
-  }
+  };
   // A missing production chunk must not make the entire client entry module
   // unevaluable. Development stays fail-fast so broken catalog wiring is
   // surfaced immediately instead of being hidden behind source fallbacks.
-  const clientFragmentFailureMode = process.env.NODE_ENV === "production" ? "degrade" : "throw"
+  const clientFragmentFailureMode = process.env.NODE_ENV === "production" ? "degrade" : "throw";
 
-  const rules: TurbopackRules = { ...baseConfig.turbopack?.rules }
+  const rules: TurbopackRules = { ...baseConfig.turbopack?.rules };
 
   // Transform local JS/TS files that actually import Palamedes macros. The
   // include/exclude options translate into the rule condition so they behave
@@ -508,7 +510,7 @@ export function withPalamedes(
         ? new RegExp(`${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`)
         : MACRO_CONTENT_PATTERN,
     },
-  ]
+  ];
   if (serverFunctions || messageSplitting) {
     // Turbopack's built-in browser condition lets one unified graph produce a
     // plain client transform and a server transform with lazy message
@@ -527,7 +529,7 @@ export function withPalamedes(
           },
         },
       ],
-    })
+    });
     appendTurbopackRule(rules, "*", {
       condition: { all: [...transformConditions, { not: "browser" }] },
       loaders: [
@@ -539,12 +541,12 @@ export function withPalamedes(
           },
         },
       ],
-    })
+    });
   } else {
     appendTurbopackRule(rules, "*", {
       condition: { all: transformConditions },
       loaders: [{ loader: oxcLoaderPath, options: transformLoaderOptions }],
-    })
+    });
   }
 
   // Compile local .po files
@@ -560,7 +562,7 @@ export function withPalamedes(
         },
       ],
       as: "*.js",
-    })
+    });
   }
 
   return {
@@ -587,18 +589,18 @@ export function withPalamedes(
       const webpackProjectRoot = resolveProjectRoot(
         { projectRoot: explicitProjectRoot, cwd: explicitCwd },
         baseConfig,
-        context as WebpackContextWithDir
-      )
+        context as WebpackContextWithDir,
+      );
       const webpackServerFunctionEntry = resolveServerFunctionInitializer(
         serverFunctionOptions,
-        webpackProjectRoot
-      )
+        webpackProjectRoot,
+      );
       const webpackServerFunctions = webpackServerFunctionEntry
         ? {
             initializerModule: SERVER_FUNCTION_INITIALIZER_MODULE,
             initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
           }
-        : undefined
+        : undefined;
       const webpackTransformLoaderOptions = {
         runtimeModule,
         keepSourceFallbacks,
@@ -606,34 +608,34 @@ export function withPalamedes(
         cwd: webpackProjectRoot,
         ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
         ...(webpackServerFunctions ? { serverFunctions: webpackServerFunctions } : {}),
-      }
+      };
       const webpackPoLoaderOptions = {
         failOnMissing,
         failOnCompileError,
         cwd: webpackProjectRoot,
         ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
-      }
+      };
 
       if (messageSplitting && !context.isServer) {
-        config.experiments ??= {}
-        config.experiments.topLevelAwait = true
-        config.output ??= {}
-        config.output.environment ??= {}
-        config.output.environment.asyncFunction = true
+        config.experiments ??= {};
+        config.experiments.topLevelAwait = true;
+        config.output ??= {};
+        config.output.environment ??= {};
+        config.output.environment.asyncFunction = true;
       }
 
       if (webpackServerFunctionEntry) {
-        config.resolve ??= {}
+        config.resolve ??= {};
         if (Array.isArray(config.resolve.alias)) {
           config.resolve.alias.push({
             name: SERVER_FUNCTION_ENTRY_MODULE,
             alias: webpackServerFunctionEntry.absolutePath,
-          })
+          });
         } else {
           config.resolve.alias = {
             ...config.resolve.alias,
             [SERVER_FUNCTION_ENTRY_MODULE]: webpackServerFunctionEntry.absolutePath,
-          }
+          };
         }
       }
 
@@ -656,7 +658,7 @@ export function withPalamedes(
             },
           },
         ],
-      })
+      });
 
       // Add .po loader. Scoped to first-party catalogs, mirroring the
       // Turbopack rule's `{ not: "foreign" }`: a dependency shipping importable
@@ -673,17 +675,17 @@ export function withPalamedes(
               options: webpackPoLoaderOptions,
             },
           ],
-        })
+        });
       }
 
       // Call the original webpack function if it exists
       if (typeof baseConfig.webpack === "function") {
-        return baseConfig.webpack(config, context)
+        return baseConfig.webpack(config, context);
       }
 
-      return config
+      return config;
     },
-  }
+  };
 }
 
-export default withPalamedes
+export default withPalamedes;

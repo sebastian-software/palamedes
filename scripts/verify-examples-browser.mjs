@@ -1,17 +1,17 @@
-import { spawn } from "node:child_process"
-import http from "node:http"
-import path from "node:path"
-import { parseExampleArgs, planBrowserRun, ROOT } from "./example-matrix.mjs"
-import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs"
+import { spawn } from "node:child_process";
+import http from "node:http";
+import path from "node:path";
+import { parseExampleArgs, planBrowserRun, ROOT } from "./example-matrix.mjs";
+import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs";
 
 function parseBrowserArgs(argv) {
   return {
     captureScreenshots: argv.includes("--capture-screenshots"),
     screenshotDir: path.resolve(
       ROOT,
-      process.env.PALAMEDES_SCREENSHOT_DIR ?? "docs/example-screenshots"
+      process.env.PALAMEDES_SCREENSHOT_DIR ?? "docs/example-screenshots",
     ),
-  }
+  };
 }
 
 function runVitest(example, options) {
@@ -50,19 +50,19 @@ function runVitest(example, options) {
           PALAMEDES_SCREENSHOT_DIR: options.screenshotDir,
         },
         stdio: "inherit",
-      }
-    )
+      },
+    );
 
     child.on("exit", (code) => {
       if (code === 0) {
-        resolve()
+        resolve();
       } else {
         reject(
-          new Error(`Vitest browser verification failed for ${example.id} with exit code ${code}`)
-        )
+          new Error(`Vitest browser verification failed for ${example.id} with exit code ${code}`),
+        );
       }
-    })
-  })
+    });
+  });
 }
 
 function requestText(port, requestPath) {
@@ -75,71 +75,71 @@ function requestText(port, requestPath) {
         port,
       },
       (response) => {
-        const chunks = []
-        response.on("data", (chunk) => chunks.push(chunk))
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
         response.on("end", () => {
           resolve({
             body: Buffer.concat(chunks).toString("utf8"),
             statusCode: response.statusCode ?? 0,
-          })
-        })
-      }
-    )
+          });
+        });
+      },
+    );
 
-    request.on("error", reject)
-    request.end()
-  })
+    request.on("error", reject);
+    request.end();
+  });
 }
 
 async function waitForServer(port, pathToCheck = "/") {
-  const startedAt = Date.now()
+  const startedAt = Date.now();
   while (Date.now() - startedAt < 30_000) {
     try {
-      const response = await requestText(port, pathToCheck)
+      const response = await requestText(port, pathToCheck);
       if (response.statusCode >= 200) {
-        return
+        return;
       }
     } catch {}
 
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
-  throw new Error(`Timed out waiting for server on port ${port}`)
+  throw new Error(`Timed out waiting for server on port ${port}`);
 }
 
 async function verifyExample(example, options) {
-  await ensurePortFree(example.port)
+  await ensurePortFree(example.port);
   const child = startCommand({
     args: example.start,
     cwd: example.cwd,
     env: example.startEnv,
-  })
+  });
 
   try {
-    await waitForServer(example.port, example.strategy === "route" ? "/en" : "/")
-    await runVitest(example, options)
+    await waitForServer(example.port, example.strategy === "route" ? "/en" : "/");
+    await runVitest(example, options);
   } finally {
-    await stopCommand(child)
-    await ensurePortFree(example.port)
+    await stopCommand(child);
+    await ensurePortFree(example.port);
   }
 }
 
 async function main() {
-  const browserOptions = parseBrowserArgs(process.argv)
-  const filters = parseExampleArgs(process.argv)
-  const plan = planBrowserRun(filters, browserOptions)
+  const browserOptions = parseBrowserArgs(process.argv);
+  const filters = parseExampleArgs(process.argv);
+  const plan = planBrowserRun(filters, browserOptions);
 
   if (plan.length === 0) {
-    throw new Error("No browser-verifiable examples matched the provided filters")
+    throw new Error("No browser-verifiable examples matched the provided filters");
   }
 
   for (const { example, options } of plan) {
-    console.log(`\n[verify:browser] ${example.id} on port ${example.port}`)
-    await verifyExample(example, options)
+    console.log(`\n[verify:browser] ${example.id} on port ${example.port}`);
+    await verifyExample(example, options);
   }
 }
 
 main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+  console.error(error);
+  process.exitCode = 1;
+});

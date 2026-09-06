@@ -1,55 +1,55 @@
 // @vitest-environment jsdom
-import { Component, Suspense, type ReactNode } from "react"
-import { act, render, waitFor } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { Component, Suspense, type ReactNode } from "react";
+import { act, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createI18n, defineCompiledCatalog } from "@palamedes/core/compiled"
-import { getI18n, resetI18nRuntime } from "@palamedes/runtime"
+import { createI18n, defineCompiledCatalog } from "@palamedes/core/compiled";
+import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
 
-import { createClientCatalogBoundary } from "./client"
-import { Plural, Select, SelectOrdinal, Trans } from "./index"
+import { createClientCatalogBoundary } from "./client";
+import { Plural, Select, SelectOrdinal, Trans } from "./index";
 
-type Locale = "de" | "en"
+type Locale = "de" | "en";
 
 type CatalogModule = {
-  messages: ReturnType<typeof defineCompiledCatalog>
-}
+  messages: ReturnType<typeof defineCompiledCatalog>;
+};
 
 function catalog(greeting: string): CatalogModule {
   return {
     messages: defineCompiledCatalog({ greeting }),
-  }
+  };
 }
 
 function fulfilled<T>(value: T): Promise<T> {
   const promise = Promise.resolve(value) as Promise<T> & {
-    status: "fulfilled"
-    value: T
-  }
-  promise.status = "fulfilled"
-  promise.value = value
-  return promise
+    status: "fulfilled";
+    value: T;
+  };
+  promise.status = "fulfilled";
+  promise.value = value;
+  return promise;
 }
 
 function deferred<T>(): {
-  promise: Promise<T>
-  resolve: (value: T) => void
-  reject: (reason?: unknown) => void
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
 } {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
   const promise = new Promise<T>((done, fail) => {
-    resolve = done
-    reject = fail
-  })
-  return { promise, resolve, reject }
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
 class CatalogErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  public state: { error: Error | null } = { error: null }
+  public state: { error: Error | null } = { error: null };
 
   public static getDerivedStateFromError(error: Error) {
-    return { error }
+    return { error };
   }
 
   public render() {
@@ -57,115 +57,115 @@ class CatalogErrorBoundary extends Component<{ children: ReactNode }, { error: E
       <span role="alert">{this.state.error.message}</span>
     ) : (
       this.props.children
-    )
+    );
   }
 }
 
 describe("createClientCatalogBoundary", () => {
   afterEach(() => {
-    resetI18nRuntime()
-    document.documentElement.lang = ""
-    delete (globalThis as Record<string, unknown>).importScripts
-  })
+    resetI18nRuntime();
+    document.documentElement.lang = "";
+    delete (globalThis as Record<string, unknown>).importScripts;
+  });
 
   it("uses the client catalog path in windowless web workers", async () => {
-    document.documentElement.lang = "de"
-    const loadCatalog = vi.fn(() => fulfilled(catalog("Hallo aus dem Worker")))
-    const resolveClientLocale = vi.fn(() => document.documentElement.lang as Locale)
-    const state = globalThis as Record<string, unknown>
-    const browserWindow = window
+    document.documentElement.lang = "de";
+    const loadCatalog = vi.fn(() => fulfilled(catalog("Hallo aus dem Worker")));
+    const resolveClientLocale = vi.fn(() => document.documentElement.lang as Locale);
+    const state = globalThis as Record<string, unknown>;
+    const browserWindow = window;
     const Boundary = (() => {
       try {
-        state.importScripts = () => null
-        delete state.window
-        return createClientCatalogBoundary<Locale>({ loadCatalog, resolveClientLocale })
+        state.importScripts = () => null;
+        delete state.window;
+        return createClientCatalogBoundary<Locale>({ loadCatalog, resolveClientLocale });
       } finally {
-        state.window = browserWindow
-        delete state.importScripts
+        state.window = browserWindow;
+        delete state.importScripts;
       }
-    })()
+    })();
 
     function Greeting() {
-      return <span>{String(getI18n()._("greeting"))}</span>
+      return <span>{String(getI18n()._("greeting"))}</span>;
     }
 
-    let view!: ReturnType<typeof render>
+    let view!: ReturnType<typeof render>;
     await act(async () => {
       view = render(
         <Suspense fallback={<span>Loading</span>}>
           <Boundary locale="de">
             <Greeting />
           </Boundary>
-        </Suspense>
-      )
-    })
+        </Suspense>,
+      );
+    });
 
-    await waitFor(() => expect(view.container.textContent).toBe("Hallo aus dem Worker"))
-    expect(resolveClientLocale).toHaveBeenCalledOnce()
-    expect(loadCatalog).toHaveBeenCalledOnce()
-    expect(loadCatalog).toHaveBeenCalledWith("de")
-  })
+    await waitFor(() => expect(view.container.textContent).toBe("Hallo aus dem Worker"));
+    expect(resolveClientLocale).toHaveBeenCalledOnce();
+    expect(loadCatalog).toHaveBeenCalledOnce();
+    expect(loadCatalog).toHaveBeenCalledWith("de");
+  });
 
   it("initializes the hook-free getter once before translated descendants render", async () => {
-    document.documentElement.lang = "de"
-    const de = deferred<CatalogModule>()
-    const loadCatalog = vi.fn(() => de.promise)
-    const resolveClientLocale = vi.fn(() => document.documentElement.lang as Locale)
-    const Boundary = createClientCatalogBoundary<Locale>({ loadCatalog, resolveClientLocale })
-    const renderedLocales: string[] = []
+    document.documentElement.lang = "de";
+    const de = deferred<CatalogModule>();
+    const loadCatalog = vi.fn(() => de.promise);
+    const resolveClientLocale = vi.fn(() => document.documentElement.lang as Locale);
+    const Boundary = createClientCatalogBoundary<Locale>({ loadCatalog, resolveClientLocale });
+    const renderedLocales: string[] = [];
 
     function Greeting() {
-      const i18n = getI18n()
-      renderedLocales.push(i18n.locale)
-      return <span>{String(i18n._("greeting"))}</span>
+      const i18n = getI18n();
+      renderedLocales.push(i18n.locale);
+      return <span>{String(i18n._("greeting"))}</span>;
     }
 
-    let view!: ReturnType<typeof render>
+    let view!: ReturnType<typeof render>;
     await act(async () => {
       view = render(
         <Suspense fallback={<span>Loading</span>}>
           <Boundary locale="de">
             <Greeting />
           </Boundary>
-        </Suspense>
-      )
-    })
+        </Suspense>,
+      );
+    });
 
-    expect(view.container.textContent).toBe("Loading")
-    expect(renderedLocales).toStrictEqual([])
-    expect(resolveClientLocale).toHaveBeenCalledOnce()
-    expect(loadCatalog).toHaveBeenCalledOnce()
-    expect(loadCatalog).toHaveBeenCalledWith("de")
+    expect(view.container.textContent).toBe("Loading");
+    expect(renderedLocales).toStrictEqual([]);
+    expect(resolveClientLocale).toHaveBeenCalledOnce();
+    expect(loadCatalog).toHaveBeenCalledOnce();
+    expect(loadCatalog).toHaveBeenCalledWith("de");
 
     await act(async () => {
-      de.resolve(catalog("Hallo"))
-      await de.promise
-    })
+      de.resolve(catalog("Hallo"));
+      await de.promise;
+    });
 
-    await waitFor(() => expect(view.container.textContent).toBe("Hallo"))
-    expect(renderedLocales).toStrictEqual(["de"])
+    await waitFor(() => expect(view.container.textContent).toBe("Hallo"));
+    expect(renderedLocales).toStrictEqual(["de"]);
 
     view.rerender(
       <Suspense fallback={<span>Loading</span>}>
         <Boundary locale="de">
           <Greeting />
         </Boundary>
-      </Suspense>
-    )
+      </Suspense>,
+    );
 
-    expect(resolveClientLocale).toHaveBeenCalledOnce()
-    expect(loadCatalog).toHaveBeenCalledOnce()
-  })
+    expect(resolveClientLocale).toHaveBeenCalledOnce();
+    expect(loadCatalog).toHaveBeenCalledOnce();
+  });
 
   it("formats compat ICU fallbacks after initializing a parser-free client catalog", async () => {
-    document.documentElement.lang = "en"
+    document.documentElement.lang = "en";
     const Boundary = createClientCatalogBoundary<Locale>({
       loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
       resolveClientLocale: () => document.documentElement.lang as Locale,
-    })
-    const when = new Date(Date.UTC(2026, 4, 8, 12, 0, 0))
+    });
+    const when = new Date(Date.UTC(2026, 4, 8, 12, 0, 0));
 
-    let view!: ReturnType<typeof render>
+    let view!: ReturnType<typeof render>;
     await act(async () => {
       view = render(
         <Suspense fallback={<span>Loading</span>}>
@@ -178,39 +178,39 @@ describe("createClientCatalogBoundary", () => {
               <SelectOrdinal value={3} one="#st" two="#nd" few="#rd" other="#th" />
             </>
           </Boundary>
-        </Suspense>
-      )
-    })
+        </Suspense>,
+      );
+    });
 
     await waitFor(() =>
       expect(view.container.textContent).toBe(
-        `Hello Ada${new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(when)}3 itemsShe3rd`
-      )
-    )
-  })
+        `Hello Ada${new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(when)}3 itemsShe3rd`,
+      ),
+    );
+  });
 
   it("uses the configured instance factory for hydration-safe date/time formatting", async () => {
-    document.documentElement.lang = "en"
+    document.documentElement.lang = "en";
     const createConfiguredI18n = vi.fn(() =>
-      createI18n({ locale: "en", timeZone: "Europe/Berlin" })
-    )
+      createI18n({ locale: "en", timeZone: "Europe/Berlin" }),
+    );
     const Boundary = createClientCatalogBoundary<Locale>({
       createI18n: createConfiguredI18n,
       loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
       resolveClientLocale: () => document.documentElement.lang as Locale,
-    })
-    const when = new Date("2026-09-18T17:30:00Z")
+    });
+    const when = new Date("2026-09-18T17:30:00Z");
 
-    let view!: ReturnType<typeof render>
+    let view!: ReturnType<typeof render>;
     await act(async () => {
       view = render(
         <Suspense fallback={<span>Loading</span>}>
           <Boundary locale="en">
             <Trans id="when" message="{when, date, full} {when, time, short}" values={{ when }} />
           </Boundary>
-        </Suspense>
-      )
-    })
+        </Suspense>,
+      );
+    });
 
     await waitFor(() =>
       expect(view.container.textContent).toBe(
@@ -220,46 +220,46 @@ describe("createClientCatalogBoundary", () => {
         }).format(when)} ${new Intl.DateTimeFormat("en", {
           timeStyle: "short",
           timeZone: "Europe/Berlin",
-        }).format(when)}`
-      )
-    )
-    expect(createConfiguredI18n).toHaveBeenCalledOnce()
-    expect(getI18n<ReturnType<typeof createI18n>>().timeZone).toBe("Europe/Berlin")
-  })
+        }).format(when)}`,
+      ),
+    );
+    expect(createConfiguredI18n).toHaveBeenCalledOnce();
+    expect(getI18n<ReturnType<typeof createI18n>>().timeZone).toBe("Europe/Berlin");
+  });
 
   it("fails fast when a render tries to change the document locale", async () => {
-    document.documentElement.lang = "en"
+    document.documentElement.lang = "en";
     const Boundary = createClientCatalogBoundary<Locale>({
       loadCatalog: () => fulfilled(catalog("Hello")),
       resolveClientLocale: () => document.documentElement.lang as Locale,
-    })
+    });
 
     await expect(
       act(async () => {
         render(
           <Boundary locale="de">
             <span>Mismatch</span>
-          </Boundary>
-        )
-      })
-    ).rejects.toThrow(/Perform a document navigation to change locale/)
-  })
+          </Boundary>,
+        );
+      }),
+    ).rejects.toThrow(/Perform a document navigation to change locale/);
+  });
 
   it("retries a rejected preload and keeps the successful catalog cached", async () => {
-    document.documentElement.lang = "de"
-    const loadError = new Error("catalog unavailable")
+    document.documentElement.lang = "de";
+    const loadError = new Error("catalog unavailable");
     const loadCatalog = vi
       .fn<() => Promise<CatalogModule>>()
       .mockRejectedValueOnce(loadError)
-      .mockResolvedValueOnce(catalog("Hallo"))
+      .mockResolvedValueOnce(catalog("Hallo"));
     const Boundary = createClientCatalogBoundary<Locale>({
       loadCatalog,
       resolveClientLocale: () => document.documentElement.lang as Locale,
-    })
-    expect(loadCatalog).toHaveBeenCalledOnce()
+    });
+    expect(loadCatalog).toHaveBeenCalledOnce();
 
     function Greeting() {
-      return <span>{String(getI18n()._("greeting"))}</span>
+      return <span>{String(getI18n()._("greeting"))}</span>;
     }
 
     function boundary(retryKey: string) {
@@ -271,46 +271,46 @@ describe("createClientCatalogBoundary", () => {
             </Boundary>
           </CatalogErrorBoundary>
         </Suspense>
-      )
+      );
     }
 
-    let view!: ReturnType<typeof render>
+    let view!: ReturnType<typeof render>;
     await act(async () => {
-      view = render(boundary("first"))
-      await Promise.resolve()
-    })
-    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("catalog unavailable"))
-    expect(loadCatalog).toHaveBeenCalledOnce()
+      view = render(boundary("first"));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("catalog unavailable"));
+    expect(loadCatalog).toHaveBeenCalledOnce();
 
     await act(async () => {
-      view.rerender(boundary("retry"))
-      await Promise.resolve()
-    })
-    await waitFor(() => expect(view.container.textContent).toBe("Hallo"))
-    expect(loadCatalog).toHaveBeenCalledTimes(2)
-  })
+      view.rerender(boundary("retry"));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.container.textContent).toBe("Hallo"));
+    expect(loadCatalog).toHaveBeenCalledTimes(2);
+  });
 
   it("surfaces repeated rejected preloads before retrying successfully", async () => {
-    document.documentElement.lang = "de"
-    const firstError = new Error("first failure")
-    const secondError = new Error("second failure")
-    const preload = deferred<CatalogModule>()
+    document.documentElement.lang = "de";
+    const firstError = new Error("first failure");
+    const secondError = new Error("second failure");
+    const preload = deferred<CatalogModule>();
     const loadCatalog = vi
       .fn<() => Promise<CatalogModule>>()
       .mockReturnValueOnce(preload.promise)
       .mockRejectedValueOnce(secondError)
-      .mockResolvedValueOnce(catalog("Hallo"))
+      .mockResolvedValueOnce(catalog("Hallo"));
     const Boundary = createClientCatalogBoundary<Locale>({
       loadCatalog,
       resolveClientLocale: () => document.documentElement.lang as Locale,
-    })
-    expect(loadCatalog).toHaveBeenCalledOnce()
+    });
+    expect(loadCatalog).toHaveBeenCalledOnce();
 
     await act(async () => {
-      preload.reject(firstError)
-      await Promise.resolve()
-      await Promise.resolve()
-    })
+      preload.reject(firstError);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     function boundary(retryKey: string) {
       return (
@@ -319,29 +319,29 @@ describe("createClientCatalogBoundary", () => {
             <Boundary locale="de">Ready</Boundary>
           </CatalogErrorBoundary>
         </Suspense>
-      )
+      );
     }
 
-    let view!: ReturnType<typeof render>
+    let view!: ReturnType<typeof render>;
     await act(async () => {
-      view = render(boundary("first"))
-      await Promise.resolve()
-    })
-    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("first failure"))
-    expect(loadCatalog).toHaveBeenCalledOnce()
+      view = render(boundary("first"));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("first failure"));
+    expect(loadCatalog).toHaveBeenCalledOnce();
 
     await act(async () => {
-      view.rerender(boundary("second"))
-      await Promise.resolve()
-    })
-    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("second failure"))
-    expect(loadCatalog).toHaveBeenCalledTimes(2)
+      view.rerender(boundary("second"));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("second failure"));
+    expect(loadCatalog).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      view.rerender(boundary("success"))
-      await Promise.resolve()
-    })
-    await waitFor(() => expect(view.container.textContent).toBe("Ready"))
-    expect(loadCatalog).toHaveBeenCalledTimes(3)
-  })
-})
+      view.rerender(boundary("success"));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.container.textContent).toBe("Ready"));
+    expect(loadCatalog).toHaveBeenCalledTimes(3);
+  });
+});

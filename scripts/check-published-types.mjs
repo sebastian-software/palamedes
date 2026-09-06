@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process"
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -7,18 +7,18 @@ import {
   rmSync,
   symlinkSync,
   writeFileSync,
-} from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import process from "node:process"
-import ts from "typescript"
-import { assertDualExportsUseFormatSpecificTargets } from "./published-export-contracts.mjs"
-import { publicWorkspacePackages } from "./release-packages.mjs"
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import ts from "typescript";
+import { assertDualExportsUseFormatSpecificTargets } from "./published-export-contracts.mjs";
+import { publicWorkspacePackages } from "./release-packages.mjs";
 
-const root = process.cwd()
-const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-published-types-"))
-const scopeDirectory = path.join(fixtureRoot, "node_modules", "@palamedes")
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm"
+const root = process.cwd();
+const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-published-types-"));
+const scopeDirectory = path.join(fixtureRoot, "node_modules", "@palamedes");
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 /*
  * Published packages that carry no `types` field, with the reason each one is
@@ -42,12 +42,12 @@ const UNTYPED_PACKAGES = new Map([
   ["@palamedes/core-node-win32-x64-msvc", "prebuilt native addon"],
   ["create-palamedes", "scaffold placeholder; ships a bin only"],
   ["palamedes", "meta package; re-exports nothing itself"],
-])
+]);
 
 /** Export subpaths that resolve to bundler plugin files rather than modules. */
 const UNTYPED_SUBPATHS = new Map([
   ["@palamedes/next-plugin", new Set(["./palamedes-loader", "./palamedes-po-loader"])],
-])
+]);
 
 const SOURCE_FALLBACK_DOC_TARGETS = [
   {
@@ -62,10 +62,10 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
     packageDirectory: "packages/remix",
     docs: "docs/api/remix.md",
   },
-]
+];
 
 const SOURCE_FALLBACK_TSDOC_PATTERN =
-  /Defaults to `true` in every environment\.[\s\S]*Set to `false` for compact,[\s\S]*bundle size or embedding authored source text/u
+  /Defaults to `true` in every environment\.[\s\S]*Set to `false` for compact,[\s\S]*bundle size or embedding authored source text/u;
 
 const SOURCE_FALLBACK_POLICY_TARGETS = [
   {
@@ -92,10 +92,10 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
       "for compact, hash-only output when bundle size or embedding authored source text is a concern.",
     ],
   },
-]
+];
 
 function typedSubpaths({ manifest }) {
-  const skipped = UNTYPED_SUBPATHS.get(manifest.name) ?? new Set()
+  const skipped = UNTYPED_SUBPATHS.get(manifest.name) ?? new Set();
   return Object.entries(manifest.exports ?? { ".": {} })
     .filter(([subpath, condition]) => !skipped.has(subpath) && typeof condition === "object")
     .map(([subpath, condition]) => ({
@@ -103,55 +103,55 @@ function typedSubpaths({ manifest }) {
       // A `require` condition promises a CommonJS consumer can resolve this
       // entry, so each one is checked from a `.cts` fixture as well.
       dual: JSON.stringify(condition).includes('"require"'),
-    }))
+    }));
 }
 
 function assertEveryPublishedPackageIsCovered(packages) {
-  const problems = []
+  const problems = [];
   for (const { manifest } of packages) {
-    const excluded = UNTYPED_PACKAGES.has(manifest.name)
+    const excluded = UNTYPED_PACKAGES.has(manifest.name);
     if (manifest.types && excluded) {
       problems.push(
-        `${manifest.name} declares "types" but is listed in UNTYPED_PACKAGES; remove the exclusion.`
-      )
+        `${manifest.name} declares "types" but is listed in UNTYPED_PACKAGES; remove the exclusion.`,
+      );
     }
     if (!manifest.types && !excluded) {
       problems.push(
-        `${manifest.name} is published without "types" and is not listed in UNTYPED_PACKAGES; add it with a reason or ship declarations.`
-      )
+        `${manifest.name} is published without "types" and is not listed in UNTYPED_PACKAGES; add it with a reason or ship declarations.`,
+      );
     }
   }
   for (const name of UNTYPED_PACKAGES.keys()) {
     if (!packages.some(({ manifest }) => manifest.name === name)) {
-      problems.push(`UNTYPED_PACKAGES lists ${name}, which is no longer published.`)
+      problems.push(`UNTYPED_PACKAGES lists ${name}, which is no longer published.`);
     }
   }
   if (problems.length > 0) {
-    throw new Error(problems.join("\n"))
+    throw new Error(problems.join("\n"));
   }
 }
 
 function exportTargets(condition, targets) {
   if (typeof condition === "string") {
-    if (condition.startsWith("./")) targets.add(condition)
-    return targets
+    if (condition.startsWith("./")) targets.add(condition);
+    return targets;
   }
   if (Array.isArray(condition)) {
-    for (const entry of condition) exportTargets(entry, targets)
-    return targets
+    for (const entry of condition) exportTargets(entry, targets);
+    return targets;
   }
   if (condition && typeof condition === "object") {
-    for (const entry of Object.values(condition)) exportTargets(entry, targets)
+    for (const entry of Object.values(condition)) exportTargets(entry, targets);
   }
-  return targets
+  return targets;
 }
 
 function advertisedTargets(manifest) {
-  const targets = exportTargets(manifest.exports ?? {}, new Set())
+  const targets = exportTargets(manifest.exports ?? {}, new Set());
   for (const field of ["main", "module", "types"]) {
-    if (typeof manifest[field] === "string") targets.add(manifest[field])
+    if (typeof manifest[field] === "string") targets.add(manifest[field]);
   }
-  return [...targets].sort()
+  return [...targets].sort();
 }
 
 /*
@@ -163,32 +163,32 @@ function advertisedTargets(manifest) {
  * workflow instead. Requires `pnpm build` to have run.
  */
 function assertExportTargetsExist(packages) {
-  const problems = []
+  const problems = [];
   for (const { directory, manifest } of packages) {
     for (const target of advertisedTargets(manifest)) {
-      if (existsSync(path.join(root, directory, target))) continue
+      if (existsSync(path.join(root, directory, target))) continue;
       problems.push(
-        `${manifest.name} advertises ${target}, which is missing after a build; drop the condition or emit the file.`
-      )
+        `${manifest.name} advertises ${target}, which is missing after a build; drop the condition or emit the file.`,
+      );
     }
   }
   if (problems.length > 0) {
-    throw new Error(problems.join("\n"))
+    throw new Error(problems.join("\n"));
   }
 }
 
 function assertDeclarationTargetsArePacked(packages) {
-  const problems = []
+  const problems = [];
   for (const { directory, manifest } of packages) {
-    const packedFiles = packedFilePaths(path.join(root, directory))
+    const packedFiles = packedFilePaths(path.join(root, directory));
     for (const target of advertisedTargets(manifest)) {
-      if (!/\.d\.(?:cts|mts|ts)$/u.test(target)) continue
-      if (packedFiles.has(target.slice(2))) continue
-      problems.push(`${manifest.name} advertises ${target}, but npm pack excludes it.`)
+      if (!/\.d\.(?:cts|mts|ts)$/u.test(target)) continue;
+      if (packedFiles.has(target.slice(2))) continue;
+      problems.push(`${manifest.name} advertises ${target}, but npm pack excludes it.`);
     }
   }
   if (problems.length > 0) {
-    throw new Error(problems.join("\n"))
+    throw new Error(problems.join("\n"));
   }
 }
 
@@ -198,45 +198,45 @@ function assertDeclarationTargetsArePacked(packages) {
  * docs so a runtime-default change cannot leave editor help behind again.
  */
 function assertSourceFallbackDefaultDocumentation() {
-  const problems = []
+  const problems = [];
 
   for (const { packageDirectory, docs } of SOURCE_FALLBACK_DOC_TARGETS) {
     const declarationFiles = ["index.d.ts", "index.d.mts", "index.d.cts"].map((file) =>
-      path.join(root, packageDirectory, "dist", file)
-    )
+      path.join(root, packageDirectory, "dist", file),
+    );
 
     for (const file of [
       path.join(root, packageDirectory, "src", "index.ts"),
       ...declarationFiles,
     ]) {
       if (!existsSync(file)) {
-        problems.push(`${path.relative(root, file)} is missing after a build.`)
-        continue
+        problems.push(`${path.relative(root, file)} is missing after a build.`);
+        continue;
       }
-      const text = readFileSync(file, "utf8")
-      const optionIndex = text.indexOf("keepSourceFallbacks?: boolean")
-      const docStart = text.lastIndexOf("/**", optionIndex)
-      const docEnd = text.indexOf("*/", docStart)
+      const text = readFileSync(file, "utf8");
+      const optionIndex = text.indexOf("keepSourceFallbacks?: boolean");
+      const docStart = text.lastIndexOf("/**", optionIndex);
+      const docEnd = text.indexOf("*/", docStart);
       if (optionIndex === -1 || docStart === -1 || docEnd < docStart || docEnd > optionIndex) {
         problems.push(
-          `${path.relative(root, file)} has no public TSDoc immediately before keepSourceFallbacks.`
-        )
-        continue
+          `${path.relative(root, file)} has no public TSDoc immediately before keepSourceFallbacks.`,
+        );
+        continue;
       }
-      const optionDocs = text.slice(docStart, docEnd)
+      const optionDocs = text.slice(docStart, docEnd);
       if (!SOURCE_FALLBACK_TSDOC_PATTERN.test(optionDocs)) {
         problems.push(
-          `${path.relative(root, file)} does not document the all-environments default and compact/source-exposure opt-out.`
-        )
+          `${path.relative(root, file)} does not document the all-environments default and compact/source-exposure opt-out.`,
+        );
       }
     }
 
-    const docsText = readFileSync(path.join(root, docs), "utf8")
+    const docsText = readFileSync(path.join(root, docs), "utf8");
     if (!docsText.includes("- `keepSourceFallbacks`: `true`")) {
-      problems.push(`${docs} does not document the default as true.`)
+      problems.push(`${docs} does not document the default as true.`);
     }
     if (!docsText.includes("`keepSourceFallbacks: false`")) {
-      problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`)
+      problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`);
     }
   }
 
@@ -244,16 +244,16 @@ function assertSourceFallbackDefaultDocumentation() {
     const policyText = readFileSync(path.join(root, file), "utf8")
       .replace(/^\s*\/\/\/\s?/gmu, "")
       .replace(/\s+/gu, " ")
-      .trim()
+      .trim();
     for (const snippet of snippets) {
       if (!policyText.includes(snippet)) {
-        problems.push(`${file} has drifted from the source-fallback policy: missing ${snippet}`)
+        problems.push(`${file} has drifted from the source-fallback policy: missing ${snippet}`);
       }
     }
   }
 
   if (problems.length > 0) {
-    throw new Error(problems.join("\n"))
+    throw new Error(problems.join("\n"));
   }
 }
 
@@ -263,20 +263,20 @@ function packedFilePaths(packageDirectory) {
     encoding: "utf8",
     env: { ...process.env, npm_config_cache: path.join(fixtureRoot, "npm-cache") },
     shell: process.platform === "win32",
-  })
-  if (result.error) throw result.error
+  });
+  if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`npm pack failed in ${packageDirectory}:\n${result.stderr}`)
+    throw new Error(`npm pack failed in ${packageDirectory}:\n${result.stderr}`);
   }
 
-  const [{ files }] = JSON.parse(result.stdout)
-  return new Set(files.map(({ path: filePath }) => filePath))
+  const [{ files }] = JSON.parse(result.stdout);
+  return new Set(files.map(({ path: filePath }) => filePath));
 }
 
 function linkPackage(name) {
-  const packageDirectory = path.join(root, name)
-  const fixturePackage = path.join(scopeDirectory, path.basename(name))
-  symlinkSync(packageDirectory, fixturePackage, process.platform === "win32" ? "junction" : "dir")
+  const packageDirectory = path.join(root, name);
+  const fixturePackage = path.join(scopeDirectory, path.basename(name));
+  symlinkSync(packageDirectory, fixturePackage, process.platform === "win32" ? "junction" : "dir");
 }
 
 function formatDiagnostics(diagnostics) {
@@ -284,7 +284,7 @@ function formatDiagnostics(diagnostics) {
     getCanonicalFileName: (fileName) => fileName,
     getCurrentDirectory: () => root,
     getNewLine: () => os.EOL,
-  })
+  });
 }
 
 function checkProgram(fileName, compilerOptions) {
@@ -294,26 +294,26 @@ function checkProgram(fileName, compilerOptions) {
     strict: true,
     target: ts.ScriptTarget.ES2022,
     ...compilerOptions,
-  })
-  const diagnostics = ts.getPreEmitDiagnostics(program)
+  });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
 
   if (diagnostics.length > 0) {
-    throw new Error(formatDiagnostics(diagnostics))
+    throw new Error(formatDiagnostics(diagnostics));
   }
 }
 
 try {
-  mkdirSync(scopeDirectory, { recursive: true })
-  const packages = publicWorkspacePackages(root)
-  assertEveryPublishedPackageIsCovered(packages)
+  mkdirSync(scopeDirectory, { recursive: true });
+  const packages = publicWorkspacePackages(root);
+  assertEveryPublishedPackageIsCovered(packages);
 
-  const typedPackages = packages.filter(({ manifest }) => manifest.types)
-  assertDualExportsUseFormatSpecificTargets(typedPackages)
-  assertExportTargetsExist(typedPackages)
-  assertDeclarationTargetsArePacked(typedPackages)
-  assertSourceFallbackDefaultDocumentation()
+  const typedPackages = packages.filter(({ manifest }) => manifest.types);
+  assertDualExportsUseFormatSpecificTargets(typedPackages);
+  assertExportTargetsExist(typedPackages);
+  assertDeclarationTargetsArePacked(typedPackages);
+  assertSourceFallbackDefaultDocumentation();
   for (const { directory } of typedPackages) {
-    linkPackage(directory)
+    linkPackage(directory);
   }
 
   /*
@@ -321,39 +321,39 @@ try {
    * every module mode it advertises. This is the breadth pass; the hand-written
    * fixtures below additionally pin the call signatures teams depend on.
    */
-  const entries = typedPackages.flatMap((entry) => typedSubpaths(entry))
-  const resolutionEsmFixture = path.join(fixtureRoot, "resolution.mts")
+  const entries = typedPackages.flatMap((entry) => typedSubpaths(entry));
+  const resolutionEsmFixture = path.join(fixtureRoot, "resolution.mts");
   writeFileSync(
     resolutionEsmFixture,
     entries
       .map(
         ({ specifier }, index) =>
-          `import type * as namespace${index} from ${JSON.stringify(specifier)}\nexport type Entry${index} = typeof namespace${index}\n`
+          `import type * as namespace${index} from ${JSON.stringify(specifier)}\nexport type Entry${index} = typeof namespace${index}\n`,
       )
-      .join("")
-  )
+      .join(""),
+  );
   checkProgram(resolutionEsmFixture, {
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
-  })
+  });
 
-  const resolutionCommonJsFixture = path.join(fixtureRoot, "resolution.cts")
+  const resolutionCommonJsFixture = path.join(fixtureRoot, "resolution.cts");
   writeFileSync(
     resolutionCommonJsFixture,
     entries
       .filter(({ dual }) => dual)
       .map(
         ({ specifier }, index) =>
-          `import namespace${index} = require(${JSON.stringify(specifier)})\nexport type Entry${index} = typeof namespace${index}\n`
+          `import namespace${index} = require(${JSON.stringify(specifier)})\nexport type Entry${index} = typeof namespace${index}\n`,
       )
-      .join("")
-  )
+      .join(""),
+  );
   checkProgram(resolutionCommonJsFixture, {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  })
+  });
 
-  const esmFixture = path.join(fixtureRoot, "consumer.mts")
+  const esmFixture = path.join(fixtureRoot, "consumer.mts");
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
@@ -442,14 +442,14 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
   locale: request.headers.get("accept-language") ?? "en",
   _: () => "",
 }))
-`
-  )
+`,
+  );
   checkProgram(esmFixture, {
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
-  })
+  });
 
-  const commonJsFixture = path.join(fixtureRoot, "consumer.cts")
+  const commonJsFixture = path.join(fixtureRoot, "consumer.cts");
   writeFileSync(
     commonJsFixture,
     `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
@@ -481,14 +481,14 @@ reactRuntime.Select({ value: "a", a: undefined, other: "Other" })
 
 export const config = nextPlugin.withPalamedes({})
 export const vitePlugins = vitePlugin.palamedes()
-`
-  )
+`,
+  );
   checkProgram(commonJsFixture, {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  })
+  });
 
-  const legacyCommonJsFixture = path.join(fixtureRoot, "legacy-consumer.ts")
+  const legacyCommonJsFixture = path.join(fixtureRoot, "legacy-consumer.ts");
   writeFileSync(
     legacyCommonJsFixture,
     `import nextPlugin = require("@palamedes/next-plugin")
@@ -496,15 +496,17 @@ import vitePlugin = require("@palamedes/vite-plugin")
 
 export const config = nextPlugin.withPalamedes({})
 export const vitePlugins = vitePlugin.palamedes()
-`
-  )
+`,
+  );
   checkProgram(legacyCommonJsFixture, {
     ignoreDeprecations: "6.0",
     module: ts.ModuleKind.CommonJS,
     moduleResolution: ts.ModuleResolutionKind.Node10,
-  })
+  });
 } finally {
-  rmSync(fixtureRoot, { force: true, recursive: true })
+  rmSync(fixtureRoot, { force: true, recursive: true });
 }
 
-console.log("Published TypeScript declarations support each package's advertised module consumers.")
+console.log(
+  "Published TypeScript declarations support each package's advertised module consumers.",
+);

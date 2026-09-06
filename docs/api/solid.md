@@ -39,8 +39,8 @@ Runtime components read the active i18n instance through the plain
 changes; changing locale requires a document navigation.
 
 ```tsx
-import { Trans } from "@palamedes/solid"
-;<Trans id="title" message="Welcome to Palamedes" />
+import { Trans } from "@palamedes/solid";
+<Trans id="title" message="Welcome to Palamedes" />;
 ```
 
 For source authoring, prefer macro imports from `@palamedes/solid/macro`.
@@ -76,7 +76,7 @@ Set the framework only so generated MDX uses Solid's component contract:
 
 ```ts
 // vite.config.ts
-palamedes({ framework: "solid" })
+palamedes({ framework: "solid" });
 ```
 
 Macro `t` / `plural` calls still use the same framework-neutral, hook-free

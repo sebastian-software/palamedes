@@ -1,16 +1,16 @@
-import { createI18nRuntime, type CreateI18nOptions } from "./i18nRuntime"
-import { formatMessageArgument, formatMessagePattern, parseMessagePattern } from "./messageFormat"
+import { createI18nRuntime, type CreateI18nOptions } from "./i18nRuntime";
+import { formatMessageArgument, formatMessagePattern, parseMessagePattern } from "./messageFormat";
 
 export function createI18n(options: CreateI18nOptions = {}) {
   const i18n = createI18nRuntime(options, {
     formatPattern: formatMessagePattern,
     parsePattern: parseMessagePattern,
-  })
-  i18n.parsePattern = parseMessagePattern
-  return i18n
+  });
+  i18n.parsePattern = parseMessagePattern;
+  return i18n;
 }
 
-export { DEFAULT_LOCALE } from "./i18nRuntime"
+export { DEFAULT_LOCALE } from "./i18nRuntime";
 export type {
   CreateI18nOptions,
   MessageFormatErrorInfo,
@@ -18,7 +18,7 @@ export type {
   MissingMessageInfo,
   PalamedesI18n,
   ReportedMessageError,
-} from "./i18nRuntime"
+} from "./i18nRuntime";
 export {
   createCompiledMessageRuntime,
   defineCompiledCatalog,
@@ -31,8 +31,8 @@ export {
   type CompiledMessageRuntime,
   type ExecutableMessageRenderer,
   type MessageValues,
-} from "./compiledMessage"
-export { formatMessageArgument, formatMessagePattern, parseMessagePattern }
+} from "./compiledMessage";
+export { formatMessageArgument, formatMessagePattern, parseMessagePattern };
 export {
   buildChoiceMessage,
   type ChoiceComponentProps,
@@ -40,13 +40,13 @@ export {
   type PluralProps,
   type SelectOrdinalProps,
   type SelectProps,
-} from "./choice"
+} from "./choice";
 export {
   replacePoundPlaceholders,
   resolveChoice,
   stringifyValue,
   type ResolvedChoice,
-} from "./messageFormat"
+} from "./messageFormat";
 export type {
   MessageNode,
   MessageChoiceNode,
@@ -55,4 +55,4 @@ export type {
   MessageTagNode,
   MessageTextNode,
   MessageVariableNode,
-} from "./messageFormat"
+} from "./messageFormat";

@@ -1,5 +1,5 @@
-import { decisionHref, docsHref } from "./links"
-import type { StrategySlug } from "./matrix"
+import { decisionHref, docsHref } from "./links";
+import type { StrategySlug } from "./matrix";
 
 /* Feature-cell copy, verbatim from the page specs. */
 
@@ -19,17 +19,17 @@ export type FeatureIconName =
   | "robot"
   | "shield"
   | "brackets"
-  | "merge"
+  | "merge";
 
 export interface FeatureCard {
-  icon: FeatureIconName
-  title: string
-  body: string
-  href?: string
+  icon: FeatureIconName;
+  title: string;
+  body: string;
+  href?: string;
 }
 
 export interface StrategyCard extends FeatureCard {
-  slug: StrategySlug
+  slug: StrategySlug;
 }
 
 export const STRATEGY_CARDS: StrategyCard[] = [
@@ -57,7 +57,7 @@ export const STRATEGY_CARDS: StrategyCard[] = [
     title: "Top-level domain",
     body: "example.de vs example.com. Maximum market trust; Palamedes maps each domain to its locale.",
   },
-]
+];
 
 export const NEXT_STEP_CARDS: FeatureCard[] = [
   {
@@ -96,7 +96,7 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
     body: "Point it at llms.txt — the whole API surface in one machine-readable file.",
     href: "/llms.txt",
   },
-]
+];
 
 export const CATALOG_QA_CARDS: FeatureCard[] = [
   {
@@ -114,4 +114,4 @@ export const CATALOG_QA_CARDS: FeatureCard[] = [
     title: "Semantic merging",
     body: "A Git merge driver resolves catalog conflicts by meaning, not by line — no more broken .po files after rebases.",
   },
-]
+];

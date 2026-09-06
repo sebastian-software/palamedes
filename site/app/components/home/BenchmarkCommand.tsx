@@ -1,11 +1,11 @@
-import { BENCH_META, BENCH_REALISTIC, displayBenchmarkTime } from "~/data/bench"
+import { BENCH_META, BENCH_REALISTIC, displayBenchmarkTime } from "~/data/bench";
 
-const baselineMs = BENCH_REALISTIC.rows.find((row) => row.accent)?.medianMs ?? Number.NaN
+const baselineMs = BENCH_REALISTIC.rows.find((row) => row.accent)?.medianMs ?? Number.NaN;
 const slowestSameScope = BENCH_REALISTIC.rows
   .filter((row) => row.sameScope)
-  .reduce((slowest, row) => (row.medianMs > slowest.medianMs ? row : slowest))
+  .reduce((slowest, row) => (row.medianMs > slowest.medianMs ? row : slowest));
 
-if (Number.isNaN(baselineMs)) throw new Error("Realistic benchmark is missing its baseline")
+if (Number.isNaN(baselineMs)) throw new Error("Realistic benchmark is missing its baseline");
 
 export function BenchmarkCommand() {
   return (
@@ -29,5 +29,5 @@ ${slowestSameScope.displayName.padEnd(16)} ${displayBenchmarkTime(slowestSameSco
 exact report, fixtures, and semantic checks: checked in`}</code>
       </pre>
     </figure>
-  )
+  );
 }

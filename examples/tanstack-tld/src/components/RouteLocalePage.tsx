@@ -1,13 +1,13 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { LocaleSuggestion } from "@palamedes/core/locale"
-import { ClientReady } from "./ClientReady"
-import { LocaleSwitcher } from "./LocaleSwitcher"
-import { ProofPanel } from "./ProofPanel"
-import { SuggestionBanner } from "./SuggestionBanner"
-import { TicketPanel } from "./TicketPanel"
-import type { Locale } from "../lib/i18n"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { LocaleSuggestion } from "@palamedes/core/locale";
+import { ClientReady } from "./ClientReady";
+import { LocaleSwitcher } from "./LocaleSwitcher";
+import { ProofPanel } from "./ProofPanel";
+import { SuggestionBanner } from "./SuggestionBanner";
+import { TicketPanel } from "./TicketPanel";
+import type { Locale } from "../lib/i18n";
 
 export function RouteLocalePage({
   banner,
@@ -15,11 +15,11 @@ export function RouteLocalePage({
   locale,
   localeLabel,
 }: {
-  banner: LocaleSuggestion<Locale> | null
-  host: string | null
-  locale: Locale
-  localeLabel: string
-  renderedAt: string
+  banner: LocaleSuggestion<Locale> | null;
+  host: string | null;
+  locale: Locale;
+  localeLabel: string;
+  renderedAt: string;
 }) {
   return (
     <main className="page-shell">
@@ -71,5 +71,5 @@ export function RouteLocalePage({
 
       <ClientReady />
     </main>
-  )
+  );
 }

@@ -1,5 +1,5 @@
-import type { FeatureIconName } from "~/data/features"
-import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
+import type { FeatureIconName } from "~/data/features";
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon";
 
 const ICONS: Record<FeatureIconName, StreamlineIconName> = {
   pen: "code-analysis",
@@ -18,14 +18,14 @@ const ICONS: Record<FeatureIconName, StreamlineIconName> = {
   shield: "browser-check",
   brackets: "code-analysis",
   merge: "deployment-workflow-collaboration",
-}
+};
 
 export function FeatureIcon({
   name,
   className = "",
 }: {
-  name: FeatureIconName
-  className?: string
+  name: FeatureIconName;
+  className?: string;
 }) {
-  return <StreamlineIcon name={ICONS[name]} className={className} />
+  return <StreamlineIcon name={ICONS[name]} className={className} />;
 }

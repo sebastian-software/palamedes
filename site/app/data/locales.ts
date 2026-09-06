@@ -5,11 +5,11 @@
  */
 
 export interface LocaleCard {
-  locale: string
-  title: string
-  seats: string
-  price: string
-  date: string
+  locale: string;
+  title: string;
+  seats: string;
+  price: string;
+  date: string;
 }
 
 export const LOCALE_CARDS: LocaleCard[] = [
@@ -34,6 +34,6 @@ export const LOCALE_CARDS: LocaleCard[] = [
     price: "1234,00 €",
     date: "12 jul 2026",
   },
-]
+];
 
-export const LOCALE_CAPTION = "one component · copy, plurals, currency & dates change together"
+export const LOCALE_CAPTION = "one component · copy, plurals, currency & dates change together";

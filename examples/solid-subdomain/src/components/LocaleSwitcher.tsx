@@ -1,12 +1,12 @@
-import { For } from "solid-js"
-import { buildLocaleSwitchItems } from "@palamedes/solid"
-import { Trans } from "@palamedes/solid/macro"
-import { LOCALES, LOCALE_LABELS, type Locale, locales } from "../lib/i18n"
+import { For } from "solid-js";
+import { buildLocaleSwitchItems } from "@palamedes/solid";
+import { Trans } from "@palamedes/solid/macro";
+import { LOCALES, LOCALE_LABELS, type Locale, locales } from "../lib/i18n";
 
 type LocaleSwitcherProps = {
-  host: string | null
-  locale: Locale
-}
+  host: string | null;
+  locale: Locale;
+};
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
   const localeSwitchItems = () =>
@@ -14,14 +14,14 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
       locales: LOCALES,
       currentLocale: props.locale,
       labels: LOCALE_LABELS,
-    })
+    });
 
   // Subdomain strategy: switching the locale means loading a different host, so
   // we build the target URL from the request host (the core control swaps the
   // locale label) and let the browser do a full document load. canonicalUrl
   // returns protocol-relative URLs, correct on http (local) and https (deployed).
   function hrefFor(target: Locale): string {
-    return locales.canonicalUrl({ locale: target, pathname: "/", requestHost: props.host })
+    return locales.canonicalUrl({ locale: target, pathname: "/", requestHost: props.host });
   }
 
   return (
@@ -37,7 +37,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
               aria-current={item.active ? "page" : undefined}
               href={hrefFor(item.locale)}
               onClick={() => {
-                document.cookie = locales.serializeChoice(item.locale)
+                document.cookie = locales.serializeChoice(item.locale);
               }}
             >
               {item.locale.toUpperCase()}
@@ -46,5 +46,5 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
         </For>
       </div>
     </div>
-  )
+  );
 }

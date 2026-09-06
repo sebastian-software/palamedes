@@ -1,14 +1,14 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
-import { pageMeta } from "~/lib/meta"
-import { CtaBand } from "~/components/home/CtaBand"
-import { StatementBand } from "~/components/home/StatementBand"
-import contentStats from "~/data/generated/content-stats.json"
-import { REPO, decisionHref, docsHref } from "~/data/links"
-import { NATIVE_SHIFT, RIVALS } from "~/data/rivals"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { pageMeta } from "~/lib/meta";
+import { CtaBand } from "~/components/home/CtaBand";
+import { StatementBand } from "~/components/home/StatementBand";
+import contentStats from "~/data/generated/content-stats.json";
+import { REPO, decisionHref, docsHref } from "~/data/links";
+import { NATIVE_SHIFT, RIVALS } from "~/data/rivals";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
@@ -17,7 +17,7 @@ export function meta() {
     description:
       "Choose an i18n model that stays coherent as a TypeScript application grows. Compare Palamedes with eight alternatives through explicit recommendations, dated research, checked workflow evidence and honest exits.",
     path: "/compare",
-  })
+  });
 }
 
 /* The cases where the answer is "use something else", stated plainly. */
@@ -42,10 +42,10 @@ const NOT_FOR_YOU = [
     answer:
       "next-intl treats localized pathnames and domain routing as core product. Palamedes leaves URLs to your router on purpose.",
   },
-]
+];
 
 function measuredWorkflow(rival: (typeof RIVALS)[number]) {
-  return rival.rows.find((row) => row.palamedes.includes("¹"))
+  return rival.rows.find((row) => row.palamedes.includes("¹"));
 }
 
 export default function Compare() {
@@ -108,7 +108,7 @@ export default function Compare() {
             </thead>
             <tbody>
               {RIVALS.map((rival) => {
-                const measurement = measuredWorkflow(rival)
+                const measurement = measuredWorkflow(rival);
                 return (
                   <tr key={rival.slug}>
                     <th scope="row" className="border border-hair px-4 py-4 text-left align-top">
@@ -143,7 +143,7 @@ export default function Compare() {
                       </Link>
                     </td>
                   </tr>
-                )
+                );
               })}
             </tbody>
           </table>
@@ -253,5 +253,5 @@ export default function Compare() {
         }}
       />
     </Page>
-  )
+  );
 }

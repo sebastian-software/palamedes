@@ -3,21 +3,30 @@
   "version": "1.23.0",
   "description": "Thin Node.js wrapper around the Palamedes Rust core",
   "keywords": [
-    "palamedes",
-    "rust",
-    "napi",
     "i18n",
-    "native"
+    "napi",
+    "native",
+    "palamedes",
+    "rust"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/core-node"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -30,15 +39,9 @@
       }
     }
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "sideEffects": false,
-  "files": [
-    "LICENSE",
-    "README.md",
-    "dist/"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "generate-native-types": "node ./scripts/generate-native-types.mjs",
     "check-native-types": "node ./scripts/generate-native-types.mjs --check",
@@ -47,11 +50,11 @@
     "test": "vitest run --globals src/index.test.ts && node --test ./scripts/package.test.mjs",
     "stub": "unbuild --stub"
   },
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.11"
   },
   "optionalDependencies": {
     "@palamedes/core-node-darwin-arm64": "workspace:*",
@@ -61,10 +64,7 @@
     "@palamedes/core-node-linux-x64-musl": "workspace:*",
     "@palamedes/core-node-win32-x64-msvc": "workspace:*"
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^7.0.2",
-    "unbuild": "^3.6.1",
-    "vitest": "^4.1.11"
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

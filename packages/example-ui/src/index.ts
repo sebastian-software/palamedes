@@ -9,25 +9,25 @@
 
 export interface EventContent {
   /** Attendee name used in the personalized greeting variable. */
-  attendeeName: string
+  attendeeName: string;
   /** Conference title (a proper noun, intentionally not translated). */
-  eventTitle: string
+  eventTitle: string;
   /** Venue name (a proper noun, intentionally not translated). */
-  venueName: string
+  venueName: string;
   /** ISO-8601 start instant with an explicit offset, formatted per-locale at render time. */
-  startsAt: string
+  startsAt: string;
   /** A fixed "now" so the relative-time output is stable across runs. */
-  referenceNow: string
+  referenceNow: string;
   /** Price of a single ticket, formatted as currency per-locale. */
-  ticketPrice: number
+  ticketPrice: number;
   /** ISO 4217 currency code for the price. */
-  currency: string
+  currency: string;
   /** Remaining seats, rendered through a plural rule. */
-  seatsLeft: number
+  seatsLeft: number;
   /** Total registered attendees, rendered through a number format. */
-  attendeeCount: number
+  attendeeCount: number;
   /** Maximum tickets a visitor can add at once. */
-  maxQuantity: number
+  maxQuantity: number;
 }
 
 export const EVENT: EventContent = {
@@ -41,11 +41,11 @@ export const EVENT: EventContent = {
   seatsLeft: 23,
   attendeeCount: 12_480,
   maxQuantity: 8,
-}
+};
 
 /** Whole-month distance from the reference "now" to the event, for relative time. */
 export function monthsUntilEvent(content: EventContent = EVENT): number {
-  const start = new Date(content.startsAt)
-  const now = new Date(content.referenceNow)
-  return (start.getFullYear() - now.getFullYear()) * 12 + (start.getMonth() - now.getMonth())
+  const start = new Date(content.startsAt);
+  const now = new Date(content.referenceNow);
+  return (start.getFullYear() - now.getFullYear()) * 12 + (start.getMonth() - now.getMonth());
 }

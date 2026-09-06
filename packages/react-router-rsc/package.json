@@ -3,39 +3,49 @@
   "version": "1.23.0",
   "description": "Experimental React Router RSC request-scoped i18n for Palamedes",
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/react-router-rsc"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "files": [
+    "README.md",
+    "dist/"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
     }
   },
-  "types": "./dist/index.d.ts",
-  "sideEffects": false,
-  "files": [
-    "README.md",
-    "dist/"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "unbuild",
     "test": "node --test ./scripts/peer-dependencies.test.mjs && pnpm build && pnpm --filter @palamedes/runtime build && vitest run --globals src/index.test.ts && node ./scripts/packed-consumer.test.mjs",
     "stub": "unbuild --stub"
   },
-  "engines": {
-    "node": ">=22.22.0"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
   "dependencies": {
     "@palamedes/runtime": "workspace:^"
+  },
+  "devDependencies": {
+    "@react-router/dev": "8.3.1",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-rsc": "0.5.34",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router": "8.3.1",
+    "react-server-dom-webpack": "^19.2.8",
+    "typescript": "^7.0.2",
+    "unbuild": "^3.6.1",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "peerDependencies": {
     "@react-router/dev": "~8.3.0",
@@ -53,17 +63,7 @@
       "optional": true
     }
   },
-  "devDependencies": {
-    "@react-router/dev": "8.3.1",
-    "@types/node": "^24.0.0",
-    "@vitejs/plugin-rsc": "0.5.34",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-router": "8.3.1",
-    "react-server-dom-webpack": "^19.2.8",
-    "typescript": "^7.0.2",
-    "unbuild": "^3.6.1",
-    "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+  "engines": {
+    "node": ">=22.22.0"
   }
 }

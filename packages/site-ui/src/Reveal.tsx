@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
-const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)"
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 function subscribeToReducedMotion(callback: () => void) {
-  const mediaQuery = window.matchMedia(REDUCED_MOTION_QUERY)
-  mediaQuery.addEventListener("change", callback)
-  return () => mediaQuery.removeEventListener("change", callback)
+  const mediaQuery = window.matchMedia(REDUCED_MOTION_QUERY);
+  mediaQuery.addEventListener("change", callback);
+  return () => mediaQuery.removeEventListener("change", callback);
 }
 
 function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(
     subscribeToReducedMotion,
     () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
-    () => true
-  )
+    () => true,
+  );
 }
 
 /*
@@ -21,32 +21,32 @@ function usePrefersReducedMotion(): boolean {
  * Animation opts in only after hydration and only where observation exists.
  */
 export function Reveal({ children, delayMs = 0 }: { children: ReactNode; delayMs?: number }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [inView, setInView] = useState(false)
-  const [canObserve, setCanObserve] = useState(false)
-  const reducedMotion = usePrefersReducedMotion()
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  const [canObserve, setCanObserve] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
-    const element = ref.current
+    const element = ref.current;
     if (!element || typeof IntersectionObserver === "undefined") {
-      return
+      return;
     }
 
-    setCanObserve(true)
+    setCanObserve(true);
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          setInView(true)
-          observer.disconnect()
+          setInView(true);
+          observer.disconnect();
         }
       },
-      { rootMargin: "-10% 0px" }
-    )
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
+      { rootMargin: "-10% 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
-  const animate = !reducedMotion && canObserve
+  const animate = !reducedMotion && canObserve;
 
   return (
     <div
@@ -63,5 +63,5 @@ export function Reveal({ children, delayMs = 0 }: { children: ReactNode; delayMs
     >
       {children}
     </div>
-  )
+  );
 }

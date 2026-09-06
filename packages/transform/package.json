@@ -4,20 +4,29 @@
   "description": "Native macro transformer for Palamedes macros without Babel",
   "keywords": [
     "i18n",
-    "oxc",
     "macro",
-    "transform",
-    "preprocessor"
+    "oxc",
+    "preprocessor",
+    "transform"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/transform"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -40,25 +49,13 @@
       }
     }
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "sideEffects": false,
-  "files": [
-    "LICENSE",
-    "README.md",
-    "dist/"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "unbuild",
     "test": "vitest run --globals src/*.test.ts",
     "stub": "unbuild --stub"
-  },
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
@@ -69,5 +66,8 @@
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

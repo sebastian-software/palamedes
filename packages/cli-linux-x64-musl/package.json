@@ -3,14 +3,13 @@
   "version": "1.23.0",
   "description": "Linux x64 musl native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/cli-linux-x64-musl"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
-  "type": "commonjs",
   "bin": {
     "pmds": "./bin/pmds"
   },
@@ -19,13 +18,6 @@
     "README.md",
     "bin/"
   ],
-  "scripts": {
-    "build": "node ../cli/scripts/build-native.mjs --if-compatible",
-    "prepublishOnly": "node ../../scripts/assert-native-artifact.mjs"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
   "os": [
     "linux"
   ],
@@ -34,5 +26,13 @@
   ],
   "libc": [
     "musl"
-  ]
+  ],
+  "type": "commonjs",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../cli/scripts/build-native.mjs --if-compatible",
+    "prepublishOnly": "node ../../scripts/assert-native-artifact.mjs"
+  }
 }

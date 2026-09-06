@@ -1,13 +1,13 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
-import { CtaBand } from "~/components/home/CtaBand"
-import { StreamlineIcon } from "~/components/icons/StreamlineIcon"
-import { docsHref } from "~/data/links"
-import { TOPICS } from "~/data/topics"
-import { pageMeta } from "~/lib/meta"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { CtaBand } from "~/components/home/CtaBand";
+import { StreamlineIcon } from "~/components/icons/StreamlineIcon";
+import { docsHref } from "~/data/links";
+import { TOPICS } from "~/data/topics";
+import { pageMeta } from "~/lib/meta";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
@@ -15,7 +15,7 @@ export function meta() {
     description:
       "Guides to the decisions that actually cost you time in a TypeScript i18n project: server-component rendering, ICU MessageFormat, locale routing strategies, and extraction performance. Each one is backed by something checked into the repository.",
     path: "/guides",
-  })
+  });
 }
 
 /*
@@ -125,5 +125,5 @@ export default function Guides() {
         secondary={{ label: "Get started", href: "/get-started" }}
       />
     </Page>
-  )
+  );
 }

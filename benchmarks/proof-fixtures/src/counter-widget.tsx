@@ -1,5 +1,5 @@
-import { plural } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
+import { plural } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
 
 export function CounterWidget({ count }: { count: number }) {
   return (
@@ -14,5 +14,5 @@ export function CounterWidget({ count }: { count: number }) {
         })}
       </p>
     </section>
-  )
+  );
 }

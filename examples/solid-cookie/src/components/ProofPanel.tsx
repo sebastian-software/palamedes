@@ -1,29 +1,29 @@
-import { createEffect, createSignal } from "solid-js"
-import { isServer } from "@solidjs/web"
-import { plural } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/solid"
-import { Trans } from "@palamedes/solid/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Locale } from "../lib/i18n"
-import { getLocalizedServerStatus } from "../lib/server"
+import { createEffect, createSignal } from "solid-js";
+import { isServer } from "@solidjs/web";
+import { plural } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/solid";
+import { Trans } from "@palamedes/solid/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Locale } from "../lib/i18n";
+import { getLocalizedServerStatus } from "../lib/server";
 
 type ProofPanelProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function ProofPanel(props: ProofPanelProps) {
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const [message, setMessage] = createSignal<string | null>(null)
-  const [isPending, setIsPending] = createSignal(false)
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const [message, setMessage] = createSignal<string | null>(null);
+  const [isPending, setIsPending] = createSignal(false);
 
   async function refresh() {
-    setIsPending(true)
+    setIsPending(true);
     try {
-      const result = await getLocalizedServerStatus()
-      setMessage(result.message)
+      const result = await getLocalizedServerStatus();
+      setMessage(result.message);
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
   }
 
@@ -32,10 +32,10 @@ export function ProofPanel(props: ProofPanelProps) {
     () => {
       // Re-run whenever the locale changes so the server message stays in sync.
       if (!isServer) {
-        void refresh()
+        void refresh();
       }
-    }
-  )
+    },
+  );
 
   return (
     <aside class="aside">
@@ -119,5 +119,5 @@ export function ProofPanel(props: ProofPanelProps) {
         </button>
       </div>
     </aside>
-  )
+  );
 }

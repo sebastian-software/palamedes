@@ -5,12 +5,12 @@
  * No Babel required!
  */
 
-import { createHash } from "node:crypto"
-import { realpathSync } from "node:fs"
-import path from "node:path"
-import * as viteModule from "vite"
-import type { Plugin, FilterPattern } from "vite"
-import { createFilter, version as viteVersion } from "vite"
+import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import path from "node:path";
+import * as viteModule from "vite";
+import type { Plugin, FilterPattern } from "vite";
+import { createFilter, version as viteVersion } from "vite";
 import {
   loadPalamedesConfig,
   catalogMatchesSource,
@@ -18,33 +18,33 @@ import {
   type PalamedesCatalogConfig,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
-} from "@palamedes/config"
+} from "@palamedes/config";
 import {
   analyzeMdxNative,
   compileCatalogArtifactSelectedAsync,
   compileCatalogModuleAsync,
   renderCatalogModule,
   type CatalogArtifactConfig,
-} from "@palamedes/core-node"
-import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform"
+} from "@palamedes/core-node";
+import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform";
 import {
   PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
   PALAMEDES_MACRO_PACKAGES,
   mdxFrameworkFor,
   resolveMacroRuntimeModule,
   type PalamedesFramework,
-} from "@palamedes/transform"
+} from "@palamedes/transform";
 
-const PO_FILE_REGEX = /(\.po|\?palamedes)$/
-const MDX_FILE_REGEX = /\.mdx$/i
-const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
-const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/"
-const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/"
-const BARE_MESSAGES_PREFIX = "#pmds/"
-const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json"
+const PO_FILE_REGEX = /(\.po|\?palamedes)$/;
+const MDX_FILE_REGEX = /\.mdx$/i;
+const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
+const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
+const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/";
+const BARE_MESSAGES_PREFIX = "#pmds/";
+const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json";
 const RENDERED_CATALOG_IMPORT =
-  'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";'
-const RENDERED_CATALOG_DEFAULT_EXPORT = "export default { messages };"
+  'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";';
+const RENDERED_CATALOG_DEFAULT_EXPORT = "export default { messages };";
 
 /*
  * Rewrite the native renderer's module source into a dependency-free message
@@ -62,73 +62,73 @@ function bareMessageAsset(rendered: string, locale: string): string {
     !rendered.trimEnd().endsWith(RENDERED_CATALOG_DEFAULT_EXPORT)
   ) {
     throw new Error(
-      "Palamedes graph splitting: the native catalog module shape changed; cannot derive a bare message asset."
-    )
+      "Palamedes graph splitting: the native catalog module shape changed; cannot derive a bare message asset.",
+    );
   }
   const body = rendered
     .slice(RENDERED_CATALOG_IMPORT.length)
-    .replace("__palamedesDefineCompiledCatalog(", "(")
-  const withoutDefault = body.slice(0, body.lastIndexOf(RENDERED_CATALOG_DEFAULT_EXPORT))
-  return `export const locale=${JSON.stringify(locale)};${withoutDefault}`
+    .replace("__palamedesDefineCompiledCatalog(", "(");
+  const withoutDefault = body.slice(0, body.lastIndexOf(RENDERED_CATALOG_DEFAULT_EXPORT));
+  return `export const locale=${JSON.stringify(locale)};${withoutDefault}`;
 }
-const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
-const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
+const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config.";
+const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10);
 // `moduleType` and Rollup's `moduleTypes` bridge require Vite's Rolldown-based
 // pipeline. The official rolldown-vite alias exposes this on the Vite 7 line,
 // so detect the optional export instead of using only Vite's major version.
 // Reflect.get keeps the published bundle compatible with Vite versions that
 // do not provide a named `rolldownVersion` export.
 function viteSupportsReactMdxModuleType(): boolean {
-  return VITE_MAJOR >= 8 || typeof Reflect.get(viteModule, "rolldownVersion") === "string"
+  return VITE_MAJOR >= 8 || typeof Reflect.get(viteModule, "rolldownVersion") === "string";
 }
 
 const REACT_MDX_VITE_REQUIREMENT =
-  'Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files. Upgrade Vite, use rolldown-vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.'
+  'Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files. Upgrade Vite, use rolldown-vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.';
 
 type EnvironmentAwarePluginContext = {
   environment?: {
-    name?: string
-    config?: { consumer?: string }
-  }
-}
+    name?: string;
+    config?: { consumer?: string };
+  };
+};
 
 function isServerEnvironment(context: unknown, ssr = false): boolean {
-  const environment = (context as EnvironmentAwarePluginContext).environment
-  return ssr || environment?.config?.consumer === "server" || environment?.name === "ssr"
+  const environment = (context as EnvironmentAwarePluginContext).environment;
+  return ssr || environment?.config?.consumer === "server" || environment?.name === "ssr";
 }
 
 function assertImportMapBase(base: string): void {
   if (base.startsWith("/") || URL.canParse(base)) {
-    return
+    return;
   }
 
   throw new Error(
-    `Palamedes graph splitting with localeBinding: "import-map" requires Vite's resolved base to be root-relative (for example "/app/") or an absolute URL. Relative base ${JSON.stringify(base)} resolves import-map entries against each document URL and breaks on nested routes. Set Vite base to "/" or an absolute deployment path/URL, or use localeBinding: "embed".`
-  )
+    `Palamedes graph splitting with localeBinding: "import-map" requires Vite's resolved base to be root-relative (for example "/app/") or an absolute URL. Relative base ${JSON.stringify(base)} resolves import-map entries against each document URL and breaks on nested routes. Set Vite base to "/" or an absolute deployment path/URL, or use localeBinding: "embed".`,
+  );
 }
 
 function stripQuery(id: string): string {
-  return id.split("?")[0] ?? id
+  return id.split("?")[0] ?? id;
 }
 
 function canonicalPath(value: string): string {
-  const pathImplementation = isWindowsPath(value) ? path.win32 : path
+  const pathImplementation = isWindowsPath(value) ? path.win32 : path;
   try {
-    return realpathSync.native(value)
+    return realpathSync.native(value);
   } catch {
-    return pathImplementation.resolve(value)
+    return pathImplementation.resolve(value);
   }
 }
 
 function isWindowsPath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\");
 }
 
 function canonicalRelativePath(rootDir: string, sourceId: string): string {
-  const canonicalRootDir = canonicalPath(rootDir)
-  const canonicalSourceId = canonicalPath(sourceId)
-  const usesWindowsPaths = isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId)
-  const pathImplementation = usesWindowsPaths ? path.win32 : path
+  const canonicalRootDir = canonicalPath(rootDir);
+  const canonicalSourceId = canonicalPath(sourceId);
+  const usesWindowsPaths = isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId);
+  const pathImplementation = usesWindowsPaths ? path.win32 : path;
 
   // Windows returns a traversal path for UNC locations on the same server but
   // different shares. Compare roots before deriving a relative identity so a
@@ -139,26 +139,26 @@ function canonicalRelativePath(rootDir: string, sourceId: string): string {
       path.win32.parse(canonicalSourceId).root.toLowerCase()
   ) {
     throw new Error(
-      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
-    )
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`,
+    );
   }
-  const relativePath = pathImplementation.relative(canonicalRootDir, canonicalSourceId)
+  const relativePath = pathImplementation.relative(canonicalRootDir, canonicalSourceId);
 
   // There is no checkout-independent relative identity across filesystem
   // volumes, so refusing graph splitting is safer than baking a machine path
   // into sidecar keys and emitted chunk content.
   if (pathImplementation.isAbsolute(relativePath)) {
     throw new Error(
-      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
-    )
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`,
+    );
   }
 
-  return (relativePath || ".").replaceAll("\\", "/")
+  return (relativePath || ".").replaceAll("\\", "/");
 }
 
 function catalogArtifactConfig(
   cfg: LoadedPalamedesConfig,
-  catalogs: PalamedesCatalogConfig[] = cfg.catalogs
+  catalogs: PalamedesCatalogConfig[] = cfg.catalogs,
 ): CatalogArtifactConfig {
   return {
     rootDir: cfg.rootDir,
@@ -172,7 +172,7 @@ function catalogArtifactConfig(
       ...(catalog.exclude ? { exclude: catalog.exclude } : {}),
       ...(catalog.format ? { format: catalog.format } : {}),
     })),
-  }
+  };
 }
 
 export type PalamedesPluginOptions = {
@@ -180,47 +180,47 @@ export type PalamedesPluginOptions = {
    * Pattern to include files for transformation.
    * @default /\.([cm]?[jt]s|[jt]sx)$/
    */
-  include?: FilterPattern
+  include?: FilterPattern;
 
   /**
    * Pattern to exclude files from transformation.
    * @default /node_modules/
    */
-  exclude?: FilterPattern
+  exclude?: FilterPattern;
 
   /**
    * Enable .po file compilation loader.
    * @default true
    */
-  enablePoLoader?: boolean
+  enablePoLoader?: boolean;
 
   /**
    * Path to a Palamedes config file.
    * If not provided, searches for config automatically.
    */
-  configPath?: string
+  configPath?: string;
 
   /**
    * Current working directory for config resolution.
    */
-  cwd?: string
+  cwd?: string;
 
   /**
    * Skip validation of the config file.
    */
-  skipValidation?: boolean
+  skipValidation?: boolean;
 
   /**
    * If true, fail compilation on missing translations.
    * @default false
    */
-  failOnMissing?: boolean
+  failOnMissing?: boolean;
 
   /**
    * If true, fail compilation on message compilation errors.
    * @default false
    */
-  failOnCompileError?: boolean
+  failOnCompileError?: boolean;
 
   /**
    * UI framework this app compiles for. Selects the component contract for
@@ -228,7 +228,7 @@ export type PalamedesPluginOptions = {
    * nor Solid.
    * @default "react"
    */
-  framework?: PalamedesFramework
+  framework?: PalamedesFramework;
 
   /**
    * Advanced override for the module the macro transform imports. Generated
@@ -236,7 +236,7 @@ export type PalamedesPluginOptions = {
    * configure those through `mdx.runtimeModule`.
    * @default "@palamedes/runtime"
    */
-  runtimeModule?: string
+  runtimeModule?: string;
 
   /**
    * Preserve authored source messages as browser/runtime fallbacks.
@@ -244,13 +244,13 @@ export type PalamedesPluginOptions = {
    * hash-only output when bundle size or embedding authored source text is a
    * concern.
    */
-  keepSourceFallbacks?: boolean
+  keepSourceFallbacks?: boolean;
 
   /**
    * Override MDX analysis options from the Palamedes config, or disable MDX.
    * @default configuration `mdx` values with React framework defaults
    */
-  mdx?: PalamedesMdxConfig | false
+  mdx?: PalamedesMdxConfig | false;
 
   /**
    * EXPERIMENTAL: emit one generated message sidecar module per transformed
@@ -277,8 +277,8 @@ export type PalamedesPluginOptions = {
    *   form.
    * @default false
    */
-  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" }
-}
+  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
+};
 
 /**
  * Create the Palamedes Vite plugin
@@ -296,24 +296,24 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     mdx: mdxOverride,
     experimentalGraphSplitting = false,
     ...configLoaderOptions
-  } = options
-  const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule)
-  const graphSplitting = experimentalGraphSplitting !== false
+  } = options;
+  const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
+  const graphSplitting = experimentalGraphSplitting !== false;
   const importMapBinding =
     typeof experimentalGraphSplitting === "object" &&
-    experimentalGraphSplitting.localeBinding === "import-map"
-  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true
-  let stripNonEssentialProps = true
-  let isBuildCommand = false
-  let resolvedBase = "/"
+    experimentalGraphSplitting.localeBinding === "import-map";
+  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true;
+  let stripNonEssentialProps = true;
+  let isBuildCommand = false;
+  let resolvedBase = "/";
 
   // Initialize lazily
-  let config: LoadedPalamedesConfig | null = null
-  let configDependencies = new Set<string>()
-  let filter: ReturnType<typeof createFilter> | null = null
-  let mdxFilter: ReturnType<typeof createFilter> | null = null
-  let macroIds: Set<string> | null = null
-  const mdxModuleIds = new Set<string>()
+  let config: LoadedPalamedesConfig | null = null;
+  let configDependencies = new Set<string>();
+  let filter: ReturnType<typeof createFilter> | null = null;
+  let mdxFilter: ReturnType<typeof createFilter> | null = null;
+  let macroIds: Set<string> | null = null;
+  const mdxModuleIds = new Set<string>();
 
   /*
    * Message sidecar registry for experimental graph splitting, keyed by a
@@ -324,12 +324,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
    * never cleared: a stale entry for an untouched module keeps dev-server
    * requests working across config reloads.
    */
-  const sidecarModules = new Map<string, { sourceId: string; compiledIds: string[] }>()
+  const sidecarModules = new Map<string, { sourceId: string; compiledIds: string[] }>();
 
   async function sidecarKey(sourceId: string): Promise<string> {
-    const cfg = await getConfigLazy()
-    const modulePath = canonicalRelativePath(cfg.rootDir, sourceId)
-    return createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
+    const cfg = await getConfigLazy();
+    const modulePath = canonicalRelativePath(cfg.rootDir, sourceId);
+    return createHash("sha256").update(modulePath).digest("hex").slice(0, 12);
   }
 
   /*
@@ -341,75 +341,75 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   function withSidecarImport(
     code: string,
     sourceId: string,
-    compiledIds: string[]
+    compiledIds: string[],
   ): string | Promise<string> {
     if (!graphSplitting || compiledIds.length === 0) {
-      return code
+      return code;
     }
     return sidecarKey(sourceId).then((key) => {
-      sidecarModules.set(key, { sourceId, compiledIds })
-      return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`
-    })
+      sidecarModules.set(key, { sourceId, compiledIds });
+      return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`;
+    });
   }
 
   function transformErrorMessage(sourceId: string, error: unknown): string {
-    const message = error instanceof Error ? error.message : String(error)
-    return `Palamedes transform error in ${sourceId}: ${message}`
+    const message = error instanceof Error ? error.message : String(error);
+    return `Palamedes transform error in ${sourceId}: ${message}`;
   }
 
   async function getConfigLazy() {
     if (!config) {
-      config = await loadPalamedesConfig(configLoaderOptions)
-      configDependencies = new Set(getConfigDependencies(config).map(canonicalPath))
-      macroIds = new Set(PALAMEDES_MACRO_PACKAGES)
+      config = await loadPalamedesConfig(configLoaderOptions);
+      configDependencies = new Set(getConfigDependencies(config).map(canonicalPath));
+      macroIds = new Set(PALAMEDES_MACRO_PACKAGES);
     }
-    return config
+    return config;
   }
 
   function isConfigChange(id: string): boolean {
-    return configDependencies.has(canonicalPath(stripQuery(id)))
+    return configDependencies.has(canonicalPath(stripQuery(id)));
   }
 
   function getConfigDependencies(cfg: LoadedPalamedesConfig): string[] {
-    return Array.isArray(cfg.configDependencies) ? cfg.configDependencies : [cfg.configPath]
+    return Array.isArray(cfg.configDependencies) ? cfg.configDependencies : [cfg.configPath];
   }
 
   function addConfigWatchFiles(
     cfg: LoadedPalamedesConfig,
-    addWatchFile: (file: string) => void
+    addWatchFile: (file: string) => void,
   ): void {
-    getConfigDependencies(cfg).forEach(addWatchFile)
+    getConfigDependencies(cfg).forEach(addWatchFile);
   }
 
   function resetConfig(): void {
-    config = null
+    config = null;
   }
 
   function resetConfigOnChange(id: string): void {
     if (isConfigChange(id)) {
-      resetConfig()
+      resetConfig();
     }
   }
 
   function getFilterLazy() {
     if (!filter) {
-      filter = createFilter(include, exclude)
+      filter = createFilter(include, exclude);
     }
-    return filter
+    return filter;
   }
 
   function getMdxFilterLazy() {
     if (!mdxFilter) {
-      mdxFilter = createFilter(undefined, exclude)
+      mdxFilter = createFilter(undefined, exclude);
     }
-    return mdxFilter
+    return mdxFilter;
   }
 
   function matchesTransformFilter(id: string): boolean {
     if (mdxOverride !== false && MDX_FILE_REGEX.test(id)) {
-      return getMdxFilterLazy()(id)
+      return getMdxFilterLazy()(id);
     }
-    return getFilterLazy()(id)
+    return getFilterLazy()(id);
   }
 
   function resolveMdxOptions(cfg: LoadedPalamedesConfig): PalamedesMdxConfig {
@@ -417,15 +417,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       ...(mdxFrameworkFor(framework) ? { framework: mdxFrameworkFor(framework) } : {}),
       ...cfg.mdx,
       ...mdxOverride,
-    }
+    };
     if (resolved.runtimeModule) {
-      return resolved
+      return resolved;
     }
 
     return {
       ...resolved,
       runtimeModule: resolveMacroRuntimeModule(),
-    }
+    };
   }
 
   function isMissingAutoConfig(error: unknown): boolean {
@@ -433,50 +433,50 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       configLoaderOptions.configPath === undefined &&
       error instanceof Error &&
       error.message.startsWith(MISSING_CONFIG_ERROR_PREFIX)
-    )
+    );
   }
 
   async function validateMdxTranslations(
     cfg: LoadedPalamedesConfig,
     id: string,
     compiledIds: string[],
-    addWatchFile: (file: string) => void
+    addWatchFile: (file: string) => void,
   ): Promise<void> {
     if (!failOnMissing || compiledIds.length === 0) {
-      return
+      return;
     }
 
-    const catalogs = cfg.catalogs.filter((catalog) => catalogMatchesSource(cfg, catalog, id))
+    const catalogs = cfg.catalogs.filter((catalog) => catalogMatchesSource(cfg, catalog, id));
     if (catalogs.length === 0) {
       throw new Error(
-        `Cannot validate MDX translations for ${id}: the file is not included in a configured catalog.`
-      )
+        `Cannot validate MDX translations for ${id}: the file is not included in a configured catalog.`,
+      );
     }
 
     for (const catalog of catalogs) {
-      const artifactConfig = catalogArtifactConfig(cfg, [catalog])
+      const artifactConfig = catalogArtifactConfig(cfg, [catalog]);
       for (const locale of cfg.locales) {
         if (locale === cfg.sourceLocale || locale === cfg.pseudoLocale) {
-          continue
+          continue;
         }
-        const resourcePath = catalogResourcePath(cfg, catalog, locale)
+        const resourcePath = catalogResourcePath(cfg, catalog, locale);
         const result = await compileCatalogArtifactSelectedAsync(
           artifactConfig,
           resourcePath,
-          compiledIds
-        )
-        result.watchFiles.forEach(addWatchFile)
+          compiledIds,
+        );
+        result.watchFiles.forEach(addWatchFile);
         if (result.missing.length > 0) {
           throw new Error(
             `${createMissingErrorMessage(locale, result.missing)}\n\n` +
-              "You see this error because `failOnMissing=true` in Vite plugin configuration."
-          )
+              "You see this error because `failOnMissing=true` in Vite plugin configuration.",
+          );
         }
       }
     }
   }
 
-  const plugins: Plugin[] = []
+  const plugins: Plugin[] = [];
 
   // Plugin 1: Report macro resolution errors
   plugins.push({
@@ -484,35 +484,35 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     resolveId(id) {
-      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
+      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES);
       if (ids.has(id)) {
-        return `${VIRTUAL_MACRO_ERROR_PREFIX}${id}`
+        return `${VIRTUAL_MACRO_ERROR_PREFIX}${id}`;
       }
     },
 
     resolveDynamicImport(id) {
-      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
+      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES);
       if (ids.has(id as string)) {
         throw new Error(
           `The macro you imported from "${id}" cannot be dynamically imported.\n` +
-            `Palamedes macros must be statically imported.`
-        )
+            `Palamedes macros must be statically imported.`,
+        );
       }
     },
 
     load(id) {
       if (!id.startsWith(VIRTUAL_MACRO_ERROR_PREFIX)) {
-        return null
+        return null;
       }
 
-      const macroId = id.slice(VIRTUAL_MACRO_ERROR_PREFIX.length)
+      const macroId = id.slice(VIRTUAL_MACRO_ERROR_PREFIX.length);
       throw new Error(
         `The macro you imported from "${macroId}" is being executed outside the context of compilation.\n` +
           `This indicates that @palamedes/vite-plugin is not transforming the file.\n` +
-          `Please ensure the plugin is configured correctly in your vite.config.ts`
-      )
+          `Please ensure the plugin is configured correctly in your vite.config.ts`,
+      );
     },
-  })
+  });
 
   // Plugin 2: Compile MDX before framework JSX transforms.
   if (mdxOverride !== false) {
@@ -521,21 +521,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       enforce: "pre" as const,
 
       async config() {
-        let cfg: LoadedPalamedesConfig
+        let cfg: LoadedPalamedesConfig;
         try {
-          cfg = await getConfigLazy()
+          cfg = await getConfigLazy();
         } catch (error) {
           if (isMissingAutoConfig(error)) {
-            return
+            return;
           }
-          throw error
+          throw error;
         }
         const mdx = {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
-        }
+        };
         if ((mdx.framework ?? "react") !== "react" || !viteSupportsReactMdxModuleType()) {
-          return
+          return;
         }
         return {
           build: {
@@ -545,53 +545,53 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               },
             },
           },
-        }
+        };
       },
 
       buildStart() {
-        mdxModuleIds.clear()
+        mdxModuleIds.clear();
       },
 
       watchChange(id, change) {
-        const cleanId = stripQuery(id)
+        const cleanId = stripQuery(id);
         if (change.event === "delete") {
-          mdxModuleIds.delete(cleanId)
+          mdxModuleIds.delete(cleanId);
         }
       },
 
       async transform(source, id) {
-        const cleanId = stripQuery(id)
+        const cleanId = stripQuery(id);
         if (!MDX_FILE_REGEX.test(cleanId) || !matchesTransformFilter(cleanId)) {
-          return null
+          return null;
         }
         if (VITE_MAJOR < 7) {
           this.error(
-            "Palamedes MDX compilation requires Vite 7 or newer. Disable it with `mdx: false` when using an older Vite release."
-          )
+            "Palamedes MDX compilation requires Vite 7 or newer. Disable it with `mdx: false` when using an older Vite release.",
+          );
         }
-        const cfg = await getConfigLazy()
+        const cfg = await getConfigLazy();
         const mdx = {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
-        }
+        };
         if ((mdx.framework ?? "react") === "react" && !viteSupportsReactMdxModuleType()) {
-          this.error(REACT_MDX_VITE_REQUIREMENT)
+          this.error(REACT_MDX_VITE_REQUIREMENT);
         }
-        const result = analyzeMdxNative(source, cleanId, mdx)
-        mdxModuleIds.add(cleanId)
-        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file))
+        const result = analyzeMdxNative(source, cleanId, mdx);
+        mdxModuleIds.add(cleanId);
+        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
         await validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) =>
-          this.addWatchFile(file)
-        )
+          this.addWatchFile(file),
+        );
 
         if (result.diagnostics.length > 0 || !result.code) {
           const details = result.diagnostics
             .map(
               (diagnostic) =>
-                `${cleanId}:${diagnostic.primary.line}:${diagnostic.primary.column}: ${diagnostic.message} (${diagnostic.code})`
+                `${cleanId}:${diagnostic.primary.line}:${diagnostic.primary.column}: ${diagnostic.message} (${diagnostic.code})`,
             )
-            .join("\n")
-          const primary = result.diagnostics[0]?.primary
+            .join("\n");
+          const primary = result.diagnostics[0]?.primary;
           this.error({
             name: "PalamedesMdxError",
             code: "PALAMEDES_MDX",
@@ -606,36 +606,36 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
                   },
                 }
               : {}),
-          })
+          });
         }
 
-        let transformedCode: string
+        let transformedCode: string;
         try {
-          transformedCode = await withSidecarImport(result.code, cleanId, result.compiledIds)
+          transformedCode = await withSidecarImport(result.code, cleanId, result.compiledIds);
         } catch (error) {
-          this.error(transformErrorMessage(cleanId, error))
+          this.error(transformErrorMessage(cleanId, error));
         }
 
         return {
           code: transformedCode,
           map: result.map,
           ...((mdx.framework ?? "react") === "react" ? { moduleType: "jsx" as const } : {}),
-        }
+        };
       },
 
       handleHotUpdate(context) {
-        const cleanId = stripQuery(context.file)
+        const cleanId = stripQuery(context.file);
         if (!isConfigChange(cleanId)) {
-          return
+          return;
         }
-        resetConfig()
+        resetConfig();
         const modules = [...mdxModuleIds]
           .map((id) => context.server.moduleGraph.getModuleById(id))
-          .filter((module): module is NonNullable<typeof module> => module !== undefined)
-        modules.forEach((module) => context.server.moduleGraph.invalidateModule(module))
-        return modules
+          .filter((module): module is NonNullable<typeof module> => module !== undefined);
+        modules.forEach((module) => context.server.moduleGraph.invalidateModule(module));
+        return modules;
       },
-    })
+    });
   }
 
   // Plugin 3: Transform macros
@@ -648,11 +648,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // particular, graph splitting can intentionally disable both MDX and the
     // eager PO loader while its sidecars still read this shared config.
     buildStart() {
-      resetConfig()
+      resetConfig();
     },
 
     watchChange(id) {
-      resetConfigOnChange(id)
+      resetConfigOnChange(id);
     },
 
     config(viteConfig, env) {
@@ -661,21 +661,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       // message in first-party output by default so that case remains readable
       // instead of exposing the opaque compiled id. Consumers that cannot ship
       // source text can opt out explicitly.
-      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true
-      stripNonEssentialProps = env.command === "build"
-      isBuildCommand = env.command === "build"
-      const ids = new Set(PALAMEDES_MACRO_PACKAGES)
-      macroIds = ids
+      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true;
+      stripNonEssentialProps = env.command === "build";
+      isBuildCommand = env.command === "build";
+      const ids = new Set(PALAMEDES_MACRO_PACKAGES);
+      macroIds = ids;
 
       // Exclude macro packages from optimization
       // https://github.com/lingui/js-lingui/issues/1464
       if (!viteConfig.optimizeDeps) {
-        viteConfig.optimizeDeps = {}
+        viteConfig.optimizeDeps = {};
       }
-      viteConfig.optimizeDeps.exclude = viteConfig.optimizeDeps.exclude || []
+      viteConfig.optimizeDeps.exclude = viteConfig.optimizeDeps.exclude || [];
 
       for (const macroId of ids) {
-        viteConfig.optimizeDeps.exclude.push(macroId)
+        viteConfig.optimizeDeps.exclude.push(macroId);
       }
     },
 
@@ -683,22 +683,22 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // this lifecycle point. Import maps need that final base so asset URLs
     // retain their separator for non-root and relative deployments.
     configResolved(viteConfig) {
-      resolvedBase = viteConfig.base
+      resolvedBase = viteConfig.base;
     },
 
     transform(code, id) {
-      const cleanId = stripQuery(id)
+      const cleanId = stripQuery(id);
 
       // Check file extension and filter
       if (!matchesTransformFilter(cleanId)) {
-        return null
+        return null;
       }
 
       // Quick check: skip if no macro imports
-      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
-      const hasAnyMacroImport = [...ids].some((macroId) => code.includes(macroId))
+      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES);
+      const hasAnyMacroImport = [...ids].some((macroId) => code.includes(macroId));
       if (!hasAnyMacroImport) {
-        return null
+        return null;
       }
 
       try {
@@ -706,31 +706,31 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           runtimeModule: macroRuntimeModule,
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
           stripNonEssentialProps,
-        })
+        });
 
         if (!result.hasChanged) {
-          return null
+          return null;
         }
 
-        const sidecarCode = withSidecarImport(result.code, cleanId, result.compiledIds)
+        const sidecarCode = withSidecarImport(result.code, cleanId, result.compiledIds);
         if (typeof sidecarCode === "string") {
           return {
             code: sidecarCode,
             map: result.map as any,
-          }
+          };
         }
         return sidecarCode.then(
           (transformedCode) => ({
             code: transformedCode,
             map: result.map as any,
           }),
-          (error) => this.error(transformErrorMessage(cleanId, error))
-        )
+          (error) => this.error(transformErrorMessage(cleanId, error)),
+        );
       } catch (error) {
-        this.error(transformErrorMessage(cleanId, error))
+        this.error(transformErrorMessage(cleanId, error));
       }
     },
-  })
+  });
 
   // Plugin 4b: message sidecar modules for experimental graph splitting.
   // Per message-bearing source file, one per-locale module rendered by the
@@ -739,7 +739,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // aggregator that registers the branded exports with the runtime. The
   // bundler then distributes messages along the module graph.
   if (graphSplitting) {
-    type SidecarEntry = { sourceId: string; compiledIds: string[] }
+    type SidecarEntry = { sourceId: string; compiledIds: string[] };
 
     // `warn` is required rather than optional: an omitted channel would
     // silently disable the `failOnMissing` gate below along with the warning,
@@ -748,40 +748,40 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       cfg: LoadedPalamedesConfig,
       entry: SidecarEntry,
       locale: string,
-      context: { addWatchFile?: (file: string) => void; warn: (message: string) => void }
+      context: { addWatchFile?: (file: string) => void; warn: (message: string) => void },
     ): Promise<Record<string, string> | null> {
       const catalogs = cfg.catalogs.filter((catalog) =>
-        catalogMatchesSource(cfg, catalog, entry.sourceId)
-      )
+        catalogMatchesSource(cfg, catalog, entry.sourceId),
+      );
       if (catalogs.length === 0) {
         context.warn(
-          `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`
-        )
-        return null
+          `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`,
+        );
+        return null;
       }
 
-      const selected: Record<string, string> = {}
+      const selected: Record<string, string> = {};
       for (const catalog of catalogs) {
-        const artifactConfig = catalogArtifactConfig(cfg, [catalog])
-        const resourcePath = catalogResourcePath(cfg, catalog, locale)
+        const artifactConfig = catalogArtifactConfig(cfg, [catalog]);
+        const resourcePath = catalogResourcePath(cfg, catalog, locale);
         const result = await compileCatalogArtifactSelectedAsync(
           artifactConfig,
           resourcePath,
-          entry.compiledIds
-        )
-        result.watchFiles.forEach((file: string) => context.addWatchFile?.(file))
+          entry.compiledIds,
+        );
+        result.watchFiles.forEach((file: string) => context.addWatchFile?.(file));
         if (result.missing.length > 0) {
           const message =
             `${createMissingErrorMessage(locale, result.missing)}\n\n` +
-            `Referenced by ${entry.sourceId}.`
+            `Referenced by ${entry.sourceId}.`;
           if (failOnMissing) {
-            throw new Error(message)
+            throw new Error(message);
           }
-          context.warn(message)
+          context.warn(message);
         }
-        Object.assign(selected, result.messages)
+        Object.assign(selected, result.messages);
       }
-      return selected
+      return selected;
     }
 
     plugins.push({
@@ -789,7 +789,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       config() {
         if (!importMapBinding) {
-          return
+          return;
         }
         // Bare #pmds/ specifiers stay external in client builds; the emitted
         // per-locale import map resolves them in the browser. SSR aggregators
@@ -801,12 +801,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               external: (id: string) => id.startsWith(BARE_MESSAGES_PREFIX),
             },
           },
-        }
+        };
       },
 
       resolveId(id) {
         if (id.startsWith(VIRTUAL_MESSAGES_PREFIX)) {
-          return `${RESOLVED_MESSAGES_PREFIX}${id.slice(VIRTUAL_MESSAGES_PREFIX.length)}`
+          return `${RESOLVED_MESSAGES_PREFIX}${id.slice(VIRTUAL_MESSAGES_PREFIX.length)}`;
         }
       },
 
@@ -823,24 +823,24 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
        */
       async load(id, loadOptions) {
         if (!id.startsWith(RESOLVED_MESSAGES_PREFIX)) {
-          return null
+          return null;
         }
 
-        const [key, locale] = id.slice(RESOLVED_MESSAGES_PREFIX.length).split("/", 2)
-        const entry = key === undefined ? undefined : sidecarModules.get(key)
+        const [key, locale] = id.slice(RESOLVED_MESSAGES_PREFIX.length).split("/", 2);
+        const entry = key === undefined ? undefined : sidecarModules.get(key);
         if (!entry || key === undefined) {
           this.error(
             `Palamedes message sidecar "${key}" was requested before its source module was transformed. ` +
-              "This indicates a plugin ordering problem; please report it."
-          )
+              "This indicates a plugin ordering problem; please report it.",
+          );
         }
 
-        const cfg = await getConfigLazy()
-        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file))
-        const locales = cfg.locales
+        const cfg = await getConfigLazy();
+        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
+        const locales = cfg.locales;
 
         if (locale === undefined) {
-          const ssr = isServerEnvironment(this, loadOptions?.ssr === true)
+          const ssr = isServerEnvironment(this, loadOptions?.ssr === true);
 
           if (importMapBinding && isBuildCommand && !ssr) {
             // Import-map binding: the client aggregator imports one
@@ -853,8 +853,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               `import { locale as l, messages as m } from "${BARE_MESSAGES_PREFIX}${key}";\n` +
               `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
               `import { registerMessages } from "@palamedes/runtime";\n` +
-              `registerMessages({ [l]: defineCompiledCatalog(m) }, ${JSON.stringify(key)});\n`
-            return { code: boundCode, map: null, moduleSideEffects: true }
+              `registerMessages({ [l]: defineCompiledCatalog(m) }, ${JSON.stringify(key)});\n`;
+            return { code: boundCode, map: null, moduleSideEffects: true };
           }
 
           // Embedded binding: import each branded per-locale module and
@@ -864,63 +864,63 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           const imports = locales
             .map(
               (localeName, index) =>
-                `import { messages as m${index} } from "${VIRTUAL_MESSAGES_PREFIX}${key}/${localeName}";`
+                `import { messages as m${index} } from "${VIRTUAL_MESSAGES_PREFIX}${key}/${localeName}";`,
             )
-            .join("\n")
+            .join("\n");
           const registration = locales
             .map((localeName, index) => `${JSON.stringify(localeName)}: m${index}`)
-            .join(", ")
+            .join(", ");
           const code =
             `${imports}\n` +
             `import { registerMessages } from "@palamedes/runtime";\n` +
-            `registerMessages({ ${registration} }, ${JSON.stringify(key)});\n`
-          return { code, map: null, moduleSideEffects: true }
+            `registerMessages({ ${registration} }, ${JSON.stringify(key)});\n`;
+          return { code, map: null, moduleSideEffects: true };
         }
 
         if (!locales.includes(locale)) {
-          this.error(`Palamedes message sidecar "${key}" requested unknown locale "${locale}".`)
+          this.error(`Palamedes message sidecar "${key}" requested unknown locale "${locale}".`);
         }
 
-        let selected: Record<string, string> | null = null
+        let selected: Record<string, string> | null = null;
         try {
           selected = await compileSidecarLocale(cfg, entry, locale, {
             addWatchFile: (file) => this.addWatchFile(file),
             warn: (message) => this.warn(message),
-          })
+          });
         } catch (error) {
-          this.error(error instanceof Error ? error.message : String(error))
+          this.error(error instanceof Error ? error.message : String(error));
         }
 
-        return { code: renderCatalogModule(selected ?? {}), map: null }
+        return { code: renderCatalogModule(selected ?? {}), map: null };
       },
 
       async generateBundle(_options, bundle) {
         if (!importMapBinding || isServerEnvironment(this) || sidecarModules.size === 0) {
-          return
+          return;
         }
 
-        assertImportMapBase(resolvedBase)
+        assertImportMapBase(resolvedBase);
 
-        const cfg = await getConfigLazy()
-        const locales = cfg.locales
+        const cfg = await getConfigLazy();
+        const locales = cfg.locales;
         const importMaps = new Map<string, Record<string, string>>(
-          locales.map((locale) => [locale, {}])
-        )
+          locales.map((locale) => [locale, {}]),
+        );
 
         // Sorted for determinism: sidecarModules fills in transform order,
         // which varies between builds; unsorted emission would re-hash the
         // import maps of untouched locales on every build.
-        const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b))
+        const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b));
         for (const [key, entry] of sortedSidecars) {
           for (const locale of locales) {
             const selected = await compileSidecarLocale(cfg, entry, locale, {
               warn: (message) => this.warn(message),
-            })
-            const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale)
-            const contentHash = createHash("sha256").update(asset).digest("hex").slice(0, 8)
-            const fileName = `assets/palamedes-m-${key}.${locale}-${contentHash}.js`
-            this.emitFile({ type: "asset", fileName, source: asset })
-            importMaps.get(locale)![`${BARE_MESSAGES_PREFIX}${key}`] = `${resolvedBase}${fileName}`
+            });
+            const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale);
+            const contentHash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
+            const fileName = `assets/palamedes-m-${key}.${locale}-${contentHash}.js`;
+            this.emitFile({ type: "asset", fileName, source: asset });
+            importMaps.get(locale)![`${BARE_MESSAGES_PREFIX}${key}`] = `${resolvedBase}${fileName}`;
           }
         }
 
@@ -928,43 +928,43 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         // emit modulepreload hints for the mapped assets of the chunks they
         // are about to serve and message assets load in parallel with the
         // code instead of one waterfall step behind it.
-        const chunkImports: Record<string, string[]> = {}
+        const chunkImports: Record<string, string[]> = {};
         for (const fileName of Object.keys(bundle).sort()) {
-          const output = bundle[fileName]
+          const output = bundle[fileName];
           if (!output || output.type !== "chunk") {
-            continue
+            continue;
           }
           const bareImports = output.imports
             .filter((imported) => imported.startsWith(BARE_MESSAGES_PREFIX))
-            .sort()
+            .sort();
           if (bareImports.length > 0) {
-            chunkImports[fileName] = bareImports
+            chunkImports[fileName] = bareImports;
           }
         }
 
         const manifest: {
-          locales: string[]
-          importMaps: Record<string, string>
-          chunkImports: Record<string, string[]>
+          locales: string[];
+          importMaps: Record<string, string>;
+          chunkImports: Record<string, string[]>;
         } = {
           locales,
           importMaps: {},
           chunkImports,
-        }
+        };
         for (const [locale, imports] of importMaps) {
-          const source = JSON.stringify({ imports })
-          const contentHash = createHash("sha256").update(source).digest("hex").slice(0, 8)
-          const fileName = `assets/palamedes-importmap.${locale}-${contentHash}.json`
-          this.emitFile({ type: "asset", fileName, source })
-          manifest.importMaps[locale] = fileName
+          const source = JSON.stringify({ imports });
+          const contentHash = createHash("sha256").update(source).digest("hex").slice(0, 8);
+          const fileName = `assets/palamedes-importmap.${locale}-${contentHash}.json`;
+          this.emitFile({ type: "asset", fileName, source });
+          manifest.importMaps[locale] = fileName;
         }
         this.emitFile({
           type: "asset",
           fileName: SPLIT_MANIFEST_NAME,
           source: JSON.stringify(manifest, null, 2),
-        })
+        });
       },
-    })
+    });
   }
 
   // Plugin 4: PO file loader
@@ -974,13 +974,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       async transform(src, id) {
         if (!PO_FILE_REGEX.test(id)) {
-          return null
+          return null;
         }
 
-        const cfg = await getConfigLazy()
-        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file))
-        const cleanId = stripQuery(id)
-        const locale = path.basename(cleanId, ".po")
+        const cfg = await getConfigLazy();
+        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
+        const cleanId = stripQuery(id);
+        const locale = path.basename(cleanId, ".po");
         const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,
@@ -992,21 +992,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
           diagnosticsWarningHint:
             "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
-        })
+        });
 
-        result.watchFiles.forEach((file: string) => this.addWatchFile(file))
+        result.watchFiles.forEach((file: string) => this.addWatchFile(file));
         // this.warn deduplicates and shows up in Vite's overlay/diagnostics.
-        result.warnings.forEach((warning) => this.warn(warning))
+        result.warnings.forEach((warning) => this.warn(warning));
 
         return {
           code: result.code,
           map: null,
-        }
+        };
       },
-    })
+    });
   }
 
-  return plugins
+  return plugins;
 }
 
-export default palamedes
+export default palamedes;

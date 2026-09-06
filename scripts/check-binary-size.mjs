@@ -15,14 +15,14 @@
  * edit, which is the point.
  */
 
-import { execFileSync } from "node:child_process"
-import { statSync } from "node:fs"
-import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { execFileSync } from "node:child_process";
+import { statSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { rustArtifactFileName } from "./build-native-lib.mjs"
+import { rustArtifactFileName } from "./build-native-lib.mjs";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const BUDGETS = [
   {
@@ -48,13 +48,13 @@ export const BUDGETS = [
     },
     maxBytes: 7_800_000,
   },
-]
+];
 
 export const formatBytes = (bytes) =>
-  `${(bytes / 1_000_000).toFixed(2)} MB (${bytes.toLocaleString("en-US")} B)`
+  `${(bytes / 1_000_000).toFixed(2)} MB (${bytes.toLocaleString("en-US")} B)`;
 
 export function releaseArtifactPath(budget, platform = process.platform) {
-  return path.join("target", "release", rustArtifactFileName({ ...budget.artifact, platform }))
+  return path.join("target", "release", rustArtifactFileName({ ...budget.artifact, platform }));
 }
 
 export function evaluateBinarySize(budget, size) {
@@ -63,15 +63,15 @@ export function evaluateBinarySize(budget, size) {
     size,
     baselineDelta: size - budget.baseline.bytes,
     headroom: budget.maxBytes - size,
-  }
+  };
 }
 
 export function formatBinarySizeResult(result, binaryPath) {
-  const { budget, size, baselineDelta, headroom } = result
+  const { budget, size, baselineDelta, headroom } = result;
   const baselineComparison =
     baselineDelta >= 0
       ? `${formatBytes(baselineDelta)} above`
-      : `${formatBytes(-baselineDelta)} below`
+      : `${formatBytes(-baselineDelta)} below`;
 
   if (headroom < 0) {
     return (
@@ -79,14 +79,14 @@ export function formatBinarySizeResult(result, binaryPath) {
       `Baseline ${budget.baseline.label}: ${formatBytes(budget.baseline.bytes)}; the measured artifact is ${baselineComparison} that baseline.\n` +
       `Artifact: ${binaryPath}\n` +
       `Either shrink it, or raise maxBytes in scripts/check-binary-size.mjs and say why in the commit.`
-    )
+    );
   }
 
-  const used = ((size / budget.maxBytes) * 100).toFixed(1)
+  const used = ((size / budget.maxBytes) * 100).toFixed(1);
   return (
     `${budget.label}: ${formatBytes(size)} of ${formatBytes(budget.maxBytes)} (${used} %), ${formatBytes(headroom)} to spare.\n` +
     `Baseline ${budget.baseline.label}: ${formatBytes(budget.baseline.bytes)}; the measured artifact is ${baselineComparison} that baseline.`
-  )
+  );
 }
 
 export function checkBinarySizes({
@@ -95,50 +95,50 @@ export function checkBinarySizes({
   stat = statSync,
   output = console,
 } = {}) {
-  let failed = false
+  let failed = false;
 
   for (const budget of BUDGETS) {
     try {
       execute("cargo", ["build", "--release", "--locked", "-p", budget.crate], {
         cwd: ROOT,
         stdio: "inherit",
-      })
+      });
     } catch (error) {
-      failed = true
+      failed = true;
       output.error(
         `${budget.label}: failed to build Rust crate ${budget.crate}; this artifact could not be measured.\n` +
-          `Cause: ${error instanceof Error ? error.message : String(error)}`
-      )
-      continue
+          `Cause: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      continue;
     }
 
-    const relativeBinaryPath = releaseArtifactPath(budget, platform)
-    const binaryPath = path.join(ROOT, relativeBinaryPath)
-    let size
+    const relativeBinaryPath = releaseArtifactPath(budget, platform);
+    const binaryPath = path.join(ROOT, relativeBinaryPath);
+    let size;
     try {
-      size = stat(binaryPath).size
+      size = stat(binaryPath).size;
     } catch (error) {
-      failed = true
+      failed = true;
       output.error(
         `${budget.label}: cargo built ${budget.crate}, but the expected ${budget.artifact.kind} was not found at ${relativeBinaryPath} for ${platform}.\n` +
-          `Cause: ${error instanceof Error ? error.message : String(error)}`
-      )
-      continue
+          `Cause: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      continue;
     }
 
-    const result = evaluateBinarySize(budget, size)
-    const message = formatBinarySizeResult(result, relativeBinaryPath)
+    const result = evaluateBinarySize(budget, size);
+    const message = formatBinarySizeResult(result, relativeBinaryPath);
     if (result.headroom < 0) {
-      failed = true
-      output.error(message)
+      failed = true;
+      output.error(message);
     } else {
-      output.log(message)
+      output.log(message);
     }
   }
 
-  return failed ? 1 : 0
+  return failed ? 1 : 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  process.exitCode = checkBinarySizes()
+  process.exitCode = checkBinarySizes();
 }

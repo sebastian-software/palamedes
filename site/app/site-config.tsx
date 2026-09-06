@@ -1,9 +1,9 @@
-import type { SiteConfig, SiteLinkComponentProps } from "@palamedes/site-ui"
-import { defineSiteConfig } from "@palamedes/site-ui"
-import { Link } from "react-router"
+import type { SiteConfig, SiteLinkComponentProps } from "@palamedes/site-ui";
+import { defineSiteConfig } from "@palamedes/site-ui";
+import { Link } from "react-router";
 
-import { apiHref, decisionHref, docsHref, repoHref } from "~/data/links"
-import { PRIMARY_NAVIGATION_LINKS } from "~/data/navigation"
+import { apiHref, decisionHref, docsHref, repoHref } from "~/data/links";
+import { PRIMARY_NAVIGATION_LINKS } from "~/data/navigation";
 
 export function RouterSiteLink({ href, className, children, ariaLabel }: SiteLinkComponentProps) {
   /*
@@ -15,14 +15,14 @@ export function RouterSiteLink({ href, className, children, ariaLabel }: SiteLin
       <Link to={href} viewTransition className={className} aria-label={ariaLabel}>
         {children}
       </Link>
-    )
+    );
   }
 
   return (
     <a href={href} className={className} aria-label={ariaLabel}>
       {children}
     </a>
-  )
+  );
 }
 
 export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
@@ -87,4 +87,4 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
     },
   ],
   copyright: "MIT © 2026 Sebastian Software GmbH — built in the open, verified in CI.",
-})
+});

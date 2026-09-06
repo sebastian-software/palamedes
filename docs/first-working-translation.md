@@ -58,26 +58,26 @@ catalogs:
 
 ```ts
 // vite.config.ts
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes(), react()],
-})
+});
 ```
 
 ## 4. Register the runtime
 
 ```ts
 // src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core/compiled";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
-setClientI18n(i18n)
+const i18n = createI18n();
+setClientI18n(i18n);
 
-export { i18n }
+export { i18n };
 ```
 
 This guide uses the parser-free `/compiled` entrypoint because the Vite loader
@@ -89,10 +89,10 @@ when you intentionally load runtime ICU strings; see the
 
 ```tsx
 // src/App.tsx
-import { t } from "@palamedes/core/macro"
+import { t } from "@palamedes/core/macro";
 
 export function App() {
-  return <h1>{t`Welcome to Palamedes`}</h1>
+  return <h1>{t`Welcome to Palamedes`}</h1>;
 }
 ```
 
@@ -123,26 +123,26 @@ TypeScript needs an ambient declaration for `.po` imports. Add it once:
 ```ts
 // src/po.d.ts
 declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 
-  export const messages: CompiledCatalogMessages
+  export const messages: CompiledCatalogMessages;
 }
 ```
 
 ```tsx
 // src/main.tsx
-import React from "react"
-import ReactDOM from "react-dom/client"
-import { i18n } from "./i18n"
-import { App } from "./App"
-import { messages as enMessages } from "./locales/en.po"
-import { messages as deMessages } from "./locales/de.po"
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { i18n } from "./i18n";
+import { App } from "./App";
+import { messages as enMessages } from "./locales/en.po";
+import { messages as deMessages } from "./locales/de.po";
 
-i18n.load("en", enMessages)
-i18n.load("de", deMessages)
-i18n.activate("de")
+i18n.load("en", enMessages);
+i18n.load("de", deMessages);
+i18n.activate("de");
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />)
+ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 ```
 
 ## Expected Result

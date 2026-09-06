@@ -21,19 +21,19 @@ Register the helper once in `src/start.ts`. It filters itself to Start's
 `serverFn` request type, so it does not affect SSR or server routes.
 
 ```ts
-import { createIsomorphicFn, createStart } from "@tanstack/react-start"
-import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
+import { createIsomorphicFn, createStart } from "@tanstack/react-start";
+import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack";
 
 const palamedesI18n = createIsomorphicFn().server(() =>
   createTanStackI18nRequestMiddleware(async (request) => {
-    const { createRequestI18n } = await import("./i18n.server")
-    return await createRequestI18n(request)
-  })
-)()
+    const { createRequestI18n } = await import("./i18n.server");
+    return await createRequestI18n(request);
+  }),
+)();
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [palamedesI18n],
-}))
+}));
 ```
 
 `src/start.ts` participates in Start's client graph. Keep a resolver that
@@ -57,20 +57,20 @@ TanStack Start does not run request middleware for page SSR or server routes.
 Wrap the server entry with a request-local scope using the same resolver:
 
 ```ts
-import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server"
-import { createServerI18nScope } from "@palamedes/runtime/server"
-import { createServerI18nFromRequest } from "./lib/i18n.server"
+import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
+import { createServerI18nScope } from "@palamedes/runtime/server";
+import { createServerI18nFromRequest } from "./lib/i18n.server";
 
-const handler = createStartHandler(defaultStreamHandler)
-const ssrI18nScope = createServerI18nScope()
+const handler = createStartHandler(defaultStreamHandler);
+const ssrI18nScope = createServerI18nScope();
 
 export default {
   async fetch(request: Request, options?: never) {
     return await ssrI18nScope.run(await createServerI18nFromRequest(request), () =>
-      handler(request, options)
-    )
+      handler(request, options),
+    );
   },
-}
+};
 ```
 
 The outer entry scope supplies SSR. If you also register the global request

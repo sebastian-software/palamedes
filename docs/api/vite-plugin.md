@@ -17,19 +17,19 @@ storage/import boundary.
 
 ```ts
 interface PalamedesPluginOptions {
-  include?: FilterPattern
-  exclude?: FilterPattern
-  enablePoLoader?: boolean
-  configPath?: string
-  cwd?: string
-  skipValidation?: boolean
-  failOnMissing?: boolean
-  failOnCompileError?: boolean
-  framework?: "react" | "solid" | "none"
-  runtimeModule?: string
-  keepSourceFallbacks?: boolean
-  mdx?: PalamedesMdxConfig | false
-  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" }
+  include?: FilterPattern;
+  exclude?: FilterPattern;
+  enablePoLoader?: boolean;
+  configPath?: string;
+  cwd?: string;
+  skipValidation?: boolean;
+  failOnMissing?: boolean;
+  failOnCompileError?: boolean;
+  framework?: "react" | "solid" | "none";
+  runtimeModule?: string;
+  keepSourceFallbacks?: boolean;
+  mdx?: PalamedesMdxConfig | false;
+  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
 }
 ```
 
@@ -84,12 +84,12 @@ imported yet.
 ## Usage
 
 ```ts
-import { defineConfig } from "vite"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes()],
-})
+});
 ```
 
 Keep `palamedes()` before the React or Solid Vite plugin so the native MDX

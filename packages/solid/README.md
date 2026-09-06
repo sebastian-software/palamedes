@@ -32,7 +32,7 @@ pnpm add -D @palamedes/cli @palamedes/config @palamedes/vite-plugin @solidjs/vit
 ## Example
 
 ```tsx
-import { Trans } from "@palamedes/solid/macro"
+import { Trans } from "@palamedes/solid/macro";
 
 export function Footer() {
   return (
@@ -41,7 +41,7 @@ export function Footer() {
         Powered by <strong>Palamedes</strong>
       </Trans>
     </footer>
-  )
+  );
 }
 ```
 
@@ -90,7 +90,7 @@ cover the stable frontend primitives that repeat across apps:
 - building render-ready locale switch models for links, buttons, or forms
 
 ```tsx
-import { buildLocaleSwitchItems } from "@palamedes/solid"
+import { buildLocaleSwitchItems } from "@palamedes/solid";
 
 function LocaleToolbar(props: { locale: "en" | "de" }) {
   const items = () =>
@@ -98,7 +98,7 @@ function LocaleToolbar(props: { locale: "en" | "de" }) {
       locales: ["en", "de"] as const,
       currentLocale: props.locale,
       labels: { en: "English", de: "Deutsch" },
-    })
+    });
 
   return (
     <nav>
@@ -108,7 +108,7 @@ function LocaleToolbar(props: { locale: "en" | "de" }) {
         </a>
       ))}
     </nav>
-  )
+  );
 }
 ```
 

@@ -1,37 +1,37 @@
 interface InstructionStep {
-  kind?: undefined
-  title: string
-  body: string
-  code?: string
-  aside?: string
+  kind?: undefined;
+  title: string;
+  body: string;
+  code?: string;
+  aside?: string;
 }
 
 interface PackageBoundaryStep {
-  kind: "package-boundary"
-  title: string
+  kind: "package-boundary";
+  title: string;
 }
 
-export type Step = InstructionStep | PackageBoundaryStep
+export type Step = InstructionStep | PackageBoundaryStep;
 
-export type StackId = "react" | "solid" | "next"
+export type StackId = "react" | "solid" | "next";
 
 export const STACKS: Array<{ id: StackId; label: string }> = [
   { id: "react", label: "Vite + React" },
   { id: "solid", label: "Vite + Solid" },
   { id: "next", label: "Next.js" },
-]
+];
 
 const PO_DECLARATION = `// src/po.d.ts
 declare module "*.po" {
   import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 
   export const messages: CompiledCatalogMessages
-}`
+}`;
 
 export const PACKAGE_BOUNDARY_STEP: PackageBoundaryStep = {
   kind: "package-boundary",
   title: "Use the scoped packages",
-}
+};
 
 export const QUICKSTART_STEPS: Record<StackId, Step[]> = {
   react: [
@@ -257,6 +257,6 @@ export function runWithServerI18n<Result>(i18n: ReturnType<typeof createI18n>, c
 $ pnpm dev`,
     },
   ],
-}
+};
 
-export const PIPELINE = ["write", "extract", "translate", "render"]
+export const PIPELINE = ["write", "extract", "translate", "render"];

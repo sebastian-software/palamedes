@@ -13,12 +13,12 @@
  * is cheap enough to run in the normal build.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const siteRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
-const outDir = join(siteRoot, "public/og")
+const siteRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const outDir = join(siteRoot, "public/og");
 
 /*
  * topics.ts is TypeScript with imports, so it cannot simply be require()d from
@@ -27,41 +27,41 @@ const outDir = join(siteRoot, "public/og")
  * by hand a few times a year. The --check mode below catches any drift.
  */
 function readTopics() {
-  const source = readFileSync(join(siteRoot, "app/data/topics.ts"), "utf8")
-  const topics = []
+  const source = readFileSync(join(siteRoot, "app/data/topics.ts"), "utf8");
+  const topics = [];
   for (const match of source.matchAll(
-    /slug: "([^"]+)",\n(?:\s*icon: "[^"]+",\n)?\s*metaTitle:\s*(?:`|")([^`"]+)/gu
+    /slug: "([^"]+)",\n(?:\s*icon: "[^"]+",\n)?\s*metaTitle:\s*(?:`|")([^`"]+)/gu,
   )) {
-    const [, slug, metaTitle] = match
+    const [, slug, metaTitle] = match;
     // The part before the em dash is the claim; the rest is supporting detail.
-    const headline = metaTitle.split(" — ")[0].trim()
-    const kicker = (metaTitle.split(" — ")[1] ?? "").trim()
-    topics.push({ slug, headline, kicker })
+    const headline = metaTitle.split(" — ")[0].trim();
+    const kicker = (metaTitle.split(" — ")[1] ?? "").trim();
+    topics.push({ slug, headline, kicker });
   }
-  if (topics.length === 0) throw new Error("generate-og-images: parsed no topics from topics.ts")
-  return topics
+  if (topics.length === 0) throw new Error("generate-og-images: parsed no topics from topics.ts");
+  return topics;
 }
 
-const topics = readTopics()
+const topics = readTopics();
 
 if (process.argv.includes("--check")) {
-  const missing = topics.filter((topic) => !existsSync(join(outDir, `${topic.slug}.png`)))
+  const missing = topics.filter((topic) => !existsSync(join(outDir, `${topic.slug}.png`)));
   if (missing.length > 0) {
     console.error(
       `generate-og-images: missing images for ${missing.map((topic) => topic.slug).join(", ")}\n` +
-        "Run: node site/scripts/generate-og-images.mjs"
-    )
-    process.exit(1)
+        "Run: node site/scripts/generate-og-images.mjs",
+    );
+    process.exit(1);
   }
-  console.log(`generate-og-images: ${topics.length} topic images present`)
-  process.exit(0)
+  console.log(`generate-og-images: ${topics.length} topic images present`);
+  process.exit(0);
 }
 
-const { chromium } = await import("@playwright/test")
+const { chromium } = await import("@playwright/test");
 
 const fontData = readFileSync(join(siteRoot, "public/fonts/CinzelHellenic-Regular.woff2")).toString(
-  "base64"
-)
+  "base64",
+);
 
 function html({ headline, kicker }) {
   return `<!doctype html>
@@ -107,31 +107,31 @@ function html({ headline, kicker }) {
   ${kicker ? `<p>${kicker}</p>` : ""}
   <div class="rule"></div>
 </div>
-<footer><span>palamedes.dev</span><span>Rust-powered i18n for JS</span></footer>`
+<footer><span>palamedes.dev</span><span>Rust-powered i18n for JS</span></footer>`;
 }
 
-mkdirSync(outDir, { recursive: true })
+mkdirSync(outDir, { recursive: true });
 
 const executablePath = [
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
   "/opt/pw-browsers/chromium",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-].find((path) => path && existsSync(path))
+].find((path) => path && existsSync(path));
 
-const browser = await chromium.launch(executablePath ? { executablePath } : undefined)
+const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
 const context = await browser.newContext({
   viewport: { width: 1200, height: 630 },
   deviceScaleFactor: 1,
-})
-const page = await context.newPage()
+});
+const page = await context.newPage();
 
 for (const topic of topics) {
-  await page.setContent(html(topic), { waitUntil: "networkidle" })
-  await page.evaluate(() => document.fonts.ready)
-  const target = join(outDir, `${topic.slug}.png`)
-  await page.screenshot({ path: target })
-  console.log(`  wrote public/og/${topic.slug}.png — "${topic.headline}"`)
+  await page.setContent(html(topic), { waitUntil: "networkidle" });
+  await page.evaluate(() => document.fonts.ready);
+  const target = join(outDir, `${topic.slug}.png`);
+  await page.screenshot({ path: target });
+  console.log(`  wrote public/og/${topic.slug}.png — "${topic.headline}"`);
 }
 
-await browser.close()
-console.log(`generate-og-images: ${topics.length} images written`)
+await browser.close();
+console.log(`generate-og-images: ${topics.length} images written`);

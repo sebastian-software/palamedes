@@ -5,31 +5,31 @@
  * TypeScript versions that no longer diagnose requiring ESM declarations.
  */
 export function assertDualExportsUseFormatSpecificTargets(packages) {
-  const problems = []
+  const problems = [];
 
   for (const { manifest } of packages) {
     for (const [subpath, condition] of Object.entries(manifest.exports ?? {})) {
-      visitCondition(condition, subpath, false, manifest.name, problems)
+      visitCondition(condition, subpath, false, manifest.name, problems);
     }
   }
 
   if (problems.length > 0) {
-    throw new Error(problems.join("\n"))
+    throw new Error(problems.join("\n"));
   }
 }
 
 function visitCondition(condition, conditionPath, hasTypesAncestor, packageName, problems) {
-  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return;
 
-  const hasTypesCondition = hasTypesAncestor || Object.hasOwn(condition, "types")
+  const hasTypesCondition = hasTypesAncestor || Object.hasOwn(condition, "types");
   const hasDualRuntimeConditions =
-    Object.hasOwn(condition, "import") && Object.hasOwn(condition, "require")
+    Object.hasOwn(condition, "import") && Object.hasOwn(condition, "require");
 
   if (hasDualRuntimeConditions) {
     if (hasTypesCondition) {
       problems.push(
-        `${packageName} ${conditionPath} has a "types" condition that masks its import and require declarations.`
-      )
+        `${packageName} ${conditionPath} has a "types" condition that masks its import and require declarations.`,
+      );
     }
     assertFormatSpecificTargets(
       condition.import,
@@ -38,8 +38,8 @@ function visitCondition(condition, conditionPath, hasTypesAncestor, packageName,
       ".mjs",
       packageName,
       conditionPath,
-      problems
-    )
+      problems,
+    );
     assertFormatSpecificTargets(
       condition.require,
       "require",
@@ -47,8 +47,8 @@ function visitCondition(condition, conditionPath, hasTypesAncestor, packageName,
       ".cjs",
       packageName,
       conditionPath,
-      problems
-    )
+      problems,
+    );
   }
 
   for (const [name, nestedCondition] of Object.entries(condition)) {
@@ -58,8 +58,8 @@ function visitCondition(condition, conditionPath, hasTypesAncestor, packageName,
         `${conditionPath}.${name}`,
         hasTypesCondition,
         packageName,
-        problems
-      )
+        problems,
+      );
     }
   }
 }
@@ -71,24 +71,24 @@ function assertFormatSpecificTargets(
   runtimeExtension,
   packageName,
   conditionPath,
-  problems
+  problems,
 ) {
   if (!condition || typeof condition !== "object" || Array.isArray(condition)) {
     problems.push(
-      `${packageName} ${conditionPath}.${mode} must nest a ${declarationExtension} declaration and ${runtimeExtension} runtime target.`
-    )
-    return
+      `${packageName} ${conditionPath}.${mode} must nest a ${declarationExtension} declaration and ${runtimeExtension} runtime target.`,
+    );
+    return;
   }
 
   if (typeof condition.types !== "string" || !condition.types.endsWith(declarationExtension)) {
     problems.push(
-      `${packageName} ${conditionPath}.${mode}.types must reference a ${declarationExtension} declaration.`
-    )
+      `${packageName} ${conditionPath}.${mode}.types must reference a ${declarationExtension} declaration.`,
+    );
   }
 
   if (typeof condition.default !== "string" || !condition.default.endsWith(runtimeExtension)) {
     problems.push(
-      `${packageName} ${conditionPath}.${mode}.default must reference a ${runtimeExtension} runtime target.`
-    )
+      `${packageName} ${conditionPath}.${mode}.default must reference a ${runtimeExtension} runtime target.`,
+    );
   }
 }

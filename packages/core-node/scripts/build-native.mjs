@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync } from "node:fs"
-import path from "node:path"
-import { execFileSync } from "node:child_process"
-import { buildNativePackage, rustArtifactFileName } from "../../../scripts/build-native-lib.mjs"
+import { copyFileSync, existsSync } from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { buildNativePackage, rustArtifactFileName } from "../../../scripts/build-native-lib.mjs";
 
 const targets = {
   "@palamedes/core-node-darwin-arm64": {
@@ -34,7 +34,7 @@ const targets = {
     platform: "win32",
     arch: "x64",
   },
-}
+};
 
 buildNativePackage({
   targets,
@@ -42,7 +42,7 @@ buildNativePackage({
   unsupportedTargetMessage: (packageName) => `Unsupported native target package: ${packageName}`,
   configureCargo({ cargoEnv, target }) {
     if (target.libc !== "musl") {
-      return
+      return;
     }
 
     // musl defaults to `+crt-static`, and cargo refuses to produce a `cdylib` for a
@@ -74,29 +74,29 @@ buildNativePackage({
     //
     // Prepend any inherited target rustflags so an externally provided value
     // (e.g. CI optimisation overrides) is preserved rather than dropped.
-    const rustflagsVariable = `CARGO_TARGET_${target.rustTarget.toUpperCase().replaceAll("-", "_")}_RUSTFLAGS`
+    const rustflagsVariable = `CARGO_TARGET_${target.rustTarget.toUpperCase().replaceAll("-", "_")}_RUSTFLAGS`;
     cargoEnv[rustflagsVariable] = [
       process.env[rustflagsVariable] ?? "",
       "-C target-feature=-crt-static",
     ]
       .filter(Boolean)
-      .join(" ")
+      .join(" ");
   },
   postBuild({ packageDir, profile, repoRoot, target }) {
-    const binaryName = rustArtifactFileName({ name: "palamedes_node", kind: "cdylib" })
+    const binaryName = rustArtifactFileName({ name: "palamedes_node", kind: "cdylib" });
     const sourcePath = target.rustTarget
       ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
-      : path.join(repoRoot, "target", profile, binaryName)
-    const targetPath = path.join(packageDir, "palamedes-node.node")
+      : path.join(repoRoot, "target", profile, binaryName);
+    const targetPath = path.join(packageDir, "palamedes-node.node");
 
     if (!existsSync(sourcePath)) {
-      throw new Error(`Expected native binary at ${sourcePath}`)
+      throw new Error(`Expected native binary at ${sourcePath}`);
     }
 
-    copyFileSync(sourcePath, targetPath)
+    copyFileSync(sourcePath, targetPath);
 
     if (process.platform !== "darwin") {
-      return
+      return;
     }
 
     // The copied N-API module can carry an invalid embedded signature after the
@@ -104,6 +104,6 @@ buildNativePackage({
     execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", targetPath], {
       cwd: packageDir,
       stdio: "inherit",
-    })
+    });
   },
-})
+});

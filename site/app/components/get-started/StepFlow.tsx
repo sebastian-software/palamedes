@@ -1,5 +1,5 @@
-import { EditorialRail } from "@palamedes/site-ui"
-import type { Step } from "~/data/steps"
+import { EditorialRail } from "@palamedes/site-ui";
+import type { Step } from "~/data/steps";
 
 /*
  * Vertical numbered step flow: 64px mono number rail with a connective
@@ -70,5 +70,5 @@ export function StepFlow({ steps }: { steps: Step[] }) {
         ))}
       </ol>
     </div>
-  )
+  );
 }

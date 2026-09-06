@@ -1,18 +1,18 @@
-import { t } from "@palamedes/core/macro"
-import { Plural, Select, Trans } from "@palamedes/remix/macro"
-import type { Handle, RemixNode } from "remix/ui"
+import { t } from "@palamedes/core/macro";
+import { Plural, Select, Trans } from "@palamedes/remix/macro";
+import type { Handle, RemixNode } from "remix/ui";
 
 export type ClientProofProps = {
-  audience: "developer" | "other"
-  count: number
-}
+  audience: "developer" | "other";
+  count: number;
+};
 
 /** Shared by SSR and the browser so Remix UI exercises its hydration path. */
 export function ClientProof(handle: Handle<ClientProofProps>): () => RemixNode {
   return () => {
-    const { audience, count } = handle.props
-    const heading = t`Palamedes is active in the browser`
-    const increment = t`Add a browser message`
+    const { audience, count } = handle.props;
+    const heading = t`Palamedes is active in the browser`;
+    const increment = t`Add a browser message`;
 
     return (
       <section aria-labelledby="client-proof-heading">
@@ -34,6 +34,6 @@ export function ClientProof(handle: Handle<ClientProofProps>): () => RemixNode {
           {increment}
         </button>
       </section>
-    )
-  }
+    );
+  };
 }

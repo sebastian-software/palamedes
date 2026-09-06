@@ -6,14 +6,14 @@ export type StreamlineIconName =
   | "deployment-workflow-collaboration"
   | "globe-app-network"
   | "programming-book"
-  | "web-hierarchy"
+  | "web-hierarchy";
 
 export function StreamlineIcon({
   name,
   className = "",
 }: {
-  name: StreamlineIconName
-  className?: string
+  name: StreamlineIconName;
+  className?: string;
 }) {
   return (
     <img
@@ -24,5 +24,5 @@ export function StreamlineIcon({
       className={className}
       aria-hidden
     />
-  )
+  );
 }

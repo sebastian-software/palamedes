@@ -1,7 +1,7 @@
-import type { ComponentProps } from "react"
+import type { ComponentProps } from "react";
 
-import { SiteLink } from "./SiteUiProvider"
-import type { ButtonLinkProps, ButtonVariant } from "./types"
+import { SiteLink } from "./SiteUiProvider";
+import type { ButtonLinkProps, ButtonVariant } from "./types";
 
 export function ButtonLink({
   variant = "primary",
@@ -18,7 +18,7 @@ export function ButtonLink({
     >
       {children}
     </SiteLink>
-  )
+  );
 }
 
 export function Button({
@@ -32,5 +32,5 @@ export function Button({
       className={`pmds-button pmds-button--${variant} ${className}`}
       {...props}
     />
-  )
+  );
 }

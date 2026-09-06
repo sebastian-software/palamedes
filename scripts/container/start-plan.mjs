@@ -3,7 +3,7 @@
 
 // Every example server must listen on 0.0.0.0 inside the container so an external
 // reverse proxy can reach the published container ports.
-export const CONTAINER_HOST = "0.0.0.0"
+export const CONTAINER_HOST = "0.0.0.0";
 
 // Host binding per framework (verified by running the container):
 // - Next.js (`next start`), Waku (`waku start`) and react-router-serve all bind
@@ -27,9 +27,9 @@ export const CONTAINER_HOST = "0.0.0.0"
 // `next start` treats a trailing `-H` as a positional project directory).
 export function buildStartArgs(example) {
   if (example.framework === "tanstack" || example.framework === "vite") {
-    return ["exec", "vite", "preview", "--host", CONTAINER_HOST, "--port", String(example.port)]
+    return ["exec", "vite", "preview", "--host", CONTAINER_HOST, "--port", String(example.port)];
   }
-  return [...example.start]
+  return [...example.start];
 }
 
 // Build the environment for an example's start script: the base environment,
@@ -45,5 +45,5 @@ export function buildStartEnv(example, baseEnv = {}) {
     ...example.startEnv,
     HOST: CONTAINER_HOST,
     PORT: String(example.port),
-  }
+  };
 }

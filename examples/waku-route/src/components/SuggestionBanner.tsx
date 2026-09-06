@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Trans } from "@palamedes/react/macro"
-import { type Locale, locales } from "../lib/i18n"
+import { useState } from "react";
+import { Trans } from "@palamedes/react/macro";
+import { type Locale, locales } from "../lib/i18n";
 
 type SuggestionBannerProps = {
-  currentLocale: Locale
-  description: string
-  recommendedLocale: Locale
-  recommendedUrl: string
-}
+  currentLocale: Locale;
+  description: string;
+  recommendedLocale: Locale;
+  recommendedUrl: string;
+};
 
 export function SuggestionBanner(props: SuggestionBannerProps) {
-  const [dismissed, setDismissed] = useState(false)
+  const [dismissed, setDismissed] = useState(false);
   if (dismissed) {
-    return null
+    return null;
   }
 
   return (
@@ -25,7 +25,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         data-testid="locale-suggestion-cta"
         href={props.recommendedUrl}
         onClick={() => {
-          document.cookie = locales.serializeChoice(props.recommendedLocale)
+          document.cookie = locales.serializeChoice(props.recommendedLocale);
         }}
       >
         <Trans>Switch to the recommended locale</Trans>
@@ -35,13 +35,13 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         className="notice-dismiss"
         data-testid="locale-suggestion-dismiss"
         onClick={() => {
-          document.cookie = locales.serializeChoice(props.currentLocale)
-          setDismissed(true)
+          document.cookie = locales.serializeChoice(props.currentLocale);
+          setDismissed(true);
         }}
         type="button"
       >
         ×
       </button>
     </div>
-  )
+  );
 }

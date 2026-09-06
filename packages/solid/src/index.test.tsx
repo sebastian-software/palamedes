@@ -1,45 +1,45 @@
 /* @jsxImportSource @solidjs/web */
-import { renderToString } from "@solidjs/web"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { renderToString } from "@solidjs/web";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createI18n,
   defineCompiledCatalog,
   type CompiledMessage,
   type PalamedesI18n,
-} from "@palamedes/core"
+} from "@palamedes/core";
 import {
   createI18n as createCompiledI18n,
   defineCompiledCatalog as defineParserFreeCatalog,
   type CompiledMessage as ParserFreeMessage,
-} from "@palamedes/core/compiled"
-import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
+} from "@palamedes/core/compiled";
+import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime";
 
-import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
-import { Trans as CompiledTrans } from "./compiled"
+import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index";
+import { Trans as CompiledTrans } from "./compiled";
 
 function withoutHydrationMarkers(html: string): string {
-  return html.replaceAll("<!--!$-->", "")
+  return html.replaceAll("<!--!$-->", "");
 }
 
 describe("@palamedes/solid", () => {
   afterEach(() => {
-    resetI18nRuntime()
-    delete (globalThis as { window?: unknown }).window
-  })
+    resetI18nRuntime();
+    delete (globalThis as { window?: unknown }).window;
+  });
 
   it("renders Trans without a provider by reading the active runtime instance", () => {
-    const i18n = createI18n()
+    const i18n = createI18n();
     i18n.load("de", {
       footer: "Bereitgestellt von Palamedes",
-    })
-    i18n.activate("de")
-    setServerI18nGetter(() => i18n)
+    });
+    i18n.activate("de");
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <Trans id="footer" message="Powered by Palamedes" />)
+    const html = renderToString(() => <Trans id="footer" message="Powered by Palamedes" />);
 
-    expect(html).toBe("Bereitgestellt von Palamedes")
-  })
+    expect(html).toBe("Bereitgestellt von Palamedes");
+  });
 
   it("executes generated message functions directly through the Solid renderer", () => {
     const footer: CompiledMessage = (values, runtime) =>
@@ -47,11 +47,11 @@ describe("@palamedes/solid", () => {
         "Hallo ",
         runtime.value(values, "name"),
         ", ",
-        runtime.tag("0", runtime.join("willkommen"))
-      )
-    const i18n = createI18n({ locale: "de" })
-    i18n.load("de", defineCompiledCatalog({ footer }))
-    setServerI18nGetter(() => i18n)
+        runtime.tag("0", runtime.join("willkommen")),
+      );
+    const i18n = createI18n({ locale: "de" });
+    i18n.load("de", defineCompiledCatalog({ footer }));
+    setServerI18nGetter(() => i18n);
 
     const html = renderToString(() => (
       <Trans
@@ -60,61 +60,61 @@ describe("@palamedes/solid", () => {
         values={{ name: "Ada" }}
         components={{ 0: (props) => <strong>{props.children}</strong> }}
       />
-    ))
+    ));
 
-    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>")
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>");
+  });
 
   it("renders generated messages through the parser-free production entry", () => {
     const greeting: ParserFreeMessage = (values, runtime) =>
-      runtime.join("Hallo ", runtime.value(values, "name"))
-    const i18n = createCompiledI18n({ locale: "de" })
-    i18n.load("de", defineParserFreeCatalog({ greeting }))
-    setServerI18nGetter(() => i18n)
+      runtime.join("Hallo ", runtime.value(values, "name"));
+    const i18n = createCompiledI18n({ locale: "de" });
+    i18n.load("de", defineParserFreeCatalog({ greeting }));
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <CompiledTrans id="greeting" values={{ name: "Ada" }} />)
+    const html = renderToString(() => <CompiledTrans id="greeting" values={{ name: "Ada" }} />);
 
-    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada")
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada");
+  });
 
   it("formats parser-free ICU fallbacks through runtime components", () => {
-    const i18n = createCompiledI18n({ locale: "en" })
-    setServerI18nGetter(() => i18n)
+    const i18n = createCompiledI18n({ locale: "en" });
+    setServerI18nGetter(() => i18n);
 
     const trans = renderToString(() => (
       <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
-    ))
-    const plural = renderToString(() => <Plural value={3} one="# item" other="# items" />)
+    ));
+    const plural = renderToString(() => <Plural value={3} one="# item" other="# items" />);
 
-    expect(withoutHydrationMarkers(trans)).toBe("Hello Ada")
-    expect(plural).toBe("3 items")
-  })
+    expect(withoutHydrationMarkers(trans)).toBe("Hello Ada");
+    expect(plural).toBe("3 items");
+  });
 
   it("parses lazy patterns without re-entering catalog lookup", () => {
-    const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values)
-    const i18n = createI18n({ locale: "de" })
+    const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values);
+    const i18n = createI18n({ locale: "de" });
     i18n.load(
       "de",
       defineCompiledCatalog({
         greeting,
         "Hello {name}": "Falscher Katalogtreffer",
-      })
-    )
-    setServerI18nGetter(() => i18n)
+      }),
+    );
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <CompiledTrans id="greeting" values={{ name: "Ada" }} />)
+    const html = renderToString(() => <CompiledTrans id="greeting" values={{ name: "Ada" }} />);
 
-    expect(withoutHydrationMarkers(html)).toBe("Hello Ada")
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Hello Ada");
+  });
 
   it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
-    const i18n = createI18n({ locale: "de" })
+    const i18n = createI18n({ locale: "de" });
     i18n.load("de", {
       footer: "Hallo {name}, <0>willkommen</0>",
-    })
-    const legacyI18n: PalamedesI18n = { ...i18n }
-    delete legacyI18n.renderMessage
-    setServerI18nGetter(() => legacyI18n)
+    });
+    const legacyI18n: PalamedesI18n = { ...i18n };
+    delete legacyI18n.renderMessage;
+    setServerI18nGetter(() => legacyI18n);
 
     const html = renderToString(() => (
       <Trans
@@ -123,194 +123,194 @@ describe("@palamedes/solid", () => {
         values={{ name: "Ada" }}
         components={{ 0: (props) => <strong>{props.children}</strong> }}
       />
-    ))
+    ));
 
-    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>")
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>");
+  });
 
   it("formats compiled Trans fallbacks with older parser-capable i18n instances", () => {
-    const i18n = createI18n({ locale: "de" })
+    const i18n = createI18n({ locale: "de" });
     i18n.load("de", {
       inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
-    })
-    const legacyI18n: PalamedesI18n = { ...i18n }
-    delete legacyI18n.renderMessage
-    setServerI18nGetter(() => legacyI18n)
+    });
+    const legacyI18n: PalamedesI18n = { ...i18n };
+    delete legacyI18n.renderMessage;
+    setServerI18nGetter(() => legacyI18n);
 
     const html = renderToString(() => (
       <CompiledTrans id="inbox" message="Hello {name}" values={{ name: "Ada" }} />
-    ))
+    ));
 
-    expect(withoutHydrationMarkers(html)).toBe("Hello Ada")
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Hello Ada");
+  });
 
   it("renders plural output through the active runtime instance", () => {
-    const i18n = createI18n()
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <Plural value={2} one="# item" other="# items" />)
+    const html = renderToString(() => <Plural value={2} one="# item" other="# items" />);
 
-    expect(html).toBe("2 items")
-  })
+    expect(html).toBe("2 items");
+  });
 
   it("applies plural offsets in direct and rich messages", () => {
-    const i18n = createI18n()
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
     const direct = renderToString(() => (
       <Plural value={2} offset={1} one="# item" other="# items" />
-    ))
+    ));
     const rich = renderToString(() => (
       <Trans
         id="companions"
         message="{count, plural, offset:1 one {you and one other} other {you and # others}}"
         values={{ count: 3 }}
       />
-    ))
+    ));
 
-    expect(direct).toBe("1 item")
-    expect(rich).toBe("you and 2 others")
-  })
+    expect(direct).toBe("1 item");
+    expect(rich).toBe("you and 2 others");
+  });
 
   it("rejects invalid offsets at the direct component boundary", () => {
-    const i18n = createI18n()
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    setServerI18nGetter(() => i18n);
 
     for (const offset of [Number.NaN, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
       expect(() =>
-        renderToString(() => <Plural value={2} offset={offset} one="# item" other="# items" />)
-      ).toThrow("Plural offset must be a non-negative safe integer.")
+        renderToString(() => <Plural value={2} offset={offset} one="# item" other="# items" />),
+      ).toThrow("Plural offset must be a non-negative safe integer.");
     }
-  })
+  });
 
   it("formats direct choice components without reporting missing catalog entries", () => {
-    const onMissing = vi.fn()
-    const i18n = createI18n({ onMissing })
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const onMissing = vi.fn();
+    const i18n = createI18n({ onMissing });
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
-    const plural = renderToString(() => <Plural value={2} one="# item" other="# items" />)
-    const select = renderToString(() => <Select value="female" female="She" other="They" />)
+    const plural = renderToString(() => <Plural value={2} one="# item" other="# items" />);
+    const select = renderToString(() => <Select value="female" female="She" other="They" />);
     const ordinal = renderToString(() => (
       <SelectOrdinal value={2} one="#st" two="#nd" other="#th" />
-    ))
+    ));
 
-    expect([plural, select, ordinal]).toStrictEqual(["2 items", "She", "2nd"])
-    expect(onMissing).not.toHaveBeenCalled()
-  })
+    expect([plural, select, ordinal]).toStrictEqual(["2 items", "She", "2nd"]);
+    expect(onMissing).not.toHaveBeenCalled();
+  });
 
   it("translates direct choice components through the active catalog", () => {
-    const i18n = createI18n()
+    const i18n = createI18n();
     i18n.load("de", {
       "{value, plural, one {# item} other {# items}}":
         "{value, plural, one {# Artikel} other {# Artikel}}",
-    })
-    i18n.activate("de")
-    setServerI18nGetter(() => i18n)
+    });
+    i18n.activate("de");
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <Plural value={2} one="# item" other="# items" />)
+    const html = renderToString(() => <Plural value={2} one="# item" other="# items" />);
 
-    expect(html).toBe("2 Artikel")
-  })
+    expect(html).toBe("2 Artikel");
+  });
 
   it("normalizes _N exact-match props like the macro transform", () => {
-    const i18n = createI18n()
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <Plural value={2} _2="a pair" other="# items" />)
+    const html = renderToString(() => <Plural value={2} _2="a pair" other="# items" />);
 
-    expect(html).toBe("a pair")
-  })
+    expect(html).toBe("a pair");
+  });
 
   it("falls back to the source message when a catalog plural cannot resolve", () => {
-    const onError = vi.fn()
-    const i18n = createI18n({ onError })
+    const onError = vi.fn();
+    const i18n = createI18n({ onError });
     // A translator introduced a plural the source never had, and nothing
     // supplies `count`: resolving it throws mid-render.
     i18n.load("de", {
       inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
-    })
-    i18n.activate("de")
-    setServerI18nGetter(() => i18n)
+    });
+    i18n.activate("de");
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <Trans id="inbox" message="You have mail" />)
+    const html = renderToString(() => <Trans id="inbox" message="You have mail" />);
 
-    expect(html).toBe("You have mail")
-    expect(onError).toHaveBeenCalledOnce()
+    expect(html).toBe("You have mail");
+    expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]?.[0]).toMatchObject({
       id: "inbox",
       locale: "de",
       pattern: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
       fallback: "You have mail",
-    })
-  })
+    });
+  });
 
   it("reports missing plural values instead of matching zero branches", () => {
-    const onError = vi.fn()
-    const i18n = createI18n({ onError })
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const onError = vi.fn();
+    const i18n = createI18n({ onError });
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
     // Same contract as `i18n._()`: report, then degrade to the raw source
     // message rather than throwing out of the render.
     const html = renderToString(() => (
       <Trans id="items" message="{n, plural, =0 {none} other {# items}}" values={{}} />
-    ))
+    ));
 
-    expect(html).toBe("{n, plural, =0 {none} other {# items}}")
-    expect(onError).toHaveBeenCalledOnce()
-    expect(onError.mock.calls[0]?.[0].error.message).toMatch(/Missing or non-numeric value/)
-  })
+    expect(html).toBe("{n, plural, =0 {none} other {# items}}");
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0]?.[0].error.message).toMatch(/Missing or non-numeric value/);
+  });
 
   it("keeps direct choice components rendering when a catalog override cannot resolve", () => {
-    const onError = vi.fn()
-    const i18n = createI18n({ onError })
+    const onError = vi.fn();
+    const i18n = createI18n({ onError });
     i18n.load("de", {
       "{value, select, female {She} other {They}}":
         "{missing, plural, one {Sie} other {# Personen}}",
-    })
-    i18n.activate("de")
-    setServerI18nGetter(() => i18n)
+    });
+    i18n.activate("de");
+    setServerI18nGetter(() => i18n);
 
-    const html = renderToString(() => <Select value="female" female="She" other="They" />)
+    const html = renderToString(() => <Select value="female" female="She" other="They" />);
 
-    expect(html).toBe("She")
-    expect(onError).toHaveBeenCalledOnce()
-  })
+    expect(html).toBe("She");
+    expect(onError).toHaveBeenCalledOnce();
+  });
 
   it("never resolves select values to Object.prototype members", () => {
-    const i18n = createI18n()
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
     const html = renderToString(() => (
       <>
         <Select value="valueOf" other="fallback" />
         <Select value="toString" other="fallback" />
       </>
-    ))
+    ));
 
-    expect(html).toBe("fallbackfallback")
-  })
+    expect(html).toBe("fallbackfallback");
+  });
 
   it("rejects choice components without any usable option instead of rendering nothing", () => {
-    const i18n = createI18n()
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
     expect(() =>
       renderToString(() => (
         <Plural value={2} {...({ other: undefined } as unknown as { other: string })} />
-      ))
-    ).toThrow(/plural component requires at least one string option/)
-  })
+      )),
+    ).toThrow(/plural component requires at least one string option/);
+  });
 
   it("renders ICU-quoted syntax literally through Trans", () => {
-    const i18n = createI18n()
-    i18n.activate("en")
-    setServerI18nGetter(() => i18n)
+    const i18n = createI18n();
+    i18n.activate("en");
+    setServerI18nGetter(() => i18n);
 
     const html = renderToString(() => (
       <Trans
@@ -318,27 +318,27 @@ describe("@palamedes/solid", () => {
         message="Literal '{name}': {count, plural, other {'#' of #}}"
         values={{ count: 5, name: "ignored" }}
       />
-    ))
+    ));
 
-    expect(withoutHydrationMarkers(html)).toBe("Literal {name}: # of 5")
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Literal {name}: # of 5");
+  });
 
   it("falls back when Trans encounters a malformed catalog pattern", () => {
-    const onError = vi.fn()
-    const i18n = createI18n({ onError })
+    const onError = vi.fn();
+    const i18n = createI18n({ onError });
     i18n.load("de", {
       greeting: "Hallo {name",
-    })
-    i18n.activate("de")
-    setServerI18nGetter(() => i18n)
+    });
+    i18n.activate("de");
+    setServerI18nGetter(() => i18n);
 
     const html = renderToString(() => (
       <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
-    ))
+    ));
 
-    expect(withoutHydrationMarkers(html)).toBe("Hello Ada")
-    expect(onError).toHaveBeenCalledOnce()
-  })
+    expect(withoutHydrationMarkers(html)).toBe("Hello Ada");
+    expect(onError).toHaveBeenCalledOnce();
+  });
 
   it("builds locale switch items headlessly", () => {
     expect(
@@ -349,10 +349,10 @@ describe("@palamedes/solid", () => {
           en: "English",
         },
         locales: ["en", "de"] as const,
-      })
+      }),
     ).toStrictEqual([
       { active: false, label: "English", locale: "en", testId: "locale-switch-en" },
       { active: true, label: "Deutsch", locale: "de", testId: "locale-switch-de" },
-    ])
-  })
-})
+    ]);
+  });
+});

@@ -1,7 +1,7 @@
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-import { tanstackStart } from "@tanstack/react-start/plugin/vite"
-import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [tanstackStart(), palamedes(), react()],
@@ -24,4 +24,4 @@ export default defineConfig({
       ".palamedes-i18n.fr",
     ],
   },
-})
+});
