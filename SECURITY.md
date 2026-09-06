@@ -1,42 +1,48 @@
 # Security Policy
 
-Palamedes is a build-time and runtime infrastructure for JavaScript applications.
-Please report security issues privately so maintainers can assess and fix them
-before public disclosure.
+Palamedes is build-time and runtime infrastructure for JavaScript applications.
+Report security issues privately so maintainers can assess and fix them before
+public disclosure.
 
-## Supported Versions
+## Supported versions
 
-Palamedes ships publishable packages in lockstep. Security fixes target the
-latest released 1.x version line.
+Security fixes are provided for the latest release on the default branch. Older
+releases are not patched separately — upgrade to the latest version to receive a
+fix.
 
-| Version    | Supported   |
-| ---------- | ----------- |
-| Latest 1.x | Yes         |
-| Older 1.x  | Best effort |
-| 0.x        | No          |
+## Reporting a vulnerability
 
-## Reporting A Vulnerability
+Report suspected vulnerabilities privately. Do not open a public issue, pull
+request, or discussion for a vulnerability that has not been fixed yet.
 
-Use GitHub private vulnerability reporting when it is available for this
-repository. If that is not available, email:
+Two private channels are available:
 
-```text
-security@sebastian-software.de
-```
+- **GitHub private vulnerability reporting** — open this repository's
+  **Security** tab and choose **Report a vulnerability**.
+- **Email** — security@sebastian-software.de.
 
-Please include:
+Include a concise description, the affected package and version or commit,
+environment details, reproduction steps, the impact you expect, whether the
+issue is already public, and any suggested fix. Leave out credentials and data
+you are not allowed to share.
 
-- affected package and version
-- environment details
-- reproduction steps or proof of concept
-- expected impact
-- whether the issue is already public
+## Response expectations
 
-Do not open a public GitHub issue for a vulnerability.
+Maintainers aim to:
+
+- Acknowledge a private report within 7 days.
+- Assess severity and affected versions within 14 days.
+- Coordinate a fix and a disclosure timeline with the reporter.
+- Credit the reporter when desired and appropriate.
+
+Timing can vary for low-impact reports and for reports that depend on a fix in
+an upstream dependency.
 
 ## Scope
 
-Security-relevant areas include:
+In scope: anything in this repository that lets someone read, modify, or execute
+something they should not — including the released artifacts and the build and
+release automation. The security-relevant areas of Palamedes are:
 
 - macro transformation and generated runtime code
 - `.po` catalog parsing and compilation
@@ -44,8 +50,11 @@ Security-relevant areas include:
 - CLI commands that read or write project files
 - GitHub Actions release and publish automation
 
+Usually out of scope: reports without a concrete impact path, vulnerabilities in
+third-party dependencies used as documented, and problems that require an
+already-compromised machine or a deliberately corrupted local state.
+
 ## Disclosure
 
-Maintainers will acknowledge reports as soon as practical, investigate the
-impact, and coordinate a fix and release. Public disclosure should wait until a
-patched version is available unless there is an active public exploit.
+Public disclosure waits until a patched version is available, unless there is an
+active public exploit.
