@@ -73,7 +73,7 @@ buildNativePackage({
     // with the default unwind strategy.
     //
     // Prepend any inherited target rustflags so an externally provided value
-    // (e.g. CI optimisation overrides) is preserved rather than dropped.
+    // (e.g. CI optimization overrides) is preserved rather than dropped.
     const rustflagsVariable = `CARGO_TARGET_${target.rustTarget.toUpperCase().replaceAll("-", "_")}_RUSTFLAGS`;
     cargoEnv[rustflagsVariable] = [
       process.env[rustflagsVariable] ?? "",

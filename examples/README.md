@@ -12,9 +12,16 @@ The matrix is a verification surface, not an assumption that one application
 uses all six frameworks. Each example is independently useful as a reference
 for its own host and locale strategy.
 
+`examples/` holds 26 apps: the 25 of the verification matrix defined in
+[`scripts/example-matrix.mjs`](../scripts/example-matrix.mjs) — 24 server
+framework/locale-strategy combinations plus the Vite MDX proof — and the
+focused React Router RSC fixture described below, which is verified on its own.
+Every count on this page is derived from that file and enforced by
+`pnpm check:example-matrix`.
+
 The matrix is intended to be run locally and validated in CI — that remains the
 canonical verification path. The `Example Verification` workflow smoke-tests
-all 25 examples on relevant pull requests and `main` pushes. Its weekly run
+all 25 matrix examples on relevant pull requests and `main` pushes. Its weekly run
 (and an opt-in manual dispatch) also exercises 22 browser-capable examples with
 Playwright, including the focused full-stack `remix-cookie` proof. The other
 three Remix locale-strategy examples remain smoke-only.

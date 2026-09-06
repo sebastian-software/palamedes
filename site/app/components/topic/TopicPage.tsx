@@ -11,7 +11,7 @@ import type { Topic } from "~/data/topics";
  *
  * Search-intent pages, so the order follows the reader rather than the
  * product: name the problem in their words first, including the symptoms they
- * would recognise, then the answer, then the evidence, then the questions they
+ * would recognize, then the answer, then the evidence, then the questions they
  * were going to ask anyway. The FAQ is rendered, not just marked up — hidden
  * answers behind visible schema is how structured data gets ignored.
  */

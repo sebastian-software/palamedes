@@ -46,7 +46,7 @@ const TOOL_STATE_PATHS = [
   ".enum_manifest.json",
   "source_strings.json",
 ];
-// Files touched before each warm run, modelling a small edit.
+// Files touched before each warm run, modeling a small edit.
 const WARM_TOUCHED_FILES = 5;
 
 async function main() {

@@ -1,4 +1,4 @@
-# Run all 25 Palamedes example apps side by side in a single container, each
+# Run all 25 Palamedes matrix example apps side by side in a single container, each
 # on its fixed port from scripts/example-matrix.mjs. Built and run with Podman:
 #
 #   podman build -f Containerfile -t palamedes-examples .
@@ -48,7 +48,7 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile
 # `pnpm build` builds the workspace packages and compiles the native addon via
-# cargo; `pnpm build:examples` builds all 25 example apps.
+# cargo; `pnpm build:examples` builds every app in `examples/`.
 RUN pnpm build
 RUN pnpm build:examples
 # Drop build-only artifacts before they reach the runtime image: the compiled
@@ -74,7 +74,7 @@ COPY --from=build --chown=node:node /app /app
 # Global pnpm at the version pinned in package.json (packageManager) so the
 # unprivileged `node` user can run the example start scripts.
 RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
-# Run all 25 example servers as a non-root user (least privilege).
+# Run all 25 matrix example servers as a non-root user (least privilege).
 USER node
 
 # Fixed ports — informational only; the authoritative list is

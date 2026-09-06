@@ -14,6 +14,18 @@ The important design goal is a coherent i18n model from source to runtime:
 - one native core with OXC-powered transforms and extraction
 - thin host adapters for frameworks and bundlers
 
+The native core builds on three first-party Rust crates:
+
+- `ferrocat` (https://github.com/sebastian-software/ferrocat) owns catalog and
+  ICU semantics: PO and FCL parsing, merging, auditing, and compilation
+  (`/adr/006-ferrocat-as-catalog-and-icu-foundation.md`)
+- `ferromark` (https://github.com/sebastian-software/ferromark) owns CommonMark
+  and MDX parsing behind the MDX extraction path
+  (`crates/palamedes/src/mdx.rs`)
+- `ferralk` (https://github.com/sebastian-software/ferralk) owns parallel source
+  discovery during extraction
+  (`crates/palamedes-cli/src/commands/extract/sources.rs`)
+
 Verified integrations currently include Next.js, Vite, TanStack Start, Solid, Waku, React Router, and full-stack Remix v3.
 
 The framework matrix verifies that the same core works across different app
@@ -501,6 +513,8 @@ Read these first:
 
 Architecture and positioning:
 
+- `/crates/palamedes/src/mdx.rs` (MDX extraction on top of `ferromark`)
+- `/crates/palamedes-cli/src/commands/extract/sources.rs` (source discovery on top of `ferralk`)
 - `/docs/comparison-with-lingui.md`
 - `/docs/migrate-from-lingui.md`
 - `/docs/approach-comparison.md`

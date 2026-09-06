@@ -87,5 +87,5 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
     },
   ],
   copyright:
-    "MIT OR Apache-2.0 © 2026 Sebastian Software GmbH — built in the open, verified in CI.",
+    "MIT OR Apache-2.0 © 2025–2026 Sebastian Software GmbH — built in the open, verified in CI.",
 });
