@@ -9,7 +9,7 @@ export function HomeHero() {
         </p>
         <img src="/logo.svg" alt="" aria-hidden width={42} height={42} className="size-10" />
         <p className="micro text-right text-[10px] tracking-label text-ink/70 max-tight:hidden">
-          Source to runtime · MIT
+          Source to runtime · MIT OR Apache-2.0
         </p>
       </div>
 

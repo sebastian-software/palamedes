@@ -10,7 +10,7 @@
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
@@ -20,6 +20,8 @@
     "create-palamedes": "./bin/create-palamedes.mjs"
   },
   "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
     "README.md",
     "bin/"
   ],

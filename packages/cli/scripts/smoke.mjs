@@ -18,7 +18,8 @@ import { resolvePlatformPackage } from "./platform.mjs";
 const packageDir = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(packageDir, "../..");
 const expectedCliManifestFiles = [
-  "LICENSE",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
   "README.md",
   "bin/pmds",
   "scripts/run.mjs",
@@ -26,7 +27,8 @@ const expectedCliManifestFiles = [
   "scripts/native.mjs",
 ];
 const expectedPackedCliFiles = [
-  "package/LICENSE",
+  "package/LICENSE-APACHE",
+  "package/LICENSE-MIT",
   "package/README.md",
   "package/bin/pmds",
   "package/package.json",
@@ -259,11 +261,16 @@ function assertPackedCliRuntimeFiles(archivePath) {
   assertPackedCliFilesRejectMutations();
 }
 
-// The native packages publish through `npm publish`, which does not embed the
-// workspace-root LICENSE the way `pnpm publish` does for @palamedes/cli.
+// Neither `npm publish` nor `pnpm publish` embeds a workspace-root
+// `LICENSE-MIT`/`LICENSE-APACHE` pair on its own, so
+// `scripts/sync-package-licenses.mjs` copies both texts into every publishable
+// package and this asserts that they survive packing.
 function assertPackedNativeLicense(archivePath) {
-  if (!readTarEntries(archivePath).includes("package/LICENSE")) {
-    throw new Error(`The packed ${platformPackage} package ships no LICENSE.`);
+  const entries = readTarEntries(archivePath);
+  for (const licenseFile of ["package/LICENSE-APACHE", "package/LICENSE-MIT"]) {
+    if (!entries.includes(licenseFile)) {
+      throw new Error(`The packed ${platformPackage} package ships no ${licenseFile}.`);
+    }
   }
 }
 

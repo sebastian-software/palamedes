@@ -4,7 +4,7 @@
   "description": "Windows x64 native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
@@ -14,7 +14,8 @@
     "pmds": "./bin/pmds.exe"
   },
   "files": [
-    "LICENSE",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
     "README.md",
     "bin/"
   ],

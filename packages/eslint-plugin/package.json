@@ -11,14 +11,15 @@
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/eslint-plugin"
   },
   "files": [
-    "LICENSE",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
     "README.md",
     "dist/"
   ],

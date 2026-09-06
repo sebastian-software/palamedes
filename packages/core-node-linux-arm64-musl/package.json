@@ -4,14 +4,15 @@
   "description": "Linux arm64 musl native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/core-node-linux-arm64-musl"
   },
   "files": [
-    "LICENSE",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
     "README.md",
     "palamedes-node.node"
   ],

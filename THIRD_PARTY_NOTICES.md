@@ -31,8 +31,8 @@ Duotone** collection.
 Copyright © Streamline Design Inc. All rights reserved.
 
 These assets are used under a paid Streamline Premium license. They remain the
-property of Streamline Design Inc., are not licensed under the Palamedes MIT
-License, and may be used only in the context of the Palamedes open-source
+property of Streamline Design Inc., are not licensed under the Palamedes
+MIT OR Apache-2.0 license, and may be used only in the context of the Palamedes open-source
 project. They may not be extracted, redistributed, sold, or offered as a
 standalone asset collection.
 

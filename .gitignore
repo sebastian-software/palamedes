@@ -53,3 +53,9 @@ docs/plan/
 
 # Local extraction cache (ADR-019)
 .palamedes/
+
+# License texts copied into every publishable package by
+# scripts/sync-package-licenses.mjs. The sources are the repository root
+# LICENSE-MIT and LICENSE-APACHE.
+packages/*/LICENSE-APACHE
+packages/*/LICENSE-MIT
