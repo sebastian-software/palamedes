@@ -189,13 +189,13 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm check-types
 
-      # minimum-release-age=0 mirrors the apply invocation in
-      # renovate-config/standards.json: pnpm defaults minimumReleaseAge to 1440
-      # (24h), so without the bypass `check` resolves the newest standards older
-      # than a day while the stamp was written by apply against the true latest.
+      # `@sebastian-software/standards` is a pinned devDependency, so this runs
+      # the exact version the lockfile records and CI executes nothing that was
+      # not reviewed in a pull request. Renovate's `:standards` preset bumps the
+      # pin; the drift it then reports is applied in that same pull request.
       - name: Check org standards
         if: ${{ matrix.full }}
-        run: pnpm --config.minimum-release-age=0 dlx @sebastian-software/standards check
+        run: pnpm exec standards check
 
   validate-musl-native:
     name: validate musl native (linux ${{ matrix.arch }})
