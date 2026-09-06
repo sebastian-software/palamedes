@@ -1,16 +1,16 @@
 use super::{
+    CatalogArtifactConfig, CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest,
+    CatalogArtifactSelectedRequest, CatalogCompilationCache, CatalogConfig, PalamedesCatalogFormat,
     compile_catalog_artifact, compile_catalog_artifact_selected,
-    compile_catalog_artifact_selected_cached, resolve_catalog_file_path, CatalogArtifactConfig,
-    CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
-    CatalogCompilationCache, CatalogConfig, PalamedesCatalogFormat,
+    compile_catalog_artifact_selected_cached, resolve_catalog_file_path,
 };
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 use std::collections::BTreeSet;
 use std::fs;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -523,20 +523,26 @@ msgstr "Konnte {firstName}'s Daten nicht laden"
     };
     let result = compile_catalog_artifact(&request).expect("catalog artifact");
 
-    assert!(!result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code == "compile.invalid_icu_message"));
-    assert!(result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code == "icu.missing_argument"
-            && diagnostic.source_key.message == "Couldn't load {name}"
-            && diagnostic.locale == "de"));
-    assert!(result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code == "icu.extra_argument"));
+    assert!(
+        !result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "compile.invalid_icu_message")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+                && diagnostic.source_key.message == "Couldn't load {name}"
+                && diagnostic.locale == "de")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.extra_argument")
+    );
 }
 
 #[test]
@@ -638,16 +644,20 @@ msgstr "Hallo {firstName}"
     };
     let result = compile_catalog_artifact(&request).expect("catalog artifact");
 
-    assert!(result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code == "icu.missing_argument"
-            && diagnostic.source_key.message == "Hello {name}"
-            && diagnostic.locale == "de"));
-    assert!(result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code == "icu.extra_argument"));
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+                && diagnostic.source_key.message == "Hello {name}"
+                && diagnostic.locale == "de")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.extra_argument")
+    );
 }
 
 #[test]
@@ -708,9 +718,11 @@ msgstr "Hallo"
             .map(String::as_str),
         Some("Hallo")
     );
-    assert!(!result
-        .messages
-        .contains_key(&compiled_key("Only source", None)));
+    assert!(
+        !result
+            .messages
+            .contains_key(&compiled_key("Only source", None))
+    );
 }
 
 #[test]
@@ -880,8 +892,8 @@ fn selected_catalog_cache_keeps_identical_builds_coalesced_under_capacity_pressu
     .expect("capacity pressure build");
 
     let second_cache = Arc::clone(&cache);
-    let second_fixture = fixture.clone();
-    let second_dir = locale_dir.clone();
+    let second_fixture = fixture;
+    let second_dir = locale_dir;
     let second = thread::spawn(move || {
         compile_catalog_artifact_selected_cached(
             &second_cache,
@@ -921,10 +933,12 @@ fn selected_catalog_cache_cleans_up_an_unwinding_in_flight_build() {
         }
     }));
     let request = selected_request(&fixture, &locale_dir, "Hello");
-    assert!(catch_unwind(AssertUnwindSafe(|| {
-        compile_catalog_artifact_selected_cached(&cache, &request)
-    }))
-    .is_err());
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            compile_catalog_artifact_selected_cached(&cache, &request)
+        }))
+        .is_err()
+    );
 
     cache.clear_before_build_hook();
     compile_catalog_artifact_selected_cached(&cache, &request)
@@ -980,10 +994,12 @@ msgstr "Hallo {firstName}"
     let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
 
     assert_eq!(result.messages.len(), 1);
-    assert!(result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.code == "icu.missing_argument"));
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.missing_argument")
+    );
 }
 
 #[test]
@@ -1034,10 +1050,12 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_kinds() {
             .collect::<BTreeSet<_>>()
     );
     assert_eq!(result.missing.len(), 4);
-    assert!(result
-        .missing
-        .iter()
-        .all(|missing| missing.resolved_locale.as_deref() == Some("en")));
+    assert!(
+        result
+            .missing
+            .iter()
+            .all(|missing| missing.resolved_locale.as_deref() == Some("en"))
+    );
 }
 
 #[test]
@@ -1154,17 +1172,23 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
         diagnostic.severity == CatalogArtifactDiagnosticSeverity::Warning
             && diagnostic.locale == "de"
     }));
-    assert!(diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.source_key.message
-            == "Compact {amount, number, ::compact-short}"));
-    assert!(diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.source_key.message
-            == "Bare currency {amount, number, currency/EUR}"));
-    assert!(diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.source_key.message == "Pattern {when, date, yyyy-MM-dd}"));
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.source_key.message
+                == "Compact {amount, number, ::compact-short}")
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.source_key.message
+                == "Bare currency {amount, number, currency/EUR}")
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.source_key.message == "Pattern {when, date, yyyy-MM-dd}")
+    );
 }
 
 #[test]
@@ -1399,12 +1423,16 @@ const colliding = <Trans>{user.name} vs {team.name}</Trans>;
 
     // The embedded runtime message text is untouched: only the key is derived
     // from the canonical form.
-    assert!(transformed
-        .code
-        .contains(r#"message: "Don't greet {name}""#));
-    assert!(transformed
-        .code
-        .contains(r#"message={"Don't wave at {name}"}"#));
+    assert!(
+        transformed
+            .code
+            .contains(r#"message: "Don't greet {name}""#)
+    );
+    assert!(
+        transformed
+            .code
+            .contains(r#"message={"Don't wave at {name}"}"#)
+    );
 }
 
 fn create_fixture_dir(prefix: &str) -> PathBuf {

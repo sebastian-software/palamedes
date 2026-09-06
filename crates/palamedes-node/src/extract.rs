@@ -5,7 +5,7 @@ use napi_derive::napi;
 
 use crate::catalog::CatalogUpdateMessage;
 use crate::mdx::NativeMdxOptions;
-use crate::shared::{checked_optional_u32, checked_u32, to_napi_error, BlockingTask};
+use crate::shared::{BlockingTask, checked_optional_u32, checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct ExtractedMessageOrigin {

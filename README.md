@@ -3,7 +3,7 @@
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
 [![Repository Node >=22.22.0](https://img.shields.io/badge/repository%20node-%3E%3D22.22.0-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-0f172a.svg)](https://github.com/sebastian-software/palamedes#license)
 [![palamedes version](https://img.shields.io/npm/v/palamedes?label=palamedes)](https://www.npmjs.com/package/palamedes)
 [![palamedes downloads](https://img.shields.io/npm/dm/palamedes?label=downloads)](https://www.npmjs.com/package/palamedes)
 [![@palamedes/cli version](https://img.shields.io/npm/v/%40palamedes%2Fcli?label=pmds)](https://www.npmjs.com/package/@palamedes/cli)
@@ -419,9 +419,10 @@ pnpm check-types
 
 ## License
 
-MIT © Sebastian Software GmbH — see [LICENSE](./LICENSE).
+Licensed under either of [MIT](./LICENSE-MIT) or
+[Apache-2.0](./LICENSE-APACHE) at your option, © Sebastian Software GmbH.
 
-The MIT license does not cover third-party marks or Streamline visual assets.
+Neither license covers third-party marks or Streamline visual assets.
 See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for their separate terms
 and required attribution.
 

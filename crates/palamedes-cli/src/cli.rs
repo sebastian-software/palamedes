@@ -6,7 +6,7 @@
 
 use clap::{Parser, Subcommand};
 
-use crate::command::{execute, Context};
+use crate::command::{Context, execute};
 use crate::commands::audit::AuditOptions;
 use crate::commands::catalog::{CatalogCommand, CatalogSubcommand};
 use crate::commands::extract::ExtractOptions;

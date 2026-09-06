@@ -11,14 +11,14 @@ use notify::{RecursiveMode, Watcher};
 use palamedes::{ExtractCache, PalamedesCatalogFormat};
 
 use crate::commands::extract::cache::{
-    load_extract_cache, persist_extract_cache_for_watch, rebuild_extract_cache_for_reload,
-    CachePersistenceWarnings,
+    CachePersistenceWarnings, load_extract_cache, persist_extract_cache_for_watch,
+    rebuild_extract_cache_for_reload,
 };
 use crate::commands::extract::sources::{
     build_exclude_set, build_include_set, normalized_include_patterns, walk_roots_for_patterns,
 };
-use crate::commands::extract::{run_extraction_with_cache, ExtractOptions};
-use crate::config::{load_config, LoadedConfig};
+use crate::commands::extract::{ExtractOptions, run_extraction_with_cache};
+use crate::config::{LoadedConfig, load_config};
 use crate::error::CliError;
 
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(150);
@@ -354,11 +354,11 @@ mod tests {
     use palamedes::ExtractCache;
 
     use super::{
-        reload_config_for_watch, run_watch_extraction, touches_config, WatchMatchers, WatchPaths,
+        WatchMatchers, WatchPaths, reload_config_for_watch, run_watch_extraction, touches_config,
     };
     use crate::commands::extract::cache::{
-        load_extract_cache, persist_extract_cache_for_watch, rebuild_extract_cache_for_reload,
-        CachePersistenceWarnings,
+        CachePersistenceWarnings, load_extract_cache, persist_extract_cache_for_watch,
+        rebuild_extract_cache_for_reload,
     };
     use crate::commands::extract::test_support::{
         age_file, cached_extract_options, extract_options,
@@ -397,9 +397,11 @@ mod tests {
         let canonical_source = fs::canonicalize(&source_path).expect("canonical source");
         let canonical_config =
             fs::canonicalize(real_app.join("palamedes.yaml")).expect("canonical config");
-        assert!(WatchPaths::build(&config)
-            .roots
-            .contains(&fs::canonicalize(&real_app).expect("canonical project root")));
+        assert!(
+            WatchPaths::build(&config)
+                .roots
+                .contains(&fs::canonicalize(&real_app).expect("canonical project root"))
+        );
         assert!(matchers.matches(&canonical_source));
         assert!(touches_config(
             std::slice::from_ref(&canonical_config),
@@ -438,9 +440,11 @@ catalogs:
         let config = load_config(&app, Some(&config_path)).expect("load config");
 
         let canonical_sources = fs::canonicalize(&sources).expect("canonical sources");
-        assert!(WatchPaths::build(&config)
-            .roots
-            .contains(&canonical_sources));
+        assert!(
+            WatchPaths::build(&config)
+                .roots
+                .contains(&canonical_sources)
+        );
         assert!(WatchMatchers::build(&config).matches(&canonical_sources.join("page.tsx")));
         assert!(
             !WatchMatchers::build(&config).matches(&canonical_sources.join("generated/build.ts"))
@@ -662,9 +666,11 @@ catalogs:
             .expect("first extraction");
 
         let catalog_path = app.join("locales/en/messages.po");
-        assert!(fs::read_to_string(&catalog_path)
-            .expect("read catalog")
-            .contains("#: app/page.tsx"));
+        assert!(
+            fs::read_to_string(&catalog_path)
+                .expect("read catalog")
+                .contains("#: app/page.tsx")
+        );
 
         // Origins move to the git root; every source file is unchanged, so
         // without a rebuilt cache the catalog would keep the old origins.
@@ -684,9 +690,11 @@ catalogs:
         run_watch_extraction(&reloaded, &options, &mut cache, &mut cache_warnings)
             .expect("extraction after reload");
 
-        assert!(fs::read_to_string(&catalog_path)
-            .expect("read catalog")
-            .contains("#: apps/web/app/page.tsx"));
+        assert!(
+            fs::read_to_string(&catalog_path)
+                .expect("read catalog")
+                .contains("#: apps/web/app/page.tsx")
+        );
 
         // Rule levels contribute to the source-analysis cache stamp too.
         // Reloading only a rule must therefore discard stale analysis.

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use ferrocat::{
-    pseudolocalize_compiled_catalog_artifact, CompileCatalogArtifactIcuOptions,
-    CompiledCatalogPseudolocalizationOptions, IcuArgumentKind, IcuDiagnosticSeverity, IcuFormatter,
-    IcuFormatterSupport, IcuPseudolocalizationOptions,
+    CompileCatalogArtifactIcuOptions, CompiledCatalogPseudolocalizationOptions, IcuArgumentKind,
+    IcuDiagnosticSeverity, IcuFormatter, IcuFormatterSupport, IcuPseudolocalizationOptions,
+    pseudolocalize_compiled_catalog_artifact,
 };
 
 use crate::error::{PalamedesError, PalamedesResult};

@@ -7,7 +7,7 @@ mod update_endpoint;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use update_endpoint::{validate, UPDATE_ENDPOINT_ENV};
+use update_endpoint::{UPDATE_ENDPOINT_ENV, validate};
 
 const VALID_ENDPOINT: &str = "https://version-service.sebastian-software.de/check";
 

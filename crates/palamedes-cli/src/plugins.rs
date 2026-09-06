@@ -13,15 +13,15 @@ use std::io::{self, BufRead, BufReader, IsTerminal, Read, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Once;
 #[cfg(unix)]
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc;
-use std::sync::Once;
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use clap::CommandFactory;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use palamedes_plugin::{Event as PluginEvent, PluginDiagnostic, PluginManifest, Severity};
@@ -95,13 +95,13 @@ fn run_invocation(
          * the user has to fix before the namespace question even arises.
          */
         Err(CliError::Config(ConfigError::NotFound)) if invocation.config_path.is_none() => {
-            return Err(unknown_command_failure(&invocation.namespace))
+            return Err(unknown_command_failure(&invocation.namespace));
         }
         Err(error) => {
             return Err(PluginFailure::new(
                 "PLUGIN_CONFIG_FAILED",
                 error.to_string(),
-            ))
+            ));
         }
     };
     if config.plugins.is_empty() {
@@ -333,10 +333,8 @@ fn load_registry(
         .entries
         .retain(|key, _| active_cache_keys.contains(key));
     cache_dirty |= cache.entries.len() != cached_entry_count;
-    if cache_dirty {
-        if let Err(error) = save_plugin_manifest_cache(config, &cache) {
-            report_plugin_manifest_cache_failure(config, &error);
-        }
+    if cache_dirty && let Err(error) = save_plugin_manifest_cache(config, &cache) {
+        report_plugin_manifest_cache_failure(config, &error);
     }
     if let Some(namespace) = collision {
         return Err(PluginFailure::new(
@@ -694,19 +692,21 @@ fn invoke_binary(
 
     let mut stdout = BufReader::new(child.stdout.take().expect("piped plugin stdout"));
     let (stdout_tx, stdout_rx) = mpsc::sync_channel(1);
-    let reader = thread::spawn(move || loop {
-        let mut line = Vec::new();
-        let read = Read::take(&mut stdout, (policy.max_line_bytes + 1) as u64)
-            .read_until(b'\n', &mut line);
-        let message = match read {
-            Ok(0) => StdoutMessage::Eof,
-            Ok(_) if line.len() > policy.max_line_bytes => StdoutMessage::LineTooLong,
-            Ok(_) => StdoutMessage::Line(line),
-            Err(error) => StdoutMessage::ReadFailed(error),
-        };
-        let finished = !matches!(message, StdoutMessage::Line(_));
-        if stdout_tx.send(message).is_err() || finished {
-            break;
+    let reader = thread::spawn(move || {
+        loop {
+            let mut line = Vec::new();
+            let read = Read::take(&mut stdout, (policy.max_line_bytes + 1) as u64)
+                .read_until(b'\n', &mut line);
+            let message = match read {
+                Ok(0) => StdoutMessage::Eof,
+                Ok(_) if line.len() > policy.max_line_bytes => StdoutMessage::LineTooLong,
+                Ok(_) => StdoutMessage::Line(line),
+                Err(error) => StdoutMessage::ReadFailed(error),
+            };
+            let finished = !matches!(message, StdoutMessage::Line(_));
+            if stdout_tx.send(message).is_err() || finished {
+                break;
+            }
         }
     });
 
@@ -1368,13 +1368,13 @@ fn emit_result(invocation: &PluginInvocation, output: &PluginOutput) {
     }
     if let Some(text) = &output.text {
         println!("{text}");
-    } else if output.outputs.is_empty() {
-        if let Some(data) = &output.data {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(data).expect("plugin data JSON")
-            );
-        }
+    } else if output.outputs.is_empty()
+        && let Some(data) = &output.data
+    {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(data).expect("plugin data JSON")
+        );
     }
     for diagnostic in &output.diagnostics {
         eprintln!("{}", diagnostic.display());
@@ -1734,12 +1734,12 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use super::{
-        command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
-        persist_plugin_manifest_cache, plugin_catalogs, plugin_manifest_cache_path,
-        reserved_plugin_namespaces, resolve_binary_plugin, save_plugin_manifest_cache,
-        validate_manifest, validate_manifest_with_reserved_namespaces,
-        write_plugin_manifest_cache_warning_once, BinaryInvocation, InvocationPolicy, PluginEvent,
-        PluginInvocation, PluginManifest, PluginManifestCache, ResolvedPlugin, PROTOCOL_VERSION,
+        BinaryInvocation, InvocationPolicy, PROTOCOL_VERSION, PluginEvent, PluginInvocation,
+        PluginManifest, PluginManifestCache, ResolvedPlugin, command_namespace_tokens, finish_run,
+        is_kebab_name, matches_constraint, parse_event, persist_plugin_manifest_cache,
+        plugin_catalogs, plugin_manifest_cache_path, reserved_plugin_namespaces,
+        resolve_binary_plugin, save_plugin_manifest_cache, validate_manifest,
+        validate_manifest_with_reserved_namespaces, write_plugin_manifest_cache_warning_once,
     };
     use crate::config::load_config;
     use palamedes_plugin::ManifestCommand;
@@ -1751,8 +1751,10 @@ mod tests {
         assert_eq!(
             reserved_plugin_namespaces(),
             BTreeSet::from_iter(
-                ["extract", "lint", "audit", "report", "catalog", "version", "help"]
-                    .map(str::to_owned)
+                [
+                    "extract", "lint", "audit", "report", "catalog", "version", "help"
+                ]
+                .map(str::to_owned)
             )
         );
     }
@@ -2371,26 +2373,32 @@ plugins:
         fs::write(&implementation, changed).expect("change plugin implementation");
         let stale = load_registry(&config, &root, Path::new("pmds"), true)
             .expect("unchanged shim stays cached");
-        assert!(stale.plugins["alpha"]
-            .manifest
-            .commands
-            .contains_key("inspect"));
+        assert!(
+            stale.plugins["alpha"]
+                .manifest
+                .commands
+                .contains_key("inspect")
+        );
         assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
 
         let explicitly_refreshed = load_registry(&config, &root, Path::new("pmds"), false)
             .expect("explicitly refreshed registry");
-        assert!(explicitly_refreshed.plugins["alpha"]
-            .manifest
-            .commands
-            .contains_key("refreshed"));
+        assert!(
+            explicitly_refreshed.plugins["alpha"]
+                .manifest
+                .commands
+                .contains_key("refreshed")
+        );
         assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
 
         let warm = load_registry(&config, &root, Path::new("pmds"), true)
             .expect("refreshed cache is reusable");
-        assert!(warm.plugins["alpha"]
-            .manifest
-            .commands
-            .contains_key("refreshed"));
+        assert!(
+            warm.plugins["alpha"]
+                .manifest
+                .commands
+                .contains_key("refreshed")
+        );
         assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
     }
 

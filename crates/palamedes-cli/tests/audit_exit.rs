@@ -36,8 +36,10 @@ fn audit_warning_threshold_prints_failed_status_and_exits_its_policy_code() {
 
     let default = audit(&fixture, &[]);
     assert!(default.status.success(), "{default:?}");
-    assert!(String::from_utf8_lossy(&default.stdout)
-        .contains("Catalog audit passed: 0 error(s), 1 warning(s), 0 info"));
+    assert!(
+        String::from_utf8_lossy(&default.stdout)
+            .contains("Catalog audit passed: 0 error(s), 1 warning(s), 0 info")
+    );
 
     let fail_on_warning = audit(&fixture, &["--fail-on", "warning"]);
     assert_eq!(
@@ -45,8 +47,10 @@ fn audit_warning_threshold_prints_failed_status_and_exits_its_policy_code() {
         Some(5),
         "{fail_on_warning:?}"
     );
-    assert!(String::from_utf8_lossy(&fail_on_warning.stdout)
-        .contains("Catalog audit failed: 0 error(s), 1 warning(s), 0 info"));
+    assert!(
+        String::from_utf8_lossy(&fail_on_warning.stdout)
+            .contains("Catalog audit failed: 0 error(s), 1 warning(s), 0 info")
+    );
 
     fs::remove_dir_all(fixture).expect("cleanup");
 }
@@ -63,8 +67,10 @@ fn audit_info_threshold_prints_failed_status_and_exits_its_policy_code() {
 
     let default = audit(&fixture, &[]);
     assert!(default.status.success(), "{default:?}");
-    assert!(String::from_utf8_lossy(&default.stdout)
-        .contains("Catalog audit passed: 0 error(s), 0 warning(s), 1 info"));
+    assert!(
+        String::from_utf8_lossy(&default.stdout)
+            .contains("Catalog audit passed: 0 error(s), 0 warning(s), 1 info")
+    );
 
     let fail_on_info = audit(&fixture, &["--fail-on", "info"]);
     assert_eq!(fail_on_info.status.code(), Some(5), "{fail_on_info:?}");

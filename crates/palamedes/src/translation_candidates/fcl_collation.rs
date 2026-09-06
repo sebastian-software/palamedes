@@ -26,7 +26,7 @@ Known limits:
   is only code-point order here.
 */
 
-use super::fcl_collation_table::{Row, EXTRA, MARK_START, MARK_WEIGHTS, RANGE_START, ROWS};
+use super::fcl_collation_table::{EXTRA, MARK_START, MARK_WEIGHTS, RANGE_START, ROWS, Row};
 
 /// Sort key reproducing CLDR root order for the covered repertoire.
 ///
@@ -78,13 +78,12 @@ fn is_combining(character: char) -> bool {
 }
 
 fn row(character: char) -> Option<&'static Row> {
-    if let Some(offset) = u32::from(character).checked_sub(RANGE_START) {
-        if let Some(row) = usize::try_from(offset)
+    if let Some(offset) = u32::from(character).checked_sub(RANGE_START)
+        && let Some(row) = usize::try_from(offset)
             .ok()
             .and_then(|index| ROWS.get(index))
-        {
-            return Some(row);
-        }
+    {
+        return Some(row);
     }
 
     // Typographic characters sit far above the dense range, so they use a

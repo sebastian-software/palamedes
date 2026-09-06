@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ObjectExpression, ObjectProperty, ObjectPropertyKind,
 };
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::{Visit, walk};
 use oxc_span::GetSpan;
 
 use crate::choice::{
@@ -13,7 +13,7 @@ use crate::choice::{
 use crate::descriptor::{descriptor_property_value, unsupported_macro_syntax};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::escape_icu_literal;
-use crate::jsx_message::{join_jsx_message_parts, JsxMessagePart};
+use crate::jsx_message::{JsxMessagePart, join_jsx_message_parts};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_message::{lower_template, make_unique_value_name};

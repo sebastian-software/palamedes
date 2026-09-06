@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 use ferrocat::{
-    combine_catalog_files as ferrocat_combine_catalog_files,
-    combine_catalogs as ferrocat_combine_catalogs, CatalogCombineInput as FerrocatCombineInput,
-    CatalogMode, CombineCatalogFilesOptions, CombineCatalogOptions, OrderBy,
+    CatalogCombineInput as FerrocatCombineInput, CatalogMode, CombineCatalogFilesOptions,
+    CombineCatalogOptions, OrderBy, combine_catalog_files as ferrocat_combine_catalog_files,
+    combine_catalogs as ferrocat_combine_catalogs,
 };
 
-use crate::catalog_update::{po_serialize_options, PoOutputOptions};
-use crate::error::{PalamedesError, PalamedesResult};
 use crate::PalamedesCatalogFormat;
+use crate::catalog_update::{PoOutputOptions, po_serialize_options};
+use crate::error::{PalamedesError, PalamedesResult};
 
 pub use ferrocat::{
     CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
@@ -165,9 +165,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        combine_catalog_files, combine_catalogs, CatalogCombineInput, CatalogCombineRequest,
-        CatalogCombineSelection, CatalogConflictStrategy, CatalogFileCombineRequest,
-        PalamedesCatalogFormat,
+        CatalogCombineInput, CatalogCombineRequest, CatalogCombineSelection,
+        CatalogConflictStrategy, CatalogFileCombineRequest, PalamedesCatalogFormat,
+        combine_catalog_files, combine_catalogs,
     };
 
     #[test]
@@ -193,10 +193,12 @@ mod tests {
 
         assert!(result.content.contains("Hallo"));
         assert_eq!(result.stats.conflicts_resolved, 1);
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "combine.conflict_resolved"));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "combine.conflict_resolved")
+        );
     }
 
     #[test]
@@ -406,18 +408,24 @@ mod tests {
 
         let parsed = ferrocat::parse_po(&fs::read_to_string(output).expect("read output"))
             .expect("parse output");
-        assert!(parsed
-            .items
-            .iter()
-            .any(|item| item.msgid == "Open" && item.msgctxt.is_none()));
-        assert!(parsed
-            .items
-            .iter()
-            .any(|item| item.msgid == "Open" && item.msgctxt.as_deref() == Some("")));
-        assert!(parsed
-            .items
-            .iter()
-            .any(|item| item.msgid == "Open" && item.msgctxt.as_deref() == Some("menu")));
+        assert!(
+            parsed
+                .items
+                .iter()
+                .any(|item| item.msgid == "Open" && item.msgctxt.is_none())
+        );
+        assert!(
+            parsed
+                .items
+                .iter()
+                .any(|item| item.msgid == "Open" && item.msgctxt.as_deref() == Some(""))
+        );
+        assert!(
+            parsed
+                .items
+                .iter()
+                .any(|item| item.msgid == "Open" && item.msgctxt.as_deref() == Some("menu"))
+        );
         assert!(!parsed.items.iter().any(|item| item.msgid == "Old"));
     }
 
@@ -502,9 +510,11 @@ mod tests {
         })
         .expect_err("unsupported format");
 
-        assert!(error
-            .to_string()
-            .contains("could not infer catalog file format"));
+        assert!(
+            error
+                .to_string()
+                .contains("could not infer catalog file format")
+        );
         assert_eq!(
             fs::read_to_string(output).expect("read output"),
             "unchanged"

@@ -6,14 +6,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::canonicalize_runtime_icu;
-use ferrocat::{
-    parse_catalog as ferrocat_parse_catalog, update_catalog as ferrocat_update_catalog,
-    update_catalog_file as ferrocat_update_catalog_file, ApiError, CatalogOrigin, CatalogStats,
-    CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef, ObsoleteStrategy,
-    ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions, SerializeOptions,
-    SourceExtractedMessage, UpdateCatalogFileOptions, UpdateCatalogOptions,
-};
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
+use ferrocat::{
+    ApiError, CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult,
+    EffectiveTranslationRef, ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog,
+    PlaceholderCommentMode, RenderOptions, SerializeOptions, SourceExtractedMessage,
+    UpdateCatalogFileOptions, UpdateCatalogOptions, parse_catalog as ferrocat_parse_catalog,
+    update_catalog as ferrocat_update_catalog, update_catalog_file as ferrocat_update_catalog_file,
+};
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
@@ -737,12 +737,12 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        parse_catalog, preview_catalog_file_update, update_catalog_file, CatalogParseRequest,
-        CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, PoLineBreaks,
-        PoOutputOptions,
+        CatalogParseRequest, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
+        PoLineBreaks, PoOutputOptions, parse_catalog, preview_catalog_file_update,
+        update_catalog_file,
     };
     use crate::parse_po;
-    use ferrocat::{machine_translation_hash, EffectiveTranslationRef};
+    use ferrocat::{EffectiveTranslationRef, machine_translation_hash};
 
     fn temp_file(name: &str) -> String {
         temp_file_with_extension(name, "po")
@@ -805,12 +805,16 @@ mod tests {
         );
 
         let output = std::fs::read_to_string(&path).expect("read output");
-        assert!(output
-            .lines()
-            .any(|line| line == format!("msgid \"{long}\"")));
-        assert!(output
-            .lines()
-            .any(|line| line == format!("msgstr \"{long}\"")));
+        assert!(
+            output
+                .lines()
+                .any(|line| line == format!("msgid \"{long}\""))
+        );
+        assert!(
+            output
+                .lines()
+                .any(|line| line == format!("msgstr \"{long}\""))
+        );
     }
 
     #[test]

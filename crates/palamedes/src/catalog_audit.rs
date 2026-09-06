@@ -3,19 +3,19 @@ use std::fs;
 use std::path::PathBuf;
 
 use ferrocat::{
-    parse_catalog_for_review, parse_icu, CatalogAuditIcuOptions, CatalogAuditOptions,
-    CatalogMessage, EffectiveTranslationRef, IcuMessage, IcuNode, NormalizedParsedCatalog,
-    ParseCatalogOptions,
+    CatalogAuditIcuOptions, CatalogAuditOptions, CatalogMessage, EffectiveTranslationRef,
+    IcuMessage, IcuNode, NormalizedParsedCatalog, ParseCatalogOptions, parse_catalog_for_review,
+    parse_icu,
 };
 use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_text::{canonicalize_runtime_icu, RUNTIME_ICU_SYNTAX_POLICY};
+use crate::icu_text::{RUNTIME_ICU_SYNTAX_POLICY, canonicalize_runtime_icu};
 use crate::message_metadata::MessageMetadataInput;
 
-use super::catalog_artifact::{resolve_catalog_path, CatalogArtifactConfig, CatalogConfig};
+use super::catalog_artifact::{CatalogArtifactConfig, CatalogConfig, resolve_catalog_path};
 
 /// Request for auditing configured catalogs.
 #[derive(Debug, Deserialize)]
@@ -452,7 +452,7 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{audit_catalogs, CatalogAuditCheckOptions, CatalogAuditRequest};
+    use super::{CatalogAuditCheckOptions, CatalogAuditRequest, audit_catalogs};
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat};
 
     #[test]
@@ -492,16 +492,20 @@ msgstr "Hallo {firstName}"
         .expect("audit");
 
         assert!(result.summary.errors >= 2);
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "icu.missing_argument"
-                && diagnostic.locale.as_deref() == Some("de")));
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "catalog.missing_locale"
-                && diagnostic.locale.as_deref() == Some("es")));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+                    && diagnostic.locale.as_deref() == Some("de"))
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "catalog.missing_locale"
+                    && diagnostic.locale.as_deref() == Some("es"))
+        );
     }
 
     #[test]
@@ -686,10 +690,12 @@ msgstr "{count, plural, one {Eine Site ist abgedeckt} other {{site} und weitere 
         })
         .expect("audit");
 
-        assert!(!result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "icu.argument_occurrence_mismatch"));
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "icu.argument_occurrence_mismatch")
+        );
     }
 
     #[test]
@@ -734,10 +740,12 @@ msgstr "Wir haben {count, plural, one {einen freien Termin} other {# freie Termi
         })
         .expect("audit");
 
-        assert!(!result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"));
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "icu.invalid_syntax")
+        );
     }
 
     #[test]
@@ -778,11 +786,13 @@ msgstr "L'{title} est bereit"
         })
         .expect("audit");
 
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "icu.missing_argument"
-                && diagnostic.locale.as_deref() == Some("de")));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+                    && diagnostic.locale.as_deref() == Some("de"))
+        );
     }
 
     #[test]
@@ -809,11 +819,13 @@ msgstr "L'{title} est bereit"
         })
         .expect("audit");
 
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "catalog.fuzzy_flag"
-                && diagnostic.locale.as_deref() == Some("de")));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "catalog.fuzzy_flag"
+                    && diagnostic.locale.as_deref() == Some("de"))
+        );
     }
 
     #[test]
@@ -852,11 +864,13 @@ msgstr "Hallo {{name}}"
         })
         .expect("audit");
 
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"
-                && diagnostic.locale.as_deref() == Some("de")));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"
+                    && diagnostic.locale.as_deref() == Some("de"))
+        );
     }
 
     fn config(root: &std::path::Path) -> CatalogArtifactConfig {

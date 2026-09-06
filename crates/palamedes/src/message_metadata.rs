@@ -495,8 +495,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        derive_message_metadata, validate_message_metadata, MessageArgumentKind,
-        MessageArgumentMetadataInput, MessageMetadataInput,
+        MessageArgumentKind, MessageArgumentMetadataInput, MessageMetadataInput,
+        derive_message_metadata, validate_message_metadata,
     };
 
     #[test]
@@ -529,10 +529,12 @@ mod tests {
 
         let report = validate_message_metadata(input.clone());
 
-        assert!(report
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "metadata.extra_argument"));
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "metadata.extra_argument")
+        );
 
         input.args = Some(BTreeMap::from([(
             "name".to_owned(),
