@@ -6,6 +6,18 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const README = "README.md";
 const GITHUB_BLOB_PREFIX = "https://github.com/sebastian-software/palamedes/blob/main/";
 
+/*
+ * The two generated sections that close the README, in the order they have to
+ * appear. The family block is rendered from the Ferramenta registry by
+ * `pnpm readme:family`; the branding footer is written by
+ * `@sebastian-software/standards`. Neither is hand-edited, and the family block
+ * always sits above the footer so the two marker sections never fight.
+ */
+const FAMILY_START = "<!-- ferramenta-family:start -->";
+const FAMILY_END = "<!-- ferramenta-family:end -->";
+const FAMILY_HEADING = "The Ferramenta family";
+const BRANDING_START = "<!-- sebastian-software-branding:start -->";
+
 function fail(message) {
   throw new Error(`README information architecture: ${message}`);
 }
@@ -192,6 +204,43 @@ function localTarget(target) {
   return target;
 }
 
+function occurrences(markdown, marker) {
+  return markdown.split(marker).length - 1;
+}
+
+/*
+ * The family block is generated, so this contract only guards what generation
+ * cannot: that the block is still there, that it still carries its heading, and
+ * that it stays the last thing the README says before the company footer. Drift
+ * inside the block is a separate gate — `pnpm readme:family:check` compares it
+ * against the pinned registry.
+ */
+function checkFamilyBlock(markdown, sections) {
+  for (const marker of [FAMILY_START, FAMILY_END]) {
+    const count = occurrences(markdown, marker);
+    if (count !== 1) fail(`expected exactly one ${marker}, found ${count}`);
+  }
+
+  const start = markdown.indexOf(FAMILY_START);
+  const end = markdown.indexOf(FAMILY_END) + FAMILY_END.length;
+  if (end <= start) fail("the family block ends before it starts");
+
+  const family = sections.find((section) => section.heading === FAMILY_HEADING);
+  if (!family) fail(`missing the generated "${FAMILY_HEADING}" section`);
+  if (family.index < start || family.index > end) {
+    fail(`the "${FAMILY_HEADING}" heading must live inside the generated block`);
+  }
+  if (sections.at(-1) !== family) {
+    fail(
+      `"${FAMILY_HEADING}" must be the last section; run \`pnpm readme:family\` after adding one`,
+    );
+  }
+
+  const branding = markdown.indexOf(BRANDING_START);
+  if (branding === -1) fail("missing the standards-owned branding footer");
+  if (branding < end) fail("the family block must sit above the branding footer");
+}
+
 export function checkReadmeInformationArchitecture({ read, exists }) {
   const markdown = read(README);
   const sections = secondLevelSections(markdown);
@@ -230,6 +279,8 @@ export function checkReadmeInformationArchitecture({ read, exists }) {
   if (!start.body.includes("[Skip to the proof](#proof-you-can-inspect)")) {
     fail("Start Here must offer evaluators a direct proof path");
   }
+
+  checkFamilyBlock(markdown, sections);
 
   for (const target of markdownLinks(markdown)) {
     const local = localTarget(target);

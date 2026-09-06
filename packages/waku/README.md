@@ -72,6 +72,13 @@ locale negotiation must `await next()`; middleware that returns a response
 early does not enter the i18n scope. Do not install a competing Palamedes
 server scope around this interceptor.
 
+<!-- ferramenta-family:start -->
+
+**palamedes** is part of the [Ferramenta](https://ferramenta.dev) family — Rust-native developer tools that keep the APIs the ecosystem already knows.
+
+Siblings: [ferroni](https://sebastian-software.github.io/ferroni/) · [ferriki](https://github.com/sebastian-software/ferriki) · [ferromark](https://sebastian-software.github.io/ferromark/) · [ferrolex](https://github.com/sebastian-software/ferrolex) · [ferrocat](https://ferrocat.dev) · [ferrovia](https://github.com/sebastian-software/ferrovia) · [ferralk](https://github.com/sebastian-software/ferralk) · [ferrugo](https://github.com/sebastian-software/ferrugo).
+<!-- ferramenta-family:end -->
+
 ## License
 
 MIT OR Apache-2.0 © 2026 Sebastian Software

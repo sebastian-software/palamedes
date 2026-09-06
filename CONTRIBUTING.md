@@ -59,6 +59,7 @@ pnpm verify:examples:smoke
 pnpm check:release-set
 pnpm check:binary-size
 pnpm check:llms
+pnpm readme:family:check
 ```
 
 `pnpm check:binary-size` builds the release CLI and core-node addon and holds
@@ -165,6 +166,32 @@ changes, refresh the relevant level of detail in both files and run `pnpm
 check:llms`. The check ties the maintained context contract to the CLI docs,
 published package manifests, and exported Node API names; the site build copies
 the checked files to `palamedes.dev`.
+
+### The Ferramenta family block
+
+Palamedes is one of the [Ferramenta](https://ferramenta.dev) tools, and the
+family section at the bottom of the repository README — plus the two-line
+version in every published package README — is generated, never hand-edited.
+The registry in
+[sebastian-software/ferramenta](https://github.com/sebastian-software/ferramenta)
+is the single source of truth for the family's members, their one-line jobs,
+and their links, so a renamed tool reaches this repository as a regenerated
+block rather than as nineteen hand-copies that fall out of date at different
+speeds.
+
+```bash
+pnpm readme:family        # rewrite every block from the pinned registry
+pnpm readme:family:check  # exit 1 when a block drifted (part of pnpm test:readme)
+```
+
+Both commands run the generator straight from Git and need network access.
+`scripts/readme-family.mjs` pins the generator to a commit, not a branch, so the
+check means the same thing today and next month. To adopt a registry change,
+bump `GENERATOR_COMMIT` in that script and run `pnpm readme:family`; the block
+is generated, so the diff shows exactly what moved. `scripts/check-readme-ia.mjs`
+owns the placement contract: the block stays the last section of the README and
+stays above the standards-owned branding footer, which means new prose belongs
+above it.
 
 ## Pull Requests
 
