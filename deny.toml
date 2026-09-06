@@ -1,0 +1,52 @@
+# Seeded by @sebastian-software/standards. Widen it with narrow, reviewed
+# exceptions — never by loosening the org allow-list below.
+
+[graph]
+all-features = true
+
+[advisories]
+# A yanked crate still builds from Cargo.lock; it must not ship unnoticed.
+yanked = "deny"
+# Flag unmaintained crates anywhere in the graph, not only in the workspace.
+unmaintained = "all"
+# Each entry needs a comment naming the advisory and why it is accepted.
+ignore = []
+
+[licenses]
+# Permissive licenses compatible with `MIT OR Apache-2.0` distribution.
+allow = ["Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0", "Zlib"]
+confidence-threshold = 0.8
+# The org allow-list is shared across the family, so it names licenses this
+# workspace does not currently pull in.
+unused-allowed-license = "allow"
+
+# Crate-scoped grants that stay narrower than the allow-list above.
+[[licenses.exceptions]]
+# Offered as "Apache-2.0 WITH LLVM-exception OR BSL-1.0"; both are permissive.
+crate = "dragonbox_ecma"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+# CC0-1.0 is a public-domain dedication, not a copyleft license.
+crate = "notify"
+allow = ["CC0-1.0"]
+
+[[licenses.exceptions]]
+# Mozilla's CA bundle ships under the permissive CDLA-Permissive-2.0.
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
+[bans]
+# Duplicates are surfaced for maintenance review without blocking a safe build.
+multiple-versions = "warn"
+wildcards = "deny"
+# The workspace-internal crates are path dependencies without a version
+# requirement. None of them is published, so a wildcard cannot leak to a
+# registry consumer.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
