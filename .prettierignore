@@ -16,8 +16,3 @@ examples/tanstack-*/src/routeTree.gen.ts
 docs/example-screenshots/
 benchmarks/*/results/
 site/homepage-revamp-mocks/
-
-# The standards-owned marker section in AGENTS.md is written byte-exact by
-# `standards apply`; oxfmt would insert a blank line before its end marker and
-# the two would then overwrite each other on every standards update.
-AGENTS.md
