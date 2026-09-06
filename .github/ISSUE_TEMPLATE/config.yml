@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability
+  - name: Email a private security report
+    url: https://github.com/sebastian-software/palamedes/blob/main/SECURITY.md
+    about: Do not open a public issue. Email security@sebastian-software.de; this route always works.
+  - name: Open a private vulnerability advisory
     url: https://github.com/sebastian-software/palamedes/security/advisories/new
-    about: Report vulnerabilities privately instead of opening a public issue.
+    about: Use GitHub private vulnerability reporting once it is enabled for this repository.
