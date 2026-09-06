@@ -417,7 +417,7 @@ postinstall hook — and sends only this JSON shape over HTTPS:
 ```json
 {
   "project": "palamedes",
-  "version": "1.17.3",
+  "version": "<installed pmds version>",
   "os": "linux",
   "arch": "x86_64",
   "ci": false,
@@ -457,7 +457,7 @@ network operation has a two-second total deadline; a valid newer semantic
 version produces only this stderr notice after the command output:
 
 ```text
-A new version of palamedes is available: 1.17.3 → 1.18.0
+A new version of palamedes is available: <installed version> → <published version>
 ```
 
 Stdout and exit status are unchanged, including for `--json` commands. See

@@ -39,8 +39,19 @@ site/.react-router/
 .lingui/
 
 # Benchmark outputs
+#
+# Benchmark results stay in Git: the README's performance claim, the site's
+# benchmark ledger, and `scripts/verify-site-bench-data.mjs` all read the
+# checked-in report, so a run that is not committed cannot be verified. The
+# rule below therefore only hides incidental local files and keeps the two
+# artifacts the harnesses publish — the dated snapshot and the `latest`
+# pointer that copies it.
 benchmarks/*/results/*
 !benchmarks/*/results/.gitkeep
+!benchmarks/*/results/latest.json
+!benchmarks/*/results/latest.md
+!benchmarks/*/results/[0-9][0-9][0-9][0-9]-*.json
+!benchmarks/*/results/[0-9][0-9][0-9][0-9]-*.md
 benchmarks/*/.swc/
 
 # Browser verification artifacts

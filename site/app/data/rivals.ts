@@ -150,7 +150,7 @@ const RIVAL_SOURCE: RivalSource[] = [
     lede: "Lingui got the authoring model right, and we are not going to pretend otherwise — write the message where the UI happens, let the source string be the identity, keep catalogs translators already know. Palamedes agrees with every part of that, then replaces the machinery underneath: one Rust core instead of a JS plugin stack, one runtime access model instead of several.",
     card: `The closest relative — and the checked benchmark says ${publicFactor("lingui")} faster on the same workflow.`,
     facts: [
-      { label: "Licence", value: "MIT" },
+      { label: "License", value: "MIT" },
       { label: "Identity", value: "Source-derived or explicit IDs" },
       { label: "Catalogs", value: ".po, native" },
       {
@@ -272,7 +272,7 @@ function checkoutLabel(seats) {
     lede: "fbtee and Palamedes start from the same useful instinct: keep the sentence beside the interface and let a compiler do the bookkeeping. They disagree about where localization grammar should live. fbtee puts a purpose-built FBT language into JSX and compiles it into hashed JSON tables. Palamedes uses ICU messages, source-readable catalogs and one native engine from extraction through compilation.",
     card: "The modern FBT continuation — explicit grammar primitives and Expo support against standard PO/ICU catalogs and one native workflow.",
     facts: [
-      { label: "Licence", value: "MIT" },
+      { label: "License", value: "MIT" },
       { label: "Grammar model", value: "FBT primitives and IR" },
       { label: "Catalogs", value: "Hash-keyed JSON" },
       {
@@ -401,7 +401,7 @@ plural(seats, {
     lede: "i18next identifies messages by keys you invent, namespace, remember and keep in sync with a JSON tree. Palamedes identifies them by the source text you already typed. That single decision deletes a whole category of weekly work, changes what a missing translation looks like in production, and changes what lands in your translators' inbox.",
     card: "A key-first plugin architecture. One question splits it: do keys identify your messages, or does the text?",
     facts: [
-      { label: "Licence", value: "MIT" },
+      { label: "License", value: "MIT" },
       { label: "Identity", value: "Explicit keys + namespaces" },
       { label: "Catalogs", value: "JSON, key-based" },
       {
@@ -522,7 +522,7 @@ plural(seats, {
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
-      { label: "Licence", value: "MIT" },
+      { label: "License", value: "MIT" },
       { label: "Scope", value: "Next.js (use-intl for plain React)" },
       { label: "Message identity", value: "Explicit keys" },
       { label: "Routing", value: "Core feature" },
@@ -636,7 +636,7 @@ function buyLabel(seats) {
     lede: "React Intl set the standard for ICU MessageFormat in JavaScript and we have no argument with the format — we have an argument with the plumbing. Resolving messages through React Context was the right call in 2014 and it is the reason React Server Components are a workaround here rather than a supported path.",
     card: "The ICU standard-bearer. Same rigor here, minus the Context tree that blocks server components.",
     facts: [
-      { label: "Licence", value: "BSD-3-Clause" },
+      { label: "License", value: "BSD-3-Clause" },
       { label: "Runtime", value: "React Context" },
       { label: "Server components", value: "Not supported natively" },
       {
@@ -748,7 +748,7 @@ function buyLabel(seats) {
     lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. The tradeoffs are adopting the inlang project and plugin model and a key namespace you still have to design; both libraries deliberately load a new document when the locale changes.",
     card: "Zero runtime and smaller bundles, against source-string authoring and standard .po catalogs.",
     facts: [
-      { label: "Licence", value: "MIT" },
+      { label: "License", value: "MIT" },
       { label: "Architecture", value: "Compile-time codegen" },
       { label: "Catalogs", value: "Inlang project + plugin-backed files" },
       { label: "Locale switch", value: "Full page reload" },
@@ -865,7 +865,7 @@ function buyLabel(seats) {
     card: "An MIT client runtime with broad framework bindings. The split is explicit keys versus extracted source strings.",
     facts: [
       { label: "Compared code", value: "JavaScript client SDK only" },
-      { label: "SDK licence", value: "MIT" },
+      { label: "SDK license", value: "MIT" },
       { label: "Bindings", value: "React, Vue, Angular, Svelte" },
       { label: "Message identity", value: "Explicit keys" },
     ],
@@ -974,7 +974,7 @@ function buyLabel(seats) {
     lede: "Intlayer and Palamedes agree on something most of this field does not: the central JSON namespace was a mistake. Intlayer's answer is to declare a dictionary file beside each component. Ours is to read the string out of the component itself. That single difference decides how much work each new message costs you, and who has to name it.",
     card: "The other anti-namespace project. It declares dictionaries; we read the sentence you wrote.",
     facts: [
-      { label: "Licence", value: "Apache-2.0" },
+      { label: "License", value: "Apache-2.0" },
       { label: "Identity", value: "Explicit dictionary keys" },
       { label: "Catalog layout", value: "Co-located declarations" },
       { label: "ICU", value: "Selectable, not default" },
@@ -1182,7 +1182,7 @@ const RIVAL_SUPPORT: Record<string, Omit<Rival, keyof RivalSource | "faq">> = {
     outcomeProof: { label: "Inspect the catalog and ICU proof", href: "/proof" },
     evaluation: {
       title: "Test one-edit authoring on a representative feature",
-      body: "There is no documented Intlayer migration playbook yet. Keep the decision reversible by modelling one feature on a branch, reviewing the generated PO catalog and checking the source-to-runtime proof before committing to a catalog conversion.",
+      body: "There is no documented Intlayer migration playbook yet. Keep the decision reversible by modeling one feature on a branch, reviewing the generated PO catalog and checking the source-to-runtime proof before committing to a catalog conversion.",
       label: "Start a bounded evaluation",
       href: "/get-started",
     },

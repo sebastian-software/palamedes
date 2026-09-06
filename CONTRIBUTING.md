@@ -75,6 +75,18 @@ Use `pnpm verify:examples` when a change touches framework integration,
 runtime wiring, or `.po` loading. It is intentionally broader and slower than
 the package unit tests.
 
+## TypeScript Versions
+
+The workspace deliberately runs two TypeScript majors. Every published package
+and every example pins `typescript@^7`, which is what `pnpm check-types`
+compiles them with. The repository root and `site/` pin `typescript@^6`, and the
+root additionally declares `@typescript/typescript6` because the declaration
+bundler used by `pnpm build` (`rollup-plugin-dts`, via `unbuild`) resolves that
+package for its TypeScript 6 API. Do not "align" the two by bumping one side in
+isolation: change the package floor and the root/site toolchain together, and
+run `pnpm build`, `pnpm check-types`, and `pnpm --filter @palamedes/site
+typecheck` before assuming a single version works everywhere.
+
 ## Website Development
 
 Complete the repository prerequisites above, then start the website from the

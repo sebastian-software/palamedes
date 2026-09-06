@@ -4,6 +4,25 @@ Palamedes ships native packages for the CLI and the Node binding. Check this
 page before installing `@palamedes/cli` or a package that uses
 `@palamedes/core-node`.
 
+## Node.js Requirements
+
+Published packages declare their own Node.js floor, so there is no single
+number for the whole project. This table is the canonical list; the
+[stability policy](./stability.md) explains what those floors mean for support.
+
+| Node.js floor  | Applies to                                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `>=22.0.0`     | Every published package except the rows below, including `@palamedes/core`, `@palamedes/runtime`, `@palamedes/cli`, and the `@palamedes/core-node-*` addons |
+| `>=22.22.0`    | `@palamedes/react-router-rsc`, `@palamedes/tanstack`, `@palamedes/waku`                                                                                     |
+| `>=24.3.0`     | `@palamedes/remix`, whose floor follows the supported full-stack Remix v3 runtime                                                                           |
+| No declaration | The `@palamedes/cli-*` platform shells, which leave Node compatibility to their `@palamedes/cli` wrapper                                                    |
+| `>=22.22.0`    | This repository itself — development and CI, declared in the root `package.json` and shown by the repository Node badge                                     |
+
+The repository floor is stricter than every published package on purpose:
+contributors run the full workspace, not one integration. `pnpm check:llms`
+compares this table with the `engines.node` field of every published package,
+so a package that changes its floor fails the check until the table is updated.
+
 ## Supported Targets
 
 These are the six targets published for both native package families. The npm

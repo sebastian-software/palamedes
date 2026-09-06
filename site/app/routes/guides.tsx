@@ -47,7 +47,7 @@ export default function Guides() {
       <Section
         num="01 — Guides"
         title="Start with the one that is biting you."
-        lede="Each page names the problem in the terms you would recognise it by, then the approach, then the evidence, then the questions people ask afterwards."
+        lede="Each page names the problem in the terms you would recognize it by, then the approach, then the evidence, then the questions people ask afterwards."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           {TOPICS.map((topic) => (

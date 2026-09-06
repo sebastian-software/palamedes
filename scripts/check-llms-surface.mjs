@@ -218,10 +218,21 @@ function verifyPackages(read, listDirectories) {
   for (const file of ["llms.txt", "llms-full.txt"])
     assertContains(read(file), reservedBinContract, `${file} reserved-bin contract`);
 
+  /*
+   * The context files carry the whole Node contract inline: an agent reading
+   * them does not follow a link. Human-facing prose points at the canonical
+   * table in docs/platform-support.md instead of repeating the list a third
+   * time, which is how the floors drifted apart (#1155).
+   */
   const nodeSupportContract =
     "Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`.";
-  for (const file of ["README.md", "llms.txt", "llms-full.txt"])
+  for (const file of ["llms.txt", "llms-full.txt"])
     assertContains(read(file), nodeSupportContract, `${file} Node support contract`);
+  assertContains(
+    read("README.md"),
+    "[platform support table](docs/platform-support.md#nodejs-requirements)",
+    "README Node support pointer",
+  );
 
   const nodeEngineExceptions = packages
     .filter(({ nodeEngine }) => nodeEngine && nodeEngine !== ">=22.0.0")
@@ -236,6 +247,8 @@ function verifyPackages(read, listDirectories) {
     ],
     "Published package Node.js engine exceptions",
   );
+
+  verifyPlatformSupportNodeTable(read, packages);
 
   const missingNodeEngines = packages
     .filter(({ name, nodeEngine }) => !nodeEngine && platformParent(name) !== "@palamedes/cli")
@@ -254,6 +267,53 @@ function verifyPackages(read, listDirectories) {
     `Use Node.js \`${nextPluginNodeEngine}\``,
     "Next.js first-run Node requirement",
   );
+}
+
+/*
+ * Keeps the canonical Node.js floor table in docs/platform-support.md tied to
+ * the published `engines.node` fields: every non-default floor must name
+ * exactly the packages that declare it, and the repository row must repeat the
+ * root floor.
+ */
+function verifyPlatformSupportNodeTable(read, packages) {
+  const platformSupport = read("docs/platform-support.md");
+  const byEngine = new Map();
+  for (const { name, nodeEngine } of packages) {
+    if (!nodeEngine || nodeEngine === ">=22.0.0") continue;
+    byEngine.set(nodeEngine, [...(byEngine.get(nodeEngine) ?? []), name]);
+  }
+
+  for (const [engine, names] of byEngine) {
+    const row = platformSupport
+      .split(/\r?\n/u)
+      .find((line) => line.startsWith(`| \`${engine}\``) && !line.includes("This repository"));
+    if (!row) {
+      throw new Error(`docs/platform-support.md is missing a Node.js floor row for ${engine}`);
+    }
+    for (const name of names) {
+      assertContains(row, `\`${name}\``, `docs/platform-support.md ${engine} row`);
+    }
+    for (const [otherEngine, otherNames] of byEngine) {
+      if (otherEngine === engine) continue;
+      for (const name of otherNames) {
+        if (row.includes(`\`${name}\``)) {
+          throw new Error(
+            `docs/platform-support.md lists ${name} under the ${engine} floor; it declares ${otherEngine}`,
+          );
+        }
+      }
+    }
+  }
+
+  const rootNodeEngine = JSON.parse(read("package.json")).engines.node;
+  const repositoryRow = platformSupport
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith("| `") && line.includes("This repository"));
+  if (!repositoryRow?.startsWith(`| \`${rootNodeEngine}\``)) {
+    throw new Error(
+      `docs/platform-support.md must state the repository Node floor ${rootNodeEngine}`,
+    );
+  }
 }
 
 function verifyCli(read) {
