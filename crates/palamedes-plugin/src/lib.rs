@@ -43,8 +43,8 @@ use std::process::ExitCode;
 use serde_json::Value;
 
 pub use protocol::{
-    Catalog, Event, LocaleCatalog, ManifestCommand, PluginDiagnostic, PluginManifest, PluginResult,
-    Request, RequestKind, Severity, PROTOCOL_VERSION,
+    Catalog, Event, LocaleCatalog, ManifestCommand, PROTOCOL_VERSION, PluginDiagnostic,
+    PluginManifest, PluginResult, Request, RequestKind, Severity,
 };
 
 /// Environment variable carrying the absolute path of the native `pmds`
@@ -396,7 +396,7 @@ fn write_event(output: &mut dyn Write, event: &Event) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::*;
 

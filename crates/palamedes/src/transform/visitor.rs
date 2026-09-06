@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use oxc_ast::ast::{
     CallExpression, Expression, JSXChild, JSXElement, JSXOpeningElement, TaggedTemplateExpression,
 };
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
 use oxc_span::GetSpan;
 
@@ -212,17 +212,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         if matches!(
             macro_info.imported_name.as_str(),
             "Trans" | "Plural" | "Select" | "SelectOrdinal"
-        ) {
-            if let Some(nested_start) = nested_message_macro_in_children(&it.children, self.imports)
-            {
-                self.fail(PalamedesError::NestedMessageMacro {
-                    location: self
-                        .source_locator
-                        .indexed_location(self.filename, nested_start)
-                        .format(),
-                });
-                return;
-            }
+        ) && let Some(nested_start) =
+            nested_message_macro_in_children(&it.children, self.imports)
+        {
+            self.fail(PalamedesError::NestedMessageMacro {
+                location: self
+                    .source_locator
+                    .indexed_location(self.filename, nested_start)
+                    .format(),
+            });
+            return;
         }
 
         let attribute_replacement_start = self.replacements.len();

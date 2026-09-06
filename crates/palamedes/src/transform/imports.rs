@@ -6,7 +6,7 @@ use oxc_ast::ast::{
     BindingIdentifier, IdentifierReference, ImportDeclaration, ImportDeclarationSpecifier,
     ImportOrExportKind, JSXIdentifier,
 };
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
 use oxc_span::GetSpan;
 use oxc_syntax::{scope::ScopeId, symbol::SymbolId};
@@ -335,63 +335,63 @@ impl<'a> Visit<'a> for ImportCollector {
             None,
         );
 
-        if is_macro_import && it.import_kind == ImportOrExportKind::Value {
-            if let Some(specifiers) = &it.specifiers {
-                for specifier in specifiers {
-                    if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
-                        if specifier.import_kind == ImportOrExportKind::Value {
-                            self.macro_specifiers.push(MacroImportSpecifier {
-                                local_name: specifier.local.name.to_string(),
-                                symbol_id: specifier.local.symbol_id.get(),
-                                declaration_range: (it.span.start as usize, it.span.end as usize),
-                                specifier_range: (
-                                    specifier.span.start as usize,
-                                    specifier.span.end as usize,
-                                ),
-                            });
-                        }
-                    }
+        if is_macro_import
+            && it.import_kind == ImportOrExportKind::Value
+            && let Some(specifiers) = &it.specifiers
+        {
+            for specifier in specifiers {
+                if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier
+                    && specifier.import_kind == ImportOrExportKind::Value
+                {
+                    self.macro_specifiers.push(MacroImportSpecifier {
+                        local_name: specifier.local.name.to_string(),
+                        symbol_id: specifier.local.symbol_id.get(),
+                        declaration_range: (it.span.start as usize, it.span.end as usize),
+                        specifier_range: (
+                            specifier.span.start as usize,
+                            specifier.span.end as usize,
+                        ),
+                    });
                 }
             }
         }
 
-        if source == self.runtime_module && it.import_kind == ImportOrExportKind::Value {
-            if let Some(specifiers) = &it.specifiers {
-                for specifier in specifiers {
-                    if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
-                        if specifier.import_kind == ImportOrExportKind::Value
-                            && specifier.imported.name() == self.runtime_import_name.as_str()
-                            && specifier.local.name == self.runtime_import_name.as_str()
-                        {
-                            self.has_reusable_runtime_import = true;
-                        }
-                    }
+        if source == self.runtime_module
+            && it.import_kind == ImportOrExportKind::Value
+            && let Some(specifiers) = &it.specifiers
+        {
+            for specifier in specifiers {
+                if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier
+                    && specifier.import_kind == ImportOrExportKind::Value
+                    && specifier.imported.name() == self.runtime_import_name.as_str()
+                    && specifier.local.name == self.runtime_import_name.as_str()
+                {
+                    self.has_reusable_runtime_import = true;
                 }
             }
         }
 
         if matches!(source, "remix/ui/jsx-runtime" | "remix/ui/jsx-dev-runtime")
             && it.import_kind == ImportOrExportKind::Value
+            && let Some(specifiers) = &it.specifiers
         {
-            if let Some(specifiers) = &it.specifiers {
-                for specifier in specifiers {
-                    let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier else {
-                        continue;
-                    };
-                    if specifier.import_kind != ImportOrExportKind::Value {
-                        continue;
-                    }
-                    let binding = match specifier.imported.name().as_str() {
-                        "jsx" | "jsxs" | "jsxDEV" => RemixJsxBinding::Helper,
-                        "Fragment" => RemixJsxBinding::Fragment,
-                        _ => continue,
-                    };
-                    self.remix_jsx_specifiers.push(RemixJsxImportSpecifier {
-                        binding,
-                        local_name: specifier.local.name.to_string(),
-                        symbol_id: specifier.local.symbol_id.get(),
-                    });
+            for specifier in specifiers {
+                let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier else {
+                    continue;
+                };
+                if specifier.import_kind != ImportOrExportKind::Value {
+                    continue;
                 }
+                let binding = match specifier.imported.name().as_str() {
+                    "jsx" | "jsxs" | "jsxDEV" => RemixJsxBinding::Helper,
+                    "Fragment" => RemixJsxBinding::Fragment,
+                    _ => continue,
+                };
+                self.remix_jsx_specifiers.push(RemixJsxImportSpecifier {
+                    binding,
+                    local_name: specifier.local.name.to_string(),
+                    symbol_id: specifier.local.symbol_id.get(),
+                });
             }
         }
 
@@ -399,20 +399,17 @@ impl<'a> Visit<'a> for ImportCollector {
             source,
             "@palamedes/react/compiled" | "@palamedes/remix/compiled" | "@palamedes/solid/compiled"
         ) && it.import_kind == ImportOrExportKind::Value
+            && let Some(specifiers) = &it.specifiers
         {
-            if let Some(specifiers) = &it.specifiers {
-                for specifier in specifiers {
-                    if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
-                        if specifier.import_kind == ImportOrExportKind::Value
-                            && specifier.imported.name() == "Trans"
-                            && specifier.local.name == "Trans"
-                        {
-                            if let Some(symbol_id) = specifier.local.symbol_id.get() {
-                                self.reusable_trans_import_symbols
-                                    .insert(source.to_string(), symbol_id);
-                            }
-                        }
-                    }
+            for specifier in specifiers {
+                if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier
+                    && specifier.import_kind == ImportOrExportKind::Value
+                    && specifier.imported.name() == "Trans"
+                    && specifier.local.name == "Trans"
+                    && let Some(symbol_id) = specifier.local.symbol_id.get()
+                {
+                    self.reusable_trans_import_symbols
+                        .insert(source.to_string(), symbol_id);
                 }
             }
         }

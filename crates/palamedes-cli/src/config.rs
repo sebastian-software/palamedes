@@ -30,9 +30,13 @@ const JS_CONFIG_FILENAMES: &[&str] = &[
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml.")]
+    #[error(
+        "Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml."
+    )]
     NotFound,
-    #[error("Found {path}, but pmds only loads data configs. Create palamedes.yaml, palamedes.yml, palamedes.json, or palamedes.toml; JavaScript and TypeScript configs are not executable CLI configuration.")]
+    #[error(
+        "Found {path}, but pmds only loads data configs. Create palamedes.yaml, palamedes.yml, palamedes.json, or palamedes.toml; JavaScript and TypeScript configs are not executable CLI configuration."
+    )]
     JsConfigUnsupported { path: PathBuf },
     #[error("Palamedes config does not exist: {path}")]
     MissingExplicit { path: PathBuf },
@@ -44,7 +48,9 @@ pub enum ConfigError {
     },
     #[error("Invalid Palamedes config in {path}: {message}")]
     Invalid { path: PathBuf, message: String },
-    #[error("Catalog path {path} matches multiple configured catalogs ({catalogs}); refusing to choose one.")]
+    #[error(
+        "Catalog path {path} matches multiple configured catalogs ({catalogs}); refusing to choose one."
+    )]
     AmbiguousCatalogPath { path: PathBuf, catalogs: String },
 }
 
@@ -761,7 +767,7 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{load_config, unknown_top_level_keys, CONFIG_FILENAME};
+    use super::{CONFIG_FILENAME, load_config, unknown_top_level_keys};
 
     #[test]
     fn loads_yaml_config_and_defaults_references_to_git_root() {
@@ -930,10 +936,12 @@ catalogs:
 
         // Relative paths anchor at the config root, which is what a merge
         // driver's `%P` hands over.
-        assert!(config
-            .catalog_for_path(std::path::Path::new("src/locales/en/messages.po"), &app)
-            .expect("resolve catalog")
-            .is_some());
+        assert!(
+            config
+                .catalog_for_path(std::path::Path::new("src/locales/en/messages.po"), &app)
+                .expect("resolve catalog")
+                .is_some()
+        );
 
         assert_eq!(
             config
@@ -943,14 +951,18 @@ catalogs:
             Some("docs/locales/{locale}")
         );
 
-        assert!(config
-            .catalog_for_path(&app.join("src/locales/fr/messages.po"), &app)
-            .expect("resolve catalog")
-            .is_none());
-        assert!(config
-            .catalog_for_path(&app.join("README.md"), &app)
-            .expect("resolve catalog")
-            .is_none());
+        assert!(
+            config
+                .catalog_for_path(&app.join("src/locales/fr/messages.po"), &app)
+                .expect("resolve catalog")
+                .is_none()
+        );
+        assert!(
+            config
+                .catalog_for_path(&app.join("README.md"), &app)
+                .expect("resolve catalog")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1010,17 +1022,21 @@ catalogs:
             Some("locales/{locale}")
         );
 
-        assert!(config
-            .catalog_for_path(
-                std::path::Path::new("apps/web/apps/web/locales/de.po"),
-                &repo,
-            )
-            .expect("duplicated prefix must not match")
-            .is_none());
-        assert!(config
-            .catalog_for_path(std::path::Path::new("outside/locales/de.po"), &repo)
-            .expect("outside path must not match")
-            .is_none());
+        assert!(
+            config
+                .catalog_for_path(
+                    std::path::Path::new("apps/web/apps/web/locales/de.po"),
+                    &repo,
+                )
+                .expect("duplicated prefix must not match")
+                .is_none()
+        );
+        assert!(
+            config
+                .catalog_for_path(std::path::Path::new("outside/locales/de.po"), &repo)
+                .expect("outside path must not match")
+                .is_none()
+        );
     }
 
     #[test]

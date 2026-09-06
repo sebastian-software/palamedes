@@ -33,7 +33,9 @@ pub enum CliError {
     CurrentDir(#[source] std::io::Error),
     #[error("Catalog merge requires exactly two input files, received {0}.")]
     InvalidMergeInputCount(usize),
-    #[error("Could not infer catalog merge format from logical --path `{path}` or merge paths ({paths}). Git supplies extensionless temporary files for %O, %A, and %B; pass --format po or --format fcl.")]
+    #[error(
+        "Could not infer catalog merge format from logical --path `{path}` or merge paths ({paths}). Git supplies extensionless temporary files for %O, %A, and %B; pass --format po or --format fcl."
+    )]
     MergeFormatInference { path: PathBuf, paths: String },
     #[error("Catalog convert requires either an input file or --config.")]
     MissingConvertInput,
@@ -110,7 +112,7 @@ impl CliError {
 #[cfg(test)]
 mod tests {
     use super::{
-        CliError, AUDIT_VERDICT_EXIT_CODE, CATALOG_DRIFT_EXIT_CODE, LINT_VERDICT_EXIT_CODE,
+        AUDIT_VERDICT_EXIT_CODE, CATALOG_DRIFT_EXIT_CODE, CliError, LINT_VERDICT_EXIT_CODE,
         REPORT_VERDICT_EXIT_CODE,
     };
 

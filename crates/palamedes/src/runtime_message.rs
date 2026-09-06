@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ferrocat_icu::{parse_icu, IcuNode, IcuPluralKind};
+use ferrocat_icu::{IcuNode, IcuPluralKind, parse_icu};
 
 /// Runtime-ready message programs keyed by compiled message ID.
 ///
@@ -204,7 +204,7 @@ fn push_node(nodes: &mut Vec<RuntimeMessageNode>, node: RuntimeMessageNode) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{compile_runtime_catalog_messages, RuntimeCompiledMessage, RuntimeMessageNode};
+    use super::{RuntimeCompiledMessage, RuntimeMessageNode, compile_runtime_catalog_messages};
 
     fn compile(pattern: &str) -> Option<RuntimeCompiledMessage> {
         compile_runtime_catalog_messages(&BTreeMap::from([(

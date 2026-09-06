@@ -13,17 +13,17 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
 use crate::source::DiagnosticLocation;
 
+use super::NativeTransformOptions;
 use super::imports::ImportCollector;
 use super::lowered_jsx::{
     choice_from_call, props_object, rendered_call_with_props, trans_from_call,
 };
 use super::messages::{
-    append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
-    expression_source, extract_choice_options, extract_choice_options_from_jsx,
+    ValueBinding, append_unique_bindings, build_icu_message, choice_expression_binding,
+    escape_string, expression_source, extract_choice_options, extract_choice_options_from_jsx,
     extract_jsx_children_parts, extract_jsx_value_binding, first_argument_object, jsx_attributes,
-    template_to_message, ValueBinding,
+    template_to_message,
 };
-use super::NativeTransformOptions;
 
 pub(super) fn transform_tagged_template(
     template: &TemplateLiteral<'_>,
@@ -152,12 +152,8 @@ fn descriptor_values_argument(
 
     match extract_descriptor_values(argument, source) {
         DescriptorValues::Bindings(explicit_values) => {
-            let bindings = merge_descriptor_values(
-                implicit_values,
-                explicit_values,
-                macro_name,
-                location,
-            )?;
+            let bindings =
+                merge_descriptor_values(implicit_values, explicit_values, macro_name, location)?;
             validate_message_values(message, &bindings)?;
             Ok(Some(render_values_object(&bindings)))
         }
@@ -633,22 +629,22 @@ fn build_runtime_descriptor(
 ) -> Option<String> {
     let mut parts = Vec::new();
 
-    if let Some(message) = message {
-        if options.keep_source_fallbacks() {
-            parts.push(format!("message: \"{}\"", escape_string(message)));
-        }
+    if let Some(message) = message
+        && options.keep_source_fallbacks()
+    {
+        parts.push(format!("message: \"{}\"", escape_string(message)));
     }
 
-    if let Some(context) = context {
-        if !options.strip_non_essential_props.unwrap_or(false) {
-            parts.push(format!("context: \"{}\"", escape_string(context)));
-        }
+    if let Some(context) = context
+        && !options.strip_non_essential_props.unwrap_or(false)
+    {
+        parts.push(format!("context: \"{}\"", escape_string(context)));
     }
 
-    if let Some(comment) = comment {
-        if !options.strip_non_essential_props.unwrap_or(false) {
-            parts.push(format!("comment: \"{}\"", escape_string(comment)));
-        }
+    if let Some(comment) = comment
+        && !options.strip_non_essential_props.unwrap_or(false)
+    {
+        parts.push(format!("comment: \"{}\"", escape_string(comment)));
     }
 
     (!parts.is_empty()).then(|| format!("{{ {} }}", parts.join(", ")))

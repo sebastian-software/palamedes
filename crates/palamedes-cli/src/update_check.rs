@@ -186,12 +186,11 @@ impl CheckCache for PlatformCache {
         }
         let _lock = DirectoryLock(&lock_path);
 
-        if let Ok(value) = fs::read_to_string(&self.file) {
-            if let Ok(previous) = value.trim().parse::<u64>() {
-                if now_secs.saturating_sub(previous) < CHECK_INTERVAL_SECS || previous > now_secs {
-                    return false;
-                }
-            }
+        if let Ok(value) = fs::read_to_string(&self.file)
+            && let Ok(previous) = value.trim().parse::<u64>()
+            && (now_secs.saturating_sub(previous) < CHECK_INTERVAL_SECS || previous > now_secs)
+        {
+            return false;
         }
 
         fs::write(&self.file, format!("{now_secs}\n")).is_ok()
@@ -521,14 +520,16 @@ mod tests {
                 payload: Mutex::new(None),
                 latest: latest.map(str::to_owned),
             };
-            assert!(run_due_check(
-                &FixedClock(Some(100)),
-                &cache,
-                &FixedCohort("2026-07"),
-                &transport,
-                payload("1.2.3", "")
-            )
-            .is_none());
+            assert!(
+                run_due_check(
+                    &FixedClock(Some(100)),
+                    &cache,
+                    &FixedCohort("2026-07"),
+                    &transport,
+                    payload("1.2.3", "")
+                )
+                .is_none()
+            );
         }
 
         assert!(update_notice("invalid", "2.0.0").is_none());
@@ -550,14 +551,16 @@ mod tests {
                 payload: Mutex::new(None),
                 latest: Some("2.0.0".to_owned()),
             };
-            assert!(run_due_check(
-                &FixedClock(clock),
-                &cache,
-                &FixedCohort("2026-07"),
-                &transport,
-                payload("1.0.0", "")
-            )
-            .is_none());
+            assert!(
+                run_due_check(
+                    &FixedClock(clock),
+                    &cache,
+                    &FixedCohort("2026-07"),
+                    &transport,
+                    payload("1.0.0", "")
+                )
+                .is_none()
+            );
             assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
         }
     }
@@ -683,7 +686,7 @@ mod tests {
         }
     }
 
-    fn environment(values: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
+    fn environment(values: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> + use<> {
         let values = values
             .iter()
             .map(|(key, value)| ((*key).to_owned(), OsString::from(value)))
@@ -697,11 +700,13 @@ mod tests {
             vec![("HOME", "/tmp/home"), ("DO_NOT_TRACK", "1")],
             vec![("HOME", "/tmp/home"), ("PALAMEDES_UPDATE_CHECK", "0")],
         ] {
-            assert!(Settings::from_environment(
-                "https://version-service.sebastian-software.de/check",
-                environment(&values)
-            )
-            .is_none());
+            assert!(
+                Settings::from_environment(
+                    "https://version-service.sebastian-software.de/check",
+                    environment(&values)
+                )
+                .is_none()
+            );
         }
     }
 

@@ -1,0 +1,6 @@
+# Formatting contract for the Rust workspace. `cargo fmt` reads the edition
+# from Cargo.toml; this file pins the same values for direct `rustfmt` runs and
+# for editors, and keeps line endings stable across the Linux, macOS, and
+# Windows checkouts.
+edition = "2024"
+newline_style = "Unix"

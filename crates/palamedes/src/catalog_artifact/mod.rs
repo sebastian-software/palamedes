@@ -10,10 +10,9 @@ mod tests;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    compile_catalog_artifact as ferrocat_compile_catalog_artifact,
-    compile_catalog_artifact_selected as ferrocat_compile_catalog_artifact_selected,
     CompileCatalogArtifactOptions, CompileSelectedCatalogArtifactOptions, CompiledCatalogIdIndex,
-    CompiledKeyStrategy,
+    CompiledKeyStrategy, compile_catalog_artifact as ferrocat_compile_catalog_artifact,
+    compile_catalog_artifact_selected as ferrocat_compile_catalog_artifact_selected,
 };
 
 use crate::error::{PalamedesError, PalamedesResult};

@@ -13,12 +13,12 @@ use std::time::Instant;
 
 use clap::Args;
 use palamedes::{
-    extract_catalog_messages_cached, preview_catalog_file_update, update_catalog_file,
     CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
+    extract_catalog_messages_cached, preview_catalog_file_update, update_catalog_file,
 };
 use serde::Serialize;
 
-use crate::command::{render_json, Command, Context};
+use crate::command::{Command, Context, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 use cache::{load_extract_cache, persist_extract_cache};
@@ -1018,12 +1018,16 @@ catalogs:
             2,
             "retention must keep the entries of every catalog"
         );
-        assert!(fs::read_to_string(app.join("locales/en/app.po"))
-            .expect("read app catalog")
-            .contains("msgid \"Dashboard\""));
-        assert!(fs::read_to_string(app.join("locales/en/admin.po"))
-            .expect("read admin catalog")
-            .contains("msgid \"Settings\""));
+        assert!(
+            fs::read_to_string(app.join("locales/en/app.po"))
+                .expect("read app catalog")
+                .contains("msgid \"Dashboard\"")
+        );
+        assert!(
+            fs::read_to_string(app.join("locales/en/admin.po"))
+                .expect("read admin catalog")
+                .contains("msgid \"Settings\"")
+        );
     }
 
     /*

@@ -22,7 +22,7 @@ fn selected_catalog_cache() -> &'static palamedes::CatalogCompilationCache {
     CACHE.get_or_init(|| palamedes::CatalogCompilationCache::new(SELECTED_CATALOG_CACHE_CAPACITY))
 }
 
-use crate::shared::{catch_blocking_panic, checked_u32, to_napi_error, BlockingTask};
+use crate::shared::{BlockingTask, catch_blocking_panic, checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct CatalogOrigin {
@@ -258,8 +258,7 @@ pub struct TranslationPatchResult {
 
 const TRANSLATION_PATCH_WRITE_ERROR_CODE: &str = "ERR_PALAMEDES_TRANSLATION_PATCH_WRITE";
 const TRANSLATION_PATCH_WRITE_CAUSE_CODE: &str = "ERR_PALAMEDES_CATALOG_WRITE";
-const TRANSLATION_PATCH_WRITE_ERROR_MESSAGE: &str =
-    "Failed to replace a translation catalog; completed per-file outcomes are available in error.report.";
+const TRANSLATION_PATCH_WRITE_ERROR_MESSAGE: &str = "Failed to replace a translation catalog; completed per-file outcomes are available in error.report.";
 
 #[napi(object)]
 pub struct CatalogCombineInput {

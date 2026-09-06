@@ -6,7 +6,7 @@ use oxc_ast::ast::{
     TaggedTemplateExpression, VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast::ast_kind::AstKind;
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::{Semantic, SemanticBuilder};
 use oxc_span::GetSpan;
 use oxc_syntax::reference::Reference;
@@ -104,23 +104,22 @@ fn module_server_function_spans(program: &Program<'_>) -> HashSet<(u32, u32)> {
     let local_async_function_spans = local_async_function_spans(program, &semantic);
     let mut named_exports = HashSet::new();
     for statement in &program.body {
-        if let Statement::ExportNamedDeclaration(export) = statement {
-            if export.export_kind == ImportOrExportKind::Value {
-                for specifier in &export.specifiers {
-                    if specifier.export_kind == ImportOrExportKind::Value {
-                        named_exports.insert(specifier.local.name().to_string());
-                    }
+        if let Statement::ExportNamedDeclaration(export) = statement
+            && export.export_kind == ImportOrExportKind::Value
+        {
+            for specifier in &export.specifiers {
+                if specifier.export_kind == ImportOrExportKind::Value {
+                    named_exports.insert(specifier.local.name().to_string());
                 }
             }
         }
-        if let Statement::ExportDefaultDeclaration(export) = statement {
-            if let Some(Expression::Identifier(identifier)) = export
+        if let Statement::ExportDefaultDeclaration(export) = statement
+            && let Some(Expression::Identifier(identifier)) = export
                 .declaration
                 .as_expression()
                 .map(Expression::get_inner_expression)
-            {
-                named_exports.insert(identifier.name.to_string());
-            }
+        {
+            named_exports.insert(identifier.name.to_string());
         }
     }
 
@@ -217,15 +216,15 @@ fn record_local_async_function(
     semantic: &Semantic<'_>,
     spans: &mut HashMap<SymbolId, (u32, u32)>,
 ) {
-    if function.r#async && function.body.is_some() {
-        if let Some(symbol_id) = function
+    if function.r#async
+        && function.body.is_some()
+        && let Some(symbol_id) = function
             .id
             .as_ref()
             .and_then(|identifier| identifier.symbol_id.get())
             .filter(|&symbol_id| !symbol_has_writes(semantic, symbol_id))
-        {
-            spans.insert(symbol_id, (function.span.start, function.span.end));
-        }
+    {
+        spans.insert(symbol_id, (function.span.start, function.span.end));
     }
 }
 
@@ -321,15 +320,13 @@ fn record_variable_functions(
                 .get_identifier_name()
                 .is_some_and(|name| exports.contains(name.as_str()))
         });
-        if should_record {
-            if let Some(initializer) = &declarator.init {
-                record_exported_initializer_functions(
-                    initializer,
-                    local_async_function_spans,
-                    semantic,
-                    spans,
-                );
-            }
+        if should_record && let Some(initializer) = &declarator.init {
+            record_exported_initializer_functions(
+                initializer,
+                local_async_function_spans,
+                semantic,
+                spans,
+            );
         }
     }
 }
@@ -346,15 +343,14 @@ fn record_exported_initializer_functions(
     semantic: &Semantic<'_>,
     spans: &mut HashSet<(u32, u32)>,
 ) {
-    if let Expression::Identifier(identifier) = expression.get_inner_expression() {
-        if let Some(span) = identifier
+    if let Expression::Identifier(identifier) = expression.get_inner_expression()
+        && let Some(span) = identifier
             .reference_id
             .get()
             .and_then(|reference_id| semantic.scoping().get_reference(reference_id).symbol_id())
             .and_then(|symbol_id| local_async_function_spans.get(&symbol_id))
-        {
-            spans.insert(*span);
-        }
+    {
+        spans.insert(*span);
     }
 
     let mut collector = ExportedInitializerFunctionCollector {

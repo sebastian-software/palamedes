@@ -5,11 +5,11 @@ use std::path::PathBuf;
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    audit_catalogs, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
-    CatalogAuditSummary,
+    CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult, CatalogAuditSummary,
+    audit_catalogs,
 };
 
-use crate::command::{render_json, Command, Context};
+use crate::command::{Command, Context, render_json};
 use crate::commands::normalize_locale_list;
 use crate::error::CliError;
 

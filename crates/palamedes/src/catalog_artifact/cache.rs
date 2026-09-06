@@ -6,9 +6,9 @@ use ferrocat::{CompiledCatalogIdIndex, CompiledKeyStrategy};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 
-use super::resolve::{prepare_compilation_snapshot, CompilationSnapshot};
+use super::resolve::{CompilationSnapshot, prepare_compilation_snapshot};
 use super::types::{CatalogArtifactConfig, CatalogArtifactSelectedRequest};
-use super::{compile_selected_prepared, PreparedCompilation};
+use super::{PreparedCompilation, compile_selected_prepared};
 
 #[cfg(test)]
 type BeforeBuildHook = Arc<dyn Fn(&str) + Send + Sync>;
@@ -127,7 +127,7 @@ impl CatalogCompilationCache {
                 self.before_build(&key.locale);
                 let result = self.build(snapshot.take().expect("snapshot")).map(Arc::new);
                 if let Ok(compiled) = &result {
-                    self.insert_ready(key.clone(), Arc::clone(compiled));
+                    self.insert_ready(key, Arc::clone(compiled));
                 }
                 drop(completion);
                 let compiled = result?;
@@ -180,16 +180,15 @@ impl CatalogCompilationCache {
             state.ready.remove(&stale);
             state.last_used.remove(&stale);
         }
-        if state.ready.len() >= self.capacity {
-            if let Some(oldest) = state
+        if state.ready.len() >= self.capacity
+            && let Some(oldest) = state
                 .last_used
                 .iter()
                 .min_by_key(|(_, used)| *used)
                 .map(|(key, _)| key.clone())
-            {
-                state.ready.remove(&oldest);
-                state.last_used.remove(&oldest);
-            }
+        {
+            state.ready.remove(&oldest);
+            state.last_used.remove(&oldest);
         }
         state.clock = state.clock.wrapping_add(1);
         let now = state.clock;

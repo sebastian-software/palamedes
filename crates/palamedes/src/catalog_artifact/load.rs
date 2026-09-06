@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use ferrocat::{parse_catalog, NormalizedParsedCatalog, ParseCatalogOptions};
+use ferrocat::{NormalizedParsedCatalog, ParseCatalogOptions, parse_catalog};
 use sha2::{Digest, Sha256};
 
 use super::resolve::{catalog_locale_matcher, normalize_path};

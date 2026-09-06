@@ -1,6 +1,6 @@
 use oxc_ast::ast::{CallExpression, Expression, JSXElement, Program, TaggedTemplateExpression};
 use oxc_ast::ast_kind::AstKind;
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::{Visit, walk};
 use oxc_span::GetSpan;
 
 use crate::error::{PalamedesError, PalamedesResult};
@@ -140,20 +140,19 @@ where
 
         if let Some((local_name, span)) = identifier_name(&it.callee) {
             self.validate_macro(local_name, span, &EAGER_JS_MACROS, it.span.start as usize);
-            if (self.is_lowered_jsx_helper)(local_name, span) {
-                if let Some((macro_name, macro_span)) = it
+            if (self.is_lowered_jsx_helper)(local_name, span)
+                && let Some((macro_name, macro_span)) = it
                     .arguments
                     .first()
                     .and_then(|argument| argument.as_expression())
                     .and_then(identifier_name)
-                {
-                    self.validate_macro(
-                        macro_name,
-                        macro_span,
-                        &EAGER_JSX_MACROS,
-                        it.span.start as usize,
-                    );
-                }
+            {
+                self.validate_macro(
+                    macro_name,
+                    macro_span,
+                    &EAGER_JSX_MACROS,
+                    it.span.start as usize,
+                );
             }
         }
 

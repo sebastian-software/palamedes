@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ferromark::block::{CodeBlockKind, ListKind};
-use ferromark::mdx::{parse_events_strict, MdxDiagnostic, MdxEvent};
+use ferromark::mdx::{MdxDiagnostic, MdxEvent, parse_events_strict};
 use ferromark::{BlockEvent, InlineEvent, Range};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::CommentKind;
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::extract::ExtractedMessageRecord;
 use crate::icu_text::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
+use crate::jsx_message::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
 use crate::source::{SourceComment, SourceCommentKind, SourceLocator, SourceRange};
 use crate::transform::NativeTransformSourceMap;
 
@@ -1191,7 +1191,7 @@ impl<'a> MdxCompiler<'a> {
         let (line, column) = self.locator.location(source_offset);
         let comment = preceding_comment(self.source, source_offset, &self.options.ignore_directive);
         self.messages.push(ExtractedMessageRecord {
-            message: message.clone(),
+            message,
             comment,
             context: None,
             placeholders: (!placeholders.is_empty()).then_some(placeholders),
@@ -1684,15 +1684,15 @@ fn preceding_comment_payload(source: &str, offset: usize) -> Option<&str> {
     let prefix = &source[..offset.min(source.len())];
     let completed_lines = prefix.rsplit_once('\n').map_or("", |(lines, _)| lines);
     let trimmed = completed_lines.trim_end();
-    if let Some(before_end) = trimmed.strip_suffix("*/}") {
-        if let Some(start) = before_end.rfind("{/*") {
-            return Some(&before_end[start + 3..]);
-        }
+    if let Some(before_end) = trimmed.strip_suffix("*/}")
+        && let Some(start) = before_end.rfind("{/*")
+    {
+        return Some(&before_end[start + 3..]);
     }
-    if let Some(before_end) = trimmed.strip_suffix("-->") {
-        if let Some(start) = before_end.rfind("<!--") {
-            return Some(&before_end[start + 4..]);
-        }
+    if let Some(before_end) = trimmed.strip_suffix("-->")
+        && let Some(start) = before_end.rfind("<!--")
+    {
+        return Some(&before_end[start + 4..]);
     }
     trimmed
         .lines()
@@ -2481,10 +2481,12 @@ See ![Diagram label](./d.png) here.
                 .collect::<Vec<_>>(),
             [("Save now.", Some("Translator: keep short"))]
         );
-        assert!(!html
-            .code
-            .expect("valid MDX should compile")
-            .contains("<!-- Translator"));
+        assert!(
+            !html
+                .code
+                .expect("valid MDX should compile")
+                .contains("<!-- Translator")
+        );
 
         let jsx_source = "{/* Keep the product name */}\n\nWelcome to Palamedes.";
         let jsx = analyze_valid(jsx_source, MdxOptions::default());

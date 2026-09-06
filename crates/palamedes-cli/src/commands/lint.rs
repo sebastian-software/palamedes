@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    analyze_source_files_cached, SourceComment, SourceCommentKind, SourceDiagnostic,
-    SourceDiagnosticSeverity, SourceFileAnalysisRequest, SourceRange, SOURCE_DIAGNOSTIC_CODES,
+    SOURCE_DIAGNOSTIC_CODES, SourceComment, SourceCommentKind, SourceDiagnostic,
+    SourceDiagnosticSeverity, SourceFileAnalysisRequest, SourceRange, analyze_source_files_cached,
 };
 use serde::Serialize;
 
-use crate::command::{render_json, Command, Context};
+use crate::command::{Command, Context, render_json};
 use crate::commands::extract::cache::{load_extract_cache, persist_extract_cache};
 use crate::commands::extract::sources::{collect_source_files, sort_and_dedupe_paths};
 use crate::error::CliError;
