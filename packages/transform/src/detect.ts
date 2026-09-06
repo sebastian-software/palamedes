@@ -2,14 +2,14 @@
  * Detection utilities to check if a file contains Palamedes macros
  */
 
-import { PALAMEDES_MACRO_PACKAGES } from "./types"
-import { walk } from "./ast"
+import { PALAMEDES_MACRO_PACKAGES } from "./types";
+import { walk } from "./ast";
 
 type ImportInfo = {
-  localName: string
-  importedName: string
-  source: string
-}
+  localName: string;
+  importedName: string;
+  source: string;
+};
 
 /**
  * Quickly check if code might contain Palamedes macro imports.
@@ -17,7 +17,7 @@ type ImportInfo = {
  */
 export function mightContainPalamedesMacros(code: string): boolean {
   // Quick string check for any of our macro packages
-  return PALAMEDES_MACRO_PACKAGES.some((pkg) => code.includes(pkg))
+  return PALAMEDES_MACRO_PACKAGES.some((pkg) => code.includes(pkg));
 }
 
 /**
@@ -25,60 +25,60 @@ export function mightContainPalamedesMacros(code: string): boolean {
  * The native pass performs the semantic AST check.
  */
 export function mightContainServerFunctions(code: string): boolean {
-  return code.includes('"use server"') || code.includes("'use server'")
+  return code.includes('"use server"') || code.includes("'use server'");
 }
 
 /**
  * Find all Palamedes macro imports in an AST
  */
 export function findMacroImports(program: unknown): Map<string, ImportInfo> {
-  const imports = new Map<string, ImportInfo>()
+  const imports = new Map<string, ImportInfo>();
 
   walk(program, {
     enter(node) {
       if (!node || typeof node !== "object") {
-        return
+        return;
       }
 
-      const record = node as Record<string, unknown>
+      const record = node as Record<string, unknown>;
 
       if (record.type !== "ImportDeclaration") {
-        return
+        return;
       }
 
-      const source = (record.source as Record<string, unknown>)?.value as string | undefined
+      const source = (record.source as Record<string, unknown>)?.value as string | undefined;
 
       if (!source || !PALAMEDES_MACRO_PACKAGES.some((pkg) => source === pkg)) {
-        return
+        return;
       }
 
-      const specifiers = record.specifiers as Array<Record<string, unknown>> | undefined
+      const specifiers = record.specifiers as Array<Record<string, unknown>> | undefined;
 
       if (!specifiers) {
-        return
+        return;
       }
 
       for (const specifier of specifiers) {
         if (specifier.type === "ImportSpecifier") {
-          const imported = specifier.imported as Record<string, unknown> | undefined
-          const local = specifier.local as Record<string, unknown> | undefined
+          const imported = specifier.imported as Record<string, unknown> | undefined;
+          const local = specifier.local as Record<string, unknown> | undefined;
 
-          const importedName = (imported?.name as string) ?? (local?.name as string)
-          const localName = local?.name as string
+          const importedName = (imported?.name as string) ?? (local?.name as string);
+          const localName = local?.name as string;
 
           if (importedName && localName) {
             imports.set(localName, {
               localName,
               importedName,
               source,
-            })
+            });
           }
         }
       }
     },
-  })
+  });
 
-  return imports
+  return imports;
 }
 
 /**
@@ -86,27 +86,27 @@ export function findMacroImports(program: unknown): Map<string, ImportInfo> {
  */
 export function findImportDeclaration(
   program: unknown,
-  source: string
+  source: string,
 ): Record<string, unknown> | undefined {
-  let found: Record<string, unknown> | undefined
+  let found: Record<string, unknown> | undefined;
 
   walk(program, {
     enter(node) {
       if (!node || typeof node !== "object") {
-        return
+        return;
       }
 
-      const record = node as Record<string, unknown>
+      const record = node as Record<string, unknown>;
 
       if (record.type === "ImportDeclaration") {
-        const srcNode = record.source as Record<string, unknown> | undefined
+        const srcNode = record.source as Record<string, unknown> | undefined;
         if (srcNode?.value === source) {
-          found = record
-          return true // stop walking
+          found = record;
+          return true; // stop walking
         }
       }
     },
-  })
+  });
 
-  return found
+  return found;
 }

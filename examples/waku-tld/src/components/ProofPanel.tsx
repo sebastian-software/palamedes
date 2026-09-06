@@ -1,42 +1,42 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useTransition } from "react"
-import { plural } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Locale } from "../lib/i18n"
+import { useEffect, useState, useTransition } from "react";
+import { plural } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Locale } from "../lib/i18n";
 
 type ProbeResult = {
-  handledAt: string
-  locale: Locale
-  localeLabel: string
-  message: string
-}
+  handledAt: string;
+  locale: Locale;
+  localeLabel: string;
+  message: string;
+};
 
 type ProofPanelProps = {
-  runProbe: () => Promise<ProbeResult>
-}
+  runProbe: () => Promise<ProbeResult>;
+};
 
 export function ProofPanel({ runProbe }: ProofPanelProps) {
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const [message, setMessage] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const [message, setMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function refresh() {
     startTransition(async () => {
-      const result = await runProbe()
-      setMessage(result.message)
-    })
+      const result = await runProbe();
+      setMessage(result.message);
+    });
   }
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await runProbe()
-      setMessage(result.message)
-    })
-  }, [runProbe])
+      const result = await runProbe();
+      setMessage(result.message);
+    });
+  }, [runProbe]);
 
   return (
     <aside className="aside">
@@ -120,5 +120,5 @@ export function ProofPanel({ runProbe }: ProofPanelProps) {
         </button>
       </div>
     </aside>
-  )
+  );
 }

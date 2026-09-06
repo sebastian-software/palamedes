@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { type Locale, locales } from "@/lib/i18n"
+import { useState } from "react";
+import { type Locale, locales } from "@/lib/i18n";
 
 type SuggestionBannerProps = {
-  ctaLabel: string
-  currentLocale: Locale
-  description: string
-  recommendedLocale: Locale
-  recommendedUrl: string
-}
+  ctaLabel: string;
+  currentLocale: Locale;
+  description: string;
+  recommendedLocale: Locale;
+  recommendedUrl: string;
+};
 
 export function SuggestionBanner(props: SuggestionBannerProps) {
-  const [dismissed, setDismissed] = useState(false)
+  const [dismissed, setDismissed] = useState(false);
   if (dismissed) {
-    return null
+    return null;
   }
 
   return (
@@ -25,7 +25,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         data-testid="locale-suggestion-cta"
         href={props.recommendedUrl}
         onClick={() => {
-          document.cookie = locales.serializeChoice(props.recommendedLocale)
+          document.cookie = locales.serializeChoice(props.recommendedLocale);
         }}
       >
         {props.ctaLabel}
@@ -35,13 +35,13 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         className="notice-dismiss"
         data-testid="locale-suggestion-dismiss"
         onClick={() => {
-          document.cookie = locales.serializeChoice(props.currentLocale)
-          setDismissed(true)
+          document.cookie = locales.serializeChoice(props.currentLocale);
+          setDismissed(true);
         }}
         type="button"
       >
         ×
       </button>
     </div>
-  )
+  );
 }

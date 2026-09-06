@@ -1,6 +1,6 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon";
 
 const QUESTIONS = [
   {
@@ -56,13 +56,13 @@ const QUESTIONS = [
     ],
   },
 ] as const satisfies ReadonlyArray<{
-  icon: StreamlineIconName
-  question: string
-  answer: string
-  href: string
-  label: string
-  resources: readonly { label: string; href: string }[]
-}>
+  icon: StreamlineIconName;
+  question: string;
+  answer: string;
+  href: string;
+  label: string;
+  resources: readonly { label: string; href: string }[];
+}>;
 
 export function QuestionRoutes() {
   return (
@@ -111,5 +111,5 @@ export function QuestionRoutes() {
         </li>
       ))}
     </ul>
-  )
+  );
 }

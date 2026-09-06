@@ -12,14 +12,14 @@ import {
   extractMessagesNative,
   type MdxOptions,
   type NativeExtractedMessage,
-} from "@palamedes/core-node"
+} from "@palamedes/core-node";
 
-const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx|mdx)$/i
+const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx|mdx)$/i;
 
-export type ExtractedMessageInfo = NativeExtractedMessage
+export type ExtractedMessageInfo = NativeExtractedMessage;
 export type PalamedesExtractorOptions = {
-  mdx?: MdxOptions
-}
+  mdx?: MdxOptions;
+};
 
 /**
  * Extract source-first messages from a JavaScript, TypeScript, or MDX module.
@@ -27,9 +27,9 @@ export type PalamedesExtractorOptions = {
 export function extractMessages(
   source: string,
   filename: string,
-  mdx?: MdxOptions
+  mdx?: MdxOptions,
 ): ExtractedMessageInfo[] {
-  return extractMessagesNative(source, filename, mdx)
+  return extractMessagesNative(source, filename, mdx);
 }
 
 /**
@@ -52,32 +52,32 @@ export function extractMessages(
  * ```
  */
 export type PalamedesExtractor = {
-  match(filename: string): boolean
+  match(filename: string): boolean;
   extract(
     filename: string,
     code: string,
-    onMessageExtracted: (msg: ExtractedMessageInfo) => void
-  ): Promise<void>
-}
+    onMessageExtracted: (msg: ExtractedMessageInfo) => void,
+  ): Promise<void>;
+};
 
 export function createExtractor(options: PalamedesExtractorOptions = {}): PalamedesExtractor {
   return {
     match(filename: string): boolean {
-      return SUPPORTED_EXTENSIONS.test(filename)
+      return SUPPORTED_EXTENSIONS.test(filename);
     },
 
     async extract(
       filename: string,
       code: string,
-      onMessageExtracted: (msg: ExtractedMessageInfo) => void
+      onMessageExtracted: (msg: ExtractedMessageInfo) => void,
     ): Promise<void> {
       for (const msg of extractMessages(code, filename, options.mdx)) {
-        onMessageExtracted(msg)
+        onMessageExtracted(msg);
       }
     },
-  }
+  };
 }
 
-export const extractor: PalamedesExtractor = createExtractor()
+export const extractor: PalamedesExtractor = createExtractor();
 
-export default extractor
+export default extractor;

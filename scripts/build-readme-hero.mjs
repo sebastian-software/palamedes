@@ -5,46 +5,46 @@
 // Usage: serve any example, then run with its port. Example:
 //   pnpm --filter @palamedes/example-tanstack-cookie preview &
 //   node scripts/build-readme-hero.mjs --port 4020 --out docs/assets/palamedes-localized-matrix.png
-import { chromium } from "@playwright/test"
-import { writeFileSync } from "node:fs"
-import path from "node:path"
+import { chromium } from "@playwright/test";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 
-const args = process.argv.slice(2)
+const args = process.argv.slice(2);
 const arg = (name, fallback) => {
-  const i = args.indexOf(`--${name}`)
-  return i === -1 ? fallback : args[i + 1]
-}
-const PORT = arg("port", "4020")
-const OUT = path.resolve(arg("out", "docs/assets/palamedes-localized-matrix.png"))
-const EXE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-const BASE = `http://127.0.0.1:${PORT}/`
+  const i = args.indexOf(`--${name}`);
+  return i === -1 ? fallback : args[i + 1];
+};
+const PORT = arg("port", "4020");
+const OUT = path.resolve(arg("out", "docs/assets/palamedes-localized-matrix.png"));
+const EXE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const BASE = `http://127.0.0.1:${PORT}/`;
 
 const LOCALES = [
   { code: "en", label: "English", note: "€149.00 · Sep 18" },
   { code: "de", label: "Deutsch", note: "149,00 € · 18. Sept." },
   { code: "es", label: "Español", note: "149,00 € · 18 sept." },
-]
+];
 
-const browser = await chromium.launch({ executablePath: EXE, headless: true })
+const browser = await chromium.launch({ executablePath: EXE, headless: true });
 
 async function shotLocale(code) {
   const ctx = await browser.newContext({
     viewport: { width: 720, height: 1120 },
     deviceScaleFactor: 2,
     colorScheme: "light",
-  })
-  await ctx.addCookies([{ name: "locale", value: code, url: BASE }])
-  const page = await ctx.newPage()
-  await page.goto(BASE, { waitUntil: "networkidle", timeout: 60_000 })
-  const buf = await page.screenshot({ clip: { x: 0, y: 0, width: 720, height: 1120 } })
-  await ctx.close()
-  return `data:image/png;base64,${buf.toString("base64")}`
+  });
+  await ctx.addCookies([{ name: "locale", value: code, url: BASE }]);
+  const page = await ctx.newPage();
+  await page.goto(BASE, { waitUntil: "networkidle", timeout: 60_000 });
+  const buf = await page.screenshot({ clip: { x: 0, y: 0, width: 720, height: 1120 } });
+  await ctx.close();
+  return `data:image/png;base64,${buf.toString("base64")}`;
 }
 
-const shots = {}
+const shots = {};
 for (const { code } of LOCALES) {
-  shots[code] = await shotLocale(code)
-  console.log("captured", code)
+  shots[code] = await shotLocale(code);
+  console.log("captured", code);
 }
 
 const cards = LOCALES.map(
@@ -52,8 +52,8 @@ const cards = LOCALES.map(
   <figure class="card">
     <img src="${shots[code]}" alt="Palamedes demo in ${label}" />
     <figcaption><span class="lang">${label}</span><span class="note">${note}</span></figcaption>
-  </figure>`
-).join("")
+  </figure>`,
+).join("");
 
 const composite = `<!doctype html><html><head><meta charset="utf-8" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
@@ -82,16 +82,16 @@ const composite = `<!doctype html><html><head><meta charset="utf-8" />
   </div>
   <div class="grid">${cards}</div>
   <p class="foot"><b>Pixel-identical</b> across Next.js · TanStack Start · Solid · Waku · React Router, in cookie and route locale strategies, each browser-verified in CI.</p>
-</body></html>`
+</body></html>`;
 
-const tmpHtml = path.resolve(".readme-hero-composite.html")
-writeFileSync(tmpHtml, composite)
-const ctx = await browser.newContext({ deviceScaleFactor: 2, colorScheme: "light" })
-const page = await ctx.newPage()
-await page.goto(`file://${tmpHtml}`, { waitUntil: "networkidle" })
-await page.waitForTimeout(600)
-const el = await page.locator("body")
-await el.screenshot({ path: OUT })
-console.log("wrote", OUT)
-await browser.close()
-writeFileSync(tmpHtml, "")
+const tmpHtml = path.resolve(".readme-hero-composite.html");
+writeFileSync(tmpHtml, composite);
+const ctx = await browser.newContext({ deviceScaleFactor: 2, colorScheme: "light" });
+const page = await ctx.newPage();
+await page.goto(`file://${tmpHtml}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(600);
+const el = await page.locator("body");
+await el.screenshot({ path: OUT });
+console.log("wrote", OUT);
+await browser.close();
+writeFileSync(tmpHtml, "");

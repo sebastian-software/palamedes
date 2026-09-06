@@ -1,21 +1,21 @@
-import { Form, useNavigation } from "react-router"
-import { buildLocaleSwitchItems } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import type { Locale } from "~/lib/i18n"
-import { LOCALES, LOCALE_LABELS } from "~/lib/i18n"
+import { Form, useNavigation } from "react-router";
+import { buildLocaleSwitchItems } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import type { Locale } from "~/lib/i18n";
+import { LOCALES, LOCALE_LABELS } from "~/lib/i18n";
 
 type LocaleSwitcherProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
-  const navigation = useNavigation()
-  const isPending = navigation.state !== "idle"
+  const navigation = useNavigation();
+  const isPending = navigation.state !== "idle";
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
-  })
+  });
 
   return (
     <div className="switcher">
@@ -45,5 +45,5 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
         ))}
       </Form>
     </div>
-  )
+  );
 }

@@ -3,6 +3,6 @@ export const TOPIC_SLUGS = [
   "i18n-performance",
   "icu-messageformat",
   "locale-routing",
-] as const
+] as const;
 
-export type TopicSlug = (typeof TOPIC_SLUGS)[number]
+export type TopicSlug = (typeof TOPIC_SLUGS)[number];

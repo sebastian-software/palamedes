@@ -19,19 +19,19 @@ and load its catalog. It must return a fresh activated i18n instance for each
 request.
 
 ```ts
-import { createIsomorphicFn, createStart } from "@tanstack/react-start"
-import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
+import { createIsomorphicFn, createStart } from "@tanstack/react-start";
+import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack";
 
 const palamedesI18n = createIsomorphicFn().server(() =>
   createTanStackI18nRequestMiddleware(async (request) => {
-    const { createRequestI18n } = await import("./i18n.server")
-    return await createRequestI18n(request)
-  })
-)()
+    const { createRequestI18n } = await import("./i18n.server");
+    return await createRequestI18n(request);
+  }),
+)();
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [palamedesI18n],
-}))
+}));
 ```
 
 Because Start includes `src/start.ts` in its client graph, put a resolver that
@@ -53,20 +53,20 @@ TanStack Start invokes request middleware only for server functions. Scope SSR
 in the server entry separately, using the same request-to-i18n resolver:
 
 ```ts
-import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server"
-import { createServerI18nScope } from "@palamedes/runtime/server"
-import { createServerI18nFromRequest } from "./lib/i18n.server"
+import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
+import { createServerI18nScope } from "@palamedes/runtime/server";
+import { createServerI18nFromRequest } from "./lib/i18n.server";
 
-const handler = createStartHandler(defaultStreamHandler)
-const ssrI18nScope = createServerI18nScope()
+const handler = createStartHandler(defaultStreamHandler);
+const ssrI18nScope = createServerI18nScope();
 
 export default {
   async fetch(request: Request, options?: never) {
     return await ssrI18nScope.run(await createServerI18nFromRequest(request), () =>
-      handler(request, options)
-    )
+      handler(request, options),
+    );
   },
-}
+};
 ```
 
 When this entry scope and the request middleware are both registered, the
@@ -80,11 +80,11 @@ i18n. Register the result in `functionMiddleware` for every server function,
 or compose it with an individual function:
 
 ```ts
-const palamedesI18n = createTanStackI18nMiddleware(resolveRequestI18n)
+const palamedesI18n = createTanStackI18nMiddleware(resolveRequestI18n);
 
 export const saveProfile = createServerFn({ method: "POST" })
   .middleware([palamedesI18n])
-  .handler(async () => ({ message: t`Saved` }))
+  .handler(async () => ({ message: t`Saved` }));
 ```
 
 The global request middleware is the recommended default because its resolver

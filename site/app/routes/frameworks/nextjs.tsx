@@ -1,7 +1,7 @@
-import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage"
-import type { FrameworkLanding } from "~/data/framework-landing"
-import { docsHref, NPM, repoHref } from "~/data/links"
-import { frameworkMeta } from "~/lib/meta"
+import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage";
+import type { FrameworkLanding } from "~/data/framework-landing";
+import { docsHref, NPM, repoHref } from "~/data/links";
+import { frameworkMeta } from "~/lib/meta";
 
 const page: FrameworkLanding = {
   name: "Next.js",
@@ -159,9 +159,9 @@ export default async function Page() {
       href: NPM("@palamedes/next-plugin"),
     },
   },
-}
+};
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return frameworkMeta({
@@ -170,9 +170,9 @@ export function meta() {
     path: page.path,
     framework: page.name,
     faq: page.faq,
-  })
+  });
 }
 
 export default function NextjsI18n() {
-  return <FrameworkLandingPage page={page} />
+  return <FrameworkLandingPage page={page} />;
 }

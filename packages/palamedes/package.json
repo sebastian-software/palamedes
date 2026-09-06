@@ -3,18 +3,17 @@
   "version": "1.23.0",
   "description": "Reserved top-level package name for the future Palamedes entry point",
   "keywords": [
-    "palamedes",
-    "i18n"
+    "i18n",
+    "palamedes"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/palamedes"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
-  "type": "module",
   "bin": {
     "palamedes": "./bin/palamedes.mjs"
   },
@@ -22,14 +21,15 @@
     "README.md",
     "bin/"
   ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node -e \"process.exit(0)\"",
     "test": "node --test ./test/palamedes.test.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

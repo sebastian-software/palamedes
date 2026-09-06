@@ -46,7 +46,11 @@ allowBuilds:
   # extracts from TypeScript sources, so the binding is never loaded.
   tree-sitter-python: false
   unrs-resolver: true
+# Own org packages bypass pnpm 11's default minimumReleaseAge (1440 min) so
+# internal releases install immediately instead of after the 24h cooldown.
 minimumReleaseAgeExclude:
+  - "@sebastian-gmbh/*"
+  - "@sebastian-software/*"
   - "@oxc-parser/binding-android-arm-eabi@0.132.0"
   - "@oxc-parser/binding-android-arm64@0.132.0"
   - "@oxc-parser/binding-darwin-arm64@0.132.0"

@@ -1,15 +1,15 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import { Reveal } from "./Reveal"
+import { Reveal } from "./Reveal";
 
 interface SectionProps {
-  num?: string
-  title?: ReactNode
-  eyebrow?: string
-  lede?: ReactNode
-  id?: string
-  dark?: boolean
-  children?: ReactNode
+  num?: string;
+  title?: ReactNode;
+  eyebrow?: string;
+  lede?: ReactNode;
+  id?: string;
+  dark?: boolean;
+  children?: ReactNode;
 }
 
 export function Section({ num, title, eyebrow, lede, id, dark, children }: SectionProps) {
@@ -25,5 +25,5 @@ export function Section({ num, title, eyebrow, lede, id, dark, children }: Secti
       </Reveal>
       {children ? <div className="pmds-section-content">{children}</div> : null}
     </section>
-  )
+  );
 }

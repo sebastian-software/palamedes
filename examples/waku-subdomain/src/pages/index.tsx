@@ -1,24 +1,30 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { unstable_getHeaders } from "waku/router/server"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { SuggestionBanner } from "../components/SuggestionBanner"
-import { TicketPanel } from "../components/TicketPanel"
-import { activateServerI18n, createBanner, getLocaleLabel, locales, type Locale } from "../lib/i18n"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { unstable_getHeaders } from "waku/router/server";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { SuggestionBanner } from "../components/SuggestionBanner";
+import { TicketPanel } from "../components/TicketPanel";
+import {
+  activateServerI18n,
+  createBanner,
+  getLocaleLabel,
+  locales,
+  type Locale,
+} from "../lib/i18n";
 
 type ProbeResult = {
-  handledAt: string
-  locale: Locale
-  localeLabel: string
-  message: string
-}
+  handledAt: string;
+  locale: Locale;
+  localeLabel: string;
+  message: string;
+};
 
 export default async function IndexPage() {
-  const headers = unstable_getHeaders()
-  const host = headers.host ?? null
+  const headers = unstable_getHeaders();
+  const host = headers.host ?? null;
 
   // Subdomain strategy: the leftmost DNS label is authoritative for the locale
   // (`de.lvh.me` -> `de`), so the app is served at `/` and reads the locale from
@@ -27,24 +33,24 @@ export default async function IndexPage() {
     strategy: "subdomain",
     acceptLanguageHeader: headers["accept-language"],
     requestHost: host,
-  })
-  const currentLocale = resolved.locale
-  const localeLabel = getLocaleLabel(currentLocale)
-  const banner = createBanner(headers, currentLocale)
+  });
+  const currentLocale = resolved.locale;
+  const localeLabel = getLocaleLabel(currentLocale);
+  const banner = createBanner(headers, currentLocale);
 
-  activateServerI18n(currentLocale)
+  activateServerI18n(currentLocale);
 
   async function runProbe(): Promise<ProbeResult> {
-    "use server"
+    "use server";
 
-    activateServerI18n(currentLocale)
+    activateServerI18n(currentLocale);
 
     return {
       handledAt: new Date().toISOString(),
       locale: currentLocale,
       localeLabel,
       message: t`Server action confirmed locale ${currentLocale}.`,
-    }
+    };
   }
 
   return (
@@ -104,11 +110,11 @@ export default async function IndexPage() {
 
       <ClientReady />
     </>
-  )
+  );
 }
 
 export async function getConfig() {
   return {
     render: "dynamic",
-  } as const
+  } as const;
 }

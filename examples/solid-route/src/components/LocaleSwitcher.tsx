@@ -1,11 +1,11 @@
-import { For } from "solid-js"
-import { buildLocaleSwitchItems } from "@palamedes/solid"
-import { Trans } from "@palamedes/solid/macro"
-import { LOCALES, LOCALE_LABELS, type Locale, locales } from "../lib/i18n"
+import { For } from "solid-js";
+import { buildLocaleSwitchItems } from "@palamedes/solid";
+import { Trans } from "@palamedes/solid/macro";
+import { LOCALES, LOCALE_LABELS, type Locale, locales } from "../lib/i18n";
 
 type LocaleSwitcherProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
   const localeSwitchItems = () =>
@@ -13,7 +13,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
       locales: LOCALES,
       currentLocale: props.locale,
       labels: LOCALE_LABELS,
-    })
+    });
 
   return (
     <div class="switcher">
@@ -34,7 +34,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
               // and makes the browser load the new document.
               rel="external"
               onClick={() => {
-                document.cookie = locales.serializeChoice(item.locale)
+                document.cookie = locales.serializeChoice(item.locale);
               }}
             >
               {item.locale.toUpperCase()}
@@ -43,5 +43,5 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
         </For>
       </div>
     </div>
-  )
+  );
 }

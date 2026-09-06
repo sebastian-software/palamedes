@@ -1,26 +1,26 @@
-import { createMemo, Show } from "solid-js"
-import { useParams } from "@solidjs/router"
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/solid/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { SuggestionBanner } from "../components/SuggestionBanner"
-import { TicketPanel } from "../components/TicketPanel"
-import { loadRoutePageData } from "../lib/server"
-import type { Locale } from "../lib/i18n"
+import { createMemo, Show } from "solid-js";
+import { useParams } from "@solidjs/router";
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/solid/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { SuggestionBanner } from "../components/SuggestionBanner";
+import { TicketPanel } from "../components/TicketPanel";
+import { loadRoutePageData } from "../lib/server";
+import type { Locale } from "../lib/i18n";
 
 type RoutePageData = {
   banner: {
-    description: string
-    recommendedLocale: Locale
-    recommendedUrl: string
-  } | null
-  locale: Locale
-  localeLabel: string
-  renderedAt: string
-}
+    description: string;
+    recommendedLocale: Locale;
+    recommendedUrl: string;
+  } | null;
+  locale: Locale;
+  localeLabel: string;
+  renderedAt: string;
+};
 
 function RoutePageContent(props: { data: RoutePageData }) {
   return (
@@ -75,12 +75,12 @@ function RoutePageContent(props: { data: RoutePageData }) {
 
       <ClientReady />
     </main>
-  )
+  );
 }
 
 export default function LocalePage() {
-  const params = useParams<{ locale: string }>()
-  const pageData = createMemo(() => loadRoutePageData(params.locale))
+  const params = useParams<{ locale: string }>();
+  const pageData = createMemo(() => loadRoutePageData(params.locale));
 
-  return <Show when={pageData()}>{(page) => <RoutePageContent data={page()} />}</Show>
+  return <Show when={pageData()}>{(page) => <RoutePageContent data={page()} />}</Show>;
 }

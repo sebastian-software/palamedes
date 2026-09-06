@@ -1,26 +1,26 @@
-import { createRequire } from "node:module"
-import path from "node:path"
-import Module from "node:module"
+import { createRequire } from "node:module";
+import path from "node:path";
+import Module from "node:module";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const require = createRequire(import.meta.url)
+const require = createRequire(import.meta.url);
 // The package ships this loader as a hand-authored CJS entrypoint, so the test
 // intentionally exercises the published loader path directly.
-const loaderPath = "../palamedes-po-loader.cjs"
+const loaderPath = "../palamedes-po-loader.cjs";
 const moduleLoader = Module as unknown as {
-  _load: (request: string, parent: unknown, isMain: boolean) => unknown
-}
-const originalLoad = moduleLoader._load
+  _load: (request: string, parent: unknown, isMain: boolean) => unknown;
+};
+const originalLoad = moduleLoader._load;
 
-const loadPalamedesConfig = vi.fn()
-const compileCatalogArtifactSelected = vi.fn()
-const compileCatalogModule = vi.fn()
-const createCatalogLoaderResult = vi.fn()
-const createMissingErrorMessage = vi.fn()
+const loadPalamedesConfig = vi.fn();
+const compileCatalogArtifactSelected = vi.fn();
+const compileCatalogModule = vi.fn();
+const createCatalogLoaderResult = vi.fn();
+const createMissingErrorMessage = vi.fn();
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.clearAllMocks();
   loadPalamedesConfig.mockResolvedValue({
     configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
     configPath: "/repo/palamedes.yaml",
@@ -30,61 +30,61 @@ beforeEach(() => {
     pseudoLocale: "pseudo",
     fallbackLocales: undefined,
     catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
-  })
+  });
   compileCatalogModule.mockResolvedValue({
     code: 'export const messages={"greeting":"Hallo"};export default { messages };',
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
-  })
+  });
   compileCatalogArtifactSelected.mockResolvedValue({
     messages: { greeting: "Hallo" },
     missing: [],
     diagnostics: [],
     watchFiles: ["/repo/src/locales/de.po"],
     resolvedLocaleChain: ["de"],
-  })
+  });
   createCatalogLoaderResult.mockReturnValue({
     code: 'export const messages={"greeting":"Hallo"};export default { messages };',
     warnings: [],
-  })
-  createMissingErrorMessage.mockReturnValue("Missing selected translation")
-  vi.spyOn(console, "warn").mockImplementation(() => {})
+  });
+  createMissingErrorMessage.mockReturnValue("Missing selected translation");
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 
   moduleLoader._load = (request, parent, isMain) => {
     if (request === "@palamedes/config") {
-      return { loadPalamedesConfig }
+      return { loadPalamedesConfig };
     }
     if (request === "@palamedes/core-node") {
       return {
         compileCatalogArtifactSelectedAsync: compileCatalogArtifactSelected,
         compileCatalogModuleAsync: compileCatalogModule,
-      }
+      };
     }
     if (request === "@palamedes/transform") {
-      return { createCatalogLoaderResult, createMissingErrorMessage }
+      return { createCatalogLoaderResult, createMissingErrorMessage };
     }
-    return originalLoad.call(Module, request, parent, isMain)
-  }
-})
+    return originalLoad.call(Module, request, parent, isMain);
+  };
+});
 
 afterEach(() => {
-  moduleLoader._load = originalLoad
-  vi.restoreAllMocks()
-  delete require.cache[require.resolve(loaderPath)]
-})
+  moduleLoader._load = originalLoad;
+  vi.restoreAllMocks();
+  delete require.cache[require.resolve(loaderPath)];
+});
 
 describe("palamedes-po-loader.cjs", () => {
   it("compiles a PO file into a catalog module and tracks dependencies", async () => {
-    const result = await runLoader()
+    const result = await runLoader();
 
     expect(result.code).toBe(
-      'export const messages={"greeting":"Hallo"};export default { messages };'
-    )
+      'export const messages={"greeting":"Hallo"};export default { messages };',
+    );
     expect(result.dependencies).toStrictEqual([
       "/repo/palamedes.yaml",
       "/repo/config/settings.ts",
       "/repo/src/locales/en.po",
-    ])
+    ]);
     expect(compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/src/locales/de.po",
@@ -93,100 +93,100 @@ describe("palamedes-po-loader.cjs", () => {
         pseudoLocale: "pseudo",
         failOnMissing: false,
         failOnCompileError: false,
-      })
-    )
-  })
+      }),
+    );
+  });
 
   it("prefers the plugin project root over a divergent loader root context", async () => {
-    await runLoader({ cwd: "/next-app" }, { rootContext: "/monorepo-root" })
+    await runLoader({ cwd: "/next-app" }, { rootContext: "/monorepo-root" });
 
     expect(loadPalamedesConfig).toHaveBeenCalledWith({
       configPath: undefined,
       cwd: path.resolve("/next-app"),
-    })
-  })
+    });
+  });
 
   it("falls back to the loader root context when no project root is propagated", async () => {
-    await runLoader({}, { rootContext: "/next-app" })
+    await runLoader({}, { rootContext: "/next-app" });
 
     expect(loadPalamedesConfig).toHaveBeenCalledWith({
       configPath: undefined,
       cwd: path.resolve("/next-app"),
-    })
-  })
+    });
+  });
 
   it("fails missing translations when configured", async () => {
-    compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"))
+    compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"));
 
-    await expect(runLoader({ failOnMissing: true })).rejects.toThrow(/Missing 1 translation/)
-  })
+    await expect(runLoader({ failOnMissing: true })).rejects.toThrow(/Missing 1 translation/);
+  });
 
   it("routes diagnostics through webpack's emitWarning when not fatal", async () => {
     compileCatalogModule.mockResolvedValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
-    })
-    const emitWarning = vi.fn()
+    });
+    const emitWarning = vi.fn();
 
-    await runLoader({}, { emitWarning })
+    await runLoader({}, { emitWarning });
 
     expect(emitWarning).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining("Catalog diagnostics for locale de"),
-      })
-    )
-    expect(console.warn).not.toHaveBeenCalled()
-  })
+      }),
+    );
+    expect(console.warn).not.toHaveBeenCalled();
+  });
 
   it("fails compile diagnostics when configured", async () => {
-    compileCatalogModule.mockRejectedValue(new Error("Compilation error for 1 translation"))
+    compileCatalogModule.mockRejectedValue(new Error("Compilation error for 1 translation"));
 
     await expect(runLoader({ failOnCompileError: true })).rejects.toThrow(
-      /Compilation error for 1 translation/
-    )
-    expect(console.warn).not.toHaveBeenCalled()
-  })
+      /Compilation error for 1 translation/,
+    );
+    expect(console.warn).not.toHaveBeenCalled();
+  });
 
   it("compiles only the ids encoded by a generated sidecar import", async () => {
-    const selection = Buffer.from(JSON.stringify(["id-a", "id-b"])).toString("base64url")
+    const selection = Buffer.from(JSON.stringify(["id-a", "id-b"])).toString("base64url");
 
-    const result = await runLoader({}, { resourceQuery: `?palamedes-selected=${selection}` })
+    const result = await runLoader({}, { resourceQuery: `?palamedes-selected=${selection}` });
 
     expect(compileCatalogArtifactSelected).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo" }),
       "/repo/src/locales/de.po",
-      ["id-a", "id-b"]
-    )
+      ["id-a", "id-b"],
+    );
     expect(createCatalogLoaderResult).toHaveBeenCalledWith(
       expect.objectContaining({ messages: { greeting: "Hallo" } }),
-      expect.objectContaining({ locale: "de" })
-    )
-    expect(compileCatalogModule).not.toHaveBeenCalled()
-    expect(result.code).toContain('"greeting":"Hallo"')
-  })
+      expect.objectContaining({ locale: "de" }),
+    );
+    expect(compileCatalogModule).not.toHaveBeenCalled();
+    expect(result.code).toContain('"greeting":"Hallo"');
+  });
 
   it("warns once per development compilation when a selected sidecar host cannot add dependencies", async () => {
-    const selection = Buffer.from(JSON.stringify(["id-a"])).toString("base64url")
-    const emitWarning = vi.fn()
-    const compilation = {}
+    const selection = Buffer.from(JSON.stringify(["id-a"])).toString("base64url");
+    const emitWarning = vi.fn();
+    const compilation = {};
     const context = {
       _compilation: compilation,
       addDependency: undefined,
       emitWarning,
       resourceQuery: `?palamedes-selected=${selection}`,
-    }
+    };
 
-    await runLoader({}, context)
-    await runLoader({}, context)
+    await runLoader({}, context);
+    await runLoader({}, context);
 
-    expect(emitWarning).toHaveBeenCalledOnce()
+    expect(emitWarning).toHaveBeenCalledOnce();
     expect(emitWarning).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining("does not implement addDependency"),
-      })
-    )
-  })
+      }),
+    );
+  });
 
   it("warns about selected messages missing from a non-pseudo locale", async () => {
     compileCatalogArtifactSelected.mockResolvedValue({
@@ -195,25 +195,25 @@ describe("palamedes-po-loader.cjs", () => {
       diagnostics: [],
       watchFiles: [],
       resolvedLocaleChain: ["de"],
-    })
-    const selection = Buffer.from(JSON.stringify(["id-missing"])).toString("base64url")
-    const emitWarning = vi.fn()
+    });
+    const selection = Buffer.from(JSON.stringify(["id-missing"])).toString("base64url");
+    const emitWarning = vi.fn();
 
-    await runLoader({}, { resourceQuery: `?palamedes-selected=${selection}`, emitWarning })
+    await runLoader({}, { resourceQuery: `?palamedes-selected=${selection}`, emitWarning });
 
     expect(emitWarning).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Missing selected translation" })
-    )
-  })
-})
+      expect.objectContaining({ message: "Missing selected translation" }),
+    );
+  });
+});
 
 async function runLoader(
   options: Record<string, unknown> = {},
-  extraContext: Record<string, unknown> = {}
+  extraContext: Record<string, unknown> = {},
 ) {
-  delete require.cache[require.resolve(loaderPath)]
-  const loader = require(loaderPath) as (this: unknown) => void
-  const dependencies: string[] = []
+  delete require.cache[require.resolve(loaderPath)];
+  const loader = require(loaderPath) as (this: unknown) => void;
+  const dependencies: string[] = [];
 
   const code = await new Promise<string>((resolve, reject) => {
     const context = {
@@ -221,23 +221,23 @@ async function runLoader(
       async() {
         return (error: Error | null, output?: string) => {
           if (error) {
-            reject(error)
-            return
+            reject(error);
+            return;
           }
-          resolve(output ?? "")
-        }
+          resolve(output ?? "");
+        };
       },
       getOptions() {
-        return options
+        return options;
       },
       addDependency(file: string) {
-        dependencies.push(file)
+        dependencies.push(file);
       },
       ...extraContext,
-    }
+    };
 
-    loader.call(context)
-  })
+    loader.call(context);
+  });
 
-  return { code, dependencies }
+  return { code, dependencies };
 }

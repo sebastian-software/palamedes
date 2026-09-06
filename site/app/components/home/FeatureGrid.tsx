@@ -1,18 +1,18 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import type { FeatureCard } from "~/data/features"
-import { FeatureIcon } from "~/components/icons/FeatureIcon"
+import type { FeatureCard } from "~/data/features";
+import { FeatureIcon } from "~/components/icons/FeatureIcon";
 
 interface FeatureGridProps {
-  cards: FeatureCard[]
-  columns?: 2 | 3 | 4
+  cards: FeatureCard[];
+  columns?: 2 | 3 | 4;
 }
 
 const COLUMN_CLASSES = {
   2: "grid-cols-2 max-tight:grid-cols-1",
   3: "grid-cols-3 max-grid:grid-cols-2 max-tight:grid-cols-1",
   4: "grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1",
-}
+};
 
 export function FeatureGrid({ cards, columns = 3 }: FeatureGridProps) {
   return (
@@ -44,5 +44,5 @@ export function FeatureGrid({ cards, columns = 3 }: FeatureGridProps) {
         </div>
       ))}
     </div>
-  )
+  );
 }

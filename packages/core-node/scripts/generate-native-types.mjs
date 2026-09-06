@@ -1,17 +1,17 @@
-import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const scriptDir = import.meta.dirname
-const packageDir = path.resolve(scriptDir, "..")
-const repoRoot = path.resolve(packageDir, "../..")
-const outputPath = path.join(packageDir, "src/generated/palamedes-node-types.ts")
-const mode = process.argv.includes("--check") ? "check" : "write"
+const scriptDir = import.meta.dirname;
+const packageDir = path.resolve(scriptDir, "..");
+const repoRoot = path.resolve(packageDir, "../..");
+const outputPath = path.join(packageDir, "src/generated/palamedes-node-types.ts");
+const mode = process.argv.includes("--check") ? "check" : "write";
 
 function generateSource() {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-napi-types-"))
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-napi-types-"));
 
   try {
     execFileSync("cargo", ["build", "--package", "palamedes-node"], {
@@ -21,17 +21,17 @@ function generateSource() {
         NAPI_TYPE_DEF_TMP_FOLDER: tempRoot,
       },
       stdio: "pipe",
-    })
+    });
 
-    const typeDefPath = path.join(tempRoot, "palamedes-node")
+    const typeDefPath = path.join(tempRoot, "palamedes-node");
     const lines = readFileSync(typeDefPath, "utf8")
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => JSON.parse(line))
+      .map((line) => JSON.parse(line));
 
-    const interfaces = []
-    const methods = []
+    const interfaces = [];
+    const methods = [];
 
     for (const entry of lines) {
       if (entry.kind === "interface") {
@@ -41,16 +41,16 @@ function generateSource() {
           .filter(Boolean)
           .map((line) => {
             if (line.startsWith("*")) {
-              return `   ${line}`
+              return `   ${line}`;
             }
             if (line.startsWith("/**")) {
-              return `  ${line}`
+              return `  ${line}`;
             }
-            return `  ${line.replace(/;$/u, "")};`
+            return `  ${line.replace(/;$/u, "")};`;
           })
-          .join("\n")
-        interfaces.push(`export interface ${entry.name} {\n${body}\n}`)
-        continue
+          .join("\n");
+        interfaces.push(`export interface ${entry.name} {\n${body}\n}`);
+        continue;
       }
 
       if (entry.kind === "string_enum") {
@@ -59,24 +59,24 @@ function generateSource() {
           .map((member) => member.trim())
           .filter(Boolean)
           .map((member) => {
-            const match = /^[A-Za-z0-9_]+\s*=\s*'([^']+)'$/.exec(member)
+            const match = /^[A-Za-z0-9_]+\s*=\s*'([^']+)'$/.exec(member);
             if (!match) {
-              throw new Error(`Unsupported string enum definition: ${entry.def}`)
+              throw new Error(`Unsupported string enum definition: ${entry.def}`);
             }
-            return JSON.stringify(match[1])
-          })
-        interfaces.push(`export type ${entry.name} = ${members.join(" | ")}`)
-        continue
+            return JSON.stringify(match[1]);
+          });
+        interfaces.push(`export type ${entry.name} = ${members.join(" | ")}`);
+        continue;
       }
 
       if (entry.kind === "fn") {
-        const match = /^function\s+([^(]+)\((.*)\):\s*(.+)$/.exec(String(entry.def))
+        const match = /^function\s+([^(]+)\((.*)\):\s*(.+)$/.exec(String(entry.def));
         if (!match) {
-          throw new Error(`Unsupported function type definition: ${entry.def}`)
+          throw new Error(`Unsupported function type definition: ${entry.def}`);
         }
 
-        const [, name, args, returnType] = match
-        methods.push(`  ${name}(${args}): ${returnType};`)
+        const [, name, args, returnType] = match;
+        methods.push(`  ${name}(${args}): ${returnType};`);
       }
     }
 
@@ -90,24 +90,24 @@ function generateSource() {
       ...methods,
       "}",
       "",
-    ].join("\n")
+    ].join("\n");
   } finally {
-    rmSync(tempRoot, { recursive: true, force: true })
+    rmSync(tempRoot, { recursive: true, force: true });
   }
 }
 
-const source = generateSource()
+const source = generateSource();
 
 if (mode === "check") {
-  const existing = readFileSync(outputPath, "utf8")
+  const existing = readFileSync(outputPath, "utf8");
   if (existing !== source) {
     console.error(
-      "Generated native type declarations are out of date. Run `pnpm --filter @palamedes/core-node generate-native-types`."
-    )
-    process.exit(1)
+      "Generated native type declarations are out of date. Run `pnpm --filter @palamedes/core-node generate-native-types`.",
+    );
+    process.exit(1);
   }
-  process.exit(0)
+  process.exit(0);
 }
 
-mkdirSync(path.dirname(outputPath), { recursive: true })
-writeFileSync(outputPath, source)
+mkdirSync(path.dirname(outputPath), { recursive: true });
+writeFileSync(outputPath, source);

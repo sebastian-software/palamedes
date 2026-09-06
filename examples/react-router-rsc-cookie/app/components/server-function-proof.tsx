@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import { useState, useTransition } from "react"
+import { useState, useTransition } from "react";
 
-import { readLocalizedServerFunction } from "../lib/server-function"
+import { readLocalizedServerFunction } from "../lib/server-function";
 
-type Proof = Awaited<ReturnType<typeof readLocalizedServerFunction>>
+type Proof = Awaited<ReturnType<typeof readLocalizedServerFunction>>;
 
 export function ServerFunctionProof() {
-  const [proof, setProof] = useState<Proof | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [proof, setProof] = useState<Proof | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function runProof() {
     startTransition(async () => {
-      setProof(await readLocalizedServerFunction())
-    })
+      setProof(await readLocalizedServerFunction());
+    });
   }
 
   return (
@@ -32,5 +32,5 @@ export function ServerFunctionProof() {
       <output data-testid="server-function-cross-module">{proof?.crossModule ?? "waiting"}</output>
       <output data-testid="server-function-default">{proof?.defaultParameter ?? "waiting"}</output>
     </section>
-  )
+  );
 }

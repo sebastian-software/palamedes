@@ -1,21 +1,21 @@
-import type { NativeTransformOptions } from "@palamedes/core-node"
+import type { NativeTransformOptions } from "@palamedes/core-node";
 
 /**
  * Source map interface (compatible with standard source map format)
  */
 export type SourceMap = {
-  version: number
-  sources: string[]
-  sourcesContent?: (string | null)[]
-  names: string[]
-  mappings: string
-  file?: string
-}
+  version: number;
+  sources: string[];
+  sourcesContent?: (string | null)[];
+  names: string[];
+  mappings: string;
+  file?: string;
+};
 
 /**
  * Configuration options for the Palamedes native transform.
  */
-export type TransformOptions = NativeTransformOptions
+export type TransformOptions = NativeTransformOptions;
 
 /**
  * Result of a transform operation
@@ -24,23 +24,23 @@ export type TransformResult = {
   /**
    * The transformed source code
    */
-  code: string
+  code: string;
 
   /**
    * Whether the code was modified
    */
-  hasChanged: boolean
+  hasChanged: boolean;
 
   /**
    * Stable compiled runtime IDs referenced by the transformed module.
    */
-  compiledIds: string[]
+  compiledIds: string[];
 
   /**
    * Source map for the transformation.
    */
-  map: SourceMap | null
-}
+  map: SourceMap | null;
+};
 
 /**
  * Palamedes macro package names that we recognize
@@ -50,7 +50,7 @@ export const PALAMEDES_MACRO_PACKAGES = [
   "@palamedes/react/macro",
   "@palamedes/remix/macro",
   "@palamedes/solid/macro",
-] as const
+] as const;
 
 /**
  * Default source filter for bundler integrations that can transform both ESM
@@ -59,17 +59,17 @@ export const PALAMEDES_MACRO_PACKAGES = [
  * Loader-only integrations may intentionally use a narrower filter when their
  * host cannot execute the ESM imports emitted by the macro transform.
  */
-export const PALAMEDES_BUNDLER_TRANSFORM_INCLUDE = /\.([cm]?[jt]s|[jt]sx)$/
+export const PALAMEDES_BUNDLER_TRANSFORM_INCLUDE = /\.([cm]?[jt]s|[jt]sx)$/;
 
 /**
  * JS macro function names
  */
-export const JS_MACROS = ["t", "plural", "select", "selectOrdinal"] as const
+export const JS_MACROS = ["t", "plural", "select", "selectOrdinal"] as const;
 
 /**
  * JSX macro component names
  */
-export const JSX_MACROS = ["Trans", "Plural", "Select", "SelectOrdinal"] as const
+export const JSX_MACROS = ["Trans", "Plural", "Select", "SelectOrdinal"] as const;
 
-export type JsMacroName = (typeof JS_MACROS)[number]
-export type JsxMacroName = (typeof JSX_MACROS)[number]
+export type JsMacroName = (typeof JS_MACROS)[number];
+export type JsxMacroName = (typeof JSX_MACROS)[number];

@@ -12,18 +12,18 @@ import {
   ArdoSidebarLink,
   ArdoSidebarSection,
   ArdoSocialLink,
-} from "ardo/ui"
-import { ButtonLink, SiteFooter, SiteUiProvider } from "@palamedes/site-ui"
-import { Link, useLoaderData, useLocation } from "react-router"
-import config from "virtual:ardo/config"
+} from "ardo/ui";
+import { ButtonLink, SiteFooter, SiteUiProvider } from "@palamedes/site-ui";
+import { Link, useLoaderData, useLocation } from "react-router";
+import config from "virtual:ardo/config";
 
-import { OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config"
-import docsNavigation from "~/data/generated/docs-navigation.json"
-import decisionLedger from "~/data/generated/decision-ledger.json"
-import blogPosts from "~/data/generated/blog-posts.json"
-import { PRIMARY_NAVIGATION_GROUPS, isPrimaryNavigationLinkActive } from "~/data/navigation"
+import { OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config";
+import docsNavigation from "~/data/generated/docs-navigation.json";
+import decisionLedger from "~/data/generated/decision-ledger.json";
+import blogPosts from "~/data/generated/blog-posts.json";
+import { PRIMARY_NAVIGATION_GROUPS, isPrimaryNavigationLinkActive } from "~/data/navigation";
 
-import "./app.css"
+import "./app.css";
 
 export function links() {
   return [
@@ -34,11 +34,11 @@ export function links() {
       type: "font/woff2",
       crossOrigin: "anonymous" as const,
     },
-  ]
+  ];
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  return <ArdoRootLayout>{children}</ArdoRootLayout>
+  return <ArdoRootLayout>{children}</ArdoRootLayout>;
 }
 
 function renderSidebarSections() {
@@ -77,11 +77,11 @@ function renderSidebarSections() {
         </ArdoSidebarGroup>
       </ArdoSidebarSection>
     </>
-  )
+  );
 }
 
 function PrimaryNavigation() {
-  const { pathname } = useLocation()
+  const { pathname } = useLocation();
 
   return (
     <ArdoNav className="pmds-primary-nav">
@@ -91,7 +91,7 @@ function PrimaryNavigation() {
             {group.label}
           </span>
           {group.links.map((link) => {
-            const active = isPrimaryNavigationLinkActive(link, pathname)
+            const active = isPrimaryNavigationLinkActive(link, pathname);
             return (
               <Link
                 key={link.href}
@@ -102,12 +102,12 @@ function PrimaryNavigation() {
               >
                 {link.label}
               </Link>
-            )
+            );
           })}
         </div>
       ))}
     </ArdoNav>
-  )
+  );
 }
 
 export function loader() {
@@ -118,7 +118,7 @@ export function loader() {
           commitHash: __PALAMEDES_BUILD_HASH__,
         }
       : null,
-  }
+  };
 }
 
 /*
@@ -128,7 +128,7 @@ export function loader() {
  * the public props used here — never from overriding ARDO internals.
  */
 export default function App() {
-  const { build } = useLoaderData<typeof loader>()
+  const { build } = useLoaderData<typeof loader>();
 
   return (
     <SiteUiProvider linkComponent={RouterSiteLink}>
@@ -189,7 +189,7 @@ export default function App() {
         </ArdoFooter>
       </ArdoRoot>
     </SiteUiProvider>
-  )
+  );
 }
 
-export const ErrorBoundary = ArdoErrorBoundary
+export const ErrorBoundary = ArdoErrorBoundary;

@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { createClientCatalogBoundary } from "@palamedes/react/client"
+import { createClientCatalogBoundary } from "@palamedes/react/client";
 
-import { createExampleI18n, locales, type Locale } from "@/lib/i18n"
+import { createExampleI18n, locales, type Locale } from "@/lib/i18n";
 
 export const ClientLocaleBoundary = createClientCatalogBoundary<Locale>({
   createI18n: createExampleI18n,
@@ -10,10 +10,10 @@ export const ClientLocaleBoundary = createClientCatalogBoundary<Locale>({
   // chunk per locale. Only the requested locale is loaded for hydration.
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale() {
-    const locale = document.documentElement.lang
+    const locale = document.documentElement.lang;
     if (!locales.isLocale(locale)) {
-      throw new Error(`Unsupported document locale: ${locale}`)
+      throw new Error(`Unsupported document locale: ${locale}`);
     }
-    return locale
+    return locale;
   },
-})
+});

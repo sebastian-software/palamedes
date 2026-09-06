@@ -1,17 +1,17 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { frameworkLandingHref } from "~/data/framework-landing"
-import { cellFor } from "~/data/matrix"
-import { repoHref } from "~/data/links"
+import { frameworkLandingHref } from "~/data/framework-landing";
+import { cellFor } from "~/data/matrix";
+import { repoHref } from "~/data/links";
 
 /* Per-framework panels — copy verbatim from FrameworksPage.jsx. */
 
 interface FwPanel {
-  name: string
-  slug: string
-  body: string
-  matrixSlug?: string
-  sourcePath: string
+  name: string;
+  slug: string;
+  body: string;
+  matrixSlug?: string;
+  sourcePath: string;
 }
 
 const PANELS: FwPanel[] = [
@@ -63,17 +63,17 @@ const PANELS: FwPanel[] = [
     sourcePath: "packages/vite-plugin",
     body: "The shared build integration behind the TanStack Start, Solid, Waku, and React Router families. Use it directly with React or Solid for macro transforms, PO imports, and build diagnostics.",
   },
-]
+];
 
 export function FwPanels() {
   return (
     <div className="border border-hair">
       {PANELS.map((panel, index) => {
-        const cookie = panel.matrixSlug ? cellFor(panel.matrixSlug, "cookie") : undefined
-        const route = panel.matrixSlug ? cellFor(panel.matrixSlug, "route") : undefined
-        const subdomain = panel.matrixSlug ? cellFor(panel.matrixSlug, "subdomain") : undefined
-        const tld = panel.matrixSlug ? cellFor(panel.matrixSlug, "tld") : undefined
-        const hasLiveDemos = Boolean(cookie?.demoLinks?.length)
+        const cookie = panel.matrixSlug ? cellFor(panel.matrixSlug, "cookie") : undefined;
+        const route = panel.matrixSlug ? cellFor(panel.matrixSlug, "route") : undefined;
+        const subdomain = panel.matrixSlug ? cellFor(panel.matrixSlug, "subdomain") : undefined;
+        const tld = panel.matrixSlug ? cellFor(panel.matrixSlug, "tld") : undefined;
+        const hasLiveDemos = Boolean(cookie?.demoLinks?.length);
         return (
           <div
             key={panel.slug}
@@ -144,8 +144,8 @@ export function FwPanels() {
               </p>
             </div>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

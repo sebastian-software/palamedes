@@ -1,9 +1,9 @@
-import type { CompiledCatalogMessages as InternalCompiledCatalogMessages } from "./compiledMessage"
-import { createI18nRuntime, type CreateI18nOptions, type PalamedesI18n } from "./i18nRuntime"
+import type { CompiledCatalogMessages as InternalCompiledCatalogMessages } from "./compiledMessage";
+import { createI18nRuntime, type CreateI18nOptions, type PalamedesI18n } from "./i18nRuntime";
 
 export type CompiledPalamedesI18n = Omit<PalamedesI18n, "load"> & {
-  load: (locale: string, messages: InternalCompiledCatalogMessages) => void
-}
+  load: (locale: string, messages: InternalCompiledCatalogMessages) => void;
+};
 
 /**
  * Creates the parser-free runtime for generated executable catalogs.
@@ -12,10 +12,10 @@ export type CompiledPalamedesI18n = Omit<PalamedesI18n, "load"> & {
  * catalogs or calling parser compatibility APIs.
  */
 export function createI18n(options: CreateI18nOptions = {}): CompiledPalamedesI18n {
-  return createI18nRuntime(options) as CompiledPalamedesI18n
+  return createI18nRuntime(options) as CompiledPalamedesI18n;
 }
 
-export { DEFAULT_LOCALE } from "./i18nRuntime"
+export { DEFAULT_LOCALE } from "./i18nRuntime";
 export {
   createCompiledMessageRuntime,
   defineCompiledCatalog,
@@ -27,14 +27,14 @@ export {
   type CompiledMessageRuntime,
   type ExecutableMessageRenderer,
   type MessageValues,
-} from "./compiledMessage"
+} from "./compiledMessage";
 export {
   formatMessageArgument,
   replacePoundPlaceholders,
   stringifyValue,
   type MessageFormat,
-} from "./runtimeFormat"
-export { resolveChoice, type ResolvedChoice } from "./runtimeChoice"
+} from "./runtimeFormat";
+export { resolveChoice, type ResolvedChoice } from "./runtimeChoice";
 export type {
   CreateI18nOptions,
   MessageFormatErrorInfo,
@@ -42,5 +42,5 @@ export type {
   MissingMessageInfo,
   PalamedesI18n,
   ReportedMessageError,
-} from "./i18nRuntime"
-export type { MessageNode } from "./messageFormat"
+} from "./i18nRuntime";
+export type { MessageNode } from "./messageFormat";

@@ -1,6 +1,6 @@
-import * as React from "react"
-import { cloneElement, Fragment, isValidElement } from "react"
-import type { ReactElement, ReactNode } from "react"
+import * as React from "react";
+import { cloneElement, Fragment, isValidElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import {
   createCompiledMessageRuntime,
@@ -8,26 +8,26 @@ import {
   replacePoundPlaceholders,
   resolveChoice,
   stringifyValue,
-} from "@palamedes/core/compiled"
+} from "@palamedes/core/compiled";
 import type {
   CompiledMessageRuntime,
   MessageMetadata,
   MessageNode,
   PalamedesI18n,
-} from "@palamedes/core/compiled"
+} from "@palamedes/core/compiled";
 
 export type TransProps = {
   // `id` is optional in authored source: components are written with `message`
   // and the Palamedes compiler transform injects the resolved id at build time.
-  id?: string
-  message?: string
-  context?: string
-  comment?: string
-  values?: Record<string, unknown>
-  components?: Record<string, ReactElement>
-}
+  id?: string;
+  message?: string;
+  context?: string;
+  comment?: string;
+  values?: Record<string, unknown>;
+  components?: Record<string, ReactElement>;
+};
 
-type PatternParser = (pattern: string) => MessageNode[]
+type PatternParser = (pattern: string) => MessageNode[];
 type RendererI18n = Pick<
   PalamedesI18n,
   | "locale"
@@ -37,22 +37,22 @@ type RendererI18n = Pick<
   | "parsePattern"
   | "renderMessage"
   | "reportError"
->
+>;
 type ResettableReactMessageRuntime = {
-  reset: (components: Record<string, ReactElement>) => void
-  runtime: CompiledMessageRuntime<ReactNode[]>
-}
+  reset: (components: Record<string, ReactElement>) => void;
+  runtime: CompiledMessageRuntime<ReactNode[]>;
+};
 type CachedReactMessageRuntime = ResettableReactMessageRuntime & {
-  locale: string
-  timeZone: string | undefined
-}
+  locale: string;
+  timeZone: string | undefined;
+};
 
-const EMPTY_COMPONENTS: Record<string, ReactElement> = Object.freeze({})
-const EMPTY_VALUES: Record<string, unknown> = Object.freeze({})
+const EMPTY_COMPONENTS: Record<string, ReactElement> = Object.freeze({});
+const EMPTY_VALUES: Record<string, unknown> = Object.freeze({});
 
 /** Creates the shared Trans component for compatibility and compiled entries. */
 export function createTrans(useI18n: () => RendererI18n, fallbackParser?: PatternParser) {
-  const runtimeCache = createReactMessageRuntimeCache(fallbackParser)
+  const runtimeCache = createReactMessageRuntimeCache(fallbackParser);
   return function Trans({
     id,
     message,
@@ -61,17 +61,17 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
     context,
     comment,
   }: TransProps): ReactNode {
-    const i18n = useI18n()
-    const resolvedId = id ?? message ?? ""
+    const i18n = useI18n();
+    const resolvedId = id ?? message ?? "";
     const metadata: MessageMetadata = {
       message,
       context,
       comment,
       renderUncompiledPattern: fallbackParser !== undefined,
-    }
-    const runtime = runtimeCache.get(i18n, components ?? EMPTY_COMPONENTS)
-    return <>{renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, runtime, metadata)}</>
-  }
+    };
+    const runtime = runtimeCache.get(i18n, components ?? EMPTY_COMPONENTS);
+    return <>{renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, runtime, metadata)}</>;
+  };
 }
 
 export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
@@ -79,21 +79,21 @@ export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
   // The weak i18n key keeps request-scoped instances collectable. Component
   // names define the runtime shape; the current element values are installed
   // for each synchronous render so inline object literals still reuse it.
-  const cache = new WeakMap<RendererI18n, Map<string, CachedReactMessageRuntime>>()
+  const cache = new WeakMap<RendererI18n, Map<string, CachedReactMessageRuntime>>();
 
   return {
     get(
       i18n: RendererI18n,
-      components: Record<string, ReactElement>
+      components: Record<string, ReactElement>,
     ): CompiledMessageRuntime<ReactNode[]> {
-      let byComponents = cache.get(i18n)
+      let byComponents = cache.get(i18n);
       if (byComponents === undefined) {
-        byComponents = new Map()
-        cache.set(i18n, byComponents)
+        byComponents = new Map();
+        cache.set(i18n, byComponents);
       }
 
-      const componentShape = componentShapeKey(components)
-      let cached = byComponents.get(componentShape)
+      const componentShape = componentShapeKey(components);
+      let cached = byComponents.get(componentShape);
       if (
         cached === undefined ||
         cached.locale !== i18n.locale ||
@@ -103,13 +103,13 @@ export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
           ...createResettableReactMessageRuntime(i18n, components, fallbackParser),
           locale: i18n.locale,
           timeZone: i18n.timeZone,
-        }
-        byComponents.set(componentShape, cached)
+        };
+        byComponents.set(componentShape, cached);
       }
-      cached.reset(components)
-      return cached.runtime
+      cached.reset(components);
+      return cached.runtime;
     },
-  }
+  };
 }
 
 export function renderI18nMessage(
@@ -117,113 +117,113 @@ export function renderI18nMessage(
   id: string,
   values: Record<string, unknown>,
   runtime: CompiledMessageRuntime<ReactNode[]>,
-  metadata: MessageMetadata
+  metadata: MessageMetadata,
 ): ReactNode[] {
   if (typeof i18n.renderMessage === "function") {
-    return i18n.renderMessage(id, values, runtime, metadata)
+    return i18n.renderMessage(id, values, runtime, metadata);
   }
 
-  const nodes = i18n.getMessageNodes(id, metadata)
+  const nodes = i18n.getMessageNodes(id, metadata);
   try {
-    return renderNodes(nodes, values, runtime, i18n.locale)
+    return renderNodes(nodes, values, runtime, i18n.locale);
   } catch (error) {
-    const fallback = metadata.message ?? id
-    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false })
-    i18n.reportError?.({ id, error, pattern, fallback, metadata })
+    const fallback = metadata.message ?? id;
+    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false });
+    i18n.reportError?.({ id, error, pattern, fallback, metadata });
 
     if (pattern !== fallback) {
       try {
-        return runtime.pattern(fallback, values)
+        return runtime.pattern(fallback, values);
       } catch {
         // Fall through to plain source text when the fallback is malformed.
       }
     }
 
-    return runtime.join(fallback)
+    return runtime.join(fallback);
   }
 }
 
 export function createReactMessageRuntime(
   i18n: RendererI18n,
   components: Record<string, ReactElement>,
-  fallbackParser?: PatternParser
+  fallbackParser?: PatternParser,
 ): CompiledMessageRuntime<ReactNode[]> {
-  return createResettableReactMessageRuntime(i18n, components, fallbackParser).runtime
+  return createResettableReactMessageRuntime(i18n, components, fallbackParser).runtime;
 }
 
 function createResettableReactMessageRuntime(
   i18n: RendererI18n,
   components: Record<string, ReactElement>,
-  fallbackParser?: PatternParser
+  fallbackParser?: PatternParser,
 ): ResettableReactMessageRuntime {
-  const locale = i18n.locale
-  const timeZone = i18n.timeZone
-  let currentComponents = components
-  let nextKey = 0
+  const locale = i18n.locale;
+  const timeZone = i18n.timeZone;
+  let currentComponents = components;
+  let nextKey = 0;
   const runtime: CompiledMessageRuntime<ReactNode[]> = createCompiledMessageRuntime<ReactNode[]>(
     locale,
     {
       pattern(pattern, values) {
-        const nodes = parsePattern(i18n, pattern, fallbackParser)
-        return renderNodes(nodes, values, runtime, locale)
+        const nodes = parsePattern(i18n, pattern, fallbackParser);
+        return renderNodes(nodes, values, runtime, locale);
       },
       join(...parts) {
-        return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
+        return parts.flatMap((part) => (typeof part === "string" ? [part] : part));
       },
       value(value) {
-        return [renderVariable(value, nextKey++)]
+        return [renderVariable(value, nextKey++)];
       },
       number(value, style) {
-        return [formatMessageArgument("number", value, style, locale)]
+        return [formatMessageArgument("number", value, style, locale)];
       },
       date(value, style) {
-        return [formatMessageArgument("date", value, style, locale, timeZone)]
+        return [formatMessageArgument("date", value, style, locale, timeZone)];
       },
       time(value, style) {
-        return [formatMessageArgument("time", value, style, locale, timeZone)]
+        return [formatMessageArgument("time", value, style, locale, timeZone)];
       },
       pound(value) {
-        return [replacePoundPlaceholders("#", value, locale)]
+        return [replacePoundPlaceholders("#", value, locale)];
       },
       literal(value) {
-        return [value]
+        return [value];
       },
       tag(name, children) {
-        const component = currentComponents[name]
+        const component = currentComponents[name];
         if (component && isValidElement(component)) {
-          return [cloneElement(component, { key: nextKey++ }, ...children)]
+          return [cloneElement(component, { key: nextKey++ }, ...children)];
         }
-        return children
+        return children;
       },
-    }
-  )
+    },
+  );
   return {
     reset(nextComponents) {
-      currentComponents = nextComponents
-      nextKey = 0
+      currentComponents = nextComponents;
+      nextKey = 0;
     },
     runtime,
-  }
+  };
 }
 
 function componentShapeKey(components: Record<string, ReactElement>): string {
-  return JSON.stringify(Object.keys(components).sort())
+  return JSON.stringify(Object.keys(components).sort());
 }
 
 function parsePattern(
   i18n: RendererI18n,
   pattern: string,
-  fallbackParser?: PatternParser
+  fallbackParser?: PatternParser,
 ): MessageNode[] {
   if (i18n.parsePattern !== undefined) {
-    return i18n.parsePattern(pattern)
+    return i18n.parsePattern(pattern);
   }
   if (fallbackParser !== undefined) {
-    return fallbackParser(pattern)
+    return fallbackParser(pattern);
   }
   // Older custom instances predate the parse-only capability. Preserve their
   // compatibility behavior while current full runtimes avoid catalog lookup.
-  return i18n.getMessageNodes(pattern, { message: pattern, reportMissing: false })
+  return i18n.getMessageNodes(pattern, { message: pattern, reportMissing: false });
 }
 
 function renderNodes(
@@ -231,9 +231,9 @@ function renderNodes(
   values: Record<string, unknown>,
   runtime: CompiledMessageRuntime<ReactNode[]>,
   locale: string,
-  pluralValue?: number
+  pluralValue?: number,
 ): ReactNode[] {
-  return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue))
+  return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue));
 }
 
 function renderNode(
@@ -241,7 +241,7 @@ function renderNode(
   values: Record<string, unknown>,
   runtime: CompiledMessageRuntime<ReactNode[]>,
   locale: string,
-  pluralValue?: number
+  pluralValue?: number,
 ): ReactNode[] {
   switch (node.type) {
     case "text":
@@ -249,32 +249,32 @@ function renderNode(
         pluralValue === undefined
           ? node.value
           : replacePoundPlaceholders(node.value, pluralValue, locale),
-      ]
+      ];
     case "literal":
-      return runtime.literal(node.value)
+      return runtime.literal(node.value);
     case "variable":
-      return runtime.value(values, node.name)
+      return runtime.value(values, node.name);
     case "formatted":
-      return runtime[node.format](values, node.variable, node.style)
+      return runtime[node.format](values, node.variable, node.style);
     case "tag":
       return runtime.tag(
         node.name,
-        renderNodes(node.children, values, runtime, locale, pluralValue)
-      )
+        renderNodes(node.children, values, runtime, locale, pluralValue),
+      );
     case "choice": {
-      const resolved = resolveChoice(node, values[node.variable], locale)
-      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
-      return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue)
+      const resolved = resolveChoice(node, values[node.variable], locale);
+      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue;
+      return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue);
     }
   }
 }
 
 function renderVariable(value: unknown, key: number): ReactNode {
   if (isValidElement(value)) {
-    return cloneElement(value, { key })
+    return cloneElement(value, { key });
   }
 
-  return stringifyValue(value)
+  return stringifyValue(value);
 }
 
-export { Fragment }
+export { Fragment };

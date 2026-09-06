@@ -1,12 +1,12 @@
-import { Tabs } from "@base-ui/react/tabs"
+import { Tabs } from "@base-ui/react/tabs";
 
-import { LocaleBookingCards } from "./LocaleBookingCards"
+import { LocaleBookingCards } from "./LocaleBookingCards";
 
 interface CodeTab {
-  id: string
-  label: string
-  caption: string
-  code: string
+  id: string;
+  label: string;
+  caption: string;
+  code: string;
 }
 
 /*
@@ -54,27 +54,27 @@ msgstr "Deine Reise nach Lissabon"
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
   },
-]
+];
 
 /* Code lines keyed by their line number — the stable identity of a code line. */
 function toLines(code: string): { no: number; text: string }[] {
-  return code.split("\n").map((text, index) => ({ no: index + 1, text }))
+  return code.split("\n").map((text, index) => ({ no: index + 1, text }));
 }
 
 function toneFor(line: string): string {
   if (line.startsWith("import ") || line.startsWith("export ")) {
-    return "text-accent-soft"
+    return "text-accent-soft";
   }
   if (line.startsWith("#") || line.startsWith("//")) {
-    return "text-gray-spec"
+    return "text-gray-spec";
   }
   if (line.startsWith("✓")) {
-    return "text-term-ok"
+    return "text-term-ok";
   }
   if (line.startsWith("$")) {
-    return "text-paper"
+    return "text-paper";
   }
-  return "text-paper/85"
+  return "text-paper/85";
 }
 
 export function CodeShowcase() {
@@ -118,5 +118,5 @@ export function CodeShowcase() {
         <LocaleBookingCards />
       </div>
     </div>
-  )
+  );
 }

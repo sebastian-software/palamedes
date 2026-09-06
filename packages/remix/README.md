@@ -32,8 +32,8 @@ For browser-delivered modules, install the post-compile asset loader and allow
 the generated runtime import:
 
 ```ts
-import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix"
-import { createAssetServer } from "remix/assets"
+import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import { createAssetServer } from "remix/assets";
 
 const assetServer = createAssetServer({
   basePath: "/assets",
@@ -41,7 +41,7 @@ const assetServer = createAssetServer({
   allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: { loaders: [createPalamedesRemixAssetLoader()] },
-})
+});
 ```
 
 The browser loader transforms ordinary macros after Remix compiles TypeScript
@@ -110,12 +110,12 @@ export const remixI18n = createRemixI18nServer({
   strategy: "cookie",
   loadMessages, // May be an executable server catalog.
   loadClientMessages(locale) {
-    return browserCatalogs[locale] // Serializable Record<string, string>.
+    return browserCatalogs[locale]; // Serializable Record<string, string>.
   },
-})
+});
 
 // While rendering inside remixI18n.run(...)
-const catalog = remixI18n.renderClientBootstrap(locale)
+const catalog = remixI18n.renderClientBootstrap(locale);
 ```
 
 Place `catalog` inside the rendered `<body>` before the external browser entry.
@@ -123,11 +123,11 @@ It is an inert `<template id="palamedes-i18n-bootstrap">`, not executable
 inline script. In the browser entry:
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { initializeRemixClientI18n } from "@palamedes/remix/client"
+import { createI18n } from "@palamedes/core";
+import { initializeRemixClientI18n } from "@palamedes/remix/client";
 
-initializeRemixClientI18n({ createI18n })
-await import("./translated-app.js")
+initializeRemixClientI18n({ createI18n });
+await import("./translated-app.js");
 ```
 
 The server payload uses ICU strings deliberately. Produce them at build or
@@ -162,8 +162,8 @@ frame endpoint inside `remixI18n.run()` so a streamed frame and a later,
 client-initiated frame reload independently resolve the same request locale:
 
 ```tsx
-import { Frame } from "remix/ui"
-import { renderToStream } from "remix/ui/server"
+import { Frame } from "remix/ui";
+import { renderToStream } from "remix/ui/server";
 
 function renderDocument(request: Request, locale: string) {
   return renderToStream(
@@ -176,8 +176,8 @@ function renderDocument(request: Request, locale: string) {
       frameSrc: request.url,
       signal: request.signal,
       resolveFrame: () => renderLocaleSummary(),
-    }
-  )
+    },
+  );
 }
 ```
 
@@ -188,8 +188,8 @@ components; those calls remain visible to the server loader after JSX lowering.
 Import rich-message macros from the Remix-specific entry:
 
 ```tsx
-import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/remix/macro"
-import type { Handle } from "remix/ui"
+import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/remix/macro";
+import type { Handle } from "remix/ui";
 
 export function Greeting(handle: Handle<{ name: string; count: number }>) {
   return () => (
@@ -199,7 +199,7 @@ export function Greeting(handle: Handle<{ name: string; count: number }>) {
       </Trans>
       <Plural value={handle.props.count} one="# message" other="# messages" />
     </p>
-  )
+  );
 }
 ```
 

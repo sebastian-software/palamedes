@@ -1,37 +1,37 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { unstable_getHeaders } from "waku/router/server"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { TicketPanel } from "../components/TicketPanel"
-import { getLocaleLabel, resolveCookieLocale, type Locale } from "../lib/i18n"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { unstable_getHeaders } from "waku/router/server";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { TicketPanel } from "../components/TicketPanel";
+import { getLocaleLabel, resolveCookieLocale, type Locale } from "../lib/i18n";
 import {
   asynchronousServerActionMessage,
   synchronousServerActionMessage,
-} from "../lib/server-action-helpers.server"
-import { crossModuleServerActionMessage } from "../lib/server-action-cross-module.server"
+} from "../lib/server-action-helpers.server";
+import { crossModuleServerActionMessage } from "../lib/server-action-cross-module.server";
 
 type ProbeResult = {
-  handledAt: string
-  locale: Locale
-  localeLabel: string
+  handledAt: string;
+  locale: Locale;
+  localeLabel: string;
   messages: Record<
     "asynchronous" | "crossModule" | "defaultParameter" | "direct" | "synchronous",
     string
-  >
-}
+  >;
+};
 
 export default async function CookiePage() {
-  const headers = unstable_getHeaders()
-  const { locale } = resolveCookieLocale(headers)
-  const localeLabel = getLocaleLabel(locale)
+  const headers = unstable_getHeaders();
+  const { locale } = resolveCookieLocale(headers);
+  const localeLabel = getLocaleLabel(locale);
 
   async function runProbe(
-    defaultParameter = t`Parameter default confirmed locale.`
+    defaultParameter = t`Parameter default confirmed locale.`,
   ): Promise<ProbeResult> {
-    "use server"
+    "use server";
 
     return {
       handledAt: new Date().toISOString(),
@@ -44,7 +44,7 @@ export default async function CookiePage() {
         direct: t`Server action confirmed locale ${locale}.`,
         synchronous: synchronousServerActionMessage(),
       },
-    }
+    };
   }
 
   return (
@@ -95,11 +95,11 @@ export default async function CookiePage() {
 
       <ClientReady />
     </>
-  )
+  );
 }
 
 export async function getConfig() {
   return {
     render: "dynamic",
-  } as const
+  } as const;
 }

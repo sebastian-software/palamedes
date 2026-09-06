@@ -109,10 +109,10 @@ import {
   listTranslationCandidates,
   type CatalogArtifactConfig,
   type TranslationPatch,
-} from "@palamedes/core-node"
+} from "@palamedes/core-node";
 
-declare function completedSingular(source: string): string
-declare function completedPluralBranch(selector: string, source: string): string
+declare function completedSingular(source: string): string;
+declare function completedPluralBranch(selector: string, source: string): string;
 
 const config: CatalogArtifactConfig = {
   rootDir: process.cwd(),
@@ -124,16 +124,16 @@ const config: CatalogArtifactConfig = {
       include: ["src"],
     },
   ],
-}
+};
 
 const { candidates, diagnostics } = listTranslationCandidates({
   config,
   locales: ["de"],
   maxOrigins: 5,
-})
+});
 
 if (diagnostics.length > 0) {
-  throw new Error(diagnostics.map(({ message }) => message).join("\n"))
+  throw new Error(diagnostics.map(({ message }) => message).join("\n"));
 }
 
 // A provider, translation memory, editor, or human review step can produce
@@ -150,24 +150,24 @@ const patches: TranslationPatch[] = candidates.map((candidate) => ({
             Object.entries(candidate.source.values).map(([selector, source]) => [
               selector,
               completedPluralBranch(selector, source),
-            ])
+            ]),
           ),
         },
-}))
+}));
 
-let result
+let result;
 try {
-  result = applyTranslationPatches({ config, patches })
+  result = applyTranslationPatches({ config, patches });
 } catch (error) {
   if (isTranslationPatchWriteError(error)) {
-    console.error(error.code, error.message, error.cause, error.report)
+    console.error(error.code, error.message, error.cause, error.report);
   }
-  throw error
+  throw error;
 }
 
 if (result.diagnostics.length > 0) {
   // Re-enumerate stale candidates before retrying them.
-  console.error(result.diagnostics)
+  console.error(result.diagnostics);
 }
 ```
 
@@ -182,5 +182,5 @@ const patch: TranslationPatch = {
   machine: {
     ai: { model: "example/model", confidence: 0.92 },
   },
-}
+};
 ```

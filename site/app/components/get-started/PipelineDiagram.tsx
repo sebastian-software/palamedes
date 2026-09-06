@@ -1,6 +1,6 @@
-import { Fragment } from "react"
+import { Fragment } from "react";
 
-import { PIPELINE } from "~/data/steps"
+import { PIPELINE } from "~/data/steps";
 
 export function PipelineDiagram() {
   return (
@@ -23,5 +23,5 @@ export function PipelineDiagram() {
       </span>
       <span className="border border-accent px-3 py-1.5 tracking-label text-accent">repeat</span>
     </p>
-  )
+  );
 }

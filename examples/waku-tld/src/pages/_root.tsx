@@ -1,15 +1,15 @@
-import type { ReactNode } from "react"
-import { unstable_getHeaders } from "waku/router/server"
-import "@palamedes/example-ui/styles.css"
-import { locales } from "../lib/i18n"
+import type { ReactNode } from "react";
+import { unstable_getHeaders } from "waku/router/server";
+import "@palamedes/example-ui/styles.css";
+import { locales } from "../lib/i18n";
 
 export default function Root({ children }: { children: ReactNode }) {
-  const headers = unstable_getHeaders()
+  const headers = unstable_getHeaders();
   const { locale } = locales.resolve({
     strategy: "tld",
     acceptLanguageHeader: headers["accept-language"],
     requestHost: headers.host ?? null,
-  })
+  });
 
   return (
     <html lang={locale}>
@@ -19,11 +19,11 @@ export default function Root({ children }: { children: ReactNode }) {
       </head>
       <body>{children}</body>
     </html>
-  )
+  );
 }
 
 export async function getConfig() {
   return {
     render: "dynamic",
-  } as const
+  } as const;
 }

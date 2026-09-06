@@ -1,42 +1,42 @@
-import type { CatalogMessages } from "@palamedes/core"
-import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale"
-import { createRemixI18nServer } from "@palamedes/remix/server"
-import { messages as deMessages } from "./locales/de.po"
-import { messages as enMessages } from "./locales/en.po"
-import { messages as esMessages } from "./locales/es.po"
+import type { CatalogMessages } from "@palamedes/core";
+import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
+import { createRemixI18nServer } from "@palamedes/remix/server";
+import { messages as deMessages } from "./locales/de.po";
+import { messages as enMessages } from "./locales/en.po";
+import { messages as esMessages } from "./locales/es.po";
 
-export const LOCALES = ["en", "de", "es"] as const
-export const DEFAULT_LOCALE = "en"
-export const LOCALE_COOKIE = "locale"
+export const LOCALES = ["en", "de", "es"] as const;
+export const DEFAULT_LOCALE = "en";
+export const LOCALE_COOKIE = "locale";
 
-export type Locale = (typeof LOCALES)[number]
+export type Locale = (typeof LOCALES)[number];
 export type ResolvedLocale = {
-  locale: Locale
-  source: LocaleSource
-}
+  locale: Locale;
+  source: LocaleSource;
+};
 
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
   cookies: { choice: LOCALE_COOKIE },
   hosts: { locales: { en: "en.lvh.me", de: "de.lvh.me", es: "es.lvh.me" } },
-})
+});
 
-export const LOCALE_LABELS = locales.labels
-export const normalizeLocale = locales.normalizeLocale
+export const LOCALE_LABELS = locales.labels;
+export const normalizeLocale = locales.normalizeLocale;
 
 const CATALOGS: Record<Locale, CatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
-}
+};
 
 export function getLocaleLabel(locale: Locale): string {
-  return locales.label(locale)
+  return locales.label(locale);
 }
 
 export function loadMessages(locale: Locale): CatalogMessages {
-  return CATALOGS[locale]
+  return CATALOGS[locale];
 }
 
 export const remixI18n = createRemixI18nServer({
@@ -44,14 +44,14 @@ export const remixI18n = createRemixI18nServer({
   strategy: "route",
   loadMessages,
   routeParam: "locale",
-})
+});
 
 export function resolveLocaleFromRequest(request: Request): ResolvedLocale {
-  return remixI18n.resolveLocale(request)
+  return remixI18n.resolveLocale(request);
 }
 
 export function getRootRedirectLocale(request: Request): Locale {
-  return locales.preferredLocale(request.headers.get("accept-language"))
+  return locales.preferredLocale(request.headers.get("accept-language"));
 }
 
 export function getRouteBanner(request: Request, locale: Locale): string | null {
@@ -61,27 +61,27 @@ export function getRouteBanner(request: Request, locale: Locale): string | null 
     currentLocale: locale,
     pathname: `/${locale}`,
     requestHost: request.headers.get("host"),
-  })
+  });
 
   return suggestion
     ? `${suggestion.description} Switch to the recommended locale: ${suggestion.recommendedLocale}.`
-    : null
+    : null;
 }
 
 export function getRouteSwitchLinks(request: Request) {
-  const host = request.headers.get("host") ?? "en.lvh.me:4061"
+  const host = request.headers.get("host") ?? "en.lvh.me:4061";
   return LOCALES.map((locale) => ({
     href: locales.canonicalUrl({ locale, pathname: `/${locale}`, requestHost: host }),
     locale,
-  }))
+  }));
 }
 
 export function resolveLocaleRedirect(
   request: Request,
   locale: Locale,
   redirect: FormDataEntryValue | null,
-  fallback: string
+  fallback: string,
 ): string {
-  const allowedRedirect = getRouteSwitchLinks(request).find((item) => item.locale === locale)?.href
-  return typeof redirect === "string" && redirect === allowedRedirect ? redirect : fallback
+  const allowedRedirect = getRouteSwitchLinks(request).find((item) => item.locale === locale)?.href;
+  return typeof redirect === "string" && redirect === allowedRedirect ? redirect : fallback;
 }

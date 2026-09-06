@@ -1,12 +1,12 @@
-import { createHash } from "node:crypto"
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import path from "node:path"
+import { createHash } from "node:crypto";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type * as PalamedesConfigModule from "@palamedes/config"
-import type * as PalamedesTransformModule from "@palamedes/transform"
+import type * as PalamedesConfigModule from "@palamedes/config";
+import type * as PalamedesTransformModule from "@palamedes/transform";
 
 const mocks = vi.hoisted(() => ({
   loadPalamedesConfig: vi.fn(),
@@ -16,31 +16,31 @@ const mocks = vi.hoisted(() => ({
   createMissingErrorMessage: vi.fn(),
   renderCatalogModule: vi.fn(),
   transformPalamedesMacros: vi.fn(),
-}))
+}));
 
 vi.mock("@palamedes/config", async (importOriginal) => {
   // Catalog path resolution is pure and shared with the Next loader — exercise
   // the real implementation so these tests pin the resolved paths.
-  const actual = await importOriginal<typeof PalamedesConfigModule>()
+  const actual = await importOriginal<typeof PalamedesConfigModule>();
   return {
     loadPalamedesConfig: mocks.loadPalamedesConfig,
     resolveCatalogPath: actual.resolveCatalogPath,
     catalogMatchesSource: actual.catalogMatchesSource,
     catalogResourcePath: actual.catalogResourcePath,
-  }
-})
+  };
+});
 
 vi.mock("@palamedes/core-node", () => ({
   analyzeMdxNative: mocks.analyzeMdxNative,
   compileCatalogArtifactSelectedAsync: mocks.compileCatalogArtifactSelected,
   compileCatalogModuleAsync: mocks.compileCatalogModule,
   renderCatalogModule: mocks.renderCatalogModule,
-}))
+}));
 
 vi.mock("@palamedes/transform", async (importOriginal) => {
   // Framework resolution is pure and shared across plugins — exercise the real
   // implementation so these tests pin the derived defaults, not a stub.
-  const actual = await importOriginal<typeof PalamedesTransformModule>()
+  const actual = await importOriginal<typeof PalamedesTransformModule>();
   return {
     PALAMEDES_BUNDLER_TRANSFORM_INCLUDE: actual.PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     PALAMEDES_MACRO_PACKAGES: ["@palamedes/core/macro", "@palamedes/react/macro"],
@@ -48,15 +48,15 @@ vi.mock("@palamedes/transform", async (importOriginal) => {
     transformPalamedesMacros: mocks.transformPalamedesMacros,
     resolveMacroRuntimeModule: actual.resolveMacroRuntimeModule,
     mdxFrameworkFor: actual.mdxFrameworkFor,
-  }
-})
+  };
+});
 
-import { palamedes } from "./index"
+import { palamedes } from "./index";
 
 // catalogResourcePath() resolves configured catalog paths. Keep the mocked
 // native boundary aligned with the host path convention so this suite covers
 // the Windows path it receives in production as well as POSIX paths.
-const deCatalogPath = path.resolve("/repo/src/locales/de.po")
+const deCatalogPath = path.resolve("/repo/src/locales/de.po");
 
 beforeEach(() => {
   mocks.loadPalamedesConfig.mockResolvedValue({
@@ -67,7 +67,7 @@ beforeEach(() => {
     pseudoLocale: "pseudo",
     fallbackLocales: undefined,
     catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
-  })
+  });
   mocks.analyzeMdxNative.mockReturnValue({
     messages: [],
     diagnostics: [],
@@ -79,29 +79,29 @@ beforeEach(() => {
       names: [],
       mappings: "AAAA",
     },
-  })
+  });
   mocks.compileCatalogModule.mockResolvedValue({
     code: 'export const messages={"greeting":"Hallo"};export default { messages };',
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
-  })
+  });
   mocks.compileCatalogArtifactSelected.mockResolvedValue({
     messages: {},
     missing: [],
     diagnostics: [],
     watchFiles: ["/repo/src/locales/de.po", "/repo/src/locales/en.po"],
     resolvedLocaleChain: ["de", "en"],
-  })
+  });
   mocks.createMissingErrorMessage.mockImplementation(
     (locale: string, missing: unknown[]) =>
-      `Missing ${missing.length} translation(s) for locale ${locale}`
-  )
+      `Missing ${missing.length} translation(s) for locale ${locale}`,
+  );
   mocks.renderCatalogModule.mockImplementation(
     (messages: Record<string, string>) =>
-      `/*rendered*/export const messages=${JSON.stringify(messages)};export default { messages };`
-  )
-  vi.spyOn(console, "warn").mockImplementation(() => {})
-})
+      `/*rendered*/export const messages=${JSON.stringify(messages)};export default { messages };`,
+  );
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
 
 describe("palamedes vite plugin", () => {
   it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
@@ -109,19 +109,19 @@ describe("palamedes vite plugin", () => {
     (file) => {
       expect(runMacroTransform({}, undefined, [], `/repo/src/${file}`)).toMatchObject({
         code: "transformed",
-      })
-    }
-  )
+      });
+    },
+  );
 
   it("compiles PO files and registers watch dependencies", async () => {
-    const addWatchFile = vi.fn()
-    const result = await runPoTransform({ addWatchFile })
+    const addWatchFile = vi.fn();
+    const result = await runPoTransform({ addWatchFile });
 
     expect(result).toStrictEqual({
       code: 'export const messages={"greeting":"Hallo"};export default { messages };',
       map: null,
-    })
-    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/en.po")
+    });
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/en.po");
     expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/src/locales/de.po",
@@ -129,35 +129,35 @@ describe("palamedes vite plugin", () => {
         locale: "de",
         failOnMissing: false,
         failOnCompileError: false,
-      })
-    )
-  })
+      }),
+    );
+  });
 
   it("fails missing translations when configured", async () => {
-    mocks.compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"))
+    mocks.compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"));
 
     await expect(runPoTransform({}, { failOnMissing: true })).rejects.toThrow(
-      /Missing 1 translation/
-    )
-  })
+      /Missing 1 translation/,
+    );
+  });
 
   it("routes diagnostics through the plugin warning channel when not fatal", async () => {
     mocks.compileCatalogModule.mockResolvedValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
-    })
-    const warn = vi.fn()
+    });
+    const warn = vi.fn();
 
-    await runPoTransform({ warn })
+    await runPoTransform({ warn });
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Catalog diagnostics for locale de"))
-  })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Catalog diagnostics for locale de"));
+  });
 
   it.each(["react", "solid"] as const)(
     "compiles MDX for the %s runtime with native source maps",
     async (framework) => {
-      const addWatchFile = vi.fn()
+      const addWatchFile = vi.fn();
       const result = await runMdxTransform(
         { addWatchFile },
         {
@@ -166,14 +166,14 @@ describe("palamedes vite plugin", () => {
             translatableAttributes: ["alt", "title"],
             frontMatterFields: ["title"],
           },
-        }
-      )
+        },
+      );
 
       expect(result).toStrictEqual({
         code: "export default function MDXContent() { return <p>Translated</p> }",
         map: expect.objectContaining({ mappings: "AAAA" }),
         ...(framework === "react" ? { moduleType: "jsx" } : {}),
-      })
+      });
       expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
         "# Welcome",
         "/repo/src/guide.mdx",
@@ -181,22 +181,22 @@ describe("palamedes vite plugin", () => {
           framework,
           translatableAttributes: ["alt", "title"],
           frontMatterFields: ["title"],
-        })
-      )
-      expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml")
-    }
-  )
+        }),
+      );
+      expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
+    },
+  );
 
   it("keeps generated MDX hook-free", async () => {
-    mocks.analyzeMdxNative.mockClear()
-    await runMdxTransform({}, { runtimeModule: "@acme/macro-runtime" })
+    mocks.analyzeMdxNative.mockClear();
+    await runMdxTransform({}, { runtimeModule: "@acme/macro-runtime" });
 
     const mdxOptions = mocks.analyzeMdxNative.mock.calls[0]?.[2] as
       | Record<string, unknown>
-      | undefined
-    expect(mdxOptions).toBeDefined()
-    expect(mdxOptions).toHaveProperty("runtimeModule", "@palamedes/runtime")
-  })
+      | undefined;
+    expect(mdxOptions).toBeDefined();
+    expect(mdxOptions).toHaveProperty("runtimeModule", "@palamedes/runtime");
+  });
 
   it("lets MDX configuration set its own runtime module", async () => {
     await runMdxTransform(
@@ -204,15 +204,15 @@ describe("palamedes vite plugin", () => {
       {
         runtimeModule: "@acme/macro-runtime",
         mdx: { runtimeModule: "@acme/mdx-runtime" },
-      }
-    )
+      },
+    );
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ runtimeModule: "@acme/mdx-runtime" })
-    )
-  })
+      expect.objectContaining({ runtimeModule: "@acme/mdx-runtime" }),
+    );
+  });
 
   it("validates compiled MDX IDs when failOnMissing is enabled", async () => {
     mocks.compileCatalogArtifactSelected.mockReturnValueOnce({
@@ -221,19 +221,19 @@ describe("palamedes vite plugin", () => {
       diagnostics: [],
       watchFiles: ["/repo/src/locales/de.po", "/repo/src/locales/en.po"],
       resolvedLocaleChain: ["de", "en"],
-    })
+    });
 
     await expect(runMdxTransform({}, { failOnMissing: true })).rejects.toThrow(
-      /Missing 1 translation.*failOnMissing=true/s
-    )
+      /Missing 1 translation.*failOnMissing=true/s,
+    );
     expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
       expect.objectContaining({
         catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
       }),
       deCatalogPath,
-      ["message-id"]
-    )
-  })
+      ["message-id"],
+    );
+  });
 
   it("configures JSX module parsing only for React MDX", async () => {
     await expect(runMdxConfig()).resolves.toMatchObject({
@@ -244,37 +244,37 @@ describe("palamedes vite plugin", () => {
           },
         },
       },
-    })
-    await expect(runMdxConfig({ mdx: { framework: "solid" } })).resolves.toBeUndefined()
-  })
+    });
+    await expect(runMdxConfig({ mdx: { framework: "solid" } })).resolves.toBeUndefined();
+  });
 
   it("does not require an auto-discovered config during Vite startup", async () => {
     mocks.loadPalamedesConfig.mockRejectedValueOnce(
-      new Error("Could not find a Palamedes config. Expected one of palamedes.yaml.")
-    )
+      new Error("Could not find a Palamedes config. Expected one of palamedes.yaml."),
+    );
 
-    await expect(runMdxConfig()).resolves.toBeUndefined()
-  })
+    await expect(runMdxConfig()).resolves.toBeUndefined();
+  });
 
   it("does not hide config errors other than missing auto-discovery", async () => {
-    mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"))
+    mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"));
 
-    await expect(runMdxConfig()).rejects.toThrow("Invalid Palamedes config")
-  })
+    await expect(runMdxConfig()).rejects.toThrow("Invalid Palamedes config");
+  });
 
   it("still requires a config when an MDX module is transformed", async () => {
     mocks.loadPalamedesConfig.mockRejectedValueOnce(
-      new Error("Could not find a Palamedes config. Expected one of palamedes.yaml.")
-    )
+      new Error("Could not find a Palamedes config. Expected one of palamedes.yaml."),
+    );
 
-    await expect(runMdxTransform()).rejects.toThrow("Could not find a Palamedes config")
-  })
+    await expect(runMdxTransform()).rejects.toThrow("Could not find a Palamedes config");
+  });
 
   it("does not let the JavaScript include filter disable MDX", async () => {
     await expect(runMdxTransform({}, { include: "src/**/*.ts" })).resolves.toMatchObject({
       moduleType: "jsx",
-    })
-  })
+    });
+  });
 
   it("reports source-ranged MDX diagnostics through Vite", async () => {
     mocks.analyzeMdxNative.mockReturnValue({
@@ -287,53 +287,53 @@ describe("palamedes vite plugin", () => {
         },
       ],
       compiledIds: [],
-    })
+    });
     const error = vi.fn((diagnostic: unknown) => {
       const message =
-        typeof diagnostic === "string" ? diagnostic : (diagnostic as { message?: string }).message
-      throw new Error(message)
-    })
+        typeof diagnostic === "string" ? diagnostic : (diagnostic as { message?: string }).message;
+      throw new Error(message);
+    });
 
     await expect(runMdxTransform({ error })).rejects.toThrow(
-      /\/repo\/src\/guide\.mdx:3:1: unclosed JSX tag \(UnclosedJsxTag\)/
-    )
+      /\/repo\/src\/guide\.mdx:3:1: unclosed JSX tag \(UnclosedJsxTag\)/,
+    );
     expect(error).toHaveBeenCalledWith(
       expect.objectContaining({
         code: "PALAMEDES_MDX",
         id: "/repo/src/guide.mdx",
         loc: { file: "/repo/src/guide.mdx", line: 3, column: 0 },
-      })
-    )
-  })
+      }),
+    );
+  });
 
   it("can disable first-class MDX compilation", () => {
-    const plugins = palamedes({ mdx: false })
-    expect(plugins.some((plugin) => plugin.name === "palamedes:mdx")).toBe(false)
+    const plugins = palamedes({ mdx: false });
+    expect(plugins.some((plugin) => plugin.name === "palamedes:mdx")).toBe(false);
     const macroTransform = plugins.find(
-      (plugin) => plugin.name === "palamedes:transform"
-    )?.transform
+      (plugin) => plugin.name === "palamedes:transform",
+    )?.transform;
     if (typeof macroTransform !== "function") {
-      throw new TypeError("Expected macro transform hook")
+      throw new TypeError("Expected macro transform hook");
     }
     expect(
       macroTransform.call(
         { error: vi.fn() } as any,
         'import { Trans } from "@palamedes/react/macro"\n# Hello',
-        "/repo/src/guide.mdx"
-      )
-    ).toBeNull()
-  })
+        "/repo/src/guide.mdx",
+      ),
+    ).toBeNull();
+  });
 
   it("invalidates compiled MDX modules when the Palamedes config changes", async () => {
-    const mdxPlugin = palamedes().find((plugin) => plugin.name === "palamedes:mdx")
-    const transform = mdxPlugin?.transform
-    const handleHotUpdate = mdxPlugin?.handleHotUpdate
+    const mdxPlugin = palamedes().find((plugin) => plugin.name === "palamedes:mdx");
+    const transform = mdxPlugin?.transform;
+    const handleHotUpdate = mdxPlugin?.handleHotUpdate;
     if (typeof transform !== "function" || typeof handleHotUpdate !== "function") {
-      throw new TypeError("Expected MDX transform and HMR hooks")
+      throw new TypeError("Expected MDX transform and HMR hooks");
     }
-    await transform.call({ addWatchFile() {} } as any, "# Welcome", "/repo/src/guide.mdx")
-    const module = { id: "/repo/src/guide.mdx" }
-    const invalidateModule = vi.fn()
+    await transform.call({ addWatchFile() {} } as any, "# Welcome", "/repo/src/guide.mdx");
+    const module = { id: "/repo/src/guide.mdx" };
+    const invalidateModule = vi.fn();
 
     const invalidated = await handleHotUpdate.call(
       {} as any,
@@ -345,12 +345,12 @@ describe("palamedes vite plugin", () => {
             invalidateModule,
           },
         },
-      } as any
-    )
+      } as any,
+    );
 
-    expect(invalidateModule).toHaveBeenCalledWith(module)
-    expect(invalidated).toStrictEqual([module])
-  })
+    expect(invalidateModule).toHaveBeenCalledWith(module);
+    expect(invalidated).toStrictEqual([module]);
+  });
 
   it("runs macro lowering on compiled MDX when authored macro imports remain", () => {
     mocks.transformPalamedesMacros.mockReturnValue({
@@ -358,24 +358,24 @@ describe("palamedes vite plugin", () => {
       hasChanged: true,
       compiledIds: ["message-id"],
       map: null,
-    })
-    const macroPlugin = palamedes().find((plugin) => plugin.name === "palamedes:transform")
-    const transform = macroPlugin?.transform
+    });
+    const macroPlugin = palamedes().find((plugin) => plugin.name === "palamedes:transform");
+    const transform = macroPlugin?.transform;
     if (typeof transform !== "function") {
-      throw new TypeError("Expected macro transform hook")
+      throw new TypeError("Expected macro transform hook");
     }
     const code =
-      'import { Trans } from "@palamedes/react/macro"\nexport default <Trans>Hello</Trans>'
+      'import { Trans } from "@palamedes/react/macro"\nexport default <Trans>Hello</Trans>';
 
-    const result = transform.call({ error: vi.fn() } as any, code, "/repo/src/guide.mdx")
+    const result = transform.call({ error: vi.fn() } as any, code, "/repo/src/guide.mdx");
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       code,
       "/repo/src/guide.mdx",
-      expect.any(Object)
-    )
-    expect(result).toMatchObject({ code: expect.stringContaining("translated") })
-  })
+      expect.any(Object),
+    );
+    expect(result).toMatchObject({ code: expect.stringContaining("translated") });
+  });
 
   it.each([
     ["react", undefined, "@palamedes/runtime"],
@@ -384,25 +384,25 @@ describe("palamedes vite plugin", () => {
   ] as const)(
     "derives the macro runtime module for %s",
     (_label, framework, expectedRuntimeModule) => {
-      runMacroTransform(framework === undefined ? {} : { framework })
+      runMacroTransform(framework === undefined ? {} : { framework });
 
       expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
-        expect.objectContaining({ runtimeModule: expectedRuntimeModule })
-      )
-    }
-  )
+        expect.objectContaining({ runtimeModule: expectedRuntimeModule }),
+      );
+    },
+  );
 
   it("lets an explicit runtime module override the framework default", () => {
-    runMacroTransform({ framework: "react", runtimeModule: "@acme/custom-runtime" })
+    runMacroTransform({ framework: "react", runtimeModule: "@acme/custom-runtime" });
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ runtimeModule: "@acme/custom-runtime" })
-    )
-  })
+      expect.objectContaining({ runtimeModule: "@acme/custom-runtime" }),
+    );
+  });
 
   it.each([
     ["build", true, true],
@@ -410,7 +410,7 @@ describe("palamedes vite plugin", () => {
   ] as const)(
     "sets runtime fallback metadata for Vite %s",
     (command, expectedFallbacks, expectedMetadataStrip) => {
-      runMacroTransform({}, command)
+      runMacroTransform({}, command);
 
       expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
         expect.any(String),
@@ -418,53 +418,53 @@ describe("palamedes vite plugin", () => {
         expect.objectContaining({
           keepSourceFallbacks: expectedFallbacks,
           stripNonEssentialProps: expectedMetadataStrip,
-        })
-      )
-    }
-  )
+        }),
+      );
+    },
+  );
 
   it("lets keepSourceFallbacks opt out of the Vite default", () => {
-    runMacroTransform({ keepSourceFallbacks: false }, "build")
+    runMacroTransform({ keepSourceFallbacks: false }, "build");
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ keepSourceFallbacks: false })
-    )
-  })
+      expect.objectContaining({ keepSourceFallbacks: false }),
+    );
+  });
 
   it("applies the source fallback mode to compiled MDX", async () => {
-    await runMdxTransform({}, {}, "build")
+    await runMdxTransform({}, {}, "build");
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ keepSourceFallbacks: true })
-    )
-  })
+      expect.objectContaining({ keepSourceFallbacks: true }),
+    );
+  });
 
   it("seeds MDX options from the framework option", async () => {
-    mocks.analyzeMdxNative.mockClear()
-    await runMdxTransform({}, { framework: "solid" })
+    mocks.analyzeMdxNative.mockClear();
+    await runMdxTransform({}, { framework: "solid" });
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ framework: "solid" })
-    )
-  })
+      expect.objectContaining({ framework: "solid" }),
+    );
+  });
 
   it("lets MDX configuration override the framework option", async () => {
-    mocks.analyzeMdxNative.mockClear()
-    await runMdxTransform({}, { framework: "solid", mdx: { framework: "react" } })
+    mocks.analyzeMdxNative.mockClear();
+    await runMdxTransform({}, { framework: "solid", mdx: { framework: "react" } });
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ framework: "react" })
-    )
-  })
-})
+      expect.objectContaining({ framework: "react" }),
+    );
+  });
+});
 
 describe("experimental graph splitting", () => {
   it("reloads sidecars after config edits without the MDX or PO plugins", async () => {
@@ -473,7 +473,7 @@ describe("experimental graph splitting", () => {
       hasChanged: true,
       compiledIds: ["message-id"],
       map: null,
-    })
+    });
     const initialConfig = {
       configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
       configPath: "/repo/palamedes.yaml",
@@ -482,7 +482,7 @@ describe("experimental graph splitting", () => {
       sourceLocale: "en",
       fallbackLocales: { de: ["en"] },
       catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
-    }
+    };
     const updatedConfig = {
       configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
       configPath: "/repo/palamedes.yaml",
@@ -491,95 +491,95 @@ describe("experimental graph splitting", () => {
       sourceLocale: "en",
       fallbackLocales: { fr: ["en"] },
       catalogs: [{ path: "translations/{locale}", include: ["src/**/*"] }],
-    }
+    };
     mocks.loadPalamedesConfig
       .mockResolvedValueOnce(initialConfig)
       .mockResolvedValueOnce(initialConfig)
-      .mockResolvedValueOnce(updatedConfig)
+      .mockResolvedValueOnce(updatedConfig);
 
     const plugins = palamedes({
       mdx: false,
       enablePoLoader: false,
       experimentalGraphSplitting: true,
-    })
-    const transformPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
-    const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars")
-    const buildStart = transformPlugin?.buildStart
-    const transform = transformPlugin?.transform
-    const watchChange = transformPlugin?.watchChange
-    const load = sidecarPlugin?.load
+    });
+    const transformPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
+    const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
+    const buildStart = transformPlugin?.buildStart;
+    const transform = transformPlugin?.transform;
+    const watchChange = transformPlugin?.watchChange;
+    const load = sidecarPlugin?.load;
     if (
       typeof buildStart !== "function" ||
       typeof transform !== "function" ||
       typeof watchChange !== "function" ||
       typeof load !== "function"
     ) {
-      throw new TypeError("Expected always-present transform and graph-splitting hooks")
+      throw new TypeError("Expected always-present transform and graph-splitting hooks");
     }
-    expect(plugins.some((plugin) => plugin.name === "palamedes:mdx")).toBe(false)
-    expect(plugins.some((plugin) => plugin.name === "palamedes:po-loader")).toBe(false)
+    expect(plugins.some((plugin) => plugin.name === "palamedes:mdx")).toBe(false);
+    expect(plugins.some((plugin) => plugin.name === "palamedes:po-loader")).toBe(false);
 
     const transformed = (await transform.call(
       { error: vi.fn() } as never,
       'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-      "/repo/src/label.ts"
-    )) as { code?: string } | null
-    const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1]
+      "/repo/src/label.ts",
+    )) as { code?: string } | null;
+    const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1];
     if (!key) {
-      throw new TypeError("Expected a graph-splitting sidecar import")
+      throw new TypeError("Expected a graph-splitting sidecar import");
     }
     const context = {
       addWatchFile: vi.fn(),
       error(message: unknown) {
-        throw message instanceof Error ? message : new Error(String(message))
+        throw message instanceof Error ? message : new Error(String(message));
       },
       warn: vi.fn(),
-    }
+    };
 
-    const configLoadsBeforeBuildStart = mocks.loadPalamedesConfig.mock.calls.length
-    buildStart.call({} as never, {} as never)
-    const beforeEdit = await load.call(context as never, `\0palamedes:messages/${key}`)
-    const beforeEditCode = typeof beforeEdit === "string" ? beforeEdit : beforeEdit?.code
-    expect(beforeEditCode).toContain(`virtual:palamedes-messages/${key}/de`)
-    expect(context.addWatchFile).toHaveBeenCalledWith("/repo/config/settings.ts")
-    expect(mocks.loadPalamedesConfig).toHaveBeenCalledTimes(configLoadsBeforeBuildStart + 1)
+    const configLoadsBeforeBuildStart = mocks.loadPalamedesConfig.mock.calls.length;
+    buildStart.call({} as never, {} as never);
+    const beforeEdit = await load.call(context as never, `\0palamedes:messages/${key}`);
+    const beforeEditCode = typeof beforeEdit === "string" ? beforeEdit : beforeEdit?.code;
+    expect(beforeEditCode).toContain(`virtual:palamedes-messages/${key}/de`);
+    expect(context.addWatchFile).toHaveBeenCalledWith("/repo/config/settings.ts");
+    expect(mocks.loadPalamedesConfig).toHaveBeenCalledTimes(configLoadsBeforeBuildStart + 1);
 
-    watchChange.call({} as never, "/repo/config/settings.ts", { event: "update" } as never)
+    watchChange.call({} as never, "/repo/config/settings.ts", { event: "update" } as never);
 
-    const afterEdit = await load.call(context as never, `\0palamedes:messages/${key}`)
-    const afterEditCode = typeof afterEdit === "string" ? afterEdit : afterEdit?.code
-    expect(afterEditCode).toContain(`virtual:palamedes-messages/${key}/fr`)
-    expect(afterEditCode).not.toContain(`virtual:palamedes-messages/${key}/de`)
+    const afterEdit = await load.call(context as never, `\0palamedes:messages/${key}`);
+    const afterEditCode = typeof afterEdit === "string" ? afterEdit : afterEdit?.code;
+    expect(afterEditCode).toContain(`virtual:palamedes-messages/${key}/fr`);
+    expect(afterEditCode).not.toContain(`virtual:palamedes-messages/${key}/de`);
 
-    await load.call(context as never, `\0palamedes:messages/${key}/fr`)
+    await load.call(context as never, `\0palamedes:messages/${key}/fr`);
     expect(mocks.compileCatalogArtifactSelected).toHaveBeenLastCalledWith(
       expect.objectContaining({
         catalogs: [{ path: "translations/{locale}", include: ["src/**/*"] }],
         fallbackLocales: { fr: ["en"] },
       }),
       path.resolve("/repo/translations/fr.po"),
-      ["message-id"]
-    )
-  })
+      ["message-id"],
+    );
+  });
 
   it("appends a sidecar import to modules that reference messages", async () => {
     const result = (await runMacroTransform({ experimentalGraphSplitting: true }, undefined, [
       "id-a",
       "id-b",
-    ])) as { code?: string } | null
+    ])) as { code?: string } | null;
 
     expect(result?.code).toMatch(
-      /^transformed\nimport "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/
-    )
-  })
+      /^transformed\nimport "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/,
+    );
+  });
 
   it("derives reproducible sidecar output from the Palamedes-root-relative path", async () => {
     mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
-      nativeModuleShape(JSON.stringify(messages))
-    )
+      nativeModuleShape(JSON.stringify(messages)),
+    );
 
     async function sidecarOutput(rootDir: string) {
-      const sourceId = `${rootDir}/src/label.ts`
+      const sourceId = `${rootDir}/src/label.ts`;
       mocks.loadPalamedesConfig.mockResolvedValue({
         configPath: `${rootDir}/palamedes.yaml`,
         rootDir,
@@ -588,24 +588,24 @@ describe("experimental graph splitting", () => {
         pseudoLocale: "pseudo",
         fallbackLocales: undefined,
         catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
-      })
+      });
       const result = await runSidecarLoad(
         ["id-a"],
         {},
-        { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", sourceId }
-      )
+        { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", sourceId },
+      );
       return {
         transformedCode: result.transformedCode,
         registration: await result.load(`\0palamedes:messages/${result.key}`, { ssr: false }),
         emitted: await emitImportMap(result.sidecarPlugin, result.key),
-      }
+      };
     }
 
-    const first = await sidecarOutput("/builds/runner-one/project")
-    const second = await sidecarOutput("/builds/runner-two/project")
+    const first = await sidecarOutput("/builds/runner-one/project");
+    const second = await sidecarOutput("/builds/runner-two/project");
 
-    expect(second).toStrictEqual(first)
-  })
+    expect(second).toStrictEqual(first);
+  });
 
   it("normalizes Windows separators before hashing the root-relative path", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -614,18 +614,18 @@ describe("experimental graph splitting", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
 
     const result = (await runMacroTransform(
       { experimentalGraphSplitting: true },
       undefined,
       ["id-a"],
-      "c:\\checkout\\project\\src\\label.ts"
-    )) as { code?: string } | null
-    const expectedKey = createHash("sha256").update("src/label.ts").digest("hex").slice(0, 12)
+      "c:\\checkout\\project\\src\\label.ts",
+    )) as { code?: string } | null;
+    const expectedKey = createHash("sha256").update("src/label.ts").digest("hex").slice(0, 12);
 
-    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`)
-  })
+    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`);
+  });
 
   it("uses a portable relative identity for sources outside the Palamedes root", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -634,20 +634,23 @@ describe("experimental graph splitting", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
 
-    const sourceId = "/checkout/shared/label.ts"
+    const sourceId = "/checkout/shared/label.ts";
     const result = (await runMacroTransform(
       { experimentalGraphSplitting: true },
       undefined,
       ["id-a"],
-      sourceId
-    )) as { code?: string } | null
-    const expectedKey = createHash("sha256").update("../shared/label.ts").digest("hex").slice(0, 12)
+      sourceId,
+    )) as { code?: string } | null;
+    const expectedKey = createHash("sha256")
+      .update("../shared/label.ts")
+      .digest("hex")
+      .slice(0, 12);
 
-    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`)
-    expect(result?.code).not.toContain("checkout")
-  })
+    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`);
+    expect(result?.code).not.toContain("checkout");
+  });
 
   it("rejects a cross-volume Windows source instead of hashing its absolute path", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -656,27 +659,27 @@ describe("experimental graph splitting", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
 
     await expect(
       runMacroTransform(
         { experimentalGraphSplitting: true },
         undefined,
         ["id-a"],
-        "C:\\shared\\label.ts"
-      )
+        "C:\\shared\\label.ts",
+      ),
     ).rejects.toThrow(
-      /Palamedes transform error in C:\\shared\\label\.ts:.*different filesystem volume/
-    )
-  })
+      /Palamedes transform error in C:\\shared\\label\.ts:.*different filesystem volume/,
+    );
+  });
 
   it("wraps asynchronous sidecar config failures with the transformed file", async () => {
-    mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"))
+    mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"));
 
     await expect(
-      runMacroTransform({ experimentalGraphSplitting: true }, undefined, ["id-a"])
-    ).rejects.toThrow("Palamedes transform error in /repo/src/label.ts: Invalid Palamedes config")
-  })
+      runMacroTransform({ experimentalGraphSplitting: true }, undefined, ["id-a"]),
+    ).rejects.toThrow("Palamedes transform error in /repo/src/label.ts: Invalid Palamedes config");
+  });
 
   it("rejects Windows UNC sources on a different share before deriving a relative key", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -685,92 +688,92 @@ describe("experimental graph splitting", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
 
     await expect(
       runMacroTransform(
         { experimentalGraphSplitting: true },
         undefined,
         ["id-a"],
-        "\\\\checkout-server\\shared\\label.ts"
-      )
-    ).rejects.toThrow(/different filesystem volume/)
-  })
+        "\\\\checkout-server\\shared\\label.ts",
+      ),
+    ).rejects.toThrow(/different filesystem volume/);
+  });
 
   it.skipIf(process.platform === "win32")(
     "canonicalizes symlinked module ids before deriving the sidecar key",
     async () => {
-      const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-vite-sidecar-"))
-      const sourceId = path.join(rootDir, "src", "label.ts")
-      const symlinkId = path.join(rootDir, "linked-label.ts")
-      mkdirSync(path.dirname(sourceId), { recursive: true })
-      writeFileSync(sourceId, "export const label = 'Hello'\n")
-      symlinkSync(sourceId, symlinkId)
+      const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-vite-sidecar-"));
+      const sourceId = path.join(rootDir, "src", "label.ts");
+      const symlinkId = path.join(rootDir, "linked-label.ts");
+      mkdirSync(path.dirname(sourceId), { recursive: true });
+      writeFileSync(sourceId, "export const label = 'Hello'\n");
+      symlinkSync(sourceId, symlinkId);
       mocks.loadPalamedesConfig.mockResolvedValue({
         configPath: path.join(rootDir, "palamedes.yaml"),
         rootDir,
         locales: ["en"],
         sourceLocale: "en",
         catalogs: [],
-      })
+      });
 
       try {
         const source = (await runMacroTransform(
           { experimentalGraphSplitting: true },
           undefined,
           ["id-a"],
-          sourceId
-        )) as { code?: string } | null
+          sourceId,
+        )) as { code?: string } | null;
         const symlink = (await runMacroTransform(
           { experimentalGraphSplitting: true },
           undefined,
           ["id-a"],
-          symlinkId
-        )) as { code?: string } | null
+          symlinkId,
+        )) as { code?: string } | null;
 
-        expect(symlink?.code).toBe(source?.code)
+        expect(symlink?.code).toBe(source?.code);
       } finally {
-        rmSync(rootDir, { recursive: true, force: true })
+        rmSync(rootDir, { recursive: true, force: true });
       }
-    }
-  )
+    },
+  );
 
   it("keeps distinct in-root modules in distinct sidecars", async () => {
     const first = (await runMacroTransform(
       { experimentalGraphSplitting: true },
       undefined,
       ["id-a"],
-      "/repo/src/first.ts"
-    )) as { code?: string } | null
+      "/repo/src/first.ts",
+    )) as { code?: string } | null;
     const second = (await runMacroTransform(
       { experimentalGraphSplitting: true },
       undefined,
       ["id-a"],
-      "/repo/src/second.ts"
-    )) as { code?: string } | null
+      "/repo/src/second.ts",
+    )) as { code?: string } | null;
 
-    expect(first?.code).not.toBe(second?.code)
-  })
+    expect(first?.code).not.toBe(second?.code);
+  });
 
   it("leaves modules without message references untouched", async () => {
     const result = (await runMacroTransform(
       { experimentalGraphSplitting: true },
       undefined,
-      []
-    )) as { code?: string } | null
+      [],
+    )) as { code?: string } | null;
 
-    expect(result?.code).toBe("transformed")
-  })
+    expect(result?.code).toBe("transformed");
+  });
 
   it("does not append sidecar imports when the flag is off", async () => {
-    const result = (await runMacroTransform({}, undefined, ["id-a"])) as { code?: string } | null
+    const result = (await runMacroTransform({}, undefined, ["id-a"])) as { code?: string } | null;
 
-    expect(result?.code).toBe("transformed")
-  })
+    expect(result?.code).toBe("transformed");
+  });
 
   it("aggregates branded per-locale modules into one registration, including pseudo", async () => {
-    const { load, key } = await runSidecarLoad(["id-a"])
-    const result = await load(`\0palamedes:messages/${key}`)
+    const { load, key } = await runSidecarLoad(["id-a"]);
+    const result = await load(`\0palamedes:messages/${key}`);
 
     // The pseudo locale is a configured locale like any other here: the native
     // selected compile resolves its catalog through the fallback chain and
@@ -780,23 +783,23 @@ describe("experimental graph splitting", () => {
         `import { messages as m1 } from "virtual:palamedes-messages/${key}/de";\n` +
         `import { messages as m2 } from "virtual:palamedes-messages/${key}/pseudo";\n` +
         `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 }, "${key}");\n`
-    )
-    expect(result?.moduleSideEffects).toBe(true)
+        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 }, "${key}");\n`,
+    );
+    expect(result?.moduleSideEffects).toBe(true);
     // Message compilation happens in the per-locale modules, not the aggregator.
-    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled()
-  })
+    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
+  });
 
   it("appends a sidecar import to MDX modules that reference messages", async () => {
     const result = (await runMdxTransform({}, { experimentalGraphSplitting: true })) as {
-      code?: string
-    } | null
+      code?: string;
+    } | null;
 
     // MDX content splits exactly like `t`/`Trans` call sites: analyzeMdx
     // reports the same compiledIds, so the module carries its own messages.
-    expect(result?.code).toMatch(/import "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/)
-    expect(result?.code).toContain("export default function MDXContent()")
-  })
+    expect(result?.code).toMatch(/import "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/);
+    expect(result?.code).toContain("export default function MDXContent()");
+  });
 
   it("wraps asynchronous MDX sidecar failures with the transformed file", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -805,14 +808,14 @@ describe("experimental graph splitting", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
 
     await expect(
-      runMdxTransform({}, { experimentalGraphSplitting: true }, undefined, "C:\\shared\\guide.mdx")
+      runMdxTransform({}, { experimentalGraphSplitting: true }, undefined, "C:\\shared\\guide.mdx"),
     ).rejects.toThrow(
-      /Palamedes transform error in C:\\shared\\guide\.mdx:.*different filesystem volume/
-    )
-  })
+      /Palamedes transform error in C:\\shared\\guide\.mdx:.*different filesystem volume/,
+    );
+  });
 
   it("leaves MDX modules without messages untouched", async () => {
     mocks.analyzeMdxNative.mockReturnValue({
@@ -821,25 +824,25 @@ describe("experimental graph splitting", () => {
       code: "export default function MDXContent() { return <p>Plain</p> }",
       compiledIds: [],
       map: null,
-    })
+    });
 
     const result = (await runMdxTransform({}, { experimentalGraphSplitting: true })) as {
-      code?: string
-    } | null
+      code?: string;
+    } | null;
 
-    expect(result?.code).toBe("export default function MDXContent() { return <p>Plain</p> }")
-  })
+    expect(result?.code).toBe("export default function MDXContent() { return <p>Plain</p> }");
+  });
 
   it("registers catalog files as watch dependencies of each sidecar", async () => {
     // Dev-mode translation updates ride on this: Vite invalidates the
     // generated modules when a watched catalog changes, so no separate
     // hot-update hook is needed.
-    const { load, key, addWatchFile } = await runSidecarLoad(["id-a"])
-    await load(`\0palamedes:messages/${key}/de`)
+    const { load, key, addWatchFile } = await runSidecarLoad(["id-a"]);
+    await load(`\0palamedes:messages/${key}/de`);
 
-    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/de.po")
-    expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml")
-  })
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/de.po");
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
+  });
 
   it("renders per-locale modules through the native catalog renderer", async () => {
     mocks.compileCatalogArtifactSelected.mockImplementation(
@@ -849,24 +852,24 @@ describe("experimental graph splitting", () => {
         diagnostics: [],
         watchFiles: [resourcePath],
         resolvedLocaleChain: [],
-      })
-    )
+      }),
+    );
 
-    const { load, key, addWatchFile } = await runSidecarLoad(["id-a"])
-    const result = await load(`\0palamedes:messages/${key}/de`)
+    const { load, key, addWatchFile } = await runSidecarLoad(["id-a"]);
+    const result = await load(`\0palamedes:messages/${key}/de`);
 
-    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(1)
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(1);
     expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo" }),
       deCatalogPath,
-      ["id-a"]
-    )
-    expect(mocks.renderCatalogModule).toHaveBeenCalledWith({ "id-a": "Hallo" })
+      ["id-a"],
+    );
+    expect(mocks.renderCatalogModule).toHaveBeenCalledWith({ "id-a": "Hallo" });
     expect(result?.code).toBe(
-      `/*rendered*/export const messages={"id-a":"Hallo"};export default { messages };`
-    )
-    expect(addWatchFile).toHaveBeenCalledWith(deCatalogPath)
-  })
+      `/*rendered*/export const messages={"id-a":"Hallo"};export default { messages };`,
+    );
+    expect(addWatchFile).toHaveBeenCalledWith(deCatalogPath);
+  });
 
   it("replaces every {locale} placeholder in a catalog path", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -875,17 +878,17 @@ describe("experimental graph splitting", () => {
       locales: ["en", "de"],
       sourceLocale: "en",
       catalogs: [{ path: "locales/{locale}/{locale}", include: ["src/**/*"] }],
-    })
+    });
 
-    const { load, key } = await runSidecarLoad(["id-a"])
-    await load(`\0palamedes:messages/${key}/de`)
+    const { load, key } = await runSidecarLoad(["id-a"]);
+    await load(`\0palamedes:messages/${key}/de`);
 
     expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo" }),
       path.resolve("/repo/locales/de/de.po"),
-      ["id-a"]
-    )
-  })
+      ["id-a"],
+    );
+  });
 
   it("warns on missing translations and keeps the sidecar buildable", async () => {
     mocks.compileCatalogArtifactSelected.mockReturnValue({
@@ -894,88 +897,88 @@ describe("experimental graph splitting", () => {
       diagnostics: [],
       watchFiles: [],
       resolvedLocaleChain: [],
-    })
+    });
 
-    const warn = vi.fn()
-    const { load, key } = await runSidecarLoad(["id-a"], { warn })
-    const result = await load(`\0palamedes:messages/${key}/de`)
+    const warn = vi.fn();
+    const { load, key } = await runSidecarLoad(["id-a"], { warn });
+    const result = await load(`\0palamedes:messages/${key}/de`);
 
-    expect(result?.code).toContain("export const messages")
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"))
-  })
+    expect(result?.code).toContain("export const messages");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"));
+  });
 
   const IMPORT_MAP_OPTIONS = {
     experimentalGraphSplitting: { localeBinding: "import-map" as const },
-  }
+  };
 
   function nativeModuleShape(map: string): string {
     return (
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
       `export const messages=__palamedesDefineCompiledCatalog(${map});export default { messages };`
-    )
+    );
   }
 
   it("binds client aggregators to bare specifiers under import-map binding", async () => {
     const { load, key } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
-    )
-    const result = await load(`\0palamedes:messages/${key}`, { ssr: false })
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+    );
+    const result = await load(`\0palamedes:messages/${key}`, { ssr: false });
 
     expect(result?.code).toBe(
       `import { locale as l, messages as m } from "#pmds/${key}";\n` +
         `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
         `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ [l]: defineCompiledCatalog(m) }, "${key}");\n`
-    )
-  })
+        `registerMessages({ [l]: defineCompiledCatalog(m) }, "${key}");\n`,
+    );
+  });
 
   it("keeps SSR aggregators on the embedded form under import-map binding", async () => {
     const { load, key } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
-    )
-    const result = await load(`\0palamedes:messages/${key}`, { ssr: true })
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+    );
+    const result = await load(`\0palamedes:messages/${key}`, { ssr: true });
 
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`)
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/de`)
-    expect(result?.code).not.toContain("#pmds/")
-  })
+    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`);
+    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/de`);
+    expect(result?.code).not.toContain("#pmds/");
+  });
 
   it("keeps dev-server aggregators on the embedded form under import-map binding", async () => {
     const { load, key } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "serve" }
-    )
-    const result = await load(`\0palamedes:messages/${key}`, { ssr: false })
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "serve" },
+    );
+    const result = await load(`\0palamedes:messages/${key}`, { ssr: false });
 
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`)
-    expect(result?.code).not.toContain("#pmds/")
-  })
+    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`);
+    expect(result?.code).not.toContain("#pmds/");
+  });
 
   it("externalizes bare message specifiers under import-map binding", async () => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
-    )
-    const configResult = sidecarPlugin.config.call({} as never)
-    const external = configResult?.build?.rollupOptions?.external as (id: string) => boolean
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+    );
+    const configResult = sidecarPlugin.config.call({} as never);
+    const external = configResult?.build?.rollupOptions?.external as (id: string) => boolean;
 
-    expect(external("#pmds/abc123")).toBe(true)
-    expect(external("react")).toBe(false)
+    expect(external("#pmds/abc123")).toBe(true);
+    expect(external("react")).toBe(false);
 
-    const { sidecarPlugin: embeddedPlugin } = await runSidecarLoad(["id-a"])
-    expect(embeddedPlugin.config.call({} as never)).toBeUndefined()
-  })
+    const { sidecarPlugin: embeddedPlugin } = await runSidecarLoad(["id-a"]);
+    expect(embeddedPlugin.config.call({} as never)).toBeUndefined();
+  });
 
   it("emits per-locale message assets, import maps, and the manifest", async () => {
     mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
-      nativeModuleShape(JSON.stringify(messages))
-    )
+      nativeModuleShape(JSON.stringify(messages)),
+    );
     mocks.compileCatalogArtifactSelected.mockImplementation(
       (_config: unknown, resourcePath: string) => ({
         messages: resourcePath === deCatalogPath ? { "id-a": "Hallo" } : { "id-a": "Hello" },
@@ -983,38 +986,38 @@ describe("experimental graph splitting", () => {
         diagnostics: [],
         watchFiles: [],
         resolvedLocaleChain: [],
-      })
-    )
+      }),
+    );
 
     const { key, sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
-    )
-    const emitted = await emitImportMap(sidecarPlugin, key)
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+    );
+    const emitted = await emitImportMap(sidecarPlugin, key);
 
     // One dependency-free asset per (sidecar x locale), pseudo included.
-    const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))
-    expect(assets).toHaveLength(3)
-    const deAsset = assets.find((file) => file.fileName.includes(".de-"))
+    const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"));
+    expect(assets).toHaveLength(3);
+    const deAsset = assets.find((file) => file.fileName.includes(".de-"));
     expect(deAsset?.source).toBe(
-      `export const locale="de";export const messages=({"id-a":"Hallo"});`
-    )
-    expect(deAsset?.source).not.toContain("import")
+      `export const locale="de";export const messages=({"id-a":"Hallo"});`,
+    );
+    expect(deAsset?.source).not.toContain("import");
 
-    const maps = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-importmap."))
-    expect(maps).toHaveLength(3)
-    const deMap = maps.find((file) => file.fileName.includes(".de-"))
-    expect(JSON.parse(deMap!.source).imports[`#pmds/${key}`]).toBe(`/${deAsset!.fileName}`)
+    const maps = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-importmap."));
+    expect(maps).toHaveLength(3);
+    const deMap = maps.find((file) => file.fileName.includes(".de-"));
+    expect(JSON.parse(deMap!.source).imports[`#pmds/${key}`]).toBe(`/${deAsset!.fileName}`);
 
-    const manifest = emitted.find((file) => file.fileName === "palamedes-split-manifest.json")
-    const parsed = JSON.parse(manifest!.source)
-    expect(parsed.locales).toEqual(["en", "de", "pseudo"])
-    expect(parsed.importMaps.de).toBe(deMap!.fileName)
+    const manifest = emitted.find((file) => file.fileName === "palamedes-split-manifest.json");
+    const parsed = JSON.parse(manifest!.source);
+    expect(parsed.locales).toEqual(["en", "de", "pseudo"]);
+    expect(parsed.importMaps.de).toBe(deMap!.fileName);
     // Only chunks with bare message imports appear, so servers can preload
     // the mapped assets of the chunks they serve.
-    expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] })
-  })
+    expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] });
+  });
 
   it.each([
     ["/app", "/app/"],
@@ -1025,8 +1028,8 @@ describe("experimental graph splitting", () => {
     "uses Vite's final base %s when generating import-map assets as %s",
     async (rawBase, finalBase) => {
       mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
-        nativeModuleShape(JSON.stringify(messages))
-      )
+        nativeModuleShape(JSON.stringify(messages)),
+      );
       const { key, sidecarPlugin } = await runSidecarLoad(
         ["id-a"],
         {},
@@ -1035,19 +1038,19 @@ describe("experimental graph splitting", () => {
           command: "build",
           rawBase,
           finalBase,
-        }
-      )
+        },
+      );
 
-      const emitted = await emitImportMap(sidecarPlugin, key)
-      const asset = emitted.find((file) => file.fileName.startsWith("assets/palamedes-m-"))
-      const importMap = emitted.find((file) => file.fileName.includes("palamedes-importmap.en-"))
-      const assetUrl = JSON.parse(importMap!.source).imports[`#pmds/${key}`]
+      const emitted = await emitImportMap(sidecarPlugin, key);
+      const asset = emitted.find((file) => file.fileName.startsWith("assets/palamedes-m-"));
+      const importMap = emitted.find((file) => file.fileName.includes("palamedes-importmap.en-"));
+      const assetUrl = JSON.parse(importMap!.source).imports[`#pmds/${key}`];
 
-      expect(assetUrl).toBe(`${finalBase}${asset!.fileName}`)
-      expect(assetUrl).not.toContain("/appassets/")
-      expect(assetUrl).not.toContain(".assets/")
-    }
-  )
+      expect(assetUrl).toBe(`${finalBase}${asset!.fileName}`);
+      expect(assetUrl).not.toContain("/appassets/");
+      expect(assetUrl).not.toContain(".assets/");
+    },
+  );
 
   it.each(["./", "assets/"])(
     "rejects relative Vite base %s for import-map assets",
@@ -1059,14 +1062,14 @@ describe("experimental graph splitting", () => {
           pluginOptions: IMPORT_MAP_OPTIONS,
           command: "build",
           finalBase,
-        }
-      )
+        },
+      );
 
       await expect(emitImportMap(sidecarPlugin, key)).rejects.toThrow(
-        `Relative base ${JSON.stringify(finalBase)} resolves import-map entries against each document URL and breaks on nested routes.`
-      )
-    }
-  )
+        `Relative base ${JSON.stringify(finalBase)} resolves import-map entries against each document URL and breaks on nested routes.`,
+      );
+    },
+  );
 
   it("fails the import-map build on missing translations when configured", async () => {
     // The emitted assets are the only client-visible artifact of this binding,
@@ -1077,7 +1080,7 @@ describe("experimental graph splitting", () => {
       diagnostics: [],
       watchFiles: [],
       resolvedLocaleChain: [],
-    })
+    });
 
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
@@ -1085,46 +1088,46 @@ describe("experimental graph splitting", () => {
       {
         pluginOptions: { ...IMPORT_MAP_OPTIONS, failOnMissing: true },
         command: "build",
-      }
-    )
-    const emitFile = vi.fn()
+      },
+    );
+    const emitFile = vi.fn();
 
     await expect(
       sidecarPlugin.generateBundle.call(
         { environment: { name: "client" }, emitFile, warn: vi.fn() } as never,
         {},
-        {}
-      )
-    ).rejects.toThrow(/Missing 1 translation\(s\) for locale en/)
-    expect(emitFile).not.toHaveBeenCalled()
-  })
+        {},
+      ),
+    ).rejects.toThrow(/Missing 1 translation\(s\) for locale en/);
+    expect(emitFile).not.toHaveBeenCalled();
+  });
 
   it("warns about incomplete import-map assets when missing is not fatal", async () => {
     mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
-      nativeModuleShape(JSON.stringify(messages))
-    )
+      nativeModuleShape(JSON.stringify(messages)),
+    );
     mocks.compileCatalogArtifactSelected.mockReturnValue({
       messages: {},
       missing: [{ id: "id-a", message: "Hello" }],
       diagnostics: [],
       watchFiles: [],
       resolvedLocaleChain: [],
-    })
+    });
 
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
-    )
-    const warn = vi.fn()
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+    );
+    const warn = vi.fn();
     await sidecarPlugin.generateBundle.call(
       { environment: { name: "client" }, emitFile: vi.fn(), warn } as never,
       {},
-      {}
-    )
+      {},
+    );
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"))
-  })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"));
+  });
 
   it.each([
     ["the legacy SSR environment name", { name: "ssr" }],
@@ -1133,55 +1136,55 @@ describe("experimental graph splitting", () => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
-    )
-    const emitFile = vi.fn()
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+    );
+    const emitFile = vi.fn();
     await sidecarPlugin.generateBundle.call(
       {
         environment,
         emitFile,
       } as never,
       {},
-      {}
-    )
+      {},
+    );
 
-    expect(emitFile).not.toHaveBeenCalled()
-  })
-})
+    expect(emitFile).not.toHaveBeenCalled();
+  });
+});
 
 async function runSidecarLoad(
   compiledIds: string[],
   context: Record<string, unknown> = {},
   setup: {
-    pluginOptions?: Parameters<typeof palamedes>[0]
-    command?: "build" | "serve"
-    rawBase?: string
-    finalBase?: string
-    sourceId?: string
-  } = {}
+    pluginOptions?: Parameters<typeof palamedes>[0];
+    command?: "build" | "serve";
+    rawBase?: string;
+    finalBase?: string;
+    sourceId?: string;
+  } = {},
 ): Promise<{
-  load: (id: string, loadOptions?: { ssr?: boolean }) => Promise<any>
-  key: string
-  transformedCode: string
-  addWatchFile: ReturnType<typeof vi.fn>
-  sidecarPlugin: any
+  load: (id: string, loadOptions?: { ssr?: boolean }) => Promise<any>;
+  key: string;
+  transformedCode: string;
+  addWatchFile: ReturnType<typeof vi.fn>;
+  sidecarPlugin: any;
 }> {
-  mocks.transformPalamedesMacros.mockClear()
-  mocks.compileCatalogArtifactSelected.mockClear()
-  mocks.renderCatalogModule.mockClear()
+  mocks.transformPalamedesMacros.mockClear();
+  mocks.compileCatalogArtifactSelected.mockClear();
+  mocks.renderCatalogModule.mockClear();
   mocks.transformPalamedesMacros.mockReturnValue({
     code: "transformed",
     hasChanged: true,
     compiledIds,
     map: null,
-  })
-  const plugins = palamedes(setup.pluginOptions ?? { experimentalGraphSplitting: true })
-  const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
-  const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars")
-  const transform = macroPlugin?.transform
-  const load = sidecarPlugin?.load
+  });
+  const plugins = palamedes(setup.pluginOptions ?? { experimentalGraphSplitting: true });
+  const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
+  const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
+  const transform = macroPlugin?.transform;
+  const load = sidecarPlugin?.load;
   if (typeof transform !== "function" || typeof load !== "function") {
-    throw new TypeError("Expected transform and sidecar load hooks")
+    throw new TypeError("Expected transform and sidecar load hooks");
   }
 
   if (setup.command && typeof macroPlugin?.config === "function") {
@@ -1191,44 +1194,44 @@ async function runSidecarLoad(
       {
         command: setup.command,
         mode: setup.command === "serve" ? "development" : "production",
-      } as any
-    )
+      } as any,
+    );
 
     if (typeof macroPlugin.configResolved !== "function") {
-      throw new TypeError("Expected transform configResolved hook")
+      throw new TypeError("Expected transform configResolved hook");
     }
     macroPlugin.configResolved.call(
       {} as any,
-      { base: setup.finalBase ?? setup.rawBase ?? "/" } as any
-    )
+      { base: setup.finalBase ?? setup.rawBase ?? "/" } as any,
+    );
   }
 
   const transformed = (await transform.call(
     { error: vi.fn() } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-    setup.sourceId ?? "/repo/src/label.ts"
-  )) as { code?: string } | null
-  const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1]
+    setup.sourceId ?? "/repo/src/label.ts",
+  )) as { code?: string } | null;
+  const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1];
   if (!key) {
-    throw new Error("Expected a sidecar import in the transformed output")
+    throw new Error("Expected a sidecar import in the transformed output");
   }
 
-  const addWatchFile = vi.fn()
+  const addWatchFile = vi.fn();
   const boundLoad = (id: string, loadOptions?: { ssr?: boolean }) =>
     Promise.resolve(
       load.call(
         {
           addWatchFile,
           error(message: unknown) {
-            throw message instanceof Error ? message : new Error(String(message))
+            throw message instanceof Error ? message : new Error(String(message));
           },
           warn() {},
           ...context,
         } as any,
         id,
-        loadOptions
-      )
-    )
+        loadOptions,
+      ),
+    );
 
   return {
     load: boundLoad,
@@ -1236,11 +1239,11 @@ async function runSidecarLoad(
     transformedCode: transformed?.code ?? "",
     addWatchFile,
     sidecarPlugin,
-  }
+  };
 }
 
 async function emitImportMap(sidecarPlugin: any, key: string) {
-  const emitted: { fileName: string; source: string }[] = []
+  const emitted: { fileName: string; source: string }[] = [];
   await sidecarPlugin.generateBundle.call(
     {
       environment: { name: "client" },
@@ -1251,60 +1254,60 @@ async function emitImportMap(sidecarPlugin: any, key: string) {
       "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
       "assets/vendor.js": { type: "chunk", imports: [] },
       "assets/style.css": { type: "asset" },
-    }
-  )
-  return emitted
+    },
+  );
+  return emitted;
 }
 
 function runMacroTransform(
   options: Parameters<typeof palamedes>[0] = {},
   command?: "build" | "serve",
   compiledIds: string[] = [],
-  sourceId = "/repo/src/label.ts"
+  sourceId = "/repo/src/label.ts",
 ) {
-  mocks.transformPalamedesMacros.mockClear()
+  mocks.transformPalamedesMacros.mockClear();
   mocks.transformPalamedesMacros.mockReturnValue({
     code: "transformed",
     hasChanged: true,
     compiledIds,
     map: null,
-  })
-  const macroPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:transform")
-  const transform = macroPlugin?.transform
+  });
+  const macroPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:transform");
+  const transform = macroPlugin?.transform;
 
   if (command && typeof macroPlugin?.config === "function") {
     macroPlugin.config.call(
       {} as any,
       {} as any,
-      { command, mode: command === "serve" ? "development" : "production" } as any
-    )
+      { command, mode: command === "serve" ? "development" : "production" } as any,
+    );
   }
 
   if (typeof transform !== "function") {
-    throw new TypeError("Expected macro transform hook")
+    throw new TypeError("Expected macro transform hook");
   }
 
   return transform.call(
     {
       error(message: unknown) {
-        throw message instanceof Error ? message : new Error(String(message))
+        throw message instanceof Error ? message : new Error(String(message));
       },
     } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-    sourceId
-  )
+    sourceId,
+  );
 }
 
 async function runPoTransform(
   context: Record<string, unknown> = {},
-  options: Parameters<typeof palamedes>[0] = {}
+  options: Parameters<typeof palamedes>[0] = {},
 ) {
-  const plugins = palamedes(options)
-  const poLoader = plugins.find((plugin) => plugin.name === "palamedes:po-loader")
-  const transform = poLoader?.transform
+  const plugins = palamedes(options);
+  const poLoader = plugins.find((plugin) => plugin.name === "palamedes:po-loader");
+  const transform = poLoader?.transform;
 
   if (typeof transform !== "function") {
-    throw new TypeError("Expected palamedes:po-loader transform hook")
+    throw new TypeError("Expected palamedes:po-loader transform hook");
   }
 
   return transform.call(
@@ -1313,53 +1316,53 @@ async function runPoTransform(
       ...context,
     } as any,
     "",
-    "/repo/src/locales/de.po"
-  )
+    "/repo/src/locales/de.po",
+  );
 }
 
 async function runMdxTransform(
   context: Record<string, unknown> = {},
   options: Parameters<typeof palamedes>[0] = {},
   command?: "build" | "serve",
-  sourceId = "/repo/src/guide.mdx"
+  sourceId = "/repo/src/guide.mdx",
 ) {
-  const plugins = palamedes(options)
+  const plugins = palamedes(options);
   if (command) {
-    const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
+    const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
     if (typeof macroPlugin?.config === "function") {
       macroPlugin.config.call(
         {} as any,
         {} as any,
-        { command, mode: command === "serve" ? "development" : "production" } as any
-      )
+        { command, mode: command === "serve" ? "development" : "production" } as any,
+      );
     }
   }
-  const mdxPlugin = plugins.find((plugin) => plugin.name === "palamedes:mdx")
-  const transform = mdxPlugin?.transform
+  const mdxPlugin = plugins.find((plugin) => plugin.name === "palamedes:mdx");
+  const transform = mdxPlugin?.transform;
 
   if (typeof transform !== "function") {
-    throw new TypeError("Expected palamedes:mdx transform hook")
+    throw new TypeError("Expected palamedes:mdx transform hook");
   }
 
   return transform.call(
     {
       addWatchFile() {},
       error(message: unknown) {
-        throw message instanceof Error ? message : new Error(String(message))
+        throw message instanceof Error ? message : new Error(String(message));
       },
       ...context,
     } as any,
     "# Welcome",
-    sourceId
-  )
+    sourceId,
+  );
 }
 
 async function runMdxConfig(options: Parameters<typeof palamedes>[0] = {}) {
-  const mdxPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")
-  const config = mdxPlugin?.config
+  const mdxPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx");
+  const config = mdxPlugin?.config;
 
   if (typeof config !== "function") {
-    throw new TypeError("Expected palamedes:mdx config hook")
+    throw new TypeError("Expected palamedes:mdx config hook");
   }
 
   return config.call(
@@ -1368,6 +1371,6 @@ async function runMdxConfig(options: Parameters<typeof palamedes>[0] = {}) {
     {
       command: "build",
       mode: "production",
-    } as any
-  )
+    } as any,
+  );
 }

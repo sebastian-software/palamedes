@@ -2,38 +2,22 @@
   "name": "@palamedes/next-plugin",
   "version": "1.23.0",
   "description": "Next.js integration for Palamedes using OXC-based macro transformation",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "sideEffects": false,
-  "license": "MIT",
   "keywords": [
-    "next.js",
-    "nextjs",
     "i18n",
-    "oxc",
     "internationalization",
     "localization",
+    "next.js",
+    "nextjs",
+    "oxc",
     "translation"
   ],
-  "scripts": {
-    "build": "unbuild",
-    "test": "vitest run --globals",
-    "stub": "unbuild --stub"
-  },
   "homepage": "https://github.com/sebastian-software/palamedes",
-  "type": "module",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/next-plugin"
-  },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "files": [
     "LICENSE",
@@ -44,6 +28,11 @@
     "palamedes-dev-warning.cjs",
     "palamedes-po-loader.cjs"
   ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -88,6 +77,14 @@
     "./palamedes-loader": "./palamedes-loader.cjs",
     "./palamedes-po-loader": "./palamedes-po-loader.cjs"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "unbuild",
+    "test": "vitest run --globals",
+    "stub": "unbuild --stub"
+  },
   "dependencies": {
     "@jridgewell/sourcemap-codec": "1.6.0",
     "@palamedes/config": "workspace:^",
@@ -95,13 +92,16 @@
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"
   },
-  "peerDependencies": {
-    "next": "^16"
-  },
   "devDependencies": {
     "next": "16.3.4",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "next": "^16"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

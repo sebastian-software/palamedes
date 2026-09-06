@@ -1,4 +1,4 @@
-import { t } from "@palamedes/core/macro"
+import { t } from "@palamedes/core/macro";
 
 export function notificationSummary(role, count) {
   return t(
@@ -8,6 +8,6 @@ export function notificationSummary(role, count) {
       context: "dashboard.notifications",
       comment: "Nested select and plural fixture for the checked ICU semantics proof.",
     },
-    { role, count }
-  )
+    { role, count },
+  );
 }

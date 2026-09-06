@@ -1,11 +1,8 @@
 {
   "name": "@palamedes/benchmark-lingui-v6",
   "private": true,
-  "type": "module",
   "description": "Synthetic hot-path benchmark harness for Palamedes vs Lingui v6",
-  "engines": {
-    "node": ">=22.19.0"
-  },
+  "type": "module",
   "scripts": {
     "benchmark": "node ./src/run.mjs",
     "benchmark:quick": "node ./src/run.mjs --warmup 1 --runs 3 --profile small",
@@ -20,5 +17,8 @@
     "@lingui/swc-plugin": "6.7.0",
     "@palamedes/core-node": "workspace:^",
     "@swc/core": "1.16.1"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

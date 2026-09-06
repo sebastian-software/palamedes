@@ -1,26 +1,26 @@
-import { createMemo, Show } from "solid-js"
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/solid/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { SuggestionBanner } from "../components/SuggestionBanner"
-import { TicketPanel } from "../components/TicketPanel"
-import type { Locale } from "../lib/i18n"
-import { loadHomePageData } from "../lib/server"
+import { createMemo, Show } from "solid-js";
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/solid/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { SuggestionBanner } from "../components/SuggestionBanner";
+import { TicketPanel } from "../components/TicketPanel";
+import type { Locale } from "../lib/i18n";
+import { loadHomePageData } from "../lib/server";
 
 type HomePageData = {
   banner: {
-    description: string
-    recommendedLocale: Locale
-    recommendedUrl: string
-  } | null
-  host: string | null
-  locale: Locale
-  localeLabel: string
-  renderedAt: string
-}
+    description: string;
+    recommendedLocale: Locale;
+    recommendedUrl: string;
+  } | null;
+  host: string | null;
+  locale: Locale;
+  localeLabel: string;
+  renderedAt: string;
+};
 
 function HomePageContent(props: { data: HomePageData }) {
   return (
@@ -75,11 +75,11 @@ function HomePageContent(props: { data: HomePageData }) {
 
       <ClientReady />
     </main>
-  )
+  );
 }
 
 export default function HomePage() {
-  const pageData = createMemo(() => loadHomePageData())
+  const pageData = createMemo(() => loadHomePageData());
 
-  return <Show when={pageData()}>{(page) => <HomePageContent data={page()} />}</Show>
+  return <Show when={pageData()}>{(page) => <HomePageContent data={page()} />}</Show>;
 }

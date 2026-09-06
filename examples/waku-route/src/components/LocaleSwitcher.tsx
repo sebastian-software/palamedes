@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import { buildLocaleSwitchItems } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { LOCALES, LOCALE_LABELS, locales, type Locale } from "../lib/i18n"
+import { buildLocaleSwitchItems } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { LOCALES, LOCALE_LABELS, locales, type Locale } from "../lib/i18n";
 
 type LocaleSwitcherProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
-  })
+  });
 
   return (
     <div className="switcher">
@@ -28,7 +28,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             aria-current={item.active ? "page" : undefined}
             href={`/${item.locale}`}
             onClick={() => {
-              document.cookie = locales.serializeChoice(item.locale)
+              document.cookie = locales.serializeChoice(item.locale);
             }}
           >
             {item.locale.toUpperCase()}
@@ -36,5 +36,5 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
         ))}
       </div>
     </div>
-  )
+  );
 }

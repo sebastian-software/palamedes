@@ -1,6 +1,6 @@
-import { reactRouter } from "@react-router/dev/vite"
-import { palamedes } from "@palamedes/vite-plugin"
-import { defineConfig } from "vite"
+import { reactRouter } from "@react-router/dev/vite";
+import { palamedes } from "@palamedes/vite-plugin";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [
@@ -17,11 +17,11 @@ export default defineConfig({
           warning.code === "SOURCEMAP_ERROR" &&
           warning.message.includes("Can't resolve original location of error")
         ) {
-          return
+          return;
         }
 
-        defaultHandler(warning)
+        defaultHandler(warning);
       },
     },
   },
-})
+});

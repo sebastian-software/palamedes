@@ -4,4 +4,4 @@
  * Palamedes CLI with OXC-based extraction.
  */
 
-export {}
+export {};

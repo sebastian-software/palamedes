@@ -1,39 +1,39 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import Extraction from "./content/extraction.mdx"
-import Runtime from "./content/runtime.mdx"
-import Welcome from "./content/welcome.mdx"
-import type { Locale } from "./i18n"
+import Extraction from "./content/extraction.mdx";
+import Runtime from "./content/runtime.mdx";
+import Welcome from "./content/welcome.mdx";
+import type { Locale } from "./i18n";
 
 const pages = {
   extraction: Extraction,
   runtime: Runtime,
   welcome: Welcome,
-} as const
+} as const;
 
-type PageId = keyof typeof pages
+type PageId = keyof typeof pages;
 
 function pageFromHash(): PageId {
-  const page = window.location.hash.replace(/^#\/?/, "")
-  return page in pages ? (page as PageId) : "welcome"
+  const page = window.location.hash.replace(/^#\/?/, "");
+  return page in pages ? (page as PageId) : "welcome";
 }
 
 function localeHref(locale: Locale): string {
-  const url = new URL(window.location.href)
-  url.searchParams.set("locale", locale)
-  return `${url.pathname}${url.search}${url.hash}`
+  const url = new URL(window.location.href);
+  url.searchParams.set("locale", locale);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 export function App({ locale }: { locale: Locale }) {
-  const [page, setPage] = useState<PageId>(pageFromHash)
+  const [page, setPage] = useState<PageId>(pageFromHash);
 
   useEffect(() => {
-    const handleHashChange = () => setPage(pageFromHash())
-    window.addEventListener("hashchange", handleHashChange)
-    return () => window.removeEventListener("hashchange", handleHashChange)
-  }, [])
+    const handleHashChange = () => setPage(pageFromHash());
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
-  const Page = pages[page]
+  const Page = pages[page];
 
   return (
     <div className="shell">
@@ -100,5 +100,5 @@ export function App({ locale }: { locale: Locale }) {
         </main>
       </div>
     </div>
-  )
+  );
 }

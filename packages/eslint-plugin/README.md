@@ -22,7 +22,7 @@ native package for the current platform.
 ## ESLint flat config
 
 ```js
-import palamedes from "@palamedes/eslint-plugin"
+import palamedes from "@palamedes/eslint-plugin";
 
 export default [
   {
@@ -33,7 +33,7 @@ export default [
       "palamedes/prefer-trans-in-jsx": "warn",
     },
   },
-]
+];
 ```
 
 The exported `configs.recommended` enables
@@ -68,10 +68,10 @@ Each host owns rule severity and its normal inline directives:
 
 ```tsx
 // eslint-disable-next-line palamedes/no-placeholder-only-message
-const eslintLabel = t`${status}`
+const eslintLabel = t`${status}`;
 
 // oxlint-disable-next-line palamedes/no-placeholder-only-message
-const oxlintLabel = t`${status}`
+const oxlintLabel = t`${status}`;
 ```
 
 The adapter enables every native Core diagnostic in one analysis and caches the

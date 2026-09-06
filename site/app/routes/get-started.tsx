@@ -1,13 +1,13 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
-import { pageMeta } from "~/lib/meta"
-import { PipelineDiagram } from "~/components/get-started/PipelineDiagram"
-import { StackPicker } from "~/components/get-started/StackPicker"
-import { CtaBand } from "~/components/home/CtaBand"
-import { FeatureGrid } from "~/components/home/FeatureGrid"
-import { NEXT_STEP_CARDS } from "~/data/features"
-import { docsHref } from "~/data/links"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { pageMeta } from "~/lib/meta";
+import { PipelineDiagram } from "~/components/get-started/PipelineDiagram";
+import { StackPicker } from "~/components/get-started/StackPicker";
+import { CtaBand } from "~/components/home/CtaBand";
+import { FeatureGrid } from "~/components/home/FeatureGrid";
+import { NEXT_STEP_CARDS } from "~/data/features";
+import { docsHref } from "~/data/links";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
@@ -15,7 +15,7 @@ export function meta() {
     description:
       "Follow the guided 5-minute path from scoped @palamedes packages to a rendered translation. The name describes the route, not a completion-time guarantee.",
     path: "/get-started",
-  })
+  });
 }
 
 export default function GetStarted() {
@@ -69,5 +69,5 @@ export default function GetStarted() {
         secondary={{ label: "Explore locale architecture", href: "/locale-routing" }}
       />
     </Page>
-  )
+  );
 }

@@ -1,10 +1,10 @@
-import { RivalPage } from "~/components/compare/RivalPage"
-import { pageMeta } from "~/lib/meta"
-import { rivalBySlug } from "~/data/rivals"
+import { RivalPage } from "~/components/compare/RivalPage";
+import { pageMeta } from "~/lib/meta";
+import { rivalBySlug } from "~/data/rivals";
 
-const rival = rivalBySlug("tolgee")
+const rival = rivalBySlug("tolgee");
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
@@ -12,9 +12,9 @@ export function meta() {
     description: rival.metaDescription,
     path: "/compare/tolgee",
     faq: rival.faq,
-  })
+  });
 }
 
 export default function CompareTolgee() {
-  return <RivalPage rival={rival} />
+  return <RivalPage rival={rival} />;
 }

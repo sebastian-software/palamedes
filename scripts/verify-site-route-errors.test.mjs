@@ -1,7 +1,7 @@
-import assert from "node:assert/strict"
-import test from "node:test"
+import assert from "node:assert/strict";
+import test from "node:test";
 
-import { isExpectedSkippedViewTransitionError } from "./verify-site-route-errors.mjs"
+import { isExpectedSkippedViewTransitionError } from "./verify-site-route-errors.mjs";
 
 test("accepts only the observed skipped View Transition page error", () => {
   assert.equal(
@@ -9,8 +9,8 @@ test("accepts only the observed skipped View Transition page error", () => {
       name: "AbortError",
       message: "Transition was skipped",
     }),
-    true
-  )
+    true,
+  );
 
   for (const [channel, error] of [
     ["console", { name: "AbortError", message: "Transition was skipped" }],
@@ -19,6 +19,6 @@ test("accepts only the observed skipped View Transition page error", () => {
     ["pageerror", { name: "AbortError", message: "Transition was skipped by the app" }],
     ["pageerror", null],
   ]) {
-    assert.equal(isExpectedSkippedViewTransitionError(channel, error), false)
+    assert.equal(isExpectedSkippedViewTransitionError(channel, error), false);
   }
-})
+});

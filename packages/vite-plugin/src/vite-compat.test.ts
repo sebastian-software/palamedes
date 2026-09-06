@@ -1,59 +1,59 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type * as PalamedesConfigModule from "@palamedes/config"
-import type * as PalamedesCoreNodeModule from "@palamedes/core-node"
-import type * as ViteModule from "vite"
+import type * as PalamedesConfigModule from "@palamedes/config";
+import type * as PalamedesCoreNodeModule from "@palamedes/core-node";
+import type * as ViteModule from "vite";
 
 const mocks = vi.hoisted(() => ({
   analyzeMdxNative: vi.fn(),
   loadPalamedesConfig: vi.fn(),
   rolldownVersion: undefined as string | undefined,
-}))
+}));
 
 vi.mock("vite", async (importOriginal) => {
-  const actual = await importOriginal<typeof ViteModule>()
+  const actual = await importOriginal<typeof ViteModule>();
   return {
     ...actual,
     version: "7.4.0",
     get rolldownVersion() {
-      return mocks.rolldownVersion
+      return mocks.rolldownVersion;
     },
-  }
-})
+  };
+});
 
 vi.mock("@palamedes/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof PalamedesConfigModule>()
+  const actual = await importOriginal<typeof PalamedesConfigModule>();
   return {
     ...actual,
     loadPalamedesConfig: mocks.loadPalamedesConfig,
-  }
-})
+  };
+});
 
 vi.mock("@palamedes/core-node", async (importOriginal) => ({
   ...(await importOriginal<typeof PalamedesCoreNodeModule>()),
   analyzeMdxNative: mocks.analyzeMdxNative,
-}))
+}));
 
-import { palamedes } from "./index"
+import { palamedes } from "./index";
 
 beforeEach(() => {
-  mocks.rolldownVersion = undefined
-})
+  mocks.rolldownVersion = undefined;
+});
 
 function mdxTransform(options: Parameters<typeof palamedes>[0] = {}) {
-  const transform = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")?.transform
+  const transform = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")?.transform;
   if (typeof transform !== "function") {
-    throw new TypeError("Expected palamedes:mdx transform hook")
+    throw new TypeError("Expected palamedes:mdx transform hook");
   }
-  return transform
+  return transform;
 }
 
 function mdxConfig(options: Parameters<typeof palamedes>[0] = {}) {
-  const config = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")?.config
+  const config = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")?.config;
   if (typeof config !== "function") {
-    throw new TypeError("Expected palamedes:mdx config hook")
+    throw new TypeError("Expected palamedes:mdx config hook");
   }
-  return config
+  return config;
 }
 
 describe("React MDX compatibility with Rollup-based Vite", () => {
@@ -64,10 +64,10 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
 
-    await expect(mdxConfig().call({} as any, {} as any, {} as any)).resolves.toBeUndefined()
-  })
+    await expect(mdxConfig().call({} as any, {} as any, {} as any)).resolves.toBeUndefined();
+  });
 
   it("stops React MDX on Vite 7 before generated JSX reaches Rollup", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -76,48 +76,48 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
     const error = vi.fn((message: string) => {
-      throw new Error(message)
-    })
+      throw new Error(message);
+    });
 
     await expect(
-      mdxTransform().call({ addWatchFile() {}, error } as any, "# Welcome", "/repo/page.mdx")
+      mdxTransform().call({ addWatchFile() {}, error } as any, "# Welcome", "/repo/page.mdx"),
     ).rejects.toThrow(
-      "Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files."
-    )
-    expect(mocks.analyzeMdxNative).not.toHaveBeenCalled()
-  })
+      "Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files.",
+    );
+    expect(mocks.analyzeMdxNative).not.toHaveBeenCalled();
+  });
 
   it("enables React MDX module types on rolldown-vite 7", async () => {
-    mocks.rolldownVersion = "1.0.0"
+    mocks.rolldownVersion = "1.0.0";
     mocks.loadPalamedesConfig.mockResolvedValue({
       configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
-    mocks.analyzeMdxNative.mockClear()
+    });
+    mocks.analyzeMdxNative.mockClear();
     mocks.analyzeMdxNative.mockReturnValue({
       code: "export default function Page() {}",
       compiledIds: [],
       diagnostics: [],
       map: null,
-    })
+    });
 
     await expect(mdxConfig().call({} as any, {} as any, {} as any)).resolves.toEqual({
       build: { rollupOptions: { moduleTypes: { ".mdx": "jsx" } } },
-    })
+    });
     await expect(
       mdxTransform().call(
         { addWatchFile() {}, error: vi.fn() } as any,
         "# Welcome",
-        "/repo/page.mdx"
-      )
-    ).resolves.toEqual({ code: "export default function Page() {}", map: null, moduleType: "jsx" })
-    expect(mocks.analyzeMdxNative).toHaveBeenCalledOnce()
-  })
+        "/repo/page.mdx",
+      ),
+    ).resolves.toEqual({ code: "export default function Page() {}", map: null, moduleType: "jsx" });
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledOnce();
+  });
 
   it("keeps Solid MDX available on Vite 7 without React's module type", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
@@ -126,24 +126,24 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
       locales: ["en"],
       sourceLocale: "en",
       catalogs: [],
-    })
+    });
     mocks.analyzeMdxNative.mockReturnValue({
       code: "export default function Page() {}",
       compiledIds: [],
       diagnostics: [],
       map: null,
-    })
+    });
 
     await expect(
       mdxTransform({ mdx: { framework: "solid" } }).call(
         { addWatchFile() {} } as any,
         "# Welcome",
-        "/repo/page.mdx"
-      )
-    ).resolves.toEqual({ code: "export default function Page() {}", map: null })
-  })
+        "/repo/page.mdx",
+      ),
+    ).resolves.toEqual({ code: "export default function Page() {}", map: null });
+  });
 
   it("does not add an MDX compiler when it is disabled", () => {
-    expect(palamedes({ mdx: false }).some((plugin) => plugin.name === "palamedes:mdx")).toBe(false)
-  })
-})
+    expect(palamedes({ mdx: false }).some((plugin) => plugin.name === "palamedes:mdx")).toBe(false);
+  });
+});

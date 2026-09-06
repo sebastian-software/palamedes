@@ -3,21 +3,30 @@
   "version": "1.23.0",
   "description": "ESLint and Oxlint adapter for native Palamedes source diagnostics",
   "keywords": [
-    "palamedes",
-    "i18n",
     "eslint",
+    "i18n",
+    "lint",
     "oxlint",
-    "lint"
+    "palamedes"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/eslint-plugin"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -30,30 +39,26 @@
       }
     }
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "sideEffects": false,
-  "files": [
-    "LICENSE",
-    "README.md",
-    "dist/"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "unbuild",
     "test": "unbuild && vitest run --globals src/index.test.ts",
     "benchmark": "unbuild && node ./scripts/benchmark.mjs",
     "stub": "unbuild --stub"
   },
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
   "dependencies": {
     "@oxlint/plugins": "^1.81.0",
     "@palamedes/core-node": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^10.9.1",
+    "oxlint": "^1.81.0",
+    "typescript": "^7.0.2",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.11"
   },
   "peerDependencies": {
     "eslint": ">=9 <11",
@@ -67,12 +72,7 @@
       "optional": true
     }
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "eslint": "^10.9.1",
-    "oxlint": "^1.81.0",
-    "typescript": "^7.0.2",
-    "unbuild": "^3.6.1",
-    "vitest": "^4.1.11"
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

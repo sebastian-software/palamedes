@@ -1,16 +1,16 @@
-import { Link, redirect } from "react-router"
-import { plural } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Route } from "./+types/insights"
-import { LocaleSwitcher } from "~/components/LocaleSwitcher"
-import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n"
-import { activateServerI18n } from "~/lib/i18n.server"
+import { Link, redirect } from "react-router";
+import { plural } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Route } from "./+types/insights";
+import { LocaleSwitcher } from "~/components/LocaleSwitcher";
+import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n";
+import { activateServerI18n } from "~/lib/i18n.server";
 
-const TALKS_SCHEDULED = 48
-const WORKSHOPS_WITH_SEATS = 3
-const COUNTRIES_REPRESENTED = 26
+const TALKS_SCHEDULED = 48;
+const WORKSHOPS_WITH_SEATS = 3;
+const COUNTRIES_REPRESENTED = 26;
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -19,39 +19,39 @@ export function meta(_args: Route.MetaArgs) {
       name: "description",
       content: "Route-level message splitting proof for Palamedes graph splitting.",
     },
-  ]
+  ];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const resolved = resolveLocaleFromRequest(request)
-  activateServerI18n(resolved.locale)
+  const resolved = resolveLocaleFromRequest(request);
+  activateServerI18n(resolved.locale);
 
   return {
     locale: resolved.locale,
     localeLabel: getLocaleLabel(resolved.locale),
-  }
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData()
-  const intent = formData.get("intent")
-  const resolved = resolveLocaleFromRequest(request)
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const resolved = resolveLocaleFromRequest(request);
 
   if (intent === "set-locale") {
-    const locale = String(formData.get("locale") ?? resolved.locale)
+    const locale = String(formData.get("locale") ?? resolved.locale);
     return redirect("/insights", {
       headers: {
         "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
       },
-    })
+    });
   }
 
-  return null
+  return null;
 }
 
 export default function Insights({ loaderData }: Route.ComponentProps) {
-  const { locale, localeLabel } = loaderData
-  const workshops = WORKSHOPS_WITH_SEATS
+  const { locale, localeLabel } = loaderData;
+  const workshops = WORKSHOPS_WITH_SEATS;
 
   return (
     <main className="page-shell">
@@ -127,5 +127,5 @@ export default function Insights({ loaderData }: Route.ComponentProps) {
         <strong data-testid="server-locale-value">{localeLabel}</strong>
       </footer>
     </main>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import { ButtonLink } from "@palamedes/site-ui"
+import { ButtonLink } from "@palamedes/site-ui";
 
 export function HomeHero() {
   return (
@@ -38,5 +38,5 @@ export function HomeHero() {
         </div>
       </div>
     </section>
-  )
+  );
 }

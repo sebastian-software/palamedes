@@ -1,10 +1,10 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
-import { CtaBand } from "~/components/home/CtaBand"
-import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
-import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
-import type { Topic } from "~/data/topics"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { CtaBand } from "~/components/home/CtaBand";
+import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger";
+import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench";
+import type { Topic } from "~/data/topics";
 
 /*
  * One layout for every topic landing page, driven by data/topics.ts.
@@ -162,5 +162,5 @@ export function TopicPage({ topic }: { topic: Topic }) {
         secondary={{ label: "Try the quickstart", href: "/get-started" }}
       />
     </Page>
-  )
+  );
 }

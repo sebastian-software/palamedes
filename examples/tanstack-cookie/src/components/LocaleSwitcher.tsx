@@ -1,27 +1,27 @@
-import { useTransition } from "react"
-import { buildLocaleSwitchItems } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import type { Locale } from "../lib/i18n"
-import { LOCALES, LOCALE_LABELS } from "../lib/i18n"
-import { setLocaleCookie } from "../lib/server-functions"
+import { useTransition } from "react";
+import { buildLocaleSwitchItems } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import type { Locale } from "../lib/i18n";
+import { LOCALES, LOCALE_LABELS } from "../lib/i18n";
+import { setLocaleCookie } from "../lib/server-functions";
 
 type LocaleSwitcherProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
-  const [isPending, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition();
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
-  })
+  });
 
   function handleLocaleChange(nextLocale: Locale) {
     startTransition(async () => {
-      await setLocaleCookie({ data: { locale: nextLocale } })
-      window.location.assign("/")
-    })
+      await setLocaleCookie({ data: { locale: nextLocale } });
+      window.location.assign("/");
+    });
   }
 
   return (
@@ -44,5 +44,5 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
         ))}
       </div>
     </div>
-  )
+  );
 }

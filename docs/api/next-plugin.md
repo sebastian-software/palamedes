@@ -26,20 +26,20 @@ storage/import boundary.
 
 ```ts
 interface WithPalamedesOptions {
-  include?: RegExp
-  exclude?: RegExp
-  enablePoLoader?: boolean
-  configPath?: string
-  projectRoot?: string
+  include?: RegExp;
+  exclude?: RegExp;
+  enablePoLoader?: boolean;
+  configPath?: string;
+  projectRoot?: string;
   /** @deprecated Use projectRoot. */
-  cwd?: string
-  failOnMissing?: boolean
-  failOnCompileError?: boolean
-  runtimeModule?: string
-  keepSourceFallbacks?: boolean
-  workspaceRoot?: string
-  serverFunctions?: boolean
-  messageSplitting?: boolean
+  cwd?: string;
+  failOnMissing?: boolean;
+  failOnCompileError?: boolean;
+  runtimeModule?: string;
+  keepSourceFallbacks?: boolean;
+  workspaceRoot?: string;
+  serverFunctions?: boolean;
+  messageSplitting?: boolean;
 }
 ```
 
@@ -78,9 +78,9 @@ fallback must interpolate and use `onMissing` to measure misses.
 ## Usage
 
 ```js
-const { withPalamedes } = require("@palamedes/next-plugin")
+const { withPalamedes } = require("@palamedes/next-plugin");
 
-module.exports = withPalamedes({})
+module.exports = withPalamedes({});
 ```
 
 ## Server Functions
@@ -91,10 +91,10 @@ server entry module:
 
 ```ts
 // src/palamedes.server.ts
-import { createActiveServerI18n } from "./lib/i18n.server"
+import { createActiveServerI18n } from "./lib/i18n.server";
 
 export async function initializeServerFunctionI18n(): Promise<void> {
-  await createActiveServerI18n()
+  await createActiveServerI18n();
 }
 ```
 
@@ -105,8 +105,8 @@ module.exports = withPalamedes(
   {},
   {
     serverFunctions: true,
-  }
-)
+  },
+);
 ```
 
 The entry can be named `palamedes.server.ts`, `.tsx`, `.js`, `.jsx`, `.mts`,
@@ -134,12 +134,12 @@ survives suspension and the handoff from the RSC pass to Client Component
 server rendering:
 
 ```ts
-import "server-only"
+import "server-only";
 
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
-import type { PalamedesI18n } from "@palamedes/core"
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import type { PalamedesI18n } from "@palamedes/core";
 
-export const serverI18n = createNextServerI18nScope<PalamedesI18n>()
+export const serverI18n = createNextServerI18nScope<PalamedesI18n>();
 ```
 
 Activate a fresh instance during each request's initialization. The adapter
@@ -157,15 +157,15 @@ module.exports = withPalamedes(
   {
     messageSplitting: true,
     serverFunctions: true,
-  }
-)
+  },
+);
 ```
 
 ```tsx
 // app/page.tsx (Server Component)
-const { locale } = await createActiveServerI18n()
+const { locale } = await createActiveServerI18n();
 
-return <TranslatedClientContent locale={locale} />
+return <TranslatedClientContent locale={locale} />;
 ```
 
 No application-owned client catalog boundary is required. For every

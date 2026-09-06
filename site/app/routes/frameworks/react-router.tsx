@@ -1,7 +1,7 @@
-import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage"
-import type { FrameworkLanding } from "~/data/framework-landing"
-import { docsHref, NPM, repoHref } from "~/data/links"
-import { frameworkMeta } from "~/lib/meta"
+import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage";
+import type { FrameworkLanding } from "~/data/framework-landing";
+import { docsHref, NPM, repoHref } from "~/data/links";
+import { frameworkMeta } from "~/lib/meta";
 
 const page: FrameworkLanding = {
   name: "React Router",
@@ -163,9 +163,9 @@ export async function loader({ params }: Route.LoaderArgs) {
       href: NPM("@palamedes/react"),
     },
   },
-}
+};
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return frameworkMeta({
@@ -174,9 +174,9 @@ export function meta() {
     path: page.path,
     framework: page.name,
     faq: page.faq,
-  })
+  });
 }
 
 export default function ReactRouterI18n() {
-  return <FrameworkLandingPage page={page} />
+  return <FrameworkLandingPage page={page} />;
 }

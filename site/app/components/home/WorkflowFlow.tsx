@@ -1,4 +1,4 @@
-import { Fragment } from "react"
+import { Fragment } from "react";
 
 /*
  * The four-stage workflow map that frames the code showcase below it: the same
@@ -9,9 +9,9 @@ import { Fragment } from "react"
  */
 
 interface FlowStage {
-  label: string
-  artifact: string
-  note: string
+  label: string;
+  artifact: string;
+  note: string;
 }
 
 const STAGES: FlowStage[] = [
@@ -19,7 +19,7 @@ const STAGES: FlowStage[] = [
   { label: "Extract", artifact: "pmds", note: "finds messages and updates the catalog" },
   { label: "Translate", artifact: ".po catalog", note: "source-string-first" },
   { label: "Render", artifact: "supported hosts", note: "same runtime model" },
-]
+];
 
 export function WorkflowFlow() {
   return (
@@ -50,5 +50,5 @@ export function WorkflowFlow() {
         </Fragment>
       ))}
     </div>
-  )
+  );
 }

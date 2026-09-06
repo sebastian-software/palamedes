@@ -1,30 +1,30 @@
-import assert from "node:assert/strict"
-import { existsSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { chromium } from "@playwright/test"
-import axe from "axe-core"
-import { startSiteStaticServer } from "./site-static-server.mjs"
+import { chromium } from "@playwright/test";
+import axe from "axe-core";
+import { startSiteStaticServer } from "./site-static-server.mjs";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 function portFromEnv(name, fallback) {
-  const configured = process.env[name]
-  if (configured === undefined) return fallback
-  const port = Number(configured)
+  const configured = process.env[name];
+  if (configured === undefined) return fallback;
+  const port = Number(configured);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(
-      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`
-    )
+      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`,
+    );
   }
-  return port
+  return port;
 }
 
-const PORT = portFromEnv("SITE_A11Y_PORT", 4104)
+const PORT = portFromEnv("SITE_A11Y_PORT", 4104);
 const staticServer = process.env.PALAMEDES_SITE_URL
   ? null
-  : await startSiteStaticServer({ clientDir: join(repoRoot, "site/build/client"), port: PORT })
-const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl
+  : await startSiteStaticServer({ clientDir: join(repoRoot, "site/build/client"), port: PORT });
+const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl;
 const paths = [
   "/",
   "/proof",
@@ -48,293 +48,299 @@ const paths = [
   "/compare/paraglide",
   "/compare/tolgee",
   "/compare/intlayer",
-]
+];
 const viewports = [
   { name: "desktop", width: 1440, height: 1000 },
   { name: "desktop-200-percent-reflow", width: 720, height: 500 },
   { name: "mobile", width: 390, height: 844 },
-]
+];
 
 const chromiumExecutable = [
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
   "/opt/pw-browsers/chromium",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
-].find((path) => path && existsSync(path))
+].find((path) => path && existsSync(path));
 
-const failures = []
-let browser
+const failures = [];
+let browser;
 
 try {
   browser = await chromium.launch({
     headless: true,
     ...(chromiumExecutable ? { executablePath: chromiumExecutable } : {}),
-  })
+  });
   for (const viewport of viewports) {
-    const context = await browser.newContext({ viewport })
-    const page = await context.newPage()
-    const runtimeErrors = []
-    page.on("pageerror", (error) => runtimeErrors.push(error.message))
+    const context = await browser.newContext({ viewport });
+    const page = await context.newPage();
+    const runtimeErrors = [];
+    page.on("pageerror", (error) => runtimeErrors.push(error.message));
     page.on("console", (message) => {
-      if (message.type() === "error") runtimeErrors.push(message.text())
-    })
+      if (message.type() === "error") runtimeErrors.push(message.text());
+    });
 
     for (const path of paths) {
-      runtimeErrors.length = 0
-      await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle" })
-      await page.addScriptTag({ content: axe.source })
+      runtimeErrors.length = 0;
+      await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle" });
+      await page.addScriptTag({ content: axe.source });
       const result = await page.evaluate(async () =>
         globalThis.axe.run(document, {
           runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] },
-        })
-      )
+        }),
+      );
       if (result.violations.length > 0) {
         failures.push(
           `${viewport.name} ${path}: ${result.violations
             .map((violation) => `${violation.id} (${violation.nodes.length})`)
-            .join(", ")}`
-        )
+            .join(", ")}`,
+        );
       }
 
       const metrics = await page.evaluate(() => ({
         h1: document.querySelectorAll("h1").length,
         viewportWidth: document.documentElement.clientWidth,
         contentWidth: document.documentElement.scrollWidth,
-      }))
+      }));
       if (metrics.h1 !== 1)
-        failures.push(`${viewport.name} ${path}: expected one h1, got ${metrics.h1}`)
+        failures.push(`${viewport.name} ${path}: expected one h1, got ${metrics.h1}`);
       if (metrics.contentWidth > metrics.viewportWidth + 1) {
         failures.push(
-          `${viewport.name} ${path}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`
-        )
+          `${viewport.name} ${path}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`,
+        );
       }
       if (runtimeErrors.length > 0) {
-        failures.push(`${viewport.name} ${path}: runtime errors: ${runtimeErrors.join(" | ")}`)
+        failures.push(`${viewport.name} ${path}: runtime errors: ${runtimeErrors.join(" | ")}`);
       }
     }
 
-    await context.close()
+    await context.close();
   }
 
   for (const width of [320, 390, 430]) {
-    const context = await browser.newContext({ viewport: { width, height: 844 } })
-    const page = await context.newPage()
-    await page.goto(`${baseUrl}/icu-messageformat`, { waitUntil: "networkidle" })
-    assert.equal(await page.getByRole("link", { name: "Palamedes", exact: true }).count(), 1)
+    const context = await browser.newContext({ viewport: { width, height: 844 } });
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/icu-messageformat`, { waitUntil: "networkidle" });
+    assert.equal(await page.getByRole("link", { name: "Palamedes", exact: true }).count(), 1);
 
-    const menuButton = page.getByRole("button", { name: /menu/i }).first()
-    await menuButton.focus()
-    await page.keyboard.press("Enter")
-    const dialog = page.getByRole("dialog")
-    await assert.doesNotReject(() => dialog.waitFor({ state: "visible" }))
-    const navigation = dialog.getByRole("navigation")
-    const navigationLinks = navigation.getByRole("link")
+    const menuButton = page.getByRole("button", { name: /menu/i }).first();
+    await menuButton.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog");
+    await assert.doesNotReject(() => dialog.waitFor({ state: "visible" }));
+    const navigation = dialog.getByRole("navigation");
+    const navigationLinks = navigation.getByRole("link");
     assert.deepEqual(await navigationLinks.allTextContents(), [
       "Frameworks",
       "Architecture",
       "Guides",
       "Docs",
-    ])
-    assert.equal(await navigation.getByRole("group", { name: "Evaluate" }).count(), 1)
-    assert.equal(await navigation.getByRole("group", { name: "Resources" }).count(), 1)
+    ]);
+    assert.equal(await navigation.getByRole("group", { name: "Evaluate" }).count(), 1);
+    assert.equal(await navigation.getByRole("group", { name: "Resources" }).count(), 1);
     assert.equal(
       await navigation
         .getByRole("link", { name: "Guides", exact: true })
         .getAttribute("aria-current"),
-      "page"
-    )
+      "page",
+    );
 
-    const primaryAction = dialog.getByRole("link", { name: "Get started", exact: true })
-    assert.equal(await primaryAction.count(), 1)
-    assert.equal((await dialog.getByRole("link").allTextContents()).at(-1), "Get started")
-    assert.equal(await dialog.evaluate((element) => element.contains(document.activeElement)), true)
+    const primaryAction = dialog.getByRole("link", { name: "Get started", exact: true });
+    assert.equal(await primaryAction.count(), 1);
+    assert.equal((await dialog.getByRole("link").allTextContents()).at(-1), "Get started");
+    assert.equal(
+      await dialog.evaluate((element) => element.contains(document.activeElement)),
+      true,
+    );
     assert.equal(
       await dialog.evaluate((element) => {
-        const nav = element.querySelector("nav")
+        const nav = element.querySelector("nav");
         const action = [...element.querySelectorAll("a")].find(
-          (link) => link.textContent?.trim() === "Get started"
-        )
+          (link) => link.textContent?.trim() === "Get started",
+        );
         return Boolean(
-          nav && action && nav.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING
-        )
+          nav && action && nav.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING,
+        );
       }),
-      true
-    )
+      true,
+    );
 
-    const closeButton = dialog.getByRole("button", { name: "Close menu" })
+    const closeButton = dialog.getByRole("button", { name: "Close menu" });
     const targetLocators = [
       menuButton,
       closeButton,
       ...(await navigationLinks.all()),
       primaryAction,
-    ]
+    ];
     const targetSizes = await Promise.all(
       targetLocators.map(async (locator) => {
-        const box = await locator.boundingBox()
-        return box ? { width: box.width, height: box.height } : null
-      })
-    )
+        const box = await locator.boundingBox();
+        return box ? { width: box.width, height: box.height } : null;
+      }),
+    );
     for (const [index, box] of targetSizes.entries()) {
       if (!box || box.width < 44 || box.height < 44) {
         failures.push(
-          `mobile ${width}px control ${index + 1}: expected 44x44px, got ${JSON.stringify(box)}`
-        )
+          `mobile ${width}px control ${index + 1}: expected 44x44px, got ${JSON.stringify(box)}`,
+        );
       }
     }
 
     const focusedStyle = await page.evaluate(() => {
-      const focused = document.activeElement
-      if (!(focused instanceof HTMLElement)) return null
-      const style = getComputedStyle(focused)
-      return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth }
-    })
+      const focused = document.activeElement;
+      if (!(focused instanceof HTMLElement)) return null;
+      const style = getComputedStyle(focused);
+      return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+    });
     if (
       !focusedStyle ||
       focusedStyle.outlineStyle === "none" ||
       Number.parseFloat(focusedStyle.outlineWidth) < 2
     ) {
-      failures.push(`mobile ${width}px: initial dialog focus is not visibly outlined`)
+      failures.push(`mobile ${width}px: initial dialog focus is not visibly outlined`);
     }
 
     const dialogWidth = await dialog.evaluate((element) => ({
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,
-    }))
+    }));
     if (dialogWidth.scrollWidth > dialogWidth.clientWidth + 1) {
       failures.push(
-        `mobile ${width}px: dialog overflows ${dialogWidth.scrollWidth}px > ${dialogWidth.clientWidth}px`
-      )
+        `mobile ${width}px: dialog overflows ${dialogWidth.scrollWidth}px > ${dialogWidth.clientWidth}px`,
+      );
     }
 
-    await closeButton.click()
-    await dialog.waitFor({ state: "hidden" })
-    assert.equal(await menuButton.evaluate((element) => element === document.activeElement), true)
+    await closeButton.click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(await menuButton.evaluate((element) => element === document.activeElement), true);
 
-    await page.keyboard.press("Enter")
-    await dialog.waitFor({ state: "visible" })
-    await page.keyboard.press("Escape")
-    await dialog.waitFor({ state: "hidden" })
-    assert.equal(await menuButton.evaluate((element) => element === document.activeElement), true)
+    await page.keyboard.press("Enter");
+    await dialog.waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(await menuButton.evaluate((element) => element === document.activeElement), true);
 
-    await page.keyboard.press("Enter")
-    await dialog.waitFor({ state: "visible" })
-    await dialog.getByRole("link", { name: "Frameworks", exact: true }).click()
-    await page.waitForURL(`${baseUrl}/frameworks`)
-    await dialog.waitFor({ state: "hidden" })
-    await context.close()
+    await page.keyboard.press("Enter");
+    await dialog.waitFor({ state: "visible" });
+    await dialog.getByRole("link", { name: "Frameworks", exact: true }).click();
+    await page.waitForURL(`${baseUrl}/frameworks`);
+    await dialog.waitFor({ state: "hidden" });
+    await context.close();
   }
 
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl })
-  const page = await context.newPage()
-  await page.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
-  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" })
-  await copyButton.focus()
-  await page.keyboard.press("Enter")
-  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "pnpm bench:e2e")
-  await page.waitForTimeout(1000)
-  await page.keyboard.press("Enter")
-  await page.waitForTimeout(700)
-  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
+  const page = await context.newPage();
+  await page.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" });
+  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" });
+  await copyButton.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "pnpm bench:e2e");
+  await page.waitForTimeout(1000);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(700);
+  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor();
 
-  await page.goto(`${baseUrl}/frameworks`, { waitUntil: "networkidle" })
-  const matrix = page.getByLabel("Verified framework and locale strategy matrix")
-  await matrix.focus()
-  const initialScroll = await matrix.evaluate((element) => element.scrollLeft)
-  await page.keyboard.press("ArrowRight")
-  await page.waitForTimeout(250)
-  assert.ok((await matrix.evaluate((element) => element.scrollLeft)) > initialScroll)
-  await context.close()
+  await page.goto(`${baseUrl}/frameworks`, { waitUntil: "networkidle" });
+  const matrix = page.getByLabel("Verified framework and locale strategy matrix");
+  await matrix.focus();
+  const initialScroll = await matrix.evaluate((element) => element.scrollLeft);
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(250);
+  assert.ok((await matrix.evaluate((element) => element.scrollLeft)) > initialScroll);
+  await context.close();
 
-  const fallbackContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const fallbackContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await fallbackContext.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
         writeText: () => Promise.reject(new Error("clipboard permission denied")),
       },
-    })
+    });
     Object.defineProperty(document, "execCommand", {
       configurable: true,
       value(command) {
-        globalThis.__proofCopyFallback = command
-        return command === "copy"
+        globalThis.__proofCopyFallback = command;
+        return command === "copy";
       },
-    })
-  })
-  const fallbackPage = await fallbackContext.newPage()
-  await fallbackPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+    });
+  });
+  const fallbackPage = await fallbackContext.newPage();
+  await fallbackPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" });
   const fallbackButton = fallbackPage.getByRole("button", {
     name: "Copy command: pnpm bench:e2e",
-  })
-  await fallbackButton.focus()
-  await fallbackPage.keyboard.press("Space")
-  await fallbackPage.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
-  assert.equal(await fallbackPage.evaluate(() => globalThis.__proofCopyFallback), "copy")
-  assert.equal(await fallbackButton.evaluate((element) => element === document.activeElement), true)
-  await fallbackContext.close()
+  });
+  await fallbackButton.focus();
+  await fallbackPage.keyboard.press("Space");
+  await fallbackPage.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor();
+  assert.equal(await fallbackPage.evaluate(() => globalThis.__proofCopyFallback), "copy");
+  assert.equal(
+    await fallbackButton.evaluate((element) => element === document.activeElement),
+    true,
+  );
+  await fallbackContext.close();
 
-  const delayedCopyContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const delayedCopyContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await delayedCopyContext.addInitScript(() => {
-    const proofCopyTimers = new Set()
-    const setTimeoutForProofCopy = globalThis.setTimeout
-    const clearTimeoutForProofCopy = globalThis.clearTimeout
+    const proofCopyTimers = new Set();
+    const setTimeoutForProofCopy = globalThis.setTimeout;
+    const clearTimeoutForProofCopy = globalThis.clearTimeout;
     globalThis.setTimeout = (callback, delay, ...args) => {
       const timer = setTimeoutForProofCopy(
         () => {
-          proofCopyTimers.delete(timer)
-          return callback()
+          proofCopyTimers.delete(timer);
+          return callback();
         },
         delay,
-        ...args
-      )
-      if (delay === 1500) proofCopyTimers.add(timer)
-      return timer
-    }
+        ...args,
+      );
+      if (delay === 1500) proofCopyTimers.add(timer);
+      return timer;
+    };
     globalThis.clearTimeout = (timer) => {
-      proofCopyTimers.delete(timer)
-      return clearTimeoutForProofCopy(timer)
-    }
-    globalThis.__proofCopyTimers = proofCopyTimers
+      proofCopyTimers.delete(timer);
+      return clearTimeoutForProofCopy(timer);
+    };
+    globalThis.__proofCopyTimers = proofCopyTimers;
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
         writeText: () =>
           new Promise((resolve) => {
-            globalThis.__resolveProofCopy = resolve
+            globalThis.__resolveProofCopy = resolve;
           }),
       },
-    })
-  })
-  const delayedCopyPage = await delayedCopyContext.newPage()
-  const delayedCopyErrors = []
-  delayedCopyPage.on("pageerror", (error) => delayedCopyErrors.push(error.message))
+    });
+  });
+  const delayedCopyPage = await delayedCopyContext.newPage();
+  const delayedCopyErrors = [];
+  delayedCopyPage.on("pageerror", (error) => delayedCopyErrors.push(error.message));
   delayedCopyPage.on("console", (message) => {
-    if (message.type() === "error") delayedCopyErrors.push(message.text())
-  })
-  await delayedCopyPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
-  await delayedCopyPage.getByRole("button", { name: "Copy command: pnpm bench:e2e" }).click()
-  await delayedCopyPage.waitForFunction(() => typeof globalThis.__resolveProofCopy === "function")
-  await delayedCopyPage.getByRole("link", { name: "i18n performance", exact: true }).click()
-  await delayedCopyPage.waitForURL(`${baseUrl}/i18n-performance`)
+    if (message.type() === "error") delayedCopyErrors.push(message.text());
+  });
+  await delayedCopyPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" });
+  await delayedCopyPage.getByRole("button", { name: "Copy command: pnpm bench:e2e" }).click();
+  await delayedCopyPage.waitForFunction(() => typeof globalThis.__resolveProofCopy === "function");
+  await delayedCopyPage.getByRole("link", { name: "i18n performance", exact: true }).click();
+  await delayedCopyPage.waitForURL(`${baseUrl}/i18n-performance`);
   await delayedCopyPage.evaluate(async () => {
-    globalThis.__resolveProofCopy()
-    await Promise.resolve()
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-  })
-  assert.equal(await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size), 0)
-  assert.deepEqual(delayedCopyErrors, [])
-  await delayedCopyContext.close()
+    globalThis.__resolveProofCopy();
+    await Promise.resolve();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  assert.equal(await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size), 0);
+  assert.deepEqual(delayedCopyErrors, []);
+  await delayedCopyContext.close();
 } finally {
-  await browser?.close()
-  await staticServer?.close()
+  await browser?.close();
+  await staticServer?.close();
 }
 
 if (failures.length > 0) {
-  throw new Error(`Site accessibility verification failed:\n- ${failures.join("\n- ")}`)
+  throw new Error(`Site accessibility verification failed:\n- ${failures.join("\n- ")}`);
 }
 
 console.log(
-  `verify-site-a11y: ${paths.length * viewports.length} route/viewport axe passes succeeded`
-)
+  `verify-site-a11y: ${paths.length * viewports.length} route/viewport axe passes succeeded`,
+);

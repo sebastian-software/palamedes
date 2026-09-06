@@ -1,59 +1,59 @@
-import type { ComponentType, ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react";
 
 export interface SiteLinkDefinition {
-  label: string
-  href: string
+  label: string;
+  href: string;
 }
 
 export interface SiteNavigationItem extends SiteLinkDefinition {
-  active?: boolean
+  active?: boolean;
 }
 
 export interface SiteFooterColumn {
-  title: string
-  links: SiteLinkDefinition[]
+  title: string;
+  links: SiteLinkDefinition[];
 }
 
 export interface SiteBuildMetadata {
-  builtAt: string
-  commitHash: string
+  builtAt: string;
+  commitHash: string;
 }
 
 export interface SiteCounterpart extends SiteLinkDefinition {
-  enabled: boolean
+  enabled: boolean;
 }
 
 export interface SiteConfig {
-  name: string
-  homeHref: string
-  logoSrc?: string
-  logoAlt?: string
-  navigation: SiteNavigationItem[]
-  primaryAction?: SiteLinkDefinition
-  counterpart?: SiteCounterpart
-  footerColumns: SiteFooterColumn[]
-  copyright: ReactNode
-  footerWordmark?: string
+  name: string;
+  homeHref: string;
+  logoSrc?: string;
+  logoAlt?: string;
+  navigation: SiteNavigationItem[];
+  primaryAction?: SiteLinkDefinition;
+  counterpart?: SiteCounterpart;
+  footerColumns: SiteFooterColumn[];
+  copyright: ReactNode;
+  footerWordmark?: string;
 }
 
 export interface SiteLinkComponentProps {
-  href: string
-  className?: string
-  children: ReactNode
-  ariaLabel?: string
+  href: string;
+  className?: string;
+  children: ReactNode;
+  ariaLabel?: string;
 }
 
 export interface SiteUiProviderProps {
-  children: ReactNode
-  linkComponent?: ComponentType<SiteLinkComponentProps>
+  children: ReactNode;
+  linkComponent?: ComponentType<SiteLinkComponentProps>;
 }
 
-export type ButtonVariant = "primary" | "outline" | "small"
+export type ButtonVariant = "primary" | "outline" | "small";
 
 export interface ButtonLinkProps {
-  variant?: ButtonVariant
-  href: string
-  children: ReactNode
-  className?: string
-  ariaLabel?: string
+  variant?: ButtonVariant;
+  href: string;
+  children: ReactNode;
+  className?: string;
+  ariaLabel?: string;
 }

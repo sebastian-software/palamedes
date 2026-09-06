@@ -1,8 +1,10 @@
-import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external.js"
-import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/server"
-import type { I18nInstance } from "@palamedes/runtime"
+import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external.js";
+import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/server";
+import type { I18nInstance } from "@palamedes/runtime";
 
-const NEXT_RENDER_REQUEST_KEY_PROVIDER = Symbol.for("palamedes.nextPlugin.renderRequestKeyProvider")
+const NEXT_RENDER_REQUEST_KEY_PROVIDER = Symbol.for(
+  "palamedes.nextPlugin.renderRequestKeyProvider",
+);
 
 /**
  * Create an i18n scope keyed to Next.js' complete App Router render lifetime.
@@ -19,7 +21,7 @@ export function createNextServerI18nScope<
       // instead of retaining one provider for every module evaluation.
       id: NEXT_RENDER_REQUEST_KEY_PROVIDER,
     },
-  })
+  });
 }
 
-export type { ServerI18nScope }
+export type { ServerI18nScope };

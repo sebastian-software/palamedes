@@ -1,9 +1,9 @@
-import { t } from "@palamedes/core/macro"
+import { t } from "@palamedes/core/macro";
 
-import { ServerFunctionProof } from "../components/server-function-proof"
+import { ServerFunctionProof } from "../components/server-function-proof";
 
 export function meta() {
-  return [{ title: "Palamedes React Router RSC Server Function" }]
+  return [{ title: "Palamedes React Router RSC Server Function" }];
 }
 
 export function ServerComponent() {
@@ -13,5 +13,5 @@ export function ServerComponent() {
       <p data-testid="server-rendered-message">{t`Server render confirmed locale.`}</p>
       <ServerFunctionProof />
     </main>
-  )
+  );
 }

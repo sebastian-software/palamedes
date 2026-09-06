@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { buildLocaleSwitchItems } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
+import { buildLocaleSwitchItems } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
 
 export const LocaleSwitcher = ({ locale }: { locale: Locale }) => {
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
-  })
+  });
 
   return (
     <div className="switcher">
@@ -32,5 +32,5 @@ export const LocaleSwitcher = ({ locale }: { locale: Locale }) => {
         ))}
       </div>
     </div>
-  )
-}
+  );
+};

@@ -5,9 +5,9 @@
 //
 //   podman run --init $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 
-import process from "node:process"
-import { EXAMPLE_MATRIX } from "../example-matrix.mjs"
-import { buildPublishArgs } from "./port-plan.mjs"
+import process from "node:process";
+import { EXAMPLE_MATRIX } from "../example-matrix.mjs";
+import { buildPublishArgs } from "./port-plan.mjs";
 
-const flags = buildPublishArgs(EXAMPLE_MATRIX)
-process.stdout.write(`${flags.join(" ")}\n`)
+const flags = buildPublishArgs(EXAMPLE_MATRIX);
+process.stdout.write(`${flags.join(" ")}\n`);

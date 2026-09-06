@@ -9,14 +9,13 @@
     "starter"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/create-palamedes"
   },
-  "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "license": "MIT",
-  "type": "module",
   "bin": {
     "create-palamedes": "./bin/create-palamedes.mjs"
   },
@@ -24,14 +23,15 @@
     "README.md",
     "bin/"
   ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node -e \"process.exit(0)\"",
     "test": "node --test ./test/create-palamedes.test.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

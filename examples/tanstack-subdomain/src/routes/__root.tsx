@@ -1,6 +1,6 @@
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
-import appCss from "@palamedes/example-ui/styles.css?url"
-import { loadDocumentLocale } from "../lib/server-functions"
+import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
+import appCss from "@palamedes/example-ui/styles.css?url";
+import { loadDocumentLocale } from "../lib/server-functions";
 
 export const Route = createRootRoute({
   loader: () => loadDocumentLocale(),
@@ -13,10 +13,10 @@ export const Route = createRootRoute({
     links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootDocument,
-})
+});
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const locale = Route.useLoaderData()
+  const locale = Route.useLoaderData();
 
   return (
     <html lang={locale}>
@@ -28,5 +28,5 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
-  )
+  );
 }

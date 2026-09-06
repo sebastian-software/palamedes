@@ -34,9 +34,9 @@ catalogs:
 
 ```ts
 // next.config.mjs
-import { withPalamedes } from "@palamedes/next-plugin"
+import { withPalamedes } from "@palamedes/next-plugin";
 
-export default withPalamedes({})
+export default withPalamedes({});
 ```
 
 `withPalamedes()` transforms macros and loads imported `.po` catalogs in the
@@ -50,9 +50,9 @@ Add the `.po` declaration once:
 ```ts
 // src/po.d.ts
 declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 
-  export const messages: CompiledCatalogMessages
+  export const messages: CompiledCatalogMessages;
 }
 ```
 
@@ -62,33 +62,33 @@ explicitly request-local.
 
 ```ts
 // src/lib/i18n.server.ts
-import "server-only"
+import "server-only";
 
-import { cache } from "react"
-import { createI18n } from "@palamedes/core/compiled"
-import type { PalamedesI18n } from "@palamedes/core"
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
-import { messages as deMessages } from "../locales/de.po"
-import { messages as enMessages } from "../locales/en.po"
+import { cache } from "react";
+import { createI18n } from "@palamedes/core/compiled";
+import type { PalamedesI18n } from "@palamedes/core";
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import { messages as deMessages } from "../locales/de.po";
+import { messages as enMessages } from "../locales/en.po";
 
-export const serverI18nScope = createNextServerI18nScope<PalamedesI18n>()
+export const serverI18nScope = createNextServerI18nScope<PalamedesI18n>();
 
 const loadActiveServerI18n = cache(async () => {
-  const i18n = createI18n()
-  i18n.load("en", enMessages)
-  i18n.load("de", deMessages)
-  i18n.activate("de")
-  return i18n
-})
+  const i18n = createI18n();
+  i18n.load("en", enMessages);
+  i18n.load("de", deMessages);
+  i18n.activate("de");
+  return i18n;
+});
 
 export async function createActiveServerI18n() {
-  const i18n = await loadActiveServerI18n()
-  serverI18nScope.activate(i18n)
-  return i18n
+  const i18n = await loadActiveServerI18n();
+  serverI18nScope.activate(i18n);
+  return i18n;
 }
 
 export function runWithServerI18n<Result>(i18n: PalamedesI18n, callback: () => Result): Result {
-  return serverI18nScope.run(i18n, callback)
+  return serverI18nScope.run(i18n, callback);
 }
 ```
 
@@ -100,16 +100,16 @@ switcher; [Locale strategies](./locale-strategies.md) shows the trade-offs.
 
 ```tsx
 // src/app/page.tsx
-import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n, runWithServerI18n } from "../lib/i18n.server"
+import { t } from "@palamedes/core/macro";
+import { createActiveServerI18n, runWithServerI18n } from "../lib/i18n.server";
 
 function translateWelcome() {
-  return t`Welcome to Palamedes`
+  return t`Welcome to Palamedes`;
 }
 
 export default async function Page() {
-  const i18n = await createActiveServerI18n()
-  return runWithServerI18n(i18n, () => <h1>{translateWelcome()}</h1>)
+  const i18n = await createActiveServerI18n();
+  return runWithServerI18n(i18n, () => <h1>{translateWelcome()}</h1>);
 }
 ```
 

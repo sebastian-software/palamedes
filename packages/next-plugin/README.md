@@ -42,9 +42,9 @@ pnpm add -D @palamedes/cli @palamedes/config
 ## Minimal Setup
 
 ```js
-const { withPalamedes } = require("@palamedes/next-plugin")
+const { withPalamedes } = require("@palamedes/next-plugin");
 
-module.exports = withPalamedes({})
+module.exports = withPalamedes({});
 ```
 
 ```yaml
@@ -74,44 +74,44 @@ bind direct macro calls to the complete Next render lifetime.
 
 ```ts
 // src/lib/i18n.server.ts
-import "server-only"
+import "server-only";
 
-import { cache } from "react"
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
-import type { PalamedesI18n } from "@palamedes/core"
+import { cache } from "react";
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import type { PalamedesI18n } from "@palamedes/core";
 
-export const serverI18n = createNextServerI18nScope<PalamedesI18n>()
+export const serverI18n = createNextServerI18nScope<PalamedesI18n>();
 
 const loadActiveServerI18n = cache(async () => {
-  const locale = await resolveLocaleFromCookiesOrHeaders()
-  const i18n = await loadI18n(locale)
-  return { i18n, locale }
-})
+  const locale = await resolveLocaleFromCookiesOrHeaders();
+  const i18n = await loadI18n(locale);
+  return { i18n, locale };
+});
 
 export async function createActiveServerI18n() {
-  const active = await loadActiveServerI18n()
-  serverI18n.activate(active.i18n)
-  return active
+  const active = await loadActiveServerI18n();
+  serverI18n.activate(active.i18n);
+  return active;
 }
 ```
 
 ```tsx
 // app/page.tsx
-import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n } from "@/lib/i18n.server"
+import { t } from "@palamedes/core/macro";
+import { createActiveServerI18n } from "@/lib/i18n.server";
 
 function DownstreamServerTitle() {
-  return <h1>{t`Welcome to Palamedes`}</h1>
+  return <h1>{t`Welcome to Palamedes`}</h1>;
 }
 
 export default async function Page() {
-  const { locale } = await createActiveServerI18n()
+  const { locale } = await createActiveServerI18n();
   return (
     <>
       <DownstreamServerTitle />
       <TranslatedClientContent locale={locale} />
     </>
-  )
+  );
 }
 ```
 
@@ -122,8 +122,8 @@ module.exports = withPalamedes(
   {},
   {
     messageSplitting: true,
-  }
-)
+  },
+);
 ```
 
 Each message-bearing browser module gets statically enumerable imports for its
@@ -199,28 +199,28 @@ the project root or `src` directory:
 
 ```ts
 // src/palamedes.server.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { getLocale, serverI18nScope } from "./lib/i18n.server"
+import { createI18n } from "@palamedes/core/compiled";
+import { getLocale, serverI18nScope } from "./lib/i18n.server";
 
 export async function initializeServerFunctionI18n(): Promise<void> {
-  const { locale } = await getLocale()
-  const i18n = createI18n()
-  i18n.activate(locale)
-  serverI18nScope.activate(i18n)
+  const { locale } = await getLocale();
+  const i18n = createI18n();
+  i18n.activate(locale);
+  serverI18nScope.activate(i18n);
 }
 ```
 
 Then opt into automatic initialization with a flag:
 
 ```js
-const { withPalamedes } = require("@palamedes/next-plugin")
+const { withPalamedes } = require("@palamedes/next-plugin");
 
 module.exports = withPalamedes(
   {},
   {
     serverFunctions: true,
-  }
-)
+  },
+);
 ```
 
 Palamedes instruments directive-visible async functions: direct exports and
@@ -282,8 +282,8 @@ JavaScript default-parameter semantics explicitly:
 
 ```ts
 export async function save(message?: string) {
-  "use server"
-  if (message === undefined) message = t`Fallback`
+  "use server";
+  if (message === undefined) message = t`Fallback`;
 }
 ```
 
@@ -294,7 +294,7 @@ Next.js integration.
 ## Options
 
 ```js
-const { withPalamedes } = require("@palamedes/next-plugin")
+const { withPalamedes } = require("@palamedes/next-plugin");
 
 module.exports = withPalamedes(
   {},
@@ -310,8 +310,8 @@ module.exports = withPalamedes(
     workspaceRoot: undefined,
     serverFunctions: true,
     messageSplitting: true,
-  }
-)
+  },
+);
 ```
 
 `keepSourceFallbacks` defaults to `true` in both development and production,

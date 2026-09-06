@@ -20,10 +20,10 @@ Palamedes keeps messages close to the code. You still write translated UI where
 the UI happens:
 
 ```tsx
-import { Trans } from "@palamedes/react/macro"
+import { Trans } from "@palamedes/react/macro";
 
 export function CheckoutTitle() {
-  return <Trans>Checkout</Trans>
+  return <Trans>Checkout</Trans>;
 }
 ```
 

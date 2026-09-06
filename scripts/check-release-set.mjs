@@ -1,30 +1,30 @@
-import { existsSync, readFileSync } from "node:fs"
-import path from "node:path"
-import { publicWorkspacePackages } from "./release-packages.mjs"
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { publicWorkspacePackages } from "./release-packages.mjs";
 
-const root = process.cwd()
-const nativePackagePattern = /^@palamedes\/(?:core-node|cli)-.+/
-const nativeWrapperPackageNames = new Set(["@palamedes/core-node", "@palamedes/cli"])
+const root = process.cwd();
+const nativePackagePattern = /^@palamedes\/(?:core-node|cli)-.+/;
+const nativeWrapperPackageNames = new Set(["@palamedes/core-node", "@palamedes/cli"]);
 
 function readJson(file) {
-  return JSON.parse(readFileSync(path.join(root, file), "utf8"))
+  return JSON.parse(readFileSync(path.join(root, file), "utf8"));
 }
 
 function readText(file) {
-  return readFileSync(path.join(root, file), "utf8")
+  return readFileSync(path.join(root, file), "utf8");
 }
 
 function fail(message) {
-  console.error(message)
-  process.exitCode = 1
+  console.error(message);
+  process.exitCode = 1;
 }
 
-const releaseConfig = readJson(".release-please-config.json")
-const releaseManifest = readJson(".release-please-manifest.json")
-const publishWorkflow = readText(".github/workflows/publish.yml")
-const rootReleasePath = "."
-const rootReleaseConfig = releaseConfig.packages?.[rootReleasePath]
-const rootReleaseExtraFiles = rootReleaseConfig?.["extra-files"] ?? []
+const releaseConfig = readJson(".release-please-config.json");
+const releaseManifest = readJson(".release-please-manifest.json");
+const publishWorkflow = readText(".github/workflows/publish.yml");
+const rootReleasePath = ".";
+const rootReleaseConfig = releaseConfig.packages?.[rootReleasePath];
+const rootReleaseExtraFiles = rootReleaseConfig?.["extra-files"] ?? [];
 const requiredTomlExtraFiles = [
   {
     type: "toml",
@@ -66,28 +66,28 @@ const requiredTomlExtraFiles = [
     path: "Cargo.lock",
     jsonpath: '$.package[?(@.name.value=="palamedes-plugin")].version',
   },
-]
+];
 
 const publicPackages = publicWorkspacePackages(root).map(({ directory, name, version }) => ({
   isNative: nativePackagePattern.test(name),
   name,
   path: directory,
   version,
-}))
+}));
 
 const extraVersionFiles = new Set(
   rootReleaseExtraFiles
     .filter((file) => file?.type === "json" && file?.jsonpath === "$.version")
-    .map((file) => file.path)
-)
+    .map((file) => file.path),
+);
 // `--filter <name>` selects every workspace project with that name, and the
 // private workspace root shares its name with the published umbrella package.
 // A bare name filter there silently drags the whole workspace build into the
 // publish job, so resolve each filter and reject the ambiguous ones.
-const rootPackageName = readJson("package.json").name
+const rootPackageName = readJson("package.json").name;
 const workflowFilters = new Set(
   Array.from(publishWorkflow.matchAll(/--filter\s+(\S+)/g), (match) =>
-    match[1].replaceAll(/^"|"$/g, "").replace(/\.\.\.$/, "")
+    match[1].replaceAll(/^"|"$/g, "").replace(/\.\.\.$/, ""),
   )
     .filter((filter) => !filter.includes("${{"))
     .map((filter) => {
@@ -95,83 +95,85 @@ const workflowFilters = new Set(
         const collisions = [
           ...(filter === rootPackageName ? ["the workspace root"] : []),
           ...publicPackages.filter((info) => info.name === filter).map((info) => info.path),
-        ]
+        ];
 
         if (collisions.length > 1) {
           fail(
-            `publish workflow filters ${filter} by name, which matches ${collisions.join(" and ")}; filter by directory instead`
-          )
+            `publish workflow filters ${filter} by name, which matches ${collisions.join(" and ")}; filter by directory instead`,
+          );
         }
 
-        return filter
+        return filter;
       }
 
-      const filteredPackageJson = path.join(root, filter.slice(2), "package.json")
+      const filteredPackageJson = path.join(root, filter.slice(2), "package.json");
 
       if (!existsSync(filteredPackageJson)) {
-        fail(`publish workflow filters ${filter}, which is not a workspace directory`)
-        return filter
+        fail(`publish workflow filters ${filter}, which is not a workspace directory`);
+        return filter;
       }
 
-      return JSON.parse(readFileSync(filteredPackageJson, "utf8")).name
-    })
-)
+      return JSON.parse(readFileSync(filteredPackageJson, "utf8")).name;
+    }),
+);
 const nativeMatrixPackages = new Set(
-  Array.from(publishWorkflow.matchAll(/package_name:\s+"([^"]+)"/g), (match) => match[1])
-)
-const expectedVersion = publicPackages[0]?.version
-const versionFile = rootReleaseConfig?.["version-file"]
-const versionFileVersion = versionFile ? readText(versionFile).trim() : undefined
+  Array.from(publishWorkflow.matchAll(/package_name:\s+"([^"]+)"/g), (match) => match[1]),
+);
+const expectedVersion = publicPackages[0]?.version;
+const versionFile = rootReleaseConfig?.["version-file"];
+const versionFileVersion = versionFile ? readText(versionFile).trim() : undefined;
 
 function hasExtraFile(expectedFile) {
   return rootReleaseExtraFiles.some(
     (file) =>
       file?.type === expectedFile.type &&
       file?.path === expectedFile.path &&
-      file?.jsonpath === expectedFile.jsonpath
-  )
+      file?.jsonpath === expectedFile.jsonpath,
+  );
 }
 
 function cargoManifestVersion(file) {
-  return readText(file).match(/^version = "([^"]+)"/m)?.[1]
+  return readText(file).match(/^version = "([^"]+)"/m)?.[1];
 }
 
 function cargoLockVersion(packageName) {
-  const escapedName = packageName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const escapedName = packageName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return readText("Cargo.lock").match(
-    new RegExp(`\\[\\[package\\]\\]\\nname = "${escapedName}"\\nversion = "([^"]+)"`)
-  )?.[1]
+    new RegExp(`\\[\\[package\\]\\]\\nname = "${escapedName}"\\nversion = "([^"]+)"`),
+  )?.[1];
 }
 
 if (!rootReleaseConfig) {
-  fail(`${rootReleasePath} is missing from .release-please-config.json`)
+  fail(`${rootReleasePath} is missing from .release-please-config.json`);
 } else {
   if (rootReleaseConfig.component !== "palamedes") {
-    fail(`root release component is ${rootReleaseConfig.component}, expected palamedes`)
+    fail(`root release component is ${rootReleaseConfig.component}, expected palamedes`);
   }
 
   if (rootReleaseConfig["release-type"] !== "simple") {
-    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected simple`)
+    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected simple`);
   }
 
   if (versionFile !== ".release-please-version") {
-    fail(`root release version file is ${versionFile}, expected .release-please-version`)
+    fail(`root release version file is ${versionFile}, expected .release-please-version`);
   }
 }
 
 if (versionFileVersion !== expectedVersion) {
-  fail(`${versionFile} tracks ${versionFileVersion}, but public packages are at ${expectedVersion}`)
+  fail(
+    `${versionFile} tracks ${versionFileVersion}, but public packages are at ${expectedVersion}`,
+  );
 }
 
 if (releaseManifest[rootReleasePath] !== expectedVersion) {
   fail(
-    `release manifest tracks ${releaseManifest[rootReleasePath]}, but public packages are at ${expectedVersion}`
-  )
+    `release manifest tracks ${releaseManifest[rootReleasePath]}, but public packages are at ${expectedVersion}`,
+  );
 }
 
 for (const requiredFile of requiredTomlExtraFiles) {
   if (!hasExtraFile(requiredFile)) {
-    fail(`${requiredFile.path} ${requiredFile.jsonpath} is missing from root release extra-files`)
+    fail(`${requiredFile.path} ${requiredFile.jsonpath} is missing from root release extra-files`);
   }
 }
 
@@ -186,51 +188,51 @@ for (const [name, version] of [
   ["Cargo.lock palamedes-plugin", cargoLockVersion("palamedes-plugin")],
 ]) {
   if (version !== expectedVersion) {
-    fail(`${name} has version ${version}, expected ${expectedVersion}`)
+    fail(`${name} has version ${version}, expected ${expectedVersion}`);
   }
 }
 
 for (const packageInfo of publicPackages) {
   if (packageInfo.version !== expectedVersion) {
-    fail(`${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`)
+    fail(`${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`);
   }
 
   if (!extraVersionFiles.has(path.join(packageInfo.path, "package.json"))) {
-    fail(`${packageInfo.name} is missing from the root release extra-files list`)
+    fail(`${packageInfo.name} is missing from the root release extra-files list`);
   }
 
   if (packageInfo.isNative) {
     if (!nativeMatrixPackages.has(packageInfo.name)) {
-      fail(`${packageInfo.name} is missing from the native publish matrix`)
+      fail(`${packageInfo.name} is missing from the native publish matrix`);
     }
   } else if (!workflowFilters.has(packageInfo.name)) {
-    fail(`${packageInfo.name} is missing from the JavaScript publish filters`)
+    fail(`${packageInfo.name} is missing from the JavaScript publish filters`);
   }
 
   if (nativeWrapperPackageNames.has(packageInfo.name)) {
     const platformDependencies = Object.entries(
-      readJson(path.join(packageInfo.path, "package.json")).optionalDependencies ?? {}
-    ).filter(([name]) => name.startsWith(`${packageInfo.name}-`))
+      readJson(path.join(packageInfo.path, "package.json")).optionalDependencies ?? {},
+    ).filter(([name]) => name.startsWith(`${packageInfo.name}-`));
     const platformPackageCount = publicPackages.filter((info) =>
-      info.name.startsWith(`${packageInfo.name}-`)
-    ).length
+      info.name.startsWith(`${packageInfo.name}-`),
+    ).length;
     if (platformDependencies.length !== platformPackageCount) {
       fail(
-        `${packageInfo.name} must declare all ${platformPackageCount} native platform dependencies`
-      )
+        `${packageInfo.name} must declare all ${platformPackageCount} native platform dependencies`,
+      );
     }
     for (const [name, version] of platformDependencies) {
       if (version !== "workspace:*") {
-        fail(`${packageInfo.name} must use workspace:* for ${name}, found ${version}`)
+        fail(`${packageInfo.name} must use workspace:* for ${name}, found ${version}`);
       }
     }
   }
 }
 
 if (process.exitCode) {
-  process.exit(process.exitCode)
+  process.exit(process.exitCode);
 }
 
 console.log(
-  `Release set is consistent for ${publicPackages.length} public packages at ${expectedVersion}.`
-)
+  `Release set is consistent for ${publicPackages.length} public packages at ${expectedVersion}.`,
+);

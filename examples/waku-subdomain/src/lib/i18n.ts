@@ -1,17 +1,17 @@
-import { createI18n } from "@palamedes/core"
-import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime"
-import { defineLocaleControls } from "@palamedes/core/locale"
-import { messages as deMessages } from "../locales/de.po"
-import { messages as enMessages } from "../locales/en.po"
-import { messages as esMessages } from "../locales/es.po"
+import { createI18n } from "@palamedes/core";
+import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime";
+import { defineLocaleControls } from "@palamedes/core/locale";
+import { messages as deMessages } from "../locales/de.po";
+import { messages as enMessages } from "../locales/en.po";
+import { messages as esMessages } from "../locales/es.po";
 
-export const LOCALES = ["en", "de", "es"] as const
-export const DEFAULT_LOCALE = "en"
-export type Locale = (typeof LOCALES)[number]
+export const LOCALES = ["en", "de", "es"] as const;
+export const DEFAULT_LOCALE = "en";
+export type Locale = (typeof LOCALES)[number];
 
 declare global {
   interface Window {
-    __PALAMEDES_LOCALE__?: string
+    __PALAMEDES_LOCALE__?: string;
   }
 }
 
@@ -24,45 +24,45 @@ export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
   hosts: { mode: "subdomain" },
-})
+});
 
-export const LOCALE_LABELS = locales.labels
-export const isLocale = locales.isLocale
-export const normalizeLocale = locales.normalizeLocale
+export const LOCALE_LABELS = locales.labels;
+export const isLocale = locales.isLocale;
+export const normalizeLocale = locales.normalizeLocale;
 
 const localeMessages = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
-} as const
+} as const;
 
-const clientI18n = createI18n()
+const clientI18n = createI18n();
 
 export function getLocaleLabel(locale: Locale) {
-  return locales.label(locale)
+  return locales.label(locale);
 }
 
 export function createServerI18n(locale: Locale) {
-  const i18n = createI18n()
-  i18n.load(locale, localeMessages[locale])
-  i18n.activate(locale)
-  return i18n
+  const i18n = createI18n();
+  i18n.load(locale, localeMessages[locale]);
+  i18n.activate(locale);
+  return i18n;
 }
 
 export function activateServerI18n(locale: Locale) {
-  return activateScopedServerI18n(createServerI18n(locale))
+  return activateScopedServerI18n(createServerI18n(locale));
 }
 
 export function initializeClientI18n(locale: Locale) {
-  clientI18n.load(locale, localeMessages[locale])
-  clientI18n.activate(locale)
+  clientI18n.load(locale, localeMessages[locale]);
+  clientI18n.activate(locale);
 
   if (typeof window !== "undefined") {
-    document.documentElement.lang = locale
-    setClientI18n(clientI18n)
+    document.documentElement.lang = locale;
+    setClientI18n(clientI18n);
   }
 
-  return clientI18n
+  return clientI18n;
 }
 
 // The host label is authoritative for the server, not for the client: a host
@@ -71,14 +71,14 @@ export function initializeClientI18n(locale: Locale) {
 // locale from `window.location` would therefore diverge from the rendered
 // document, so the page injects the resolved server locale instead.
 if (typeof window !== "undefined") {
-  const locale = window.__PALAMEDES_LOCALE__
+  const locale = window.__PALAMEDES_LOCALE__;
   if (!locales.isLocale(locale)) {
     throw new Error(
-      `Expected an injected supported server locale, received ${JSON.stringify(locale)}`
-    )
+      `Expected an injected supported server locale, received ${JSON.stringify(locale)}`,
+    );
   }
 
-  initializeClientI18n(locale)
+  initializeClientI18n(locale);
 }
 
 export function createBanner(headers: Record<string, string | undefined>, locale: Locale) {
@@ -88,5 +88,5 @@ export function createBanner(headers: Record<string, string | undefined>, locale
     currentLocale: locale,
     pathname: "/",
     requestHost: headers.host,
-  })
+  });
 }

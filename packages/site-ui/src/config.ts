@@ -1,4 +1,4 @@
-import type { SiteConfig } from "./types"
+import type { SiteConfig } from "./types";
 
 /*
  * Keeps configuration at the consuming site boundary. In particular, a
@@ -7,5 +7,5 @@ import type { SiteConfig } from "./types"
  * independently and test the exact state they intend to ship.
  */
 export function defineSiteConfig(config: SiteConfig): SiteConfig {
-  return config
+  return config;
 }

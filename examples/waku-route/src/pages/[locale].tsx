@@ -1,47 +1,47 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { PageProps } from "waku/router"
-import { unstable_getHeaders } from "waku/router/server"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { SuggestionBanner } from "../components/SuggestionBanner"
-import { TicketPanel } from "../components/TicketPanel"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { PageProps } from "waku/router";
+import { unstable_getHeaders } from "waku/router/server";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { SuggestionBanner } from "../components/SuggestionBanner";
+import { TicketPanel } from "../components/TicketPanel";
 import {
   activateServerI18n,
   createBanner,
   getLocaleLabel,
   normalizeLocale,
   type Locale,
-} from "../lib/i18n"
+} from "../lib/i18n";
 
 type ProbeResult = {
-  handledAt: string
-  locale: Locale
-  localeLabel: string
-  message: string
-}
+  handledAt: string;
+  locale: Locale;
+  localeLabel: string;
+  message: string;
+};
 
 export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
-  const currentLocale = normalizeLocale(locale)
-  const headers = unstable_getHeaders()
-  const localeLabel = getLocaleLabel(currentLocale)
-  const banner = createBanner(headers, currentLocale)
+  const currentLocale = normalizeLocale(locale);
+  const headers = unstable_getHeaders();
+  const localeLabel = getLocaleLabel(currentLocale);
+  const banner = createBanner(headers, currentLocale);
 
-  activateServerI18n(currentLocale)
+  activateServerI18n(currentLocale);
 
   async function runProbe(): Promise<ProbeResult> {
-    "use server"
+    "use server";
 
-    activateServerI18n(currentLocale)
+    activateServerI18n(currentLocale);
 
     return {
       handledAt: new Date().toISOString(),
       locale: currentLocale,
       localeLabel,
       message: t`Server action confirmed locale ${currentLocale}.`,
-    }
+    };
   }
 
   return (
@@ -96,11 +96,11 @@ export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
 
       <ClientReady />
     </>
-  )
+  );
 }
 
 export async function getConfig() {
   return {
     render: "dynamic",
-  } as const
+  } as const;
 }

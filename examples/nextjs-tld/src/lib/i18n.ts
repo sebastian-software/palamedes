@@ -1,10 +1,10 @@
-import { createI18n } from "@palamedes/core"
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-import { defineLocaleControls } from "@palamedes/core/locale"
+import { createI18n } from "@palamedes/core";
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
+import { defineLocaleControls } from "@palamedes/core/locale";
 
-export const LOCALES = ["en", "de", "es", "fr"] as const
-export const DEFAULT_LOCALE = "en"
-export type Locale = (typeof LOCALES)[number]
+export const LOCALES = ["en", "de", "es", "fr"] as const;
+export const DEFAULT_LOCALE = "en";
+export type Locale = (typeof LOCALES)[number];
 
 /**
  * Headless locale controls for this demo (TLD strategy). The locale comes from
@@ -17,22 +17,22 @@ export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
   hosts: { mode: "tld", tld: { com: "en" }, defaultTld: "com" },
-})
+});
 
-export const LOCALE_LABELS = locales.labels
+export const LOCALE_LABELS = locales.labels;
 
 /**
  * Load messages for a locale (used on both server and client)
  */
 export async function loadMessages(locale: Locale): Promise<CompiledCatalogMessages> {
-  const { messages } = await import(`../locales/${locale}.po`)
-  return messages
+  const { messages } = await import(`../locales/${locale}.po`);
+  return messages;
 }
 
 export function createExampleI18n() {
-  return createI18n()
+  return createI18n();
 }
 
 export function getLocaleLabel(locale: Locale): string {
-  return locales.label(locale)
+  return locales.label(locale);
 }

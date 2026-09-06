@@ -1,26 +1,26 @@
-import { createSignal } from "solid-js"
-import { plural, t } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/solid"
-import { Trans } from "@palamedes/solid/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Locale } from "../lib/i18n"
+import { createSignal } from "solid-js";
+import { plural, t } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/solid";
+import { Trans } from "@palamedes/solid/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Locale } from "../lib/i18n";
 
 type TicketPanelProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 // A member expression (`props.quantity`) gives the macro a stable placeholder
 // name while staying reactive through Solid's prop getters, so the ticket count
 // is both translated via the catalog and updated as the stepper changes.
 function QuantityLabel(props: { quantity: number }) {
-  return <b>{plural(props.quantity, { one: "# ticket", other: "# tickets" })}</b>
+  return <b>{plural(props.quantity, { one: "# ticket", other: "# tickets" })}</b>;
 }
 
 export function TicketPanel(_props: TicketPanelProps) {
-  const [quantity, setQuantity] = createSignal(1)
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const total = () => EVENT.ticketPrice * quantity()
+  const [quantity, setQuantity] = createSignal(1);
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const total = () => EVENT.ticketPrice * quantity();
 
   return (
     <article class="ticket">
@@ -122,5 +122,5 @@ export function TicketPanel(_props: TicketPanelProps) {
         </button>
       </div>
     </article>
-  )
+  );
 }

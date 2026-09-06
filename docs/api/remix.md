@@ -67,13 +67,13 @@ and browser runtime.
 
 ```ts
 interface PalamedesRemixRegisterOptions {
-  include?: RegExp
-  exclude?: RegExp
-  runtimeModule?: string
-  keepSourceFallbacks?: boolean
-  configPath?: string
-  failOnMissing?: boolean
-  failOnCompileError?: boolean
+  include?: RegExp;
+  exclude?: RegExp;
+  runtimeModule?: string;
+  keepSourceFallbacks?: boolean;
+  configPath?: string;
+  failOnMissing?: boolean;
+  failOnCompileError?: boolean;
 }
 ```
 
@@ -122,8 +122,8 @@ Install the Palamedes asset loader there so ordinary macros are transformed
 before Remix analyzes imports, HMR boundaries, and minification:
 
 ```ts
-import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix"
-import { createAssetServer } from "remix/assets"
+import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import { createAssetServer } from "remix/assets";
 
 export const assetServer = createAssetServer({
   basePath: "/assets",
@@ -133,7 +133,7 @@ export const assetServer = createAssetServer({
   scripts: {
     loaders: [createPalamedesRemixAssetLoader()],
   },
-})
+});
 ```
 
 `PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/core`,
@@ -171,30 +171,30 @@ provide the equivalent restart.
 ## Server Request Scope
 
 ```ts
-import type { CatalogMessages } from "@palamedes/core"
-import { defineLocaleControls } from "@palamedes/core/locale"
-import { createRemixI18nServer } from "@palamedes/remix/server"
+import type { CatalogMessages } from "@palamedes/core";
+import { defineLocaleControls } from "@palamedes/core/locale";
+import { createRemixI18nServer } from "@palamedes/remix/server";
 
 const locales = defineLocaleControls({
   locales: ["en", "de"],
   defaultLocale: "en",
   cookies: { locale: "locale" },
-})
+});
 
 const catalogs: Record<"en" | "de", CatalogMessages> = {
   en: {},
   de: {
     // Load compiled catalog messages for real apps.
   },
-}
+};
 
 export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "cookie",
   loadMessages(locale) {
-    return catalogs[locale]
+    return catalogs[locale];
   },
-})
+});
 ```
 
 Use `remixI18n.run(context, callback)` inside Remix actions, or install
@@ -231,12 +231,12 @@ locale already selected for the document:
 
 ```ts
 const response = await remixI18n.run(context, ({ locale }) => {
-  const bootstrap = remixI18n.renderClientBootstrap(locale)
+  const bootstrap = remixI18n.renderClientBootstrap(locale);
   return new Response(
     `<!doctype html><html lang="${locale}"><body>${bootstrap}<script type="module" src="/assets/app.js"></script></body></html>`,
-    { headers: { "content-type": "text/html; charset=utf-8" } }
-  )
-})
+    { headers: { "content-type": "text/html; charset=utf-8" } },
+  );
+});
 ```
 
 The exact raw-markup insertion API depends on the Remix UI renderer. The
@@ -249,11 +249,11 @@ module.
 Initialize before loading translated browser modules:
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { initializeRemixClientI18n } from "@palamedes/remix/client"
+import { createI18n } from "@palamedes/core";
+import { initializeRemixClientI18n } from "@palamedes/remix/client";
 
-initializeRemixClientI18n({ createI18n })
-await import("./app.js")
+initializeRemixClientI18n({ createI18n });
+await import("./app.js");
 ```
 
 `initializeRemixClientI18n()` validates the complete payload, requires its

@@ -1,4 +1,4 @@
-import { withPalamedes } from "@palamedes/next-plugin"
+import { withPalamedes } from "@palamedes/next-plugin";
 
 export default withPalamedes(
   {
@@ -11,5 +11,5 @@ export default withPalamedes(
     // but opt into compact production output for that assertion.
     keepSourceFallbacks: process.env.NODE_ENV !== "production",
     serverFunctions: true,
-  }
-)
+  },
+);

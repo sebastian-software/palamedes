@@ -20,12 +20,12 @@ pnpm add @palamedes/core
 ## Minimal Example
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
+const i18n = createI18n();
 
-setClientI18n(i18n)
+setClientI18n(i18n);
 ```
 
 ## Runtime Fallback Hooks
@@ -41,18 +41,18 @@ failure.
 ```ts
 const i18n = createI18n({
   onMissing({ id, locale }) {
-    reportMetric("palamedes.missing", { id, locale })
+    reportMetric("palamedes.missing", { id, locale });
   },
   onError({ id, locale, error }) {
-    captureException(error, { tags: { id, locale } })
+    captureException(error, { tags: { id, locale } });
   },
-})
+});
 ```
 
 Pass `locale` when the instance should start in another locale:
 
 ```ts
-const i18n = createI18n({ locale: "de" })
+const i18n = createI18n({ locale: "de" });
 ```
 
 For server-rendered applications, set `timeZone` to the same IANA identifier on
@@ -61,7 +61,7 @@ that zone instead of the host process or browser zone, preventing hydration
 output from drifting across environments.
 
 ```ts
-const i18n = createI18n({ locale: "en-US", timeZone: "Europe/Berlin" })
+const i18n = createI18n({ locale: "en-US", timeZone: "Europe/Berlin" });
 ```
 
 Date objects, timestamps, and ISO strings with a time represent instants and are
@@ -82,7 +82,7 @@ catalog should account for those events in their telemetry policy.
 For authoring imports, use:
 
 ```ts
-import { t } from "@palamedes/core/macro"
+import { t } from "@palamedes/core/macro";
 ```
 
 The macro entry exports `t`, `plural`, `select`, and `selectOrdinal`.
@@ -97,14 +97,14 @@ Use `@palamedes/core/locale` for framework-agnostic locale resolution and
 switch UI data:
 
 ```ts
-import { defineLocaleControls } from "@palamedes/core/locale"
+import { defineLocaleControls } from "@palamedes/core/locale";
 
 const localeControls = defineLocaleControls({
   locales: ["en", "de"],
   defaultLocale: "en",
-})
+});
 
-const locale = localeControls.preferredLocale(request.headers.get("accept-language"))
+const locale = localeControls.preferredLocale(request.headers.get("accept-language"));
 ```
 
 The subpath also exports `parseAcceptLanguage()`, `buildLocaleSwitchItems()`,
@@ -124,7 +124,7 @@ const localeControls = defineLocaleControls({
   defaultLocale: "en",
   hosts: { mode: "subdomain" },
   protocol: "https",
-})
+});
 ```
 
 Set `protocol` when the emitted URLs must be absolute, for example in canonical
@@ -150,13 +150,13 @@ Use the parser-free production entrypoint when the application loads only these
 generated catalogs:
 
 ```ts
-import { createI18n, type CompiledCatalogMessages } from "@palamedes/core/compiled"
+import { createI18n, type CompiledCatalogMessages } from "@palamedes/core/compiled";
 
 declare module "*.po" {
-  export const messages: CompiledCatalogMessages
+  export const messages: CompiledCatalogMessages;
 }
 
-const i18n = createI18n()
+const i18n = createI18n();
 ```
 
 Generated catalog modules, transformed `Trans` components, and compiled MDX
@@ -181,7 +181,7 @@ inside translated sentences:
 i18n._("Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}", {
   amount: 12.3,
   when: new Date(),
-})
+});
 ```
 
 Supported runtime styles:
@@ -226,7 +226,7 @@ lenient form:
 `'{'` is therefore how a message emits a literal brace:
 
 ```ts
-i18n._("Write '{'name'}' to insert the user name", {})
+i18n._("Write '{'name'}' to insert the user name", {});
 // -> "Write {name} to insert the user name"
 ```
 
@@ -239,7 +239,7 @@ custom renderers must handle that node type alongside `text`.
 sentences:
 
 ```ts
-i18n._("{count, plural, offset:1 =0 {nobody else} one {# other} other {# others}}", { count: 3 })
+i18n._("{count, plural, offset:1 =0 {nobody else} one {# other} other {# others}}", { count: 3 });
 // -> "2 others"
 ```
 

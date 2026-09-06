@@ -1,19 +1,19 @@
-import { createMemo, Show } from "solid-js"
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/solid/macro"
-import { EVENT } from "@palamedes/example-ui"
-import { ClientReady } from "../components/ClientReady"
-import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ProofPanel } from "../components/ProofPanel"
-import { TicketPanel } from "../components/TicketPanel"
-import { loadHomePageData } from "../lib/server"
+import { createMemo, Show } from "solid-js";
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/solid/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { ClientReady } from "../components/ClientReady";
+import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { ProofPanel } from "../components/ProofPanel";
+import { TicketPanel } from "../components/TicketPanel";
+import { loadHomePageData } from "../lib/server";
 
 type HomePageData = {
-  locale: "en" | "de" | "es"
-  localeLabel: string
-  renderedAt: string
-  source: string
-}
+  locale: "en" | "de" | "es";
+  localeLabel: string;
+  renderedAt: string;
+  source: string;
+};
 
 function HomePageContent(props: { data: HomePageData }) {
   return (
@@ -57,18 +57,18 @@ function HomePageContent(props: { data: HomePageData }) {
 
       <ClientReady />
     </main>
-  )
+  );
 }
 
 export default function HomePage() {
-  const pageData = createMemo(() => loadHomePageData())
+  const pageData = createMemo(() => loadHomePageData());
 
   return (
     <Show when={pageData()}>
       {(page) => {
-        const data = page()
-        return <HomePageContent data={data} />
+        const data = page();
+        return <HomePageContent data={data} />;
       }}
     </Show>
-  )
+  );
 }

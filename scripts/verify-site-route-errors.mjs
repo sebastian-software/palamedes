@@ -3,5 +3,5 @@ export function isExpectedSkippedViewTransitionError(channel, error) {
     channel === "pageerror" &&
     error?.name === "AbortError" &&
     error.message === "Transition was skipped"
-  )
+  );
 }

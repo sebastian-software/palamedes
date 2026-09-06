@@ -1,41 +1,41 @@
-import { useEffect, useRef } from "react"
-import { useFetcher } from "react-router"
-import { plural } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Locale } from "~/lib/i18n"
+import { useEffect, useRef } from "react";
+import { useFetcher } from "react-router";
+import { plural } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Locale } from "~/lib/i18n";
 
 type ProofData = {
   proof?: {
-    message: string
-  }
-}
+    message: string;
+  };
+};
 
 type ProofPanelProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function ProofPanel({ locale }: ProofPanelProps) {
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const fetcher = useFetcher<ProofData>()
-  const isPending = fetcher.state !== "idle"
-  const message = fetcher.data?.proof?.message ?? null
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const fetcher = useFetcher<ProofData>();
+  const isPending = fetcher.state !== "idle";
+  const message = fetcher.data?.proof?.message ?? null;
 
-  const submit = fetcher.submit
-  const refreshRef = useRef<() => void>(() => {})
+  const submit = fetcher.submit;
+  const refreshRef = useRef<() => void>(() => {});
   refreshRef.current = () => {
-    submit({ intent: "probe" }, { method: "post" })
-  }
+    submit({ intent: "probe" }, { method: "post" });
+  };
 
   function refresh() {
-    refreshRef.current()
+    refreshRef.current();
   }
 
   useEffect(() => {
-    refreshRef.current()
-  }, [locale])
+    refreshRef.current();
+  }, [locale]);
 
   return (
     <aside className="aside">
@@ -119,5 +119,5 @@ export function ProofPanel({ locale }: ProofPanelProps) {
         </button>
       </div>
     </aside>
-  )
+  );
 }

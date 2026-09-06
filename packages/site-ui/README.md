@@ -8,7 +8,7 @@ Palamedes sites.
 Import the self-contained component CSS once:
 
 ```ts
-import "@palamedes/site-ui/styles.css"
+import "@palamedes/site-ui/styles.css";
 ```
 
 Tailwind v4 consumers additionally import
@@ -25,8 +25,8 @@ import {
   SiteUiProvider,
   defineSiteConfig,
   type SiteLinkComponentProps,
-} from "@palamedes/site-ui"
-import { Link } from "react-router"
+} from "@palamedes/site-ui";
+import { Link } from "react-router";
 
 function RouterLink({ href, className, children, ariaLabel }: SiteLinkComponentProps) {
   return href.startsWith("/") ? (
@@ -37,7 +37,7 @@ function RouterLink({ href, className, children, ariaLabel }: SiteLinkComponentP
     <a href={href} className={className} aria-label={ariaLabel}>
       {children}
     </a>
-  )
+  );
 }
 
 const config = defineSiteConfig({
@@ -51,14 +51,14 @@ const config = defineSiteConfig({
     enabled: true,
   },
   copyright: "© Sebastian Software GmbH",
-})
+});
 
 export function App() {
   return (
     <SiteUiProvider linkComponent={RouterLink}>
       <SiteShell config={config}>Content</SiteShell>
     </SiteUiProvider>
-  )
+  );
 }
 ```
 

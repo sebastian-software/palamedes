@@ -44,11 +44,11 @@ throws a curated runtime error.
 ## Client Runtime
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
-setClientI18n(i18n)
+const i18n = createI18n();
+setClientI18n(i18n);
 ```
 
 Call `setClientI18n()` before translated client UI renders.
@@ -85,12 +85,12 @@ before registration.
 For request-local server rendering, prefer `@palamedes/runtime/server`:
 
 ```ts
-import { createServerI18nScope } from "@palamedes/runtime/server"
-import type { PalamedesI18n } from "@palamedes/core"
+import { createServerI18nScope } from "@palamedes/runtime/server";
+import type { PalamedesI18n } from "@palamedes/core";
 
-export const serverI18n = createServerI18nScope<PalamedesI18n>()
+export const serverI18n = createServerI18nScope<PalamedesI18n>();
 
-serverI18n.activate(i18n)
+serverI18n.activate(i18n);
 ```
 
 `createServerI18nScope()` uses Node `AsyncLocalStorage`, so keep it out of

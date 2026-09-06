@@ -1,8 +1,8 @@
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
 
 export function ClientApp({ name }: { name: string }) {
-  const welcome = t`Welcome ${name}`
+  const welcome = t`Welcome ${name}`;
 
   return (
     <main>
@@ -11,5 +11,5 @@ export function ClientApp({ name }: { name: string }) {
         <Trans>This fixture exercises translated JSX output in a client-oriented component.</Trans>
       </p>
     </main>
-  )
+  );
 }

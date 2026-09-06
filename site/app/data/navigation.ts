@@ -1,18 +1,18 @@
-import { TOPIC_SLUGS, type TopicSlug } from "./topic-slugs"
+import { TOPIC_SLUGS, type TopicSlug } from "./topic-slugs";
 
 export const GUIDE_TOPIC_PATHS: readonly `/${TopicSlug}`[] = TOPIC_SLUGS.map(
-  (slug): `/${TopicSlug}` => `/${slug}`
-)
+  (slug): `/${TopicSlug}` => `/${slug}`,
+);
 
 export interface PrimaryNavigationLink {
-  label: string
-  href: string
-  relatedPaths?: readonly string[]
+  label: string;
+  href: string;
+  relatedPaths?: readonly string[];
 }
 
 export interface PrimaryNavigationGroup {
-  label: string
-  links: readonly PrimaryNavigationLink[]
+  label: string;
+  links: readonly PrimaryNavigationLink[];
 }
 
 /*
@@ -36,21 +36,21 @@ export const PRIMARY_NAVIGATION_GROUPS = [
       { label: "Docs", href: "/docs" },
     ],
   },
-] as const satisfies readonly PrimaryNavigationGroup[]
+] as const satisfies readonly PrimaryNavigationGroup[];
 
 export const PRIMARY_NAVIGATION_LINKS: readonly PrimaryNavigationLink[] = (
   PRIMARY_NAVIGATION_GROUPS as readonly PrimaryNavigationGroup[]
-).flatMap((group) => group.links)
+).flatMap((group) => group.links);
 
 export function isPrimaryNavigationLinkActive(
   link: PrimaryNavigationLink,
-  pathname: string
+  pathname: string,
 ): boolean {
-  const normalizedPathname = pathname === "/" ? pathname : pathname.replace(/\/+$/, "")
+  const normalizedPathname = pathname === "/" ? pathname : pathname.replace(/\/+$/, "");
 
   return (
     normalizedPathname === link.href ||
     normalizedPathname.startsWith(`${link.href}/`) ||
     link.relatedPaths?.includes(normalizedPathname) === true
-  )
+  );
 }

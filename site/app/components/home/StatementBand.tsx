@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
 /*
  * The dark positioning band — Home's single deliberate style break. The
@@ -12,11 +12,11 @@ export function StatementBand({
   href,
   children,
 }: {
-  num: string
-  diagram?: boolean
+  num: string;
+  diagram?: boolean;
   /** Optional route to the detailed evidence behind this positioning statement. */
-  href?: string
-  children: ReactNode
+  href?: string;
+  children: ReactNode;
 }) {
   return (
     <section className="border-t border-hair bg-ink px-8 pt-0 pb-16 text-paper max-tight:px-5">
@@ -35,7 +35,7 @@ export function StatementBand({
         </a>
       ) : null}
     </section>
-  )
+  );
 }
 
 const OWNED = [
@@ -43,8 +43,8 @@ const OWNED = [
   "extract & update",
   "audit, merge & compile",
   "runtime integration",
-]
-const HOST = ["routing & URLs", "locale detection", "rendering", "hosting"]
+];
+const HOST = ["routing & URLs", "locale detection", "rendering", "hosting"];
 
 function ScopeDiagram() {
   return (
@@ -89,5 +89,5 @@ function ScopeDiagram() {
         <span className="text-accent-soft">The full local workflow stays coherent.</span>
       </p>
     </div>
-  )
+  );
 }

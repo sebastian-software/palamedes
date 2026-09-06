@@ -1,9 +1,9 @@
-import { locales } from "../../lib/i18n"
+import { locales } from "../../lib/i18n";
 
 export async function POST(request: Request): Promise<Response> {
-  const formData = await request.formData()
-  const locale = locales.normalizeLocale(formData.get("locale"))
-  const location = new URL("/", request.url)
+  const formData = await request.formData();
+  const locale = locales.normalizeLocale(formData.get("locale"));
+  const location = new URL("/", request.url);
 
   return new Response(null, {
     status: 303,
@@ -11,5 +11,5 @@ export async function POST(request: Request): Promise<Response> {
       Location: location.toString(),
       "Set-Cookie": `locale=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
     },
-  })
+  });
 }

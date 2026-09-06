@@ -1,13 +1,13 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
-import { CopyCommand } from "~/components/CopyCommand"
-import { pageMeta } from "~/lib/meta"
-import { CtaBand } from "~/components/home/CtaBand"
-import { FeatureGrid } from "~/components/home/FeatureGrid"
-import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
-import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
-import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { CopyCommand } from "~/components/CopyCommand";
+import { pageMeta } from "~/lib/meta";
+import { CtaBand } from "~/components/home/CtaBand";
+import { FeatureGrid } from "~/components/home/FeatureGrid";
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon";
+import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger";
+import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip";
 import {
   BENCH_MEDIUM,
   BENCH_MEDIUM_WARM,
@@ -19,20 +19,20 @@ import {
   displayBenchmarkTime,
   type BenchCorpus,
   type BenchWarm,
-} from "~/data/bench"
-import { CATALOG_QA_CARDS } from "~/data/features"
-import contentStats from "~/data/generated/content-stats.json"
-import decisionLedger from "~/data/generated/decision-ledger.json"
-import { decisionHref, docsHref, repoHref } from "~/data/links"
+} from "~/data/bench";
+import { CATALOG_QA_CARDS } from "~/data/features";
+import contentStats from "~/data/generated/content-stats.json";
+import decisionLedger from "~/data/generated/decision-ledger.json";
+import { decisionHref, docsHref, repoHref } from "~/data/links";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
     description: `Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, ${contentStats.smokeExampleCount} smoke-verified examples and ${contentStats.browserExampleCount} scheduled browser checks, and ${contentStats.adrCount} decision records.`,
     path: "/proof",
-  })
+  });
 }
 
 const VERIFICATION_STEPS = [
@@ -51,21 +51,21 @@ const VERIFICATION_STEPS = [
     title: "Capture",
     body: "Screenshots are versioned in the repo, so 'works across frameworks' is a diffable artifact, not a slide.",
   },
-] satisfies ReadonlyArray<{ icon: StreamlineIconName; title: string; body: string }>
+] satisfies ReadonlyArray<{ icon: StreamlineIconName; title: string; body: string }>;
 
 const CORPORA: { corpus: BenchCorpus; warm: BenchWarm }[] = [
   { corpus: BENCH_SMALL, warm: BENCH_SMALL_WARM },
   { corpus: BENCH_MEDIUM, warm: BENCH_MEDIUM_WARM },
   { corpus: BENCH_REALISTIC, warm: BENCH_REALISTIC_WARM },
-]
+];
 
 function sameScopeRange(corpus: BenchCorpus) {
-  const baseline = corpus.rows.find((row) => row.tool === "Palamedes")
-  if (!baseline) throw new Error(`Benchmark corpus ${corpus.id} has no Palamedes baseline`)
+  const baseline = corpus.rows.find((row) => row.tool === "Palamedes");
+  if (!baseline) throw new Error(`Benchmark corpus ${corpus.id} has no Palamedes baseline`);
   const factors = corpus.rows
     .filter((row) => row.sameScope)
-    .map((row) => Math.floor(row.medianMs / baseline.medianMs))
-  return `${Math.min(...factors)}–${Math.max(...factors)}× slower`
+    .map((row) => Math.floor(row.medianMs / baseline.medianMs));
+  return `${Math.min(...factors)}–${Math.max(...factors)}× slower`;
 }
 
 function CorpusLedger() {
@@ -127,7 +127,7 @@ function CorpusLedger() {
         </table>
       </div>
     </div>
-  )
+  );
 }
 
 export default function Proof() {
@@ -301,5 +301,5 @@ export default function Proof() {
         }}
       />
     </Page>
-  )
+  );
 }

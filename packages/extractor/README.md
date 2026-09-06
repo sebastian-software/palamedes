@@ -30,17 +30,17 @@ pnpm add -D @palamedes/extractor
 ## Minimal Example
 
 ```ts
-import { extractor } from "@palamedes/extractor"
+import { extractor } from "@palamedes/extractor";
 
 const source =
-  'import { t } from "@palamedes/core/macro"; function message(name) { return t`Hello ${name}` }'
-const messages = []
+  'import { t } from "@palamedes/core/macro"; function message(name) { return t`Hello ${name}` }';
+const messages = [];
 
 await extractor.extract("example.ts", source, (message) => {
-  messages.push(message)
-})
+  messages.push(message);
+});
 
-console.log(messages)
+console.log(messages);
 ```
 
 ## Supported Inputs
@@ -71,15 +71,15 @@ Rich JSX children inside `<Trans>` are extracted with numeric component slots. F
 Configure MDX attributes and frontmatter for direct extraction:
 
 ```ts
-import { createExtractor, extractMessages } from "@palamedes/extractor"
+import { createExtractor, extractMessages } from "@palamedes/extractor";
 
 const mdx = {
   translatableAttributes: ["alt", "title", "aria-label"],
   frontMatterFields: ["title", "description"],
-}
+};
 
-const messages = extractMessages(source, "guide.mdx", mdx)
-const configuredExtractor = createExtractor({ mdx })
+const messages = extractMessages(source, "guide.mdx", mdx);
+const configuredExtractor = createExtractor({ mdx });
 ```
 
 ## Related Packages

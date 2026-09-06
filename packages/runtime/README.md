@@ -31,11 +31,11 @@ pnpm add @palamedes/runtime
 ## Minimal Example
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
-setClientI18n(i18n)
+const i18n = createI18n();
+setClientI18n(i18n);
 ```
 
 The public `I18nInstance` contract requires an initialized `locale: string`.
@@ -49,11 +49,11 @@ resolve their client instance off the main thread.
 For server-side rendering or server components, register a getter for the active request-local i18n instance:
 
 ```ts
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { setServerI18nGetter } from "@palamedes/runtime";
 
 setServerI18nGetter(() => {
-  return getRequestScopedI18n()
-})
+  return getRequestScopedI18n();
+});
 ```
 
 For Node server code, prefer the server-only helper subpath. It uses
@@ -61,17 +61,17 @@ For Node server code, prefer the server-only helper subpath. It uses
 scope is created:
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createI18n } from "@palamedes/core";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 
-const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 
-serverI18n.activate(i18n)
-renderTranslatedServerComponents()
+serverI18n.activate(i18n);
+renderTranslatedServerComponents();
 
 await serverI18n.run(i18n, async () => {
-  renderTranslatedRequestHandler()
-})
+  renderTranslatedRequestHandler();
+});
 ```
 
 All scopes created by this helper share the same runtime getter, so independently
@@ -95,10 +95,10 @@ The important requirement is request-local access to the active i18n instance.
 The recommended pattern is `@palamedes/runtime/server`:
 
 ```ts
-import { createI18n } from "@palamedes/core"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createI18n } from "@palamedes/core";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 
-const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 ```
 
 Per request, resolve the locale from `Accept-Language`, cookies, session data,

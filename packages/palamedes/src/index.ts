@@ -3,4 +3,4 @@
  * this module exists solely so the workspace-wide `tsc --noEmit` sweep has an
  * input for this package.
  */
-export {}
+export {};

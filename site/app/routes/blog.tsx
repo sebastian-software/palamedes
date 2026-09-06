@@ -1,17 +1,17 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
-import { pageMeta } from "~/lib/meta"
-import { CtaBand } from "~/components/home/CtaBand"
-import { REPO } from "~/data/links"
-import posts from "~/data/generated/blog-posts.json"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { pageMeta } from "~/lib/meta";
+import { CtaBand } from "~/components/home/CtaBand";
+import { REPO } from "~/data/links";
+import posts from "~/data/generated/blog-posts.json";
 
-export const handle = { layout: "bare" }
+export const handle = { layout: "bare" };
 
 const formatDate = new Intl.DateTimeFormat("en", {
   day: "2-digit",
   month: "short",
   year: "numeric",
   timeZone: "UTC",
-})
+});
 
 export function meta() {
   return pageMeta({
@@ -19,7 +19,7 @@ export function meta() {
     description:
       "Design notes, honest benchmarks, and lessons from the third time around — written by the maintainer, not a content team.",
     path: "/blog",
-  })
+  });
 }
 
 export default function Blog() {
@@ -87,5 +87,5 @@ export default function Blog() {
         secondary={{ label: "Get started", href: "/get-started" }}
       />
     </Page>
-  )
+  );
 }

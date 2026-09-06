@@ -1,23 +1,23 @@
-import { createRequire } from "node:module"
-import { fileURLToPath, pathToFileURL } from "node:url"
-import { readFileSync, writeFileSync } from "node:fs"
-import path from "node:path"
-import process from "node:process"
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
 
-import ts from "typescript"
+import ts from "typescript";
 
-const root = process.cwd()
-const docsPath = path.join(root, "docs/api/core.md")
+const root = process.cwd();
+const docsPath = path.join(root, "docs/api/core.md");
 const entrypoints = [
   { name: "root", source: "index.ts", dist: "index", marker: "core-root-exports" },
   { name: "compiled", source: "compiled.ts", dist: "compiled", marker: "core-compiled-exports" },
   { name: "macro", source: "macro.ts", dist: "macro", marker: "core-macro-exports" },
   { name: "locale", source: "locale.ts", dist: "locale", marker: "core-locale-exports" },
-]
+];
 
 export function collectExports(source, filename = "index.ts") {
-  const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true)
-  const exports = new Map()
+  const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true);
+  const exports = new Map();
 
   for (const statement of file.statements) {
     if (
@@ -25,67 +25,67 @@ export function collectExports(source, filename = "index.ts") {
       statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
     ) {
       throw new Error(
-        `${filename} uses an unsupported public export form. Use explicit named exports so the API reference remains complete.`
-      )
+        `${filename} uses an unsupported public export form. Use explicit named exports so the API reference remains complete.`,
+      );
     }
     if (ts.isExportDeclaration(statement)) {
       if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
         throw new Error(
-          `${filename} uses an unsupported public export form. Use explicit named exports so the API reference remains complete.`
-        )
+          `${filename} uses an unsupported public export form. Use explicit named exports so the API reference remains complete.`,
+        );
       }
       for (const element of statement.exportClause.elements) {
         exports.set(
           element.name.text,
-          statement.isTypeOnly || element.isTypeOnly ? "type" : "runtime"
-        )
+          statement.isTypeOnly || element.isTypeOnly ? "type" : "runtime",
+        );
       }
-      continue
+      continue;
     }
-    if (!hasExportModifier(statement)) continue
+    if (!hasExportModifier(statement)) continue;
     if (
       ts.isFunctionDeclaration(statement) ||
       ts.isClassDeclaration(statement) ||
       ts.isEnumDeclaration(statement)
     ) {
-      if (statement.name) exports.set(statement.name.text, "runtime")
-      continue
+      if (statement.name) exports.set(statement.name.text, "runtime");
+      continue;
     }
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name)) {
-          throw unsupportedExportError(filename)
+          throw unsupportedExportError(filename);
         }
-        exports.set(declaration.name.text, "runtime")
+        exports.set(declaration.name.text, "runtime");
       }
-      continue
+      continue;
     }
     if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
-      exports.set(statement.name.text, "type")
-      continue
+      exports.set(statement.name.text, "type");
+      continue;
     }
-    throw unsupportedExportError(filename)
+    throw unsupportedExportError(filename);
   }
 
   return [...exports.entries()]
     .map(([name, kind]) => ({ name, kind }))
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function unsupportedExportError(filename) {
   return new Error(
-    `${filename} uses an unsupported public export form. Use explicit named exports so the API reference remains complete.`
-  )
+    `${filename} uses an unsupported public export form. Use explicit named exports so the API reference remains complete.`,
+  );
 }
 
 export function renderExportBlock(exports, marker = "core-root-exports") {
   const rows = exports.map(({ name, kind }) => ({
     name: `\`${name}\``,
     kind: kind === "runtime" ? "Runtime" : "Type-only",
-  }))
-  const exportWidth = Math.max("Export".length, ...rows.map(({ name }) => name.length))
-  const kindWidth = Math.max("Kind".length, ...rows.map(({ kind }) => kind.length))
-  const row = (name, kind) => `| ${name.padEnd(exportWidth)} | ${kind.padEnd(kindWidth)} |`
+  }));
+  const exportWidth = Math.max("Export".length, ...rows.map(({ name }) => name.length));
+  const kindWidth = Math.max("Kind".length, ...rows.map(({ kind }) => kind.length));
+  const row = (name, kind) => `| ${name.padEnd(exportWidth)} | ${kind.padEnd(kindWidth)} |`;
   return [
     `<!-- ${marker}:start -->`,
     "<!-- Generated by scripts/check-core-api-reference.mjs. Do not edit manually. -->",
@@ -95,31 +95,31 @@ export function renderExportBlock(exports, marker = "core-root-exports") {
     ...rows.map(({ name, kind }) => row(name, kind)),
     "",
     `<!-- ${marker}:end -->`,
-  ].join("\n")
+  ].join("\n");
 }
 
 export function replaceExportBlock(docs, block, marker = "core-root-exports") {
-  const startMarker = `<!-- ${marker}:start -->`
-  const endMarker = `<!-- ${marker}:end -->`
-  const start = docs.indexOf(startMarker)
-  const end = docs.indexOf(endMarker)
+  const startMarker = `<!-- ${marker}:start -->`;
+  const endMarker = `<!-- ${marker}:end -->`;
+  const start = docs.indexOf(startMarker);
+  const end = docs.indexOf(endMarker);
   if (start === -1 || end === -1 || end < start) {
-    throw new Error(`docs/api/core.md is missing the ${marker} markers.`)
+    throw new Error(`docs/api/core.md is missing the ${marker} markers.`);
   }
-  return `${docs.slice(0, start)}${block}${docs.slice(end + endMarker.length)}`
+  return `${docs.slice(0, start)}${block}${docs.slice(end + endMarker.length)}`;
 }
 
 function hasExportModifier(statement) {
   return (
     statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
-  )
+  );
 }
 
 function isTypeOnlyAlias(symbol) {
   return symbol.declarations?.some((declaration) => {
-    if (!ts.isExportSpecifier(declaration)) return false
-    return declaration.isTypeOnly || declaration.parent.parent.isTypeOnly
-  })
+    if (!ts.isExportSpecifier(declaration)) return false;
+    return declaration.isTypeOnly || declaration.parent.parent.isTypeOnly;
+  });
 }
 
 export function collectDeclarationExports(filename) {
@@ -129,122 +129,123 @@ export function collectDeclarationExports(filename) {
     noEmit: true,
     skipLibCheck: true,
     target: ts.ScriptTarget.Latest,
-  })
-  const sourceFile = program.getSourceFile(filename)
-  if (!sourceFile) throw new Error(`Could not load declaration entrypoint: ${filename}`)
+  });
+  const sourceFile = program.getSourceFile(filename);
+  if (!sourceFile) throw new Error(`Could not load declaration entrypoint: ${filename}`);
 
-  const checker = program.getTypeChecker()
-  const moduleSymbol = checker.getSymbolAtLocation(sourceFile)
-  if (!moduleSymbol) throw new Error(`Could not inspect declaration entrypoint: ${filename}`)
+  const checker = program.getTypeChecker();
+  const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
+  if (!moduleSymbol) throw new Error(`Could not inspect declaration entrypoint: ${filename}`);
 
   return checker
     .getExportsOfModule(moduleSymbol)
     .map((symbol) => {
-      const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+      const target =
+        symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
       const kind =
-        isTypeOnlyAlias(symbol) || !(target.flags & ts.SymbolFlags.Value) ? "type" : "runtime"
-      return { name: symbol.name, kind }
+        isTypeOnlyAlias(symbol) || !(target.flags & ts.SymbolFlags.Value) ? "type" : "runtime";
+      return { name: symbol.name, kind };
     })
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function assertSameExports(expected, actual, label, expectedLabel = "source exports") {
-  const expectedByName = new Map(expected.map((entry) => [entry.name, entry.kind]))
-  const actualByName = new Map(actual.map((entry) => [entry.name, entry.kind]))
-  const problems = []
+  const expectedByName = new Map(expected.map((entry) => [entry.name, entry.kind]));
+  const actualByName = new Map(actual.map((entry) => [entry.name, entry.kind]));
+  const problems = [];
 
   for (const [name, expectedKind] of expectedByName) {
-    const actualKind = actualByName.get(name)
+    const actualKind = actualByName.get(name);
     if (!actualKind) {
-      problems.push(`missing ${expectedKind} export ${name}`)
+      problems.push(`missing ${expectedKind} export ${name}`);
     } else if (actualKind !== expectedKind) {
-      problems.push(`${name} is ${actualKind}, expected ${expectedKind}`)
+      problems.push(`${name} is ${actualKind}, expected ${expectedKind}`);
     }
   }
   for (const [name, actualKind] of actualByName) {
-    if (!expectedByName.has(name)) problems.push(`unexpected ${actualKind} export ${name}`)
+    if (!expectedByName.has(name)) problems.push(`unexpected ${actualKind} export ${name}`);
   }
 
   if (problems.length > 0) {
-    throw new Error(`${label} does not match ${expectedLabel}:\n${problems.join("\n")}`)
+    throw new Error(`${label} does not match ${expectedLabel}:\n${problems.join("\n")}`);
   }
 }
 
 async function check() {
-  const docs = readFileSync(docsPath, "utf8")
-  const require = createRequire(import.meta.url)
-  let expectedDocs = docs
+  const docs = readFileSync(docsPath, "utf8");
+  const require = createRequire(import.meta.url);
+  let expectedDocs = docs;
 
   for (const entrypoint of entrypoints) {
-    const sourcePath = path.join(root, "packages/core/src", entrypoint.source)
-    const sourceExports = collectExports(readFileSync(sourcePath, "utf8"), sourcePath)
-    const expectedLabel = `${sourcePath} exports`
+    const sourcePath = path.join(root, "packages/core/src", entrypoint.source);
+    const sourceExports = collectExports(readFileSync(sourcePath, "utf8"), sourcePath);
+    const expectedLabel = `${sourcePath} exports`;
     const declarationPaths = ["d.ts", "d.mts", "d.cts"].map((extension) =>
-      path.join(root, "packages/core/dist", `${entrypoint.dist}.${extension}`)
-    )
+      path.join(root, "packages/core/dist", `${entrypoint.dist}.${extension}`),
+    );
 
     for (const declarationPath of declarationPaths) {
       assertSameExports(
         sourceExports,
         collectDeclarationExports(declarationPath),
         declarationPath,
-        expectedLabel
-      )
+        expectedLabel,
+      );
     }
 
     const esm = await import(
       pathToFileUrl(path.join(root, "packages/core/dist", `${entrypoint.dist}.mjs`))
-    )
-    const cjs = require(path.join(root, "packages/core/dist", `${entrypoint.dist}.cjs`))
-    const runtime = sourceExports.filter(({ kind }) => kind === "runtime")
+    );
+    const cjs = require(path.join(root, "packages/core/dist", `${entrypoint.dist}.cjs`));
+    const runtime = sourceExports.filter(({ kind }) => kind === "runtime");
     assertSameExports(
       runtime,
       Object.keys(esm).map((name) => ({ name, kind: "runtime" })),
       `ESM ${entrypoint.name} runtime exports`,
-      expectedLabel
-    )
+      expectedLabel,
+    );
     assertSameExports(
       runtime,
       Object.keys(cjs).map((name) => ({ name, kind: "runtime" })),
       `CJS ${entrypoint.name} runtime exports`,
-      expectedLabel
-    )
+      expectedLabel,
+    );
 
     expectedDocs = replaceExportBlock(
       expectedDocs,
       renderExportBlock(sourceExports, entrypoint.marker),
-      entrypoint.marker
-    )
+      entrypoint.marker,
+    );
   }
 
   if (docs !== expectedDocs) {
     throw new Error(
-      "docs/api/core.md export tables have drifted; run pnpm check:core-api-reference --write."
-    )
+      "docs/api/core.md export tables have drifted; run pnpm check:core-api-reference --write.",
+    );
   }
 }
 
 function pathToFileUrl(file) {
-  return pathToFileURL(file).href
+  return pathToFileURL(file).href;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.includes("--write")) {
-    let docs = readFileSync(docsPath, "utf8")
+    let docs = readFileSync(docsPath, "utf8");
     for (const entrypoint of entrypoints) {
-      const sourcePath = path.join(root, "packages/core/src", entrypoint.source)
-      const sourceExports = collectExports(readFileSync(sourcePath, "utf8"), sourcePath)
+      const sourcePath = path.join(root, "packages/core/src", entrypoint.source);
+      const sourceExports = collectExports(readFileSync(sourcePath, "utf8"), sourcePath);
       docs = replaceExportBlock(
         docs,
         renderExportBlock(sourceExports, entrypoint.marker),
-        entrypoint.marker
-      )
+        entrypoint.marker,
+      );
     }
-    writeFileSync(docsPath, docs)
+    writeFileSync(docsPath, docs);
   } else {
-    await check()
+    await check();
     console.log(
-      "@palamedes/core API docs match source, declarations, ESM, and CJS exports for every public entrypoint."
-    )
+      "@palamedes/core API docs match source, declarations, ESM, and CJS exports for every public entrypoint.",
+    );
   }
 }

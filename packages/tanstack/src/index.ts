@@ -1,15 +1,15 @@
-import { createMiddleware } from "@tanstack/react-start"
-import { getRequest } from "@tanstack/react-start/server"
-import type { I18nInstance } from "@palamedes/runtime"
-import { createScopedTanStackI18nRunner } from "./scope"
+import { createMiddleware } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+import type { I18nInstance } from "@palamedes/runtime";
+import { createScopedTanStackI18nRunner } from "./scope";
 
 /**
  * Creates one fresh request-local i18n instance. The incoming request is the
  * original TanStack Start request, including its headers and cookies.
  */
 export type TanStackI18nResolver<T extends I18nInstance = I18nInstance> = (
-  request: Request
-) => T | Promise<T>
+  request: Request,
+) => T | Promise<T>;
 
 /**
  * Create a global TanStack Start request middleware that activates i18n only
@@ -20,17 +20,17 @@ export type TanStackI18nResolver<T extends I18nInstance = I18nInstance> = (
  * the resolver.
  */
 export function createTanStackI18nRequestMiddleware<T extends I18nInstance = I18nInstance>(
-  resolveI18n: TanStackI18nResolver<T>
+  resolveI18n: TanStackI18nResolver<T>,
 ) {
-  const runner = createScopedTanStackI18nRunner(resolveI18n)
+  const runner = createScopedTanStackI18nRunner(resolveI18n);
 
   return createMiddleware().server(async ({ handlerType, next, request }) => {
     if (handlerType !== "serverFn") {
-      return await next()
+      return await next();
     }
 
-    return await runner.run(request, next)
-  })
+    return await runner.run(request, next);
+  });
 }
 
 /**
@@ -43,11 +43,11 @@ export function createTanStackI18nRequestMiddleware<T extends I18nInstance = I18
  * request middleware callback or scope before request decoding is required.
  */
 export function createTanStackI18nMiddleware<T extends I18nInstance = I18nInstance>(
-  resolveI18n: TanStackI18nResolver<T>
+  resolveI18n: TanStackI18nResolver<T>,
 ) {
-  const runner = createScopedTanStackI18nRunner(resolveI18n)
+  const runner = createScopedTanStackI18nRunner(resolveI18n);
 
   return createMiddleware({ type: "function" }).server(
-    async ({ next }) => await runner.run(getRequest(), next)
-  )
+    async ({ next }) => await runner.run(getRequest(), next),
+  );
 }

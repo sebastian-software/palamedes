@@ -72,334 +72,338 @@ import type {
   TranslationPatchRequest as GeneratedTranslationPatchRequest,
   TranslationPatchResult as GeneratedTranslationPatchResult,
   TranslationValue as GeneratedTranslationValue,
-} from "./generated/palamedes-node-types"
+} from "./generated/palamedes-node-types";
 
 import {
   coordinateInitialCatalogBuild,
   selectedCatalogBuildKey,
-} from "./catalogCompilationCoordinator"
-import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue"
+} from "./catalogCompilationCoordinator";
+import { serializeCatalogMutation, translationPatchTargetPaths } from "./catalogMutationQueue";
 import {
   loadNativeBindings,
   markPreparedNativeArgument,
   snapshotNativeArgument,
-} from "./native-loader"
+} from "./native-loader";
 
-export type NativeInfo = GeneratedNativeInfo
+export type NativeInfo = GeneratedNativeInfo;
 export type AsyncTaskOptions = {
   /** Cancel the native task while it is still waiting for a libuv worker. */
-  signal?: AbortSignal
-}
-export type ParsedPoItem = GeneratedParsedPoItem
-export type ParsedPoFile = GeneratedParsedPoFile
-export type CatalogOrigin = GeneratedCatalogOrigin
-export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage
-export type CatalogUpdateStats = GeneratedCatalogUpdateStats
-export type ExtractCatalogFileFailure = GeneratedExtractCatalogFileFailure
+  signal?: AbortSignal;
+};
+export type ParsedPoItem = GeneratedParsedPoItem;
+export type ParsedPoFile = GeneratedParsedPoFile;
+export type CatalogOrigin = GeneratedCatalogOrigin;
+export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage;
+export type CatalogUpdateStats = GeneratedCatalogUpdateStats;
+export type ExtractCatalogFileFailure = GeneratedExtractCatalogFileFailure;
 export type ExtractCatalogMessagesRequest = Omit<GeneratedExtractCatalogMessagesRequest, "mdx"> & {
-  mdx?: MdxOptions
-}
-export type ExtractCatalogMessagesResult = GeneratedExtractCatalogMessagesResult
-export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
-export type MachineMetadata = GeneratedMachineMetadata
-export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions
-export type CatalogAuditSummary = GeneratedCatalogAuditSummary
-export type CatalogDiagnosticSeverity = "info" | "warning" | "error"
+  mdx?: MdxOptions;
+};
+export type ExtractCatalogMessagesResult = GeneratedExtractCatalogMessagesResult;
+export type ParsedCatalogMessage = GeneratedParsedCatalogMessage;
+export type MachineMetadata = GeneratedMachineMetadata;
+export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions;
+export type CatalogAuditSummary = GeneratedCatalogAuditSummary;
+export type CatalogDiagnosticSeverity = "info" | "warning" | "error";
 export type CatalogDiagnostic = Omit<GeneratedCatalogDiagnostic, "severity"> & {
-  severity: CatalogDiagnosticSeverity
-}
+  severity: CatalogDiagnosticSeverity;
+};
 export type CatalogUpdateResult = Omit<GeneratedCatalogUpdateResult, "diagnostics"> & {
-  diagnostics: CatalogDiagnostic[]
-}
+  diagnostics: CatalogDiagnostic[];
+};
 export type CatalogParseResult = Omit<GeneratedCatalogParseResult, "diagnostics"> & {
-  diagnostics: CatalogDiagnostic[]
-}
-export type TranslationCandidateId = GeneratedTranslationCandidateId
-export type TranslationPluralKind = "cardinal" | "ordinal"
+  diagnostics: CatalogDiagnostic[];
+};
+export type TranslationCandidateId = GeneratedTranslationCandidateId;
+export type TranslationPluralKind = "cardinal" | "ordinal";
 export type TranslationValue =
   | { kind: "singular"; value: string }
   | {
-      kind: "plural"
-      variable: string
-      pluralKind: TranslationPluralKind
-      offset: number
-      values: Record<string, string>
-    }
+      kind: "plural";
+      variable: string;
+      pluralKind: TranslationPluralKind;
+      offset: number;
+      values: Record<string, string>;
+    };
 export type TranslationWorkflowOrigin = {
-  file: string
-  scope?: string
-}
+  file: string;
+  scope?: string;
+};
 export type TranslationReviewState = {
-  translated: boolean
-  fuzzy: boolean
-  obsolete: boolean
-}
+  translated: boolean;
+  fuzzy: boolean;
+  obsolete: boolean;
+};
 export type TranslationCandidate = Omit<
   GeneratedTranslationCandidate,
   "format" | "source" | "translation" | "origins"
 > & {
-  format: CatalogConfigFormat
-  source: TranslationValue
-  translation: TranslationValue
-  origins: TranslationWorkflowOrigin[]
-}
+  format: CatalogConfigFormat;
+  source: TranslationValue;
+  translation: TranslationValue;
+  origins: TranslationWorkflowOrigin[];
+};
 export type TranslationWorkflowDiagnostic = {
-  code: string
-  message: string
-  id?: TranslationCandidateId
-  catalogPath?: string
-  locale?: string
-}
+  code: string;
+  message: string;
+  id?: TranslationCandidateId;
+  catalogPath?: string;
+  locale?: string;
+};
 export type TranslationCandidateRequest = {
-  config: CatalogArtifactConfig
-  locales?: string[]
-  targets?: TranslationCandidateId[]
-  maxOrigins?: number
-}
+  config: CatalogArtifactConfig;
+  locales?: string[];
+  targets?: TranslationCandidateId[];
+  maxOrigins?: number;
+};
 export type TranslationCandidateResult = {
-  candidates: TranslationCandidate[]
-  diagnostics: TranslationWorkflowDiagnostic[]
-}
+  candidates: TranslationCandidate[];
+  diagnostics: TranslationWorkflowDiagnostic[];
+};
 export type TranslationMachineProvenance = {
   ai?: {
-    model: string
-    confidence?: number
-  }
-}
+    model: string;
+    confidence?: number;
+  };
+};
 export type TranslationPatch = {
-  id: TranslationCandidateId
-  fingerprint: string
-  translation: TranslationValue
-  machine?: TranslationMachineProvenance
-}
+  id: TranslationCandidateId;
+  fingerprint: string;
+  translation: TranslationValue;
+  machine?: TranslationMachineProvenance;
+};
 export type TranslationPatchRequest = {
-  config: CatalogArtifactConfig
-  patches: TranslationPatch[]
-  po?: PoOutputOptions
-}
-export type TranslationPatchOutcomeStatus = "applied" | "unchanged" | "rejected" | "notApplied"
+  config: CatalogArtifactConfig;
+  patches: TranslationPatch[];
+  po?: PoOutputOptions;
+};
+export type TranslationPatchOutcomeStatus = "applied" | "unchanged" | "rejected" | "notApplied";
 export type TranslationPatchOutcome = Omit<GeneratedTranslationPatchOutcome, "status"> & {
-  status: TranslationPatchOutcomeStatus
-}
+  status: TranslationPatchOutcomeStatus;
+};
 export type TranslationPatchResult = Omit<
   GeneratedTranslationPatchResult,
   "outcomes" | "diagnostics"
 > & {
-  outcomes: TranslationPatchOutcome[]
-  diagnostics: TranslationWorkflowDiagnostic[]
-}
-export const TRANSLATION_PATCH_WRITE_ERROR_CODE = "ERR_PALAMEDES_TRANSLATION_PATCH_WRITE"
+  outcomes: TranslationPatchOutcome[];
+  diagnostics: TranslationWorkflowDiagnostic[];
+};
+export const TRANSLATION_PATCH_WRITE_ERROR_CODE = "ERR_PALAMEDES_TRANSLATION_PATCH_WRITE";
 export const TRANSLATION_PATCH_WRITE_ERROR_MESSAGE =
-  "Failed to replace a translation catalog; completed per-file outcomes are available in error.report."
+  "Failed to replace a translation catalog; completed per-file outcomes are available in error.report.";
 export type TranslationPatchWriteError = Error & {
-  code: typeof TRANSLATION_PATCH_WRITE_ERROR_CODE
-  cause: Error
-  report: TranslationPatchResult
-}
+  code: typeof TRANSLATION_PATCH_WRITE_ERROR_CODE;
+  cause: Error;
+  report: TranslationPatchResult;
+};
 export type CatalogAuditDiagnostic = Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
-  severity: CatalogDiagnosticSeverity
-}
+  severity: CatalogDiagnosticSeverity;
+};
 export type CatalogAuditResult = Omit<GeneratedCatalogAuditResult, "diagnostics"> & {
-  diagnostics: CatalogAuditDiagnostic[]
-}
+  diagnostics: CatalogAuditDiagnostic[];
+};
 export type CatalogCombineInput = {
-  content: string
-  label?: string
-}
-export type CatalogConflictStrategy = "useFirst" | "useLast" | "error"
-export type CatalogCombineSelection = "all" | "unique" | { moreThan: number } | { lessThan: number }
+  content: string;
+  label?: string;
+};
+export type CatalogConflictStrategy = "useFirst" | "useLast" | "error";
+export type CatalogCombineSelection =
+  | "all"
+  | "unique"
+  | { moreThan: number }
+  | { lessThan: number };
 export type CatalogCombineRequest = {
-  inputs: CatalogCombineInput[]
-  sourceLocale: string
-  locale?: string
-  conflictStrategy?: CatalogConflictStrategy
-  selection?: CatalogCombineSelection
-  includeObsolete?: boolean
-}
+  inputs: CatalogCombineInput[];
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogConflictStrategy;
+  selection?: CatalogCombineSelection;
+  includeObsolete?: boolean;
+};
 export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
-  diagnostics: CatalogDiagnostic[]
-}
-export type CatalogFileFormat = "po" | "fcl"
+  diagnostics: CatalogDiagnostic[];
+};
+export type CatalogFileFormat = "po" | "fcl";
 export type CatalogThreeWayMergeRequest = {
-  ancestor: CatalogCombineInput
-  ours: CatalogCombineInput
-  theirs: CatalogCombineInput
-  format: CatalogFileFormat
-  sourceLocale: string
-  locale?: string
-  conflictStrategy?: CatalogConflictStrategy
-  po?: PoOutputOptions
-}
-export type CatalogConfigFormat = CatalogFileFormat
-export type PoLineBreaks = "auto" | "off"
+  ancestor: CatalogCombineInput;
+  ours: CatalogCombineInput;
+  theirs: CatalogCombineInput;
+  format: CatalogFileFormat;
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogConflictStrategy;
+  po?: PoOutputOptions;
+};
+export type CatalogConfigFormat = CatalogFileFormat;
+export type PoLineBreaks = "auto" | "off";
 export type PoOutputOptions = {
-  lineBreaks?: PoLineBreaks
-}
+  lineBreaks?: PoLineBreaks;
+};
 export type CatalogUpdateRequest = Omit<GeneratedCatalogUpdateRequest, "format" | "po"> & {
-  format?: CatalogConfigFormat
-  po?: PoOutputOptions
-}
+  format?: CatalogConfigFormat;
+  po?: PoOutputOptions;
+};
 export type CatalogParseRequest = Omit<GeneratedCatalogParseRequest, "format"> & {
-  format?: CatalogConfigFormat
-}
+  format?: CatalogConfigFormat;
+};
 export type CatalogFileCombineRequest = {
-  inputPaths: string[]
-  outputPath: string
-  format?: CatalogFileFormat
-  sourceLocale: string
-  locale?: string
-  conflictStrategy?: CatalogConflictStrategy
-  po?: PoOutputOptions
-}
+  inputPaths: string[];
+  outputPath: string;
+  format?: CatalogFileFormat;
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogConflictStrategy;
+  po?: PoOutputOptions;
+};
 export type CatalogFileCombineResult = Omit<
   GeneratedCatalogFileCombineResult,
   "format" | "diagnostics"
 > & {
-  format: CatalogFileFormat
-  diagnostics: CatalogDiagnostic[]
-}
+  format: CatalogFileFormat;
+  diagnostics: CatalogDiagnostic[];
+};
 export type CatalogFileThreeWayMergeRequest = {
-  ancestorPath: string
-  oursPath: string
-  theirsPath: string
-  outputPath: string
-  format?: CatalogFileFormat
-  sourceLocale: string
-  locale?: string
-  conflictStrategy?: CatalogConflictStrategy
-  po?: PoOutputOptions
-}
+  ancestorPath: string;
+  oursPath: string;
+  theirsPath: string;
+  outputPath: string;
+  format?: CatalogFileFormat;
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogConflictStrategy;
+  po?: PoOutputOptions;
+};
 export type CatalogAuditOptions = {
-  locales?: string[]
-  checks?: CatalogAuditCheckOptions
-  metadata?: MessageMetadataInput[]
-}
-export type MessageMetadataInput = GeneratedMessageMetadataInput
-export type MessageOriginMetadata = GeneratedMessageOriginMetadata
-export type MessageArgumentKind = GeneratedMessageArgumentKind
-export type MessageArgumentMetadata = GeneratedMessageArgumentMetadata
-export type MessageArgumentFormatMetadata = GeneratedMessageArgumentFormatMetadata
-export type MessageFormatStyleKind = GeneratedMessageFormatStyleKind
-export type MessageSelectorKind = GeneratedMessageSelectorKind
-export type MessageSelectorMetadata = GeneratedMessageSelectorMetadata
-export type MessageMetadata = GeneratedMessageMetadata
+  locales?: string[];
+  checks?: CatalogAuditCheckOptions;
+  metadata?: MessageMetadataInput[];
+};
+export type MessageMetadataInput = GeneratedMessageMetadataInput;
+export type MessageOriginMetadata = GeneratedMessageOriginMetadata;
+export type MessageArgumentKind = GeneratedMessageArgumentKind;
+export type MessageArgumentMetadata = GeneratedMessageArgumentMetadata;
+export type MessageArgumentFormatMetadata = GeneratedMessageArgumentFormatMetadata;
+export type MessageFormatStyleKind = GeneratedMessageFormatStyleKind;
+export type MessageSelectorKind = GeneratedMessageSelectorKind;
+export type MessageSelectorMetadata = GeneratedMessageSelectorMetadata;
+export type MessageMetadata = GeneratedMessageMetadata;
 export type MessageMetadataDiagnostic = Omit<GeneratedMessageMetadataDiagnostic, "severity"> & {
-  severity: CatalogDiagnosticSeverity
-}
+  severity: CatalogDiagnosticSeverity;
+};
 export type MessageMetadataValidationReport = Omit<
   GeneratedMessageMetadataValidationReport,
   "diagnostics"
 > & {
-  diagnostics: MessageMetadataDiagnostic[]
-}
+  diagnostics: MessageMetadataDiagnostic[];
+};
 
 export type NativeExtractedMessageOrigin = [filename: string, line: number, column?: number] & {
-  scope?: string
-}
+  scope?: string;
+};
 
 export type NativeExtractedMessage = Omit<GeneratedNativeExtractedMessage, "origin"> & {
-  origin: NativeExtractedMessageOrigin
-}
+  origin: NativeExtractedMessageOrigin;
+};
 
-export type MdxFramework = "react" | "solid"
+export type MdxFramework = "react" | "solid";
 export type MdxOptions = Omit<GeneratedNativeMdxOptions, "framework"> & {
-  framework?: MdxFramework
-}
-export type MdxSourceRange = GeneratedNativeMdxSourceRange
-export type MdxDiagnostic = GeneratedNativeMdxDiagnostic
+  framework?: MdxFramework;
+};
+export type MdxSourceRange = GeneratedNativeMdxSourceRange;
+export type MdxDiagnostic = GeneratedNativeMdxDiagnostic;
 export type MdxAnalysisResult = Omit<GeneratedNativeMdxAnalysisResult, "messages"> & {
-  messages: NativeExtractedMessage[]
-}
+  messages: NativeExtractedMessage[];
+};
 
-export type SourceRange = GeneratedNativeSourceRange
-export type SourceDiagnosticSeverity = "error" | "warning" | "info"
+export type SourceRange = GeneratedNativeSourceRange;
+export type SourceDiagnosticSeverity = "error" | "warning" | "info";
 export type SourceDiagnostic = Omit<GeneratedNativeSourceDiagnostic, "severity"> & {
-  severity: SourceDiagnosticSeverity
-}
+  severity: SourceDiagnosticSeverity;
+};
 export type SourceAnalysisResult = Omit<
   GeneratedNativeSourceAnalysisResult,
   "messages" | "diagnostics"
 > & {
-  messages: NativeExtractedMessage[]
-  diagnostics: SourceDiagnostic[]
-}
-export type SourceRuleLevel = "off" | "info" | "warning" | "error"
+  messages: NativeExtractedMessage[];
+  diagnostics: SourceDiagnostic[];
+};
+export type SourceRuleLevel = "off" | "info" | "warning" | "error";
 export type SourceRuleOptions = Omit<
   GeneratedNativeSourceRuleOptions,
   "placeholderOnly" | "emptyComponentOnly" | "preferTransInJsx"
 > & {
-  placeholderOnly?: SourceRuleLevel
-  emptyComponentOnly?: SourceRuleLevel
-  preferTransInJsx?: SourceRuleLevel
-}
+  placeholderOnly?: SourceRuleLevel;
+  emptyComponentOnly?: SourceRuleLevel;
+  preferTransInJsx?: SourceRuleLevel;
+};
 export type SourceAnalysisOptions = Omit<GeneratedNativeSourceAnalysisOptions, "mdx" | "rules"> & {
-  mdx?: MdxOptions
-  rules?: SourceRuleOptions
-}
+  mdx?: MdxOptions;
+  rules?: SourceRuleOptions;
+};
 
-export type NativeTransformOptions = GeneratedNativeTransformOptions
-export type NativeTransformEdit = GeneratedNativeTransformEdit
-export type NativeTransformSourceMap = GeneratedNativeTransformSourceMap
-export type NativeTransformResult = GeneratedNativeTransformResult
-export type CatalogArtifactSourceKey = GeneratedCatalogArtifactSourceKey
-export type CatalogArtifactMissingMessage = GeneratedCatalogArtifactMissingMessage
-export type CatalogArtifactDiagnosticSeverity = "info" | "warning" | "error"
+export type NativeTransformOptions = GeneratedNativeTransformOptions;
+export type NativeTransformEdit = GeneratedNativeTransformEdit;
+export type NativeTransformSourceMap = GeneratedNativeTransformSourceMap;
+export type NativeTransformResult = GeneratedNativeTransformResult;
+export type CatalogArtifactSourceKey = GeneratedCatalogArtifactSourceKey;
+export type CatalogArtifactMissingMessage = GeneratedCatalogArtifactMissingMessage;
+export type CatalogArtifactDiagnosticSeverity = "info" | "warning" | "error";
 export type CatalogArtifactDiagnostic = Omit<GeneratedCatalogArtifactDiagnostic, "severity"> & {
-  severity: CatalogArtifactDiagnosticSeverity
-}
+  severity: CatalogArtifactDiagnosticSeverity;
+};
 export type CatalogArtifactFallbackLocales = NonNullable<
   GeneratedCatalogArtifactConfig["fallbackLocales"]
->
+>;
 export type CatalogArtifactCatalogConfig = Omit<GeneratedCatalogArtifactCatalogConfig, "format"> & {
-  format?: CatalogConfigFormat
-}
+  format?: CatalogConfigFormat;
+};
 export type CatalogArtifactConfig = Omit<GeneratedCatalogArtifactConfig, "catalogs"> & {
-  catalogs: CatalogArtifactCatalogConfig[]
-}
+  catalogs: CatalogArtifactCatalogConfig[];
+};
 export type CatalogArtifactResult = Omit<GeneratedCatalogArtifactResult, "diagnostics"> & {
-  diagnostics: CatalogArtifactDiagnostic[]
-}
+  diagnostics: CatalogArtifactDiagnostic[];
+};
 export type CatalogModuleOptions = {
-  locale: string
-  pseudoLocale?: string
-  failOnMissing?: boolean
-  failOnCompileError?: boolean
-  missingFailureHint?: string
-  compileFailureHint?: string
-  diagnosticsWarningHint?: string
-}
-export type CatalogModuleResult = GeneratedCatalogModuleResult
+  locale: string;
+  pseudoLocale?: string;
+  failOnMissing?: boolean;
+  failOnCompileError?: boolean;
+  missingFailureHint?: string;
+  compileFailureHint?: string;
+  diagnosticsWarningHint?: string;
+};
+export type CatalogModuleResult = GeneratedCatalogModuleResult;
 
-type NativeBindings = GeneratedNativeBindings
-type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
-type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest
-type NativeCatalogFileCombineRequest = GeneratedCatalogFileCombineRequest
-type NativeCatalogThreeWayMergeRequest = GeneratedCatalogThreeWayMergeRequest
-type NativeCatalogFileThreeWayMergeRequest = GeneratedCatalogFileThreeWayMergeRequest
-type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
-type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
-type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
-type NativeCatalogUpdateRequest = GeneratedCatalogUpdateRequest
-type NativeCatalogParseRequest = GeneratedCatalogParseRequest
-type NativeTranslationCandidateRequest = GeneratedTranslationCandidateRequest
-type NativeTranslationPatchRequest = GeneratedTranslationPatchRequest
+type NativeBindings = GeneratedNativeBindings;
+type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest;
+type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest;
+type NativeCatalogFileCombineRequest = GeneratedCatalogFileCombineRequest;
+type NativeCatalogThreeWayMergeRequest = GeneratedCatalogThreeWayMergeRequest;
+type NativeCatalogFileThreeWayMergeRequest = GeneratedCatalogFileThreeWayMergeRequest;
+type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest;
+type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest;
+type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest;
+type NativeCatalogUpdateRequest = GeneratedCatalogUpdateRequest;
+type NativeCatalogParseRequest = GeneratedCatalogParseRequest;
+type NativeTranslationCandidateRequest = GeneratedTranslationCandidateRequest;
+type NativeTranslationPatchRequest = GeneratedTranslationPatchRequest;
 
-const native = loadNativeBindings()
+const native = loadNativeBindings();
 
 function mapNativeDiagnosticSeverity(
   severity:
     | GeneratedCatalogArtifactDiagnostic["severity"]
-    | GeneratedCatalogAuditDiagnostic["severity"]
+    | GeneratedCatalogAuditDiagnostic["severity"],
 ): CatalogDiagnosticSeverity {
   switch (severity) {
     case "Info": {
-      return "info"
+      return "info";
     }
     case "Warning": {
-      return "warning"
+      return "warning";
     }
     case "Error": {
-      return "error"
+      return "error";
     }
   }
 }
@@ -408,156 +412,156 @@ function mapNativeDiagnosticSeverity(
 // generated union and turns this switch into a type error, which is the whole
 // reason the boundary carries an enum rather than a bare string.
 function mapNativeSourceDiagnosticSeverity(
-  severity: GeneratedNativeSourceDiagnostic["severity"]
+  severity: GeneratedNativeSourceDiagnostic["severity"],
 ): SourceDiagnosticSeverity {
   switch (severity) {
     case "Info": {
-      return "info"
+      return "info";
     }
     case "Warning": {
-      return "warning"
+      return "warning";
     }
     case "Error": {
-      return "error"
+      return "error";
     }
   }
 }
 
 export function getNativeInfo(): NativeInfo {
-  return native.getNativeInfo()
+  return native.getNativeInfo();
 }
 
 export function parsePo(source: string): ParsedPoFile {
-  return native.parsePo(source)
+  return native.parsePo(source);
 }
 
 export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
   return fromNativeCatalogUpdateResult(
-    native.updateCatalogFile(toNativeUpdateRequest("updateCatalogFile", request))
-  )
+    native.updateCatalogFile(toNativeUpdateRequest("updateCatalogFile", request)),
+  );
 }
 
 /** Run the catalog read/update/write cycle on Node's shared libuv worker pool. */
 export async function updateCatalogFileAsync(
   request: CatalogUpdateRequest,
-  options?: AsyncTaskOptions
+  options?: AsyncTaskOptions,
 ): Promise<CatalogUpdateResult> {
-  const nativeRequest = toNativeUpdateRequest("updateCatalogFileAsync", request)
+  const nativeRequest = toNativeUpdateRequest("updateCatalogFileAsync", request);
   const result = await serializeCatalogMutation([nativeRequest.targetPath], () =>
     startAbortableNativeTask(options, (signal) =>
-      native.updateCatalogFileAsync(nativeRequest, signal)
-    )
-  )
-  return fromNativeCatalogUpdateResult(result)
+      native.updateCatalogFileAsync(nativeRequest, signal),
+    ),
+  );
+  return fromNativeCatalogUpdateResult(result);
 }
 
 function fromNativeCatalogUpdateResult(result: GeneratedCatalogUpdateResult): CatalogUpdateResult {
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
-  }
+  };
 }
 
 export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
-  const result = native.parseCatalog(toNativeParseRequest(request))
+  const result = native.parseCatalog(toNativeParseRequest(request));
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
-  }
+  };
 }
 
 export function listTranslationCandidates(
-  request: TranslationCandidateRequest
+  request: TranslationCandidateRequest,
 ): TranslationCandidateResult {
   const nativeRequest: NativeTranslationCandidateRequest = {
     config: toNativeArtifactConfig(request.config),
     locales: request.locales,
     targets: request.targets,
     maxOrigins: request.maxOrigins,
-  }
+  };
   const result: GeneratedTranslationCandidateResult =
-    native.listTranslationCandidates(nativeRequest)
+    native.listTranslationCandidates(nativeRequest);
   return {
     candidates: result.candidates.map(fromNativeTranslationCandidate),
     diagnostics: result.diagnostics,
-  }
+  };
 }
 
 export function applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult {
-  const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatches", request)
+  const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatches", request);
   try {
-    const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest)
-    return fromNativeTranslationPatchResult(result)
+    const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest);
+    return fromNativeTranslationPatchResult(result);
   } catch (error) {
-    throw mapTranslationPatchError(error)
+    throw mapTranslationPatchError(error);
   }
 }
 
 /** Run translation patch validation and catalog replacement on the libuv worker pool. */
 export async function applyTranslationPatchesAsync(
   request: TranslationPatchRequest,
-  options?: AsyncTaskOptions
+  options?: AsyncTaskOptions,
 ): Promise<TranslationPatchResult> {
-  const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request)
+  const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request);
   try {
     const result = await serializeCatalogMutation(translationPatchTargetPaths(nativeRequest), () =>
       startAbortableNativeTask(options, (signal) =>
-        native.applyTranslationPatchesAsync(nativeRequest, signal)
-      )
-    )
-    return fromNativeTranslationPatchResult(result)
+        native.applyTranslationPatchesAsync(nativeRequest, signal),
+      ),
+    );
+    return fromNativeTranslationPatchResult(result);
   } catch (error) {
-    throw mapTranslationPatchError(error)
+    throw mapTranslationPatchError(error);
   }
 }
 
 function toNativeTranslationPatchRequest(
   operation: string,
-  request: TranslationPatchRequest
+  request: TranslationPatchRequest,
 ): NativeTranslationPatchRequest {
-  const source = snapshotNativeArgument(operation, request)
+  const source = snapshotNativeArgument(operation, request);
   return markPreparedNativeArgument({
     config: toOwnedNativeArtifactConfig(source.config),
     patches: source.patches.map(toNativeTranslationPatch),
     po: toNativePoOptions(source.po),
-  })
+  });
 }
 
 function mapTranslationPatchError(error: unknown): unknown {
   if (isNativeTranslationPatchWriteError(error)) {
-    const writeError = error as unknown as TranslationPatchWriteError
-    writeError.report = fromNativeTranslationPatchResult(error.report)
+    const writeError = error as unknown as TranslationPatchWriteError;
+    writeError.report = fromNativeTranslationPatchResult(error.report);
   }
-  return error
+  return error;
 }
 
 export function isTranslationPatchWriteError(error: unknown): error is TranslationPatchWriteError {
-  const candidate = error as { code?: unknown }
+  const candidate = error as { code?: unknown };
   return (
     error instanceof Error &&
     candidate.code === TRANSLATION_PATCH_WRITE_ERROR_CODE &&
     "report" in error
-  )
+  );
 }
 
 type NativeTranslationPatchWriteError = Error & {
-  code: typeof TRANSLATION_PATCH_WRITE_ERROR_CODE
-  report: GeneratedTranslationPatchResult
-}
+  code: typeof TRANSLATION_PATCH_WRITE_ERROR_CODE;
+  report: GeneratedTranslationPatchResult;
+};
 
 function isNativeTranslationPatchWriteError(
-  error: unknown
+  error: unknown,
 ): error is NativeTranslationPatchWriteError {
-  const candidate = error as { code?: unknown }
+  const candidate = error as { code?: unknown };
   return (
     error instanceof Error &&
     candidate.code === TRANSLATION_PATCH_WRITE_ERROR_CODE &&
     "report" in error
-  )
+  );
 }
 
 function fromNativeTranslationPatchResult(
-  result: GeneratedTranslationPatchResult
+  result: GeneratedTranslationPatchResult,
 ): TranslationPatchResult {
   return {
     ...result,
@@ -566,27 +570,27 @@ function fromNativeTranslationPatchResult(
       status: fromNativeTranslationPatchOutcomeStatus(outcome.status),
     })),
     diagnostics: result.diagnostics,
-  }
+  };
 }
 
 function fromNativeTranslationCandidate(
-  candidate: GeneratedTranslationCandidate
+  candidate: GeneratedTranslationCandidate,
 ): TranslationCandidate {
   return {
     ...candidate,
     format: fromNativeFileFormat(candidate.format),
     source: fromNativeTranslationValue(candidate.source),
     translation: fromNativeTranslationValue(candidate.translation),
-  }
+  };
 }
 
 function fromNativeTranslationValue(value: GeneratedTranslationValue): TranslationValue {
   switch (value.kind) {
     case "Singular": {
       if (value.value === undefined) {
-        throw new TypeError("Native singular translation value is missing `value`.")
+        throw new TypeError("Native singular translation value is missing `value`.");
       }
-      return { kind: "singular", value: value.value }
+      return { kind: "singular", value: value.value };
     }
     case "Plural": {
       if (
@@ -595,7 +599,7 @@ function fromNativeTranslationValue(value: GeneratedTranslationValue): Translati
         value.offset === undefined ||
         value.values === undefined
       ) {
-        throw new TypeError("Native plural translation value is incomplete.")
+        throw new TypeError("Native plural translation value is incomplete.");
       }
       return {
         kind: "plural",
@@ -603,15 +607,15 @@ function fromNativeTranslationValue(value: GeneratedTranslationValue): Translati
         pluralKind: value.pluralKind === "Cardinal" ? "cardinal" : "ordinal",
         offset: value.offset,
         values: value.values,
-      }
+      };
     }
   }
 }
 
 function toNativeTranslationPatch(patch: TranslationPatch): GeneratedTranslationPatch {
-  const id = patch.id
-  const machine = patch.machine
-  const ai = machine?.ai
+  const id = patch.id;
+  const machine = patch.machine;
+  const ai = machine?.ai;
   return {
     id: {
       catalog: id.catalog,
@@ -631,13 +635,13 @@ function toNativeTranslationPatch(patch: TranslationPatch): GeneratedTranslation
             : undefined,
         }
       : undefined,
-  }
+  };
 }
 
 function toNativeTranslationValue(value: TranslationValue): GeneratedTranslationValue {
   switch (value.kind) {
     case "singular": {
-      return { kind: "Singular", value: value.value }
+      return { kind: "Singular", value: value.value };
     }
     case "plural": {
       return {
@@ -646,37 +650,37 @@ function toNativeTranslationValue(value: TranslationValue): GeneratedTranslation
         pluralKind: value.pluralKind === "cardinal" ? "Cardinal" : "Ordinal",
         offset: value.offset,
         values: { ...value.values },
-      }
+      };
     }
   }
 }
 
 function fromNativeTranslationPatchOutcomeStatus(
-  status: GeneratedTranslationPatchOutcome["status"]
+  status: GeneratedTranslationPatchOutcome["status"],
 ): TranslationPatchOutcomeStatus {
   switch (status) {
     case "Applied":
-      return "applied"
+      return "applied";
     case "Unchanged":
-      return "unchanged"
+      return "unchanged";
     case "Rejected":
-      return "rejected"
+      return "rejected";
     case "NotApplied":
-      return "notApplied"
+      return "notApplied";
   }
 }
 
 export function auditCatalogs(
   config: CatalogArtifactConfig,
-  options: CatalogAuditOptions = {}
+  options: CatalogAuditOptions = {},
 ): CatalogAuditResult {
   const request: NativeCatalogAuditRequest = {
     config: toNativeArtifactConfig(config),
     locales: options.locales,
     checks: options.checks,
     metadata: options.metadata,
-  }
-  const result = native.auditCatalogs(request)
+  };
+  const result = native.auditCatalogs(request);
 
   return {
     ...result,
@@ -684,72 +688,72 @@ export function auditCatalogs(
       ...diagnostic,
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
-  }
+  };
 }
 
 export function deriveMessageMetadata(message: string, context?: string): MessageMetadata {
-  return native.deriveMessageMetadata(message, context)
+  return native.deriveMessageMetadata(message, context);
 }
 
 export function normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata {
-  return native.normalizeMessageMetadata(input)
+  return native.normalizeMessageMetadata(input);
 }
 
 export function validateMessageMetadata(
-  input: MessageMetadataInput
+  input: MessageMetadataInput,
 ): MessageMetadataValidationReport {
-  const result = native.validateMessageMetadata(input)
+  const result = native.validateMessageMetadata(input);
   return {
     diagnostics: result.diagnostics.map((diagnostic) => ({
       ...diagnostic,
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
-  }
+  };
 }
 
 export function combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult {
-  const result = native.combineCatalogs(toNativeCombineRequest("combineCatalogs", request))
+  const result = native.combineCatalogs(toNativeCombineRequest("combineCatalogs", request));
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
-  }
+  };
 }
 
 export function combineCatalogFiles(request: CatalogFileCombineRequest): CatalogFileCombineResult {
-  const result = native.combineCatalogFiles(toNativeFileCombineRequest(request))
+  const result = native.combineCatalogFiles(toNativeFileCombineRequest(request));
   return {
     ...result,
     format: fromNativeFileFormat(result.format),
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
-  }
+  };
 }
 
 export function mergeCatalogsThreeWay(request: CatalogThreeWayMergeRequest): CatalogCombineResult {
-  const result = native.mergeCatalogsThreeWay(toNativeThreeWayMergeRequest(request))
+  const result = native.mergeCatalogsThreeWay(toNativeThreeWayMergeRequest(request));
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
-  }
+  };
 }
 
 export function mergeCatalogFilesThreeWay(
-  request: CatalogFileThreeWayMergeRequest
+  request: CatalogFileThreeWayMergeRequest,
 ): CatalogFileCombineResult {
-  const result = native.mergeCatalogFilesThreeWay(toNativeFileThreeWayMergeRequest(request))
+  const result = native.mergeCatalogFilesThreeWay(toNativeFileThreeWayMergeRequest(request));
   return {
     ...result,
     format: fromNativeFileFormat(result.format),
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
-  }
+  };
 }
 
 function toNativeCombineRequest(
   operation: string,
-  request: CatalogCombineRequest
+  request: CatalogCombineRequest,
 ): NativeCatalogCombineRequest {
-  const source = snapshotNativeArgument(operation, request)
-  const conflictStrategy = source.conflictStrategy
-  const selection = source.selection
+  const source = snapshotNativeArgument(operation, request);
+  const conflictStrategy = source.conflictStrategy;
+  const selection = source.selection;
   return markPreparedNativeArgument({
     inputs: source.inputs.map((input) => ({ content: input.content, label: input.label })),
     sourceLocale: source.sourceLocale,
@@ -757,11 +761,11 @@ function toNativeCombineRequest(
     conflictStrategy: conflictStrategy ? toNativeConflictStrategy(conflictStrategy) : undefined,
     selection: selection ? toOwnedNativeSelection(selection) : undefined,
     includeObsolete: source.includeObsolete,
-  })
+  });
 }
 
 function toNativeThreeWayMergeRequest(
-  request: CatalogThreeWayMergeRequest
+  request: CatalogThreeWayMergeRequest,
 ): NativeCatalogThreeWayMergeRequest {
   return {
     ancestor: request.ancestor,
@@ -774,27 +778,27 @@ function toNativeThreeWayMergeRequest(
       ? toNativeConflictStrategy(request.conflictStrategy)
       : undefined,
     po: toNativePoOptions(request.po),
-  }
+  };
 }
 
 function toNativeConflictStrategy(
-  strategy: CatalogConflictStrategy
+  strategy: CatalogConflictStrategy,
 ): NonNullable<NativeCatalogCombineRequest["conflictStrategy"]> {
   switch (strategy) {
     case "useFirst": {
-      return "UseFirst"
+      return "UseFirst";
     }
     case "useLast": {
-      return "UseLast"
+      return "UseLast";
     }
     case "error": {
-      return "Error"
+      return "Error";
     }
   }
 }
 
 function toNativeFileCombineRequest(
-  request: CatalogFileCombineRequest
+  request: CatalogFileCombineRequest,
 ): NativeCatalogFileCombineRequest {
   return {
     inputPaths: request.inputPaths,
@@ -806,11 +810,11 @@ function toNativeFileCombineRequest(
       ? toNativeConflictStrategy(request.conflictStrategy)
       : undefined,
     po: toNativePoOptions(request.po),
-  }
+  };
 }
 
 function toNativeFileThreeWayMergeRequest(
-  request: CatalogFileThreeWayMergeRequest
+  request: CatalogFileThreeWayMergeRequest,
 ): NativeCatalogFileThreeWayMergeRequest {
   return {
     ancestorPath: request.ancestorPath,
@@ -824,44 +828,44 @@ function toNativeFileThreeWayMergeRequest(
       ? toNativeConflictStrategy(request.conflictStrategy)
       : undefined,
     po: toNativePoOptions(request.po),
-  }
+  };
 }
 
 function toNativePoOptions(po: PoOutputOptions | undefined): NativeCatalogUpdateRequest["po"] {
   if (!po) {
-    return undefined
+    return undefined;
   }
-  const lineBreaks = po.lineBreaks
+  const lineBreaks = po.lineBreaks;
   return {
     lineBreaks: lineBreaks ? toNativePoLineBreaks(lineBreaks) : undefined,
-  }
+  };
 }
 
 function toNativeFileFormat(
-  format: CatalogFileFormat
+  format: CatalogFileFormat,
 ): NonNullable<NativeCatalogFileCombineRequest["format"]> {
   switch (format) {
     case "po": {
-      return "Po"
+      return "Po";
     }
     case "fcl": {
-      return "Fcl"
+      return "Fcl";
     }
   }
 }
 
 function toNativeConfigFormat(
-  format: CatalogConfigFormat
+  format: CatalogConfigFormat,
 ): NonNullable<GeneratedCatalogArtifactCatalogConfig["format"]> {
-  return toNativeFileFormat(format)
+  return toNativeFileFormat(format);
 }
 
 function toNativeUpdateRequest(
   operation: string,
-  request: CatalogUpdateRequest
+  request: CatalogUpdateRequest,
 ): NativeCatalogUpdateRequest {
-  const source = snapshotNativeArgument(operation, request)
-  const format = source.format
+  const source = snapshotNativeArgument(operation, request);
+  const format = source.format;
   return markPreparedNativeArgument({
     targetPath: source.targetPath,
     locale: source.locale,
@@ -871,13 +875,13 @@ function toNativeUpdateRequest(
     format: format ? toNativeConfigFormat(format) : undefined,
     po: toNativePoOptions(source.po),
     messages: source.messages.map((message) => {
-      const placeholders = message.placeholders
+      const placeholders = message.placeholders;
       return {
         message: message.message,
         context: message.context,
         placeholders: placeholders
           ? Object.fromEntries(
-              Object.entries(placeholders).map(([name, values]) => [name, [...values]])
+              Object.entries(placeholders).map(([name, values]) => [name, [...values]]),
             )
           : undefined,
         extractedComments: [...message.extractedComments],
@@ -886,20 +890,20 @@ function toNativeUpdateRequest(
           line: origin.line,
           scope: origin.scope,
         })),
-      }
+      };
     }),
-  })
+  });
 }
 
 function toNativePoLineBreaks(
-  lineBreaks: PoLineBreaks
+  lineBreaks: PoLineBreaks,
 ): NonNullable<NonNullable<NativeCatalogUpdateRequest["po"]>["lineBreaks"]> {
   switch (lineBreaks) {
     case "auto": {
-      return "Auto"
+      return "Auto";
     }
     case "off": {
-      return "Off"
+      return "Off";
     }
   }
 }
@@ -908,7 +912,7 @@ function toNativeParseRequest(request: CatalogParseRequest): NativeCatalogParseR
   return {
     ...request,
     format: request.format ? toNativeConfigFormat(request.format) : undefined,
-  }
+  };
 }
 
 function toNativeArtifactConfig(config: CatalogArtifactConfig): GeneratedCatalogArtifactConfig {
@@ -918,13 +922,13 @@ function toNativeArtifactConfig(config: CatalogArtifactConfig): GeneratedCatalog
       ...catalog,
       format: catalog.format ? toNativeConfigFormat(catalog.format) : undefined,
     })),
-  }
+  };
 }
 
 function toOwnedNativeArtifactConfig(
-  config: CatalogArtifactConfig
+  config: CatalogArtifactConfig,
 ): GeneratedCatalogArtifactConfig {
-  const fallbackLocales = config.fallbackLocales
+  const fallbackLocales = config.fallbackLocales;
   return {
     rootDir: config.rootDir,
     locales: [...config.locales],
@@ -933,65 +937,65 @@ function toOwnedNativeArtifactConfig(
       ? [...fallbackLocales]
       : fallbackLocales
         ? Object.fromEntries(
-            Object.entries(fallbackLocales).map(([locale, fallbacks]) => [locale, [...fallbacks]])
+            Object.entries(fallbackLocales).map(([locale, fallbacks]) => [locale, [...fallbacks]]),
           )
         : undefined,
     pseudoLocale: config.pseudoLocale,
     catalogs: config.catalogs.map((catalog) => {
-      const format = catalog.format
-      const include = catalog.include
-      const exclude = catalog.exclude
+      const format = catalog.format;
+      const include = catalog.include;
+      const exclude = catalog.exclude;
       return {
         path: catalog.path,
         format: format ? toNativeConfigFormat(format) : undefined,
         include: include ? [...include] : undefined,
         exclude: exclude ? [...exclude] : undefined,
-      }
+      };
     }),
-  }
+  };
 }
 
 function fromNativeFileFormat(
-  format: GeneratedCatalogFileCombineResult["format"]
+  format: GeneratedCatalogFileCombineResult["format"],
 ): CatalogFileFormat {
   switch (format) {
     case "Po": {
-      return "po"
+      return "po";
     }
     case "Fcl": {
-      return "fcl"
+      return "fcl";
     }
   }
 }
 
 function toNativeSelection(
-  selection: CatalogCombineSelection
+  selection: CatalogCombineSelection,
 ): NonNullable<NativeCatalogCombineRequest["selection"]> {
   if (selection === "all") {
-    return "All"
+    return "All";
   }
   if (selection === "unique") {
-    return "Unique"
+    return "Unique";
   }
-  return selection
+  return selection;
 }
 
 function toOwnedNativeSelection(
-  selection: CatalogCombineSelection
+  selection: CatalogCombineSelection,
 ): NonNullable<NativeCatalogCombineRequest["selection"]> {
-  const nativeSelection = toNativeSelection(selection)
-  return typeof nativeSelection === "object" ? { ...nativeSelection } : nativeSelection
+  const nativeSelection = toNativeSelection(selection);
+  return typeof nativeSelection === "object" ? { ...nativeSelection } : nativeSelection;
 }
 
 function mapCatalogDiagnostics(diagnostics: GeneratedCatalogDiagnostic[]): CatalogDiagnostic[] {
   return diagnostics.map((diagnostic) => ({
     ...diagnostic,
     severity: mapNativeDiagnosticSeverity(diagnostic.severity),
-  }))
+  }));
 }
 
 function fromNativeCatalogArtifactResult(
-  result: GeneratedCatalogArtifactResult
+  result: GeneratedCatalogArtifactResult,
 ): CatalogArtifactResult {
   return {
     ...result,
@@ -999,48 +1003,48 @@ function fromNativeCatalogArtifactResult(
       ...diagnostic,
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
-  }
+  };
 }
 
 export function compileCatalogArtifact(
   config: CatalogArtifactConfig,
-  resourcePath: string
+  resourcePath: string,
 ): CatalogArtifactResult {
   const request: NativeCatalogArtifactRequest = {
     config: toNativeArtifactConfig(config),
     resourcePath,
-  }
-  return fromNativeCatalogArtifactResult(native.compileCatalogArtifact(request))
+  };
+  return fromNativeCatalogArtifactResult(native.compileCatalogArtifact(request));
 }
 
 /** Compile a full catalog artifact on Node's shared libuv worker pool. */
 export async function compileCatalogArtifactAsync(
   config: CatalogArtifactConfig,
   resourcePath: string,
-  options?: AsyncTaskOptions
+  options?: AsyncTaskOptions,
 ): Promise<CatalogArtifactResult> {
   const request: NativeCatalogArtifactRequest = {
     config: toNativeArtifactConfig(config),
     resourcePath,
-  }
+  };
   return fromNativeCatalogArtifactResult(
     await startAbortableNativeTask(options, (signal) =>
-      native.compileCatalogArtifactAsync(request, signal)
-    )
-  )
+      native.compileCatalogArtifactAsync(request, signal),
+    ),
+  );
 }
 
 export function compileCatalogArtifactSelected(
   config: CatalogArtifactConfig,
   resourcePath: string,
-  compiledIds: string[]
+  compiledIds: string[],
 ): CatalogArtifactResult {
   const request: NativeCatalogArtifactSelectedRequest = {
     config: toNativeArtifactConfig(config),
     resourcePath,
     compiledIds,
-  }
-  return fromNativeCatalogArtifactResult(native.compileCatalogArtifactSelected(request))
+  };
+  return fromNativeCatalogArtifactResult(native.compileCatalogArtifactSelected(request));
 }
 
 /** Compile selected runtime IDs on Node's shared libuv worker pool. */
@@ -1048,27 +1052,27 @@ export async function compileCatalogArtifactSelectedAsync(
   config: CatalogArtifactConfig,
   resourcePath: string,
   compiledIds: string[],
-  options?: AsyncTaskOptions
+  options?: AsyncTaskOptions,
 ): Promise<CatalogArtifactResult> {
   const request: NativeCatalogArtifactSelectedRequest = {
     config: toOwnedNativeArtifactConfig(config),
     resourcePath,
     compiledIds: [...compiledIds],
-  }
-  const key = selectedCatalogBuildKey(request.config, request.resourcePath)
+  };
+  const key = selectedCatalogBuildKey(request.config, request.resourcePath);
   return coordinateInitialCatalogBuild(key, async () =>
     fromNativeCatalogArtifactResult(
       await startAbortableNativeTask(options, (signal) =>
-        native.compileCatalogArtifactSelectedAsync(request, signal)
-      )
-    )
-  )
+        native.compileCatalogArtifactSelectedAsync(request, signal),
+      ),
+    ),
+  );
 }
 
 export function compileCatalogModule(
   config: CatalogArtifactConfig,
   resourcePath: string,
-  options: CatalogModuleOptions
+  options: CatalogModuleOptions,
 ): CatalogModuleResult {
   const request: NativeCatalogModuleRequest = {
     config: toNativeArtifactConfig(config),
@@ -1080,8 +1084,8 @@ export function compileCatalogModule(
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
-  }
-  return native.compileCatalogModule(request)
+  };
+  return native.compileCatalogModule(request);
 }
 
 /** Compile and render a catalog module on Node's shared libuv worker pool. */
@@ -1089,7 +1093,7 @@ export async function compileCatalogModuleAsync(
   config: CatalogArtifactConfig,
   resourcePath: string,
   options: CatalogModuleOptions,
-  taskOptions?: AsyncTaskOptions
+  taskOptions?: AsyncTaskOptions,
 ): Promise<CatalogModuleResult> {
   const request: NativeCatalogModuleRequest = {
     config: toNativeArtifactConfig(config),
@@ -1101,55 +1105,57 @@ export async function compileCatalogModuleAsync(
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
-  }
+  };
   return startAbortableNativeTask(taskOptions, (signal) =>
-    native.compileCatalogModuleAsync(request, signal)
-  )
+    native.compileCatalogModuleAsync(request, signal),
+  );
 }
 
 /** Render an already-compiled message map through the canonical native generator. */
 export function renderCatalogModule(messages: Record<string, string>): string {
-  return native.renderCatalogModule(messages)
+  return native.renderCatalogModule(messages);
 }
 
 function mapExtractedMessages(
-  messages: GeneratedNativeExtractedMessage[]
+  messages: GeneratedNativeExtractedMessage[],
 ): NativeExtractedMessage[] {
   return messages.map((message) => {
     const origin: NativeExtractedMessageOrigin = [
       message.origin.filename,
       message.origin.line,
       message.origin.column,
-    ]
-    origin.scope = message.origin.scope
+    ];
+    origin.scope = message.origin.scope;
 
     return {
       ...message,
       origin,
-    }
-  })
+    };
+  });
 }
 
 export function extractMessagesNative(
   source: string,
   filename: string,
-  options?: MdxOptions
+  options?: MdxOptions,
 ): NativeExtractedMessage[] {
-  return mapExtractedMessages(native.extractMessages(source, filename, toNativeMdxOptions(options)))
+  return mapExtractedMessages(
+    native.extractMessages(source, filename, toNativeMdxOptions(options)),
+  );
 }
 
 export function analyzeSourceNative(
   source: string,
   filename: string,
-  options?: SourceAnalysisOptions
+  options?: SourceAnalysisOptions,
 ): SourceAnalysisResult {
   const nativeOptions: GeneratedNativeSourceAnalysisOptions | undefined = options
     ? {
         ...options,
         mdx: toNativeMdxOptions(options.mdx),
       }
-    : undefined
-  const result = native.analyzeSource(source, filename, nativeOptions)
+    : undefined;
+  const result = native.analyzeSource(source, filename, nativeOptions);
   return {
     ...result,
     messages: mapExtractedMessages(result.messages),
@@ -1157,46 +1163,46 @@ export function analyzeSourceNative(
       ...diagnostic,
       severity: mapNativeSourceDiagnosticSeverity(diagnostic.severity),
     })),
-  }
+  };
 }
 
 export function analyzeMdxNative(
   source: string,
   filename: string,
-  options?: MdxOptions
+  options?: MdxOptions,
 ): MdxAnalysisResult {
-  const result = native.analyzeMdx(source, filename, toNativeMdxOptions(options))
+  const result = native.analyzeMdx(source, filename, toNativeMdxOptions(options));
   return {
     ...result,
     messages: mapExtractedMessages(result.messages),
-  }
+  };
 }
 
 function toNativeMdxOptions(options?: MdxOptions): GeneratedNativeMdxOptions | undefined {
   if (!options) {
-    return undefined
+    return undefined;
   }
   const framework: GeneratedNativeMdxFramework | undefined =
-    options?.framework === "solid" ? "Solid" : options?.framework === "react" ? "React" : undefined
+    options?.framework === "solid" ? "Solid" : options?.framework === "react" ? "React" : undefined;
   return {
     ...options,
     framework,
-  }
+  };
 }
 
 export function extractCatalogMessagesFromFiles(
-  request: ExtractCatalogMessagesRequest
+  request: ExtractCatalogMessagesRequest,
 ): ExtractCatalogMessagesResult {
   return native.extractCatalogMessagesFromFiles({
     ...request,
     mdx: toNativeMdxOptions(request.mdx),
-  })
+  });
 }
 
 /** Read and extract source files on Node's shared libuv worker pool. */
 export async function extractCatalogMessagesFromFilesAsync(
   request: ExtractCatalogMessagesRequest,
-  options?: AsyncTaskOptions
+  options?: AsyncTaskOptions,
 ): Promise<ExtractCatalogMessagesResult> {
   return startAbortableNativeTask(options, (signal) =>
     native.extractCatalogMessagesFromFilesAsync(
@@ -1204,23 +1210,23 @@ export async function extractCatalogMessagesFromFilesAsync(
         ...request,
         mdx: toNativeMdxOptions(request.mdx),
       },
-      signal
-    )
-  )
+      signal,
+    ),
+  );
 }
 
 function startAbortableNativeTask<TResult>(
   options: AsyncTaskOptions | undefined,
-  operation: (signal: AbortSignal | undefined) => Promise<TResult>
+  operation: (signal: AbortSignal | undefined) => Promise<TResult>,
 ): Promise<TResult> {
-  options?.signal?.throwIfAborted()
-  return operation(options?.signal)
+  options?.signal?.throwIfAborted();
+  return operation(options?.signal);
 }
 
 export function transformMacrosNative(
   source: string,
   filename: string,
-  options?: NativeTransformOptions
+  options?: NativeTransformOptions,
 ): NativeTransformResult {
-  return native.transformMacros(source, filename, options)
+  return native.transformMacros(source, filename, options);
 }

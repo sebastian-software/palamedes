@@ -1,10 +1,10 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import { ButtonLink } from "./Button"
-import { SiteFooter } from "./SiteFooter"
-import { SiteLink } from "./SiteUiProvider"
-import type { SiteConfig } from "./types"
-import { Wordmark } from "./Wordmark"
+import { ButtonLink } from "./Button";
+import { SiteFooter } from "./SiteFooter";
+import { SiteLink } from "./SiteUiProvider";
+import type { SiteConfig } from "./types";
+import { Wordmark } from "./Wordmark";
 
 export function SiteHeader({ config }: { config: SiteConfig }) {
   return (
@@ -45,7 +45,7 @@ export function SiteHeader({ config }: { config: SiteConfig }) {
         ) : null}
       </div>
     </header>
-  )
+  );
 }
 
 export function SiteShell({ config, children }: { config: SiteConfig; children: ReactNode }) {
@@ -57,5 +57,5 @@ export function SiteShell({ config, children }: { config: SiteConfig; children: 
         <SiteFooter config={config} />
       </div>
     </>
-  )
+  );
 }

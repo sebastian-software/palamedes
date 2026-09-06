@@ -1,7 +1,7 @@
-import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { disableRule, getEslintConfig, optionsToFilename } from "eslint-config-setup"
+import { disableRule, getEslintConfig, optionsToFilename } from "eslint-config-setup";
 
 const generatedAndBuildIgnores = {
   ignores: [
@@ -22,7 +22,7 @@ const generatedAndBuildIgnores = {
     "**/*.tsbuildinfo",
     "docs/example-screenshots/**",
   ],
-}
+};
 
 const legacyBaselineRules = {
   "@cspell/spellchecker": "off",
@@ -110,39 +110,39 @@ const legacyBaselineRules = {
   "vitest/no-conditional-in-test": "off",
   "vitest/prefer-strict-equal": "off",
   "vitest/require-top-level-describe": "off",
-}
+};
 
 const eslintConfigOptions = {
   react: true,
   node: true,
   ai: true,
   oxlint: true,
-}
+};
 
 async function getPortableEslintConfig(options) {
   try {
-    return await getEslintConfig(options)
+    return await getEslintConfig(options);
   } catch (error) {
-    const packageEntry = fileURLToPath(import.meta.resolve("eslint-config-setup"))
-    const configPath = path.join(path.dirname(packageEntry), "configs", optionsToFilename(options))
+    const packageEntry = fileURLToPath(import.meta.resolve("eslint-config-setup"));
+    const configPath = path.join(path.dirname(packageEntry), "configs", optionsToFilename(options));
 
     try {
-      return (await import(pathToFileURL(configPath).href)).default
+      return (await import(pathToFileURL(configPath).href)).default;
     } catch {
-      throw error
+      throw error;
     }
   }
 }
 
-const config = await getPortableEslintConfig(eslintConfigOptions)
+const config = await getPortableEslintConfig(eslintConfigOptions);
 
 for (const ruleName of Object.keys(legacyBaselineRules)) {
-  disableRule(config, ruleName)
+  disableRule(config, ruleName);
 }
 
 for (const block of config) {
   if (!block.rules) {
-    continue
+    continue;
   }
 
   for (const ruleName of Object.keys(block.rules)) {
@@ -162,7 +162,7 @@ for (const block of config) {
       ruleName.startsWith("testing-library/") ||
       ruleName.startsWith("unused-imports/")
     ) {
-      block.rules[ruleName] = "off"
+      block.rules[ruleName] = "off";
     }
   }
 }
@@ -197,4 +197,4 @@ export default [
       "react/no-unknown-property": "off",
     },
   },
-]
+];

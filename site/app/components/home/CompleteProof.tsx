@@ -1,9 +1,9 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { FRAMEWORKS, STRATEGIES } from "~/data/matrix"
-import contentStats from "~/data/generated/content-stats.json"
+import { FRAMEWORKS, STRATEGIES } from "~/data/matrix";
+import contentStats from "~/data/generated/content-stats.json";
 
-import { WorkflowFlow } from "./WorkflowFlow"
+import { WorkflowFlow } from "./WorkflowFlow";
 
 function EvidenceAxis({
   label,
@@ -12,11 +12,11 @@ function EvidenceAxis({
   items,
   note,
 }: {
-  label: string
-  value: string
-  title: string
-  items: readonly string[]
-  note: string
+  label: string;
+  value: string;
+  title: string;
+  items: readonly string[];
+  note: string;
 }) {
   return (
     <div className="bg-paper px-6 py-6">
@@ -37,7 +37,7 @@ function EvidenceAxis({
       </ul>
       <p className="mt-5 text-[12px] leading-relaxed text-gray-spec">{note}</p>
     </div>
-  )
+  );
 }
 
 export function CompleteProof() {
@@ -76,5 +76,5 @@ export function CompleteProof() {
         <WorkflowFlow />
       </div>
     </div>
-  )
+  );
 }

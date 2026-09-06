@@ -1,5 +1,5 @@
-import solid from "@solidjs/vite-plugin"
-import { defineConfig } from "vitest/config"
+import solid from "@solidjs/vite-plugin";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [solid()],
@@ -8,4 +8,4 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "src/client.test.tsx"],
     globals: true,
   },
-})
+});

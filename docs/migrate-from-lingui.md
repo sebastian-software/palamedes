@@ -53,11 +53,11 @@ The Palamedes transform recognizes Palamedes macro packages; Lingui macro
 imports are left untouched.
 
 ```ts
-import { t, plural, select, selectOrdinal } from "@palamedes/core/macro"
+import { t, plural, select, selectOrdinal } from "@palamedes/core/macro";
 ```
 
 ```tsx
-import { Trans, Plural, Select, SelectOrdinal } from "@palamedes/react/macro"
+import { Trans, Plural, Select, SelectOrdinal } from "@palamedes/react/macro";
 ```
 
 Palamedes requires eager translation macros to live inside a function, method,
@@ -88,10 +88,10 @@ Before:
 After:
 
 ```ts
-import { getI18n } from "@palamedes/runtime"
+import { getI18n } from "@palamedes/runtime";
 
 function currentLocale() {
-  return getI18n().locale
+  return getI18n().locale;
 }
 ```
 
@@ -103,15 +103,15 @@ import time there is no active i18n instance yet.
 Before (Lingui):
 
 ```ts
-t({ id: "checkout.cta", message: "Buy now" })
-defineMessage({ id: "checkout.cta", message: "Buy now" })
+t({ id: "checkout.cta", message: "Buy now" });
+defineMessage({ id: "checkout.cta", message: "Buy now" });
 ```
 
 After:
 
 ```ts
 function checkoutButtonLabel() {
-  return t({ message: "Buy now", context: "checkout button" })
+  return t({ message: "Buy now", context: "checkout button" });
 }
 ```
 
@@ -130,19 +130,19 @@ Before:
 After for Vite:
 
 ```ts
-import { palamedes } from "@palamedes/vite-plugin"
+import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [palamedes()],
-})
+});
 ```
 
 After for Next.js:
 
 ```js
-const { withPalamedes } = require("@palamedes/next-plugin")
+const { withPalamedes } = require("@palamedes/next-plugin");
 
-module.exports = withPalamedes({})
+module.exports = withPalamedes({});
 ```
 
 ## Recommended Migration Order
@@ -167,11 +167,11 @@ Make the active i18n instance available through `@palamedes/runtime`.
 Client-side:
 
 ```ts
-import { createI18n } from "@palamedes/core/compiled"
-import { setClientI18n } from "@palamedes/runtime"
+import { createI18n } from "@palamedes/core/compiled";
+import { setClientI18n } from "@palamedes/runtime";
 
-const i18n = createI18n()
-setClientI18n(i18n)
+const i18n = createI18n();
+setClientI18n(i18n);
 ```
 
 When the app loads generated `.po` catalogs, use the parser-free `/compiled`
@@ -182,18 +182,18 @@ intentional runtime-ICU compatibility path; see the
 ```ts
 // src/po.d.ts
 declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 
-  export const messages: CompiledCatalogMessages
+  export const messages: CompiledCatalogMessages;
 }
 ```
 
 Server-side:
 
 ```ts
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { setServerI18nGetter } from "@palamedes/runtime";
 
-setServerI18nGetter(() => getRequestScopedI18n())
+setServerI18nGetter(() => getRequestScopedI18n());
 ```
 
 For Next.js App Router Server Components on the Node runtime, prefer the
@@ -201,39 +201,39 @@ Next render-lifetime helper:
 
 ```ts
 // src/lib/i18n.server.ts
-import "server-only"
+import "server-only";
 
-import { cache } from "react"
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
-import type { PalamedesI18n } from "@palamedes/core"
+import { cache } from "react";
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import type { PalamedesI18n } from "@palamedes/core";
 
-export const serverI18n = createNextServerI18nScope<PalamedesI18n>()
+export const serverI18n = createNextServerI18nScope<PalamedesI18n>();
 
 const loadActiveServerI18n = cache(async () => {
-  const locale = await resolveLocaleFromCookiesOrHeaders()
-  const i18n = await loadI18n(locale)
-  return { i18n, locale }
-})
+  const locale = await resolveLocaleFromCookiesOrHeaders();
+  const i18n = await loadI18n(locale);
+  return { i18n, locale };
+});
 
 export async function createActiveServerI18n() {
-  const active = await loadActiveServerI18n()
-  serverI18n.activate(active.i18n)
-  return active
+  const active = await loadActiveServerI18n();
+  serverI18n.activate(active.i18n);
+  return active;
 }
 ```
 
 ```tsx
 // app/page.tsx
-import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n } from "@/lib/i18n.server"
+import { t } from "@palamedes/core/macro";
+import { createActiveServerI18n } from "@/lib/i18n.server";
 
 function CheckoutTitle() {
-  return <h1>{t`Checkout`}</h1>
+  return <h1>{t`Checkout`}</h1>;
 }
 
 export default async function Page() {
-  await createActiveServerI18n()
-  return <CheckoutTitle />
+  await createActiveServerI18n();
+  return <CheckoutTitle />;
 }
 ```
 

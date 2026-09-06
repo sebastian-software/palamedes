@@ -1,14 +1,14 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { BENCH_REALISTIC, displayBenchmarkFactor } from "~/data/bench"
-import contentStats from "~/data/generated/content-stats.json"
-import { decisionHref } from "~/data/links"
+import { BENCH_REALISTIC, displayBenchmarkFactor } from "~/data/bench";
+import contentStats from "~/data/generated/content-stats.json";
+import { decisionHref } from "~/data/links";
 
 interface Stat {
-  value: string
-  label: string
-  href: string
-  icon: string
+  value: string;
+  label: string;
+  href: string;
+  icon: string;
 }
 
 /*
@@ -17,17 +17,17 @@ interface Stat {
  * narrower extraction-only scope. bench.ts is guarded against the checked
  * benchmark report, so none of these numbers can silently drift.
  */
-const baseline = BENCH_REALISTIC.rows.find((row) => row.tool === "Palamedes")
-const sameScopeRows = BENCH_REALISTIC.rows.filter((row) => row.sameScope)
+const baseline = BENCH_REALISTIC.rows.find((row) => row.tool === "Palamedes");
+const sameScopeRows = BENCH_REALISTIC.rows.filter((row) => row.sameScope);
 
 if (!baseline || sameScopeRows.length !== 4) {
-  throw new Error("Realistic benchmark is missing the expected same-scope workflows")
+  throw new Error("Realistic benchmark is missing the expected same-scope workflows");
 }
 
 const sameScopeFactors = sameScopeRows.map((row) =>
-  Number.parseInt(displayBenchmarkFactor(row, baseline.medianMs), 10)
-)
-const factorRange = `${Math.min(...sameScopeFactors)}–${Math.max(...sameScopeFactors)}×`
+  Number.parseInt(displayBenchmarkFactor(row, baseline.medianMs), 10),
+);
+const factorRange = `${Math.min(...sameScopeFactors)}–${Math.max(...sameScopeFactors)}×`;
 
 const STATS: Stat[] = [
   {
@@ -54,7 +54,7 @@ const STATS: Stat[] = [
     href: decisionHref(),
     icon: "programming-book",
   },
-]
+];
 
 function StatCell({ stat }: { stat: Stat }) {
   const inner = (
@@ -72,20 +72,20 @@ function StatCell({ stat }: { stat: Stat }) {
       />
       <span className="mt-2 block text-[12.5px] leading-snug text-gray-spec">{stat.label}</span>
     </>
-  )
-  const classes = "block bg-paper px-6 py-6 transition-colors hover:bg-hover-fill"
+  );
+  const classes = "block bg-paper px-6 py-6 transition-colors hover:bg-hover-fill";
   if (stat.href.startsWith("/")) {
     return (
       <Link to={stat.href} viewTransition className={classes}>
         {inner}
       </Link>
-    )
+    );
   }
   return (
     <a href={stat.href} className={classes}>
       {inner}
     </a>
-  )
+  );
 }
 
 export function ProofStrip() {
@@ -95,5 +95,5 @@ export function ProofStrip() {
         <StatCell key={stat.label} stat={stat} />
       ))}
     </div>
-  )
+  );
 }

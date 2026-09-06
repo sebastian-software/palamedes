@@ -1,22 +1,22 @@
-import fs from "node:fs"
-import { mkdir } from "node:fs/promises"
-import path from "node:path"
-import { chromium } from "@playwright/test"
-import { afterEach, expect, test } from "vitest"
+import fs from "node:fs";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { chromium } from "@playwright/test";
+import { afterEach, expect, test } from "vitest";
 
-let browser
+let browser;
 
 function resolveChromiumExecutable() {
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
-    return process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+    return process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   }
 
-  const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   if (process.platform === "darwin" && fs.existsSync(macChrome)) {
-    return macChrome
+    return macChrome;
   }
 
-  return
+  return;
 }
 
 function activeExample() {
@@ -30,7 +30,7 @@ function activeExample() {
     strategy: process.env.PALAMEDES_VERIFY_STRATEGY ?? "",
     subdomainUrl: process.env.PALAMEDES_VERIFY_SUBDOMAIN_URL ?? "",
     tldUrl: process.env.PALAMEDES_VERIFY_TLD_URL ?? "",
-  }
+  };
 }
 
 // The tld strategy derives the locale from a real top-level domain, so the
@@ -41,32 +41,32 @@ const TLD_TEST_HOSTS = [
   "palamedes-i18n.de",
   "palamedes-i18n.es",
   "palamedes-i18n.fr",
-]
+];
 
 function tldHostResolverArgs() {
-  const rules = TLD_TEST_HOSTS.map((host) => `MAP ${host} 127.0.0.1`).join(",")
-  return [`--host-resolver-rules=${rules}`]
+  const rules = TLD_TEST_HOSTS.map((host) => `MAP ${host} 127.0.0.1`).join(",");
+  return [`--host-resolver-rules=${rules}`];
 }
 
 function routeUrl(baseUrl) {
-  return `${baseUrl}/en`
+  return `${baseUrl}/en`;
 }
 
 function germanDocumentUrl(example) {
   if (example.strategy === "route") {
-    return `${example.baseUrl}/de`
+    return `${example.baseUrl}/de`;
   }
   if (example.strategy === "subdomain") {
-    return example.subdomainUrl.replace("//en.", "//de.")
+    return example.subdomainUrl.replace("//en.", "//de.");
   }
   if (example.strategy === "tld") {
-    return example.tldUrl.replace(".com:", ".de:")
+    return example.tldUrl.replace(".com:", ".de:");
   }
-  return `${example.baseUrl}/`
+  return `${example.baseUrl}/`;
 }
 
 function hasClientLocaleProbe(example) {
-  return ["solid-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
+  return ["solid-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id);
 }
 
 function isHydrationMismatch(message) {
@@ -74,7 +74,7 @@ function isHydrationMismatch(message) {
     /\b(?:hydration|hydrate|hydrated)\b.*\b(?:mismatch|failed|error)/iu.test(message) ||
     /\b(?:server rendered|server-rendered)\b.*\b(?:html|text|markup)/iu.test(message) ||
     /\b(?:text content|html)\b.*\b(?:does not match|did not match|mismatch)/iu.test(message)
-  )
+  );
 }
 
 async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorLocale } = {}) {
@@ -82,7 +82,7 @@ async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorL
     args: launchArgs,
     executablePath: resolveChromiumExecutable(),
     headless: true,
-  })
+  });
   const context = await browser.newContext({
     colorScheme: "light",
     locale: browserLocale,
@@ -90,8 +90,8 @@ async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorL
       width: 1440,
       height: 1200,
     },
-  })
-  const page = await context.newPage()
+  });
+  const page = await context.newPage();
 
   if (navigatorLocale) {
     await page.addInitScript((locale) => {
@@ -104,32 +104,32 @@ async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorL
           configurable: true,
           get: () => [locale],
         },
-      })
-    }, navigatorLocale)
+      });
+    }, navigatorLocale);
   }
 
-  return page
+  return page;
 }
 
 afterEach(async () => {
-  await browser?.close()
-  browser = undefined
-})
+  await browser?.close();
+  browser = undefined;
+});
 
 // React recovers from a hydration mismatch instead of throwing, so it only
 // surfaces as a console error. Both buckets are therefore checked together,
 // once the document has settled and again after the locale switch.
 function expectNoRuntimeErrors(pageErrors, hydrationErrors) {
-  expect(pageErrors).toEqual([])
-  expect(hydrationErrors).toEqual([])
+  expect(pageErrors).toEqual([]);
+  expect(hydrationErrors).toEqual([]);
 }
 
 async function currentServerLocale(page) {
-  return (await page.getByTestId("server-locale-value").textContent())?.trim() ?? ""
+  return (await page.getByTestId("server-locale-value").textContent())?.trim() ?? "";
 }
 
 async function waitForClientReady(page) {
-  await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 })
+  await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 });
 }
 
 // The served document carries the locale, but hydration and any revalidation
@@ -137,15 +137,15 @@ async function waitForClientReady(page) {
 // accept the served value and never see the later flip, so the attribute is
 // read again after the app has had time to settle.
 async function expectSettledDocumentLocale(page, locale) {
-  await waitForClientReady(page)
-  await expect.poll(() => page.locator("html").getAttribute("lang")).toBe(locale)
-  await page.waitForTimeout(500)
-  expect(await page.locator("html").getAttribute("lang")).toBe(locale)
+  await waitForClientReady(page);
+  await expect.poll(() => page.locator("html").getAttribute("lang")).toBe(locale);
+  await page.waitForTimeout(500);
+  expect(await page.locator("html").getAttribute("lang")).toBe(locale);
 }
 
 async function expectTanStackServerFunctionMessages(page, locale) {
   if (activeExample().id !== "tanstack-cookie") {
-    return
+    return;
   }
 
   const messages =
@@ -161,18 +161,18 @@ async function expectTanStackServerFunctionMessages(page, locale) {
           ["server-proof-sync", "Synchronous server helper confirmed locale."],
           ["server-proof-async", "Asynchronous server helper confirmed locale."],
           ["server-proof-cross-module", "Cross-module server helper confirmed locale."],
-        ]
+        ];
 
   for (const [testId, expected] of messages) {
     await expect
       .poll(async () => (await page.getByTestId(testId).textContent())?.trim() ?? "")
-      .toBe(expected)
+      .toBe(expected);
   }
 }
 
 async function expectRemixClientProof(page, locale, count) {
   if (activeExample().id !== "remix-cookie") {
-    return
+    return;
   }
 
   const messages =
@@ -188,19 +188,21 @@ async function expectRemixClientProof(page, locale, count) {
           plural: `${count} ${count === 1 ? "mensaje" : "mensajes"} del navegador`,
           rich: "Abre la guía del cliente de Remix.",
           select: "Creado para desarrolladores",
-        }
+        };
 
-  await expect.poll(() => page.getByTestId("client-heading").textContent()).toBe(messages.heading)
-  await expect.poll(() => page.getByTestId("client-rich-message").textContent()).toBe(messages.rich)
+  await expect.poll(() => page.getByTestId("client-heading").textContent()).toBe(messages.heading);
+  await expect
+    .poll(() => page.getByTestId("client-rich-message").textContent())
+    .toBe(messages.rich);
   await expect
     .poll(() => page.getByTestId("client-rich-message").locator("a").getAttribute("href"))
-    .toBe("/frames")
+    .toBe("/frames");
   await expect
     .poll(() => page.getByTestId("client-plural-message").textContent())
-    .toBe(messages.plural)
+    .toBe(messages.plural);
   await expect
     .poll(() => page.getByTestId("client-select-message").textContent())
-    .toBe(messages.select)
+    .toBe(messages.select);
 }
 
 async function stabilizePage(page) {
@@ -216,44 +218,44 @@ async function stabilizePage(page) {
       }
     `,
     })
-    .catch(() => {})
+    .catch(() => {});
 }
 
 async function captureScreenshot(page, example, state) {
   if (!example.captureScreenshots || !example.screenshotDir) {
-    return
+    return;
   }
 
-  await mkdir(example.screenshotDir, { recursive: true })
-  await stabilizePage(page)
+  await mkdir(example.screenshotDir, { recursive: true });
+  await stabilizePage(page);
   await page.screenshot({
     fullPage: true,
     path: path.join(example.screenshotDir, `${example.id}-${state}.png`),
-  })
+  });
 }
 
 test("Waku initial HTML document uses the request locale", async () => {
-  const example = activeExample()
+  const example = activeExample();
   if (example.framework !== "waku") {
-    return
+    return;
   }
 
   const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
     browserLocale: "de-DE",
-  })
+  });
   const response = await page.goto(germanDocumentUrl(example), {
     waitUntil: "domcontentloaded",
-  })
-  expect(response).not.toBeNull()
+  });
+  expect(response).not.toBeNull();
 
-  const initialHtml = await response.text()
-  const documentLocale = initialHtml.match(/<html\b[^>]*\blang=["']([^"']+)["']/iu)?.[1]
-  expect(documentLocale).toBe("de")
-})
+  const initialHtml = await response.text();
+  const documentLocale = initialHtml.match(/<html\b[^>]*\blang=["']([^"']+)["']/iu)?.[1];
+  expect(documentLocale).toBe("de");
+});
 
 test("matrix example browser contract", async () => {
-  const example = activeExample()
-  expect(example.id).not.toBe("")
+  const example = activeExample();
+  expect(example.id).not.toBe("");
 
   const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
     // The browser sends es-ES to SSR, while client code sees en-US. A client
@@ -261,15 +263,15 @@ test("matrix example browser contract", async () => {
     // the Spanish server document during hydration.
     browserLocale: example.strategy === "cookie" ? "es-ES" : "en-US",
     navigatorLocale: example.strategy === "cookie" ? "en-US" : undefined,
-  })
-  const pageErrors = []
-  const hydrationErrors = []
-  page.on("pageerror", (error) => pageErrors.push(error.message))
+  });
+  const pageErrors = [];
+  const hydrationErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error" && isHydrationMismatch(message.text())) {
-      hydrationErrors.push(message.text())
+      hydrationErrors.push(message.text());
     }
-  })
+  });
 
   const initialUrl =
     example.strategy === "route"
@@ -278,145 +280,145 @@ test("matrix example browser contract", async () => {
         ? example.subdomainUrl
         : example.strategy === "tld"
           ? example.tldUrl
-          : `${example.baseUrl}/`
-  const initialResponse = await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
+          : `${example.baseUrl}/`;
+  const initialResponse = await page.goto(initialUrl, { waitUntil: "domcontentloaded" });
 
   if (example.id === "remix-cookie") {
-    expect(initialResponse).not.toBeNull()
-    const initialHtml = await initialResponse.text()
-    expect(initialHtml).toContain("Palamedes está activo en el navegador")
-    expect(initialHtml).toContain("Abre la ")
-    expect(initialHtml).toContain("guía del cliente de Remix")
-    expect(initialHtml).toContain('id="palamedes-i18n-bootstrap"')
-    expect(initialHtml).toContain('src="/assets/app/public/client.tsx"')
-    expect(initialHtml).not.toContain('data-testid="client-ready"')
+    expect(initialResponse).not.toBeNull();
+    const initialHtml = await initialResponse.text();
+    expect(initialHtml).toContain("Palamedes está activo en el navegador");
+    expect(initialHtml).toContain("Abre la ");
+    expect(initialHtml).toContain("guía del cliente de Remix");
+    expect(initialHtml).toContain('id="palamedes-i18n-bootstrap"');
+    expect(initialHtml).toContain('src="/assets/app/public/client.tsx"');
+    expect(initialHtml).not.toContain('data-testid="client-ready"');
   }
 
   if (example.strategy === "client") {
-    const mdxPage = page.getByTestId("mdx-page")
+    const mdxPage = page.getByTestId("mdx-page");
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("Palamedes MDX handbook")
+      .toContain("Palamedes MDX handbook");
 
-    await page.getByTestId("page-link-extraction").click()
+    await page.getByTestId("page-link-extraction").click();
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("Extract once, render everywhere")
+      .toContain("Extract once, render everywhere");
 
-    await page.getByTestId("page-link-runtime").click()
+    await page.getByTestId("page-link-runtime").click();
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("One locale per document")
+      .toContain("One locale per document");
 
-    await page.getByTestId("locale-switch-de").click()
+    await page.getByTestId("locale-switch-de").click();
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("Eine Sprache pro Dokument")
+      .toContain("Eine Sprache pro Dokument");
 
-    await page.getByTestId("page-link-welcome").click()
+    await page.getByTestId("page-link-welcome").click();
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("Palamedes-MDX-Handbuch")
-    expectNoRuntimeErrors(pageErrors, hydrationErrors)
-    await captureScreenshot(page, example, "interactive")
-    return
+      .toContain("Palamedes-MDX-Handbuch");
+    expectNoRuntimeErrors(pageErrors, hydrationErrors);
+    await captureScreenshot(page, example, "interactive");
+    return;
   }
 
   await expect
     .poll(() => currentServerLocale(page))
-    .toMatch(example.strategy === "cookie" ? /español/iu : /english/iu)
-  await expectSettledDocumentLocale(page, example.strategy === "cookie" ? "es" : "en")
-  expectNoRuntimeErrors(pageErrors, hydrationErrors)
+    .toMatch(example.strategy === "cookie" ? /español/iu : /english/iu);
+  await expectSettledDocumentLocale(page, example.strategy === "cookie" ? "es" : "en");
+  expectNoRuntimeErrors(pageErrors, hydrationErrors);
   if (hasClientLocaleProbe(example)) {
     await expect
       .poll(() => page.getByTestId("client-locale-value").textContent())
-      .toBe("Añadir al carrito")
+      .toBe("Añadir al carrito");
   }
-  await expectRemixClientProof(page, "es", 1)
+  await expectRemixClientProof(page, "es", 1);
   if (example.id === "remix-cookie") {
-    await page.getByTestId("client-increment").click()
-    await expectRemixClientProof(page, "es", 2)
+    await page.getByTestId("client-increment").click();
+    await expectRemixClientProof(page, "es", 2);
   }
-  await captureScreenshot(page, example, "initial")
+  await captureScreenshot(page, example, "initial");
 
   if (example.strategy === "cookie") {
-    const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 })
+    const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 });
     await page
       .getByTestId("locale-switch-de")
-      .click({ force: true, noWaitAfter: true, timeout: 15_000 })
-    await navigation
+      .click({ force: true, noWaitAfter: true, timeout: 15_000 });
+    await navigation;
 
-    await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("de")
-    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+    await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("de");
+    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
-    await waitForClientReady(page)
+    await waitForClientReady(page);
     if (example.id === "remix-cookie") {
-      await expectRemixClientProof(page, "de", 1)
-      await page.getByTestId("client-increment").click()
-      await expectRemixClientProof(page, "de", 2)
-      await expectSettledDocumentLocale(page, "de")
-      expectNoRuntimeErrors(pageErrors, hydrationErrors)
-      await captureScreenshot(page, example, "interactive")
-      return
+      await expectRemixClientProof(page, "de", 1);
+      await page.getByTestId("client-increment").click();
+      await expectRemixClientProof(page, "de", 2);
+      await expectSettledDocumentLocale(page, "de");
+      expectNoRuntimeErrors(pageErrors, hydrationErrors);
+      await captureScreenshot(page, example, "interactive");
+      return;
     }
     if (example.id === "nextjs-cookie") {
-      await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("In den Warenkorb")
+      await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("In den Warenkorb");
       await expect
         .poll(async () => (await page.locator("body").innerText()).includes("Add to cart"))
-        .toBe(false)
+        .toBe(false);
     }
     await page.evaluate(() => {
-      document.querySelector('[data-testid="server-proof-trigger"]')?.click()
-    })
+      document.querySelector('[data-testid="server-proof-trigger"]')?.click();
+    });
     await expect
       .poll(
-        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "",
       )
-      .toContain("de")
+      .toContain("de");
     if (example.id === "waku-cookie") {
       await expect
         .poll(() => page.getByTestId("server-proof-sync").textContent())
-        .toBe("Synchroner Serveraktionshelfer bestätigte Sprache.")
+        .toBe("Synchroner Serveraktionshelfer bestätigte Sprache.");
       await expect
         .poll(() => page.getByTestId("server-proof-async").textContent())
-        .toBe("Asynchroner Serveraktionshelfer bestätigte Sprache.")
+        .toBe("Asynchroner Serveraktionshelfer bestätigte Sprache.");
       await expect
         .poll(() => page.getByTestId("server-proof-cross-module").textContent())
-        .toBe("Modulübergreifender Serveraktionshelfer bestätigte Sprache.")
+        .toBe("Modulübergreifender Serveraktionshelfer bestätigte Sprache.");
       await expect
         .poll(() => page.getByTestId("server-proof-default-parameter").textContent())
-        .toBe("Parameterstandard bestätigte Sprache.")
+        .toBe("Parameterstandard bestätigte Sprache.");
 
-      const englishContext = await browser.newContext({ locale: "en-US" })
-      const englishPage = await englishContext.newPage()
-      await englishPage.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" })
-      await waitForClientReady(englishPage)
+      const englishContext = await browser.newContext({ locale: "en-US" });
+      const englishPage = await englishContext.newPage();
+      await englishPage.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" });
+      await waitForClientReady(englishPage);
       await Promise.all([
         page.evaluate(() =>
-          document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+          document.querySelector('[data-testid="server-proof-trigger"]')?.click(),
         ),
         englishPage.evaluate(() =>
-          document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+          document.querySelector('[data-testid="server-proof-trigger"]')?.click(),
         ),
-      ])
+      ]);
       await expect
         .poll(
-          async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+          async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "",
         )
-        .toContain("de")
+        .toContain("de");
       await expect
         .poll(
           async () =>
-            (await englishPage.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+            (await englishPage.getByTestId("server-proof-message").textContent())?.trim() ?? "",
         )
-        .toContain("en")
-      await englishContext.close()
+        .toContain("en");
+      await englishContext.close();
     }
-    await expectTanStackServerFunctionMessages(page, "de")
-    await expectSettledDocumentLocale(page, "de")
-    expectNoRuntimeErrors(pageErrors, hydrationErrors)
-    await captureScreenshot(page, example, "interactive")
-    return
+    await expectTanStackServerFunctionMessages(page, "de");
+    await expectSettledDocumentLocale(page, "de");
+    expectNoRuntimeErrors(pageErrors, hydrationErrors);
+    await captureScreenshot(page, example, "interactive");
+    return;
   }
 
   if (example.strategy === "subdomain") {
@@ -424,24 +426,24 @@ test("matrix example browser contract", async () => {
     // label is authoritative, so the path stays "/".
     await page
       .getByTestId("locale-switch-de")
-      .click({ force: true, noWaitAfter: true, timeout: 15_000 })
-    await page.waitForURL(/de\.lvh\.me/)
-    expect(page.url()).toContain("de.lvh.me")
-    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+      .click({ force: true, noWaitAfter: true, timeout: 15_000 });
+    await page.waitForURL(/de\.lvh\.me/);
+    expect(page.url()).toContain("de.lvh.me");
+    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
-    await waitForClientReady(page)
+    await waitForClientReady(page);
     await page.evaluate(() => {
-      document.querySelector('[data-testid="server-proof-trigger"]')?.click()
-    })
+      document.querySelector('[data-testid="server-proof-trigger"]')?.click();
+    });
     await expect
       .poll(
-        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "",
       )
-      .toContain("de")
-    await expectSettledDocumentLocale(page, "de")
-    expectNoRuntimeErrors(pageErrors, hydrationErrors)
-    await captureScreenshot(page, example, "interactive")
-    return
+      .toContain("de");
+    await expectSettledDocumentLocale(page, "de");
+    expectNoRuntimeErrors(pageErrors, hydrationErrors);
+    await captureScreenshot(page, example, "interactive");
+    return;
   }
 
   if (example.strategy === "tld") {
@@ -449,58 +451,58 @@ test("matrix example browser contract", async () => {
     // host); the tld is authoritative for the locale, so the path stays "/".
     await page
       .getByTestId("locale-switch-de")
-      .click({ force: true, noWaitAfter: true, timeout: 15_000 })
-    await page.waitForURL(/palamedes-i18n\.de/)
-    expect(page.url()).toContain("palamedes-i18n.de")
-    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+      .click({ force: true, noWaitAfter: true, timeout: 15_000 });
+    await page.waitForURL(/palamedes-i18n\.de/);
+    expect(page.url()).toContain("palamedes-i18n.de");
+    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
-    await waitForClientReady(page)
+    await waitForClientReady(page);
     await page.evaluate(() => {
-      document.querySelector('[data-testid="server-proof-trigger"]')?.click()
-    })
+      document.querySelector('[data-testid="server-proof-trigger"]')?.click();
+    });
     await expect
       .poll(
-        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "",
       )
-      .toContain("de")
-    await expectSettledDocumentLocale(page, "de")
-    expectNoRuntimeErrors(pageErrors, hydrationErrors)
-    await captureScreenshot(page, example, "interactive")
-    return
+      .toContain("de");
+    await expectSettledDocumentLocale(page, "de");
+    expectNoRuntimeErrors(pageErrors, hydrationErrors);
+    await captureScreenshot(page, example, "interactive");
+    return;
   }
 
   await page
     .getByTestId("locale-switch-de")
-    .click({ force: true, noWaitAfter: true, timeout: 15_000 })
-  await page.waitForURL(/\/de$/)
-  expect(page.url()).toContain("/de")
-  await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+    .click({ force: true, noWaitAfter: true, timeout: 15_000 });
+  await page.waitForURL(/\/de$/);
+  expect(page.url()).toContain("/de");
+  await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
-  await waitForClientReady(page)
+  await waitForClientReady(page);
   await page.evaluate(() => {
-    document.querySelector('[data-testid="server-proof-trigger"]')?.click()
-  })
+    document.querySelector('[data-testid="server-proof-trigger"]')?.click();
+  });
   await expect
     .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
-    .toContain("de")
-  await expectSettledDocumentLocale(page, "de")
-  expectNoRuntimeErrors(pageErrors, hydrationErrors)
-  await captureScreenshot(page, example, "interactive")
+    .toContain("de");
+  await expectSettledDocumentLocale(page, "de");
+  expectNoRuntimeErrors(pageErrors, hydrationErrors);
+  await captureScreenshot(page, example, "interactive");
 
   if (!example.hostMismatchUrl) {
-    throw new Error(`Missing host mismatch URL for route example ${example.id}`)
+    throw new Error(`Missing host mismatch URL for route example ${example.id}`);
   }
 
-  await page.goto(example.hostMismatchUrl, { waitUntil: "domcontentloaded" })
-  await page.getByTestId("locale-suggestion-cta").waitFor({ state: "visible", timeout: 15_000 })
+  await page.goto(example.hostMismatchUrl, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("locale-suggestion-cta").waitFor({ state: "visible", timeout: 15_000 });
   await page
     .getByTestId("locale-suggestion-cta")
-    .click({ force: true, noWaitAfter: true, timeout: 15_000 })
-  await page.waitForURL(/\/de$/)
-  expect(page.url()).toContain("/de")
-  expect(page.url()).toContain("de.lvh.me")
-  await waitForClientReady(page)
-  await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
-  await expectSettledDocumentLocale(page, "de")
-  expectNoRuntimeErrors(pageErrors, hydrationErrors)
-})
+    .click({ force: true, noWaitAfter: true, timeout: 15_000 });
+  await page.waitForURL(/\/de$/);
+  expect(page.url()).toContain("/de");
+  expect(page.url()).toContain("de.lvh.me");
+  await waitForClientReady(page);
+  await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
+  await expectSettledDocumentLocale(page, "de");
+  expectNoRuntimeErrors(pageErrors, hydrationErrors);
+});

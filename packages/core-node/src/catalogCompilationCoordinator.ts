@@ -1,13 +1,13 @@
-import path from "node:path"
+import path from "node:path";
 
 type CatalogCompilationCompletion =
   | { ok: true }
   | {
-      ok: false
-      error: unknown
-    }
+      ok: false;
+      error: unknown;
+    };
 
-const initialCatalogBuilds = new Map<string, Promise<CatalogCompilationCompletion>>()
+const initialCatalogBuilds = new Map<string, Promise<CatalogCompilationCompletion>>();
 
 /**
  * Keep same-key cache misses out of the native worker pool until the first
@@ -17,48 +17,48 @@ const initialCatalogBuilds = new Map<string, Promise<CatalogCompilationCompletio
  */
 export async function coordinateInitialCatalogBuild<T>(
   key: string,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
 ): Promise<T> {
-  const current = initialCatalogBuilds.get(key)
+  const current = initialCatalogBuilds.get(key);
   if (current) {
-    const currentCompletion = await current
+    const currentCompletion = await current;
     if (!currentCompletion.ok) {
-      throw currentCompletion.error
+      throw currentCompletion.error;
     }
-    return operation()
+    return operation();
   }
 
-  const result = Promise.resolve().then(operation)
+  const result = Promise.resolve().then(operation);
   const completion: Promise<CatalogCompilationCompletion> = result.then(
     (): CatalogCompilationCompletion => ({ ok: true }),
-    (error: unknown): CatalogCompilationCompletion => ({ ok: false, error })
-  )
-  initialCatalogBuilds.set(key, completion)
+    (error: unknown): CatalogCompilationCompletion => ({ ok: false, error }),
+  );
+  initialCatalogBuilds.set(key, completion);
 
   try {
-    return await result
+    return await result;
   } finally {
     if (initialCatalogBuilds.get(key) === completion) {
-      initialCatalogBuilds.delete(key)
+      initialCatalogBuilds.delete(key);
     }
   }
 }
 
 export function selectedCatalogBuildKey(
   config: {
-    rootDir: string
-    locales: string[]
-    sourceLocale: string
-    fallbackLocales?: string[] | Record<string, string[]>
-    pseudoLocale?: string
+    rootDir: string;
+    locales: string[];
+    sourceLocale: string;
+    fallbackLocales?: string[] | Record<string, string[]>;
+    pseudoLocale?: string;
     catalogs: Array<{
-      path: string
-      format?: string
-      include?: string[]
-      exclude?: string[]
-    }>
+      path: string;
+      format?: string;
+      include?: string[];
+      exclude?: string[];
+    }>;
   },
-  resourcePath: string
+  resourcePath: string,
 ): string {
   return JSON.stringify({
     rootDir: path.resolve(config.rootDir),
@@ -68,5 +68,5 @@ export function selectedCatalogBuildKey(
     fallbackLocales: config.fallbackLocales,
     pseudoLocale: config.pseudoLocale,
     catalogs: config.catalogs,
-  })
+  });
 }

@@ -1,26 +1,26 @@
-import { transformMacrosNative, type NativeTransformResult } from "@palamedes/core-node"
+import { transformMacrosNative, type NativeTransformResult } from "@palamedes/core-node";
 
-import type { SourceMap, TransformOptions, TransformResult } from "./types"
-import { mightContainPalamedesMacros, mightContainServerFunctions } from "./detect"
+import type { SourceMap, TransformOptions, TransformResult } from "./types";
+import { mightContainPalamedesMacros, mightContainServerFunctions } from "./detect";
 
 function buildTransformOutput(
   filename: string,
-  nativeResult: NativeTransformResult
+  nativeResult: NativeTransformResult,
 ): TransformResult {
   return {
     code: nativeResult.code,
     hasChanged: true,
     compiledIds: nativeResult.compiledIds,
     map: toTransformSourceMap(nativeResult.map, filename),
-  }
+  };
 }
 
 function toTransformSourceMap(
   map: NativeTransformResult["map"],
-  filename: string
+  filename: string,
 ): SourceMap | null {
   if (!map) {
-    return null
+    return null;
   }
 
   return {
@@ -30,25 +30,25 @@ function toTransformSourceMap(
     names: map.names,
     mappings: map.mappings,
     file: map.file ?? filename,
-  }
+  };
 }
 
 export function transformPalamedesMacros(
   code: string,
   filename: string,
-  options: TransformOptions = {}
+  options: TransformOptions = {},
 ): TransformResult {
   const mightNeedServerFunctionTransform =
-    options.serverFunctions !== undefined && mightContainServerFunctions(code)
+    options.serverFunctions !== undefined && mightContainServerFunctions(code);
 
   if (!mightContainPalamedesMacros(code) && !mightNeedServerFunctionTransform) {
-    return { code, hasChanged: false, compiledIds: [], map: null }
+    return { code, hasChanged: false, compiledIds: [], map: null };
   }
 
-  const result = transformMacrosNative(code, filename, options)
+  const result = transformMacrosNative(code, filename, options);
   if (!result.hasChanged) {
-    return { code, hasChanged: false, compiledIds: [], map: null }
+    return { code, hasChanged: false, compiledIds: [], map: null };
   }
 
-  return buildTransformOutput(filename, result)
+  return buildTransformOutput(filename, result);
 }

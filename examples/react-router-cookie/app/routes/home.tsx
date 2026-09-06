@@ -1,14 +1,14 @@
-import { Link, redirect } from "react-router"
-import { t } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
-import type { Route } from "./+types/home"
-import { ClientReady } from "~/components/ClientReady"
-import { LocaleSwitcher } from "~/components/LocaleSwitcher"
-import { ProofPanel } from "~/components/ProofPanel"
-import { TicketPanel } from "~/components/TicketPanel"
-import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n"
-import { activateServerI18n } from "~/lib/i18n.server"
+import { Link, redirect } from "react-router";
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
+import type { Route } from "./+types/home";
+import { ClientReady } from "~/components/ClientReady";
+import { LocaleSwitcher } from "~/components/LocaleSwitcher";
+import { ProofPanel } from "~/components/ProofPanel";
+import { TicketPanel } from "~/components/TicketPanel";
+import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n";
+import { activateServerI18n } from "~/lib/i18n.server";
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -17,35 +17,35 @@ export function meta(_args: Route.MetaArgs) {
       name: "description",
       content: "Cookie-driven Palamedes locale proof for React Router framework mode.",
     },
-  ]
+  ];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const resolved = resolveLocaleFromRequest(request)
-  activateServerI18n(resolved.locale)
+  const resolved = resolveLocaleFromRequest(request);
+  activateServerI18n(resolved.locale);
 
   return {
     locale: resolved.locale,
     localeLabel: getLocaleLabel(resolved.locale),
     source: resolved.source,
-  }
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData()
-  const intent = formData.get("intent")
-  const resolved = resolveLocaleFromRequest(request)
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const resolved = resolveLocaleFromRequest(request);
 
   if (intent === "set-locale") {
-    const locale = String(formData.get("locale") ?? resolved.locale)
+    const locale = String(formData.get("locale") ?? resolved.locale);
     return redirect("/", {
       headers: {
         "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
       },
-    })
+    });
   }
 
-  activateServerI18n(resolved.locale)
+  activateServerI18n(resolved.locale);
 
   return {
     proof: {
@@ -54,11 +54,11 @@ export async function action({ request }: Route.ActionArgs) {
       localeLabel: getLocaleLabel(resolved.locale),
       message: t`Server action confirmed locale ${resolved.locale}.`,
     },
-  }
+  };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { locale, localeLabel } = loaderData
+  const { locale, localeLabel } = loaderData;
 
   return (
     <main className="page-shell">
@@ -107,5 +107,5 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       <ClientReady />
     </main>
-  )
+  );
 }

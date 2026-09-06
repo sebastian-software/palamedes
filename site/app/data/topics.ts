@@ -12,51 +12,51 @@
  * about running machine translation over catalogs you keep.
  */
 
-import { BENCH_REALISTIC } from "./bench"
-import contentStats from "./generated/content-stats.json"
-import { docsHref } from "./links"
-import type { TOPIC_SLUGS, TopicSlug } from "./topic-slugs"
-import type { StreamlineIconName } from "~/components/icons/StreamlineIcon"
+import { BENCH_REALISTIC } from "./bench";
+import contentStats from "./generated/content-stats.json";
+import { docsHref } from "./links";
+import type { TOPIC_SLUGS, TopicSlug } from "./topic-slugs";
+import type { StreamlineIconName } from "~/components/icons/StreamlineIcon";
 
 export interface TopicFaq {
-  q: string
-  a: string
+  q: string;
+  a: string;
 }
 
 export interface TopicPoint {
-  title: string
-  body: string
+  title: string;
+  body: string;
 }
 
 export interface TopicEvidence {
-  label: string
-  value: string
-  note: string
+  label: string;
+  value: string;
+  note: string;
 }
 
 export interface Topic {
-  slug: TopicSlug
-  icon: StreamlineIconName
-  metaTitle: string
-  metaDescription: string
-  eyebrow: string
-  headline: string
-  lede: string
+  slug: TopicSlug;
+  icon: StreamlineIconName;
+  metaTitle: string;
+  metaDescription: string;
+  eyebrow: string;
+  headline: string;
+  lede: string;
   /** Stated in the reader's words, before any product claim. */
-  problem: { title: string; body: string; symptoms: string[] }
-  answer: { title: string; lede: string; points: TopicPoint[] }
+  problem: { title: string; body: string; symptoms: string[] };
+  answer: { title: string; lede: string; points: TopicPoint[] };
   evidence: {
-    title: string
-    lede: string
-    items: TopicEvidence[]
-    href: string
-    hrefLabel: string
+    title: string;
+    lede: string;
+    items: TopicEvidence[];
+    href: string;
+    hrefLabel: string;
     /** Renders the shared benchmark chart instead of an evidence grid. */
-    chart?: boolean
-  }
-  code?: { caption: string; label: string; code: string; note: string }
-  faq: TopicFaq[]
-  related: { label: string; href: string }[]
+    chart?: boolean;
+  };
+  code?: { caption: string; label: string; code: string; note: string };
+  faq: TopicFaq[];
+  related: { label: string; href: string }[];
 }
 
 type TopicCollection<Slugs extends readonly TopicSlug[] = typeof TOPIC_SLUGS> =
@@ -65,7 +65,7 @@ type TopicCollection<Slugs extends readonly TopicSlug[] = typeof TOPIC_SLUGS> =
     ...infer RemainingSlugs extends readonly TopicSlug[],
   ]
     ? readonly [Topic & { slug: Slug }, ...TopicCollection<RemainingSlugs>]
-    : readonly []
+    : readonly [];
 
 export const TOPICS = [
   {
@@ -456,10 +456,10 @@ select(gender, {
       { label: "Start the quickstart", href: "/get-started" },
     ],
   },
-] satisfies TopicCollection
+] satisfies TopicCollection;
 
 export function topicBySlug(slug: string): Topic {
-  const topic = TOPICS.find((candidate) => candidate.slug === slug)
-  if (!topic) throw new Error(`topics.ts: unknown topic ${slug}`)
-  return topic
+  const topic = TOPICS.find((candidate) => candidate.slug === slug);
+  if (!topic) throw new Error(`topics.ts: unknown topic ${slug}`);
+  return topic;
 }

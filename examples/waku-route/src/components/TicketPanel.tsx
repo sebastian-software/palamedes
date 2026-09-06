@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { plural, t } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import { EVENT } from "@palamedes/example-ui"
+import { useState } from "react";
+import { plural, t } from "@palamedes/core/macro";
+import { Trans as Fmt } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import { EVENT } from "@palamedes/example-ui";
 
 export function TicketPanel() {
-  const [quantity, setQuantity] = useState(1)
-  const when = new Date(EVENT.startsAt)
-  const seats = EVENT.seatsLeft
-  const total = EVENT.ticketPrice * quantity
+  const [quantity, setQuantity] = useState(1);
+  const when = new Date(EVENT.startsAt);
+  const seats = EVENT.seatsLeft;
+  const total = EVENT.ticketPrice * quantity;
 
   return (
     <article className="ticket">
@@ -112,5 +112,5 @@ export function TicketPanel() {
         </button>
       </div>
     </article>
-  )
+  );
 }

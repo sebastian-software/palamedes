@@ -1,8 +1,8 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import contentStats from "~/data/generated/content-stats.json"
-import { frameworkLandingHref } from "~/data/framework-landing"
-import { cellFor, FRAMEWORKS, STRATEGIES, type MatrixCell } from "~/data/matrix"
+import contentStats from "~/data/generated/content-stats.json";
+import { frameworkLandingHref } from "~/data/framework-landing";
+import { cellFor, FRAMEWORKS, STRATEGIES, type MatrixCell } from "~/data/matrix";
 
 function CellContent({ cell }: { cell: MatrixCell }) {
   return (
@@ -31,7 +31,7 @@ function CellContent({ cell }: { cell: MatrixCell }) {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 /*
@@ -104,5 +104,5 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         CI — Remix v3 has a focused browser proof; public hosting is pending.
       </p>
     </div>
-  )
+  );
 }

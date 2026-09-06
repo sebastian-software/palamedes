@@ -1,12 +1,12 @@
-import { Link } from "react-router"
+import { Link } from "react-router";
 
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
-import { CtaBand } from "~/components/home/CtaBand"
-import { FrameworkPackageStats } from "~/components/frameworks/FrameworkPackageStats"
-import type { FrameworkLanding, FrameworkLandingFact } from "~/data/framework-landing"
-import { STRATEGY_CARDS } from "~/data/features"
-import { docsHref } from "~/data/links"
-import { cellFor } from "~/data/matrix"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { CtaBand } from "~/components/home/CtaBand";
+import { FrameworkPackageStats } from "~/components/frameworks/FrameworkPackageStats";
+import type { FrameworkLanding, FrameworkLandingFact } from "~/data/framework-landing";
+import { STRATEGY_CARDS } from "~/data/features";
+import { docsHref } from "~/data/links";
+import { cellFor } from "~/data/matrix";
 
 function Facts({ facts }: { facts: FrameworkLandingFact[] }) {
   return (
@@ -19,16 +19,16 @@ function Facts({ facts }: { facts: FrameworkLandingFact[] }) {
         </div>
       ))}
     </dl>
-  )
+  );
 }
 
 function StrategyGrid({ page }: { page: FrameworkLanding }) {
-  const matrixSlug = page.strategies.matrixSlug
+  const matrixSlug = page.strategies.matrixSlug;
 
   return (
     <div className="hairline-grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
       {STRATEGY_CARDS.map((strategy) => {
-        const cell = matrixSlug ? cellFor(matrixSlug, strategy.slug) : undefined
+        const cell = matrixSlug ? cellFor(matrixSlug, strategy.slug) : undefined;
         return (
           <div key={strategy.title} className="bg-paper px-5 py-5">
             <h3 className="text-[15px] font-bold">{strategy.title}</h3>
@@ -51,10 +51,10 @@ function StrategyGrid({ page }: { page: FrameworkLanding }) {
               </p>
             ) : null}
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
@@ -206,5 +206,5 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
         secondary={page.finalCta.secondary}
       />
     </Page>
-  )
+  );
 }

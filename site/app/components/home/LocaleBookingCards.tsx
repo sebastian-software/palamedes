@@ -1,9 +1,9 @@
-import { useRef } from "react"
+import { useRef } from "react";
 
-import { LOCALE_CARDS, LOCALE_CAPTION } from "~/data/locales"
-import { useCycle } from "~/hooks/useCycle"
-import { useInView } from "~/hooks/useInView"
-import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion"
+import { LOCALE_CARDS, LOCALE_CAPTION } from "~/data/locales";
+import { useCycle } from "~/hooks/useCycle";
+import { useInView } from "~/hooks/useInView";
+import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion";
 
 /*
  * The three-locale booking cards. After hydration (and outside reduced
@@ -11,17 +11,17 @@ import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion"
  * not a tween. The prerendered state is the plain three-card stack.
  */
 export function LocaleBookingCards() {
-  const ref = useRef<HTMLDivElement>(null)
-  const inView = useInView(ref)
-  const reducedMotion = usePrefersReducedMotion()
-  const activeIndex = useCycle(LOCALE_CARDS.length, 2500, inView)
-  const cycling = !reducedMotion
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref);
+  const reducedMotion = usePrefersReducedMotion();
+  const activeIndex = useCycle(LOCALE_CARDS.length, 2500, inView);
+  const cycling = !reducedMotion;
 
   return (
     <figure ref={ref}>
       <div className="hairline-grid grid-cols-3 max-tight:grid-cols-1">
         {LOCALE_CARDS.map((card, index) => {
-          const active = !cycling || index === activeIndex
+          const active = !cycling || index === activeIndex;
           return (
             <div
               key={card.locale}
@@ -40,10 +40,10 @@ export function LocaleBookingCards() {
               </div>
               <p className="mono-nums mt-2 text-[12px] text-gray-spec">{card.date}</p>
             </div>
-          )
+          );
         })}
       </div>
       <figcaption className="micro mt-3 text-[10px] text-gray-spec">{LOCALE_CAPTION}</figcaption>
     </figure>
-  )
+  );
 }

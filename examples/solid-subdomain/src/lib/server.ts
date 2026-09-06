@@ -1,8 +1,8 @@
-import { query } from "@solidjs/router"
-import { getRequestEvent } from "@solidjs/web"
-import { t } from "@palamedes/core/macro"
-import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, locales } from "./i18n"
+import { query } from "@solidjs/router";
+import { getRequestEvent } from "@solidjs/web";
+import { t } from "@palamedes/core/macro";
+import { activateServerI18n } from "./i18n.server";
+import { getLocaleLabel, locales } from "./i18n";
 
 /**
  * Resolve the request locale authoritatively from the host label
@@ -10,23 +10,23 @@ import { getLocaleLabel, locales } from "./i18n"
  * requested, so the `Host` header is available here too.
  */
 export function resolveHostLocale(request: Request | undefined) {
-  const requestHost = request?.headers.get("host") ?? null
-  const acceptLanguageHeader = request?.headers.get("accept-language") ?? null
+  const requestHost = request?.headers.get("host") ?? null;
+  const acceptLanguageHeader = request?.headers.get("accept-language") ?? null;
   const { locale } = locales.resolve({
     strategy: "subdomain",
     acceptLanguageHeader,
     requestHost,
-  })
+  });
 
-  return { acceptLanguageHeader, locale, requestHost }
+  return { acceptLanguageHeader, locale, requestHost };
 }
 
 export const loadHomePageData = query(async () => {
-  "use server"
+  "use server";
 
-  const event = getRequestEvent()
-  const { acceptLanguageHeader, locale, requestHost } = resolveHostLocale(event?.request)
-  activateServerI18n(locale)
+  const event = getRequestEvent();
+  const { acceptLanguageHeader, locale, requestHost } = resolveHostLocale(event?.request);
+  activateServerI18n(locale);
 
   return {
     banner: locales.suggest({
@@ -40,19 +40,19 @@ export const loadHomePageData = query(async () => {
     locale,
     localeLabel: getLocaleLabel(locale),
     renderedAt: new Date().toISOString(),
-  }
-}, "solid-subdomain:home")
+  };
+}, "solid-subdomain:home");
 
 export const getLocalizedServerStatus = query(async () => {
-  "use server"
+  "use server";
 
-  const { locale } = resolveHostLocale(getRequestEvent()?.request)
-  activateServerI18n(locale)
+  const { locale } = resolveHostLocale(getRequestEvent()?.request);
+  activateServerI18n(locale);
 
   return {
     locale,
     localeLabel: getLocaleLabel(locale),
     handledAt: new Date().toISOString(),
     message: t`Server query confirmed locale ${locale}.`,
-  }
-}, "solid-subdomain:status")
+  };
+}, "solid-subdomain:status");

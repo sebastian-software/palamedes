@@ -1,4 +1,4 @@
-import { defineBuildConfig } from "unbuild"
+import { defineBuildConfig } from "unbuild";
 
 export default defineBuildConfig({
   entries: [
@@ -18,4 +18,4 @@ export default defineBuildConfig({
         chunk.name === "index" || chunk.name === "compiled" ? '"use client";' : "",
     },
   },
-})
+});

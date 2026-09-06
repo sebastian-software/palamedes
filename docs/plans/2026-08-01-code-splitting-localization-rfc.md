@@ -70,13 +70,13 @@ that module is a branded map of executable message functions on the parser-free
 compiled ABI:
 
 ```js
-import { defineCompiledCatalog as __palamedesDefineCompiledCatalog } from "@palamedes/core/compiled"
-const __pm0 = (v, r) => r.join("Hallo ", r.value(v, "name"))
+import { defineCompiledCatalog as __palamedesDefineCompiledCatalog } from "@palamedes/core/compiled";
+const __pm0 = (v, r) => r.join("Hallo ", r.value(v, "name"));
 export const messages = __palamedesDefineCompiledCatalog({
   ["<idA>"]: "Konstante",
   ["<idB>"]: __pm0,
-})
-export default { messages }
+});
+export default { messages };
 ```
 
 rendered by the native module renderer in `crates/palamedes-node/src/catalog.rs`
@@ -231,7 +231,7 @@ native source map valid; imports hoist anyway):
 
 ```js
 // appended to Checkout.tsx after macro transform
-import "virtual:palamedes/messages/f3a9c1" // hash of module id
+import "virtual:palamedes/messages/f3a9c1"; // hash of module id
 ```
 
 The plugin resolves that id, calls `compileCatalogArtifactSelected` with the
@@ -241,10 +241,10 @@ the branded parser-free compiled ABI of ADR-022/023), and aggregates them in a
 registration module:
 
 ```js
-import { messages as en } from "virtual:palamedes-messages/f3a9c1/en"
-import { messages as de } from "virtual:palamedes-messages/f3a9c1/de"
-import { registerMessages } from "@palamedes/runtime"
-registerMessages({ en, de })
+import { messages as en } from "virtual:palamedes-messages/f3a9c1/en";
+import { messages as de } from "virtual:palamedes-messages/f3a9c1/de";
+import { registerMessages } from "@palamedes/runtime";
+registerMessages({ en, de });
 ```
 
 The per-locale granularity is not incidental: those per-locale modules are

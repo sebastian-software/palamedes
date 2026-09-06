@@ -1,27 +1,27 @@
-import { createSignal, For } from "solid-js"
-import { buildLocaleSwitchItems } from "@palamedes/solid"
-import { Trans } from "@palamedes/solid/macro"
-import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
-import { setLocaleCookie } from "../lib/server"
+import { createSignal, For } from "solid-js";
+import { buildLocaleSwitchItems } from "@palamedes/solid";
+import { Trans } from "@palamedes/solid/macro";
+import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
+import { setLocaleCookie } from "../lib/server";
 
 type LocaleSwitcherProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
-  const [isPending, setIsPending] = createSignal(false)
+  const [isPending, setIsPending] = createSignal(false);
   const localeSwitchItems = () =>
     buildLocaleSwitchItems({
       locales: LOCALES,
       currentLocale: props.locale,
       labels: LOCALE_LABELS,
-    })
+    });
 
   function handleLocaleChange(nextLocale: Locale) {
-    setIsPending(true)
+    setIsPending(true);
     void setLocaleCookie(nextLocale).then(() => {
-      window.location.assign("/")
-    })
+      window.location.assign("/");
+    });
   }
 
   return (
@@ -45,5 +45,5 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
         </For>
       </div>
     </div>
-  )
+  );
 }

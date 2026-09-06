@@ -1,31 +1,31 @@
-"use client"
+"use client";
 
-import { useTransition } from "react"
-import { buildLocaleSwitchItems } from "@palamedes/react"
-import { Trans } from "@palamedes/react/macro"
-import type { Locale } from "@/lib/i18n"
-import { LOCALE_LABELS, LOCALES } from "@/lib/i18n"
-import { setLocaleAction } from "@/lib/actions"
+import { useTransition } from "react";
+import { buildLocaleSwitchItems } from "@palamedes/react";
+import { Trans } from "@palamedes/react/macro";
+import type { Locale } from "@/lib/i18n";
+import { LOCALE_LABELS, LOCALES } from "@/lib/i18n";
+import { setLocaleAction } from "@/lib/actions";
 
 type LocaleSwitcherProps = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
-  const [isPending, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition();
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
-  })
+  });
 
   function handleLocaleChange(nextLocale: Locale) {
     startTransition(async () => {
-      await setLocaleAction(nextLocale)
+      await setLocaleAction(nextLocale);
       // Locale is document bootstrap state. Start a new document only after the
       // server action has persisted the cookie so server and client agree.
-      window.location.assign("/")
-    })
+      window.location.assign("/");
+    });
   }
 
   return (
@@ -48,5 +48,5 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
         ))}
       </div>
     </div>
-  )
+  );
 }

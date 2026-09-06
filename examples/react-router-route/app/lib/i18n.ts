@@ -1,14 +1,14 @@
-import { createI18n } from "@palamedes/core"
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime"
-import { defineLocaleControls } from "@palamedes/core/locale"
-import { messages as enMessages } from "../locales/en.po"
-import { messages as deMessages } from "../locales/de.po"
-import { messages as esMessages } from "../locales/es.po"
+import { createI18n } from "@palamedes/core";
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
+import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime";
+import { defineLocaleControls } from "@palamedes/core/locale";
+import { messages as enMessages } from "../locales/en.po";
+import { messages as deMessages } from "../locales/de.po";
+import { messages as esMessages } from "../locales/es.po";
 
-export const LOCALES = ["en", "de", "es"] as const
-export const DEFAULT_LOCALE = "en"
-export type Locale = (typeof LOCALES)[number]
+export const LOCALES = ["en", "de", "es"] as const;
+export const DEFAULT_LOCALE = "en";
+export type Locale = (typeof LOCALES)[number];
 
 /** Headless locale controls for this demo (route strategy + host map). */
 export const locales = defineLocaleControls<Locale>({
@@ -21,13 +21,13 @@ export const locales = defineLocaleControls<Locale>({
       es: "es.lvh.me",
     },
   },
-})
+});
 
-export const LOCALE_LABELS = locales.labels
-export const normalizeLocale = locales.normalizeLocale
+export const LOCALE_LABELS = locales.labels;
+export const normalizeLocale = locales.normalizeLocale;
 
 export function getLocaleLabel(locale: Locale): string {
-  return locales.label(locale)
+  return locales.label(locale);
 }
 
 // Demo catalogs are tiny, so they ship statically. That keeps client locale
@@ -38,45 +38,45 @@ const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
-}
+};
 
 export function loadMessages(locale: Locale): CompiledCatalogMessages {
-  return CATALOGS[locale]
+  return CATALOGS[locale];
 }
 
 export function createExampleI18n() {
-  return createI18n()
+  return createI18n();
 }
 
 export function createServerI18n(locale: Locale) {
-  const i18n = createExampleI18n()
-  i18n.load(locale, loadMessages(locale))
-  i18n.activate(locale)
-  return i18n
+  const i18n = createExampleI18n();
+  i18n.load(locale, loadMessages(locale));
+  i18n.activate(locale);
+  return i18n;
 }
 
 export function activateServerI18n(locale: Locale) {
-  return activateScopedServerI18n(createServerI18n(locale))
+  return activateScopedServerI18n(createServerI18n(locale));
 }
 
-const clientI18n = createExampleI18n()
+const clientI18n = createExampleI18n();
 
 export function initializeClientI18n(locale: Locale) {
   if (typeof document === "undefined") {
-    return
+    return;
   }
 
-  clientI18n.load(locale, loadMessages(locale))
-  clientI18n.activate(locale)
-  setClientI18n(clientI18n)
+  clientI18n.load(locale, loadMessages(locale));
+  clientI18n.activate(locale);
+  setClientI18n(clientI18n);
 }
 
 export function getRootRedirectLocale(request: Request) {
-  return locales.preferredLocale(request.headers.get("accept-language"))
+  return locales.preferredLocale(request.headers.get("accept-language"));
 }
 
 export function resolveLocaleFromRequest(request: Request): Locale {
-  const pathname = new URL(request.url).pathname
+  const pathname = new URL(request.url).pathname;
   // Single Fetch revalidates a route through `/<path>.data`, so the locale
   // segment arrives suffixed on every client-side loader call. Without stripping
   // it the root loader falls through to Accept-Language and the document lang
@@ -84,13 +84,13 @@ export function resolveLocaleFromRequest(request: Request): Locale {
   const segment = pathname
     .split("/")
     .filter(Boolean)[0]
-    ?.replace(/\.data$/u, "")
+    ?.replace(/\.data$/u, "");
 
   if (LOCALES.includes(segment as Locale)) {
-    return segment as Locale
+    return segment as Locale;
   }
 
-  return getRootRedirectLocale(request)
+  return getRootRedirectLocale(request);
 }
 
 export function getRouteBanner(request: Request, locale: Locale) {
@@ -100,5 +100,5 @@ export function getRouteBanner(request: Request, locale: Locale) {
     currentLocale: locale,
     pathname: `/${locale}`,
     requestHost: request.headers.get("host"),
-  })
+  });
 }

@@ -1,6 +1,6 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-export type EditorialRailTone = "structural" | "emphasis"
+export type EditorialRailTone = "structural" | "emphasis";
 
 /**
  * A restrained editorial grouping for qualifications, positions, and asides.
@@ -11,13 +11,13 @@ export function EditorialRail({
   tone = "structural",
   className = "",
 }: {
-  children: ReactNode
-  tone?: EditorialRailTone
-  className?: string
+  children: ReactNode;
+  tone?: EditorialRailTone;
+  className?: string;
 }) {
   return (
     <aside className={`pmds-editorial-rail pmds-editorial-rail--${tone} ${className}`}>
       {children}
     </aside>
-  )
+  );
 }

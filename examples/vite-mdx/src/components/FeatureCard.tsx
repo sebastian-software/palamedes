@@ -1,8 +1,8 @@
-import type { PropsWithChildren } from "react"
+import type { PropsWithChildren } from "react";
 
 type FeatureCardProps = PropsWithChildren<{
-  title: string
-}>
+  title: string;
+}>;
 
 export function FeatureCard({ children, title }: FeatureCardProps) {
   return (
@@ -10,5 +10,5 @@ export function FeatureCard({ children, title }: FeatureCardProps) {
       <p className="feature-card-title">{title}</p>
       <div>{children}</div>
     </section>
-  )
+  );
 }
