@@ -72,7 +72,7 @@ stdin before closing it. `describe` asks for the plugin manifest:
 ```json
 {
   "palamedesBinaryPluginProtocol": 1,
-  "hostVersion": "1.10.0",
+  "hostVersion": "<host pmds version>",
   "kind": "describe"
 }
 ```
@@ -101,7 +101,7 @@ A `run` request carries the invocation and resolved project context:
 ```json
 {
   "palamedesBinaryPluginProtocol": 1,
-  "hostVersion": "1.10.0",
+  "hostVersion": "<host pmds version>",
   "kind": "run",
   "command": "inspect",
   "args": ["one", "two"],

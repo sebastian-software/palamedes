@@ -190,7 +190,7 @@ This stage has standalone value even if no further splitting ships: it is what
 the "Larger apps would dynamically import per-locale chunks instead" comment in
 twenty examples silently assumes and the runtime currently cannot honor.
 
-## Variant catalogue
+## Variant catalog
 
 ### V1 — Lazy per-locale catalogs
 

@@ -9,9 +9,9 @@ minor releases.
 All publishable Palamedes packages ship in lockstep.
 
 Published packages declare Node.js `>=22.0.0` unless a package has a specific
-runtime reason to require a higher Node floor. `@palamedes/waku`,
-`@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`;
-server-first `@palamedes/remix` requires `>=24.3.0`. The `@palamedes/cli-*`
+runtime reason to require a higher Node floor. The canonical per-package list is
+the [platform support table](./platform-support.md#nodejs-requirements), which
+is checked against the published `engines.node` fields. The `@palamedes/cli-*`
 platform shells intentionally leave Node compatibility to their `@palamedes/cli`
 wrapper and therefore omit an engine declaration; the `@palamedes/core-node-*`
 native addons are loaded directly by Node and declare `>=22.0.0`. The repository
