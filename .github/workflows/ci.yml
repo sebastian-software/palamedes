@@ -41,6 +41,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      # The standards drift PR carries this marker while its judgement steps are
+      # still open. CI stays red until an agent or a maintainer completes them.
+      - name: Guard against an incomplete standards update
+        shell: bash
+        run: test ! -f .standards/pending.json
+
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
         with:
@@ -165,6 +171,14 @@ jobs:
       - name: Check types
         if: ${{ matrix.full }}
         run: pnpm check-types
+
+      # minimum-release-age=0 mirrors the apply invocation in
+      # renovate-config/standards.json: pnpm defaults minimumReleaseAge to 1440
+      # (24h), so without the bypass `check` resolves the newest standards older
+      # than a day while the stamp was written by apply against the true latest.
+      - name: Check org standards
+        if: ${{ matrix.full }}
+        run: pnpm --config.minimum-release-age=0 dlx @sebastian-software/standards check
 
   validate-musl-native:
     name: validate musl native (linux ${{ matrix.arch }})

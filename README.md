@@ -419,10 +419,25 @@ pnpm check-types
 
 ## License
 
-[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
-
-MIT © 2026 Sebastian Software
+MIT © Sebastian Software GmbH — see [LICENSE](./LICENSE).
 
 The MIT license does not cover third-party marks or Streamline visual assets.
 See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for their separate terms
 and required attribution.
+
+---
+
+<!-- sebastian-software-branding:start -->
+<p align="center">
+  <a href="https://oss.sebastian-software.com">
+    <img src="https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg" alt="Sebastian Software" width="240" />
+  </a>
+</p>
+
+<p align="center">
+  <strong>Built by Sebastian Software</strong> — consulting for TypeScript, React &amp; Rust.<br />
+  <a href="https://sebastian-software.de">Work with us</a> · <a href="https://oss.sebastian-software.com">More open source</a>
+</p>
+
+<p align="center">Copyright &copy; 2025&ndash;2026 Sebastian Software GmbH</p>
+<!-- sebastian-software-branding:end -->

@@ -1,4 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>sebastian-software/renovate-config"]
+  "extends": [
+    "github>sebastian-software/renovate-config",
+    "github>sebastian-software/renovate-config:standards"
+  ]
 }
