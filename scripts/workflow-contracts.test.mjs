@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { checkWorkflowPins, unpinnedActionReferences } from "./check-workflow-pins.mjs";
 import { selectScreenshotExamples } from "./example-matrix.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -78,9 +79,9 @@ describe("workflow contracts", () => {
     expect(setupWorkspace).toContain("rust-cache:");
     expect(setupWorkspace).toContain("registry-url:");
     expect(setupWorkspace).toContain("cache: pnpm");
-    expect(setupWorkspace).toContain("uses: Swatinem/rust-cache@v2");
+    expect(setupWorkspace).toContain("uses: Swatinem/rust-cache@");
     expect(setupWorkspace.indexOf("cache: pnpm")).toBeLessThan(
-      setupWorkspace.indexOf("uses: Swatinem/rust-cache@v2"),
+      setupWorkspace.indexOf("uses: Swatinem/rust-cache@"),
     );
   });
 
@@ -179,7 +180,7 @@ describe("workflow contracts", () => {
     expect(publishNative).toContain("uses: ./.github/actions/verify-musl-native");
     expect(verifyMuslNative).toContain('rustup target add "${{ inputs.rust_target }}"');
     expect(verifyMuslNative).toContain('pnpm --filter "${{ inputs.package_name }}" build');
-    expect(verifyMuslNative).toContain("uses: actions/cache@v5");
+    expect(verifyMuslNative).toContain("uses: actions/cache@");
     expect(verifyMuslNative).toContain("inputs.cargo-cache == 'true'");
     expect(verifyMuslNative).toContain("/usr/local/cargo/registry");
     expect(verifyMuslNative).toContain("rust:1.95-alpine");
@@ -383,6 +384,40 @@ describe("workflow contracts", () => {
       build.indexOf("run: pnpm verify:site-a11y"),
     );
     expect(build).toContain("run: pnpm exec playwright install --with-deps chromium");
+  });
+
+  it("pins every third-party action to a commit SHA with a version comment", async () => {
+    const { checked, problems } = checkWorkflowPins(repositoryRoot);
+
+    expect(problems).toEqual([]);
+    expect(checked).toBeGreaterThan(0);
+
+    // Local composite actions carry no reference to pin; everything else must
+    // name a commit and say which release it is.
+    expect(unpinnedActionReferences("      - uses: ./.github/actions/setup-workspace\n")).toEqual(
+      [],
+    );
+    expect(unpinnedActionReferences("      - uses: actions/checkout@v7\n")).toHaveLength(1);
+
+    const uncommented = `actions/checkout@${"a".repeat(40)}`;
+    expect(unpinnedActionReferences(`      - uses: ${uncommented}\n`)).toEqual([
+      `<memory>:1: ${uncommented} has no version comment`,
+    ]);
+  });
+
+  it("runs the dependency policy and the pin check in CI", async () => {
+    const [ci, packageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("package.json").then(JSON.parse),
+    ]);
+
+    expect(packageJson.scripts["check:workflow-pins"]).toBe(
+      "node ./scripts/check-workflow-pins.mjs",
+    );
+    expect(job(ci, "validate", "validate-rust")).toContain("run: pnpm check:workflow-pins");
+    expect(job(ci, "validate-dependency-policy", "__missing__")).toContain(
+      "uses: EmbarkStudios/cargo-deny-action@",
+    );
   });
 
   it("keeps HTML live smoke probes independent of mutable page copy", async () => {

@@ -36,7 +36,7 @@ export default defineConfig({
       provider: "v8",
       include: ["packages/*/src/**/*.{js,jsx,ts,tsx}"],
       exclude: ["**/*.test.*", "**/*.d.ts"],
-      reporter: ["text-summary", "json-summary"],
+      reporter: ["text-summary", "json-summary", "lcov"],
       reportsDirectory: "coverage/javascript",
       reportOnFailure: true,
     },

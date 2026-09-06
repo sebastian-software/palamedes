@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # The standards drift PR carries this marker while its judgement steps are
       # still open. CI stays red until an agent or a maintainer completes them.
@@ -69,6 +69,12 @@ jobs:
       - name: Check release package set
         if: ${{ matrix.full }}
         run: pnpm check:release-set
+
+      # A floating action tag is resolved at run time, so a moved tag changes
+      # what CI executes without a commit in this repository.
+      - name: Check workflow action pins
+        if: ${{ matrix.full }}
+        run: pnpm check:workflow-pins
 
       - name: Check JavaScript and TypeScript formatting
         run: pnpm format:check
@@ -158,11 +164,22 @@ jobs:
 
       - name: Upload JavaScript coverage summary
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.node == 24 }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: javascript-coverage
           path: coverage/javascript/coverage-summary.json
           if-no-files-found: warn
+
+      # Reported, not gated: a missing or rejected upload must not fail a run
+      # that is otherwise green.
+      - name: Report JavaScript coverage to Codecov
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.node == 24 }}
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        with:
+          files: coverage/javascript/lcov.info
+          flags: javascript
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Test lifecycle-free CLI package
         if: ${{ !matrix.full }}
@@ -210,7 +227,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
@@ -265,7 +282,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
@@ -277,7 +294,9 @@ jobs:
 
       - name: Install cargo-llvm-cov
         if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2
+        with:
+          tool: cargo-llvm-cov
 
       - name: Check Rust formatting
         if: ${{ matrix.lint }}
@@ -290,19 +309,31 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace --locked
 
+      # One instrumented test run, two reports: `report` re-renders the profile
+      # data the first command collected instead of running the suite twice.
       - name: Collect Rust coverage
         if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
         run: |
           mkdir -p coverage/rust
-          cargo llvm-cov --workspace --locked --json --summary-only --output-path coverage/rust/coverage-summary.json
+          cargo llvm-cov --workspace --locked --lcov --output-path coverage/rust/lcov.info
+          cargo llvm-cov report --json --summary-only --output-path coverage/rust/coverage-summary.json
 
       - name: Upload Rust coverage summary
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-coverage
           path: coverage/rust/coverage-summary.json
           if-no-files-found: warn
+
+      - name: Report Rust coverage to Codecov
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        with:
+          files: coverage/rust/lcov.info
+          flags: rust
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Palamedes ships the CLI and core-node addon for six platforms, so
       # anything baked into either artifact multiplies. Checked once, on the
@@ -310,3 +341,26 @@ jobs:
       - name: Check shipped binary sizes
         if: matrix.toolchain == '1.95'
         run: node ./scripts/check-binary-size.mjs
+
+  validate-dependency-policy:
+    name: validate dependency policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The weekly dependency audit reports newly disclosed advisories into a
+      # tracking issue. This gate is the other half: it refuses a disallowed
+      # license, a yanked crate, or an unknown source before it reaches main.
+      - name: Check the dependency policy
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          command: check
+          # Feature coverage comes from `[graph] all-features` in deny.toml.
+          # The action's own default arguments are not accepted by current
+          # cargo-deny releases.
+          arguments: ""
