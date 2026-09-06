@@ -100,6 +100,29 @@ const MECHANISMS = [
   },
 ] as const;
 
+/*
+ * The native core is not one monolith: three first-party crates own the parts
+ * that are not Palamedes-specific. Naming them here keeps the "so it is glue
+ * around oxc and ferrocat?" question answerable with links instead of prose.
+ */
+const FOUNDATION_CRATES = [
+  {
+    name: "ferrocat",
+    role: "Catalog and ICU semantics: PO and FCL parsing, merging, auditing, and compilation.",
+    href: "https://github.com/sebastian-software/ferrocat",
+  },
+  {
+    name: "ferromark",
+    role: "CommonMark and MDX parsing behind the MDX extraction path.",
+    href: "https://github.com/sebastian-software/ferromark",
+  },
+  {
+    name: "ferralk",
+    role: "Parallel source discovery during extraction.",
+    href: "https://github.com/sebastian-software/ferralk",
+  },
+] as const;
+
 const MACHINE_LAYERS = [
   {
     number: "01",
@@ -261,6 +284,30 @@ export default function Architecture() {
             </li>
           ))}
         </ol>
+
+        <div className="mt-10 border-t border-hair pt-7">
+          <p className="micro text-[10px] tracking-label text-gray-spec">
+            First-party Rust foundations
+          </p>
+          <p className="mt-3 max-w-[48rem] text-[14px] leading-relaxed text-ink/80">
+            Three crates from the same open-source family carry the work that is not specific to
+            Palamedes. Each is released separately, so the parsing and traversal layers can be read
+            and reported against on their own.
+          </p>
+          <ul className="mt-6 border-y border-hair">
+            {FOUNDATION_CRATES.map((crate) => (
+              <li
+                key={crate.name}
+                className="grid grid-cols-[10rem_minmax(0,1fr)] gap-5 border-b border-hair px-5 py-4 last:border-b-0 max-grid:grid-cols-1 max-grid:gap-2"
+              >
+                <a href={crate.href} className="text-[15px] font-semibold text-accent">
+                  {crate.name} →
+                </a>
+                <p className="text-[14px] leading-relaxed text-ink/80">{crate.role}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
       </Section>
 
       <CtaBand

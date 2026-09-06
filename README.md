@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
 [![Repository Node >=22.22.0](https://img.shields.io/badge/repository%20node-%3E%3D22.22.0-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
-[![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 [![palamedes version](https://img.shields.io/npm/v/palamedes?label=palamedes)](https://www.npmjs.com/package/palamedes)
 [![palamedes downloads](https://img.shields.io/npm/dm/palamedes?label=downloads)](https://www.npmjs.com/package/palamedes)
@@ -108,6 +107,17 @@ semantics handle the careful work: parsing, extraction, updates, audits,
 diagnostics, and runtime artifact compilation. PO remains the default catalog
 storage, and teams can opt into FCL when they want canonical, merge-friendly
 generated catalogs with cleaner machine-owned metadata.
+
+That core builds on three first-party Rust crates, each developed and
+released in the open:
+
+- [`ferrocat`](https://github.com/sebastian-software/ferrocat) — catalog and
+  ICU semantics: PO and FCL parsing, merging, auditing, and compilation
+  ([ADR-006](adr/006-ferrocat-as-catalog-and-icu-foundation.md))
+- [`ferromark`](https://github.com/sebastian-software/ferromark) — CommonMark
+  and MDX parsing behind the MDX extraction path
+- [`ferralk`](https://github.com/sebastian-software/ferralk) — parallel source
+  discovery for extraction
 
 ## Why Teams Pick Palamedes
 
@@ -268,8 +278,9 @@ export default defineConfig({
 });
 ```
 
+Then add `palamedes.yaml` at the project root:
+
 ```yaml
-# palamedes.yaml
 locales: [en, de]
 source-locale: en
 catalogs:
@@ -345,6 +356,7 @@ Palamedes is opinionated in a few places:
 - `message + context` is the semantic identity
 - `getI18n()` is the public runtime model
 - catalog parsing, updates, audits, PO/FCL storage, and ICU QA live in `ferrocat`
+- MDX parsing lives in `ferromark`, and extraction source discovery in `ferralk`
 - host adapters render modules while the core stays portable
 
 That gives teams more than a benchmark number:
