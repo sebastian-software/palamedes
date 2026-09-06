@@ -1,6 +1,6 @@
 use super::{
-    transform_macros as transform_macros_raw, NativeTransformOptions, NativeTransformResult,
-    ServerFunctionTransformOptions,
+    NativeTransformOptions, NativeTransformResult, ServerFunctionTransformOptions,
+    transform_macros as transform_macros_raw,
 };
 use crate::error::PalamedesResult;
 use crate::extract::extract_messages;
@@ -215,9 +215,11 @@ export const save = withAuth(async () => persist());
     assert!(result.code.contains(
         "export const save = withAuth(async () => {\n  await __palamedesServerFunctionInitializer();\n  return persist();\n})"
     ));
-    assert!(result
-        .code
-        .contains("const hidden = withAuth(async () => hide())"));
+    assert!(
+        result
+            .code
+            .contains("const hidden = withAuth(async () => hide())")
+    );
 }
 
 #[test]
@@ -236,10 +238,12 @@ export const save = withAuth(saveHandler);
             .count(),
         1
     );
-    assert!(result
-        .map
-        .as_ref()
-        .is_some_and(|map| !map.mappings.is_empty()));
+    assert!(
+        result
+            .map
+            .as_ref()
+            .is_some_and(|map| !map.mappings.is_empty())
+    );
 
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &result.code, SourceType::ts()).parse();
@@ -279,9 +283,11 @@ export const remove = withAuth(deleteHandler);
     assert!(result.code.contains(
         "const archiveHandler = async () => {\n  await __palamedesServerFunctionInitializer();\n  return archive();\n};"
     ));
-    assert!(result
-        .code
-        .contains("const deleteHandler = async function ()"));
+    assert!(
+        result
+            .code
+            .contains("const deleteHandler = async function ()")
+    );
 }
 
 #[test]
@@ -372,9 +378,11 @@ export async function second() {}
         result.code.matches("from \"@/i18n/server-action\"").count(),
         1
     );
-    assert!(result
-        .code
-        .contains("import { initServerActionI18n as __palamedesServerFunctionInitializer2 }"));
+    assert!(
+        result
+            .code
+            .contains("import { initServerActionI18n as __palamedesServerFunctionInitializer2 }")
+    );
     assert_eq!(
         result
             .code
@@ -414,9 +422,11 @@ export async function save(format = () => t`Fallback`) { "use server"; return fo
         .expect("a callback default does not run the macro before initialization");
 
     assert!(result.has_changed);
-    assert!(result
-        .code
-        .contains("await __palamedesServerFunctionInitializer();"));
+    assert!(
+        result
+            .code
+            .contains("await __palamedesServerFunctionInitializer();")
+    );
     assert!(result.code.contains("getI18n()._("));
 }
 
@@ -429,9 +439,11 @@ export const label = async () => t`Saved`;
     let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
         .expect("overlapping concise arrow and macro transforms should compose");
 
-    assert!(result
-        .code
-        .contains("await __palamedesServerFunctionInitializer();"));
+    assert!(
+        result
+            .code
+            .contains("await __palamedesServerFunctionInitializer();")
+    );
     assert!(result.code.contains("return getI18n()._("));
     assert!(!result.code.contains("@palamedes/core/macro"));
 }
@@ -462,9 +474,11 @@ fn rejects_invalid_server_function_initializer_exports() {
     )
     .expect_err("invalid generated import syntax must be rejected");
 
-    assert!(error
-        .to_string()
-        .contains("Invalid Server Function initializer import"));
+    assert!(
+        error
+            .to_string()
+            .contains("Invalid Server Function initializer import")
+    );
 }
 
 #[test]
@@ -557,9 +571,11 @@ fn transforms_tagged_templates() {
     assert!(result.code.contains("getI18n()._(\""));
     assert!(result.code.contains("message: \"Hello {name}\""));
     assert!(result.code.contains("{ name }"));
-    assert!(result
-        .code
-        .contains("import { getI18n } from \"@palamedes/runtime\";"));
+    assert!(
+        result
+            .code
+            .contains("import { getI18n } from \"@palamedes/runtime\";")
+    );
     assert_eq!(
         result.compiled_ids,
         vec![compiled_message_key("Hello {name}", None)]
@@ -595,9 +611,11 @@ function Example() {
 
     let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains(r#"import { t as translate, plural as count } from "@palamedes/core/macro";"#));
+    assert!(
+        result.code.contains(
+            r#"import { t as translate, plural as count } from "@palamedes/core/macro";"#
+        )
+    );
     assert!(result.code.contains("[translate]"));
     assert!(result.code.contains("{ translate, count }"));
     assert!(result.code.contains("console.log(count)"));
@@ -615,9 +633,11 @@ function Example() {
 
     let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains(r#"import { t } from "@palamedes/core/macro";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { t } from "@palamedes/core/macro";"#)
+    );
     assert!(result.code.contains("type MacroValue = typeof t"));
     assert!(!result.code.contains("t`Upload failed`"));
 }
@@ -664,9 +684,11 @@ function Example(): Trans {
 
     let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains(r#"import {  type Trans } from "@palamedes/react/macro";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import {  type Trans } from "@palamedes/react/macro";"#)
+    );
     assert!(!result.code.contains("import { t,"));
 }
 
@@ -681,17 +703,23 @@ function Example() {
 
     let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains(r#"import { Trans } from "@palamedes/react/macro";"#));
-    assert!(result
-        .code
-        .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { Trans } from "@palamedes/react/macro";"#)
+    );
+    assert!(
+        result
+            .code
+            .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#)
+    );
     assert!(result.code.contains("<__palamedesTrans id="));
     assert!(result.code.contains("component: Trans"));
-    assert!(!result
-        .code
-        .contains(r#"import { Trans } from "@palamedes/react/compiled";"#));
+    assert!(
+        !result
+            .code
+            .contains(r#"import { Trans } from "@palamedes/react/compiled";"#)
+    );
 
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &result.code, SourceType::tsx()).parse();
@@ -711,14 +739,18 @@ const view = <MacroTrans>Upload failed</MacroTrans>;
 
     let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#)
+    );
     assert!(result.code.contains("const Trans = () => null"));
     assert!(result.code.contains("<__palamedesTrans id="));
-    assert!(!result
-        .code
-        .contains(r#"import { Trans } from "@palamedes/react/compiled";"#));
+    assert!(
+        !result
+            .code
+            .contains(r#"import { Trans } from "@palamedes/react/compiled";"#)
+    );
 }
 
 #[test]
@@ -778,12 +810,16 @@ function Example() {
 
     let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#));
-    assert!(result
-        .code
-        .contains("const Trans = () => \"authored-shadow\""));
+    assert!(
+        result
+            .code
+            .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#)
+    );
+    assert!(
+        result
+            .code
+            .contains("const Trans = () => \"authored-shadow\"")
+    );
     assert!(result.code.contains("return <__palamedesTrans id="));
 }
 
@@ -807,12 +843,16 @@ const msg = t`Hello`;
     .expect("transform should avoid runtime import collisions");
 
     assert!(result.has_changed);
-    assert!(result
-        .code
-        .contains(r#"import { getI18n as __palamedesGetI18n } from "@acme/custom-runtime";"#));
-    assert!(result
-        .code
-        .contains(r#"import { getI18n } from "@palamedes/runtime";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { getI18n as __palamedesGetI18n } from "@acme/custom-runtime";"#)
+    );
+    assert!(
+        result
+            .code
+            .contains(r#"import { getI18n } from "@palamedes/runtime";"#)
+    );
     assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
     assert!(result.code.contains("const locale = getI18n().locale;"));
 }
@@ -841,9 +881,11 @@ const msg = t`Hello`;
         )
         .expect("transform should avoid all import binding collisions");
 
-        assert!(result
-            .code
-            .contains(r#"import { getI18n as __palamedesGetI18n } from "@acme/custom-runtime";"#));
+        assert!(
+            result.code.contains(
+                r#"import { getI18n as __palamedesGetI18n } from "@acme/custom-runtime";"#
+            )
+        );
         assert!(result.code.contains(conflicting_import));
         assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
     }
@@ -862,9 +904,11 @@ function greeting(getI18n: () => string) {
     let result = transform_macros(source, "test.ts", None)
         .expect("transform should avoid nested runtime getter shadowing");
 
-    assert!(result
-        .code
-        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#)
+    );
     assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
     assert!(result.code.contains("const local = getI18n();"));
 }
@@ -889,9 +933,11 @@ const msg = t`Hello`;
     )
     .expect("transform should generate a globally unused runtime alias");
 
-    assert!(result
-        .code
-        .contains(r#"import { getI18n as __palamedesGetI18n3 } from "@acme/custom-runtime";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { getI18n as __palamedesGetI18n3 } from "@acme/custom-runtime";"#)
+    );
     assert!(result.code.contains(r#"__palamedesGetI18n3()._("#));
     assert!(result.code.contains("console.log(__palamedesGetI18n2);"));
 }
@@ -939,9 +985,11 @@ function greeting(getI18n: () => string) {
     let result = transform_macros(source, "test.ts", None)
         .expect("transform should avoid shadowing a matching runtime import");
 
-    assert!(result
-        .code
-        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#)
+    );
     assert_eq!(
         result.code.matches(r#"from "@palamedes/runtime""#).count(),
         2
@@ -961,13 +1009,17 @@ const msg = t`Hello`;
     let result = transform_macros(source, "test.ts", None)
         .expect("transform should import the configured runtime export");
 
-    assert!(result
-        .code
-        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#)
+    );
     assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
-    assert!(result
-        .code
-        .contains(r#"import { createI18n as getI18n } from "@palamedes/runtime";"#));
+    assert!(
+        result
+            .code
+            .contains(r#"import { createI18n as getI18n } from "@palamedes/runtime";"#)
+    );
 }
 
 #[test]
@@ -1055,15 +1107,21 @@ const message = t({
     let descriptor = transform_macros(&descriptor_source, "test.ts", None)
         .expect("descriptor with line terminators should transform");
 
-    assert!(descriptor
-        .code
-        .contains(r#"message: "Line1\rLine2\u2028Line3\u2029Line4""#));
-    assert!(descriptor
-        .code
-        .contains(r#"context: "dialog\rtitle\u2028wide""#));
-    assert!(descriptor
-        .code
-        .contains(r#"comment: "Translator\rnote\u2029continued""#));
+    assert!(
+        descriptor
+            .code
+            .contains(r#"message: "Line1\rLine2\u2028Line3\u2029Line4""#)
+    );
+    assert!(
+        descriptor
+            .code
+            .contains(r#"context: "dialog\rtitle\u2028wide""#)
+    );
+    assert!(
+        descriptor
+            .code
+            .contains(r#"comment: "Translator\rnote\u2029continued""#)
+    );
     for line_terminator in ['\r', '\u{2028}', '\u{2029}'] {
         assert!(!descriptor.code.contains(line_terminator));
     }
@@ -1085,13 +1143,15 @@ const choice = <Plural value={count} one="item" other="items" comment={"Translat
     let jsx = transform_macros(&jsx_source, "test.tsx", None)
         .expect("JSX attributes with line terminators should transform");
 
-    assert!(jsx
-        .code
-        .contains(r#"message={"Line1\rLine2\u2028Line3\u2029Line4"}"#));
+    assert!(
+        jsx.code
+            .contains(r#"message={"Line1\rLine2\u2028Line3\u2029Line4"}"#)
+    );
     assert!(jsx.code.contains(r#"context: "count\rlabel\u2028wide""#));
-    assert!(jsx
-        .code
-        .contains(r#"comment: "Translator\rnote\u2029continued""#));
+    assert!(
+        jsx.code
+            .contains(r#"comment: "Translator\rnote\u2029continued""#)
+    );
     for line_terminator in ['\r', '\u{2028}', '\u{2029}'] {
         assert!(!jsx.code.contains(line_terminator));
     }
@@ -1116,9 +1176,11 @@ const message = t({ message: `Hello ${name}, you have {count}` }, { count });
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("message: \"Hello {name}, you have {count}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"Hello {name}, you have {count}\"")
+    );
     assert!(result.code.contains("{ name, count }"));
 }
 
@@ -1184,9 +1246,11 @@ fn transforms_plural_choice_macros() {
     .expect("transform should succeed");
 
     assert!(result.code.contains("getI18n()._(\""));
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, one {# item} other {# items}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, one {# item} other {# items}}\"")
+    );
     assert!(result.code.contains("{ count }"));
 }
 
@@ -1221,9 +1285,11 @@ fn transforms_plural_choice_with_signal_accessor() {
 
     // A reactive signal read keeps its accessor name instead of falling back to
     // the generic "value" placeholder.
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, one {# item} other {# items}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, one {# item} other {# items}}\"")
+    );
     assert!(result.code.contains("{ count: count() }"));
     assert!(!result.code.contains("{value, plural"));
 }
@@ -1406,9 +1472,11 @@ fn transforms_select_ordinal_choice_macros() {
     .expect("transform should succeed");
 
     assert!(result.code.contains("getI18n()._(\""));
-    assert!(result
-        .code
-        .contains("message: \"{count, selectordinal, one {#st} other {#th}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, selectordinal, one {#st} other {#th}}\"")
+    );
     assert!(result.code.contains("{ count }"));
 }
 
@@ -1421,9 +1489,11 @@ fn transforms_trans_jsx_macro() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("import { Trans } from \"@palamedes/react/compiled\";"));
+    assert!(
+        result
+            .code
+            .contains("import { Trans } from \"@palamedes/react/compiled\";")
+    );
     assert!(result.code.contains("<Trans id=\""));
     assert!(result.code.contains("message={\"Hello {name}\"}"));
     assert!(result.code.contains("values={{ name }}"));
@@ -1439,9 +1509,11 @@ const view = render(Message, { children: ["Hello ", name] });
     let result = transform_macros(source, "view.js", None)
         .expect("Remix rich-message macro should transform");
 
-    assert!(result
-        .code
-        .contains("import { Trans } from \"@palamedes/remix/compiled\";"));
+    assert!(
+        result
+            .code
+            .contains("import { Trans } from \"@palamedes/remix/compiled\";")
+    );
     assert!(result.code.contains("render(Trans, { id: \""));
     assert!(result.code.contains("message: \"Hello {name}\""));
     assert!(result.code.contains("values: { name }"));
@@ -1465,16 +1537,22 @@ export function View() {
     let result = transform_macros(source, "view.js", None)
         .expect("Remix-lowered rich macros should transform");
 
-    assert!(result
-        .code
-        .contains("import { Trans } from \"@palamedes/react/compiled\";"));
+    assert!(
+        result
+            .code
+            .contains("import { Trans } from \"@palamedes/react/compiled\";")
+    );
     assert!(result.code.contains("makeMany(Trans, { id: \""));
-    assert!(result
-        .code
-        .contains("message: \"Hello {name}<0>{name_1}</0><1/><2>now</2>\""));
-    assert!(result
-        .code
-        .contains("values: { name: user.name, name_1: owner.name }"));
+    assert!(
+        result
+            .code
+            .contains("message: \"Hello {name}<0>{name_1}</0><1/><2>now</2>\"")
+    );
+    assert!(
+        result
+            .code
+            .contains("values: { name: user.name, name_1: owner.name }")
+    );
     assert!(result.code.contains(
         "components: { 0: make(\"strong\", { className: \"loud\" }), 1: make(\"Icon\", {  }), 2: make(Button, { title: \"Save\" }) }"
     ));
@@ -1497,15 +1575,21 @@ export function labels(count, gender, position) {
     let result = transform_macros(source, "choices.js", None)
         .expect("Remix-lowered choices should transform");
 
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, offset:1 one {# item} other {# items}}\""));
-    assert!(result
-        .code
-        .contains("message: \"{gender, select, female {She} other {They}}\""));
-    assert!(result
-        .code
-        .contains("message: \"{position, selectordinal, one {#st} other {#th}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, offset:1 one {# item} other {# items}}\"")
+    );
+    assert!(
+        result
+            .code
+            .contains("message: \"{gender, select, female {She} other {They}}\"")
+    );
+    assert!(
+        result
+            .code
+            .contains("message: \"{position, selectordinal, one {#st} other {#th}}\"")
+    );
     assert_eq!(result.compiled_ids.len(), 3);
     assert!(!result.code.contains("render(Count"));
     assert!(!result.code.contains("render(Pick"));
@@ -1565,9 +1649,11 @@ export function View() {
         transformed.compiled_ids,
         vec![compiled_key(&extracted[0].message, None)]
     );
-    assert!(transformed
-        .code
-        .contains("message: \"Hello {name}<0>{name_1}</0><1/> again\""));
+    assert!(
+        transformed
+            .code
+            .contains("message: \"Hello {name}<0>{name_1}</0><1/> again\"")
+    );
 }
 
 #[test]
@@ -1595,9 +1681,11 @@ export function View() {
 
     assert_eq!(extracted[0].message, message);
     assert_eq!(transformed.compiled_ids, vec![compiled_key(message, None)]);
-    assert!(transformed
-        .code
-        .contains(&format!("message: \"{message}\"")));
+    assert!(
+        transformed
+            .code
+            .contains(&format!("message: \"{message}\""))
+    );
     assert!(transformed.code.contains(
         "components: { 0: make(\"strong\", {  }), 1: makeMany(\"strong\", {  }), 2: make(\"em\", {  }) }"
     ));
@@ -1637,9 +1725,11 @@ export function View(count) {
     let error = transform_macros(source, "view.js", None)
         .expect_err("nested message macros should match authored JSX diagnostics");
 
-    assert!(error
-        .to_string()
-        .contains("Nested i18n macro is not extractable as a single message"));
+    assert!(
+        error
+            .to_string()
+            .contains("Nested i18n macro is not extractable as a single message")
+    );
 }
 
 #[test]
@@ -1654,9 +1744,11 @@ export function View() {
     let error = transform_macros(source, "view.js", None)
         .expect_err("nested prop macros must not survive the outer replacement");
 
-    assert!(error
-        .to_string()
-        .contains("macros nested in lowered non-child props cannot be transformed safely"));
+    assert!(
+        error
+            .to_string()
+            .contains("macros nested in lowered non-child props cannot be transformed safely")
+    );
 }
 
 #[test]
@@ -1709,9 +1801,11 @@ const label = render(Count, { value: count, one: "# item", other: "# items" });
     let error = transform_macros_raw(source, "view.js", None)
         .expect_err("lowered choice components stay eager after compilation");
 
-    assert!(error
-        .to_string()
-        .contains("Translation macro `Plural` must be used inside a function at view.js:3:15"));
+    assert!(
+        error
+            .to_string()
+            .contains("Translation macro `Plural` must be used inside a function at view.js:3:15")
+    );
 }
 
 #[test]
@@ -1737,14 +1831,18 @@ fn transforms_solid_trans_jsx_macro() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("import { Trans } from \"@palamedes/solid/compiled\";"));
+    assert!(
+        result
+            .code
+            .contains("import { Trans } from \"@palamedes/solid/compiled\";")
+    );
     assert!(result.code.contains("<Trans id=\""));
     assert!(result.code.contains("message={\"Hello <0>{name}</0>\"}"));
-    assert!(result
-        .code
-        .contains("components={{ 0: (props) => <strong>{props.children}</strong> }}"));
+    assert!(
+        result
+            .code
+            .contains("components={{ 0: (props) => <strong>{props.children}</strong> }}")
+    );
 }
 
 #[test]
@@ -1756,12 +1854,16 @@ fn deduplicates_same_tag_component_placeholders() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("message={\"Accept <0>terms</0> and <1>privacy</1>\"}"));
-    assert!(result
-        .code
-        .contains("components={{ 0: <a href=\"/terms\" />, 1: <a href=\"/privacy\" /> }}"));
+    assert!(
+        result
+            .code
+            .contains("message={\"Accept <0>terms</0> and <1>privacy</1>\"}")
+    );
+    assert!(
+        result
+            .code
+            .contains("components={{ 0: <a href=\"/terms\" />, 1: <a href=\"/privacy\" /> }}")
+    );
 }
 
 #[test]
@@ -1774,9 +1876,11 @@ fn deduplicates_same_tag_component_placeholders_with_identical_markup() {
     .expect("transform should succeed");
 
     assert!(result.code.contains("message={\"<0>A</0> and <1>B</1>\"}"));
-    assert!(result
-        .code
-        .contains("components={{ 0: <strong />, 1: <strong /> }}"));
+    assert!(
+        result
+            .code
+            .contains("components={{ 0: <strong />, 1: <strong /> }}")
+    );
 }
 
 #[test]
@@ -1788,9 +1892,11 @@ fn trans_jsx_macro_uses_self_closing_empty_component_placeholders() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("message={\"I agree to the <0>Commercial Terms<1/></0>\"}"));
+    assert!(
+        result
+            .code
+            .contains("message={\"I agree to the <0>Commercial Terms<1/></0>\"}")
+    );
     assert!(result
         .code
         .contains("components={{ 0: <a href={COMMERCIAL_TERMS_URL} />, 1: <ExternalLink className=\"inline\" /> }}"));
@@ -1817,9 +1923,11 @@ fn normalizes_trans_jsx_placeholder_boundary_whitespace() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("message={\"Reach out to your <0>advisor</0> for help.\"}"));
+    assert!(
+        result
+            .code
+            .contains("message={\"Reach out to your <0>advisor</0> for help.\"}")
+    );
 }
 
 #[test]
@@ -1849,9 +1957,11 @@ fn preserves_trans_jsx_leading_separator_spacing() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("message={\" · ${priceFormatted}/MWh\"}"));
+    assert!(
+        result
+            .code
+            .contains("message={\" · ${priceFormatted}/MWh\"}")
+    );
     assert!(result.code.contains("message={\" — no manager\"}"));
 }
 
@@ -1887,9 +1997,11 @@ fn transforms_plural_jsx_macro() {
     .expect("transform should succeed");
 
     assert!(result.code.contains("getI18n()._(\""));
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, one {# item} other {# items}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, one {# item} other {# items}}\"")
+    );
     assert!(result.code.contains("{ count }"));
 }
 
@@ -1907,12 +2019,16 @@ const jsx = <Plural value={count} offset={1} one="# item" other="# items" />;
     )
     .expect("static plural offsets should transform");
 
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, offset:1 one {# item} other {# items}}\""));
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, offset:2 one {# item} other {# items}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, offset:1 one {# item} other {# items}}\"")
+    );
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, offset:2 one {# item} other {# items}}\"")
+    );
     assert_eq!(
         result
             .code
@@ -2068,9 +2184,11 @@ fn trans_jsx_macro_escapes_double_quotes_in_message_attribute() {
     assert!(result.code.contains(
         "message={\"Upload settlement data file with \\\"3Degrees Audit Summary\\\" tab\"}"
     ));
-    assert!(!result
-        .code
-        .contains("message=\"Upload settlement data file with \\\""));
+    assert!(
+        !result
+            .code
+            .contains("message=\"Upload settlement data file with \\\"")
+    );
 }
 
 #[test]
@@ -2083,12 +2201,16 @@ fn trans_jsx_macro_decodes_entities_before_deriving_message_id() {
     .expect("transform should succeed");
     let message = "Green-e® applies to US & Canada only";
 
-    assert!(result
-        .code
-        .contains("message={\"Green-e® applies to US & Canada only\"}"));
-    assert!(result
-        .code
-        .contains(&format!("id=\"{}\"", compiled_message_key(message, None))));
+    assert!(
+        result
+            .code
+            .contains("message={\"Green-e® applies to US & Canada only\"}")
+    );
+    assert!(
+        result
+            .code
+            .contains(&format!("id=\"{}\"", compiled_message_key(message, None)))
+    );
     assert_eq!(
         result.compiled_ids,
         vec![compiled_message_key(message, None)]
@@ -2105,9 +2227,11 @@ fn trans_jsx_macro_decodes_message_attribute_entities() {
     .expect("transform should succeed");
     let message = "Decision \"Model\" & review";
 
-    assert!(result
-        .code
-        .contains("message={\"Decision \\\"Model\\\" & review\"}"));
+    assert!(
+        result
+            .code
+            .contains("message={\"Decision \\\"Model\\\" & review\"}")
+    );
     assert_eq!(
         result.compiled_ids,
         vec![compiled_message_key(message, None)]
@@ -2145,9 +2269,11 @@ fn choice_jsx_macro_decodes_option_attribute_entities() {
     )
     .expect("transform should succeed");
 
-    assert!(result
-        .code
-        .contains("message: \"{count, plural, one {# item & fee} other {# items & fees}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{count, plural, one {# item & fee} other {# items & fees}}\"")
+    );
 }
 
 #[test]
@@ -2160,9 +2286,11 @@ fn wraps_choice_jsx_macro_when_used_as_jsx_child() {
     .expect("transform should succeed");
 
     assert!(result.code.contains("<p>{getI18n()._(\""));
-    assert!(result
-        .code
-        .contains("message: \"{totalRows, plural, one {# row} other {# rows}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{totalRows, plural, one {# row} other {# rows}}\"")
+    );
     assert!(result.code.contains(")}</p>"));
 }
 
@@ -2332,9 +2460,11 @@ fn accepts_getter_call_choice_jsx_value_names() {
     )
     .expect("transform should accept the same getter value names as extraction");
 
-    assert!(result
-        .code
-        .contains("message: \"{demand, plural, one {# unit} other {# units}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{demand, plural, one {# unit} other {# units}}\"")
+    );
     assert!(result.code.contains("{ demand: getDemand() }"));
 }
 
@@ -2456,15 +2586,21 @@ fn accepts_computed_defaulted_and_literal_choice_values() {
     )
     .expect("choice values should support fallback placeholder names");
 
-    assert!(result
-        .code
-        .contains("message: \"{period, plural, one {# entry} other {# entries}}\""));
-    assert!(result
-        .code
-        .contains("{ period: periodCounts[period] ?? 0 }"));
-    assert!(result
-        .code
-        .contains("message: \"{value, plural, one {# month} other {# months}}\""));
+    assert!(
+        result
+            .code
+            .contains("message: \"{period, plural, one {# entry} other {# entries}}\"")
+    );
+    assert!(
+        result
+            .code
+            .contains("{ period: periodCounts[period] ?? 0 }")
+    );
+    assert!(
+        result
+            .code
+            .contains("message: \"{value, plural, one {# month} other {# months}}\"")
+    );
     assert!(result.code.contains("{ value: 21 }"));
 }
 
@@ -2477,10 +2613,14 @@ fn accepts_defaulted_jsx_choice_values() {
     )
     .expect("JSX choice values should support fallback placeholder names");
 
-    assert!(result
-        .code
-        .contains("message: \"{locationCount, plural, one {# location} other {# locations}}\""));
-    assert!(result
-        .code
-        .contains("{ locationCount: node.locationCount ?? 0 }"));
+    assert!(
+        result
+            .code
+            .contains("message: \"{locationCount, plural, one {# location} other {# locations}}\"")
+    );
+    assert!(
+        result
+            .code
+            .contains("{ locationCount: node.locationCount ?? 0 }")
+    );
 }

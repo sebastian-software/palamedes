@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use palamedes::{measure_catalog_coverage, CatalogCoverageRequest, CatalogCoverageResult};
+use palamedes::{CatalogCoverageRequest, CatalogCoverageResult, measure_catalog_coverage};
 
-use crate::command::{render_json, Command, Context};
+use crate::command::{Command, Context, render_json};
 use crate::commands::normalize_locale_list;
 use crate::config::LoadedConfig;
 use crate::error::CliError;
@@ -141,7 +141,7 @@ fn format_percent(value: f64) -> String {
 mod tests {
     use std::fs;
 
-    use super::{build_report, ReportOptions};
+    use super::{ReportOptions, build_report};
     use crate::command::{Command, Context};
     use crate::commands::test_support::{temp_dir, write_config};
     use crate::config::load_config;

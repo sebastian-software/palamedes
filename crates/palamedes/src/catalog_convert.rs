@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use ferrocat::{ConvertCatalogFileOptions, OrderBy};
 
-use crate::error::{PalamedesError, PalamedesResult};
 use crate::PalamedesCatalogFormat;
+use crate::error::{PalamedesError, PalamedesResult};
 
 /// Request for converting one catalog file into another storage format.
 #[derive(Debug)]
@@ -72,7 +72,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{convert_catalog_file, CatalogFileConvertRequest};
+    use super::{CatalogFileConvertRequest, convert_catalog_file};
     use crate::PalamedesCatalogFormat;
 
     #[test]

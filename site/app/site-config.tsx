@@ -73,7 +73,7 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
         { label: "Stability & versioning", href: docsHref("stability") },
         { label: "Changelog", href: repoHref("CHANGELOG.md") },
         { label: "Security", href: repoHref("SECURITY.md") },
-        { label: "MIT license", href: repoHref("LICENSE") },
+        { label: "MIT OR Apache-2.0 license", href: repoHref("README.md#license") },
       ],
     },
     {
@@ -86,5 +86,6 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
       ],
     },
   ],
-  copyright: "MIT © 2025–2026 Sebastian Software GmbH — built in the open, verified in CI.",
+  copyright:
+    "MIT OR Apache-2.0 © 2025–2026 Sebastian Software GmbH — built in the open, verified in CI.",
 });

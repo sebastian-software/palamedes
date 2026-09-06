@@ -1,11 +1,23 @@
 [package]
 name = "palamedes"
 version = "1.23.0"
+authors.workspace = true
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Rust core for Palamedes."
+readme = "README.md"
+keywords = ["i18n", "internationalization", "icu", "gettext", "ferramenta"]
+categories = ["internationalization", "development-tools", "text-processing"]
+# The Rust core ships through the npm packages today. Publishing it to
+# crates.io is still open (sebastian-software/palamedes#1153); until that is
+# decided, nothing may reach the registry by accident.
+publish = false
+
+[lints]
+workspace = true
 
 [features]
 test-support = []

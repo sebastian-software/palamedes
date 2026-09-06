@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::config::{load_config, LoadedConfig};
+use crate::config::{LoadedConfig, load_config};
 use crate::error::CliError;
 
 /// The environment a command runs in.

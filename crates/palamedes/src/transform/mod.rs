@@ -23,7 +23,7 @@ use crate::source::{display_filename, format_parser_diagnostics};
 use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
 use self::imports::ImportCollector;
-use self::server_functions::{initializer_import, ServerFunctionTransform};
+use self::server_functions::{ServerFunctionTransform, initializer_import};
 use self::visitor::TransformVisitor;
 
 #[derive(Debug, Clone)]
@@ -150,15 +150,14 @@ pub fn transform_macros(
 ) -> PalamedesResult<NativeTransformResult> {
     let options = options.unwrap_or_default();
 
-    if let Some(server_functions) = &options.server_functions {
-        if server_functions.initializer_module.is_empty()
-            || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export)
-        {
-            return Err(PalamedesError::InvalidServerFunctionInitializer {
-                initializer_module: server_functions.initializer_module.clone(),
-                initializer_export: server_functions.initializer_export.clone(),
-            });
-        }
+    if let Some(server_functions) = &options.server_functions
+        && (server_functions.initializer_module.is_empty()
+            || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export))
+    {
+        return Err(PalamedesError::InvalidServerFunctionInitializer {
+            initializer_module: server_functions.initializer_module.clone(),
+            initializer_export: server_functions.initializer_export.clone(),
+        });
     }
 
     let runtime_module = options
@@ -279,13 +278,12 @@ pub fn transform_macros(
 
     if let (Some(server_options), Some(transform)) =
         (&options.server_functions, &server_function_transform)
+        && !transform.replacements.is_empty()
     {
-        if !transform.replacements.is_empty() {
-            prefix.push_str(&initializer_import(
-                server_options,
-                &transform.initializer_alias,
-            ));
-        }
+        prefix.push_str(&initializer_import(
+            server_options,
+            &transform.initializer_alias,
+        ));
     }
 
     let needs_runtime_import = !collector.has_reusable_runtime_import

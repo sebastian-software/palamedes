@@ -190,7 +190,7 @@ fn starts_with_leading_separator(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
+    use super::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
 
     #[test]
     fn trims_whitespace_before_punctuation_after_value_placeholders() {

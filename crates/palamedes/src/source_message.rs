@@ -17,7 +17,7 @@ use crate::choice::{
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
+use crate::jsx_message::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::source::DiagnosticLocation;
 

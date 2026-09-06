@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
-use palamedes::{convert_catalog_file, CatalogFileConvertRequest, PalamedesCatalogFormat};
+use palamedes::{CatalogFileConvertRequest, PalamedesCatalogFormat, convert_catalog_file};
 
 use crate::command::{Command, Context};
 use crate::error::CliError;
@@ -190,7 +190,7 @@ const fn target_catalog_format(to: ConvertFormat) -> PalamedesCatalogFormat {
 mod tests {
     use std::fs;
 
-    use super::{convert_one_catalog, ConvertFormat, ConvertOptions, ConvertReport};
+    use super::{ConvertFormat, ConvertOptions, ConvertReport, convert_one_catalog};
     use crate::command::{Command, Context};
     use crate::commands::test_support::temp_dir;
 

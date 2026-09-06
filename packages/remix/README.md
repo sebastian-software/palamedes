@@ -311,4 +311,4 @@ separately from this package.
 
 [![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
 
-MIT © 2026 Sebastian Software
+MIT OR Apache-2.0 © 2026 Sebastian Software

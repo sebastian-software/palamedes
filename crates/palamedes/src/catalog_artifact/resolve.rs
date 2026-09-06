@@ -5,10 +5,10 @@ use regex::Regex;
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::load::{
-    load_catalogs, parse_catalog_sources_with_observer, read_catalog_sources, CatalogSources,
+    CatalogSources, load_catalogs, parse_catalog_sources_with_observer, read_catalog_sources,
 };
 use super::types::{CatalogArtifactConfig, FallbackLocales};
-use super::{resolve_catalog_file_path, resolve_catalog_path, PreparedCompilation};
+use super::{PreparedCompilation, resolve_catalog_file_path, resolve_catalog_path};
 
 #[derive(Debug, Clone)]
 struct ResolvedCatalogRequest {

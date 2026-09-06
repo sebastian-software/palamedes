@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use napi::bindgen_prelude::{Result, ToNapiValue, TypeName};
 use napi::{Env, Error, Status, Task};

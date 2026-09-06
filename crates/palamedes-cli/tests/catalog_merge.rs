@@ -131,9 +131,11 @@ fn explicit_format_overrides_the_logical_path() {
         .expect("run catalog merge driver");
 
     assert!(result.status.success(), "{result:?}");
-    assert!(fs::read_to_string(&output)
-        .expect("read output")
-        .contains("msgstr \"Unser\""));
+    assert!(
+        fs::read_to_string(&output)
+            .expect("read output")
+            .contains("msgstr \"Unser\"")
+    );
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
 

@@ -47,91 +47,90 @@ mod transform;
 mod translation_candidates;
 mod translation_scope;
 
-use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
+use ferrocat::{MsgStr, PoFile, PoItem, parse_po as ferrocat_parse_po};
 use serde::Serialize;
 
 pub use catalog_artifact::{
-    compile_catalog_artifact, compile_catalog_artifact_selected,
-    compile_catalog_artifact_selected_cached, resolve_catalog_file_path, CatalogArtifactConfig,
-    CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity, CatalogArtifactMissingMessage,
-    CatalogArtifactRequest, CatalogArtifactResult, CatalogArtifactSelectedRequest,
-    CatalogArtifactSourceKey, CatalogCompilationCache, CatalogConfig, FallbackLocales,
-    PalamedesCatalogFormat,
+    CatalogArtifactConfig, CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity,
+    CatalogArtifactMissingMessage, CatalogArtifactRequest, CatalogArtifactResult,
+    CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogCompilationCache,
+    CatalogConfig, FallbackLocales, PalamedesCatalogFormat, compile_catalog_artifact,
+    compile_catalog_artifact_selected, compile_catalog_artifact_selected_cached,
+    resolve_catalog_file_path,
 };
 pub use catalog_audit::{
-    audit_catalogs, CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest,
-    CatalogAuditResult, CatalogAuditSummary,
+    CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
+    CatalogAuditSummary, audit_catalogs,
 };
 pub use catalog_combine::{
-    combine_catalog_files, combine_catalogs, CatalogCombineInput, CatalogCombineRequest,
-    CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
-    CatalogFileCombineRequest, CatalogFileCombineResult,
+    CatalogCombineInput, CatalogCombineRequest, CatalogCombineResult, CatalogCombineSelection,
+    CatalogCombineStats, CatalogConflictStrategy, CatalogFileCombineRequest,
+    CatalogFileCombineResult, combine_catalog_files, combine_catalogs,
 };
 pub use catalog_convert::{
-    convert_catalog_file, CatalogFileConvertRequest, CatalogFileConvertResult,
+    CatalogFileConvertRequest, CatalogFileConvertResult, convert_catalog_file,
 };
 pub use catalog_coverage::{
-    measure_catalog_coverage, CatalogCoverageRequest, CatalogCoverageResult,
-    CatalogLocaleCoverageResult,
+    CatalogCoverageRequest, CatalogCoverageResult, CatalogLocaleCoverageResult,
+    measure_catalog_coverage,
 };
 pub use catalog_three_way::{
-    merge_catalog_files_three_way, merge_catalogs_three_way, CatalogFileThreeWayMergeRequest,
-    CatalogMergeSide, CatalogThreeWayMergeRequest, CATALOG_MODIFY_DELETE_RESOLVED,
+    CATALOG_MODIFY_DELETE_RESOLVED, CatalogFileThreeWayMergeRequest, CatalogMergeSide,
+    CatalogThreeWayMergeRequest, merge_catalog_files_three_way, merge_catalogs_three_way,
 };
 pub use catalog_update::{
-    parse_catalog, preview_catalog_file_update, update_catalog_file, AiProvenance,
-    CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult, CatalogUpdateMessage,
-    CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest, CatalogUpdateResponse,
-    CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks, PoOutputOptions,
+    AiProvenance, CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult,
+    CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest,
+    CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
+    PoOutputOptions, parse_catalog, preview_catalog_file_update, update_catalog_file,
 };
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{
+    ExtractCatalogFileFailure, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
+    ExtractCatalogMessagesResult, ExtractedMessageRecord, SourceFileAnalysisRequest,
     analyze_source, analyze_source_file_cached, analyze_source_files_cached,
     analyze_source_with_mdx_options, analyze_source_with_options, extract_catalog_messages_cached,
     extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-    extract_messages, extract_messages_with_mdx_options, ExtractCatalogFileFailure,
-    ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult,
-    ExtractedMessageRecord, SourceFileAnalysisRequest,
+    extract_messages, extract_messages_with_mdx_options,
 };
-pub use extract_cache::{default_cache_path, ExtractCache};
+pub use extract_cache::{ExtractCache, default_cache_path};
 pub use mdx::{
-    analyze_mdx, extract_mdx_messages, MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework,
-    MdxOptions, MdxSourceRange,
+    MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework, MdxOptions, MdxSourceRange, analyze_mdx,
+    extract_mdx_messages,
 };
 pub use message_metadata::{
-    derive_message_metadata, normalize_message_metadata, validate_message_metadata,
     MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,
     MessageArgumentMetadataInput, MessageFormatStyleKind, MessageMetadata,
     MessageMetadataDiagnostic, MessageMetadataInput, MessageMetadataValidationReport,
-    MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata,
+    MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata, derive_message_metadata,
+    normalize_message_metadata, validate_message_metadata,
 };
 pub use runtime_message::{
-    compile_runtime_catalog_messages, RuntimeCompiledMessage, RuntimeCompiledMessages,
-    RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
+    RuntimeCompiledMessage, RuntimeCompiledMessages, RuntimeMessageChoiceKind,
+    RuntimeMessageFormat, RuntimeMessageNode, compile_runtime_catalog_messages,
 };
 pub use source::{
-    SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
-    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceRange,
-    SourceRuleLevel, SourceRuleOptions, SOURCE_DIAGNOSTIC_CODES,
     SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
+    SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions, SourceAnalysisResult, SourceComment,
+    SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult,
+    SourceRange, SourceRuleLevel, SourceRuleOptions,
 };
 pub use transform::{
-    transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
-    NativeTransformSourceMap, ServerFunctionTransformOptions,
+    NativeTransformEdit, NativeTransformOptions, NativeTransformResult, NativeTransformSourceMap,
+    ServerFunctionTransformOptions, transform_macros,
 };
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
 pub use translation_candidates::apply_translation_patches_with_injected_write_failure;
 pub use translation_candidates::{
-    apply_translation_patches, list_translation_candidates, TranslationCandidate,
-    TranslationCandidateId, TranslationCandidateRequest, TranslationCandidateResult,
-    TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcome,
-    TranslationPatchOutcomeStatus, TranslationPatchRequest, TranslationPatchResult,
-    TranslationPatchStats, TranslationPluralKind, TranslationReviewState, TranslationValue,
-    TranslationWorkflowDiagnostic, TranslationWorkflowOrigin,
-    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS,
+    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS, TranslationCandidate, TranslationCandidateId,
+    TranslationCandidateRequest, TranslationCandidateResult, TranslationMachineProvenance,
+    TranslationPatch, TranslationPatchOutcome, TranslationPatchOutcomeStatus,
+    TranslationPatchRequest, TranslationPatchResult, TranslationPatchStats, TranslationPluralKind,
+    TranslationReviewState, TranslationValue, TranslationWorkflowDiagnostic,
+    TranslationWorkflowOrigin, apply_translation_patches, list_translation_candidates,
 };
 
 /// Published `ferrocat` version used by the Rust core.
@@ -264,7 +263,7 @@ pub fn parse_po(source: &str) -> PalamedesResult<JsPoFile> {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_native_info, parse_po, FERROCAT_VERSION};
+    use super::{FERROCAT_VERSION, get_native_info, parse_po};
     use ferrocat::compiled_key;
 
     #[test]

@@ -74,4 +74,4 @@ server scope around this interceptor.
 
 ## License
 
-MIT © 2026 Sebastian Software
+MIT OR Apache-2.0 © 2026 Sebastian Software

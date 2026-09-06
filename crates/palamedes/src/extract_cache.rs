@@ -602,7 +602,7 @@ mod tests {
         let mut cache = ExtractCache::load(&cache_path, "root-one", true);
         let before = cache.fingerprint_before_read(&key);
         cache.insert(
-            key.clone(),
+            key,
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],
@@ -747,7 +747,7 @@ mod tests {
         std::thread::sleep(RACY_WINDOW + Duration::from_millis(100));
 
         cache.insert(
-            key.clone(),
+            key,
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],
@@ -794,7 +794,7 @@ mod tests {
 
         let before = cache.fingerprint_before_read(&key);
         cache.insert(
-            key.clone(),
+            key,
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],

@@ -5,18 +5,17 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use ferrocat::{
-    convert_catalog, machine_translation_hash, CatalogMessageKey, CatalogMode,
-    ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr, PoFile, PoItem,
-    SerializeOptions,
+    CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr,
+    PoFile, PoItem, SerializeOptions, convert_catalog, machine_translation_hash,
 };
-use ferrocat_icu::{parse_icu, stringify_icu, IcuMessage, IcuNode, IcuOption, IcuPluralKind};
+use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, parse_icu, stringify_icu};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 mod fcl_collation;
 mod fcl_collation_table;
 
-use self::fcl_collation::{collation_key, CollationKey};
+use self::fcl_collation::{CollationKey, collation_key};
 
 #[cfg(test)]
 thread_local! {
@@ -24,7 +23,7 @@ thread_local! {
 }
 
 use crate::catalog_artifact::resolve_catalog_path;
-use crate::catalog_update::{po_serialize_options, AiProvenance, MachineMetadata};
+use crate::catalog_update::{AiProvenance, MachineMetadata, po_serialize_options};
 use crate::icu_text::parse_runtime_icu;
 use crate::{
     CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError, PalamedesResult,
@@ -586,15 +585,15 @@ where
                     Some(patch.id.clone()),
                 ));
             }
-            if let Some(machine) = &patch.machine {
-                if let Err(message) = validate_machine_provenance(machine) {
-                    rejected.insert(patch_index);
-                    diagnostics.push(workflow_diagnostic(
-                        "translation.invalid_provenance",
-                        message,
-                        Some(patch.id.clone()),
-                    ));
-                }
+            if let Some(machine) = &patch.machine
+                && let Err(message) = validate_machine_provenance(machine)
+            {
+                rejected.insert(patch_index);
+                diagnostics.push(workflow_diagnostic(
+                    "translation.invalid_provenance",
+                    message,
+                    Some(patch.id.clone()),
+                ));
             }
             if !rejected.contains(&patch_index) && patch_changes_candidate(&current, patch)? {
                 changed_patches.insert(patch_index);
@@ -882,7 +881,7 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
                 return Err(ferrocat::ApiError::InvalidArguments(
                     "duplicate FCL header key `order`".to_owned(),
                 )
-                .into())
+                .into());
             }
             "order" if value == "collated" => {
                 declared_order = true;
@@ -892,13 +891,13 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
                 return Err(ferrocat::ApiError::InvalidArguments(format!(
                     "unknown FCL order {value:?}"
                 ))
-                .into())
+                .into());
             }
             _ => {
                 return Err(ferrocat::ApiError::InvalidArguments(format!(
                     "unknown FCL header key {key:?}"
                 ))
-                .into())
+                .into());
             }
         }
     }
@@ -1032,7 +1031,7 @@ fn parse_fcl_item(line: &str) -> Result<PoItem, ferrocat::ApiError> {
             _ => {
                 return Err(ferrocat::ApiError::InvalidArguments(format!(
                     "unknown FCL tag key {key:?}"
-                )))
+                )));
             }
         };
         validate_fcl_tag_order(&mut last_rank, rank, key)?;
@@ -1101,12 +1100,12 @@ fn unescape_fcl(value: &str) -> Result<String, ferrocat::ApiError> {
             Some(other) => {
                 return Err(ferrocat::ApiError::InvalidArguments(format!(
                     "invalid FCL escape `\\{other}`"
-                )))
+                )));
             }
             None => {
                 return Err(ferrocat::ApiError::InvalidArguments(
                     "dangling `\\` at end of FCL value".to_owned(),
-                ))
+                ));
             }
         }
     }
@@ -1261,12 +1260,14 @@ fn project_po_translation(item: &PoItem, source: &TranslationValue) -> Translati
 
 fn project_icu_plural(value: &str) -> Option<TranslationValue> {
     let parsed = parse_icu(value).ok()?;
-    let [IcuNode::Plural {
-        name,
-        kind,
-        offset,
-        options,
-    }] = parsed.nodes.as_slice()
+    let [
+        IcuNode::Plural {
+            name,
+            kind,
+            offset,
+            options,
+        },
+    ] = parsed.nodes.as_slice()
     else {
         return None;
     };
@@ -1626,7 +1627,7 @@ where
             return Err(PalamedesError::WriteFile {
                 path: catalog.path.clone(),
                 source,
-            })
+            });
         }
     };
     fs::create_dir_all(directory).map_err(|source| PalamedesError::WriteFile {
@@ -1840,18 +1841,18 @@ mod tests {
     use std::path::Path;
 
     use ferrocat::{
-        convert_catalog, machine_translation_hash, parse_catalog, parse_po, CatalogMessageKey,
-        CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, ParseCatalogOptions,
+        CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef,
+        ParseCatalogOptions, convert_catalog, machine_translation_hash, parse_catalog, parse_po,
     };
 
     use super::{
+        PreparedCatalog, TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
+        TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcomeStatus,
+        TranslationPatchRequest, TranslationPluralKind, TranslationValue,
         apply_translation_patches, apply_translation_patches_with_replacement,
         atomic_replace_catalog, atomic_replace_catalog_with_directory_sync, build_candidate,
         find_po_item, list_translation_candidates, load_catalog, parse_catalog_as_po,
         po_item_indexes, reset_source_catalog_parse_count, source_catalog_parse_count,
-        PreparedCatalog, TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
-        TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcomeStatus,
-        TranslationPatchRequest, TranslationPluralKind, TranslationValue,
     };
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
@@ -2039,12 +2040,14 @@ msgstr "placeholder"
         .content;
 
         assert!(parse_catalog_as_po(&canonical, "en", "de", PalamedesCatalogFormat::Fcl).is_ok());
-        assert!(parse_catalog(
-            ParseCatalogOptions::new(&canonical, "en")
-                .with_locale("de")
-                .with_mode(CatalogMode::IcuFcl),
-        )
-        .is_ok());
+        assert!(
+            parse_catalog(
+                ParseCatalogOptions::new(&canonical, "en")
+                    .with_locale("de")
+                    .with_mode(CatalogMode::IcuFcl),
+            )
+            .is_ok()
+        );
 
         let lines = canonical.lines().collect::<Vec<_>>();
         for first in 1..lines.len() - 1 {
@@ -2164,10 +2167,12 @@ msgstr "placeholder"
 
         assert!(result.diagnostics.is_empty());
         assert_eq!(result.candidates.len(), 12);
-        assert!(result
-            .candidates
-            .windows(2)
-            .all(|pair| pair[0].id <= pair[1].id));
+        assert!(
+            result
+                .candidates
+                .windows(2)
+                .all(|pair| pair[0].id <= pair[1].id)
+        );
         let plural = result
             .candidates
             .iter()
@@ -2201,10 +2206,12 @@ msgstr "placeholder"
         assert!(!result.candidates.iter().any(|candidate| {
             candidate.id.message == "Open" && candidate.id.context.as_deref() == Some("adjective")
         }));
-        assert!(!result
-            .candidates
-            .iter()
-            .any(|candidate| candidate.id.message == "Old"));
+        assert!(
+            !result
+                .candidates
+                .iter()
+                .any(|candidate| candidate.id.message == "Old")
+        );
 
         let review_id = id("messages/{locale}", "de", "Review me", None);
         let obsolete_id = id("messages/{locale}", "de", "Old", None);
@@ -2285,10 +2292,12 @@ msgstr "placeholder"
             max_origins: 8,
         })
         .expect("default enumeration skips fresh locale catalogs");
-        assert!(default_result
-            .candidates
-            .iter()
-            .all(|candidate| candidate.id.locale == "de"));
+        assert!(
+            default_result
+                .candidates
+                .iter()
+                .all(|candidate| candidate.id.locale == "de")
+        );
         let missing = default_result
             .diagnostics
             .iter()
@@ -2312,9 +2321,11 @@ msgstr "placeholder"
                 fixture.path().join("messages/ja.po").to_str(),
             ]
         );
-        assert!(missing
-            .iter()
-            .all(|diagnostic| diagnostic.message.contains("pmds extract")));
+        assert!(
+            missing
+                .iter()
+                .all(|diagnostic| diagnostic.message.contains("pmds extract"))
+        );
 
         let mut explicit_config = po_config(fixture.path());
         explicit_config.locales = vec![
@@ -2467,10 +2478,12 @@ msgstr "placeholder"
         assert_eq!(result.stats.applied, 2);
         assert_eq!(result.stats.catalogs_updated, 1);
         assert!(result.diagnostics.is_empty());
-        assert!(result
-            .outcomes
-            .iter()
-            .all(|outcome| outcome.status == TranslationPatchOutcomeStatus::Applied));
+        assert!(
+            result
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status == TranslationPatchOutcomeStatus::Applied)
+        );
 
         let path = fixture.path().join("messages/de.po");
         let output = fs::read_to_string(&path).expect("read patched PO");
@@ -2478,15 +2491,19 @@ msgstr "placeholder"
         let raw = parse_po(&output).expect("parse patched PO");
         let hello = raw.items.iter().find(|item| item.msgid == "Hello").unwrap();
         assert_eq!(hello.msgstr.first(), Some("Hallo"));
-        assert!(hello
-            .references
-            .iter()
-            .any(|origin| origin == "src/home.tsx#HomePage"));
+        assert!(
+            hello
+                .references
+                .iter()
+                .any(|origin| origin == "src/home.tsx#HomePage")
+        );
         assert!(hello.metadata.iter().any(|(key, _)| key == "lock"));
-        assert!(hello
-            .metadata
-            .iter()
-            .any(|(key, value)| key == "ai" && value == "example/new:0.9"));
+        assert!(
+            hello
+                .metadata
+                .iter()
+                .any(|(key, value)| key == "ai" && value == "example/new:0.9")
+        );
         let plural = raw
             .items
             .iter()
@@ -2507,10 +2524,11 @@ msgstr "placeholder"
             review.comments.first().map(String::as_str),
             Some("Translator-owned review note")
         );
-        assert!(raw
-            .items
-            .iter()
-            .any(|item| item.msgid == "Old" && item.obsolete));
+        assert!(
+            raw.items
+                .iter()
+                .any(|item| item.msgid == "Old" && item.obsolete)
+        );
         assert_eq!(
             raw.items
                 .iter()
@@ -3015,15 +3033,21 @@ msgstr "placeholder"
             .filter(|diagnostic| diagnostic.code == "translation.invalid_icu")
             .collect::<Vec<_>>();
         assert_eq!(diagnostics.len(), 2);
-        assert!(diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.id.as_ref() == Some(&plural.id)));
-        assert!(diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("translation.values.one")));
-        assert!(diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("translation.values.other")));
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.id.as_ref() == Some(&plural.id))
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("translation.values.one"))
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("translation.values.other"))
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
     }
 
@@ -3214,12 +3238,16 @@ msgstr "placeholder"
                 TranslationPatchOutcomeStatus::NotApplied,
             ]
         );
-        assert!(fs::read_to_string(&first_path)
-            .expect("read first catalog")
-            .contains("msgstr \"Hallo\""));
-        assert!(fs::read_to_string(&second_path)
-            .expect("read second catalog")
-            .contains("msgstr \"\""));
+        assert!(
+            fs::read_to_string(&first_path)
+                .expect("read first catalog")
+                .contains("msgstr \"Hallo\"")
+        );
+        assert!(
+            fs::read_to_string(&second_path)
+                .expect("read second catalog")
+                .contains("msgstr \"\"")
+        );
     }
 
     #[test]
@@ -3259,12 +3287,16 @@ msgstr "placeholder"
         );
         assert_eq!(result.diagnostics.len(), 1);
         assert_eq!(result.diagnostics[0].code, "translation.catalog_durability");
-        assert!(result.diagnostics[0]
-            .message
-            .contains("injected directory sync failure"));
-        assert!(fs::read_to_string(path)
-            .expect("read visibly committed catalog")
-            .contains("msgstr \"Hallo\""));
+        assert!(
+            result.diagnostics[0]
+                .message
+                .contains("injected directory sync failure")
+        );
+        assert!(
+            fs::read_to_string(path)
+                .expect("read visibly committed catalog")
+                .contains("msgstr \"Hallo\"")
+        );
     }
 
     #[cfg(unix)]
@@ -3358,10 +3390,12 @@ msgstr "placeholder"
         })
         .expect("reject duplicate batch");
         assert!(!duplicate.updated);
-        assert!(duplicate
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "translation.duplicate_patch"));
+        assert!(
+            duplicate
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "translation.duplicate_patch")
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
 
         let unknown = TranslationPatch {
@@ -3379,10 +3413,12 @@ msgstr "placeholder"
         })
         .expect("reject unknown message batch");
         assert!(!atomic.updated);
-        assert!(atomic
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "translation.unknown_message"));
+        assert!(
+            atomic
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "translation.unknown_message")
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
 
         fs::write(
@@ -3401,10 +3437,12 @@ msgstr "placeholder"
         })
         .expect("reject stale candidate");
         assert!(!stale.updated);
-        assert!(stale
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "translation.stale_candidate"));
+        assert!(
+            stale
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "translation.stale_candidate")
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), externally_changed);
     }
 
@@ -3450,10 +3488,12 @@ msgstr "placeholder"
             result.outcomes[0].status,
             TranslationPatchOutcomeStatus::Rejected
         );
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "translation.ambiguous_message"));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "translation.ambiguous_message")
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
     }
 

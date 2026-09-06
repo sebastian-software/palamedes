@@ -15,7 +15,7 @@
 
 use std::borrow::Cow;
 
-use ferrocat_icu::{parse_icu, IcuMessage, IcuParseError};
+use ferrocat_icu::{IcuMessage, IcuParseError, parse_icu};
 
 /// ICU quoting policy implemented by the Palamedes JavaScript runtime.
 pub(crate) const RUNTIME_ICU_SYNTAX_POLICY: ferrocat::IcuSyntaxPolicy =

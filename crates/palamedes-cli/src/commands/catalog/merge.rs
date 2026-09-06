@@ -5,9 +5,9 @@ use std::process::Command as ProcessCommand;
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    combine_catalog_files, merge_catalog_files_three_way, CatalogConflictStrategy,
-    CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileThreeWayMergeRequest,
-    PalamedesCatalogFormat,
+    CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileCombineResult,
+    CatalogFileThreeWayMergeRequest, PalamedesCatalogFormat, combine_catalog_files,
+    merge_catalog_files_three_way,
 };
 
 use crate::command::{Command, Context};

@@ -10,16 +10,16 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
 use crate::icu_text::escape_icu_source_literal;
 use crate::jsx_message::clean_jsx_text;
-use crate::mdx::{analyze_mdx, MdxOptions};
+use crate::mdx::{MdxOptions, analyze_mdx};
 use crate::placeholder_name::expression_name;
 use crate::source::{
-    display_filename, format_parser_diagnostics, SourceAnalysisOptions, SourceAnalysisResult,
-    SourceComment, SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceFileAnalysisResult, SourceLocator, SourceRange, SourceRuleOptions,
     SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
+    SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
+    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
+    SourceRange, SourceRuleOptions, display_filename, format_parser_diagnostics,
 };
-use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
+use crate::source_macros::{ImportedMacro, record_macro_import_declaration};
 use crate::source_message::{
     build_icu_message as shared_build_icu_message, expression_source, jsx_attributes,
     lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
@@ -34,7 +34,7 @@ use oxc_ast::ast::{
     LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind, Program,
     TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast_visit::{Visit, walk};
 use oxc_parser::Parser;
 use oxc_semantic::SemanticBuilder;
 use oxc_span::{GetSpan, SourceType};
@@ -80,7 +80,7 @@ pub struct ExtractCatalogMessagesRequest {
     pub files: Vec<String>,
     /// Worker threads for the parallel read/parse pass.
     ///
-    /// Defaults to [`DEFAULT_EXTRACT_THREADS`] when `None`, and is clamped to
+    /// Defaults to `DEFAULT_EXTRACT_THREADS` when `None`, and is clamped to
     /// the file count and to the machine's available parallelism. `Some(1)`
     /// forces the serial path.
     pub max_threads: Option<usize>,
@@ -389,9 +389,10 @@ impl<'a> ExtractionVisitor<'a> {
             return;
         }
 
-        if facts.is_one_empty_component() {
-            if let Some(severity) = self.rules.empty_component_only.severity() {
-                self.diagnostics.push(SourceDiagnostic {
+        if facts.is_one_empty_component()
+            && let Some(severity) = self.rules.empty_component_only.severity()
+        {
+            self.diagnostics.push(SourceDiagnostic {
                     code: SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE.to_owned(),
                     severity,
                     file: self.filename.clone(),
@@ -401,7 +402,6 @@ impl<'a> ExtractionVisitor<'a> {
                     help: "Add translatable text around or inside the component, or render the component without a translation macro.".to_owned(),
                     related: None,
                 });
-            }
         }
     }
 
@@ -619,15 +619,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             walk::walk_jsx_child(self, it);
             return;
         }
-        if let JSXChild::ExpressionContainer(container) = it {
-            if self.current_jsx_parent_allows_trans() {
-                if let Some(expression) = container.expression.as_expression() {
-                    collect_direct_render_expression_spans(
-                        expression,
-                        &mut self.renderable_t_spans,
-                    );
-                }
-            }
+        if let JSXChild::ExpressionContainer(container) = it
+            && self.current_jsx_parent_allows_trans()
+            && let Some(expression) = container.expression.as_expression()
+        {
+            collect_direct_render_expression_spans(expression, &mut self.renderable_t_spans);
         }
         walk::walk_jsx_child(self, it);
     }
@@ -637,44 +633,43 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             return;
         }
 
-        if let Some((tag_name, tag_span)) = identifier_name(&it.tag) {
-            if let Some(macro_name) = self
+        if let Some((tag_name, tag_span)) = identifier_name(&it.tag)
+            && let Some(macro_name) = self
                 .imported_macro_name(tag_name, tag_span, &["t"])
                 .map(str::to_string)
-            {
-                let macro_source = self
-                    .imported_macros
-                    .get(tag_name)
-                    .map(|macro_info| macro_info.source.clone())
-                    .unwrap_or_default();
-                match extract_from_tagged_template(
-                    &it.quasi,
-                    self.origin(it.span.start as usize),
-                    self.current_scope(),
-                    self.source,
-                ) {
-                    Ok(Some(message)) => {
-                        let facts = self.facts(
-                            SourceMessageSurface::TaggedTemplate,
-                            it.span.start as usize,
-                            it.span.end as usize,
-                            template_authored_parts(&it.quasi),
-                        );
-                        self.push(message, facts);
-                        self.diagnose_prefer_trans(
-                            it.span.start as usize,
-                            it.span.end as usize,
-                            &macro_source,
-                        );
-                    }
-                    Ok(None) => {
-                        self.fail_unsupported_macro(&macro_name, it.span.start as usize);
-                        return;
-                    }
-                    Err(error) => {
-                        self.fail(error);
-                        return;
-                    }
+        {
+            let macro_source = self
+                .imported_macros
+                .get(tag_name)
+                .map(|macro_info| macro_info.source.clone())
+                .unwrap_or_default();
+            match extract_from_tagged_template(
+                &it.quasi,
+                self.origin(it.span.start as usize),
+                self.current_scope(),
+                self.source,
+            ) {
+                Ok(Some(message)) => {
+                    let facts = self.facts(
+                        SourceMessageSurface::TaggedTemplate,
+                        it.span.start as usize,
+                        it.span.end as usize,
+                        template_authored_parts(&it.quasi),
+                    );
+                    self.push(message, facts);
+                    self.diagnose_prefer_trans(
+                        it.span.start as usize,
+                        it.span.end as usize,
+                        &macro_source,
+                    );
+                }
+                Ok(None) => {
+                    self.fail_unsupported_macro(&macro_name, it.span.start as usize);
+                    return;
+                }
+                Err(error) => {
+                    self.fail(error);
+                    return;
                 }
             }
         }
@@ -711,72 +706,67 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             return;
         }
 
-        if let Some((callee_name, callee_span)) = identifier_name(&it.callee) {
-            if let Some(macro_name) = self
+        if let Some((callee_name, callee_span)) = identifier_name(&it.callee)
+            && let Some(macro_name) = self
                 .imported_macro_name(
                     callee_name,
                     callee_span,
                     &["t", "plural", "select", "selectOrdinal"],
                 )
                 .map(str::to_string)
-            {
-                let macro_source = self
-                    .imported_macros
-                    .get(callee_name)
-                    .map(|macro_info| macro_info.source.clone())
-                    .unwrap_or_default();
-                let message = match macro_name.as_str() {
-                    "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
-                        it,
-                        &macro_name,
-                        self.origin(it.span.start as usize),
-                        self.current_scope(),
-                        self.source,
-                        &self.location(it.span.start as usize),
-                    ),
-                    _ => extract_from_descriptor_call(
-                        it,
-                        &macro_name,
-                        self.origin(it.span.start as usize),
-                        self.current_scope(),
-                        self.source,
-                        &self.location(it.span.start as usize),
-                    ),
-                };
+        {
+            let macro_source = self
+                .imported_macros
+                .get(callee_name)
+                .map(|macro_info| macro_info.source.clone())
+                .unwrap_or_default();
+            let message = match macro_name.as_str() {
+                "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
+                    it,
+                    &macro_name,
+                    self.origin(it.span.start as usize),
+                    self.current_scope(),
+                    self.source,
+                    &self.location(it.span.start as usize),
+                ),
+                _ => extract_from_descriptor_call(
+                    it,
+                    &macro_name,
+                    self.origin(it.span.start as usize),
+                    self.current_scope(),
+                    self.source,
+                    &self.location(it.span.start as usize),
+                ),
+            };
 
-                match message {
-                    Ok(Some(message)) => {
-                        let (surface, parts) = if macro_name == "t" {
-                            (
-                                SourceMessageSurface::Descriptor,
-                                descriptor_authored_parts(it),
-                            )
-                        } else {
-                            (SourceMessageSurface::Choice, Vec::new())
-                        };
-                        let facts = self.facts(
-                            surface,
+            match message {
+                Ok(Some(message)) => {
+                    let (surface, parts) = if macro_name == "t" {
+                        (
+                            SourceMessageSurface::Descriptor,
+                            descriptor_authored_parts(it),
+                        )
+                    } else {
+                        (SourceMessageSurface::Choice, Vec::new())
+                    };
+                    let facts =
+                        self.facts(surface, it.span.start as usize, it.span.end as usize, parts);
+                    self.push(message, facts);
+                    if macro_name == "t" {
+                        self.diagnose_prefer_trans(
                             it.span.start as usize,
                             it.span.end as usize,
-                            parts,
+                            &macro_source,
                         );
-                        self.push(message, facts);
-                        if macro_name == "t" {
-                            self.diagnose_prefer_trans(
-                                it.span.start as usize,
-                                it.span.end as usize,
-                                &macro_source,
-                            );
-                        }
                     }
-                    Ok(None) => {
-                        self.fail_unsupported_macro(&macro_name, it.span.start as usize);
-                        return;
-                    }
-                    Err(error) => {
-                        self.fail(error);
-                        return;
-                    }
+                }
+                Ok(None) => {
+                    self.fail_unsupported_macro(&macro_name, it.span.start as usize);
+                    return;
+                }
+                Err(error) => {
+                    self.fail(error);
+                    return;
                 }
             }
         }
@@ -2100,10 +2090,9 @@ pub fn extract_catalog_messages_cached(
     if let Some(index) = outcomes
         .iter()
         .position(|outcome| matches!(outcome, FileExtraction::Fatal(_)))
+        && let FileExtraction::Fatal(error) = outcomes.swap_remove(index)
     {
-        if let FileExtraction::Fatal(error) = outcomes.swap_remove(index) {
-            return Err(error);
-        }
+        return Err(error);
     }
 
     /*
@@ -2429,10 +2418,10 @@ fn add_extracted_message(
             origins: Vec::new(),
         });
 
-    if let Some(comment) = message.comment {
-        if !entry.extracted_comments.contains(&comment) {
-            entry.extracted_comments.push(comment);
-        }
+    if let Some(comment) = message.comment
+        && !entry.extracted_comments.contains(&comment)
+    {
+        entry.extracted_comments.push(comment);
     }
 
     if let Some(placeholders) = message.placeholders {
@@ -2492,12 +2481,12 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        analyze_source, analyze_source_file_cached, analyze_source_files_cached,
-        analyze_source_with_mdx_options, analyze_source_with_options,
-        extract_catalog_messages_cached, extract_catalog_messages_from_files,
-        extract_catalog_messages_from_files_with_options, extract_messages as extract_messages_raw,
-        resolve_extract_threads, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
-        ExtractedMessageRecord, SourceFileAnalysisRequest, DEFAULT_EXTRACT_THREADS,
+        DEFAULT_EXTRACT_THREADS, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
+        ExtractedMessageRecord, SourceFileAnalysisRequest, analyze_source,
+        analyze_source_file_cached, analyze_source_files_cached, analyze_source_with_mdx_options,
+        analyze_source_with_options, extract_catalog_messages_cached,
+        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
+        extract_messages as extract_messages_raw, resolve_extract_threads,
     };
     use crate::error::PalamedesResult;
     use crate::extract_cache::ExtractCache;
@@ -2555,9 +2544,11 @@ function Greeting({ name }: { name: string }) {
     fn parser_errors_use_an_honest_fallback_for_an_unknown_filename() {
         let error = analyze_source("const broken = ;", "").expect_err("parse error");
 
-        assert!(error
-            .to_string()
-            .contains("<unknown source>:1:16: Unexpected token"));
+        assert!(
+            error
+                .to_string()
+                .contains("<unknown source>:1:16: Unexpected token")
+        );
     }
 
     #[test]
@@ -2642,12 +2633,16 @@ const active = `value ${(
                 ),
             ]
         );
-        assert!(comments
-            .iter()
-            .all(|(text, _)| !text.contains("fenced example")));
-        assert!(comments
-            .iter()
-            .all(|(text, _)| !text.contains("not a comment")));
+        assert!(
+            comments
+                .iter()
+                .all(|(text, _)| !text.contains("fenced example"))
+        );
+        assert!(
+            comments
+                .iter()
+                .all(|(text, _)| !text.contains("not a comment"))
+        );
     }
 
     #[test]
@@ -2814,9 +2809,11 @@ function Greeting() { return <p>{translate`Hello`}</p>; }
 function Greeting() { return <p>{translate`Hello`}</p>; }
 "#;
         let core = analyze_source(core_source, "core.tsx").expect("analyze core render");
-        assert!(core.diagnostics[0]
-            .help
-            .contains("the active UI framework's `<Trans>`"));
+        assert!(
+            core.diagnostics[0]
+                .help
+                .contains("the active UI framework's `<Trans>`")
+        );
     }
 
     #[test]
@@ -2841,10 +2838,12 @@ function Greeting({ ready }) {
 
         let result = analyze_source(source, "test.tsx").expect("analyze excluded positions");
         assert_eq!(result.messages.len(), 11);
-        assert!(result
-            .diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.code != "pmds/prefer-trans-in-jsx"));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.code != "pmds/prefer-trans-in-jsx")
+        );
     }
 
     #[test]
@@ -3415,9 +3414,11 @@ const message = t({ message })
         let error = extract_messages(r#"const message = i18n._({ message: "Hello" })"#, "test.ts")
             .expect_err("object-form runtime messages must fail");
 
-        assert!(error
-            .to_string()
-            .contains("object-form runtime messages have been removed"));
+        assert!(
+            error
+                .to_string()
+                .contains("object-form runtime messages have been removed")
+        );
     }
 
     #[test]
@@ -4072,11 +4073,13 @@ const message = t({ message })
             },
         )
         .expect("batch extraction without scopes");
-        assert!(without_scopes
-            .messages
-            .iter()
-            .flat_map(|message| &message.origins)
-            .all(|origin| origin.scope.is_none()));
+        assert!(
+            without_scopes
+                .messages
+                .iter()
+                .flat_map(|message| &message.origins)
+                .all(|origin| origin.scope.is_none())
+        );
 
         fs::remove_dir_all(root).expect("cleanup");
     }
@@ -4276,9 +4279,11 @@ const message = t({ message })
         })
         .expect_err("top-level translation macros should fail");
 
-        assert!(error
-            .to_string()
-            .contains("Translation macro `t` must be used inside a function"));
+        assert!(
+            error
+                .to_string()
+                .contains("Translation macro `t` must be used inside a function")
+        );
         fs::remove_dir_all(root).expect("cleanup");
     }
 

@@ -340,7 +340,7 @@ impl DiagnosticLocation for IndexedSourceLocation<'_, '_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_parser_diagnostics, SourceLocator};
+    use super::{SourceLocator, format_parser_diagnostics};
     use oxc_diagnostics::OxcDiagnostic;
     use oxc_span::Span;
 

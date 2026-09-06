@@ -106,4 +106,4 @@ that detached work explicitly; it is outside the request scope.
 
 ## License
 
-MIT © 2026 Sebastian Software
+MIT OR Apache-2.0 © 2026 Sebastian Software

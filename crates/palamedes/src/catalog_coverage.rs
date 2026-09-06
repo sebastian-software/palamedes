@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use ferrocat::{parse_catalog_for_review, CatalogCoverageOptions, NormalizedParsedCatalog};
+use ferrocat::{CatalogCoverageOptions, NormalizedParsedCatalog, parse_catalog_for_review};
 use ferrocat_po::measure_catalog_coverage as ferrocat_measure_catalog_coverage;
 use serde::Serialize;
 
-use crate::catalog_artifact::{resolve_catalog_path, CatalogArtifactConfig, CatalogConfig};
+use crate::catalog_artifact::{CatalogArtifactConfig, CatalogConfig, resolve_catalog_path};
 use crate::error::{PalamedesError, PalamedesResult};
 
 /// Request for measuring configured catalog coverage.
@@ -189,7 +189,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{measure_catalog_coverage, CatalogCoverageRequest};
+    use super::{CatalogCoverageRequest, measure_catalog_coverage};
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat};
 
     #[test]

@@ -3,16 +3,16 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    merge_catalogs_three_way as ferrocat_merge_catalogs_three_way,
     CatalogCombineInput as FerrocatCombineInput, MergeCatalogsThreeWayOptions, OrderBy,
+    merge_catalogs_three_way as ferrocat_merge_catalogs_three_way,
 };
 
+use crate::PalamedesCatalogFormat;
 use crate::catalog_combine::{
     CatalogCombineInput, CatalogCombineResult, CatalogConflictStrategy, CatalogFileCombineResult,
 };
-use crate::catalog_update::{po_serialize_options, PoOutputOptions};
+use crate::catalog_update::{PoOutputOptions, po_serialize_options};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::PalamedesCatalogFormat;
 
 pub use ferrocat::CatalogMergeSide;
 
@@ -251,8 +251,8 @@ mod tests {
     use std::fs;
 
     use super::{
-        merge_catalog_files_three_way, merge_catalogs_three_way, CatalogFileThreeWayMergeRequest,
-        CatalogThreeWayMergeRequest, CATALOG_MODIFY_DELETE_RESOLVED,
+        CATALOG_MODIFY_DELETE_RESOLVED, CatalogFileThreeWayMergeRequest,
+        CatalogThreeWayMergeRequest, merge_catalog_files_three_way, merge_catalogs_three_way,
     };
     use crate::{
         CatalogCombineInput, CatalogConflictStrategy, CatalogMergeSide, PalamedesCatalogFormat,
@@ -303,10 +303,12 @@ mod tests {
         let use_first =
             merge_po(base, ours, "", CatalogConflictStrategy::UseFirst).expect("use first");
         assert!(use_first.content.contains("msgstr \"Neu\""));
-        assert!(use_first
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == CATALOG_MODIFY_DELETE_RESOLVED));
+        assert!(
+            use_first
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == CATALOG_MODIFY_DELETE_RESOLVED)
+        );
 
         let use_last =
             merge_po(base, ours, "", CatalogConflictStrategy::UseLast).expect("use last");
@@ -361,10 +363,12 @@ mod tests {
         })
         .expect("unfolded merge");
 
-        assert!(result
-            .content
-            .lines()
-            .any(|line| line == format!("msgstr \"{long}\"")));
+        assert!(
+            result
+                .content
+                .lines()
+                .any(|line| line == format!("msgstr \"{long}\""))
+        );
     }
 
     #[test]

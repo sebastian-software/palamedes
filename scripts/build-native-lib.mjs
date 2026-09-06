@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+
+import { copyLicenseFiles } from "./sync-package-licenses.mjs";
 
 /**
  * Returns Cargo's host artifact name for the two native artifact families we
@@ -105,9 +107,10 @@ export function buildNativePackage({
   }
 
   // Native packages ship via `npm publish`, which — unlike `pnpm publish` —
-  // does not embed the workspace-root LICENSE. Keep the declared MIT license
-  // accompanied by its text in every platform package.
-  copyFileSync(path.join(repoRoot, "LICENSE"), path.join(packageDir, "LICENSE"));
+  // does not embed the workspace-root license files. Keep the declared
+  // `MIT OR Apache-2.0` license accompanied by both texts in every platform
+  // package.
+  copyLicenseFiles(packageDir, repoRoot);
 
   const profile = process.env.PALAMEDES_RUST_PROFILE === "release" ? "release" : "debug";
   const cargoArgs = ["build", "--package", cargoPackage];

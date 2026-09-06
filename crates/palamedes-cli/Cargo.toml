@@ -1,11 +1,24 @@
 [package]
 name = "palamedes-cli"
 version = "1.23.0"
+authors.workspace = true
 edition.workspace = true
+homepage.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Native command-line interface for Palamedes."
+readme = "README.md"
+keywords = ["i18n", "internationalization", "cli", "gettext", "ferramenta"]
+categories = ["command-line-utilities", "internationalization", "development-tools"]
+# ADR-024 keeps a Node-free escape hatch open, which `cargo install
+# palamedes-cli` would serve. That decision is still open
+# (sebastian-software/palamedes#1153); until then nothing may reach the
+# registry by accident.
+publish = false
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "pmds"

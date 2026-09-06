@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[test]
 fn reports_po_and_fcl_drift_without_mutating_catalogs() {
@@ -203,9 +203,11 @@ catalogs:
     );
     let apply = pmds(&fixture, &["extract", "--force-clean"]);
     assert!(apply.status.success(), "{apply:?}");
-    assert!(!fs::read_to_string(&catalog)
-        .expect("read after cleanup")
-        .contains("Removed"));
+    assert!(
+        !fs::read_to_string(&catalog)
+            .expect("read after cleanup")
+            .contains("Removed")
+    );
 
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }

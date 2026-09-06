@@ -67,9 +67,11 @@ mod tests {
         );
         let attributes = napi_attributes(&source);
 
-        assert!(attributes
-            .iter()
-            .all(|(_, attribute)| is_object_or_enum_annotation(attribute)));
+        assert!(
+            attributes
+                .iter()
+                .all(|(_, attribute)| is_object_or_enum_annotation(attribute))
+        );
     }
 
     #[test]
@@ -82,9 +84,11 @@ mod tests {
             format!("#[{}]", "napi(/* catch_unwind */ js_name = \"exported\")"),
         ];
 
-        assert!(unguarded_attributes
-            .iter()
-            .all(|attribute| !has_catch_unwind_option(attribute)));
+        assert!(
+            unguarded_attributes
+                .iter()
+                .all(|attribute| !has_catch_unwind_option(attribute))
+        );
     }
 
     #[test]
