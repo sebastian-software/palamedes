@@ -357,7 +357,7 @@ describe("@palamedes/core-node", () => {
       controller.signal,
     );
     expect(captured[1]).toBe(prepared);
-    expect(capturedSignals[1]).toBe(controller.signal);
+    expect(capturedSignals[1]).not.toBe(controller.signal);
 
     let reads = 0;
     const unprepared = {
@@ -415,6 +415,54 @@ describe("@palamedes/core-node", () => {
         inputs: [nullPrototypeInput],
       }),
     ).not.toThrow();
+  });
+
+  it("snapshots AbortSignals outside the known async abort slot", () => {
+    const captured: unknown[][] = [];
+    const signal = new AbortController().signal;
+    const fixtureBindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifactAsync(...arguments_: unknown[]) {
+        captured.push(arguments_);
+        if (arguments_[1] !== undefined && arguments_[1] !== signal) {
+          throw new TypeError("Expected a native AbortSignal.");
+        }
+        return {};
+      },
+    };
+    const guarded = loadNativeBindings({
+      packageDir: "/fixture/core-node",
+      nativePackageName: "fixture-native",
+      require(specifier) {
+        return specifier.endsWith("package.json") ? { version: "fixture" } : fixtureBindings;
+      },
+    });
+    const invoke = guarded.compileCatalogArtifactAsync as unknown as (
+      ...arguments_: unknown[]
+    ) => unknown;
+    const request = prepareNativeArgument("compileCatalogArtifactAsync", {
+      config: {},
+      resourcePath: "fixture.po",
+    });
+
+    invoke(request, signal);
+    expect(captured[0]?.[0]).toBe(request);
+    expect(captured[0]?.[1]).toBe(signal);
+
+    expect(() => invoke(signal, request)).toThrow("Expected a native AbortSignal");
+    expect(captured[1]?.[0]).not.toBe(signal);
+
+    const nestedRequest = { signal };
+    invoke(nestedRequest);
+    const nestedSnapshot = captured[2]?.[0];
+    if (nestedSnapshot === null || typeof nestedSnapshot !== "object") {
+      throw new Error("Expected the nested request to be snapshotted.");
+    }
+    expect(Reflect.get(nestedSnapshot, "signal")).not.toBe(signal);
+
+    const arbitrary = { aborted: false, onabort: null };
+    expect(() => invoke(request, arbitrary)).toThrow("Expected a native AbortSignal");
+    expect(captured[3]?.[1]).not.toBe(arbitrary);
   });
 
   it("validates wrapper-owned bulk payloads before the native call", () => {
