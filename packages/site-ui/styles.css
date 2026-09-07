@@ -249,6 +249,203 @@
     border-inline-start-color: var(--color-accent);
   }
 
+  /*
+   * Family tool switcher. A plain <details> disclosure so it keeps working
+   * without JavaScript; the flyout is a hairline sheet on paper, never a card
+   * (ADR-026: no radius, no shadow, no gradient).
+   */
+  .pmds-switcher {
+    position: relative;
+  }
+
+  .pmds-switcher-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.7rem;
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-nav);
+    text-transform: uppercase;
+    color: var(--color-ink);
+  }
+
+  .pmds-switcher-trigger::-webkit-details-marker {
+    display: none;
+  }
+
+  .pmds-switcher-trigger::after {
+    width: 5px;
+    height: 5px;
+    border-right: 1px solid currentcolor;
+    border-bottom: 1px solid currentcolor;
+    rotate: 45deg;
+    translate: 0 -2px;
+    content: "";
+    transition: rotate 120ms ease-out;
+  }
+
+  .pmds-switcher[open] .pmds-switcher-trigger::after {
+    rotate: 225deg;
+    translate: 0 1px;
+  }
+
+  .pmds-switcher-trigger:hover,
+  .pmds-switcher[open] .pmds-switcher-trigger {
+    color: var(--color-accent);
+  }
+
+  .pmds-switcher-trigger:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .pmds-switcher-flyout {
+    position: absolute;
+    z-index: 60;
+    inset-inline-end: 0;
+    top: calc(100% + 0.5rem);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(9.5rem, 1fr));
+    gap: 1px;
+    width: max-content;
+    max-width: min(42rem, calc(100vw - 2.5rem));
+    border: 1px solid var(--color-hair);
+    background: var(--color-hair);
+  }
+
+  .pmds-switcher-group {
+    min-width: 0;
+    padding: 1rem;
+    background: var(--color-paper);
+  }
+
+  .pmds-switcher-group-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--color-gray-spec);
+  }
+
+  .pmds-switcher-list {
+    margin-top: 0.75rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pmds-switcher-list li + li {
+    margin-top: 0.15rem;
+  }
+
+  .pmds-switcher-link {
+    display: block;
+    padding: 0.35rem 0.5rem;
+    margin-inline: -0.5rem;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .pmds-switcher-link:hover {
+    background: var(--color-hover-fill);
+  }
+
+  .pmds-switcher-link:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 0;
+  }
+
+  .pmds-switcher-link[aria-current="page"] .pmds-family-name {
+    color: var(--color-accent);
+  }
+
+  .pmds-switcher-link .pmds-family-name {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+
+  .pmds-family-job {
+    display: block;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--color-gray-spec);
+  }
+
+  /*
+   * Footer family line: one rule-separated row that names the family and every
+   * sibling, so palamedes.dev credits its family without adopting the family
+   * chrome (decision D6 of the 2026-09 family audit).
+   */
+  .pmds-family-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1rem;
+    border-bottom: 1px solid var(--color-hair);
+    padding: 1rem 2rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-nav);
+  }
+
+  /*
+   * The lead-in is a micro-label, so it takes the uppercase treatment; the tool
+   * names stay in the lowercase the registry spells them with (decision D3).
+   */
+  .pmds-family-line-label {
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--color-gray-spec);
+    text-decoration: none;
+  }
+
+  .pmds-family-line-label:hover {
+    color: var(--color-accent);
+  }
+
+  .pmds-family-line-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /*
+   * WCAG 2.2 target size: an 11px line of names wraps to several rows on a
+   * phone, so each name carries its own 24px touch target instead of relying
+   * on the gap between rows.
+   */
+  .pmds-family-line-label,
+  .pmds-family-line-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+  }
+
+  .pmds-family-line-link {
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+
+  .pmds-family-line-link:hover {
+    color: var(--color-accent);
+  }
+
+  .pmds-family-line-link[aria-current="page"] {
+    color: var(--color-gray-spec);
+  }
+
+  .pmds-family-line-label:focus-visible,
+  .pmds-family-line-link:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
   .pmds-footer {
     border-top: 1px solid var(--color-hair);
   }
@@ -415,9 +612,19 @@
   }
 }
 
+@media (max-width: 56rem) {
+  .pmds-switcher-flyout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 35rem) {
   .pmds-section,
   .pmds-footer-column {
+    padding-inline: 1.25rem;
+  }
+
+  .pmds-family-line {
     padding-inline: 1.25rem;
   }
 

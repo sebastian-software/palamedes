@@ -1948,6 +1948,9 @@ importers:
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@ferramenta/family':
+        specifier: github:sebastian-software/ferramenta#5b84af1676b12b4b45661d5be4a42b11275a72da&path:/packages/family
+        version: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/5b84af1676b12b4b45661d5be4a42b11275a72da#path:/packages/family(react@19.2.8)
       '@palamedes/site-ui':
         specifier: workspace:*
         version: link:../packages/site-ui
@@ -2997,6 +3000,13 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@ferramenta/family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/5b84af1676b12b4b45661d5be4a42b11275a72da#path:/packages/family':
+    resolution: {gitHosted: true, path: /packages/family, tarball: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/5b84af1676b12b4b45661d5be4a42b11275a72da}
+    version: 0.1.0
+    hasBin: true
+    peerDependencies:
+      react: '>=19.0.0 <20.0.0'
 
   '@floating-ui/core@1.8.0':
     resolution: {integrity: sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==}
@@ -12706,6 +12716,10 @@ snapshots:
   '@exodus/bytes@1.15.1(@noble/hashes@2.4.0)':
     optionalDependencies:
       '@noble/hashes': 2.4.0
+
+  '@ferramenta/family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/5b84af1676b12b4b45661d5be4a42b11275a72da#path:/packages/family(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
 
   '@floating-ui/core@1.8.0':
     dependencies:

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
+    "@ferramenta/family": "github:sebastian-software/ferramenta#5b84af1676b12b4b45661d5be4a42b11275a72da&path:/packages/family",
     "@palamedes/site-ui": "workspace:*",
     "@react-router/node": "8.3.1",
     "ardo": "4.2.0",

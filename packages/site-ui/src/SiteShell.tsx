@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { ButtonLink } from "./Button";
+import { ToolSwitcher } from "./FamilySurfaces";
 import { SiteFooter } from "./SiteFooter";
 import { SiteLink } from "./SiteUiProvider";
 import type { SiteConfig } from "./types";
@@ -33,6 +34,7 @@ export function SiteHeader({ config }: { config: SiteConfig }) {
         ))}
       </nav>
       <div className="pmds-site-actions">
+        {config.toolSwitcher ? <ToolSwitcher switcher={config.toolSwitcher} /> : null}
         {config.counterpart?.enabled ? (
           <SiteLink href={config.counterpart.href} className="pmds-counterpart-link">
             {config.counterpart.label}

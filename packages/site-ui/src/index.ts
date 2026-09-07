@@ -1,5 +1,6 @@
 export { Button, ButtonLink } from "./Button";
 export { EditorialRail } from "./EditorialRail";
+export { FamilyLine, ToolSwitcher } from "./FamilySurfaces";
 export { Page } from "./Page";
 export { Reveal } from "./Reveal";
 export { Section } from "./Section";
@@ -15,9 +16,13 @@ export type {
   SiteBuildMetadata,
   SiteConfig,
   SiteCounterpart,
+  SiteFamilyGroup,
+  SiteFamilyLine,
+  SiteFamilyTool,
   SiteFooterColumn,
   SiteLinkComponentProps,
   SiteLinkDefinition,
   SiteNavigationItem,
+  SiteToolSwitcher,
   SiteUiProviderProps,
 } from "./types";
