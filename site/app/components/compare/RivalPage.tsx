@@ -158,7 +158,8 @@ function PickList({ title, items, accent }: { title: string; items: string[]; ac
 
 function RivalFaq({ rival }: { rival: Rival }) {
   return (
-    <div className="border-y border-hair">
+    /* See HomeFaq: the site guard counts the entries inside this list. */
+    <div className="border-y border-hair" data-faq-list>
       {rival.faq.map((entry, index) => (
         <details key={entry.q} className="group border-b border-hair last:border-b-0">
           <summary className="grid cursor-pointer grid-cols-[2.75rem_1fr_auto] gap-4 px-5 py-5 text-[15px] font-semibold leading-snug marker:content-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent">

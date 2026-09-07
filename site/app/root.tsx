@@ -13,7 +13,7 @@ import {
   ArdoSidebarSection,
   ArdoSocialLink,
 } from "ardo/ui";
-import { ButtonLink, SiteFooter, SiteUiProvider } from "@palamedes/site-ui";
+import { ButtonLink, SiteFooter, SiteUiProvider, ToolSwitcher } from "@palamedes/site-ui";
 import { Link, useLoaderData, useLocation } from "react-router";
 import config from "virtual:ardo/config";
 
@@ -169,6 +169,16 @@ export default function App() {
         >
           <PrimaryNavigation />
           <ArdoHeaderActions>
+            {/*
+             * The family switcher sits with the header actions, in the site's
+             * own editorial style (decision D6). It needs the room a flyout
+             * takes, so below the tight breakpoint the footer family line is
+             * the family surface — the same width at which ARDO already folds
+             * the primary action away.
+             */}
+            {OSS_SITE_CONFIG.toolSwitcher ? (
+              <ToolSwitcher switcher={OSS_SITE_CONFIG.toolSwitcher} className="max-tight:hidden" />
+            ) : null}
             <ArdoSocialLink
               href="https://github.com/sebastian-software/palamedes"
               icon="github"
