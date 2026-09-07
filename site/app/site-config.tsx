@@ -1,4 +1,4 @@
-import { FAMILY_SITE, family, familyGroups, type FamilyTool } from "@ferramenta/family/registry";
+import { FAMILY_SITE, family, familyGroups, type FamilyTool } from "ferramenta-family/registry";
 import type { SiteConfig, SiteFamilyTool, SiteLinkComponentProps } from "@palamedes/site-ui";
 import { defineSiteConfig } from "@palamedes/site-ui";
 import { Link } from "react-router";
@@ -41,7 +41,7 @@ export function RouterSiteLink({
 /*
  * D6 of the 2026-09 family audit: palamedes.dev keeps its own editorial brand
  * and adds the family switcher plus the footer family line. The facts come from
- * the `@ferramenta/family` registry — names, jobs, and destinations are never
+ * the `ferramenta-family` registry — names, jobs, and destinations are never
  * copied into this repository (ferramenta ADR-0001). Only the registry entry
  * point is imported: it is data with no React and no CSS, so `site-ui` keeps
  * its React-only dependency contract (ADR-021) and the shared chrome receives
