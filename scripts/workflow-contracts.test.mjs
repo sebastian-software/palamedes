@@ -253,6 +253,9 @@ describe("workflow contracts", () => {
 
     expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m);
     expect(verifyRelease).toContain("run: node ./scripts/check-published-versions.mjs");
+    expect(verifyRelease).toContain("timeout-minutes: 15");
+    expect(verifyRelease).toContain("PALAMEDES_REGISTRY_RETRY_BUDGET_MS: 300000");
+    expect(verifyRelease).toContain("PALAMEDES_REGISTRY_RETRY_MS: 15000");
     expect(publishJs).toContain("publish-package-if-needed.mjs --all-js");
     expect(publishJs).not.toContain("publish_package @palamedes/");
     expect(notifyFailure).toContain("issues: write");

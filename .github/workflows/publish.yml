@@ -268,6 +268,12 @@ jobs:
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      # npm can take several minutes to serve a freshly published version from
+      # every read replica. The script spends this budget only on packages that
+      # were missing from its initial sweep, leaving ample time in this job.
+      PALAMEDES_REGISTRY_RETRY_BUDGET_MS: 300000
+      PALAMEDES_REGISTRY_RETRY_MS: 15000
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

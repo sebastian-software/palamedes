@@ -3,53 +3,21 @@
 // This runs after the publish jobs and asserts that every public package really
 // resolves at the version in its manifest.
 //
-// npm's read path is eventually consistent, so a package published seconds ago
-// can still 404 on the next request. Retry a missing version a few times before
-// treating it as a real gap; anything still missing after that is a failed
-// publish, not propagation lag.
-import { setTimeout as delay } from "node:timers/promises";
-
 import { publicWorkspacePackages, registryLookup } from "./release-packages.mjs";
-import { nativeTarballFailure } from "./release-verification.mjs";
+import { verifyPublishedVersions } from "./release-verification.mjs";
 
-const attempts = Number(process.env.PALAMEDES_REGISTRY_ATTEMPTS ?? 5);
-const retryDelayMs = Number(process.env.PALAMEDES_REGISTRY_RETRY_MS ?? 15_000);
+const retryBudgetMs = durationFromEnvironment("PALAMEDES_REGISTRY_RETRY_BUDGET_MS", 5 * 60_000);
+const retryDelayMs = durationFromEnvironment("PALAMEDES_REGISTRY_RETRY_MS", 15_000, {
+  allowZero: false,
+});
 
 const packages = publicWorkspacePackages();
-const missing = [];
-const failures = [];
-
-for (const packageInfo of packages) {
-  const spec = `${packageInfo.name}@${packageInfo.version}`;
-  let lookup;
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    lookup = registryLookup(spec);
-
-    if (lookup.state === "found") {
-      break;
-    }
-
-    if (attempt < attempts) {
-      console.log(`${spec} not visible yet (attempt ${attempt}/${attempts}); retrying.`);
-      await delay(retryDelayMs);
-    }
-  }
-
-  if (lookup.state === "found") {
-    const tarballFailure = await nativeTarballCheck(packageInfo, spec);
-
-    if (tarballFailure) {
-      failures.push({ detail: tarballFailure, spec });
-    } else {
-      console.log(`${spec} ✓`);
-    }
-  } else if (lookup.state === "missing") {
-    missing.push(spec);
-  } else {
-    failures.push({ detail: lookup.detail, spec });
-  }
-}
+const { failures, missing } = await verifyPublishedVersions({
+  packages,
+  registryLookup,
+  retryBudgetMs,
+  retryDelayMs,
+});
 
 if (failures.length > 0) {
   console.error("");
@@ -78,25 +46,10 @@ if (missing.length > 0 || failures.length > 0) {
 console.log("");
 console.log(`All ${packages.length} public packages are published at ${packages[0]?.version}.`);
 
-async function nativeTarballCheck(packageInfo, spec) {
-  if (!packageInfo.nativeArtifact) {
-    return null;
+function durationFromEnvironment(name, fallback, { allowZero = true } = {}) {
+  const duration = Number(process.env[name]);
+  if (!Number.isFinite(duration) || duration < 0 || (!allowZero && duration === 0)) {
+    return fallback;
   }
-
-  let lookup;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    lookup = registryLookup(spec, "dist.unpackedSize");
-    if (lookup.state === "found") {
-      return nativeTarballFailure(packageInfo, lookup.value);
-    }
-
-    if (attempt < attempts) {
-      console.log(
-        `${spec} tarball metadata not visible yet (attempt ${attempt}/${attempts}); retrying.`,
-      );
-      await delay(retryDelayMs);
-    }
-  }
-
-  return `${spec}: could not read native tarball metadata: ${lookup.detail ?? "unknown registry error"}`;
+  return duration;
 }
