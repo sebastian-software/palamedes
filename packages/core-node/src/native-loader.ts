@@ -332,7 +332,8 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
     if (
       current.kind === "value" &&
       current.argumentIndex !== undefined &&
-      isAbortSignalArgument(operation, current.argumentIndex, value)
+      (preparedNativeArguments.has(value) ||
+        isAbortSignalArgument(operation, current.argumentIndex, value))
     ) {
       current.assign(value);
       continue;
