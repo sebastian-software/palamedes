@@ -51,6 +51,11 @@ function assertNoCache(roots) {
   }
 }
 
+export function assertEnabledCacheContents(timestamp, cohort) {
+  assert.match(timestamp, /^\d+\n$/u);
+  assert.match(cohort, /^\d{4}-\d{2}\n$/u);
+}
+
 function checkProcess(binary, version, optOut, dropOptOut) {
   const fixture = mkdtempSync(join(tmpdir(), "palamedes-enabled-update-check-"));
   try {
@@ -77,10 +82,9 @@ function checkProcess(binary, version, optOut, dropOptOut) {
       // This real due-check side effect proves the binary is enabled. It also
       // demonstrates that the same oracle rejects an ignored/missing opt-out.
       assert.throws(() => assertNoCache(roots), /unexpected cache write/u);
-      assert.match(readFileSync(join(roots[1], "palamedes", "update-check-v1"), "utf8"), /^\d+$/u);
-      assert.match(
+      assertEnabledCacheContents(
+        readFileSync(join(roots[1], "palamedes", "update-check-v1"), "utf8"),
         readFileSync(join(roots[1], "palamedes", "installed-since-v1"), "utf8"),
-        /^\d{4}-\d{2}$/u,
       );
     } else {
       assertNoCache(roots);

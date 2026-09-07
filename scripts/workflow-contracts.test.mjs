@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { checkWorkflowPins, unpinnedActionReferences } from "./check-workflow-pins.mjs";
 import { selectScreenshotExamples } from "./example-matrix.mjs";
-import { assertNetworkIsolation } from "./check-enabled-update-check.mjs";
+import {
+  assertEnabledCacheContents,
+  assertNetworkIsolation,
+} from "./check-enabled-update-check.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -26,6 +29,16 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
+  it("validates the enabled control's newline-terminated Rust cache files", () => {
+    expect(() => assertEnabledCacheContents("1788773977\n", "2026-09\n")).not.toThrow();
+    for (const timestamp of ["1788773977", "1788773977\n\n", "1788773977\r\n", "invalid\n", ""]) {
+      expect(() => assertEnabledCacheContents(timestamp, "2026-09\n")).toThrow();
+    }
+    for (const cohort of ["2026-09", "2026-09\n\n", "2026-09\r\n", "2026-09-07\n", ""]) {
+      expect(() => assertEnabledCacheContents("1788773977\n", cohort)).toThrow();
+    }
+  });
+
   it("embeds the exact update endpoint only in all six native release build paths", async () => {
     const [publish, ci, musl, cliBuild, nativeBuild] = await Promise.all([
       readRepositoryFile(".github/workflows/publish.yml"),
