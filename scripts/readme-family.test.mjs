@@ -43,7 +43,7 @@ test("every README the generator writes to exists", () => {
 test("pins the generator to a commit, never to a branch", () => {
   assert.match(
     generatorSpecifier,
-    /^github:sebastian-software\/ferramenta#[\da-f]{40}&path:\/packages\/ardo-config$/u,
+    /^github:sebastian-software\/ferramenta#[\da-f]{40}&path:\/packages\/family$/u,
   );
 });
 

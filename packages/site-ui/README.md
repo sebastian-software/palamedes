@@ -74,11 +74,11 @@ appears in the markup at all.
 
 Both are plain data. This package never reads the Ferramenta registry itself:
 the consuming site resolves names, jobs, and destinations from
-`@ferramenta/family/registry` and passes the result in, which is what keeps the
+`ferramenta-family/registry` and passes the result in, which is what keeps the
 React-only dependency contract of ADR-021 intact.
 
 ```tsx
-import { familyGroups } from "@ferramenta/family/registry";
+import { familyGroups } from "ferramenta-family/registry";
 
 const { pipeline, language, workbench } = familyGroups();
 

@@ -25,15 +25,16 @@ import { javascriptWorkspacePackages } from "./release-packages.mjs";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /*
- * The generator ships inside the family repository and is consumed straight
- * from Git: the `@ferramenta` npm scope does not exist yet. Pin a commit and
- * never a branch — a floating ref would bless a different block on every run,
- * so a check that passed yesterday would say nothing about today. To adopt a
- * registry change, bump this SHA and run `pnpm readme:family`; the block is
- * generated, so the diff shows exactly what moved.
+ * The generator is the `ferramenta-readme` bin of `ferramenta-family`, which
+ * ships inside the family repository and is consumed straight from Git until
+ * the package is released to npm. Pin a commit and never a branch — a floating
+ * ref would bless a different block on every run, so a check that passed
+ * yesterday would say nothing about today. To adopt a registry change, bump
+ * this SHA and run `pnpm readme:family`; the block is generated, so the diff
+ * shows exactly what moved.
  */
-const GENERATOR_COMMIT = "d63a0b163ef3e5e68cd1c77e5c8871ac72c36b60";
-const GENERATOR = `github:sebastian-software/ferramenta#${GENERATOR_COMMIT}&path:/packages/ardo-config`;
+const GENERATOR_COMMIT = "f6de99cd094d0fabbf0be23a9c0b5c074ff89976";
+const GENERATOR = `github:sebastian-software/ferramenta#${GENERATOR_COMMIT}&path:/packages/family`;
 const TOOL = "palamedes";
 
 const START = "<!-- ferramenta-family:start -->";

@@ -56,6 +56,15 @@ CSS — so this package still depends on React alone. A site that omits both, as
 Palamedes+ does, renders no family surface at all, which keeps the switch a
 configuration decision rather than an environment check.
 
+**Note, 2026-09-07 — the family package is unscoped.** The npm scope
+`@ferramenta` turned out to be unavailable, so the package named
+`@ferramenta/family` above is published as `ferramenta-family`
+(sebastian-software/ferramenta#33). Nothing in the decision changes: the site
+still resolves the family from the data-only registry entry point, now imported
+as `ferramenta-family/registry`, and `site-ui` still depends on React alone.
+The dependency is a commit pin of `packages/family` consumed straight from Git
+until the package is released to npm.
+
 ## Alternatives Considered
 
 ### Copy the components into both sites
