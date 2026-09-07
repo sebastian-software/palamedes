@@ -45,6 +45,7 @@ import type {
   TranslationPatchRequest as GeneratedTranslationPatchRequest,
   TranslationPatchResult as GeneratedTranslationPatchResult,
 } from "./generated/palamedes-node-types";
+import type * as NativeLoaderModule from "./native-loader";
 import {
   assertNativeBindingVersion,
   assertWellFormedNativeArguments,
@@ -1128,8 +1129,7 @@ export function greeting() {
 
     vi.resetModules();
     vi.doMock("./native-loader", async () => {
-      const nativeLoader =
-        await vi.importActual<typeof import("./native-loader")>("./native-loader");
+      const nativeLoader = await vi.importActual<typeof NativeLoaderModule>("./native-loader");
       return {
         ...nativeLoader,
         loadNativeBindings: () =>
