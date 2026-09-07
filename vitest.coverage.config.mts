@@ -1,5 +1,7 @@
 import { defineConfig } from "vitest/config";
 
+import { COVERAGE_GATES } from "./scripts/coverage-gate.mjs";
+
 const standardPackages = [
   "config",
   "core-node",
@@ -39,6 +41,12 @@ export default defineConfig({
       reporter: ["text-summary", "json-summary", "lcov"],
       reportsDirectory: "coverage/javascript",
       reportOnFailure: true,
+      // The gate. `scripts/coverage-gate.mjs` is the single source for both
+      // this floor and the Rust one the coverage job passes to cargo-llvm-cov,
+      // and CONTRIBUTING names the command that reproduces this run locally.
+      thresholds: {
+        lines: COVERAGE_GATES.javascript.threshold,
+      },
     },
   },
 });
