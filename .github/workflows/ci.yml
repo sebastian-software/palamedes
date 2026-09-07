@@ -158,6 +158,8 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm test
 
+      # Gated, not just reported: the vitest config reads its line threshold
+      # from `scripts/coverage-gate.mjs`, so this run fails below the floor.
       - name: Collect JavaScript coverage
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm test:coverage
@@ -167,19 +169,16 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: javascript-coverage
-          path: coverage/javascript/coverage-summary.json
+          path: |
+            coverage/javascript/coverage-summary.json
+            coverage/javascript/lcov.info
           if-no-files-found: warn
 
-      # Reported, not gated: a missing or rejected upload must not fail a run
-      # that is otherwise green.
-      - name: Report JavaScript coverage to Codecov
+      # Runs even when the step above failed the gate, so the run summary says
+      # what the number actually was.
+      - name: Report JavaScript coverage
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.node == 24 }}
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
-        with:
-          files: coverage/javascript/lcov.info
-          flags: javascript
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: node ./scripts/coverage-gate.mjs javascript
 
       - name: Test lifecycle-free CLI package
         if: ${{ !matrix.full }}
@@ -309,31 +308,34 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace --locked
 
-      # One instrumented test run, two reports: `report` re-renders the profile
-      # data the first command collected instead of running the suite twice.
+      # One instrumented test run, three reports: `report` re-renders the
+      # profile data the first command collected instead of running the suite
+      # again. The last render is the gate; its threshold comes from
+      # `scripts/coverage-gate.mjs`, the single source the vitest config reads
+      # for the JavaScript side.
       - name: Collect Rust coverage
         if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
         run: |
           mkdir -p coverage/rust
           cargo llvm-cov --workspace --locked --lcov --output-path coverage/rust/lcov.info
           cargo llvm-cov report --json --summary-only --output-path coverage/rust/coverage-summary.json
+          cargo llvm-cov report --fail-under-lines "$(node ./scripts/coverage-gate.mjs rust --threshold)"
 
       - name: Upload Rust coverage summary
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-coverage
-          path: coverage/rust/coverage-summary.json
+          path: |
+            coverage/rust/coverage-summary.json
+            coverage/rust/lcov.info
           if-no-files-found: warn
 
-      - name: Report Rust coverage to Codecov
+      # Runs even when the step above failed the gate, so the run summary says
+      # what the number actually was.
+      - name: Report Rust coverage
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
-        with:
-          files: coverage/rust/lcov.info
-          flags: rust
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: node ./scripts/coverage-gate.mjs rust
 
       # Palamedes ships the CLI and core-node addon for six platforms, so
       # anything baked into either artifact multiplies. Checked once, on the
