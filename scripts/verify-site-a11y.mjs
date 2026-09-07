@@ -324,12 +324,26 @@ try {
   await delayedCopyPage.waitForFunction(() => typeof globalThis.__resolveProofCopy === "function");
   await delayedCopyPage.getByRole("link", { name: "i18n performance", exact: true }).click();
   await delayedCopyPage.waitForURL(`${baseUrl}/i18n-performance`);
+  // `waitForURL` resolves on the history entry, which React Router pushes
+  // before React commits the route transition, so the copy button can still be
+  // mounted at that point. What is under test is the guard that keeps a
+  // clipboard promise resolving *after* unmount from scheduling a reset timer,
+  // so wait for the commit the guard depends on: without this the timer was
+  // always scheduled and the assertion below merely raced the unmount cleanup
+  // clearing it within two animation frames.
+  await delayedCopyPage
+    .getByRole("button", { name: "Copy command: pnpm bench:e2e" })
+    .waitFor({ state: "detached" });
   await delayedCopyPage.evaluate(async () => {
     globalThis.__resolveProofCopy();
     await Promise.resolve();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
-  assert.equal(await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size), 0);
+  assert.equal(
+    await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size),
+    0,
+    "a copy reset timer outlived the CopyCommand that scheduled it",
+  );
   assert.deepEqual(delayedCopyErrors, []);
   await delayedCopyContext.close();
 } finally {

@@ -1,6 +1,7 @@
 # Palamedes
 
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![Coverage gate: JS ≥ 81% | Rust ≥ 82%](https://img.shields.io/badge/coverage%20gate-JS%20%E2%89%A5%2081%25%20%7C%20Rust%20%E2%89%A5%2082%25-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/.github/workflows/ci.yml)
 [![Repository Node >=22.22.0](https://img.shields.io/badge/repository%20node-%3E%3D22.22.0-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-0f172a.svg)](https://github.com/sebastian-software/palamedes#license)
 [![palamedes version](https://img.shields.io/npm/v/palamedes?label=palamedes)](https://www.npmjs.com/package/palamedes)
