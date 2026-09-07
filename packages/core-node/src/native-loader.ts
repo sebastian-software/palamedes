@@ -130,6 +130,18 @@ function isWellFormed(value: string): boolean {
 }
 
 const preparedNativeArguments = new WeakSet<object>();
+const abortSignalAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  if (value === null || typeof value !== "object" || !abortSignalAborted) {
+    return false;
+  }
+  try {
+    return typeof abortSignalAborted.call(value) === "boolean";
+  } catch {
+    return false;
+  }
+}
 
 export function assertWellFormedNativeArguments(operation: string, arguments_: unknown[]): void {
   snapshotNativeArguments(operation, arguments_);
@@ -297,6 +309,10 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
       continue;
     }
     if (value === null || typeof value !== "object") {
+      current.assign(value);
+      continue;
+    }
+    if (isAbortSignal(value)) {
       current.assign(value);
       continue;
     }
@@ -527,6 +543,7 @@ function guardNativeBindings(bindings: NativeBindings): NativeBindings {
           (argument) =>
             argument === null ||
             typeof argument !== "object" ||
+            isAbortSignal(argument) ||
             preparedNativeArguments.has(argument),
         );
         if (!prepared) {

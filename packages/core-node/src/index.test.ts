@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   coordinateInitialCatalogBuild,
@@ -323,10 +323,12 @@ describe("@palamedes/core-node", () => {
 
   it("passes wrapper-owned prepared bulk requests without a second deep copy", () => {
     const captured: unknown[] = [];
+    const capturedSignals: Array<AbortSignal | undefined> = [];
     const fixtureBindings = {
       getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
-      combineCatalogs(request: unknown) {
+      combineCatalogs(request: unknown, signal?: AbortSignal) {
         captured.push(request);
+        capturedSignals.push(signal);
         return {};
       },
     };
@@ -348,6 +350,14 @@ describe("@palamedes/core-node", () => {
     (guarded.combineCatalogs as unknown as (request: unknown) => unknown)(prepared);
     expect(captured[0]).toBe(prepared);
 
+    const controller = new AbortController();
+    (guarded.combineCatalogs as unknown as (request: unknown, signal: AbortSignal) => unknown)(
+      prepared,
+      controller.signal,
+    );
+    expect(captured[1]).toBe(prepared);
+    expect(capturedSignals[1]).toBe(controller.signal);
+
     let reads = 0;
     const unprepared = {
       get sourceLocale() {
@@ -357,8 +367,8 @@ describe("@palamedes/core-node", () => {
     };
     (guarded.combineCatalogs as unknown as (request: unknown) => unknown)(unprepared);
     expect(reads).toBe(1);
-    expect(captured[1]).not.toBe(unprepared);
-    expect(captured[1]).toStrictEqual({ sourceLocale: "en" });
+    expect(captured[2]).not.toBe(unprepared);
+    expect(captured[2]).toStrictEqual({ sourceLocale: "en" });
 
     expect(() =>
       prepareNativeArgument("combineCatalogs", {
@@ -1094,6 +1104,63 @@ export function greeting() {
         { signal: controller.signal },
       ),
     ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("cancels a queued catalog task through the guarded async wrapper", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    let queued = false;
+    const bindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifactAsync(_request: unknown, signal?: AbortSignal) {
+        queued = true;
+        receivedSignal = signal;
+        return new Promise<never>((_resolve, reject) => {
+          if (signal) {
+            signal.onabort = () => {
+              const error = new Error("AbortError");
+              error.name = "AbortError";
+              reject(error);
+            };
+          }
+        });
+      },
+    };
+
+    vi.resetModules();
+    vi.doMock("./native-loader", async () => {
+      const nativeLoader =
+        await vi.importActual<typeof import("./native-loader")>("./native-loader");
+      return {
+        ...nativeLoader,
+        loadNativeBindings: () =>
+          nativeLoader.loadNativeBindings({
+            packageDir: "/fixture/core-node",
+            nativePackageName: "fixture-native",
+            require(specifier) {
+              return specifier.endsWith("package.json") ? { version: "fixture" } : bindings;
+            },
+          }),
+      };
+    });
+
+    try {
+      const { compileCatalogArtifactAsync: compileQueuedCatalogArtifact } = await import("./index");
+      const controller = new AbortController();
+      const task = compileQueuedCatalogArtifact(
+        { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] },
+        "fixture.po",
+        { signal: controller.signal },
+      );
+
+      expect(queued).toBe(true);
+      controller.abort();
+
+      await expect(task).rejects.toMatchObject({ name: "AbortError" });
+      expect(receivedSignal).toBe(controller.signal);
+    } finally {
+      vi.doUnmock("./native-loader");
+      vi.resetModules();
+    }
   });
 
   it("keeps the event loop responsive while catalog compilation runs off-thread", async () => {
