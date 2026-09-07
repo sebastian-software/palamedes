@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { checkWorkflowPins, unpinnedActionReferences } from "./check-workflow-pins.mjs";
 import { selectScreenshotExamples } from "./example-matrix.mjs";
+import { assertNetworkIsolation } from "./check-enabled-update-check.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -25,6 +26,100 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
+  it("embeds the exact update endpoint only in all six native release build paths", async () => {
+    const [publish, ci, musl, cliBuild, nativeBuild] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile(".github/actions/verify-musl-native/action.yml"),
+      readRepositoryFile("packages/cli/scripts/build-native.mjs"),
+      readRepositoryFile("scripts/build-native-lib.mjs"),
+    ]);
+    const native = job(publish, "publish-native", "publish-js");
+    const header = native.slice(0, native.indexOf("    steps:"));
+    expect(header).toMatch(
+      /^ {4}env:\n(?: {6}.+\n)* {6}PALAMEDES_UPDATE_ENDPOINT: https:\/\/version-service\.sebastian-software\.de\/check$/mu,
+    );
+    expect(publish.match(/PALAMEDES_UPDATE_ENDPOINT/gu)).toHaveLength(1);
+    expect(ci).not.toContain("PALAMEDES_UPDATE_ENDPOINT:");
+    expect(musl).not.toContain("PALAMEDES_UPDATE_ENDPOINT:");
+    const targets = [
+      "darwin-arm64",
+      "linux-x64-gnu",
+      "linux-arm64-gnu",
+      "linux-x64-musl",
+      "linux-arm64-musl",
+      "win32-x64-msvc",
+    ];
+    expect(native.match(/package_name: "@palamedes\/cli-/gu)).toHaveLength(targets.length);
+    for (const target of targets) {
+      expect(native).toContain(`package_name: "@palamedes/cli-${target}"`);
+      expect(cliBuild).toContain(`"@palamedes/cli-${target}":`);
+      const manifest = JSON.parse(await readRepositoryFile(`packages/cli-${target}/package.json`));
+      expect(manifest.scripts.build).toBe("node ../cli/scripts/build-native.mjs --if-compatible");
+    }
+    expect(native).toContain("if: matrix.rust_target == ''\n        run: pnpm --filter");
+    expect(native).toContain("uses: ./.github/actions/verify-musl-native");
+    expect(musl).toContain('run: pnpm --filter "${{ inputs.package_name }}" build');
+    expect(cliBuild).toContain('cargoPackage: "palamedes-cli"');
+    expect(nativeBuild).toContain("const cargoEnv = { ...process.env }");
+    expect(nativeBuild).toContain("env: cargoEnv");
+  });
+
+  it("opts native and container release smoke processes out without packaging a default", async () => {
+    const [publish, musl] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/actions/verify-musl-native/action.yml"),
+    ]);
+    const nativeSmoke = publish
+      .split("- name: Smoke-test native CLI package")[1]
+      .split("- name:")[0];
+    expect(nativeSmoke).toContain('env:\n          PALAMEDES_UPDATE_CHECK: "0"');
+    expect(nativeSmoke).toContain("execFileSync(bin, ['version']");
+    const muslSmoke = musl.split("- name: Smoke-test musl native CLI package")[1];
+    expect(muslSmoke).toMatch(/docker run --rm\s+-e PALAMEDES_UPDATE_CHECK=0\s+-v/u);
+    expect(muslSmoke).toContain("execFileSync('./bin/pmds', ['version']");
+  });
+
+  it("runs enabled-process evidence separately on Linux in CI and release dry runs", async () => {
+    const [ci, publish] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile(".github/workflows/publish.yml"),
+    ]);
+    const ciProof = ci
+      .split("- name: Verify enabled update-check opt-outs without network access")[1]
+      .split("- name:")[0];
+    expect(ciProof).toContain("if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.95'");
+    expect(ciProof).toContain("run: node ./scripts/check-enabled-update-check.mjs");
+    const releaseValidation = job(publish, "validate-release", "publish-native");
+    expect(releaseValidation).toContain("run: node ./scripts/check-enabled-update-check.mjs");
+    expect(releaseValidation).not.toContain("PALAMEDES_UPDATE_ENDPOINT:");
+    expect(releaseValidation.indexOf("cargo test --workspace --locked")).toBeLessThan(
+      releaseValidation.indexOf("node ./scripts/check-enabled-update-check.mjs"),
+    );
+  });
+
+  it("rejects uncontained enabled-process runs before any CLI execution", () => {
+    const isolated = {
+      parentNamespace: "net:[1]",
+      namespace: "net:[2]",
+      links: [{ ifname: "lo", flags: ["LOOPBACK"] }],
+      ipv4Routes: [],
+      ipv6Routes: [{ type: "unreachable" }],
+    };
+    expect(() => assertNetworkIsolation(isolated)).not.toThrow();
+    for (const change of [
+      { parentNamespace: undefined },
+      { namespace: "net:[1]" },
+      { links: [{ ifname: "eth0", flags: [] }] },
+      { links: [...isolated.links, { ifname: "eth0", flags: [] }] },
+      { links: [{ ifname: "lo", flags: ["LOOPBACK", "UP"] }] },
+      { ipv4Routes: [{ dst: "default", gateway: "192.0.2.1" }] },
+      { ipv6Routes: [{ dst: "default", dev: "eth0" }] },
+    ]) {
+      expect(() => assertNetworkIsolation({ ...isolated, ...change })).toThrow();
+    }
+  });
+
   it("keeps pure-JS container contracts in the full test gate", async () => {
     const [packageJson, ci] = await Promise.all([
       readRepositoryFile("package.json").then(JSON.parse),

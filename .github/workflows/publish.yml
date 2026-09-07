@@ -94,6 +94,9 @@ jobs:
       - name: Run Rust workspace tests
         run: cargo test --workspace --locked
 
+      - name: Verify enabled update-check opt-outs without network access
+        run: node ./scripts/check-enabled-update-check.mjs
+
   publish-native:
     needs:
       - determine-release
@@ -152,6 +155,7 @@ jobs:
       NPM_CONFIG_PROVENANCE: true
       PALAMEDES_ALLOW_CROSS_NATIVE: ${{ matrix.rust_target != '' && '1' || '0' }}
       PALAMEDES_RUST_PROFILE: release
+      PALAMEDES_UPDATE_ENDPOINT: https://version-service.sebastian-software.de/check
 
     steps:
       - name: Check out repository
@@ -178,6 +182,8 @@ jobs:
 
       - name: Smoke-test native CLI package
         if: startsWith(matrix.package_name, '@palamedes/cli-') && matrix.rust_target == ''
+        env:
+          PALAMEDES_UPDATE_CHECK: "0"
         run: >
           pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e
           "import { execFileSync } from 'node:child_process';
