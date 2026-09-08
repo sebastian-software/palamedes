@@ -308,6 +308,10 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace --locked
 
+      - name: Verify enabled update-check opt-outs without network access
+        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.95'
+        run: node ./scripts/check-enabled-update-check.mjs
+
       # One instrumented test run, three reports: `report` re-renders the
       # profile data the first command collected instead of running the suite
       # again. The last render is the gate; its threshold comes from

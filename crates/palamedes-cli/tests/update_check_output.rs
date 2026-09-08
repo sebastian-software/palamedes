@@ -8,6 +8,7 @@ fn release_endpoint_is_disabled_by_default_without_cache_or_output_side_effects(
         .arg("version")
         .env("HOME", home.path())
         .env("XDG_CACHE_HOME", home.path().join("cache"))
+        .env("LOCALAPPDATA", home.path().join("local-app-data"))
         .env_remove("DO_NOT_TRACK")
         .env_remove("PALAMEDES_UPDATE_CHECK")
         .output()
