@@ -96,6 +96,7 @@ runs:
       shell: bash
       run: >
         docker run --rm
+        -e PALAMEDES_UPDATE_CHECK=0
         -v "$PWD:/workspace"
         -w "/workspace/${{ inputs.package_dir }}"
         node:24-alpine

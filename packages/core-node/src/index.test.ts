@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   coordinateInitialCatalogBuild,
@@ -45,6 +45,7 @@ import type {
   TranslationPatchRequest as GeneratedTranslationPatchRequest,
   TranslationPatchResult as GeneratedTranslationPatchResult,
 } from "./generated/palamedes-node-types";
+import type * as NativeLoaderModule from "./native-loader";
 import {
   assertNativeBindingVersion,
   assertWellFormedNativeArguments,
@@ -323,10 +324,12 @@ describe("@palamedes/core-node", () => {
 
   it("passes wrapper-owned prepared bulk requests without a second deep copy", () => {
     const captured: unknown[] = [];
+    const capturedSignals: Array<AbortSignal | undefined> = [];
     const fixtureBindings = {
       getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
-      combineCatalogs(request: unknown) {
+      combineCatalogs(request: unknown, signal?: AbortSignal) {
         captured.push(request);
+        capturedSignals.push(signal);
         return {};
       },
     };
@@ -348,6 +351,14 @@ describe("@palamedes/core-node", () => {
     (guarded.combineCatalogs as unknown as (request: unknown) => unknown)(prepared);
     expect(captured[0]).toBe(prepared);
 
+    const controller = new AbortController();
+    (guarded.combineCatalogs as unknown as (request: unknown, signal: AbortSignal) => unknown)(
+      prepared,
+      controller.signal,
+    );
+    expect(captured[1]).toBe(prepared);
+    expect(capturedSignals[1]).not.toBe(controller.signal);
+
     let reads = 0;
     const unprepared = {
       get sourceLocale() {
@@ -357,8 +368,8 @@ describe("@palamedes/core-node", () => {
     };
     (guarded.combineCatalogs as unknown as (request: unknown) => unknown)(unprepared);
     expect(reads).toBe(1);
-    expect(captured[1]).not.toBe(unprepared);
-    expect(captured[1]).toStrictEqual({ sourceLocale: "en" });
+    expect(captured[2]).not.toBe(unprepared);
+    expect(captured[2]).toStrictEqual({ sourceLocale: "en" });
 
     expect(() =>
       prepareNativeArgument("combineCatalogs", {
@@ -404,6 +415,54 @@ describe("@palamedes/core-node", () => {
         inputs: [nullPrototypeInput],
       }),
     ).not.toThrow();
+  });
+
+  it("snapshots AbortSignals outside the known async abort slot", () => {
+    const captured: unknown[][] = [];
+    const signal = new AbortController().signal;
+    const fixtureBindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifactAsync(...arguments_: unknown[]) {
+        captured.push(arguments_);
+        if (arguments_[1] !== undefined && arguments_[1] !== signal) {
+          throw new TypeError("Expected a native AbortSignal.");
+        }
+        return {};
+      },
+    };
+    const guarded = loadNativeBindings({
+      packageDir: "/fixture/core-node",
+      nativePackageName: "fixture-native",
+      require(specifier) {
+        return specifier.endsWith("package.json") ? { version: "fixture" } : fixtureBindings;
+      },
+    });
+    const invoke = guarded.compileCatalogArtifactAsync as unknown as (
+      ...arguments_: unknown[]
+    ) => unknown;
+    const request = prepareNativeArgument("compileCatalogArtifactAsync", {
+      config: {},
+      resourcePath: "fixture.po",
+    });
+
+    invoke(request, signal);
+    expect(captured[0]?.[0]).toBe(request);
+    expect(captured[0]?.[1]).toBe(signal);
+
+    expect(() => invoke(signal, request)).toThrow("Expected a native AbortSignal");
+    expect(captured[1]?.[0]).not.toBe(signal);
+
+    const nestedRequest = { signal };
+    invoke(nestedRequest);
+    const nestedSnapshot = captured[2]?.[0];
+    if (nestedSnapshot === null || typeof nestedSnapshot !== "object") {
+      throw new Error("Expected the nested request to be snapshotted.");
+    }
+    expect(Reflect.get(nestedSnapshot, "signal")).not.toBe(signal);
+
+    const arbitrary = { aborted: false, onabort: null };
+    expect(() => invoke(request, arbitrary)).toThrow("Expected a native AbortSignal");
+    expect(captured[3]?.[1]).not.toBe(arbitrary);
   });
 
   it("validates wrapper-owned bulk payloads before the native call", () => {
@@ -1094,6 +1153,62 @@ export function greeting() {
         { signal: controller.signal },
       ),
     ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("cancels a queued catalog task through the guarded async wrapper", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    let queued = false;
+    const bindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifactAsync(_request: unknown, signal?: AbortSignal) {
+        queued = true;
+        receivedSignal = signal;
+        return new Promise<never>((_resolve, reject) => {
+          if (signal) {
+            signal.onabort = () => {
+              const error = new Error("AbortError");
+              error.name = "AbortError";
+              reject(error);
+            };
+          }
+        });
+      },
+    };
+
+    vi.resetModules();
+    vi.doMock("./native-loader", async () => {
+      const nativeLoader = await vi.importActual<typeof NativeLoaderModule>("./native-loader");
+      return {
+        ...nativeLoader,
+        loadNativeBindings: () =>
+          nativeLoader.loadNativeBindings({
+            packageDir: "/fixture/core-node",
+            nativePackageName: "fixture-native",
+            require(specifier) {
+              return specifier.endsWith("package.json") ? { version: "fixture" } : bindings;
+            },
+          }),
+      };
+    });
+
+    try {
+      const { compileCatalogArtifactAsync: compileQueuedCatalogArtifact } = await import("./index");
+      const controller = new AbortController();
+      const task = compileQueuedCatalogArtifact(
+        { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] },
+        "fixture.po",
+        { signal: controller.signal },
+      );
+
+      expect(queued).toBe(true);
+      controller.abort();
+
+      await expect(task).rejects.toMatchObject({ name: "AbortError" });
+      expect(receivedSignal).toBe(controller.signal);
+    } finally {
+      vi.doUnmock("./native-loader");
+      vi.resetModules();
+    }
   });
 
   it("keeps the event loop responsive while catalog compilation runs off-thread", async () => {
