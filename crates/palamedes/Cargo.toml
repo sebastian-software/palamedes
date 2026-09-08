@@ -1,6 +1,6 @@
 [package]
 name = "palamedes"
-version = "1.23.0"
+version = "1.24.0"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
