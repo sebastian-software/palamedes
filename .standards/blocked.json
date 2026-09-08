@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "blocking": false,
+  "reason": "The automated standards agent could not complete the repository gate because cargo is not available on this host.",
+  "detectedAt": "2026-09-07T19:56:10.667Z",
+  "expectedStandardsVersion": 13,
+  "observedStandardsVersion": 13,
+  "expectedCliVersion": "0.10.0",
+  "observedCliVersion": "0.10.0",
+  "failedChecks": [
+    "CI=true pnpm agent:check"
+  ],
+  "retry": "Run the pull request CI or rerun the repository gate in an environment with the Rust toolchain available, then delete this file if the gate passes."
+}
