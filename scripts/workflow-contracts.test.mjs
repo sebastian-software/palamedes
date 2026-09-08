@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { checkWorkflowPins, unpinnedActionReferences } from "./check-workflow-pins.mjs";
+import { COVERAGE_GATES } from "./coverage-gate.mjs";
 import { selectScreenshotExamples } from "./example-matrix.mjs";
 import {
   assertEnabledCacheContents,
@@ -360,6 +361,9 @@ describe("workflow contracts", () => {
 
     expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m);
     expect(verifyRelease).toContain("run: node ./scripts/check-published-versions.mjs");
+    expect(verifyRelease).toContain("timeout-minutes: 15");
+    expect(verifyRelease).toContain("PALAMEDES_REGISTRY_RETRY_BUDGET_MS: 300000");
+    expect(verifyRelease).toContain("PALAMEDES_REGISTRY_RETRY_MS: 15000");
     expect(publishJs).toContain("publish-package-if-needed.mjs --all-js");
     expect(publishJs).not.toContain("publish_package @palamedes/");
     expect(notifyFailure).toContain("issues: write");
@@ -641,6 +645,46 @@ describe("workflow contracts", () => {
     expect(validate).toContain("run: pnpm verify:site-docs-dev");
     expect(validate.indexOf("run: pnpm build:site")).toBeLessThan(
       validate.indexOf("run: pnpm verify:site-docs-dev"),
+    );
+  });
+
+  it("gates both coverage flows on one threshold source", async () => {
+    const [ci, vitestConfig, readme, packageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("vitest.coverage.config.mts"),
+      readRepositoryFile("README.md"),
+      readRepositoryFile("package.json").then(JSON.parse),
+    ]);
+    const validate = job(ci, "validate", "validate-rust");
+    const rust = job(ci, "validate-rust", "validate-dependency-policy");
+
+    // Neither floor is ever restated: the vitest config reads the JavaScript
+    // one, the workflow asks the script for the Rust one.
+    expect(packageJson.scripts["test:coverage"]).toBe(
+      "vitest run --config vitest.coverage.config.mts --coverage",
+    );
+    expect(vitestConfig).toContain("lines: COVERAGE_GATES.javascript.threshold");
+    expect(validate).toContain("run: pnpm test:coverage");
+    expect(rust).toContain(
+      'cargo llvm-cov report --fail-under-lines "$(node ./scripts/coverage-gate.mjs rust --threshold)"',
+    );
+
+    // Both flows report their number into the run summary, including on the
+    // run that just failed the gate.
+    expect(validate).toContain("run: node ./scripts/coverage-gate.mjs javascript");
+    expect(rust).toContain("run: node ./scripts/coverage-gate.mjs rust\n");
+
+    // Coverage is enforced here, not reported to an external service.
+    expect(ci.toLowerCase()).not.toContain("codecov");
+
+    const badge = readme.match(/^\[!\[(Coverage gate[^\]]*)\]\((\S+)\)\]\((\S+)\)$/mu);
+    expect(badge).not.toBeNull();
+    for (const threshold of [COVERAGE_GATES.javascript.threshold, COVERAGE_GATES.rust.threshold]) {
+      expect(badge[1]).toContain(`≥ ${threshold}%`);
+      expect(decodeURIComponent(badge[2])).toContain(`≥ ${threshold}%`);
+    }
+    expect(badge[3]).toBe(
+      "https://github.com/sebastian-software/palamedes/blob/main/.github/workflows/ci.yml",
     );
   });
 });

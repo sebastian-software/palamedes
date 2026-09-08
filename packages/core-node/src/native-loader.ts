@@ -130,6 +130,34 @@ function isWellFormed(value: string): boolean {
 }
 
 const preparedNativeArguments = new WeakSet<object>();
+const abortSignalAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
+const abortableNativeOperations = new Set([
+  "updateCatalogFileAsync",
+  "applyTranslationPatchesAsync",
+  "compileCatalogArtifactAsync",
+  "compileCatalogArtifactSelectedAsync",
+  "compileCatalogModuleAsync",
+  "extractCatalogMessagesFromFilesAsync",
+]);
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  if (value === null || typeof value !== "object" || !abortSignalAborted) {
+    return false;
+  }
+  try {
+    return typeof abortSignalAborted.call(value) === "boolean";
+  } catch {
+    return false;
+  }
+}
+
+function isAbortSignalArgument(
+  operation: string,
+  index: number,
+  value: unknown,
+): value is AbortSignal {
+  return index === 1 && abortableNativeOperations.has(operation) && isAbortSignal(value);
+}
 
 export function assertWellFormedNativeArguments(operation: string, arguments_: unknown[]): void {
   snapshotNativeArguments(operation, arguments_);
@@ -261,6 +289,7 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
   const pending: SnapshotTask[] = arguments_
     .map((value, index) => ({
       kind: "value" as const,
+      argumentIndex: index,
       value,
       path: { segment: `${operation}.argument[${index}]` },
       assign(snapshot: unknown) {
@@ -297,6 +326,15 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
       continue;
     }
     if (value === null || typeof value !== "object") {
+      current.assign(value);
+      continue;
+    }
+    if (
+      current.kind === "value" &&
+      current.argumentIndex !== undefined &&
+      (preparedNativeArguments.has(value) ||
+        isAbortSignalArgument(operation, current.argumentIndex, value))
+    ) {
       current.assign(value);
       continue;
     }
@@ -356,6 +394,7 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
 type SnapshotTask =
   | {
       kind: "value";
+      argumentIndex?: number;
       value: unknown;
       path: NativeArgumentPath;
       assign: (snapshot: unknown) => void;
@@ -524,9 +563,10 @@ function guardNativeBindings(bindings: NativeBindings): NativeBindings {
       }
       return (...arguments_: unknown[]) => {
         const prepared = arguments_.every(
-          (argument) =>
+          (argument, index) =>
             argument === null ||
             typeof argument !== "object" ||
+            isAbortSignalArgument(property, index, argument) ||
             preparedNativeArguments.has(argument),
         );
         if (!prepared) {
