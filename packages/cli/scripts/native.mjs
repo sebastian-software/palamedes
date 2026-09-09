@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:os";
 
+const CAPTURE_OUTPUT_DRAIN_GRACE_MS = 2000;
+
 export async function spawnNative(args, options = {}) {
   const executable = options.nativeExecutable;
   if (!executable) {
@@ -24,14 +26,20 @@ export async function spawnNative(args, options = {}) {
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let childExited = false;
+    let exitCode;
+    let exitSignal;
+    let outputDrainTimer;
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk) => {
+    const onStdoutData = (chunk) => {
       stdout += chunk;
-    });
-    child.stderr?.on("data", (chunk) => {
+    };
+    const onStderrData = (chunk) => {
       stderr += chunk;
-    });
+    };
+    child.stdout?.on("data", onStdoutData);
+    child.stderr?.on("data", onStderrData);
     const forwardSignal = (signal) => {
       if (settled) return false;
       try {
@@ -62,12 +70,26 @@ export async function spawnNative(args, options = {}) {
     // SIGKILL cannot be intercepted; a native parent-death mechanism would be
     // platform-specific and belongs outside this JavaScript wrapper.
     const onParentExit = () => forwardSignal("SIGTERM");
+    const cleanupOutput = () => {
+      child.stdout?.off("data", onStdoutData);
+      child.stderr?.off("data", onStderrData);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+    };
     const cleanup = () => {
+      if (outputDrainTimer) {
+        clearTimeout(outputDrainTimer);
+        outputDrainTimer = undefined;
+      }
+      cleanupOutput();
       options.signal?.removeEventListener("abort", onAbort);
       process.off("SIGINT", forwardInterrupt);
       process.off("SIGTERM", forwardTerminate);
       if (isolatedSignalGroup) process.off("SIGHUP", forwardHangup);
       process.off("exit", onParentExit);
+      child.off("error", onError);
+      child.off("exit", onExit);
+      if (captureOutput) child.off("close", onClose);
     };
     const settle = (callback) => {
       if (settled) return;
@@ -76,16 +98,32 @@ export async function spawnNative(args, options = {}) {
       callback();
     };
 
-    child.once("error", (error) => settle(() => reject(error)));
-    // `exit` can precede the final data events from piped stdio. `close`
-    // guarantees both streams have drained, while the inherited-stdio path can
-    // keep its existing process-exit semantics.
-    child.once(captureOutput ? "close" : "exit", (code, signal) => {
-      settle(() => {
-        const exitCode = signal ? signalExitCode(signal) : (code ?? 1);
-        resolve(captureOutput ? { exitCode, stdout, stderr } : exitCode);
-      });
-    });
+    const resolveCapturedOutput = () => {
+      const code = exitSignal ? signalExitCode(exitSignal) : (exitCode ?? 1);
+      settle(() => resolve({ exitCode: code, stdout, stderr }));
+    };
+    const onError = (error) => settle(() => reject(error));
+    const onExit = (code, signal) => {
+      childExited = true;
+      exitCode = code;
+      exitSignal = signal;
+      if (!captureOutput) {
+        settle(() => resolve(signal ? signalExitCode(signal) : (code ?? 1)));
+        return;
+      }
+
+      // `exit` can precede the final data events from piped stdio. Keep
+      // draining until `close`, but do not wait forever when a grandchild
+      // inherits the pipes and outlives the native child.
+      outputDrainTimer = setTimeout(resolveCapturedOutput, CAPTURE_OUTPUT_DRAIN_GRACE_MS);
+    };
+    const onClose = () => {
+      if (captureOutput && childExited) resolveCapturedOutput();
+    };
+
+    child.once("error", onError);
+    child.once("exit", onExit);
+    if (captureOutput) child.once("close", onClose);
 
     options.signal?.addEventListener("abort", onAbort, { once: true });
     process.on("SIGINT", forwardInterrupt);

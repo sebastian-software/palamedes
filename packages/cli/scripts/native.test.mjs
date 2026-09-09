@@ -366,6 +366,84 @@ worker.unref()
   });
 });
 
+test("captured output settles after a bounded drain when a descendant holds the pipes open", async () => {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-open-pipes-"));
+  const workerPidFile = path.join(fixture, "worker-pid");
+  const workerReadyFile = path.join(fixture, "worker-ready");
+  const parentCleanupFile = path.join(fixture, "parent-cleanup");
+  const workerSource = `
+const { writeFileSync } = require("node:fs")
+process.stdout.write("stdout-held-pipe")
+process.stderr.write("stderr-held-pipe")
+writeFileSync(${JSON.stringify(workerReadyFile)}, "ready")
+setInterval(() => {}, 1000)
+`;
+  const parentSource = `
+const { spawn } = require("node:child_process")
+const { existsSync, writeFileSync } = require("node:fs")
+const worker = spawn(process.execPath, ["-e", ${JSON.stringify(workerSource)}], {
+  detached: true,
+  stdio: ["ignore", "inherit", "inherit"],
+})
+writeFileSync(${JSON.stringify(workerPidFile)}, String(worker.pid))
+worker.unref()
+const readyTimer = setInterval(() => {
+  if (existsSync(${JSON.stringify(parentCleanupFile)})) {
+    clearInterval(readyTimer)
+    process.exit(1)
+  }
+  if (existsSync(${JSON.stringify(workerReadyFile)})) {
+    clearInterval(readyTimer)
+    process.exit(0)
+  }
+}, 10)
+`;
+
+  const listenersBefore = signalListenerCounts();
+  const spawnPromise = spawnNative(["-e", parentSource], {
+    nativeExecutable: process.execPath,
+    captureOutput: true,
+  });
+  const observed = spawnPromise.then(
+    () => undefined,
+    () => undefined,
+  );
+  let timeoutId;
+
+  try {
+    const startedAt = Date.now();
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("Timed out waiting for captured output to settle.")),
+        5000,
+      );
+    });
+    const result = await Promise.race([spawnPromise, timeoutPromise]);
+    const elapsed = Date.now() - startedAt;
+
+    assert.ok(elapsed < 5000, `spawnNative took ${elapsed}ms to settle`);
+    assert.doesNotThrow(() => process.kill(Number(readFileSync(workerPidFile, "utf8")), 0));
+    assert.deepEqual(signalListenerCounts(), listenersBefore);
+    assert.deepEqual(result, {
+      exitCode: 0,
+      stdout: "stdout-held-pipe",
+      stderr: "stderr-held-pipe",
+    });
+  } finally {
+    clearTimeout(timeoutId);
+    writeFileSync(parentCleanupFile, "cleanup");
+    if (existsSync(workerPidFile)) {
+      try {
+        process.kill(Number(readFileSync(workerPidFile, "utf8")), "SIGTERM");
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error;
+      }
+    }
+    await Promise.race([observed, new Promise((resolve) => setTimeout(resolve, 1000))]);
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 async function waitFor(predicate, timeout) {
   const deadline = Date.now() + timeout;
   while (!predicate()) {
