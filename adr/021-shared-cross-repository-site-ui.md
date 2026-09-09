@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-29
-**Last updated:** 2026-07-29
+**Last updated:** 2026-09-07
 
 ## Context
 
@@ -42,6 +42,28 @@ must not be committed as the reproducible dependency.
 Cross-product navigation is configuration, never hostname detection. The
 Palamedes+ destination is present but disabled in the OSS configuration until
 that site is live.
+
+**Amendment, 2026-09-07 — Ferramenta family surfaces.** Decision D6 of the
+2026-09 family audit (sebastian-software/ferramenta#17) asks every project site
+to carry a family tool switcher and a footer family line. Palamedes keeps its
+own brand and does not adopt the `@ferramenta/family` chrome; instead the shared
+package gained two optional configuration shapes, `toolSwitcher` and
+`familyLine`, rendered by `SiteHeader`/`SiteFooter` and also exported as the
+standalone `ToolSwitcher` and `FamilyLine` components for a site whose header
+belongs to something else. They are data: the consuming site resolves the tools
+from `@ferramenta/family/registry` — the data-only entry point, no React and no
+CSS — so this package still depends on React alone. A site that omits both, as
+Palamedes+ does, renders no family surface at all, which keeps the switch a
+configuration decision rather than an environment check.
+
+**Note, 2026-09-07 — the family package is unscoped.** The npm scope
+`@ferramenta` turned out to be unavailable, so the package named
+`@ferramenta/family` above is published as `ferramenta-family`
+(sebastian-software/ferramenta#33). Nothing in the decision changes: the site
+still resolves the family from the data-only registry entry point, now imported
+as `ferramenta-family/registry`, and `site-ui` still depends on React alone.
+The dependency is a commit pin of `packages/family` consumed straight from Git
+until the package is released to npm.
 
 ## Alternatives Considered
 

@@ -399,11 +399,14 @@ pmds --version
 
 ## Advisory update checks
 
-The native CLI contains a privacy-bounded update-check client, but published
-binaries keep it disabled until the shared endpoint has valid DNS/TLS and a
-verified deployment. Enabling a release is an explicit build step; a binary
-without that release-time endpoint makes no update-check request and writes no
-update-check cache. A configured build fails unless the value is exactly the
+The release workflow configures the native CLI's privacy-bounded update check
+for the next release, following completed service readiness. The consuming
+release and its production-check evidence remain pending in
+[#1036](https://github.com/sebastian-software/palamedes/issues/1036) and
+[version-service #12](https://github.com/sebastian-software/version-service/issues/12);
+configuration alone does not mean that an enabled release has shipped.
+Ordinary/local builds without `PALAMEDES_UPDATE_ENDPOINT` make no update-check
+request and write no update-check cache. A configured build fails unless the value is exactly the
 owned HTTPS route `https://version-service.sebastian-software.de/check`; malformed,
 alternate-host, credentialed, port-qualified, query, and fragment values cannot
 produce a release binary. The server half of the contract lives in the public
@@ -428,7 +431,8 @@ postinstall hook — and sends only this JSON shape over HTTPS:
 `installedSince` is a coarse year-month install cohort and is deliberately
 never finer than a month: combined with the other fields, a day-precision value
 could form singleton combinations whose daily requests become linkable — a
-de-facto identifier. There is no installation or telemetry ID and no command,
+de-facto identifier. A month reduces specificity but does not guarantee that
+every combination is nonunique or unlinkable. There is no installation or telemetry ID and no command,
 arguments, path, project data, username, or hostname. Palamedes application
 code does not access or persist client IP addresses, forwarded headers, user
 agents, or other identifying headers. The service reads the request URL path,
@@ -439,7 +443,8 @@ aggregates rate-limited request volume and
 version/OS/architecture/CI/cohort distributions; because it has no stable
 identifier, those requests are not unique weekly installations.
 
-Set either opt-out before invoking the CLI:
+Set either opt-out before invoking the CLI to prevent both cache and network
+access:
 
 ```bash
 export DO_NOT_TRACK=1
@@ -460,7 +465,14 @@ version produces only this stderr notice after the command output:
 A new version of palamedes is available: <installed version> → <published version>
 ```
 
-Stdout and exit status are unchanged, including for `--json` commands. See
+Stdout and exit status are unchanged, including for `--json` commands. A
+silent check is not proof of successful ingestion, and a timeout can occur
+after the service accepted an event. The service's 10-minute registry cache
+can briefly return the previous version after publication; do not delete the
+client cache to poll. Packaging smoke tests opt out without disabling checks
+in the shipped artifact. Removing endpoint embedding only affects future
+builds; existing binaries require an opt-out or an update to a disabled build.
+See
 [ADR-027](../adr/027-privacy-bounded-cli-update-check.md) for the data boundary
 and the [version-service](https://github.com/sebastian-software/version-service)
 repository for the service implementation and its deployment guide.

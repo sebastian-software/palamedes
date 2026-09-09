@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { FamilyLine } from "./FamilySurfaces";
 import { SiteLink } from "./SiteUiProvider";
 import type { SiteBuildMetadata, SiteConfig } from "./types";
 import { Wordmark } from "./Wordmark";
@@ -42,6 +43,7 @@ export function SiteFooter({ config, build }: { config: SiteConfig; build?: Site
           </div>
         ))}
       </div>
+      {config.familyLine ? <FamilyLine line={config.familyLine} /> : null}
       <div className="pmds-footer-meta">
         <p className="pmds-footer-copyright">
           <span>{config.copyright}</span>

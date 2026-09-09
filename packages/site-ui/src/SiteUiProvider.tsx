@@ -2,9 +2,9 @@ import { createContext, useContext, type ComponentType } from "react";
 
 import type { SiteLinkComponentProps, SiteUiProviderProps } from "./types";
 
-function AnchorLink({ href, className, children, ariaLabel }: SiteLinkComponentProps) {
+function AnchorLink({ href, className, children, ariaLabel, ariaCurrent }: SiteLinkComponentProps) {
   return (
-    <a href={href} className={className} aria-label={ariaLabel}>
+    <a href={href} className={className} aria-label={ariaLabel} aria-current={ariaCurrent}>
       {children}
     </a>
   );

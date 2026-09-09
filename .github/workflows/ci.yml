@@ -52,6 +52,46 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      # `.standards/blocked.json` records an agent run that pushed a result it
+      # could not validate. `blocking: true` is the CLI/stamp alignment class:
+      # every verdict of that run was computed against the wrong manifest, so
+      # the pull request must not merge. A non-blocking marker is context for
+      # the reviewer — the failures it lists are reported by this workflow's own
+      # lanes. The marker is parsed rather than matched line by line: JSON may
+      # put `"blocking":` and `true` on separate lines, and a guard whose whole
+      # purpose is to fail closed must fail on a marker it cannot read at all.
+      # `node` rather than `jq`, which the Forgejo node image may lack; the
+      # schema is `BlockedState` in @sebastian-software/standards.
+      - name: "Guard: no blocking agent findings for this PR"
+        run: |
+          node -e "
+          const { existsSync, readFileSync } = require('node:fs');
+          const file = '.standards/blocked.json';
+          if (!existsSync(file)) { process.exit(0); }
+          const raw = readFileSync(file, 'utf8');
+          console.log(raw);
+          const fail = (detail) => { console.error('Refusing to pass ' + file + ': ' + detail); process.exit(1); };
+          let state;
+          try { state = JSON.parse(raw); } catch (error) { fail('it is not valid JSON — ' + error.message); }
+          if (typeof state !== 'object' || state === null || Array.isArray(state)) { fail('it is not a JSON object.'); }
+          const orNull = (value, type) => value === null || typeof value === type;
+          const broken = [
+            ['schemaVersion must be 1', state.schemaVersion !== 1],
+            ['blocking must be a boolean', typeof state.blocking !== 'boolean'],
+            ['reason must be a string', typeof state.reason !== 'string'],
+            ['detectedAt must be a string', typeof state.detectedAt !== 'string'],
+            ['expectedStandardsVersion must be a number', typeof state.expectedStandardsVersion !== 'number'],
+            ['observedStandardsVersion must be a number or null', !orNull(state.observedStandardsVersion, 'number')],
+            ['expectedCliVersion must be a string or null', !orNull(state.expectedCliVersion, 'string')],
+            ['observedCliVersion must be a string or null', !orNull(state.observedCliVersion, 'string')],
+            ['failedChecks must be an array of strings', !Array.isArray(state.failedChecks) || !state.failedChecks.every((entry) => typeof entry === 'string')],
+            ['retry must be a string', typeof state.retry !== 'string'],
+          ].filter((entry) => entry[1]).map((entry) => entry[0]);
+          if (broken.length > 0) { fail('it does not match the documented schema — ' + broken.join('; ')); }
+          if (state.blocking) { fail('the agent could not validate its result.'); }
+          console.log('The agent marker is non-blocking; its findings are reviewer context.');
+          "
+
       # A new public package needs one manual bootstrap publish before npm can
       # issue the OIDC token used by the release workflow. Surface that release
       # prerequisite while the package-adding PR is still reviewable.
@@ -158,6 +198,8 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm test
 
+      # Gated, not just reported: the vitest config reads its line threshold
+      # from `scripts/coverage-gate.mjs`, so this run fails below the floor.
       - name: Collect JavaScript coverage
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm test:coverage
@@ -167,19 +209,16 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: javascript-coverage
-          path: coverage/javascript/coverage-summary.json
+          path: |
+            coverage/javascript/coverage-summary.json
+            coverage/javascript/lcov.info
           if-no-files-found: warn
 
-      # Reported, not gated: a missing or rejected upload must not fail a run
-      # that is otherwise green.
-      - name: Report JavaScript coverage to Codecov
+      # Runs even when the step above failed the gate, so the run summary says
+      # what the number actually was.
+      - name: Report JavaScript coverage
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.node == 24 }}
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
-        with:
-          files: coverage/javascript/lcov.info
-          flags: javascript
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: node ./scripts/coverage-gate.mjs javascript
 
       - name: Test lifecycle-free CLI package
         if: ${{ !matrix.full }}
@@ -193,6 +232,19 @@ jobs:
       # the exact version the lockfile records and CI executes nothing that was
       # not reviewed in a pull request. Renovate's `:standards` preset bumps the
       # pin; the drift it then reports is applied in that same pull request.
+      - name: "Guard: the pinned standards CLI matches the repository stamp"
+        if: ${{ matrix.full }}
+        run: |
+          node -p "
+          const meta = require('./.repometa.json');
+          const paths = [process.cwd(), ...(meta.workspaces ?? [])];
+          const manifest = require(require.resolve('@sebastian-software/standards/manifest.json', { paths }));
+          if (manifest.currentVersion !== meta.standards) {
+            throw new Error('The installed @sebastian-software/standards ships manifest version ' + manifest.currentVersion + ', but .repometa.json is stamped ' + meta.standards + '. Raise the pin to the release whose manifest is version ' + meta.standards + ' and refresh the lockfile.');
+          }
+          'standards CLI and repository stamp are aligned at version ' + meta.standards
+          "
+
       - name: Check org standards
         if: ${{ matrix.full }}
         run: pnpm exec standards check
@@ -309,31 +361,38 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace --locked
 
-      # One instrumented test run, two reports: `report` re-renders the profile
-      # data the first command collected instead of running the suite twice.
+      - name: Verify enabled update-check opt-outs without network access
+        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.95'
+        run: node ./scripts/check-enabled-update-check.mjs
+
+      # One instrumented test run, three reports: `report` re-renders the
+      # profile data the first command collected instead of running the suite
+      # again. The last render is the gate; its threshold comes from
+      # `scripts/coverage-gate.mjs`, the single source the vitest config reads
+      # for the JavaScript side.
       - name: Collect Rust coverage
         if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
         run: |
           mkdir -p coverage/rust
           cargo llvm-cov --workspace --locked --lcov --output-path coverage/rust/lcov.info
           cargo llvm-cov report --json --summary-only --output-path coverage/rust/coverage-summary.json
+          cargo llvm-cov report --fail-under-lines "$(node ./scripts/coverage-gate.mjs rust --threshold)"
 
       - name: Upload Rust coverage summary
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-coverage
-          path: coverage/rust/coverage-summary.json
+          path: |
+            coverage/rust/coverage-summary.json
+            coverage/rust/lcov.info
           if-no-files-found: warn
 
-      - name: Report Rust coverage to Codecov
+      # Runs even when the step above failed the gate, so the run summary says
+      # what the number actually was.
+      - name: Report Rust coverage
         if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
-        with:
-          files: coverage/rust/lcov.info
-          flags: rust
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: node ./scripts/coverage-gate.mjs rust
 
       # Palamedes ships the CLI and core-node addon for six platforms, so
       # anything baked into either artifact multiplies. Checked once, on the

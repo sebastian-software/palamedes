@@ -1,8 +1,9 @@
 # ADR-027: Privacy-Bounded CLI Update Check With Deployment-Gated Rollout
 
-- Status: Accepted; rollout gated on endpoint readiness
+- Status: Accepted; service readiness complete, activation configured for the next release
 - Date: 2026-08-22 (amended 2026-08-27: shared service, project and cohort
-  fields; amended 2026-09-02: production hostname —
+  fields; amended 2026-09-02: production hostname; amended 2026-09-07:
+  release activation and readiness evidence —
   [#1036](https://github.com/sebastian-software/palamedes/issues/1036))
 - Issue: [#855](https://github.com/sebastian-software/palamedes/issues/855)
 
@@ -18,18 +19,23 @@ attempts, or accidental command and filesystem context.
 The production hostname now exists at
 `version-service.sebastian-software.de`, owned by the public
 [version-service](https://github.com/sebastian-software/version-service)
-repository. The application endpoint is not yet published or live-contract
-verified. Shipping a hard-coded call before that verification would add a
-broken network request and falsely imply that the server-side privacy contract
-was in operation.
+repository. Production readiness was completed on September 6 in
+[version-service #11](https://github.com/sebastian-software/version-service/issues/11#issuecomment-5558984060).
+The verification is associated with candidate
+`04b56723d03c28e9b94a4db9fbbc57a2ee1a3940`; this is deployment-history
+correlation, not attestation of the revision active inside Bunny. The release
+workflow now configures activation for the next release. A consuming release
+and its production-check evidence are still pending in
+[#1036](https://github.com/sebastian-software/palamedes/issues/1036) and
+[version-service #12](https://github.com/sebastian-software/version-service/issues/12).
 
 The no-identifier boundary has one important measurement consequence. A
 24-hour client cache rate-limits requests from one installation, but the server
 cannot recognize that installation again on a later day. Weekly unique active
 installations are therefore not derivable. The honest measurements are
 rate-limited request volume, version, OS, architecture, and CI/local
-distributions, and — through a coarse year-month install cohort — how many
-older installations remain active.
+distributions, and — through a coarse year-month install cohort — requests
+from older cohorts, not counts of retained installations.
 
 ## Decision
 
@@ -41,9 +47,12 @@ The native `pmds` binary owns one advisory update-check mechanism:
    `PALAMEDES_UPDATE_ENDPOINT` is exactly the owned HTTPS route
    `https://version-service.sebastian-software.de/check`. Missing values keep it
    disabled; malformed, alternate-origin, credentialed, port-qualified, query,
-   or fragment values fail the build. The release workflow must not set that
-   build variable until the production endpoint passes the deployment guide in
-   the version-service repository.
+   or fragment values fail the build. With service readiness complete,
+   `publish-native` sets that variable for all six CLI artifacts, including
+   the two host-built musl targets. Ordinary builds and general validation
+   remain default-off. Packaging smoke checks set `PALAMEDES_UPDATE_CHECK=0`,
+   explicitly inside the musl container too; this runtime opt-out is not a
+   packaged default and does not remove the compiled endpoint.
 3. `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0` disable the mechanism before
    cache or network access.
 4. A platform cache records an attempted check before network I/O. Linux uses
@@ -63,7 +72,9 @@ The native `pmds` binary owns one advisory update-check mechanism:
    singleton combinations whose daily requests become linkable across days — a
    de-facto identifier. The value is derived once, persisted beside the cache
    as `installed-since-v1`, validated on read, and recomputed when missing,
-   malformed, or in the future. A deleted cache restarts the cohort.
+   malformed, or in the future. A deleted cache restarts the cohort. Coarse
+   dimensions reduce specificity; they do not guarantee anonymity or prevent
+   every linkable combination.
 7. Redirects are disabled and the entire request/response operation has a
    two-second deadline. The response body is limited to 4 KiB. The check runs
    beside the command; joining it can add only the remainder of that deadline
@@ -76,7 +87,7 @@ The server half is a shared, multi-project endpoint owned by the public
 [version-service](https://github.com/sebastian-software/version-service)
 repository: a Bunny Edge Scripting script that validates the documented JSON
 fields against a per-project allowlist, answers with the latest released
-version read from the project's distribution registry (cached briefly
+version read from the project's distribution registry (cached for 10 minutes
 server-side; publishing a release is the synchronization), and forwards only
 the documented aggregate dimensions to the self-hosted Rybbit analytics
 instance with neutralized IP and user-agent values. Application code does not
@@ -88,10 +99,33 @@ edge platform still necessarily processes network metadata as infrastructure;
 the application contract is that we do not persist or query it. The sink is
 swappable behind the stable wire contract without rebuilding any client.
 
-Deployment, DNS/TLS, sink configuration, and live privacy verification remain
-explicit external readiness work tracked in the version-service repository.
-Until that work is complete, the default release build makes no request and
-this issue must not be described as a deployed service.
+The service accepts exactly the six request fields, bounded to 1024 bytes, and
+returns `{"latestVersion":"<SemVer>"}` on success. Invalid payloads return 400,
+unsupported methods 405, and configuration, registry, or analytics failures
+503; the client treats these as silent, nonfatal outcomes. Rybbit acceptance
+requires HTTP 200 and an exact bounded `{"success":true}` acknowledgement.
+That acknowledgement does not prove later event visibility, and a client
+timeout can follow ingestion.
+
+Bunny raw request logging was observed off during readiness verification;
+this is not a historical-deletion guarantee. Shield/per-client rate limiting
+is intentionally absent. Aggregate monitoring and health checks provide
+limited detection, not abuse prevention or proof of individual ingestion.
+
+Release execution remains Palamedes-owned and production observation requires
+operator authorization. Keep #1036 and version-service #12 open until an
+actual published artifact and a valid matching private service-side event
+are verified, with sanitized evidence linked in both issues. A silent CLI
+exit or an unrelated aggregate increase is insufficient; colliding aggregate
+dimensions leave attribution ambiguous. Follow the service runbook's bounded
+observation window and do not delete the cache to retry an ambiguous check.
+
+For immediate user-side disable, set `DO_NOT_TRACK=1` or
+`PALAMEDES_UPDATE_CHECK=0`. Maintainers can remove endpoint embedding from
+future builds and publish a new patch release; existing binaries stay enabled
+until users opt out or install a disabled build. Service-side containment
+belongs to version-service operators. Disarming `BUNNY_DEPLOY_ENABLED` only
+prevents future deployments, not requests to an already deployed service.
 
 ## Alternatives Considered
 
@@ -127,8 +161,8 @@ explicit opt-in with its own decision.
 
 Rejected. Roughly 365 values per year multiplied with the version, OS, and
 architecture dimensions produce singleton cells; a singleton that pings daily
-is trackable without any explicit identifier. Year-month buckets keep the
-cohort signal while individuals stay inside their cohort.
+can be linkable without any explicit identifier. Year-month buckets retain a
+coarser cohort signal without promising that every combination is nonunique.
 
 ### Count IP addresses as installations
 

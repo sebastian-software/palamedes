@@ -143,12 +143,14 @@
 /*
  * The header wordmark. ARDO renders the site title as a plain <span> inside
  * the logo home link and exposes no className hook for it; like the
- * mobile-panel nav below, it is scoped through semantics (the only header
- * link to "/" — a descendant combinator, so an extra ARDO wrapper element
- * cannot silently break the match), never through hashed classes.
+ * mobile-panel nav below, it is scoped through semantics (a descendant
+ * combinator, so an extra ARDO wrapper element cannot silently break the
+ * match), never through hashed classes. The family switcher also links this
+ * site's root — for its own entry — and its labels are body type, not the
+ * inscription, so it is excluded by its own public class.
  * Cinzel Hellenic set wide, as on an inscription.
  */
-header a[href="/"] span {
+header a[href="/"]:not(.pmds-switcher-link) span {
   font-family: var(--font-display);
   font-weight: 400;
   font-size: 18px;

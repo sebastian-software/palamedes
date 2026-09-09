@@ -15,6 +15,7 @@
     "@palamedes/site-ui": "workspace:*",
     "@react-router/node": "8.3.1",
     "ardo": "4.2.0",
+    "ferramenta-family": "github:sebastian-software/ferramenta#f6de99cd094d0fabbf0be23a9c0b5c074ff89976&path:/packages/family",
     "isbot": "^5.2.2",
     "lucide-react": "^1.39.0",
     "react": "^19.2.8",

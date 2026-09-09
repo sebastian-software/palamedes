@@ -510,7 +510,7 @@ async function checkRoutes(context, label, { expectHydration }) {
       ) {
         fail(`${path}: missing Palamedes decision path`);
       }
-      if ((await comparePage.locator("details").count()) !== 5) {
+      if ((await comparePage.locator("[data-faq-list] details").count()) !== 5) {
         fail(`${path}: expected five comparison-specific FAQs`);
       }
       const faqSchemaCount = await comparePage
@@ -548,7 +548,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!warmLaneCopy) {
       fail("home benchmark: changed-source-files copy collapsed or missing");
     }
-    const faqEntries = await page.locator("details").count();
+    const faqEntries = await page.locator("[data-faq-list] details").count();
     if (faqEntries !== 6) {
       fail(`home FAQ: expected 6 entries, got ${faqEntries}`);
     }

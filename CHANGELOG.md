@@ -106,6 +106,20 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.24.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.23.0...palamedes-v1.24.0) (2026-09-08)
+
+
+### Features
+
+* enable update checks in native release builds ([011cebe](https://github.com/sebastian-software/palamedes/commit/011cebeb0be56661591b5bbb8b0227726592c986))
+* **site:** add the Ferramenta family switcher and footer family line ([#1168](https://github.com/sebastian-software/palamedes/issues/1168)) ([71296ce](https://github.com/sebastian-software/palamedes/commit/71296ce065990b96bc971c7c6324f5acf72786c4))
+
+
+### Bug Fixes
+
+* **core-node:** preserve AbortSignal identity ([#1117](https://github.com/sebastian-software/palamedes/issues/1117)) ([dab06f8](https://github.com/sebastian-software/palamedes/commit/dab06f81bb1d092e5f53ddd6119e5ccea56d1b09))
+* **release:** tolerate npm post-publish propagation lag ([#1116](https://github.com/sebastian-software/palamedes/issues/1116)) ([6b00bff](https://github.com/sebastian-software/palamedes/commit/6b00bff408581acfd66802cb2d9ebad29c6d167c))
+
 ## [1.23.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.22.6...palamedes-v1.23.0) (2026-09-02)
 
 

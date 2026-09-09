@@ -60,7 +60,26 @@ pnpm check:release-set
 pnpm check:binary-size
 pnpm check:llms
 pnpm readme:family:check
+pnpm test:coverage
 ```
+
+Coverage is gated by this repository's own CI, not by an external service.
+`pnpm test:coverage` runs the JavaScript suites with coverage and fails below
+the line floor. The Rust half needs cargo-llvm-cov (`cargo install
+cargo-llvm-cov`) and gates the same crates CI does:
+
+```bash
+cargo llvm-cov --workspace --locked \
+  --fail-under-lines "$(node ./scripts/coverage-gate.mjs rust --threshold)"
+```
+
+Both floors live in `scripts/coverage-gate.mjs` and nowhere else:
+`vitest.coverage.config.mts` reads the JavaScript one into
+`coverage.thresholds.lines`, and the coverage job passes the Rust one to
+cargo-llvm-cov. That same script prints `Line coverage (…): X% (gate: ≥ N%)`
+into the GitHub run summary, so a run says what its number was even when the
+gate rejected it. Raising a floor after coverage genuinely improves is a
+one-line edit there; lowering one to turn a red run green is not.
 
 `pnpm check:binary-size` builds the release CLI and core-node addon and holds
 each artifact under its own fixed ceiling. Palamedes
