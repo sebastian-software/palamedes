@@ -44,6 +44,22 @@ describe("Remix client i18n bootstrap", () => {
     expect(getI18n()._("greeting")).toBe("Hello");
   });
 
+  it("rejects explicit bootstrap in a server environment before installation", () => {
+    expect(() =>
+      initializeRemixClientI18n({
+        createI18n,
+        bootstrap: {
+          locale: "en",
+          catalogVersion: "deployment-42",
+          messages: { greeting: "Hello" },
+        },
+      }),
+    ).toThrow(/can only run in a browser environment.*createRemixI18nServer/u);
+
+    vi.stubGlobal("window", {});
+    expect(() => getI18n()).toThrow(/No active client i18n instance/u);
+  });
+
   it("supports locale changes through a fresh full-document bootstrap", () => {
     vi.stubGlobal("window", {});
 
@@ -93,6 +109,8 @@ describe("Remix client i18n bootstrap", () => {
   });
 
   it("rejects missing, malformed, and non-string catalog payloads", () => {
+    vi.stubGlobal("window", {});
+
     expect(() =>
       readRemixI18nBootstrap({ document: createBootstrapDocument("en", undefined) }),
     ).toThrow(/could not find a <template/u);
@@ -123,6 +141,20 @@ describe("Remix client i18n bootstrap", () => {
 
     expect(() => initializeRemixClientI18n({ createI18n, document })).toThrow(
       /locale "de" does not match document locale "en".*full document navigation/u,
+    );
+    expect(() => getI18n()).toThrow(/No active client i18n instance/u);
+  });
+
+  it("reports the missing html lang attribute before installation", () => {
+    vi.stubGlobal("window", {});
+    const document = createBootstrapDocument("", {
+      locale: "en",
+      catalogVersion: "en-v1",
+      messages: { greeting: "Hello" },
+    });
+
+    expect(() => initializeRemixClientI18n({ createI18n, document })).toThrow(
+      /no <html lang> attribute.*Render <html lang=\{locale\}>/u,
     );
     expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });

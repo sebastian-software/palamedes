@@ -32,13 +32,13 @@ For browser-delivered modules, install the post-compile asset loader and allow
 the generated runtime import:
 
 ```ts
-import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import { createPalamedesRemixAssetLoader, PALAMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
 import { createAssetServer } from "remix/assets";
 
 const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/routes.ts", "app/**/public/**"],
-  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: { loaders: [createPalamedesRemixAssetLoader()] },
 });
@@ -49,6 +49,10 @@ and JavaScript. Remix then rewrites the injected `@palamedes/runtime` import to
 an asset URL. The loader does not compile `.po` imports or load Palamedes config;
 those remain server-hook responsibilities. A custom `runtimeModule` package
 must be added to `allowPackages` in place of the default package constant.
+
+Use the correctly spelled `PALAMEDES_REMIX_ASSET_PACKAGES` export in new code.
+The previous `PALEMEDES_REMIX_ASSET_PACKAGES` spelling remains available as a
+deprecated alias for compatibility.
 
 ### Development source maps and invalidation
 
@@ -133,11 +137,13 @@ await import("./translated-app.js");
 The server payload uses ICU strings deliberately. Produce them at build or
 server startup with `compileCatalogArtifact(...).messages` from
 `@palamedes/core-node`; do not serialize executable `.po` module exports.
-`initializeRemixClientI18n()` uses the parser-capable `@palamedes/core`
-runtime, validates the payload and exact `<html lang>` match, installs the
-catalog, and only then exposes it to transformed browser code. Missing,
-malformed, executable, or locale-mismatched payloads fail with an actionable
-error instead of mixing locales silently.
+`initializeRemixClientI18n()` runs only in a browser environment. It uses the
+parser-capable `@palamedes/core` runtime, validates the payload and exact
+`<html lang>` match, installs the catalog, and only then exposes it to
+transformed browser code. Render `<html lang={locale}>`; if the attribute is
+missing, initialization reports that it cannot verify the document locale.
+Missing, malformed, executable, or locale-mismatched payloads fail with an
+actionable error instead of mixing locales silently.
 
 Locale changes require a full document navigation. A new request resolves the
 cookie, route, host, or language header again and emits a matching document and

@@ -1,5 +1,5 @@
 import type { CatalogMessages, PalamedesI18n } from "@palamedes/core";
-import { setClientI18n } from "@palamedes/runtime";
+import { isServerEnvironment, setClientI18n } from "@palamedes/runtime";
 
 export const REMIX_I18N_BOOTSTRAP_ID = "palamedes-i18n-bootstrap";
 
@@ -87,6 +87,12 @@ export function readRemixI18nBootstrap<TLocale extends string = string>(
 export function initializeRemixClientI18n<TLocale extends string, T extends PalamedesI18n>(
   options: InitializeRemixClientI18nOptions<TLocale, T>,
 ): T {
+  if (isServerEnvironment()) {
+    throw new Error(
+      "Palamedes Remix client bootstrap can only run in a browser environment. Render the server catalog with createRemixI18nServer instead.",
+    );
+  }
+
   const document = options.document ?? getBrowserDocument();
   const bootstrap =
     options.bootstrap === undefined
@@ -97,6 +103,11 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
       : validateBootstrap<TLocale>(options.bootstrap);
 
   const documentLocale = document?.documentElement.lang;
+  if (documentLocale === "") {
+    throw new Error(
+      `Palamedes Remix client bootstrap cannot verify locale "${bootstrap.locale}" because the document has no <html lang> attribute. Render <html lang={locale}> in the server document.`,
+    );
+  }
   if (documentLocale !== undefined && documentLocale !== bootstrap.locale) {
     throw new Error(
       `Palamedes Remix client bootstrap locale "${bootstrap.locale}" does not match document locale "${documentLocale}". Perform a full document navigation when changing locale.`,

@@ -24,7 +24,7 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 
 - `createPalamedesRemixLoadHook(options?)`
 - `createPalamedesRemixAssetLoader(options?)`
-- `PALEMEDES_REMIX_ASSET_PACKAGES`
+- `PALAMEDES_REMIX_ASSET_PACKAGES`
 - `@palamedes/remix/register`
 - `@palamedes/remix/server`
 - `@palamedes/remix/client`
@@ -45,7 +45,7 @@ full-stack reference. Its setup has six ordered parts:
 1. Start Node with
    `node --import remix/node-tsx --import @palamedes/remix/register server.ts`.
 2. Add `createPalamedesRemixAssetLoader()` to the asset server's
-   `scripts.loaders`, allow `PALEMEDES_REMIX_ASSET_PACKAGES`, and enable Remix
+   `scripts.loaders`, allow `PALAMEDES_REMIX_ASSET_PACKAGES`, and enable Remix
    source maps in development.
 3. Create the request-local server with `createRemixI18nServer()`, loading the
    executable server catalog and serializable client ICU strings for the same
@@ -122,13 +122,13 @@ Install the Palamedes asset loader there so ordinary macros are transformed
 before Remix analyzes imports, HMR boundaries, and minification:
 
 ```ts
-import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import { createPalamedesRemixAssetLoader, PALAMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
 import { createAssetServer } from "remix/assets";
 
 export const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/routes.ts", "app/**/public/**"],
-  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: {
     loaders: [createPalamedesRemixAssetLoader()],
@@ -136,13 +136,17 @@ export const assetServer = createAssetServer({
 });
 ```
 
-`PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/core`,
+`PALAMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/core`,
 `@palamedes/runtime`, and `@palamedes/remix`. They must be in `allowPackages`
 because the browser bootstrap creates a parser-capable i18n instance, while
 transformed modules import `getI18n()` for ordinary macros and the Remix
 compiled component for rich messages. Remix rewrites those package imports to
 served asset URLs. If `runtimeModule` selects another package, allow that exact
 package name instead of `@palamedes/runtime`.
+
+Use the correctly spelled export in new code. The previous
+`PALEMEDES_REMIX_ASSET_PACKAGES` spelling remains available as a deprecated
+alias for compatibility.
 
 `PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
 `runtimeModule`, and `keepSourceFallbacks` options. Defaults match the Node
@@ -256,11 +260,13 @@ initializeRemixClientI18n({ createI18n });
 await import("./app.js");
 ```
 
-`initializeRemixClientI18n()` validates the complete payload, requires its
-locale to exactly match `<html lang>`, loads its ICU strings, activates the
-locale, and only then installs the runtime used by transformed calls. Invalid
-payloads and parser-free runtimes fail before installation. Advanced hosts can
-pass `bootstrap`, `document`, or `elementId` explicitly;
+`initializeRemixClientI18n()` runs only in a browser environment. It validates
+the complete payload, requires its locale to exactly match `<html lang>`,
+loads its ICU strings, activates the locale, and only then installs the runtime
+used by transformed calls. Render `<html lang={locale}>`; if the attribute is
+missing, initialization reports that it cannot verify the document locale.
+Invalid payloads and parser-free runtimes fail before installation. Advanced
+hosts can pass `bootstrap`, `document`, or `elementId` explicitly;
 `readRemixI18nBootstrap()` provides validation without creating the runtime.
 
 Generate `loadClientMessages` values with the serializable `messages` returned
