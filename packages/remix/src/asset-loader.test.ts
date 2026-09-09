@@ -15,7 +15,11 @@ import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "./index";
+import {
+  createPalamedesRemixAssetLoader,
+  PALAMEDES_REMIX_ASSET_PACKAGES,
+  PALEMEDES_REMIX_ASSET_PACKAGES,
+} from "./index";
 
 const assetLoadContext = {
   conditions: ["browser", "import", "module", "default"],
@@ -35,11 +39,12 @@ afterEach(() => {
 
 describe("createPalamedesRemixAssetLoader", () => {
   it("allows every package required by transformed and bootstrapped browser modules", () => {
-    expect(PALEMEDES_REMIX_ASSET_PACKAGES).toStrictEqual([
+    expect(PALAMEDES_REMIX_ASSET_PACKAGES).toStrictEqual([
       "@palamedes/core",
       "@palamedes/runtime",
       "@palamedes/remix",
     ]);
+    expect(PALEMEDES_REMIX_ASSET_PACKAGES).toBe(PALAMEDES_REMIX_ASSET_PACKAGES);
   });
 
   it.each([
@@ -71,7 +76,7 @@ describe("createPalamedesRemixAssetLoader", () => {
         rootDir: fixture.rootDir,
         basePath: "/assets",
         allowFiles: ["app/**/public/**"],
-        allowPackages: [...PALEMEDES_REMIX_ASSET_PACKAGES],
+        allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
         watch: false,
         scripts: { loaders: [createPalamedesRemixAssetLoader()] },
       });
@@ -151,7 +156,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       rootDir: fixture.rootDir,
       basePath: "/assets",
       allowFiles: ["app/**/public/**"],
-      allowPackages: [...PALEMEDES_REMIX_ASSET_PACKAGES],
+      allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
       sourceMaps: "inline",
       watch: false,
       scripts: { loaders: [createPalamedesRemixAssetLoader()] },
@@ -191,7 +196,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       rootDir: fixture.rootDir,
       basePath: "/assets",
       allowFiles: ["app/**/public/**"],
-      allowPackages: [...PALEMEDES_REMIX_ASSET_PACKAGES],
+      allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
       sourceMaps: "external",
       sourceMapSourcePaths: "absolute",
       watch: false,
@@ -234,7 +239,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       rootDir: fixture.rootDir,
       basePath: "/assets",
       allowFiles: ["app/**/public/**"],
-      allowPackages: [...PALEMEDES_REMIX_ASSET_PACKAGES],
+      allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
       minify: true,
       sourceMaps: "external",
       watch: false,
@@ -277,7 +282,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       rootDir: fixture.rootDir,
       basePath: "/assets",
       allowFiles: ["app/**/public/**"],
-      allowPackages: [...PALEMEDES_REMIX_ASSET_PACKAGES],
+      allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
       hmr: () => ({
         url: "http://example.test/assets/__hmr/events",
         close() {},

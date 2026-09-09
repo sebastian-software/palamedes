@@ -1,19 +1,15 @@
 import path from "node:path";
 
-type CatalogCompilationCompletion =
-  | { ok: true }
-  | {
-      ok: false;
-      error: unknown;
-    };
+type CatalogCompilationCompletion = { ok: true } | { ok: false };
 
 const initialCatalogBuilds = new Map<string, Promise<CatalogCompilationCompletion>>();
 
 /**
  * Keep same-key cache misses out of the native worker pool until the first
  * build has completed. A successful leader warms the native cache before its
- * followers are submitted; a failed leader's error is shared by every
- * follower that arrived while it was running.
+ * followers are submitted. After a leader failure, followers retry one at a
+ * time because cancellation and selected-ID compilation failures are specific
+ * to the leader even though the cache key is shared.
  */
 export async function coordinateInitialCatalogBuild<T>(
   key: string,
@@ -23,7 +19,10 @@ export async function coordinateInitialCatalogBuild<T>(
   if (current) {
     const currentCompletion = await current;
     if (!currentCompletion.ok) {
-      throw currentCompletion.error;
+      if (initialCatalogBuilds.get(key) === current) {
+        initialCatalogBuilds.delete(key);
+      }
+      return coordinateInitialCatalogBuild(key, operation);
     }
     return operation();
   }
@@ -31,7 +30,7 @@ export async function coordinateInitialCatalogBuild<T>(
   const result = Promise.resolve().then(operation);
   const completion: Promise<CatalogCompilationCompletion> = result.then(
     (): CatalogCompilationCompletion => ({ ok: true }),
-    (error: unknown): CatalogCompilationCompletion => ({ ok: false, error }),
+    (): CatalogCompilationCompletion => ({ ok: false }),
   );
   initialCatalogBuilds.set(key, completion);
 
