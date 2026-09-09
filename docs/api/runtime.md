@@ -6,6 +6,7 @@ macro output.
 ## Exports
 
 - `getI18n<T>()`
+- `isServerEnvironment()`
 - `setClientI18n(i18n)`
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
@@ -20,6 +21,10 @@ macro output.
 - `RegisteredMessageLoader`
 - `CreateServerI18nScopeOptions`
 - `ServerI18nScope`
+
+`isServerEnvironment()` classifies the current runtime consistently across
+Palamedes packages. Browser workers are client environments even when they do
+not expose a `window` global.
 
 The server subpath `@palamedes/runtime/server` exports:
 

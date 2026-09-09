@@ -12,7 +12,7 @@ plugins.
 - `mdxFrameworkFor(framework)`
 - `PALAMEDES_MACRO_PACKAGES`
 - `PALAMEDES_BUNDLER_TRANSFORM_INCLUDE` — shared Vite/Next default covering
-  `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, and `.cjs`
+  `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, and `.cjs`
 - `JS_MACROS`
 - `JSX_MACROS`
 - `TransformOptions`
