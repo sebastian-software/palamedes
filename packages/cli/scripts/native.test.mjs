@@ -370,6 +370,7 @@ test("captured output settles after a bounded drain when a descendant holds the 
   const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-open-pipes-"));
   const workerPidFile = path.join(fixture, "worker-pid");
   const workerReadyFile = path.join(fixture, "worker-ready");
+  const parentCleanupFile = path.join(fixture, "parent-cleanup");
   const workerSource = `
 const { writeFileSync } = require("node:fs")
 process.stdout.write("stdout-held-pipe")
@@ -387,6 +388,10 @@ const worker = spawn(process.execPath, ["-e", ${JSON.stringify(workerSource)}], 
 writeFileSync(${JSON.stringify(workerPidFile)}, String(worker.pid))
 worker.unref()
 const readyTimer = setInterval(() => {
+  if (existsSync(${JSON.stringify(parentCleanupFile)})) {
+    clearInterval(readyTimer)
+    process.exit(1)
+  }
   if (existsSync(${JSON.stringify(workerReadyFile)})) {
     clearInterval(readyTimer)
     process.exit(0)
@@ -426,6 +431,7 @@ const readyTimer = setInterval(() => {
     });
   } finally {
     clearTimeout(timeoutId);
+    writeFileSync(parentCleanupFile, "cleanup");
     if (existsSync(workerPidFile)) {
       try {
         process.kill(Number(readFileSync(workerPidFile, "utf8")), "SIGTERM");
