@@ -205,7 +205,7 @@ pub(super) fn normalized_include_patterns(
             if resolved.is_dir() {
                 format!(
                     "{}/**/*.{{js,jsx,ts,tsx,mdx}}",
-                    globset::escape(&resolved.to_string_lossy())
+                    escape_root_for_glob(&resolved)
                 )
             } else {
                 resolve_glob_pattern(config, pattern)
@@ -218,11 +218,23 @@ pub(super) fn normalized_include_patterns(
 /// become part of the caller's pattern. The configured suffix remains a glob;
 /// only the absolute root supplied by Palamedes is made literal.
 fn resolve_glob_pattern(config: &LoadedConfig, pattern: &str) -> String {
-    let escaped_root = globset::escape(&config.root_dir.to_string_lossy());
+    let escaped_root = escape_root_for_glob(&config.root_dir);
     PathBuf::from(escaped_root)
         .join(pattern)
         .to_string_lossy()
         .into_owned()
+}
+
+/// Escapes only the project root, leaving the catalog's own glob semantics
+/// unchanged. On Unix a backslash is not a path separator, so globset parses
+/// it as an escape unless it is represented by a literal character class.
+fn escape_root_for_glob(root: &Path) -> String {
+    let escaped = globset::escape(&root.to_string_lossy());
+    if cfg!(unix) {
+        escaped.replace('\\', "[\\]")
+    } else {
+        escaped
+    }
 }
 
 fn build_glob_set(patterns: &[String], label: &str) -> Result<GlobSet, CliError> {
@@ -276,6 +288,7 @@ fn literal_glob_prefix(pattern: &str) -> String {
             Some("[]]") => Some(']'),
             Some("[{]") => Some('{'),
             Some("[}]") => Some('}'),
+            Some("[\\]") => Some('\\'),
             _ => None,
         };
         if let Some(literal) = escaped {
@@ -394,6 +407,14 @@ mod tests {
                 "{name}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn treats_a_backslash_in_the_project_path_as_a_literal() {
+        let root = project_with_sources("back\\slash-project", &["app/page.tsx"]);
+
+        assert_eq!(discovered(&root), vec![root.join("app/page.tsx")]);
     }
 
     /*
