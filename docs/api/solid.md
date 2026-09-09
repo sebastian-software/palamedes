@@ -2,6 +2,14 @@
 
 `@palamedes/solid` mirrors the React package for Solid applications.
 
+> **Breaking minor release at `1.18.0`:** `@palamedes/solid` moved from Solid 1
+> to Solid 2 while Palamedes packages continued their lockstep `1.x` releases.
+> A dependency range such as `^1.17.3` can therefore upgrade a Solid 1 app to a
+> Solid 2 adapter and lose Solid 1 compatibility. If your app must stay on
+> Solid 1, pin `@palamedes/solid` to `1.17.3`, the last Solid 1-compatible
+> release. To use a newer adapter, migrate the app and its compiler/tooling to
+> Solid 2 first; `@palamedes/solid` `1.18.0` and newer target Solid 2.
+
 ## Exports
 
 - `Trans`

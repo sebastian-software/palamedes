@@ -1,4 +1,4 @@
-import type { Element } from "solid-js";
+import { createMemo, omit, type Element } from "solid-js";
 
 import { buildChoiceMessage, parseMessagePattern } from "@palamedes/core";
 import type {
@@ -8,7 +8,7 @@ import type {
   SelectOrdinalProps,
   SelectProps,
 } from "@palamedes/core";
-import { getI18n } from "@palamedes/runtime";
+import { getI18n, isServerEnvironment } from "@palamedes/runtime";
 
 import {
   createSolidMessageRuntime,
@@ -61,14 +61,27 @@ function renderChoice(
   return renderI18nMessage(i18n, message, { value }, runtime, metadata);
 }
 
-export function Plural({ value, offset, ...choices }: PluralProps): Element {
-  return renderChoice("plural", value, choices, offset);
+function renderTrackedChoice(render: () => Element): Element {
+  if (isServerEnvironment()) {
+    return render();
+  }
+
+  return createMemo(render) as unknown as Element;
 }
 
-export function SelectOrdinal({ value, offset, ...choices }: SelectOrdinalProps): Element {
-  return renderChoice("selectordinal", value, choices, offset);
+export function Plural(props: PluralProps): Element {
+  const choices = omit(props, "value", "offset");
+  return renderTrackedChoice(() => renderChoice("plural", props.value, choices, props.offset));
 }
 
-export function Select({ value, ...choices }: SelectProps): Element {
-  return renderChoice("select", value, choices);
+export function SelectOrdinal(props: SelectOrdinalProps): Element {
+  const choices = omit(props, "value", "offset");
+  return renderTrackedChoice(() =>
+    renderChoice("selectordinal", props.value, choices, props.offset),
+  );
+}
+
+export function Select(props: SelectProps): Element {
+  const choices = omit(props, "value");
+  return renderTrackedChoice(() => renderChoice("select", props.value, choices));
 }

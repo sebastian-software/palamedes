@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source-map-js";
 
 import type * as CoreNode from "@palamedes/core-node";
 
@@ -61,27 +62,48 @@ describe("createPalamedesRemixLoadHook", () => {
     "transforms Palamedes JS macros in %s after the Remix loader returns source",
     (file) => {
       const load = createPalamedesRemixLoadHook();
-      const oldMap = Buffer.from(JSON.stringify({ version: 3, mappings: "" }), "utf8").toString(
-        "base64",
-      );
+      const modulePath = `/repo/app/routes/${file}`;
+      const authoredPath = `/repo/app/routes/authored-${file}`;
+      const sourceLines = [
+        'import { t } from "@palamedes/core/macro"',
+        "export function greeting(name) {",
+        "  return t`Hello ${name} from Remix 3`",
+        "}",
+      ];
+      const incomingMap = new SourceMapGenerator({ file: modulePath });
+      for (let column = 0; column <= sourceLines[2]!.length; column += 1) {
+        incomingMap.addMapping({
+          generated: { line: 3, column },
+          original: { line: 7, column: column + 4 },
+          source: authoredPath,
+        });
+      }
+      incomingMap.setSourceContent(authoredPath, "\n\n\n\n\n\n    return authoredMacro");
+      const oldMap = Buffer.from(incomingMap.toString(), "utf8").toString("base64");
       const loaded = load(new URL(`file:///repo/app/routes/${file}`).href, loadContext, () => ({
         format: "module",
         shortCircuit: true,
         source: [
-          'import { t } from "@palamedes/core/macro"',
-          "export function greeting(name) {",
-          "  return t`Hello ${name} from Remix 3`",
-          "}",
+          ...sourceLines,
           `//# sourceMappingURL=data:application/json;base64,${oldMap}`,
         ].join("\n"),
       }));
 
-      expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"');
-      expect(String(loaded.source)).toContain("getI18n()._(");
-      expect(String(loaded.source)).toContain("Hello ");
-      expect(String(loaded.source)).not.toContain(oldMap);
-      expect(String(loaded.source)).toMatch(
+      const transformed = String(loaded.source);
+      expect(transformed).toContain('import { getI18n } from "@palamedes/runtime"');
+      expect(transformed).toContain("getI18n()._(");
+      expect(transformed).toContain("Hello ");
+      expect(transformed).not.toContain(oldMap);
+      expect(transformed).toMatch(
         /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u,
+      );
+      const finalMap = readInlineSourceMapFromCode(transformed);
+      const original = new SourceMapConsumer(finalMap).originalPositionFor(
+        findGeneratedPosition(transformed, "getI18n()._("),
+      );
+      expect(original).toMatchObject({ source: authoredPath, line: 7, column: 13 });
+      expect(new SourceMapConsumer(finalMap).sourceContentFor(authoredPath)).toBe(
+        "\n\n\n\n\n\n    return authoredMacro",
       );
     },
   );
@@ -296,3 +318,16 @@ describe("createPalamedesRemixLoadHook", () => {
     expect(String(loaded.source)).toContain("getI18n()._(");
   });
 });
+
+function readInlineSourceMapFromCode(source: string): RawSourceMap {
+  const encoded = source.match(/sourceMappingURL=data:application\/json;base64,([^\r\n]+)$/u)?.[1];
+  expect(encoded).toBeDefined();
+  return JSON.parse(Buffer.from(encoded!, "base64").toString("utf8")) as RawSourceMap;
+}
+
+function findGeneratedPosition(source: string, needle: string): { column: number; line: number } {
+  const offset = source.indexOf(needle);
+  expect(offset).toBeGreaterThanOrEqual(0);
+  const lines = source.slice(0, offset).split("\n");
+  return { line: lines.length, column: lines.at(-1)?.length ?? 0 };
+}

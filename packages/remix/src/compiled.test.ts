@@ -95,17 +95,22 @@ describe("@palamedes/remix compiled rich-message runtime", () => {
     );
   });
 
-  it("resets generated tag keys when a cached runtime is reused", () => {
+  it("reuses a runtime for inline component shapes without keeping stale elements", async () => {
     const i18n = createI18n({ locale: "en" });
-    const components = { 0: createElement("strong") };
     const cache = createRemixMessageRuntimeCache();
-    const firstRuntime = cache.get(i18n, components);
+    const firstRuntime = cache.get(i18n, {
+      0: createElement("strong", { class: "first" }),
+    });
     const first = firstRuntime.tag("0", firstRuntime.join("one"))[0] as RemixElement;
-    const secondRuntime = cache.get(i18n, components);
+    const secondRuntime = cache.get(i18n, {
+      0: createElement("em", { class: "second" }),
+    });
     const second = secondRuntime.tag("0", secondRuntime.join("two"))[0] as RemixElement;
 
     expect(secondRuntime).toBe(firstRuntime);
     expect([first.key, second.key]).toEqual([0, 0]);
+    await expect(renderToString(first)).resolves.toBe('<strong class="first">one</strong>');
+    await expect(renderToString(second)).resolves.toBe('<em class="second">two</em>');
   });
 
   it("uses the same readable fallback behavior for missing and malformed messages", async () => {

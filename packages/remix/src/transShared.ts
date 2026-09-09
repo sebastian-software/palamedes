@@ -36,7 +36,7 @@ type RendererI18n = Pick<
   | "reportError"
 >;
 type ResettableRemixMessageRuntime = {
-  reset: () => void;
+  reset: (components: Record<string, RemixElement>) => void;
   runtime: CompiledMessageRuntime<RemixNode[]>;
 };
 type CachedRemixMessageRuntime = ResettableRemixMessageRuntime & {
@@ -69,10 +69,9 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
 }
 
 export function createRemixMessageRuntimeCache(fallbackParser?: PatternParser) {
-  const cache = new WeakMap<
-    RendererI18n,
-    WeakMap<Record<string, RemixElement>, CachedRemixMessageRuntime>
-  >();
+  // Component names define the runtime shape; each synchronous reset installs
+  // the current elements so fresh inline object literals can reuse the runtime.
+  const cache = new WeakMap<RendererI18n, Map<string, CachedRemixMessageRuntime>>();
 
   return {
     get(
@@ -81,11 +80,12 @@ export function createRemixMessageRuntimeCache(fallbackParser?: PatternParser) {
     ): CompiledMessageRuntime<RemixNode[]> {
       let byComponents = cache.get(i18n);
       if (byComponents === undefined) {
-        byComponents = new WeakMap();
+        byComponents = new Map();
         cache.set(i18n, byComponents);
       }
 
-      let cached = byComponents.get(components);
+      const componentShape = componentShapeKey(components);
+      let cached = byComponents.get(componentShape);
       if (
         cached === undefined ||
         cached.locale !== i18n.locale ||
@@ -96,9 +96,9 @@ export function createRemixMessageRuntimeCache(fallbackParser?: PatternParser) {
           locale: i18n.locale,
           timeZone: i18n.timeZone,
         };
-        byComponents.set(components, cached);
+        byComponents.set(componentShape, cached);
       }
-      cached.reset();
+      cached.reset(components);
       return cached.runtime;
     },
   };
@@ -150,6 +150,7 @@ function createResettableRemixMessageRuntime(
 ): ResettableRemixMessageRuntime {
   const locale = i18n.locale;
   const timeZone = i18n.timeZone;
+  let currentComponents = components;
   let nextKey = 0;
   const runtime: CompiledMessageRuntime<RemixNode[]> = createCompiledMessageRuntime<RemixNode[]>(
     locale,
@@ -180,7 +181,7 @@ function createResettableRemixMessageRuntime(
         return [value];
       },
       tag(name, children) {
-        const component = components[name];
+        const component = currentComponents[name];
         if (isRemixElement(component)) {
           return [
             createElement(component.type, { ...component.props, key: nextKey++ }, ...children),
@@ -192,11 +193,16 @@ function createResettableRemixMessageRuntime(
   );
 
   return {
-    reset() {
+    reset(nextComponents) {
+      currentComponents = nextComponents;
       nextKey = 0;
     },
     runtime,
   };
+}
+
+function componentShapeKey(components: Record<string, RemixElement>): string {
+  return JSON.stringify(Object.keys(components).sort());
 }
 
 function parsePattern(
