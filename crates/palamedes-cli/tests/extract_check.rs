@@ -213,6 +213,140 @@ catalogs:
 }
 
 #[test]
+fn fail_on_empty_catalog_stops_every_catalog_before_writes() {
+    let fixture = fixture_dir("fail-on-empty-multiple");
+    let populated_config = r#"locales: [de]
+source-locale: de
+extract-cache: false
+catalogs:
+  - path: locales/{locale}/messages
+    format: po
+    include: [src]
+  - path: catalogs/{locale}/messages
+    format: fcl
+    include: [src]
+"#;
+    write_project(&fixture, populated_config, &["Original"]);
+    let initial = pmds(&fixture, &["extract", "--no-cache"]);
+    assert!(initial.status.success(), "{initial:?}");
+
+    let po = fixture.join("locales/de/messages.po");
+    let fcl = fixture.join("catalogs/de/messages.fcl");
+    let fixed_mtime = UNIX_EPOCH + Duration::from_secs(3_000_000);
+    let po_before = fs::read(&po).expect("read PO before guarded extraction");
+    let fcl_before = fs::read(&fcl).expect("read FCL before guarded extraction");
+    for path in [&po, &fcl] {
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open catalog")
+            .set_modified(fixed_mtime)
+            .expect("set catalog mtime");
+    }
+
+    write_source(&fixture, &["Changed"]);
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        r#"locales: [de]
+source-locale: de
+extract-cache: false
+catalogs:
+  - path: locales/{locale}/messages
+    format: po
+    include: [src]
+  - path: catalogs/{locale}/messages
+    format: fcl
+    include: [missing]
+"#,
+    )
+    .expect("make the second catalog empty");
+
+    let guarded = pmds(
+        &fixture,
+        &["extract", "--fail-on-empty-catalog", "--no-cache"],
+    );
+
+    assert_eq!(guarded.status.code(), Some(1), "{guarded:?}");
+    let stderr = String::from_utf8_lossy(&guarded.stderr);
+    assert!(
+        stderr.contains("matched no source files (include: missing)"),
+        "{guarded:?}"
+    );
+    assert!(stderr.contains("catalogs were not updated"), "{guarded:?}");
+    assert_catalog_unchanged(&po, &po_before, fixed_mtime);
+    assert_catalog_unchanged(&fcl, &fcl_before, fixed_mtime);
+
+    let compatible_default = pmds(&fixture, &["extract", "--no-cache"]);
+    assert!(
+        compatible_default.status.success(),
+        "{compatible_default:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&compatible_default.stderr).contains(
+            "Warning: catalog 'catalogs/{locale}/messages' matched no source files (include: missing); projecting an empty catalog."
+        ),
+        "{compatible_default:?}"
+    );
+    assert_ne!(fs::read(&po).expect("read updated PO"), po_before);
+    assert_ne!(fs::read(&fcl).expect("read projected FCL"), fcl_before);
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn fail_on_empty_catalog_check_reports_json_without_mutating_the_catalog() {
+    let fixture = fixture_dir("fail-on-empty-json");
+    write_project(
+        &fixture,
+        r#"locales: [de]
+source-locale: de
+extract-cache: false
+catalogs:
+  - path: locales/{locale}/messages
+    format: po
+    include: [src]
+"#,
+        &["Existing"],
+    );
+    assert!(pmds(&fixture, &["extract", "--no-cache"]).status.success());
+    let catalog = fixture.join("locales/de/messages.po");
+    let fixed_mtime = UNIX_EPOCH + Duration::from_secs(4_000_000);
+    let before = fs::read(&catalog).expect("read catalog before check");
+    fs::File::options()
+        .write(true)
+        .open(&catalog)
+        .expect("open catalog")
+        .set_modified(fixed_mtime)
+        .expect("set catalog mtime");
+    fs::remove_file(fixture.join("src/messages.ts")).expect("remove source");
+
+    let output = pmds(
+        &fixture,
+        &[
+            "extract",
+            "--check",
+            "--json",
+            "--fail-on-empty-catalog",
+            "--no-cache",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let report = json_stdout(&output);
+    assert_eq!(report["status"], "error");
+    assert_eq!(report["catalogs"], json!([]));
+    assert!(
+        report["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("catalogs were not updated")),
+        "{report}"
+    );
+    assert_catalog_unchanged(&catalog, &before, fixed_mtime);
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
 fn json_distinguishes_execution_errors_and_clap_rejects_invalid_combinations() {
     let fixture = fixture_dir("errors");
     fs::create_dir_all(&fixture).expect("create fixture");

@@ -72,6 +72,7 @@ pnpm exec pmds extract --clean
 pnpm exec pmds extract --force-clean
 pnpm exec pmds extract --check
 pnpm exec pmds extract --check --json
+pnpm exec pmds extract --fail-on-empty-catalog
 pnpm exec pmds extract --config ./palamedes.yaml
 pnpm exec pmds extract --threads 1
 pnpm exec pmds extract --no-cache
@@ -110,8 +111,15 @@ creating missing catalog directories. Add `--json` for deterministic CI
 output. The extraction cache may still be updated unless `--no-cache` is
 present.
 
+Add `--fail-on-empty-catalog` when a source-discovery mismatch must fail CI
+instead of projecting an empty catalog. If any configured catalog matches no
+source files, the command exits with code `1` before writing or marking any
+catalog entry obsolete. Without the flag, extraction keeps its warning-only
+behavior. `--check --json` reports the guarded failure as status `error`; watch
+mode reports the failed cycle, keeps catalogs unchanged, and continues watching.
+
 ```bash
-pnpm exec pmds extract --check --json
+pnpm exec pmds extract --check --json --fail-on-empty-catalog
 ```
 
 ## Exit codes
