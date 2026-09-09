@@ -366,6 +366,52 @@ worker.unref()
   });
 });
 
+test("captured output settles after a bounded drain when a descendant holds the pipes open", async () => {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-open-pipes-"));
+  const workerPidFile = path.join(fixture, "worker-pid");
+  const workerSource = `
+const { writeFileSync } = require("node:fs")
+writeFileSync(${JSON.stringify(workerPidFile)}, String(process.pid))
+process.stdout.write("stdout-held-pipe")
+process.stderr.write("stderr-held-pipe")
+setInterval(() => {}, 1000)
+`;
+  const parentSource = `
+const { spawn } = require("node:child_process")
+const worker = spawn(process.execPath, ["-e", ${JSON.stringify(workerSource)}], {
+  detached: true,
+  stdio: ["ignore", "inherit", "inherit"],
+})
+worker.unref()
+`;
+
+  try {
+    const startedAt = Date.now();
+    const result = await spawnNative(["-e", parentSource], {
+      nativeExecutable: process.execPath,
+      captureOutput: true,
+    });
+    const elapsed = Date.now() - startedAt;
+
+    assert.ok(elapsed < 5000, `spawnNative took ${elapsed}ms to settle`);
+    assert.doesNotThrow(() => process.kill(Number(readFileSync(workerPidFile, "utf8")), 0));
+    assert.deepEqual(result, {
+      exitCode: 0,
+      stdout: "stdout-held-pipe",
+      stderr: "stderr-held-pipe",
+    });
+  } finally {
+    if (existsSync(workerPidFile)) {
+      try {
+        process.kill(Number(readFileSync(workerPidFile, "utf8")), "SIGTERM");
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error;
+      }
+    }
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 async function waitFor(predicate, timeout) {
   const deadline = Date.now() + timeout;
   while (!predicate()) {
