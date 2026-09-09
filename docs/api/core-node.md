@@ -9,10 +9,10 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `parsePo(source)`
 - `parseCatalog(request)`
 - `updateCatalogFile(request)`
-- `updateCatalogFileAsync(request)`
+- `updateCatalogFileAsync(request, options?: AsyncTaskOptions)`
 - `listTranslationCandidates(request)`
 - `applyTranslationPatches(request)`
-- `applyTranslationPatchesAsync(request)`
+- `applyTranslationPatchesAsync(request, options?: AsyncTaskOptions)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
@@ -23,18 +23,19 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `mergeCatalogsThreeWay(request)`
 - `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
-- `compileCatalogArtifactAsync(config, resourcePath)`
+- `compileCatalogArtifactAsync(config, resourcePath, options?: AsyncTaskOptions)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
-- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds)`
+- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds, options?: AsyncTaskOptions)`
 - `compileCatalogModule(config, resourcePath, options)`
-- `compileCatalogModuleAsync(config, resourcePath, options)`
+- `compileCatalogModuleAsync(config, resourcePath, options, taskOptions?: AsyncTaskOptions)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
-- `extractCatalogMessagesFromFilesAsync(request)`
+- `extractCatalogMessagesFromFilesAsync(request, options?: AsyncTaskOptions)`
 - `transformMacrosNative(source, filename, options?)`
+- `AsyncTaskOptions`
 
 `analyzeMdxNative` returns messages, structured diagnostics, generated
 framework JSX, compiled message IDs, and a native source map from one semantic
