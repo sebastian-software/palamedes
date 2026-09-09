@@ -356,7 +356,8 @@ describe("workflow contracts", () => {
   it("verifies the published release set and reports a failed publish", async () => {
     const publish = await readRepositoryFile(".github/workflows/publish.yml");
     const publishJs = job(publish, "publish-js", "verify-release");
-    const verifyRelease = job(publish, "verify-release", "notify-failure");
+    const verifyRelease = job(publish, "verify-release", "retire-release-failure");
+    const retireFailure = job(publish, "retire-release-failure", "notify-failure");
     const notifyFailure = job(publish, "notify-failure", "__missing__");
 
     expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m);
@@ -369,6 +370,13 @@ describe("workflow contracts", () => {
     expect(notifyFailure).toContain("issues: write");
     expect(notifyFailure).toContain("failure()");
     expect(notifyFailure).toContain("scripts/open-or-refresh-issue.mjs");
+    expect(retireFailure).toContain("issues: write");
+    expect(retireFailure).toContain("needs.verify-release.result == 'success'");
+    expect(retireFailure).toContain('TITLE: "chore(release): publish workflow failed"');
+    expect(retireFailure).toContain("scripts/open-or-refresh-issue.mjs");
+    expect(retireFailure).toContain("--label type:bug");
+    expect(retireFailure).toContain("--close-comment");
+    expect(notifyFailure).toContain("--label type:bug");
     for (const jobName of [
       "determine-release",
       "validate-release",

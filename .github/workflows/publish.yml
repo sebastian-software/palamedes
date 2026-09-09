@@ -297,6 +297,31 @@ jobs:
       - name: Verify every package reached the registry
         run: node ./scripts/check-published-versions.mjs
 
+  retire-release-failure:
+    needs:
+      - determine-release
+      - verify-release
+    if: ${{ needs.determine-release.outputs.should_publish == 'true' && needs.verify-release.result == 'success' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Retire release failure tracking issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "chore(release): publish workflow failed"
+        run: >
+          node ./scripts/open-or-refresh-issue.mjs
+          --title "$TITLE"
+          --label type:bug
+          --close-comment "The release completed successfully, so this tracking issue is no longer active."
+
   notify-failure:
     needs:
       - determine-release
@@ -345,4 +370,4 @@ jobs:
           node ./scripts/open-or-refresh-issue.mjs \
             --title "$TITLE" \
             --body-file issue-body.md \
-            --label bug
+            --label type:bug

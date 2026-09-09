@@ -115,6 +115,8 @@ For a fuller walkthrough, including Hono and Express examples, see:
 ## API
 
 - `getI18n()`
+- `isServerEnvironment()` classifies the current runtime consistently across
+  Palamedes packages; browser workers count as client environments.
 - `setClientI18n(i18n)`
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`

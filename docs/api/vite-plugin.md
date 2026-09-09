@@ -73,8 +73,12 @@ Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
 source module. The default `"embed"` form carries every locale in each sidecar;
 the experimental `"import-map"` form emits locale-specific assets and requires
 the server to inject the active locale's import map before browser modules
-load. Both modes require `setClientI18n()` rather than eager application-owned
-PO imports, and locale changes require document navigation.
+load. The `"import-map"` form also requires Vite's resolved `base` to be
+root-relative, such as `"/app/"`, or an absolute URL. Relative bases resolve
+import-map entries against each document URL and are rejected; set Vite's base
+to `"/"` or an absolute deployment path/URL, or use `localeBinding: "embed"`.
+Both modes require `setClientI18n()` rather than eager application-owned PO
+imports, and locale changes require document navigation.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target
 locale in each catalog whose `include` patterns cover that MDX file. This
@@ -95,7 +99,8 @@ export default defineConfig({
 Keep `palamedes()` before the React or Solid Vite plugin so the native MDX
 compiler emits JSX before the framework transform runs. React MDX parsing is
 configured automatically. Solid must use
-`solid({ extensions: [".mdx"] })`. React MDX requires Vite 8 or newer because
-the generated JSX module type needs Rolldown; Vite 7 and older projects can
-set `mdx: false` while keeping macros and catalog loading. See [MDX
+`solid({ extensions: [".mdx"] })`. React MDX requires Vite 8 or `rolldown-vite`
+because the generated JSX module type needs Rolldown; plain Rollup-based Vite 7
+and older projects can set `mdx: false` while keeping macros and catalog loading.
+See [MDX
 messages](../mdx.md) for authoring and configuration.
