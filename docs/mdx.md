@@ -7,10 +7,10 @@ compiled module.
 
 ## Setup
 
-React MDX compilation requires Vite 8 or newer. Its Rolldown pipeline accepts
-the generated JSX module type that lets Palamedes compile `.mdx` before React
-processes it. Install the framework package and use the Palamedes plugin before
-the framework Vite plugin:
+React MDX compilation requires Vite 8 or `rolldown-vite`. Palamedes accepts the
+generated JSX module type when Vite exposes its Rolldown pipeline, including the
+`rolldownVersion` export provided by `rolldown-vite` on Vite 7. Install the
+framework package and use the Palamedes plugin before the framework Vite plugin:
 
 ```ts
 import react from "@vitejs/plugin-react";
@@ -22,9 +22,9 @@ export default defineConfig({
 });
 ```
 
-For React, Palamedes marks generated `.mdx` modules as JSX automatically. Vite
-7 uses Rollup rather than Rolldown, so it cannot consume this React MDX output;
-upgrade to Vite 8 or set `mdx: false` while keeping macro and catalog support.
+For React, Palamedes marks generated `.mdx` modules as JSX automatically. Plain
+Rollup-based Vite 7 cannot consume this React MDX output; use `rolldown-vite` or
+set `mdx: false` while keeping macro and catalog support.
 
 For Solid 2, set `framework: "solid"` on the plugin and opt `.mdx` into
 `@solidjs/vite-plugin` explicitly:
