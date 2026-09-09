@@ -21,6 +21,8 @@ overrides:
   "jsdom>undici": "8.10.0"
   "next>postcss": "8.5.26"
   "postcss-svgo>svgo": "4.0.2"
+  # remark-mdx-frontmatter 5.2 permits this parser line; remove after it requires >=4.2.
+  "remark-mdx-frontmatter>toml": "4.2.0"
   # unbuild 3.6 permits this TS 7-compatible dts plugin line.
   "unbuild>rollup-plugin-dts": "6.5.1"
   "tsx>esbuild": "0.28.2"
