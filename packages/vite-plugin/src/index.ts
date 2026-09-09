@@ -92,9 +92,17 @@ type EnvironmentAwarePluginContext = {
   };
 };
 
-function isServerEnvironment(context: unknown, ssr = false): boolean {
+function isServerEnvironment(context: unknown, ssr = false, legacyBuildSsr = false): boolean {
   const environment = (context as EnvironmentAwarePluginContext).environment;
-  return ssr || environment?.config?.consumer === "server" || environment?.name === "ssr";
+  // Vite <=5 has no environment context, so use the root build.ssr flag only
+  // for that legacy shape. Modern Vite environments can include both clients
+  // and servers in one build.
+  return (
+    ssr ||
+    environment?.config?.consumer === "server" ||
+    environment?.name === "ssr" ||
+    (environment === undefined && legacyBuildSsr)
+  );
 }
 
 function assertImportMapBase(base: string): void {
@@ -306,6 +314,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   let stripNonEssentialProps = true;
   let isBuildCommand = false;
   let resolvedBase = "/";
+  let legacyBuildSsr = false;
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null;
@@ -684,6 +693,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // retain their separator for non-root and relative deployments.
     configResolved(viteConfig) {
       resolvedBase = viteConfig.base;
+      legacyBuildSsr = viteConfig.build.ssr === true;
     },
 
     transform(code, id) {
@@ -895,7 +905,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
 
       async generateBundle(_options, bundle) {
-        if (!importMapBinding || isServerEnvironment(this) || sidecarModules.size === 0) {
+        if (
+          !importMapBinding ||
+          isServerEnvironment(this, false, legacyBuildSsr) ||
+          sidecarModules.size === 0
+        ) {
           return;
         }
 

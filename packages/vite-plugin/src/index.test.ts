@@ -1130,13 +1130,14 @@ describe("experimental graph splitting", () => {
   });
 
   it.each([
-    ["the legacy SSR environment name", { name: "ssr" }],
-    ["an RSC server consumer", { name: "rsc", config: { consumer: "server" } }],
-  ])("skips asset emission for %s", async (_description, environment) => {
+    ["the legacy SSR environment name", { name: "ssr" }, undefined],
+    ["an RSC server consumer", { name: "rsc", config: { consumer: "server" } }, undefined],
+    ["a Vite 3-5 SSR build without an environment", undefined, true],
+  ])("skips asset emission for %s", async (_description, environment, buildSsr) => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", buildSsr },
     );
     const emitFile = vi.fn();
     await sidecarPlugin.generateBundle.call(
@@ -1150,6 +1151,42 @@ describe("experimental graph splitting", () => {
 
     expect(emitFile).not.toHaveBeenCalled();
   });
+
+  it("emits assets for a legacy client build without an environment", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    const { sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", buildSsr: false },
+    );
+    const emitFile = vi.fn();
+
+    await sidecarPlugin.generateBundle.call({ emitFile, warn: vi.fn() } as never, {}, {});
+
+    expect(emitFile).toHaveBeenCalled();
+  });
+
+  it("keeps a modern client environment client-side when the root build is SSR", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    const { sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", buildSsr: true },
+    );
+    const emitFile = vi.fn();
+
+    await sidecarPlugin.generateBundle.call(
+      { environment: { name: "client" }, emitFile, warn: vi.fn() } as never,
+      {},
+      {},
+    );
+
+    expect(emitFile).toHaveBeenCalled();
+  });
 });
 
 async function runSidecarLoad(
@@ -1158,6 +1195,7 @@ async function runSidecarLoad(
   setup: {
     pluginOptions?: Parameters<typeof palamedes>[0];
     command?: "build" | "serve";
+    buildSsr?: boolean;
     rawBase?: string;
     finalBase?: string;
     sourceId?: string;
@@ -1202,7 +1240,10 @@ async function runSidecarLoad(
     }
     macroPlugin.configResolved.call(
       {} as any,
-      { base: setup.finalBase ?? setup.rawBase ?? "/" } as any,
+      {
+        base: setup.finalBase ?? setup.rawBase ?? "/",
+        build: { ssr: setup.buildSsr },
+      } as any,
     );
   }
 
