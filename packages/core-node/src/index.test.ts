@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import * as fsPromises from "node:fs/promises";
 import { createRequire } from "node:module";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,6 +55,11 @@ import {
   snapshotNativeArguments,
 } from "./native-loader";
 
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof fsPromises>();
+  return { ...actual, realpath: vi.fn(actual.realpath) };
+});
+
 type SourceMapLike = {
   mappings?: string;
   sources?: string[];
@@ -103,11 +109,15 @@ describe("@palamedes/core-node", () => {
     expect(events).toEqual(["leader:start", "independent:start", "leader:end", "follower:start"]);
   });
 
-  it("shares an initial catalog build failure with queued followers", async () => {
+  it("retries queued initial catalog builds one at a time after a leader failure", async () => {
     let attempts = 0;
     let rejectLeader: ((error: Error) => void) | undefined;
+    let releaseFirstFollower: (() => void) | undefined;
     const leaderGate = new Promise<never>((_resolve, reject) => {
       rejectLeader = reject;
+    });
+    const firstFollowerGate = new Promise<void>((resolve) => {
+      releaseFirstFollower = resolve;
     });
     const failure = new Error("broken catalog");
 
@@ -117,15 +127,26 @@ describe("@palamedes/core-node", () => {
     });
     const follower = coordinateInitialCatalogBuild("failing", async () => {
       attempts += 1;
-      return "unexpected";
+      await firstFollowerGate;
+      return "first follower";
+    });
+    const secondFollower = coordinateInitialCatalogBuild("failing", async () => {
+      attempts += 1;
+      return "second follower";
     });
 
     await Promise.resolve();
     expect(attempts).toBe(1);
     rejectLeader?.(failure);
     await expect(leader).rejects.toBe(failure);
-    await expect(follower).rejects.toBe(failure);
-    expect(attempts).toBe(1);
+    await Promise.resolve();
+    expect(attempts).toBe(2);
+    releaseFirstFollower?.();
+    await expect(Promise.all([follower, secondFollower])).resolves.toEqual([
+      "first follower",
+      "second follower",
+    ]);
+    expect(attempts).toBe(3);
   });
 
   it("keys selected catalog builds without their selected IDs", () => {
@@ -189,6 +210,59 @@ describe("@palamedes/core-node", () => {
     ).resolves.toBe("recovered");
   });
 
+  it("serializes catalog mutations through a symlinked parent before the file exists", async () => {
+    const rootDir = await createTempDir();
+    const actualDir = path.join(rootDir, "catalogs");
+    const linkedDir = path.join(rootDir, "linked-catalogs");
+    await mkdir(actualDir);
+    await symlink(actualDir, linkedDir, process.platform === "win32" ? "junction" : "dir");
+
+    let firstStarted: (() => void) | undefined;
+    let releaseFirst: (() => void) | undefined;
+    const firstStartedGate = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const events: string[] = [];
+    const first = serializeCatalogMutation([path.join(actualDir, "messages.po")], async () => {
+      events.push("first:start");
+      firstStarted?.();
+      await firstGate;
+      events.push("first:end");
+    });
+    const second = serializeCatalogMutation([path.join(linkedDir, "messages.po")], async () => {
+      events.push("second:start");
+    });
+    const independent = serializeCatalogMutation([path.join(rootDir, "other.po")], async () => {
+      events.push("independent");
+    });
+
+    await firstStartedGate;
+    await independent;
+    expect(events).toStrictEqual(["first:start", "independent"]);
+    releaseFirst?.();
+    await Promise.all([first, second]);
+    expect(events).toStrictEqual(["first:start", "independent", "first:end", "second:start"]);
+  });
+
+  it("does not run a mutation when target path normalization fails", async () => {
+    const normalizationError = Object.assign(new Error("too many open files"), { code: "EMFILE" });
+    const operation = vi.fn(async () => {});
+    const realpathMock = vi.mocked(fsPromises.realpath);
+    realpathMock.mockRejectedValueOnce(normalizationError);
+
+    try {
+      await expect(serializeCatalogMutation(["catalogs/de.po"], operation)).rejects.toBe(
+        normalizationError,
+      );
+      expect(operation).not.toHaveBeenCalled();
+    } finally {
+      realpathMock.mockClear();
+    }
+  });
+
   it("resolves every translation patch catalog path used by the mutation queue", () => {
     const rootDir = path.resolve("fixtures", "project");
     const paths = translationPatchTargetPaths({
@@ -199,6 +273,8 @@ describe("@palamedes/core-node", () => {
         catalogs: [
           { path: "locales/{locale}/messages", include: ["src"] },
           { path: "admin/{locale}.fcl", format: "Fcl", include: ["admin"] },
+          { path: "legacy/{locale}/messages.PO", include: ["legacy"] },
+          { path: "empty/{locale}/messages.", include: ["empty"] },
         ],
       },
       patches: [
@@ -212,12 +288,24 @@ describe("@palamedes/core-node", () => {
           fingerprint: "second",
           translation: { kind: "Singular", value: "Speichern" },
         },
+        {
+          id: { catalog: "legacy/{locale}/messages.PO", locale: "de", message: "Old" },
+          fingerprint: "third",
+          translation: { kind: "Singular", value: "Alt" },
+        },
+        {
+          id: { catalog: "empty/{locale}/messages.", locale: "de", message: "Empty" },
+          fingerprint: "fourth",
+          translation: { kind: "Singular", value: "Leer" },
+        },
       ],
     });
 
     expect(paths).toStrictEqual([
       path.join(rootDir, "locales", "de", "messages.po"),
       path.join(rootDir, "admin", "de.fcl"),
+      path.join(rootDir, "legacy", "de", "messages.po"),
+      path.join(rootDir, "empty", "de", "messages.po"),
     ]);
   });
 
@@ -1155,6 +1243,126 @@ export function greeting() {
     ).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("retries a selected catalog follower after the leader's selected IDs fail", async () => {
+    let rejectLeader: ((error: Error) => void) | undefined;
+    const leaderGate = new Promise<never>((_resolve, reject) => {
+      rejectLeader = reject;
+    });
+    const selections: string[][] = [];
+    const bindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifactSelectedAsync(request: { compiledIds: string[] }) {
+        selections.push([...request.compiledIds]);
+        if (request.compiledIds[0] === "broken") {
+          return leaderGate;
+        }
+        return Promise.resolve({
+          messages: { working: "compiled" },
+          watchFiles: [],
+          missing: [],
+          diagnostics: [],
+        });
+      },
+    };
+
+    vi.resetModules();
+    vi.doMock("./native-loader", async () => {
+      const nativeLoader = await vi.importActual<typeof NativeLoaderModule>("./native-loader");
+      return {
+        ...nativeLoader,
+        loadNativeBindings: () =>
+          nativeLoader.loadNativeBindings({
+            packageDir: "/fixture/core-node",
+            nativePackageName: "fixture-native",
+            require(specifier) {
+              return specifier.endsWith("package.json") ? { version: "fixture" } : bindings;
+            },
+          }),
+      };
+    });
+
+    try {
+      const { compileCatalogArtifactSelectedAsync: compileSelected } = await import("./index");
+      const config = { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] };
+      const leader = compileSelected(config, "fixture.po", ["broken"]);
+      const follower = compileSelected(config, "fixture.po", ["working"]);
+
+      await Promise.resolve();
+      expect(selections).toStrictEqual([["broken"]]);
+      rejectLeader?.(new Error("leader selection failed"));
+
+      await expect(leader).rejects.toThrow("leader selection failed");
+      await expect(follower).resolves.toMatchObject({ messages: { working: "compiled" } });
+      expect(selections).toStrictEqual([["broken"], ["working"]]);
+    } finally {
+      vi.doUnmock("./native-loader");
+      vi.resetModules();
+    }
+  });
+
+  it("does not share a selected catalog leader's cancellation with its follower", async () => {
+    const selections: string[][] = [];
+    const bindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifactSelectedAsync(
+        request: { compiledIds: string[] },
+        signal?: AbortSignal,
+      ) {
+        selections.push([...request.compiledIds]);
+        if (request.compiledIds[0] === "cancelled") {
+          return new Promise<never>((_resolve, reject) => {
+            if (signal) {
+              signal.onabort = () => reject(new Error("AbortError"));
+            }
+          });
+        }
+        return Promise.resolve({
+          messages: { working: "compiled" },
+          watchFiles: [],
+          missing: [],
+          diagnostics: [],
+        });
+      },
+    };
+
+    vi.resetModules();
+    vi.doMock("./native-loader", async () => {
+      const nativeLoader = await vi.importActual<typeof NativeLoaderModule>("./native-loader");
+      return {
+        ...nativeLoader,
+        loadNativeBindings: () =>
+          nativeLoader.loadNativeBindings({
+            packageDir: "/fixture/core-node",
+            nativePackageName: "fixture-native",
+            require(specifier) {
+              return specifier.endsWith("package.json") ? { version: "fixture" } : bindings;
+            },
+          }),
+      };
+    });
+
+    try {
+      const { compileCatalogArtifactSelectedAsync: compileSelected } = await import("./index");
+      const config = { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] };
+      const controller = new AbortController();
+      const leader = compileSelected(config, "fixture.po", ["cancelled"], {
+        signal: controller.signal,
+      });
+      const follower = compileSelected(config, "fixture.po", ["working"]);
+
+      await Promise.resolve();
+      expect(selections).toStrictEqual([["cancelled"]]);
+      controller.abort();
+
+      await expect(leader).rejects.toBe(controller.signal.reason);
+      await expect(follower).resolves.toMatchObject({ messages: { working: "compiled" } });
+      expect(selections).toStrictEqual([["cancelled"], ["working"]]);
+    } finally {
+      vi.doUnmock("./native-loader");
+      vi.resetModules();
+    }
+  });
+
   it("cancels a queued catalog task through the guarded async wrapper", async () => {
     let receivedSignal: AbortSignal | undefined;
     let queued = false;
@@ -1167,7 +1375,6 @@ export function greeting() {
           if (signal) {
             signal.onabort = () => {
               const error = new Error("AbortError");
-              error.name = "AbortError";
               reject(error);
             };
           }
@@ -1203,7 +1410,7 @@ export function greeting() {
       expect(queued).toBe(true);
       controller.abort();
 
-      await expect(task).rejects.toMatchObject({ name: "AbortError" });
+      await expect(task).rejects.toBe(controller.signal.reason);
       expect(receivedSignal).toBe(controller.signal);
     } finally {
       vi.doUnmock("./native-loader");

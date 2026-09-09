@@ -80,8 +80,9 @@ the process-level pool control.
 
 Selected-artifact calls that target the same catalog and configuration are
 coordinated in JavaScript. Only the first cold build enters the worker pool;
-concurrent followers wait for it, then use the warmed native cache. Followers
-also observe the first build error without retrying the same broken catalog.
+concurrent followers wait for it, then use the warmed native cache. If the
+first build fails, waiting callers retry one at a time so cancellation or a
+selected-ID compilation error from one caller does not reject another.
 Different catalogs remain concurrent.
 
 `renderCatalogModule(messages)` exposes the same native module generator for
