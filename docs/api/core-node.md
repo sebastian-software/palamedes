@@ -9,10 +9,10 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `parsePo(source)`
 - `parseCatalog(request)`
 - `updateCatalogFile(request)`
-- `updateCatalogFileAsync(request)`
+- `updateCatalogFileAsync(request, options?: AsyncTaskOptions)`
 - `listTranslationCandidates(request)`
 - `applyTranslationPatches(request)`
-- `applyTranslationPatchesAsync(request)`
+- `applyTranslationPatchesAsync(request, options?: AsyncTaskOptions)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
@@ -23,18 +23,19 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `mergeCatalogsThreeWay(request)`
 - `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
-- `compileCatalogArtifactAsync(config, resourcePath)`
+- `compileCatalogArtifactAsync(config, resourcePath, options?: AsyncTaskOptions)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
-- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds)`
+- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds, options?: AsyncTaskOptions)`
 - `compileCatalogModule(config, resourcePath, options)`
-- `compileCatalogModuleAsync(config, resourcePath, options)`
+- `compileCatalogModuleAsync(config, resourcePath, options, taskOptions?: AsyncTaskOptions)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
-- `extractCatalogMessagesFromFilesAsync(request)`
+- `extractCatalogMessagesFromFilesAsync(request, options?: AsyncTaskOptions)`
 - `transformMacrosNative(source, filename, options?)`
+- `AsyncTaskOptions`
 
 `analyzeMdxNative` returns messages, structured diagnostics, generated
 framework JSX, compiled message IDs, and a native source map from one semantic
@@ -63,10 +64,19 @@ worker pool and returns the same result or error shape in a promise. Vite and
 Next await these APIs in their asynchronous plugin hooks. Remix's synchronous
 module hook continues to use `compileCatalogModule()`.
 
-Queued native work is not cancellable through these APIs. Bound concurrency in
-the caller for bulk work; do not launch an unbounded promise fan-out. The pool
-is shared with other Node filesystem and native work, and
-`UV_THREADPOOL_SIZE` is the process-level pool control.
+Each async API accepts an optional task-options object with an `AbortSignal`:
+
+```ts
+await updateCatalogFileAsync(request, { signal: controller.signal });
+```
+
+If the signal is already aborted, the call rejects before it is scheduled. If
+the native task is still waiting for a libuv worker, aborting the signal rejects
+it with an `AbortError`. Native work that has already started runs to completion;
+the signal does not interrupt the native operation. Bound concurrency in the
+caller for bulk work; do not launch an unbounded promise fan-out. The pool is
+shared with other Node filesystem and native work, and `UV_THREADPOOL_SIZE` is
+the process-level pool control.
 
 Selected-artifact calls that target the same catalog and configuration are
 coordinated in JavaScript. Only the first cold build enters the worker pool;

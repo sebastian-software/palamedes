@@ -135,11 +135,17 @@ a module through the Palamedes catalog loader.
 
 `.mdx` modules are compiled before the React or Solid JSX plugin. Catalog
 extraction discovers the same files automatically, and both paths share the
-native semantic analyzer. React MDX requires Vite 8 or newer: its Rolldown
-pipeline recognizes the generated module type. Vite 7 projects can continue to
-use macros and catalog loading with `mdx: false`, or compile MDX for Solid with
-`solid({ extensions: [".mdx"] })`. React parsing is configured automatically,
-while Solid requires that explicit extension setting.
+native semantic analyzer. React MDX requires Vite 8 or `rolldown-vite`: its
+Rolldown pipeline recognizes the generated module type. Plain Rollup-based Vite
+7 projects can continue to use macros and catalog loading with `mdx: false`, or
+compile MDX for Solid with `solid({ extensions: [".mdx"] })`. React parsing is
+configured automatically, while Solid requires that explicit extension setting.
+
+When using `experimentalGraphSplitting: { localeBinding: "import-map" }`, Vite's
+resolved `base` must be root-relative, such as `"/app/"`, or an absolute URL.
+Relative bases are rejected because import-map entries would resolve against
+each document URL; set `base: "/"` or an absolute deployment path/URL, or use
+the default `localeBinding: "embed"` form.
 
 The package peer range remains broad because macros and catalog loading work on
 supported Vite releases independently of the React MDX compiler.
