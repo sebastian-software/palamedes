@@ -4,8 +4,8 @@ mdx:
   framework: react
   translatable-attributes: [alt, title]
   front-matter-fields: [title]
-  trans-module: '@palamedes/react/compiled'
-  runtime-module: '@palamedes/runtime'
+  trans-module: "@palamedes/react/compiled"
+  runtime-module: "@palamedes/runtime"
   ignore-directive: palamedes-ignore
   keep-source-fallbacks: true
 catalogs:
@@ -14,4 +14,4 @@ catalogs:
     po:
       line-breaks: auto
     include: [src]
-    exclude: ['**/node_modules/**']
+    exclude: ["**/node_modules/**"]
