@@ -64,10 +64,19 @@ worker pool and returns the same result or error shape in a promise. Vite and
 Next await these APIs in their asynchronous plugin hooks. Remix's synchronous
 module hook continues to use `compileCatalogModule()`.
 
-Queued native work is not cancellable through these APIs. Bound concurrency in
-the caller for bulk work; do not launch an unbounded promise fan-out. The pool
-is shared with other Node filesystem and native work, and
-`UV_THREADPOOL_SIZE` is the process-level pool control.
+Each async API accepts an optional task-options object with an `AbortSignal`:
+
+```ts
+await updateCatalogFileAsync(request, { signal: controller.signal });
+```
+
+If the signal is already aborted, the call rejects before it is scheduled. If
+the native task is still waiting for a libuv worker, aborting the signal rejects
+it with an `AbortError`. Native work that has already started runs to completion;
+the signal does not interrupt the native operation. Bound concurrency in the
+caller for bulk work; do not launch an unbounded promise fan-out. The pool is
+shared with other Node filesystem and native work, and `UV_THREADPOOL_SIZE` is
+the process-level pool control.
 
 Selected-artifact calls that target the same catalog and configuration are
 coordinated in JavaScript. Only the first cold build enters the worker pool;
