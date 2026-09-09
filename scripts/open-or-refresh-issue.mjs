@@ -2,23 +2,66 @@
 // recurring workflow cannot accumulate a backlog of near-identical reports.
 // Shared by the scheduled dependency audit and the release publish lane.
 import { spawnSync } from "node:child_process";
+import path from "node:path";
 
-const args = process.argv.slice(2);
+const usage =
+  "Usage: node ./scripts/open-or-refresh-issue.mjs --title <title> --label <label> (--body-file <path> | --close-comment <comment>)";
 
-function option(name) {
+function option(args, name) {
   const index = args.indexOf(`--${name}`);
   return index === -1 ? undefined : args[index + 1];
 }
 
-const title = option("title");
-const bodyFile = option("body-file");
-const label = option("label");
+export function manageTrackingIssue(args, { log = console.log, runGh = gh } = {}) {
+  const title = option(args, "title");
+  const bodyFile = option(args, "body-file");
+  const closeComment = option(args, "close-comment");
+  const label = option(args, "label");
 
-if (!title || !bodyFile || !label) {
-  console.error(
-    "Usage: node ./scripts/open-or-refresh-issue.mjs --title <title> --body-file <path> --label <label>",
+  if (!title || !label || Boolean(bodyFile) === Boolean(closeComment)) {
+    throw new Error(usage);
+  }
+
+  const openIssues = JSON.parse(
+    runGh(["issue", "list", "--state", "open", "--limit", "1000", "--json", "number,title"]),
   );
-  process.exit(1);
+
+  if (!Array.isArray(openIssues)) {
+    throw new TypeError("GitHub returned an invalid issue list.");
+  }
+
+  const matches = openIssues.filter(
+    (issue) =>
+      issue &&
+      Number.isInteger(issue.number) &&
+      typeof issue.title === "string" &&
+      issue.title === title,
+  );
+
+  if (closeComment) {
+    for (const issue of matches) {
+      runGh(["issue", "close", String(issue.number), "--comment", closeComment], {
+        stdio: "inherit",
+      });
+    }
+
+    if (matches.length > 0) {
+      log(`Closed ${matches.length} tracking issue(s) titled ${JSON.stringify(title)}.`);
+    }
+    return;
+  }
+
+  const existing = matches[0];
+  if (existing) {
+    runGh(["issue", "edit", String(existing.number), "--body-file", bodyFile], {
+      stdio: "inherit",
+    });
+    log(`Refreshed issue #${existing.number}.`);
+  } else {
+    runGh(["issue", "create", "--title", title, "--body-file", bodyFile, "--label", label], {
+      stdio: "inherit",
+    });
+  }
 }
 
 function gh(commandArgs, options = {}) {
@@ -37,26 +80,11 @@ function gh(commandArgs, options = {}) {
   return (result.stdout ?? "").trim();
 }
 
-const existing = gh([
-  "issue",
-  "list",
-  "--state",
-  "open",
-  "--label",
-  label,
-  "--search",
-  title,
-  "--json",
-  "number,title",
-  "--jq",
-  `[.[] | select(.title == ${JSON.stringify(title)})] | first | .number // empty`,
-]);
-
-if (existing) {
-  gh(["issue", "edit", existing, "--body-file", bodyFile], { stdio: "inherit" });
-  console.log(`Refreshed issue #${existing}.`);
-} else {
-  gh(["issue", "create", "--title", title, "--body-file", bodyFile, "--label", label], {
-    stdio: "inherit",
-  });
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
+  try {
+    manageTrackingIssue(process.argv.slice(2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }
