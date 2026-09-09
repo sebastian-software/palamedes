@@ -17,6 +17,9 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
+/// Future timestamps within one check interval are tolerated as clock skew.
+/// Values farther ahead are treated as corrupt so the cache self-heals.
+const FUTURE_TIMESTAMP_TOLERANCE_SECS: u64 = CHECK_INTERVAL_SECS;
 /// Grace period after which a leaked lock directory (crash, SIGKILL, power
 /// loss inside the short claim window) is broken instead of silently
 /// disabling update checks on that machine forever.
@@ -188,12 +191,20 @@ impl CheckCache for PlatformCache {
 
         if let Ok(value) = fs::read_to_string(&self.file)
             && let Ok(previous) = value.trim().parse::<u64>()
-            && (now_secs.saturating_sub(previous) < CHECK_INTERVAL_SECS || previous > now_secs)
+            && cache_timestamp_is_fresh(previous, now_secs)
         {
             return false;
         }
 
         fs::write(&self.file, format!("{now_secs}\n")).is_ok()
+    }
+}
+
+fn cache_timestamp_is_fresh(previous: u64, now: u64) -> bool {
+    if previous > now {
+        previous - now <= FUTURE_TIMESTAMP_TOLERANCE_SECS
+    } else {
+        now - previous < CHECK_INTERVAL_SECS
     }
 }
 
@@ -574,10 +585,37 @@ mod tests {
         assert!(cache.claim_due(10));
         assert!(!cache.claim_due(10 + CHECK_INTERVAL_SECS - 1));
         assert!(cache.claim_due(10 + CHECK_INTERVAL_SECS));
-        assert!(!cache.claim_due(1));
 
         fs::write(&file, "broken\n").expect("corrupt cache");
         assert!(cache.claim_due(20));
+    }
+
+    #[test]
+    fn cache_tolerates_small_clock_skew_and_self_heals_far_future_timestamps() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("cache").join("update-check-v1");
+        let cache = PlatformCache::new(file.clone());
+        let now = 100;
+
+        fs::create_dir_all(file.parent().expect("cache parent")).expect("cache dir");
+        fs::write(
+            &file,
+            format!("{}\n", now + FUTURE_TIMESTAMP_TOLERANCE_SECS),
+        )
+        .expect("future cache within tolerance");
+        assert!(!cache.claim_due(now));
+
+        fs::write(
+            &file,
+            format!("{}\n", now + FUTURE_TIMESTAMP_TOLERANCE_SECS + 1),
+        )
+        .expect("far-future cache");
+        assert!(cache.claim_due(now));
+        assert_eq!(fs::read_to_string(&file).expect("cache file").trim(), "100");
+
+        fs::write(&file, format!("{}\n", u64::MAX)).expect("maximum future cache");
+        assert!(cache.claim_due(now));
+        assert_eq!(fs::read_to_string(&file).expect("cache file").trim(), "100");
     }
 
     #[test]

@@ -59,9 +59,11 @@ The native `pmds` binary owns one advisory update-check mechanism:
    `$XDG_CACHE_HOME` with `$HOME/.cache` fallback, macOS uses
    `$HOME/Library/Caches`, and Windows uses `%LOCALAPPDATA%`. An atomic
    directory claim prevents concurrent processes from producing more than one
-   request in the same 24-hour window. Missing, corrupt, or unwritable cache
-   state never fails the command; if the rate limit cannot be recorded, the
-   request is skipped.
+   request in the same 24-hour window. A timestamp up to one interval in the
+   future is tolerated as clock skew; a value farther ahead is treated as
+   corrupt and replaced by the next claim. Missing, corrupt, or unwritable
+   cache state never fails the command; if the rate limit cannot be recorded,
+   the request is skipped.
 5. The HTTPS POST body contains exactly the project identifier (`palamedes`),
    the CLI version, Rust target OS, Rust target architecture, a CI boolean,
    and a year-month install cohort. It contains no installation ID, telemetry
