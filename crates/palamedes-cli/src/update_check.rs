@@ -8,8 +8,8 @@
 //! public `sebastian-software/version-service` repository.
 
 use std::ffi::OsString;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::fs::{self, OpenOptions};
+use std::path::PathBuf;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -17,10 +17,12 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
-/// Grace period after which a leaked lock directory (crash, SIGKILL, power
-/// loss inside the short claim window) is broken instead of silently
-/// disabling update checks on that machine forever.
-const STALE_LOCK_AFTER: Duration = Duration::from_secs(60 * 60);
+/// Future timestamps within one check interval are tolerated as clock skew.
+/// Values farther ahead are treated as corrupt so the cache self-heals.
+const FUTURE_TIMESTAMP_TOLERANCE_SECS: u64 = CHECK_INTERVAL_SECS;
+/// The versioned name avoids treating a lock directory leaked by the previous
+/// protocol as a file. Kernel ownership makes stale-lock recovery unnecessary.
+const LOCK_FILE_EXTENSION: &str = "lock-v2";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024;
 /// Wire identifier of this CLI on the shared multi-project endpoint.
@@ -153,15 +155,11 @@ trait CheckCache {
 
 struct PlatformCache {
     file: PathBuf,
-    stale_lock_after: Duration,
 }
 
 impl PlatformCache {
     fn new(file: PathBuf) -> Self {
-        Self {
-            file,
-            stale_lock_after: STALE_LOCK_AFTER,
-        }
+        Self { file }
     }
 }
 
@@ -174,21 +172,23 @@ impl CheckCache for PlatformCache {
             return false;
         }
 
-        let lock_path = self.file.with_extension("lock");
-        if fs::create_dir(&lock_path).is_err() {
-            if !lock_is_stale(&lock_path, self.stale_lock_after) {
-                return false;
-            }
-            let _ = fs::remove_dir(&lock_path);
-            if fs::create_dir(&lock_path).is_err() {
-                return false;
-            }
+        let lock_path = self.file.with_extension(LOCK_FILE_EXTENSION);
+        let Ok(lock) = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(lock_path)
+        else {
+            return false;
+        };
+        if lock.try_lock().is_err() {
+            return false;
         }
-        let _lock = DirectoryLock(&lock_path);
 
         if let Ok(value) = fs::read_to_string(&self.file)
             && let Ok(previous) = value.trim().parse::<u64>()
-            && (now_secs.saturating_sub(previous) < CHECK_INTERVAL_SECS || previous > now_secs)
+            && cache_timestamp_is_fresh(previous, now_secs)
         {
             return false;
         }
@@ -197,22 +197,11 @@ impl CheckCache for PlatformCache {
     }
 }
 
-/// A lock directory is stale once its mtime is older than the grace period;
-/// a live claim holds it only for a few filesystem operations. Unreadable
-/// metadata or a future mtime keeps the lock, favoring fewer requests.
-fn lock_is_stale(lock_path: &Path, after: Duration) -> bool {
-    fs::metadata(lock_path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
-        .and_then(|modified| modified.elapsed().ok())
-        .is_some_and(|age| age >= after)
-}
-
-struct DirectoryLock<'a>(&'a Path);
-
-impl Drop for DirectoryLock<'_> {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir(self.0);
+fn cache_timestamp_is_fresh(previous: u64, now: u64) -> bool {
+    if previous > now {
+        previous - now <= FUTURE_TIMESTAMP_TOLERANCE_SECS
+    } else {
+        now - previous < CHECK_INTERVAL_SECS
     }
 }
 
@@ -409,6 +398,7 @@ fn is_ci(environment: impl Fn(&str) -> Option<OsString>) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::process::Command;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier, Mutex};
 
@@ -574,10 +564,37 @@ mod tests {
         assert!(cache.claim_due(10));
         assert!(!cache.claim_due(10 + CHECK_INTERVAL_SECS - 1));
         assert!(cache.claim_due(10 + CHECK_INTERVAL_SECS));
-        assert!(!cache.claim_due(1));
 
         fs::write(&file, "broken\n").expect("corrupt cache");
         assert!(cache.claim_due(20));
+    }
+
+    #[test]
+    fn cache_tolerates_small_clock_skew_and_self_heals_far_future_timestamps() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("cache").join("update-check-v1");
+        let cache = PlatformCache::new(file.clone());
+        let now = 100;
+
+        fs::create_dir_all(file.parent().expect("cache parent")).expect("cache dir");
+        fs::write(
+            &file,
+            format!("{}\n", now + FUTURE_TIMESTAMP_TOLERANCE_SECS),
+        )
+        .expect("future cache within tolerance");
+        assert!(!cache.claim_due(now));
+
+        fs::write(
+            &file,
+            format!("{}\n", now + FUTURE_TIMESTAMP_TOLERANCE_SECS + 1),
+        )
+        .expect("far-future cache");
+        assert!(cache.claim_due(now));
+        assert_eq!(fs::read_to_string(&file).expect("cache file").trim(), "100");
+
+        fs::write(&file, format!("{}\n", u64::MAX)).expect("maximum future cache");
+        assert!(cache.claim_due(now));
+        assert_eq!(fs::read_to_string(&file).expect("cache file").trim(), "100");
     }
 
     #[test]
@@ -616,26 +633,72 @@ mod tests {
     }
 
     #[test]
-    fn fresh_locks_are_honored_and_stale_locks_are_broken() {
+    fn competing_process_cannot_replace_or_release_a_live_lock() {
         let temp = tempfile::tempdir().expect("temp dir");
         let file = temp.path().join("palamedes").join("update-check-v1");
         fs::create_dir_all(file.parent().expect("cache parent")).expect("cache dir");
-        let lock = file.with_extension("lock");
-        fs::create_dir(&lock).expect("leaked lock fixture");
+        let lock_path = file.with_extension(LOCK_FILE_EXTENSION);
+        fs::write(&lock_path, "owner\n").expect("owner lock fixture");
+        let owner = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+            .expect("owner lock file");
+        owner.try_lock().expect("owner lock");
 
-        // A recent lock keeps its claim.
-        assert!(!PlatformCache::new(file.clone()).claim_due(100));
-        assert!(lock.exists());
+        run_process_lock_probe(&file, false);
+        assert!(lock_path.is_file());
+        assert!(!file.exists());
 
-        // Once the grace period has passed, the leaked lock is broken and the
-        // claim proceeds; the fresh lock is released again afterwards.
-        let cache = PlatformCache {
-            file: file.clone(),
-            stale_lock_after: Duration::ZERO,
-        };
-        assert!(cache.claim_due(100));
-        assert!(!lock.exists());
+        drop(owner);
+        run_process_lock_probe(&file, true);
+        assert!(lock_path.is_file());
         assert_eq!(fs::read_to_string(&file).expect("cache file").trim(), "100");
+    }
+
+    fn run_process_lock_probe(file: &PathBuf, expected: bool) {
+        let output = Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "update_check::tests::process_lock_probe",
+                "--nocapture",
+            ])
+            .env("PALAMEDES_TEST_CACHE_LOCK_FILE", file)
+            .env(
+                "PALAMEDES_TEST_CACHE_LOCK_EXPECTED",
+                if expected { "1" } else { "0" },
+            )
+            .output()
+            .expect("lock probe process");
+        assert!(
+            output.status.success(),
+            "lock probe failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn process_lock_probe() {
+        let Some(file) = std::env::var_os("PALAMEDES_TEST_CACHE_LOCK_FILE") else {
+            return;
+        };
+        let expected =
+            std::env::var_os("PALAMEDES_TEST_CACHE_LOCK_EXPECTED").as_deref() == Some("1".as_ref());
+        assert_eq!(PlatformCache::new(file.into()).claim_due(100), expected);
+    }
+
+    #[test]
+    fn a_leaked_directory_from_the_previous_lock_protocol_is_never_removed() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("palamedes").join("update-check-v1");
+        fs::create_dir_all(file.parent().expect("cache parent")).expect("cache dir");
+        let legacy_lock = file.with_extension("lock");
+        fs::create_dir(&legacy_lock).expect("legacy lock directory");
+
+        assert!(PlatformCache::new(file).claim_due(100));
+        assert!(legacy_lock.is_dir());
     }
 
     #[test]
