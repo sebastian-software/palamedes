@@ -86,10 +86,9 @@ type ResolvedMessage = {
   fromCatalog: boolean;
 };
 
-type LoadedMessage = {
-  value: CatalogMessage;
-  compiled: boolean;
-};
+// Generated entries already distinguish constants from executable messages.
+// Only compatibility strings need a wrapper to retain their ICU semantics.
+type LoadedMessage = CatalogMessage | { pattern: string };
 
 type LoadedCatalog = Record<string, LoadedMessage>;
 
@@ -124,16 +123,25 @@ export function createI18nRuntime(
     }
   }
 
-  function resolveMessage(id: string, metadata?: MessageMetadata): ResolvedMessage {
+  function getLoadedMessage(id: string): LoadedMessage | undefined {
     const catalog = catalogs.get(activeLocale);
-    const loaded = catalog !== undefined && Object.hasOwn(catalog, id) ? catalog[id] : undefined;
+    // Loaded catalogs have a null prototype, including for special message IDs.
+    return catalog?.[id];
+  }
+
+  function resolveMessage(
+    loaded: LoadedMessage | undefined,
+    id: string,
+    metadata?: MessageMetadata,
+  ): ResolvedMessage {
     const fallback = metadata?.message ?? id;
 
     if (loaded !== undefined) {
+      const compiled = typeof loaded !== "object";
       return {
-        value: loaded.value,
+        value: compiled ? loaded : loaded.pattern,
         fallback,
-        compiled: loaded.compiled,
+        compiled,
         fromCatalog: true,
       };
     }
@@ -264,10 +272,7 @@ export function createI18nRuntime(
       const compiledCatalog = isCompiledCatalog(messages);
 
       for (const [id, value] of Object.entries(messages)) {
-        current[id] = {
-          value,
-          compiled: compiledCatalog || typeof value === "function",
-        };
+        current[id] = compiledCatalog || typeof value === "function" ? value : { pattern: value };
       }
 
       catalogs.set(locale, current);
@@ -278,15 +283,21 @@ export function createI18nRuntime(
     },
 
     getMessage(id, metadata) {
-      return getResolvedPattern(resolveMessage(id, metadata));
+      return getResolvedPattern(resolveMessage(getLoadedMessage(id), id, metadata));
     },
 
     getMessageNodes(id, metadata) {
-      return parseResolvedMessage(resolveMessage(id, metadata), id, metadata);
+      return parseResolvedMessage(resolveMessage(getLoadedMessage(id), id, metadata), id, metadata);
     },
 
     renderMessage(id, values, runtime, metadata) {
-      return renderResolvedMessage(resolveMessage(id, metadata), values, runtime, id, metadata);
+      return renderResolvedMessage(
+        resolveMessage(getLoadedMessage(id), id, metadata),
+        values,
+        runtime,
+        id,
+        metadata,
+      );
     },
 
     reportError(info) {
@@ -300,10 +311,14 @@ export function createI18nRuntime(
       });
     },
 
-    _(id, values = {}, metadata) {
+    _(id, values, metadata) {
+      const loaded = getLoadedMessage(id);
+      if (typeof loaded === "string") {
+        return loaded;
+      }
       return renderResolvedMessage(
-        resolveMessage(id, metadata),
-        values,
+        resolveMessage(loaded, id, metadata),
+        values ?? {},
         getStringRuntime(activeLocale),
         id,
         metadata,
