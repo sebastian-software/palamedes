@@ -1,0 +1,17 @@
+locales: [en]
+source-locale: en
+mdx:
+  framework: react
+  translatable-attributes: [alt, title]
+  front-matter-fields: [title]
+  trans-module: "@palamedes/react/compiled"
+  runtime-module: "@palamedes/runtime"
+  ignore-directive: palamedes-ignore
+  keep-source-fallbacks: true
+catalogs:
+  - path: locales/{locale}/messages
+    format: po
+    po:
+      line-breaks: auto
+    include: [src]
+    exclude: ["**/node_modules/**"]
