@@ -44,16 +44,22 @@ when the requested namespace cannot be served.
 
 After a successful `describe`, the host caches the validated manifest in
 `.palamedes/plugin-manifests.json`. Later plugin invocations reuse manifests
-whose canonical executable path, byte length, modification time, and SHA-256
-content digest still match, while continuing to validate every configured
-namespace and collision. Changing a binary, the host version, or the protocol
-version forces another `describe`, including replacements that preserve file
-size and timestamps. The cache is only a startup optimization: missing,
-corrupt, or unwritable cache data falls back to the normal handshake without
-blocking a plugin command. Pass `--refresh-plugin-manifests` to a plugin
-invocation to ignore the cached manifests once, describe every configured
-plugin again, and replace the cache with the validated results. Removing
-`.palamedes/plugin-manifests.json` remains an equivalent manual recovery path.
+whose canonical executable path and fingerprint still match, while continuing
+to validate every configured namespace and collision. On Unix, an unchanged
+device, inode, byte length, modification time, and nanosecond change time let
+the host reuse the cached SHA-256 digest without reading the binary again. Any
+metadata change triggers a fresh digest; platforms without that complete Unix
+identity hash the binary on every lookup. A missing inode or a zero nanosecond
+change-time component is treated conservatively as incomplete metadata and
+also keeps full hashing enabled. Changing a binary, the host version, or the
+protocol version forces another `describe`, including replacements that
+preserve file size and modification time. The cache is only a startup
+optimization: missing, old, corrupt, or unwritable cache data falls back to the
+normal handshake without blocking a plugin command. Pass
+`--refresh-plugin-manifests` to a plugin invocation to ignore the cached
+manifests once, describe every configured plugin again, and replace the cache
+with the validated results. Removing `.palamedes/plugin-manifests.json` remains
+an equivalent manual recovery path.
 
 The host consumes its own invocation flags before it forwards `args` to the
 plugin: `--json`, `--config PATH`, `-c PATH`, `--config=PATH`,
