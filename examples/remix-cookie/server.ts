@@ -1,6 +1,6 @@
 import * as http from "node:http";
 
-import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import { createPalamedesRemixAssetLoader, PALAMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
 import { createAssetServer } from "remix/assets";
 import { createRequestListener } from "remix/node-fetch-server";
 
@@ -17,7 +17,7 @@ const assetServer = createAssetServer({
     workspace: "../../packages",
   },
   allowFiles: ["app/**/public/**"],
-  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: { loaders: [createPalamedesRemixAssetLoader()] },
 });

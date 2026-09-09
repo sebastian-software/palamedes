@@ -72,11 +72,14 @@ export type LoadHook = NonNullable<RegisterHooksOptions["load"]>;
 export type LoadResult = ReturnType<LoadHook>;
 
 /** Packages imported by the default browser transform output. */
-export const PALEMEDES_REMIX_ASSET_PACKAGES = [
+export const PALAMEDES_REMIX_ASSET_PACKAGES = [
   "@palamedes/core",
   "@palamedes/runtime",
   "@palamedes/remix",
 ] as const;
+
+/** @deprecated Use PALAMEDES_REMIX_ASSET_PACKAGES. */
+export const PALEMEDES_REMIX_ASSET_PACKAGES = PALAMEDES_REMIX_ASSET_PACKAGES;
 
 // The Node loader must exclude CommonJS .cjs/.cts: macro lowering injects ESM
 // imports. Bundler integrations can safely use the wider shared default.
@@ -132,7 +135,7 @@ export function createPalamedesRemixLoadHook(
  * Create the post-compile loader used by Remix's browser asset server.
  *
  * Add the returned loader to `scripts.loaders` and add
- * `PALEMEDES_REMIX_ASSET_PACKAGES` to the asset server's `allowPackages`.
+ * `PALAMEDES_REMIX_ASSET_PACKAGES` to the asset server's `allowPackages`.
  */
 export function createPalamedesRemixAssetLoader(
   options: PalamedesRemixAssetLoaderOptions = {},
