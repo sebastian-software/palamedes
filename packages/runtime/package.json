@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/runtime",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "description": "Palamedes runtime primitives for resolving the active i18n instance",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
