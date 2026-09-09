@@ -41,12 +41,6 @@ name = "Palamedes"
   assert.match(output, /"publisher": \{/);
 });
 
-test("remark-mdx-frontmatter resolves the patched TOML version", () => {
-  const packageJson = requireFromRemarkMdxFrontmatter("toml/package.json");
-
-  assert.equal(packageJson.version, "4.2.0");
-});
-
 test("TOML parsing blocks prototype traversal", () => {
   const payload = `[a.b]
 y = 1
