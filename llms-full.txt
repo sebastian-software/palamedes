@@ -348,6 +348,7 @@ Useful options include:
 ```bash
 pnpm exec pmds extract --clean
 pnpm exec pmds extract --check --json
+pnpm exec pmds extract --fail-on-empty-catalog
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --verbose
 pnpm exec pmds lint --json
@@ -380,6 +381,14 @@ the normal extraction and serialization path, compares the result with disk,
 and reports deterministic clean, drift, or error data. It exits nonzero for
 drift without writing catalog files or creating missing catalog directories.
 The extraction cache may still be updated unless `--no-cache` is passed.
+
+`--fail-on-empty-catalog` turns a catalog that matches no source files into an
+operational failure before any configured catalog is written or marked
+obsolete. Without the flag, extraction keeps the warning-only behavior and
+projects that catalog from an empty message set. With `--check --json`, the
+guarded failure uses status `error`, an empty `catalogs` array, and exit code
+`1`. Watch mode reports the failed cycle, leaves catalogs unchanged, and keeps
+watching for a source change that can recover.
 
 ### CLI exit codes
 

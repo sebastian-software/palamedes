@@ -40,23 +40,25 @@ pmds extract --clean
 pmds extract --force-clean
 pmds extract --check
 pmds extract --check --json
+pmds extract --fail-on-empty-catalog
 pmds extract --watch
 pmds extract --verbose
 ```
 
 Options:
 
-| Option                | Description                                                                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `-c, --config <path>` | Use a specific config file.                                                                                                                                  |
-| `-w, --watch`         | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
-| `--clean`             | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
-| `--force-clean`       | Remove all obsolete entries immediately, including undated entries.                                                                                          |
-| `--check`             | Exit unsuccessfully when extraction would create or modify a catalog, without writing catalog files. Cannot be combined with `--watch`.                      |
-| `--json`              | With `--check`, print one deterministic result document.                                                                                                     |
-| `--threads <COUNT>`   | Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config; defaults to `4`; `1` runs serial.                                |
-| `--no-cache`          | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
-| `-v, --verbose`       | Print verbose extraction details.                                                                                                                            |
+| Option                    | Description                                                                                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-c, --config <path>`     | Use a specific config file.                                                                                                                                  |
+| `-w, --watch`             | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
+| `--clean`                 | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
+| `--force-clean`           | Remove all obsolete entries immediately, including undated entries.                                                                                          |
+| `--check`                 | Exit unsuccessfully when extraction would create or modify a catalog, without writing catalog files. Cannot be combined with `--watch`.                      |
+| `--json`                  | With `--check`, print one deterministic result document.                                                                                                     |
+| `--fail-on-empty-catalog` | Fail an extraction cycle before any catalog update when a configured catalog matches no source files.                                                        |
+| `--threads <COUNT>`       | Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config; defaults to `4`; `1` runs serial.                                |
+| `--no-cache`              | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
+| `-v, --verbose`           | Print verbose extraction details.                                                                                                                            |
 
 Watch mode resolves project and include-directory symlinks to the filesystem
 targets observed by the native watcher while continuing to apply include and
@@ -70,6 +72,16 @@ It compares the exact resulting bytes with each configured catalog. Catalog
 files, missing catalog directories, and catalog modification times remain
 unchanged. The source-analysis cache may still be populated; add `--no-cache`
 when the entire check must avoid cache writes.
+
+Use `--fail-on-empty-catalog` in automated extraction pipelines that must treat
+an empty source match as a configuration failure. Catalog projection starts
+only after source discovery has succeeded, so one empty catalog exits with code
+`1` before any catalog is written or marked obsolete.
+Without the flag, the existing behavior remains: Palamedes warns and projects
+that catalog from an empty message set. In `--check --json` mode the failure is
+returned as status `error` with an empty `catalogs` array. Watch mode prints the
+failure, leaves every catalog unchanged for that cycle, and keeps watching so a
+later source change can recover.
 
 `--clean` and `--force-clean` keep their normal meaning in check mode. If both
 are present, `--force-clean` wins. Because regular extraction does not delete
@@ -96,7 +108,7 @@ or configuration failure uses status `error`, an empty `catalogs` array, and
 drift. A minimal CI check is:
 
 ```bash
-pnpm exec pmds extract --check --json
+pnpm exec pmds extract --check --json --fail-on-empty-catalog
 ```
 
 ## `pmds lint`

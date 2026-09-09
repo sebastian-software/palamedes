@@ -90,7 +90,7 @@ export const compactTranslationApiInventory = [
 export const featureNarrative = {
   lint: ["non-mutating", "MDX"],
   eslintAdapter: ["Preview", "ESLint/Oxlint", "pmds lint"],
-  extractCheck: ["pmds extract --check --json", "--no-cache"],
+  extractCheck: ["pmds extract --check --json", "--fail-on-empty-catalog", "--no-cache"],
   mergeDriver: ["deletion-aware", "three-way merge"],
   binaryPlugins: ["binary-only", "binary plugin protocol"],
   adapterSourceFallbacks: ["keepSourceFallbacks: false", "@palamedes/core/compiled", "onMissing"],

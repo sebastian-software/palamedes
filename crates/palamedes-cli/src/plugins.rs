@@ -33,7 +33,7 @@ use crate::error::CliError;
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
-const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 2;
+const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 3;
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
@@ -258,6 +258,22 @@ fn load_registry(
     native_executable: &Path,
     reuse_cached_manifests: bool,
 ) -> Result<PluginRegistry, PluginFailure> {
+    load_registry_with_binary_hasher(
+        config,
+        cwd,
+        native_executable,
+        reuse_cached_manifests,
+        &hash_plugin_binary,
+    )
+}
+
+fn load_registry_with_binary_hasher(
+    config: &LoadedConfig,
+    cwd: &Path,
+    native_executable: &Path,
+    reuse_cached_manifests: bool,
+    hash_binary: &dyn Fn(&Path) -> Option<[u8; 32]>,
+) -> Result<PluginRegistry, PluginFailure> {
     let mut registry = PluginRegistry::default();
     let mut cache = load_plugin_manifest_cache(config);
     let mut active_cache_keys = BTreeSet::new();
@@ -277,7 +293,19 @@ fn load_registry(
                 continue;
             }
         };
-        let cache_identity = plugin_cache_identity(&resolved);
+        let binary_path = fs::canonicalize(&resolved.binary_path).ok();
+        let cached_stamp = if reuse_cached_manifests {
+            binary_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned())
+                .and_then(|key| cache.entries.get(&key))
+                .map(|entry| &entry.stamp)
+        } else {
+            None
+        };
+        let cache_identity = binary_path
+            .as_deref()
+            .and_then(|binary_path| plugin_cache_identity(binary_path, cached_stamp, hash_binary));
         let manifest = match cache_identity.as_ref().and_then(|(key, stamp)| {
             active_cache_keys.insert(key.clone());
             if !reuse_cached_manifests {
@@ -442,10 +470,30 @@ fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-fn plugin_cache_identity(resolved: &ResolvedPlugin) -> Option<(String, PluginBinaryStamp)> {
-    let binary_path = fs::canonicalize(&resolved.binary_path).ok()?;
-    let metadata = fs::metadata(&binary_path).ok()?;
-    let mut binary = fs::File::open(&binary_path).ok()?;
+fn plugin_cache_identity(
+    binary_path: &Path,
+    cached: Option<&PluginBinaryStamp>,
+    hash_binary: &dyn Fn(&Path) -> Option<[u8; 32]>,
+) -> Option<(String, PluginBinaryStamp)> {
+    let metadata = fs::metadata(binary_path).ok()?;
+    let binary_metadata = plugin_binary_metadata(&metadata);
+    if let Some(cached) = cached
+        && cached.metadata.permits_digest_reuse(&binary_metadata)
+    {
+        return Some((binary_path.to_string_lossy().into_owned(), cached.clone()));
+    }
+    let sha256 = hash_binary(binary_path)?;
+    Some((
+        binary_path.to_string_lossy().into_owned(),
+        PluginBinaryStamp {
+            metadata: binary_metadata,
+            sha256,
+        },
+    ))
+}
+
+fn hash_plugin_binary(binary_path: &Path) -> Option<[u8; 32]> {
+    let mut binary = fs::File::open(binary_path).ok()?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     loop {
@@ -455,23 +503,64 @@ fn plugin_cache_identity(resolved: &ResolvedPlugin) -> Option<(String, PluginBin
         }
         hasher.update(&buffer[..bytes_read]);
     }
-    let modified_ns = u64::try_from(
-        metadata
-            .modified()
-            .ok()?
-            .duration_since(UNIX_EPOCH)
-            .ok()?
-            .as_nanos(),
+    Some(hasher.finalize().into())
+}
+
+fn plugin_binary_metadata(metadata: &fs::Metadata) -> PluginBinaryMetadata {
+    let modified_ns = metadata.modified().ok().and_then(|modified| {
+        u64::try_from(modified.duration_since(UNIX_EPOCH).ok()?.as_nanos()).ok()
+    });
+    PluginBinaryMetadata {
+        length: metadata.len(),
+        modified_ns,
+        unix_identity: unix_plugin_binary_identity(metadata),
+    }
+}
+
+#[cfg(unix)]
+fn unix_plugin_binary_identity(metadata: &fs::Metadata) -> Option<UnixPluginBinaryIdentity> {
+    use std::os::unix::fs::MetadataExt;
+
+    unix_plugin_binary_identity_from_parts(
+        metadata.dev(),
+        metadata.ino(),
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
     )
-    .ok()?;
-    Some((
-        binary_path.to_string_lossy().into_owned(),
-        PluginBinaryStamp {
-            length: metadata.len(),
-            modified_ns,
-            sha256: hasher.finalize().into(),
-        },
-    ))
+}
+
+#[cfg(unix)]
+fn unix_plugin_binary_identity_from_parts(
+    device: u64,
+    inode: u64,
+    modified_seconds: i64,
+    modified_nanoseconds: i64,
+    changed_seconds: i64,
+    changed_nanoseconds: i64,
+) -> Option<UnixPluginBinaryIdentity> {
+    // A zero ctime nanosecond component can indicate a second-resolution
+    // filesystem. Treat it as incomplete rather than trusting a coarse clock.
+    if inode == 0
+        || !(0..1_000_000_000).contains(&modified_nanoseconds)
+        || !(1..1_000_000_000).contains(&changed_nanoseconds)
+    {
+        return None;
+    }
+    Some(UnixPluginBinaryIdentity {
+        device,
+        inode,
+        modified_seconds,
+        modified_nanoseconds,
+        changed_seconds,
+        changed_nanoseconds,
+    })
+}
+
+#[cfg(not(unix))]
+fn unix_plugin_binary_identity(_metadata: &fs::Metadata) -> Option<UnixPluginBinaryIdentity> {
+    None
 }
 
 fn manifest_from_invocation(
@@ -1636,12 +1725,40 @@ struct CachedPluginManifest {
     manifest: PluginManifest,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PluginBinaryStamp {
-    length: u64,
-    modified_ns: u64,
+    metadata: PluginBinaryMetadata,
     sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginBinaryMetadata {
+    length: u64,
+    modified_ns: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unix_identity: Option<UnixPluginBinaryIdentity>,
+}
+
+impl PluginBinaryMetadata {
+    fn permits_digest_reuse(&self, current: &Self) -> bool {
+        // ctime cannot normally be restored by a writer. Device and inode tie
+        // it to the same file object; length and nanosecond mtime cover its
+        // visible content metadata. Without every Unix field, rehash instead.
+        self == current && current.modified_ns.is_some() && current.unix_identity.is_some()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnixPluginBinaryIdentity {
+    device: u64,
+    inode: u64,
+    modified_seconds: i64,
+    modified_nanoseconds: i64,
+    changed_seconds: i64,
+    changed_nanoseconds: i64,
 }
 
 #[derive(Debug)]
@@ -1725,6 +1842,7 @@ struct PackagePalamedes {
 mod tests {
     use std::fs;
     use std::path::Path;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Mutex, Once};
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -2294,7 +2412,9 @@ plugins:
         let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        use super::{load_registry, plugin_cache_identity, plugin_manifest_cache_path};
+        use super::{
+            hash_plugin_binary, load_registry_with_binary_hasher, plugin_manifest_cache_path,
+        };
 
         let root = temp_dir("manifest-cache");
         let plugin = root.join("alpha");
@@ -2317,31 +2437,6 @@ plugins:
              \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
         )
         .expect("plugin implementation");
-
-        let resolved = ResolvedPlugin {
-            specifier: "./alpha".to_owned(),
-            binary_path: script.clone(),
-        };
-        let (_, original_stamp) = plugin_cache_identity(&resolved).expect("original cache stamp");
-        let original_metadata = fs::metadata(&script).expect("plugin script metadata");
-        let original_mtime = original_metadata.modified().expect("plugin script mtime");
-        let changed = fs::read_to_string(&script)
-            .expect("plugin script")
-            .replace("variant-a", "variant-b");
-        assert_eq!(changed.len() as u64, original_metadata.len());
-        write_executable_fixture(&script, changed);
-        fs::OpenOptions::new()
-            .write(true)
-            .open(&script)
-            .expect("plugin script")
-            .set_times(fs::FileTimes::new().set_modified(original_mtime))
-            .expect("restore plugin script mtime");
-        let (_, replacement_stamp) =
-            plugin_cache_identity(&resolved).expect("replacement cache stamp");
-        let replacement_metadata = fs::metadata(&script).expect("replacement metadata");
-        assert_eq!(replacement_metadata.len(), original_metadata.len());
-        assert_eq!(replacement_metadata.modified().unwrap(), original_mtime);
-        assert_ne!(replacement_stamp, original_stamp);
         fs::write(
             root.join("palamedes.yaml"),
             r"
@@ -2356,50 +2451,92 @@ plugins:
         )
         .expect("config");
         let config = load_config(&root, None).expect("config with plugin");
+        let hash_count = AtomicUsize::new(0);
+        let counting_hasher = |path: &Path| {
+            hash_count.fetch_add(1, Ordering::SeqCst);
+            hash_plugin_binary(path)
+        };
+        let load = |reuse_cached_manifests| {
+            load_registry_with_binary_hasher(
+                &config,
+                &root,
+                Path::new("pmds"),
+                reuse_cached_manifests,
+                &counting_hasher,
+            )
+        };
 
-        let first =
-            load_registry(&config, &root, Path::new("pmds"), true).expect("initial registry");
+        let first = load(true).expect("initial registry");
         assert_eq!(first.plugins.len(), 1);
         assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 1);
         assert!(plugin_manifest_cache_path(&config).is_file());
 
-        let warm = load_registry(&config, &root, Path::new("pmds"), true).expect("cached registry");
+        let warm = load(true).expect("cached registry");
         assert_eq!(warm.plugins.len(), 1);
         assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 1);
+
+        let original_metadata = fs::metadata(&script).expect("plugin script metadata");
+        let original_mtime = original_metadata.modified().expect("plugin script mtime");
+        let changed = fs::read_to_string(&script)
+            .expect("plugin script")
+            .replace("variant-a", "variant-b");
+        assert_eq!(changed.len() as u64, original_metadata.len());
+        write_executable_fixture(&script, changed);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&script)
+            .expect("plugin script")
+            .set_times(fs::FileTimes::new().set_modified(original_mtime))
+            .expect("restore plugin script mtime");
+        let replacement_metadata = fs::metadata(&script).expect("replacement metadata");
+        assert_eq!(replacement_metadata.len(), original_metadata.len());
+        assert_eq!(replacement_metadata.modified().unwrap(), original_mtime);
+
+        let replaced = load(true).expect("replaced executable registry");
+        assert_eq!(replaced.plugins.len(), 1);
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 2);
+
+        let warm = load(true).expect("replacement cache hit");
+        assert_eq!(warm.plugins.len(), 1);
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 2);
 
         let changed = fs::read_to_string(&implementation)
             .expect("plugin implementation")
             .replace("inspect", "refreshed");
         fs::write(&implementation, changed).expect("change plugin implementation");
-        let stale = load_registry(&config, &root, Path::new("pmds"), true)
-            .expect("unchanged shim stays cached");
+        let stale = load(true).expect("unchanged shim stays cached");
         assert!(
             stale.plugins["alpha"]
                 .manifest
                 .commands
                 .contains_key("inspect")
         );
-        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "x");
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 2);
 
-        let explicitly_refreshed = load_registry(&config, &root, Path::new("pmds"), false)
-            .expect("explicitly refreshed registry");
+        let explicitly_refreshed = load(false).expect("explicitly refreshed registry");
         assert!(
             explicitly_refreshed.plugins["alpha"]
                 .manifest
                 .commands
                 .contains_key("refreshed")
         );
-        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xxx");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 3);
 
-        let warm = load_registry(&config, &root, Path::new("pmds"), true)
-            .expect("refreshed cache is reusable");
+        let warm = load(true).expect("refreshed cache is reusable");
         assert!(
             warm.plugins["alpha"]
                 .manifest
                 .commands
                 .contains_key("refreshed")
         );
-        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xx");
+        assert_eq!(fs::read_to_string(plugin.join("counter")).unwrap(), "xxx");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 3);
     }
 
     #[cfg(unix)]
@@ -2533,6 +2670,89 @@ catalogs:
                 .collect::<Vec<_>>(),
             [std::ffi::OsString::from("plugin-manifests.json")]
         );
+    }
+
+    #[test]
+    fn invalidates_manifest_cache_entries_from_the_previous_stamp_schema() {
+        use super::{
+            PLUGIN_MANIFEST_CACHE_SCHEMA, load_plugin_manifest_cache, plugin_manifest_cache_path,
+        };
+
+        let root = temp_dir("old-manifest-cache-schema");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("config");
+        let config = load_config(&root, None).expect("load config");
+        let cache_path = plugin_manifest_cache_path(&config);
+        fs::create_dir_all(cache_path.parent().expect("cache parent")).expect("cache directory");
+        let old_cache = json!({
+            "schema": 2,
+            "protocolVersion": PROTOCOL_VERSION,
+            "hostVersion": env!("CARGO_PKG_VERSION"),
+            "entries": {
+                "/plugin": {
+                    "stamp": {
+                        "length": 1,
+                        "modifiedNs": 1,
+                        "sha256": vec![0_u8; 32]
+                    },
+                    "manifest": {
+                        "name": "cached",
+                        "protocolVersion": PROTOCOL_VERSION,
+                        "commands": {"inspect": {}}
+                    }
+                }
+            }
+        });
+        fs::write(
+            &cache_path,
+            serde_json::to_vec(&old_cache).expect("old cache JSON"),
+        )
+        .expect("old cache");
+
+        let loaded = load_plugin_manifest_cache(&config);
+        assert_eq!(loaded.schema, PLUGIN_MANIFEST_CACHE_SCHEMA);
+        assert!(loaded.entries.is_empty());
+    }
+
+    #[test]
+    fn plugin_cache_identity_rehashes_without_complete_unix_metadata() {
+        use super::{
+            PluginBinaryStamp, hash_plugin_binary, plugin_binary_metadata, plugin_cache_identity,
+        };
+
+        let root = temp_dir("manifest-cache-metadata-fallback");
+        let binary = root.join("plugin");
+        fs::write(&binary, "plugin bytes").expect("plugin binary");
+        let binary = fs::canonicalize(binary).expect("canonical plugin binary");
+        let mut metadata = plugin_binary_metadata(&fs::metadata(&binary).expect("metadata"));
+        metadata.unix_identity = None;
+        let cached = PluginBinaryStamp {
+            metadata,
+            sha256: [0; 32],
+        };
+        let hash_count = AtomicUsize::new(0);
+        let counting_hasher = |path: &Path| {
+            hash_count.fetch_add(1, Ordering::SeqCst);
+            hash_plugin_binary(path)
+        };
+
+        let (_, actual) = plugin_cache_identity(&binary, Some(&cached), &counting_hasher)
+            .expect("cache identity");
+        assert_eq!(hash_count.load(Ordering::SeqCst), 1);
+        assert_ne!(actual.sha256, cached.sha256);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn coarse_or_missing_unix_identity_never_enables_digest_reuse() {
+        use super::unix_plugin_binary_identity_from_parts;
+
+        assert!(unix_plugin_binary_identity_from_parts(1, 2, 3, 4, 5, 6).is_some());
+        assert!(unix_plugin_binary_identity_from_parts(1, 2, 3, 4, 5, 0).is_none());
+        assert!(unix_plugin_binary_identity_from_parts(1, 0, 3, 4, 5, 6).is_none());
     }
 
     #[test]

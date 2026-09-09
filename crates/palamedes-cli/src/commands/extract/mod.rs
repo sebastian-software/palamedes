@@ -43,6 +43,9 @@ pub struct ExtractOptions {
     /// Print the extraction check as one JSON document.
     #[arg(long, requires = "check")]
     json: bool,
+    /// Fail before updating catalogs when any catalog matches no source files.
+    #[arg(long)]
+    fail_on_empty_catalog: bool,
     /// Remove obsolete messages whose obsolete-since marker is older than the
     /// 30-day grace period; undated entries are kept (use --force-clean to
     /// remove everything immediately).
@@ -372,6 +375,12 @@ fn extract_from_catalog(
     }
 
     if files.is_empty() {
+        if options.fail_on_empty_catalog {
+            return Err(CliError::EmptyCatalogSources {
+                catalog: catalog.path.clone(),
+                include: catalog.include.join(", "),
+            });
+        }
         eprintln!(
             "Warning: catalog '{}' matched no source files (include: {}); projecting an empty catalog.",
             catalog.path,
