@@ -405,10 +405,11 @@ const readyTimer = setInterval(() => {
     captureOutput: true,
   });
   const observed = spawnPromise.then(
-    () => undefined,
-    () => undefined,
+    () => true,
+    () => false,
   );
   let timeoutId;
+  let testError;
 
   try {
     const startedAt = Date.now();
@@ -429,20 +430,56 @@ const readyTimer = setInterval(() => {
       stdout: "stdout-held-pipe",
       stderr: "stderr-held-pipe",
     });
-  } finally {
-    clearTimeout(timeoutId);
-    writeFileSync(parentCleanupFile, "cleanup");
-    if (existsSync(workerPidFile)) {
-      try {
-        process.kill(Number(readFileSync(workerPidFile, "utf8")), "SIGTERM");
-      } catch (error) {
-        if (error?.code !== "ESRCH") throw error;
-      }
-    }
-    await Promise.race([observed, new Promise((resolve) => setTimeout(resolve, 1000))]);
-    rmSync(fixture, { recursive: true, force: true });
+  } catch (error) {
+    testError = error;
   }
+
+  let cleanupError;
+  try {
+    await cleanupCapturedOutput({
+      fixture,
+      parentCleanupFile,
+      workerPidFile,
+      observed,
+      timeoutId,
+    });
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  if (testError) throw testError;
+  if (cleanupError) throw cleanupError;
 });
+
+async function cleanupCapturedOutput({
+  fixture,
+  parentCleanupFile,
+  workerPidFile,
+  observed,
+  timeoutId,
+}) {
+  clearTimeout(timeoutId);
+  writeFileSync(parentCleanupFile, "cleanup");
+  let cleanupError;
+  if (existsSync(workerPidFile)) {
+    try {
+      process.kill(Number(readFileSync(workerPidFile, "utf8")), "SIGTERM");
+    } catch (error) {
+      if (error?.code !== "ESRCH") cleanupError = error;
+    }
+  }
+  try {
+    await Promise.race([observed, new Promise((resolve) => setTimeout(resolve, 1000))]);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+  try {
+    rmSync(fixture, { recursive: true, force: true });
+  } catch (error) {
+    cleanupError ??= error;
+  }
+  if (cleanupError) throw cleanupError;
+}
 
 async function waitFor(predicate, timeout) {
   const deadline = Date.now() + timeout;
