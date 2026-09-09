@@ -796,25 +796,97 @@ catalogs:
     }
 
     #[test]
-    fn loads_kebab_case_mdx_source_fallbacks() {
-        let app = temp_dir("mdx-source-fallbacks");
-        fs::write(
-            app.join(CONFIG_FILENAME),
-            r#"
+    fn loads_both_mdx_source_fallback_aliases() {
+        for key in ["keep-source-fallbacks", "keep_source_fallbacks"] {
+            let app = temp_dir("mdx-source-fallbacks");
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    r#"
 locales: [en]
 source-locale: en
 mdx:
-  keep-source-fallbacks: true
+  {key}: true
 catalogs:
-  - path: src/locales/{locale}
+  - path: src/locales/{{locale}}
     include: [src]
-"#,
-        )
-        .expect("write config");
+"#
+                ),
+            )
+            .expect("write config");
 
-        let config = load_config(&app, None).expect("load config");
+            let config = load_config(&app, None).expect("load config");
 
-        assert!(config.mdx.keep_source_fallbacks);
+            assert!(config.mdx.keep_source_fallbacks, "{key}");
+        }
+    }
+
+    #[test]
+    fn shared_config_key_fixture_covers_serde_fields_and_cli_whitelists() {
+        const FIXTURE: &str = include_str!("../../../test-fixtures/config-key-parity.yaml");
+        let app = temp_dir("config-key-parity");
+        fs::write(app.join(CONFIG_FILENAME), FIXTURE).expect("write config fixture");
+
+        let config = load_config(&app, None).expect("shared fixture must load");
+        let value = ::config::Config::builder()
+            .add_source(::config::File::from_str(
+                FIXTURE,
+                ::config::FileFormat::Yaml,
+            ))
+            .build()
+            .expect("parse config fixture")
+            .try_deserialize::<serde_json::Value>()
+            .expect("deserialize config fixture");
+
+        let mdx_fixture = value
+            .get("mdx")
+            .and_then(serde_json::Value::as_object)
+            .expect("fixture MDX object");
+        for field in serde_json::to_value(palamedes::MdxOptions::default())
+            .expect("serialize MDX defaults")
+            .as_object()
+            .expect("MDX defaults object")
+            .keys()
+        {
+            let data_key = camel_case_to_kebab(field);
+            assert!(
+                mdx_fixture.contains_key(&data_key),
+                "shared fixture is missing serde MDX field {data_key}"
+            );
+        }
+
+        let catalog_fixture = value
+            .get("catalogs")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|catalogs| catalogs.first())
+            .and_then(serde_json::Value::as_object)
+            .expect("fixture catalog object");
+        let catalog = config.catalogs.first().expect("fixture catalog");
+        for field in serde_json::to_value(catalog)
+            .expect("serialize catalog")
+            .as_object()
+            .expect("catalog object")
+            .keys()
+        {
+            let data_key = camel_case_to_kebab(field);
+            assert!(
+                catalog_fixture.contains_key(&data_key),
+                "shared fixture is missing serde catalog field {data_key}"
+            );
+        }
+    }
+
+    fn camel_case_to_kebab(value: &str) -> String {
+        let mut kebab = String::with_capacity(value.len());
+        for character in value.chars() {
+            if character.is_ascii_uppercase() {
+                kebab.push('-');
+                kebab.push(character.to_ascii_lowercase());
+            } else {
+                kebab.push(character);
+            }
+        }
+        kebab
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
@@ -13,6 +13,10 @@ import {
 } from "./index";
 
 const tempDirs: string[] = [];
+const sharedConfigKeyFixture = new URL(
+  "../../../test-fixtures/config-key-parity.yaml",
+  import.meta.url,
+);
 
 afterEach(async () => {
   await Promise.all(
@@ -374,6 +378,33 @@ describe("loadPalamedesConfig", () => {
 
     expect((await loadPalamedesConfig({ cwd: javascriptDir })).mdx).toStrictEqual({
       keepSourceFallbacks: true,
+    });
+  });
+
+  it("accepts the shared config-key parity fixture", async () => {
+    const fixtureDir = await createTempDir();
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      await readFile(sharedConfigKeyFixture, "utf8"),
+    );
+
+    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+
+    expect(config.mdx).toMatchObject({
+      framework: "react",
+      translatableAttributes: ["alt", "title"],
+      frontMatterFields: ["title"],
+      transModule: "@palamedes/react/compiled",
+      runtimeModule: "@palamedes/runtime",
+      ignoreDirective: "palamedes-ignore",
+      keepSourceFallbacks: true,
+    });
+    expect(config.catalogs[0]).toMatchObject({
+      path: "locales/{locale}/messages",
+      format: "po",
+      include: ["src"],
+      exclude: ["**/node_modules/**"],
+      po: { lineBreaks: "auto" },
     });
   });
 
