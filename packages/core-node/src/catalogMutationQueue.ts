@@ -45,9 +45,7 @@ async function canonicalMutationPath(targetPath: string): Promise<string> {
         !("code" in error) ||
         (error.code !== "ENOENT" && error.code !== "ENOTDIR")
       ) {
-        // Let the native operation report filesystem failures through its
-        // established error contract instead of failing during lock setup.
-        return resolvedPath;
+        throw error;
       }
     }
 
