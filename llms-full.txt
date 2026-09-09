@@ -332,6 +332,15 @@ hooks await them; the Remix synchronous module hook keeps
 custom bulk callers must bound their own concurrency rather than launch an
 unbounded promise fan-out.
 
+Same-key `compileCatalogArtifactSelectedAsync` calls and async mutations of the
+same resolved catalog are coordinated within one loaded JavaScript module
+instance. Loading both the CommonJS and ESM entry points, or multiple package
+copies, creates independent build coordinators and mutation queues. The
+synchronous selected compiler bypasses JavaScript coordination and can block
+the Node.js event loop while it waits for an in-flight native build. Separate
+module instances and processes, plus concurrent synchronous mutations, require
+caller coordination.
+
 ## CLI model
 
 Core commands:
