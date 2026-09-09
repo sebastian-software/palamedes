@@ -36,7 +36,32 @@ function rejected<T>(reason: unknown): Promise<T> {
 }
 
 describe("createClientCatalogBoundary on the server", () => {
-  afterEach(() => resetI18nRuntime());
+  afterEach(() => {
+    resetI18nRuntime();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not initialize a browser locale in Cloudflare Workers", () => {
+    class TestWorkerGlobalScope {
+      public readonly kind = "workerd";
+    }
+    vi.stubGlobal("navigator", { userAgent: "Cloudflare-Workers" });
+    vi.stubGlobal("WorkerGlobalScope", TestWorkerGlobalScope);
+    vi.stubGlobal("self", new TestWorkerGlobalScope());
+    const resolveClientLocale = vi.fn(() => "de" as const);
+    const Boundary = createClientCatalogBoundary<Locale>({
+      loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
+      resolveClientLocale,
+    });
+    const scope = createServerI18nScope<ReturnType<typeof createI18n>>();
+
+    const html = scope.run(createI18n(), () =>
+      renderToStaticMarkup(<Boundary locale="en">Server content</Boundary>),
+    );
+
+    expect(html).toBe("Server content");
+    expect(resolveClientLocale).not.toHaveBeenCalled();
+  });
 
   it("uses the configured i18n factory during server rendering", () => {
     const createConfiguredI18n = vi.fn(() =>

@@ -116,7 +116,10 @@ For a fuller walkthrough, including Hono and Express examples, see:
 
 - `getI18n()`
 - `isServerEnvironment()` classifies the current runtime consistently across
-  Palamedes packages; browser workers count as client environments.
+  Palamedes packages; browser workers count as client environments, while
+  Cloudflare Workers that expose Cloudflare's documented
+  [`navigator.userAgent` marker](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-navigator)
+  count as a server runtime.
 - `setClientI18n(i18n)`
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
