@@ -3,9 +3,27 @@ import test from "node:test";
 
 import {
   dependencyOrderedWorkspacePackages,
+  isMissingFromRegistry,
   javascriptWorkspacePackages,
   publicWorkspacePackages,
 } from "./release-packages.mjs";
+
+test("recognizes current package and version npm 404s without hiding other failures", () => {
+  assert.equal(
+    isMissingFromRegistry(`npm error code E404
+npm error 404 Not Found - GET https://registry.npmjs.org/@example%2fmissing`),
+    true,
+  );
+  assert.equal(
+    isMissingFromRegistry(`npm error code E404
+npm error 404 No match found for version 1.2.3`),
+    true,
+  );
+  assert.equal(
+    isMissingFromRegistry("npm error code E401\nnpm error Incorrect or missing password."),
+    false,
+  );
+});
 
 test("derives JavaScript publish packages from the public workspace scan", () => {
   const publicPackages = publicWorkspacePackages();
