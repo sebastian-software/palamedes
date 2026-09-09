@@ -26,6 +26,7 @@ function createTestI18n(locale = "en"): I18nInstance {
 describe("@palamedes/runtime", () => {
   afterEach(() => {
     resetI18nRuntime();
+    vi.unstubAllGlobals();
     const state = globalThis as Record<string, unknown>;
     delete state.window;
     delete state.importScripts;
@@ -122,6 +123,21 @@ describe("@palamedes/runtime", () => {
     setClientI18n(i18n);
 
     expect(getI18n()).toBe(i18n);
+  });
+
+  it("keeps Cloudflare Workers server-classified when WorkerGlobalScope instanceof succeeds", () => {
+    class TestWorkerGlobalScope {
+      public readonly kind = "workerd";
+    }
+    vi.stubGlobal("navigator", { userAgent: "Cloudflare-Workers" });
+    vi.stubGlobal("WorkerGlobalScope", TestWorkerGlobalScope);
+    vi.stubGlobal("self", new TestWorkerGlobalScope());
+    const serverI18n = createTestI18n("server");
+
+    setServerI18nGetter(() => serverI18n);
+
+    expect(isServerEnvironment()).toBe(true);
+    expect(getI18n()).toBe(serverI18n);
   });
 
   it("prefers the request-local server instance in service-worker-style edge runtimes", () => {
