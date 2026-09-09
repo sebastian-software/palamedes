@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import type { registerHooks } from "node:module";
 import type { ModuleLoader } from "remix/assets";
-import { SourceMapConsumer, type RawSourceMap } from "source-map-js";
+import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source-map-js";
 
 import { loadPalamedesConfigSync, type LoadedPalamedesConfig } from "@palamedes/config";
 import { compileCatalogModule } from "@palamedes/core-node";
@@ -124,7 +124,7 @@ export function createPalamedesRemixLoadHook(
       return loaded;
     }
 
-    return transformLoadedModule(url, loaded, transformOptions);
+    return transformLoadedModule(url, loaded, transformOptions, true);
   };
 }
 
@@ -145,7 +145,7 @@ export function createPalamedesRemixAssetLoader(
       return loaded;
     }
 
-    return transformLoadedModule(url, loaded, transformOptions);
+    return transformLoadedModule(url, loaded, transformOptions, false);
   };
 }
 
@@ -167,6 +167,7 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
   url: string,
   loaded: Loaded,
   options: ResolvedMacroTransformOptions,
+  composeIncomingSourceMap: boolean,
 ): Loaded {
   const filePath = fileURLToPath(url);
   const source = stringifySource(loaded.source);
@@ -194,7 +195,10 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
 
   return {
     ...loaded,
-    source: appendInlineSourceMap(stripInlineSourceMap(result.code), result.map),
+    source: appendInlineSourceMap(
+      stripInlineSourceMap(result.code),
+      composeIncomingSourceMap ? composeSourceMaps(result.map, source) : result.map,
+    ),
   };
 }
 
@@ -390,6 +394,33 @@ function readInlineSourceMap(source: string): SourceMap | null {
   }
 
   return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as SourceMap;
+}
+
+function composeSourceMaps(transformedMap: SourceMap | null, source: string): SourceMap | null {
+  if (!transformedMap) {
+    return null;
+  }
+
+  try {
+    const incomingMap = readInlineSourceMap(source);
+    if (!incomingMap) {
+      return transformedMap;
+    }
+
+    const transformedConsumer = new SourceMapConsumer(transformedMap as unknown as RawSourceMap);
+    const incomingConsumer = new SourceMapConsumer(incomingMap as unknown as RawSourceMap);
+    const composed = SourceMapGenerator.fromSourceMap(transformedConsumer);
+    const intermediateSource =
+      transformedConsumer.sources.find((candidate) => candidate === incomingConsumer.file) ??
+      (transformedConsumer.sources.length === 1 ? transformedConsumer.sources[0] : undefined);
+    if (!intermediateSource) {
+      return transformedMap;
+    }
+    composed.applySourceMap(incomingConsumer, intermediateSource);
+    return JSON.parse(composed.toString()) as SourceMap;
+  } catch {
+    return transformedMap;
+  }
 }
 
 function unicodeColumnToUtf16(source: string, line: number, oneBasedColumn: number): number {
