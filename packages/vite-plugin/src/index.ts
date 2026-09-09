@@ -693,7 +693,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // retain their separator for non-root and relative deployments.
     configResolved(viteConfig) {
       resolvedBase = viteConfig.base;
-      legacyBuildSsr = viteConfig.build.ssr === true;
+      legacyBuildSsr = Boolean(viteConfig.build.ssr);
     },
 
     transform(code, id) {
