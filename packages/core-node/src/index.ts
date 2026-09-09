@@ -1219,8 +1219,19 @@ function startAbortableNativeTask<TResult>(
   options: AsyncTaskOptions | undefined,
   operation: (signal: AbortSignal | undefined) => Promise<TResult>,
 ): Promise<TResult> {
-  options?.signal?.throwIfAborted();
-  return operation(options?.signal);
+  const signal = options?.signal;
+  signal?.throwIfAborted();
+  return operation(signal).catch((error: unknown) => {
+    if (
+      signal?.aborted &&
+      error instanceof Error &&
+      error.name === "Error" &&
+      error.message === "AbortError"
+    ) {
+      signal.throwIfAborted();
+    }
+    throw error;
+  });
 }
 
 export function transformMacrosNative(

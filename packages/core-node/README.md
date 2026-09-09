@@ -184,9 +184,9 @@ Concurrent selected-artifact calls for the same catalog/configuration are
 coordinated before they enter the worker pool. The first call performs an
 initial native build; callers that arrived while it was running wait in
 JavaScript and only enter native code after the cache is warm. If that initial
-build fails, its error is shared with those waiting callers instead of
-rebuilding the same broken catalog once per request. Independent catalogs can
-still compile concurrently.
+build fails, waiting callers retry one at a time so cancellation or a
+selected-ID compilation error from one caller does not reject another.
+Independent catalogs can still compile concurrently.
 
 Async catalog mutations targeting the same resolved file are serialized within
 one loaded `@palamedes/core-node` process, including calls across
