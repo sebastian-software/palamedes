@@ -78,12 +78,29 @@ caller for bulk work; do not launch an unbounded promise fan-out. The pool is
 shared with other Node filesystem and native work, and `UV_THREADPOOL_SIZE` is
 the process-level pool control.
 
-Selected-artifact calls that target the same catalog and configuration are
-coordinated in JavaScript. Only the first cold build enters the worker pool;
-concurrent followers wait for it, then use the warmed native cache. If the
-first build fails, waiting callers retry one at a time so cancellation or a
-selected-ID compilation error from one caller does not reject another.
-Different catalogs remain concurrent.
+Concurrent `compileCatalogArtifactSelectedAsync()` calls that target the same
+catalog and configuration are coordinated in JavaScript. Only the first cold
+build enters the worker pool; concurrent followers wait for it, then use the
+warmed native cache. If the first build fails, waiting callers retry one at a
+time so cancellation or a selected-ID compilation error from one caller does
+not reject another. Different catalogs remain concurrent.
+
+This build coordination applies within one loaded JavaScript module instance.
+Loading both the CommonJS and ESM entry points, or loading multiple copies of
+the package, creates independent coordinators. The synchronous
+`compileCatalogArtifactSelected()` API also bypasses the JavaScript coordinator.
+If it races an in-flight native build for the same cache key, it can wait for
+that build and block the Node.js event loop. Event-loop-sensitive integrations
+should use the async API and avoid mixing package instances for concurrent
+same-key builds.
+
+Async catalog mutations targeting the same resolved file are serialized within
+one loaded JavaScript module instance, including calls across
+`updateCatalogFileAsync()` and `applyTranslationPatchesAsync()`. Mutations of
+different files can still run concurrently. Loading both package formats or
+multiple package copies creates independent mutation queues. Separate module
+instances, separate Node.js processes, and concurrent synchronous mutations
+must coordinate access themselves.
 
 `renderCatalogModule(messages)` exposes the same native module generator for
 custom integrations that already have a compiled message map. The TypeScript

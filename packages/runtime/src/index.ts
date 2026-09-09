@@ -89,7 +89,18 @@ type WindowlessClientRuntimeState = GlobalRuntimeState & {
   WorkerGlobalScope?: unknown;
 };
 
+function isCloudflareWorkersEnvironment(): boolean {
+  return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+}
+
 function isWindowlessClientEnvironment(): boolean {
+  // Cloudflare documents this user agent as a reliable Workers marker. Check it
+  // before browser-worker signals because workerd exposes their global classes,
+  // and a future constructor-identity fix could make `instanceof` succeed.
+  if (isCloudflareWorkersEnvironment()) {
+    return false;
+  }
+
   const state = globalRuntimeState() as WindowlessClientRuntimeState;
   if (typeof state.importScripts === "function") {
     return true;
