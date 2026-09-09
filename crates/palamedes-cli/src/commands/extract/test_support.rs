@@ -14,6 +14,7 @@ pub(super) fn extract_options() -> ExtractOptions {
         watch: false,
         check: false,
         json: false,
+        fail_on_empty_catalog: false,
         clean: false,
         force_clean: false,
         threads: None,

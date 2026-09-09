@@ -61,6 +61,10 @@ pub enum CliError {
     CompletenessBelowThreshold { threshold: String, locales: String },
     #[error("Extraction failed for {failures} source file(s); catalogs were not updated.")]
     ExtractionFailed { failures: usize },
+    #[error(
+        "Catalog '{catalog}' matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
+    )]
+    EmptyCatalogSources { catalog: String, include: String },
     #[error("Catalog extraction check found drift in {catalogs} catalog file(s).")]
     CatalogDrift { catalogs: usize },
     #[error("{message}")]

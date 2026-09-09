@@ -582,6 +582,45 @@ catalogs:
     }
 
     #[test]
+    fn watch_keeps_catalogs_unchanged_for_guarded_empty_cycles_and_recovers() {
+        let app = temp_dir("watch-fail-on-empty");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, None);
+        let source_path = app.join("app/page.tsx");
+        fs::write(
+            &source_path,
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Existing`; }\n",
+        )
+        .expect("write source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let mut options = extract_options();
+        options.fail_on_empty_catalog = true;
+        run_test_watch_extraction(&config, &options, &mut ExtractCache::disabled())
+            .expect("initial watch extraction");
+        let catalog_path = app.join("locales/en/messages.po");
+        let before = fs::read(&catalog_path).expect("read populated catalog");
+
+        fs::remove_file(&source_path).expect("remove source");
+        run_test_watch_extraction(&config, &options, &mut ExtractCache::disabled())
+            .expect("guarded failure should keep the watcher active");
+        assert_eq!(
+            fs::read(&catalog_path).expect("read guarded catalog"),
+            before
+        );
+
+        fs::write(
+            source_path,
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Recovered`; }\n",
+        )
+        .expect("restore source");
+        run_test_watch_extraction(&config, &options, &mut ExtractCache::disabled())
+            .expect("watch should recover after sources return");
+        let recovered = fs::read_to_string(catalog_path).expect("read recovered catalog");
+        assert!(recovered.contains("msgid \"Recovered\""), "{recovered}");
+    }
+
+    #[test]
     fn watch_reports_a_persistent_cache_write_failure_once_per_session() {
         let app = temp_dir("watch-cache-warning-once");
         fs::create_dir_all(app.join("app")).expect("create app");
