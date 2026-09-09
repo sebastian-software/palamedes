@@ -106,6 +106,47 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.25.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.24.0...palamedes-v1.25.0) (2026-09-09)
+
+
+### Features
+
+* **cli:** guard extraction against empty source matches ([aee8769](https://github.com/sebastian-software/palamedes/commit/aee876988ff412ed02014c0717602bd9d02c57ae))
+
+
+### Bug Fixes
+
+* **cli:** bound captured native output draining ([5bb9a58](https://github.com/sebastian-software/palamedes/commit/5bb9a5893869fd049459a4493d2adedff4bf80dd))
+* **cli:** make update cache locking ABA-safe ([0aea83a](https://github.com/sebastian-software/palamedes/commit/0aea83a8e7d4fa49af0f263e19fb26013926652c))
+* **cli:** preserve backslashes in discovery roots ([010f06b](https://github.com/sebastian-software/palamedes/commit/010f06b5e3b949cd719af2ee2d0fac8285bc54e2))
+* **cli:** self-heal future update timestamps ([bac4e99](https://github.com/sebastian-software/palamedes/commit/bac4e99ee1fea3d46bf7d8570d7ad85efea73dc0))
+* **core-node:** canonicalize catalog mutation locks ([535f86b](https://github.com/sebastian-software/palamedes/commit/535f86bb57962b83d5022845344d6cee42a7508a))
+* **core-node:** integrate caller-specific compilation failures ([#1180](https://github.com/sebastian-software/palamedes/issues/1180)) ([cb5e621](https://github.com/sebastian-software/palamedes/commit/cb5e621110bf564864e8f23eacc1786013dfb37b))
+* **core-node:** integrate canonical mutation locks ([#1182](https://github.com/sebastian-software/palamedes/issues/1182)) ([7a3019e](https://github.com/sebastian-software/palamedes/commit/7a3019e1b83276ec1ca16b05ca9dfd2ef4806aee))
+* **core-node:** isolate coordinated task failures ([d21f4b0](https://github.com/sebastian-software/palamedes/commit/d21f4b086c6ba320bc9cc7179a9d60a239c288d1))
+* **deps:** clear remaining audit findings ([19897f7](https://github.com/sebastian-software/palamedes/commit/19897f7d90e865ddfab529887d8ddb8421dcc0de))
+* **deps:** pin patched toml parser ([5bd5fc7](https://github.com/sebastian-software/palamedes/commit/5bd5fc72ed1b5b6ba7cd1df58f5133b59abf9c38))
+* integrate reviewed catalog and framework corrections ([e40f81f](https://github.com/sebastian-software/palamedes/commit/e40f81f21a38ceb2b3895fa6258c25af8dd3eacd))
+* integrate reviewed dependency, CLI and adapter fixes ([afc8dfd](https://github.com/sebastian-software/palamedes/commit/afc8dfd3e726701f35f9447127c1cadc6de60149))
+* integrate reviewed extraction and plugin cache guards ([a0dbb6e](https://github.com/sebastian-software/palamedes/commit/a0dbb6e135580d529d2910231ef56e0ec98dd4db))
+* integrate runtime hardening and contract guidance ([291230e](https://github.com/sebastian-software/palamedes/commit/291230eae27b3dd7af9336c0d37464d6eed87b13))
+* **release:** recover registry verification alerts ([#1179](https://github.com/sebastian-software/palamedes/issues/1179)) ([b6c45b0](https://github.com/sebastian-software/palamedes/commit/b6c45b0d424eca9743b27336a907c8283463258c))
+* **remix:** compose node loader source maps ([1a1905f](https://github.com/sebastian-software/palamedes/commit/1a1905f3fed19b6ce0d4f09a1328f0d8091ca9c0))
+* **remix:** guard client bootstrap and correct asset export ([635a04f](https://github.com/sebastian-software/palamedes/commit/635a04f12bb772c9acbd6a1c814420b6ca5167f3))
+* **remix:** integrate browser bootstrap corrections ([#1183](https://github.com/sebastian-software/palamedes/issues/1183)) ([e5fc207](https://github.com/sebastian-software/palamedes/commit/e5fc2076cc92c3f456583ba7cccd07a14b8cdc59))
+* **runtime:** classify Cloudflare Workers as server ([a741cb4](https://github.com/sebastian-software/palamedes/commit/a741cb4f50efa85a9417d80068c429c5a8ed5b64))
+* **solid:** keep choice props reactive ([8224611](https://github.com/sebastian-software/palamedes/commit/8224611942d3f9188538b94a18e8a45069f4c584))
+* **vite-plugin:** integrate legacy SSR graph splitting guard ([#1181](https://github.com/sebastian-software/palamedes/issues/1181)) ([6ac1fb2](https://github.com/sebastian-software/palamedes/commit/6ac1fb26b7aee7089b3e332890dd347ed95749ce))
+* **vite-plugin:** recognize SSR entry builds ([374e70c](https://github.com/sebastian-software/palamedes/commit/374e70c265f53f073dee78db347be799792483bd))
+* **vite-plugin:** respect legacy SSR builds during graph splitting ([c3a31c9](https://github.com/sebastian-software/palamedes/commit/c3a31c97d65abe527349909c8fe61799fad4eb47))
+
+
+### Performance Improvements
+
+* **cli:** avoid rehashing unchanged plugin binaries ([c6e14a8](https://github.com/sebastian-software/palamedes/commit/c6e14a86cbc6858f97dd629baca60f0a5f346711))
+* **core:** reduce compiled catalog storage and constant lookup overhead ([#1167](https://github.com/sebastian-software/palamedes/issues/1167)) ([96df2d3](https://github.com/sebastian-software/palamedes/commit/96df2d36f998967c028811a0cb45c5f6beb17751))
+* **remix:** reuse inline component runtimes ([54dca4b](https://github.com/sebastian-software/palamedes/commit/54dca4b528983ed9b179be34d119750f5c6c53e7))
+
 ## [1.24.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.23.0...palamedes-v1.24.0) (2026-09-08)
 
 
