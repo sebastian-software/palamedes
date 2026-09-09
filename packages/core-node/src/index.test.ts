@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import * as fsPromises from "node:fs/promises";
 import { createRequire } from "node:module";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +54,11 @@ import {
   prepareNativeArgument,
   snapshotNativeArguments,
 } from "./native-loader";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof fsPromises>();
+  return { ...actual, realpath: vi.fn(actual.realpath) };
+});
 
 type SourceMapLike = {
   mappings?: string;
@@ -204,6 +210,59 @@ describe("@palamedes/core-node", () => {
     ).resolves.toBe("recovered");
   });
 
+  it("serializes catalog mutations through a symlinked parent before the file exists", async () => {
+    const rootDir = await createTempDir();
+    const actualDir = path.join(rootDir, "catalogs");
+    const linkedDir = path.join(rootDir, "linked-catalogs");
+    await mkdir(actualDir);
+    await symlink(actualDir, linkedDir, process.platform === "win32" ? "junction" : "dir");
+
+    let firstStarted: (() => void) | undefined;
+    let releaseFirst: (() => void) | undefined;
+    const firstStartedGate = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const events: string[] = [];
+    const first = serializeCatalogMutation([path.join(actualDir, "messages.po")], async () => {
+      events.push("first:start");
+      firstStarted?.();
+      await firstGate;
+      events.push("first:end");
+    });
+    const second = serializeCatalogMutation([path.join(linkedDir, "messages.po")], async () => {
+      events.push("second:start");
+    });
+    const independent = serializeCatalogMutation([path.join(rootDir, "other.po")], async () => {
+      events.push("independent");
+    });
+
+    await firstStartedGate;
+    await independent;
+    expect(events).toStrictEqual(["first:start", "independent"]);
+    releaseFirst?.();
+    await Promise.all([first, second]);
+    expect(events).toStrictEqual(["first:start", "independent", "first:end", "second:start"]);
+  });
+
+  it("does not run a mutation when target path normalization fails", async () => {
+    const normalizationError = Object.assign(new Error("too many open files"), { code: "EMFILE" });
+    const operation = vi.fn(async () => {});
+    const realpathMock = vi.mocked(fsPromises.realpath);
+    realpathMock.mockRejectedValueOnce(normalizationError);
+
+    try {
+      await expect(serializeCatalogMutation(["catalogs/de.po"], operation)).rejects.toBe(
+        normalizationError,
+      );
+      expect(operation).not.toHaveBeenCalled();
+    } finally {
+      realpathMock.mockClear();
+    }
+  });
+
   it("resolves every translation patch catalog path used by the mutation queue", () => {
     const rootDir = path.resolve("fixtures", "project");
     const paths = translationPatchTargetPaths({
@@ -214,6 +273,8 @@ describe("@palamedes/core-node", () => {
         catalogs: [
           { path: "locales/{locale}/messages", include: ["src"] },
           { path: "admin/{locale}.fcl", format: "Fcl", include: ["admin"] },
+          { path: "legacy/{locale}/messages.PO", include: ["legacy"] },
+          { path: "empty/{locale}/messages.", include: ["empty"] },
         ],
       },
       patches: [
@@ -227,12 +288,24 @@ describe("@palamedes/core-node", () => {
           fingerprint: "second",
           translation: { kind: "Singular", value: "Speichern" },
         },
+        {
+          id: { catalog: "legacy/{locale}/messages.PO", locale: "de", message: "Old" },
+          fingerprint: "third",
+          translation: { kind: "Singular", value: "Alt" },
+        },
+        {
+          id: { catalog: "empty/{locale}/messages.", locale: "de", message: "Empty" },
+          fingerprint: "fourth",
+          translation: { kind: "Singular", value: "Leer" },
+        },
       ],
     });
 
     expect(paths).toStrictEqual([
       path.join(rootDir, "locales", "de", "messages.po"),
       path.join(rootDir, "admin", "de.fcl"),
+      path.join(rootDir, "legacy", "de", "messages.po"),
+      path.join(rootDir, "empty", "de", "messages.po"),
     ]);
   });
 
