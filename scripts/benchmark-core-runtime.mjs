@@ -31,6 +31,9 @@ const patterns = Object.fromEntries(
         : `{count, plural, one {# item ${index}} other {# items ${index}}}`,
   ]),
 );
+patterns.integer = "{amount, number, integer}";
+patterns.percent = "{amount, number, percent}";
+patterns.currency = "{amount, number, ::currency/EUR}";
 const catalogSource = renderCatalogModule(patterns).replaceAll(
   '"@palamedes/core/compiled"',
   '"/runtime/compiled.mjs"',
@@ -85,15 +88,19 @@ try {
         const result = await page.evaluate(
           ({ warmup, iterations }) => {
             const { i18n } = globalThis.fixture;
-            const values = { name: "Ada", count: 2 };
+            const values = { name: "Ada", count: 2, amount: 1234.5 };
             const probe = [i18n._("m0"), i18n._("m1", values), i18n._("m2", values)];
             const measurements = {};
             for (const [kind, offset] of [
               ["constant", 0],
               ["interpolation", 1],
               ["plural", 2],
+              ["mixedNumber", 3],
             ]) {
-              const ids = Array.from({ length: 1000 }, (_, index) => `m${index * 3 + offset}`);
+              const ids =
+                offset === 3
+                  ? ["integer", "percent", "currency"]
+                  : Array.from({ length: 1000 }, (_, index) => `m${index * 3 + offset}`);
               const render = () => {
                 let checksum = 0;
                 for (let index = 0; index < iterations; index += 1) {
@@ -128,7 +135,7 @@ try {
   }
   const reference = samples[variants[0][0]][0];
   for (const sample of Object.values(samples).flat()) {
-    for (const kind of ["constant", "interpolation", "plural"]) {
+    for (const kind of ["constant", "interpolation", "plural", "mixedNumber"]) {
       assert.equal(sample[kind].checksum, reference[kind].checksum);
     }
   }
@@ -140,7 +147,7 @@ try {
         loadMs: median(entries.map((entry) => entry.loadMs)),
         retainedBytes: median(entries.map((entry) => entry.retainedBytes)),
         ...Object.fromEntries(
-          ["constant", "interpolation", "plural"].map((kind) => [
+          ["constant", "interpolation", "plural", "mixedNumber"].map((kind) => [
             `${kind}Ms`,
             median(entries.map((entry) => entry[kind].ms)),
           ]),
@@ -158,7 +165,7 @@ try {
           arch: process.arch,
           cpu: os.cpus()[0]?.model,
         },
-        messageCount,
+        messageCount: Object.keys(patterns).length,
         runs,
         warmup,
         iterations,

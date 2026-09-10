@@ -9,6 +9,49 @@ import {
 } from "./compiled";
 
 describe("parser-free compiled runtime", () => {
+  it("refreshes the string renderer across locale round trips without changing its time zone", () => {
+    const message: CompiledMessage = (args, runtime) =>
+      runtime.join(runtime.number(args, "amount"), " / ", runtime.date(args, "date", "short"));
+    const i18n = createI18n({ locale: "en-US", timeZone: "America/Los_Angeles" });
+    const catalog = defineCompiledCatalog({ message });
+    i18n.load("en-US", catalog);
+    i18n.load("de-DE", catalog);
+    const values = { amount: 1234.5, date: new Date("2026-09-10T01:00:00Z") };
+    for (const locale of ["en-US", "de-DE", "en-US", "de-DE"]) {
+      i18n.activate(locale);
+      expect(i18n._("message", values)).toBe(
+        `${new Intl.NumberFormat(locale).format(values.amount)} / ${new Intl.DateTimeFormat(
+          locale,
+          {
+            timeZone: "America/Los_Angeles",
+            dateStyle: "short",
+          },
+        ).format(values.date)}`,
+      );
+    }
+  });
+
+  it("keeps an outer renderer usable when a value getter performs a nested lookup in another locale", () => {
+    const message: CompiledMessage = (values, runtime) =>
+      runtime.join(runtime.value(values, "nested"), " / ", runtime.number(values, "amount"));
+    const amount: CompiledMessage = (values, runtime) => runtime.number(values, "amount");
+    const i18n = createI18n({ locale: "en-US" });
+    i18n.load("en-US", defineCompiledCatalog({ message, amount }));
+    i18n.load("de-DE", defineCompiledCatalog({ amount }));
+    expect(
+      i18n._("message", {
+        amount: 1234.5,
+        get nested() {
+          i18n.activate("de-DE");
+          const result = i18n._("amount", { amount: 1234.5 });
+          i18n.activate("en-US");
+          return result;
+        },
+      }),
+    ).toBe("1.234,5 / 1,234.5");
+    expect(i18n._("amount", { amount: 1234.5 })).toBe("1,234.5");
+  });
+
   it("renders generated constants, variables, and plurals without parsing ICU", () => {
     const greeting: CompiledMessage = (values, runtime) =>
       runtime.join("Hallo ", runtime.value(values, "name"));

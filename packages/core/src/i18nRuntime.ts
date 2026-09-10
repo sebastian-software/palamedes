@@ -103,7 +103,8 @@ export function createI18nRuntime(
   patternSupport?: I18nPatternSupport,
 ): PalamedesI18n {
   const catalogs = new Map<string, LoadedCatalog>();
-  const stringRuntimes = new Map<string, CompiledMessageRuntime<string>>();
+  let stringRuntime: CompiledMessageRuntime<string> | undefined;
+  let stringRuntimeLocale: string | undefined;
   let activeLocale = options.locale ?? DEFAULT_LOCALE;
   const timeZone = validateTimeZone(options.timeZone);
 
@@ -202,18 +203,17 @@ export function createI18nRuntime(
   }
 
   function getStringRuntime(locale: string): CompiledMessageRuntime<string> {
-    const cacheKey = `${locale}\0${timeZone ?? ""}`;
-    const cached = stringRuntimes.get(cacheKey);
-    if (cached) {
-      return cached;
+    // Locale is stable for a browser document. Keep only the last renderer,
+    // while still rebuilding lazily when callers activate another locale.
+    if (stringRuntime === undefined || stringRuntimeLocale !== locale) {
+      stringRuntime = createStringMessageRuntime(
+        locale,
+        patternSupport?.formatPattern ?? noParser,
+        timeZone,
+      );
+      stringRuntimeLocale = locale;
     }
-    const runtime = createStringMessageRuntime(
-      locale,
-      patternSupport?.formatPattern ?? noParser,
-      timeZone,
-    );
-    stringRuntimes.set(cacheKey, runtime);
-    return runtime;
+    return stringRuntime;
   }
 
   function parseResolvedMessage(
