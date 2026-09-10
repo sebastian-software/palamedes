@@ -1,0 +1,304 @@
+{
+  "environment": {
+    "browser": "151.0.7922.34",
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  },
+  "runs": 9,
+  "updates": 40,
+  "rows": 500,
+  "summary": {
+    "react-baseline": {
+      "mountMs": 16.30000001192093,
+      "updatesMs": 46.40000003576279,
+      "mountedBytes": 1807412,
+      "afterUnmountBytes": 627100,
+      "retainedComponent": 1
+    },
+    "react-current": {
+      "mountMs": 16.19999998807907,
+      "updatesMs": 45.30000001192093,
+      "mountedBytes": 1806720,
+      "afterUnmountBytes": 626324,
+      "retainedComponent": 0
+    },
+    "solid-baseline": {
+      "mountMs": 13.800000011920929,
+      "updatesMs": 70,
+      "mountedBytes": 1654132,
+      "afterUnmountBytes": 445976,
+      "retainedComponent": 0
+    },
+    "solid-current": {
+      "mountMs": 13.899999976158142,
+      "updatesMs": 64.19999998807907,
+      "mountedBytes": 1676744,
+      "afterUnmountBytes": 447108,
+      "retainedComponent": 0
+    }
+  },
+  "samples": {
+    "react-baseline": [
+      {
+        "mountMs": 17.5,
+        "updatesMs": 47.30000001192093,
+        "mountedBytes": 1806548,
+        "afterUnmountBytes": 626196,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16,
+        "updatesMs": 48.10000002384186,
+        "mountedBytes": 1807412,
+        "afterUnmountBytes": 627100,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16.30000001192093,
+        "updatesMs": 46.40000003576279,
+        "mountedBytes": 1807256,
+        "afterUnmountBytes": 626196,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16.100000023841858,
+        "updatesMs": 45.89999997615814,
+        "mountedBytes": 1807412,
+        "afterUnmountBytes": 627100,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16.5,
+        "updatesMs": 46,
+        "mountedBytes": 1807412,
+        "afterUnmountBytes": 627100,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16.19999998807907,
+        "updatesMs": 46.799999952316284,
+        "mountedBytes": 1807412,
+        "afterUnmountBytes": 627100,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16.30000001192093,
+        "updatesMs": 45.90000003576279,
+        "mountedBytes": 1807412,
+        "afterUnmountBytes": 627100,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16,
+        "updatesMs": 47.10000002384186,
+        "mountedBytes": 1806520,
+        "afterUnmountBytes": 626208,
+        "retainedComponent": 1
+      },
+      {
+        "mountMs": 16.30000001192093,
+        "updatesMs": 46.19999998807907,
+        "mountedBytes": 1807516,
+        "afterUnmountBytes": 627100,
+        "retainedComponent": 1
+      }
+    ],
+    "react-current": [
+      {
+        "mountMs": 16.600000023841858,
+        "updatesMs": 45.39999997615814,
+        "mountedBytes": 1805540,
+        "afterUnmountBytes": 625444,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 16.19999998807907,
+        "updatesMs": 45.30000001192093,
+        "mountedBytes": 1806720,
+        "afterUnmountBytes": 626324,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 16.099999964237213,
+        "updatesMs": 43.10000002384186,
+        "mountedBytes": 1806720,
+        "afterUnmountBytes": 626336,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 16.5,
+        "updatesMs": 43.60000002384186,
+        "mountedBytes": 1807456,
+        "afterUnmountBytes": 626336,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 15.699999988079071,
+        "updatesMs": 45.39999997615814,
+        "mountedBytes": 1805552,
+        "afterUnmountBytes": 625444,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 16.100000023841858,
+        "updatesMs": 44.30000001192093,
+        "mountedBytes": 1806720,
+        "afterUnmountBytes": 626336,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 15.699999988079071,
+        "updatesMs": 44,
+        "mountedBytes": 1806824,
+        "afterUnmountBytes": 626336,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 17.600000023841858,
+        "updatesMs": 46.700000047683716,
+        "mountedBytes": 1807504,
+        "afterUnmountBytes": 626172,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 16.5,
+        "updatesMs": 46.200000047683716,
+        "mountedBytes": 1805644,
+        "afterUnmountBytes": 625444,
+        "retainedComponent": 0
+      }
+    ],
+    "solid-baseline": [
+      {
+        "mountMs": 13.800000011920929,
+        "updatesMs": 68,
+        "mountedBytes": 1653572,
+        "afterUnmountBytes": 445500,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 14.199999988079071,
+        "updatesMs": 70,
+        "mountedBytes": 1653572,
+        "afterUnmountBytes": 501516,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 14.200000047683716,
+        "updatesMs": 69.80000001192093,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 501636,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.800000011920929,
+        "updatesMs": 71.60000002384186,
+        "mountedBytes": 1652656,
+        "afterUnmountBytes": 445500,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.300000011920929,
+        "updatesMs": 76.10000002384186,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 445620,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 14,
+        "updatesMs": 69.69999998807907,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 501636,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.5,
+        "updatesMs": 70.39999997615814,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 501636,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.599999964237213,
+        "updatesMs": 69,
+        "mountedBytes": 1653616,
+        "afterUnmountBytes": 445620,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.800000011920929,
+        "updatesMs": 73,
+        "mountedBytes": 1654132,
+        "afterUnmountBytes": 445976,
+        "retainedComponent": 0
+      }
+    ],
+    "solid-current": [
+      {
+        "mountMs": 14.300000011920929,
+        "updatesMs": 63.69999998807907,
+        "mountedBytes": 1676868,
+        "afterUnmountBytes": 447108,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 14.700000047683716,
+        "updatesMs": 64.30000001192093,
+        "mountedBytes": 1676744,
+        "afterUnmountBytes": 446952,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 14.5,
+        "updatesMs": 66.5,
+        "mountedBytes": 1675916,
+        "afterUnmountBytes": 447108,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.899999976158142,
+        "updatesMs": 63.19999998807907,
+        "mountedBytes": 1676832,
+        "afterUnmountBytes": 447108,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 14,
+        "updatesMs": 65.29999995231628,
+        "mountedBytes": 1675884,
+        "afterUnmountBytes": 503124,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.5,
+        "updatesMs": 61,
+        "mountedBytes": 1676800,
+        "afterUnmountBytes": 503124,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.699999988079071,
+        "updatesMs": 64.19999998807907,
+        "mountedBytes": 1676004,
+        "afterUnmountBytes": 503212,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.700000047683716,
+        "updatesMs": 63,
+        "mountedBytes": 1674932,
+        "afterUnmountBytes": 446228,
+        "retainedComponent": 0
+      },
+      {
+        "mountMs": 13.800000011920929,
+        "updatesMs": 66.80000001192093,
+        "mountedBytes": 1676800,
+        "afterUnmountBytes": 447108,
+        "retainedComponent": 0
+      }
+    ]
+  }
+}

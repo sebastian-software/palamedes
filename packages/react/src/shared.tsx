@@ -44,8 +44,12 @@ export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
       reportMissing: false,
       renderUncompiledPattern: true,
     };
-    const runtime = choiceRuntimeCache.get(i18n, EMPTY_COMPONENTS);
-    return <>{renderI18nMessage(i18n, message, { value }, runtime, metadata)}</>;
+    const lease = choiceRuntimeCache.acquire(i18n, EMPTY_COMPONENTS);
+    try {
+      return <>{renderI18nMessage(i18n, message, { value }, lease.runtime, metadata)}</>;
+    } finally {
+      choiceRuntimeCache.release(lease);
+    }
   }
 
   function Plural({ value, offset, ...choices }: PluralProps): ReactNode {

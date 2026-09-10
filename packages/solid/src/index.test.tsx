@@ -17,6 +17,7 @@ import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index";
 import { Trans as CompiledTrans } from "./compiled";
+import { createSolidMessageRuntime } from "./transShared";
 
 function withoutHydrationMarkers(html: string): string {
   return html.replaceAll("<!--!$-->", "");
@@ -26,6 +27,16 @@ describe("@palamedes/solid", () => {
   afterEach(() => {
     resetI18nRuntime();
     delete (globalThis as { window?: unknown }).window;
+  });
+  it("joins parts without mutating input arrays and preserves sparse-array behavior", () => {
+    const runtime = createSolidMessageRuntime(createI18n(), {});
+    const parts = ["first", "second"];
+    Object.freeze(parts);
+    const sparse: string[] = [];
+    sparse.length = 2;
+    sparse[1] = "tail";
+    expect(runtime.join("", parts, sparse)).toEqual(["", "first", "second", "tail"]);
+    expect(parts).toEqual(["first", "second"]);
   });
 
   it("renders Trans without a provider by reading the active runtime instance", () => {

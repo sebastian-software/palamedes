@@ -1,0 +1,50 @@
+--- a/packages/solid/src/transShared.tsx
++++ b/packages/solid/src/transShared.tsx
+@@ -42,6 +42,10 @@
+ /** Creates the shared Trans component for compatibility and compiled entries. */
+ export function createTrans(getI18n: () => RendererI18n, fallbackParser?: PatternParser) {
+   return function Trans(props: TransProps): Element {
++    let runtime: CompiledMessageRuntime<Element[]> | undefined;
++    let runtimeI18n: RendererI18n | undefined;
++    let runtimeLocale: string | undefined;
++    let runtimeTimeZone: string | undefined;
+     const content = createMemo(() => {
+       const i18n = getI18n();
+       const resolvedId = props.id ?? props.message ?? "";
+@@ -51,7 +55,17 @@
+         comment: props.comment,
+         renderUncompiledPattern: fallbackParser !== undefined,
+       };
+-      const runtime = createSolidMessageRuntime(i18n, props.components ?? {}, fallbackParser);
++      if (
++        runtime === undefined ||
++        runtimeI18n !== i18n ||
++        runtimeLocale !== i18n.locale ||
++        runtimeTimeZone !== i18n.timeZone
++      ) {
++        runtime = createSolidMessageRuntime(i18n, () => props.components ?? {}, fallbackParser);
++        runtimeI18n = i18n;
++        runtimeLocale = i18n.locale;
++        runtimeTimeZone = i18n.timeZone;
++      }
+       return renderI18nMessage(i18n, resolvedId, props.values ?? {}, runtime, metadata);
+     });
+
+@@ -94,7 +108,7 @@
+
+ export function createSolidMessageRuntime(
+   i18n: RendererI18n,
+-  components: Record<string, RichTextComponent>,
++  components: Record<string, RichTextComponent> | (() => Record<string, RichTextComponent>),
+   fallbackParser?: PatternParser,
+ ): CompiledMessageRuntime<Element[]> {
+   const locale = i18n.locale;
+@@ -138,7 +152,7 @@
+         return [value];
+       },
+       tag(name: string, children: Element[]) {
+-        const component = components[name];
++        const component = (typeof components === "function" ? components() : components)[name];
+         if (component !== undefined) {
+           return [
+             createComponent(component, {
