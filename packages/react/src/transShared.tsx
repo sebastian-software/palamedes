@@ -43,6 +43,7 @@ type ResettableReactMessageRuntime = {
   runtime: CompiledMessageRuntime<ReactNode[]>;
 };
 type CachedReactMessageRuntime = ResettableReactMessageRuntime & {
+  inUse: boolean;
   locale: string;
   timeZone: string | undefined;
 };
@@ -69,45 +70,52 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
       comment,
       renderUncompiledPattern: fallbackParser !== undefined,
     };
-    const runtime = runtimeCache.get(i18n, components ?? EMPTY_COMPONENTS);
-    return <>{renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, runtime, metadata)}</>;
+    const lease = runtimeCache.acquire(i18n, components ?? EMPTY_COMPONENTS);
+    try {
+      return (
+        <>{renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, lease.runtime, metadata)}</>
+      );
+    } finally {
+      runtimeCache.release(lease);
+    }
   };
 }
 
 export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
-  // Keep the shared component entries hook-free for React Server Components.
-  // The weak i18n key keeps request-scoped instances collectable. Component
-  // names define the runtime shape; the current element values are installed
-  // for each synchronous render so inline object literals still reuse it.
-  const cache = new WeakMap<RendererI18n, Map<string, CachedReactMessageRuntime>>();
+  // Cache one idle renderer per i18n instance. Nested synchronous renders get a
+  // temporary renderer so they cannot overwrite an outer render's components
+  // or keys. Weak keys keep request-scoped instances collectable.
+  const cache = new WeakMap<RendererI18n, CachedReactMessageRuntime>();
 
   return {
-    get(
+    acquire(
       i18n: RendererI18n,
       components: Record<string, ReactElement>,
-    ): CompiledMessageRuntime<ReactNode[]> {
-      let byComponents = cache.get(i18n);
-      if (byComponents === undefined) {
-        byComponents = new Map();
-        cache.set(i18n, byComponents);
-      }
-
-      const componentShape = componentShapeKey(components);
-      let cached = byComponents.get(componentShape);
+    ): CachedReactMessageRuntime {
+      let cached = cache.get(i18n);
       if (
         cached === undefined ||
+        cached.inUse ||
         cached.locale !== i18n.locale ||
         cached.timeZone !== i18n.timeZone
       ) {
+        const canCache = cached?.inUse !== true;
         cached = {
           ...createResettableReactMessageRuntime(i18n, components, fallbackParser),
           locale: i18n.locale,
           timeZone: i18n.timeZone,
+          inUse: false,
         };
-        byComponents.set(componentShape, cached);
+        if (canCache) cache.set(i18n, cached);
       }
+      cached.inUse = true;
       cached.reset(components);
-      return cached.runtime;
+      return cached;
+    },
+    release(cached: CachedReactMessageRuntime): void {
+      // Do not keep the last rendered React elements and their props alive.
+      cached.reset(EMPTY_COMPONENTS);
+      cached.inUse = false;
     },
   };
 }
@@ -168,7 +176,17 @@ function createResettableReactMessageRuntime(
         return renderNodes(nodes, values, runtime, locale);
       },
       join(...parts) {
-        return parts.flatMap((part) => (typeof part === "string" ? [part] : part));
+        const result: ReactNode[] = [];
+        for (const part of parts) {
+          if (typeof part === "string") {
+            result.push(part);
+          } else {
+            for (let index = 0; index < part.length; index += 1) {
+              if (index in part) result.push(part[index]);
+            }
+          }
+        }
+        return result;
       },
       value(value) {
         return [renderVariable(value, nextKey++)];
@@ -204,10 +222,6 @@ function createResettableReactMessageRuntime(
     },
     runtime,
   };
-}
-
-function componentShapeKey(components: Record<string, ReactElement>): string {
-  return JSON.stringify(Object.keys(components).sort());
 }
 
 function parsePattern(

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { isValidElement } from "react";
+import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -42,7 +42,7 @@ describe("@palamedes/react", () => {
     expect(html).toBe("Bereitgestellt von <strong>Palamedes</strong>");
   });
 
-  it("reuses Trans runtimes by i18n and component shape while resetting render state", () => {
+  it("reuses idle Trans runtimes across component shapes while resetting render state", () => {
     const i18n = createI18n({ locale: "en" });
     const renderMessage = vi.spyOn(i18n, "renderMessage");
     const CachedTrans = createTrans(() => i18n);
@@ -70,7 +70,7 @@ describe("@palamedes/react", () => {
     renderToStaticMarkup(
       <CachedTrans id="different-shape" message="<1>body</1>" components={{ 1: <strong /> }} />,
     );
-    expect(renderMessage.mock.calls[3]?.[2]).not.toBe(renderMessage.mock.calls[2]?.[2]);
+    expect(renderMessage.mock.calls[3]?.[2]).toBe(renderMessage.mock.calls[2]?.[2]);
 
     i18n.activate("de");
     renderToStaticMarkup(
@@ -79,10 +79,14 @@ describe("@palamedes/react", () => {
     expect(renderMessage.mock.calls[4]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2]);
 
     const runtimeCache = createReactMessageRuntimeCache();
-    const firstRuntime = runtimeCache.get(i18n, stableComponents);
+    const firstLease = runtimeCache.acquire(i18n, stableComponents);
+    const firstRuntime = firstLease.runtime;
     const firstResult = firstRuntime.tag("0", firstRuntime.join("body"));
-    const secondRuntime = runtimeCache.get(i18n, { 0: <em /> });
+    runtimeCache.release(firstLease);
+    const secondLease = runtimeCache.acquire(i18n, { 0: <em /> });
+    const secondRuntime = secondLease.runtime;
     const secondResult = secondRuntime.tag("0", secondRuntime.join("body"));
+    runtimeCache.release(secondLease);
     expect(secondRuntime).toBe(firstRuntime);
     expect(isValidElement(secondResult[0]) && secondResult[0].type).toBe("em");
     expect([
@@ -103,6 +107,64 @@ describe("@palamedes/react", () => {
     i18n.activate("de");
     renderToStaticMarkup(<CachedPlural value={3} one="# item" other="# items" />);
     expect(renderMessage.mock.calls[2]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2]);
+  });
+
+  it("isolates nested synchronous renders and releases component references afterwards", () => {
+    const i18n = createCompiledI18n();
+    const outer: ParserFreeMessage = (args, runtime) =>
+      runtime.join(
+        runtime.tag("0", runtime.join("before")),
+        runtime.value(args, "nested"),
+        runtime.tag("0", runtime.join("after")),
+      );
+    const inner: ParserFreeMessage = (_values, runtime) => runtime.tag("0", runtime.join("inside"));
+    i18n.load("en", defineParserFreeCatalog({ outer, inner }));
+    const NestedTrans = createTrans(() => i18n);
+    const renderMessage = vi.spyOn(i18n, "renderMessage");
+    const values = {
+      get nested() {
+        return NestedTrans({ id: "inner", components: { 0: <em /> } });
+      },
+    };
+    expect(
+      renderToStaticMarkup(
+        <NestedTrans id="outer" values={values} components={{ 0: <strong /> }} />,
+      ),
+    ).toBe("<strong>before</strong><em>inside</em><strong>after</strong>");
+    const outerRuntime = renderMessage.mock.calls[0]![2];
+    const innerRuntime = renderMessage.mock.calls[1]![2];
+    expect(innerRuntime).not.toBe(outerRuntime);
+    expect(outerRuntime.tag("0", outerRuntime.join("released"))).toEqual(["released"]);
+    expect(innerRuntime.tag("0", innerRuntime.join("released"))).toEqual(["released"]);
+  });
+
+  it("releases a leased renderer when a custom renderMessage throws", () => {
+    const i18n = createI18n();
+    const renderMessage = vi.spyOn(i18n, "renderMessage").mockImplementationOnce(() => {
+      throw new Error("custom renderer failed");
+    });
+    const CachedTrans = createTrans(() => i18n);
+    expect(() => CachedTrans({ message: "Hello", components: { 0: <strong /> } })).toThrow(
+      "custom renderer failed",
+    );
+    CachedTrans({ message: "Hello" });
+    const runtime = renderMessage.mock.calls[0]![2];
+    expect(renderMessage.mock.calls[1]![2]).toBe(runtime);
+    expect(runtime.tag("0", runtime.join("released"))).toEqual(["released"]);
+  });
+
+  it("joins parts without mutating inputs or flattening nested React children twice", () => {
+    const cache = createReactMessageRuntimeCache();
+    const lease = cache.acquire(createI18n(), {});
+    const nested = ["nested"];
+    const parts: ReactNode[] = ["text", nested];
+    Object.freeze(parts);
+    const sparse: string[] = [];
+    sparse.length = 2;
+    sparse[1] = "tail";
+    expect(lease.runtime.join("", parts, sparse)).toEqual(["", "text", nested, "tail"]);
+    expect(parts).toEqual(["text", nested]);
+    cache.release(lease);
   });
 
   it("executes generated message functions directly through the React renderer", () => {

@@ -1,0 +1,264 @@
+{
+  "environment": {
+    "browser": "151.0.7922.34",
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  },
+  "runs": 9,
+  "updates": 40,
+  "rows": 500,
+  "summary": {
+    "react-baseline": {
+      "mountMs": 16.200000047683716,
+      "updatesMs": 52.10000002384186,
+      "mountedBytes": 1799856,
+      "afterUnmountBytes": 620760
+    },
+    "react-current": {
+      "mountMs": 16.19999998807907,
+      "updatesMs": 45.80000001192093,
+      "mountedBytes": 1807140,
+      "afterUnmountBytes": 626828
+    },
+    "solid-baseline": {
+      "mountMs": 13.899999976158142,
+      "updatesMs": 76,
+      "mountedBytes": 1650440,
+      "afterUnmountBytes": 501208
+    },
+    "solid-current": {
+      "mountMs": 13.5,
+      "updatesMs": 69,
+      "mountedBytes": 1653572,
+      "afterUnmountBytes": 501504
+    }
+  },
+  "samples": {
+    "react-baseline": [
+      {
+        "mountMs": 19.19999998807907,
+        "updatesMs": 51.80000001192093,
+        "mountedBytes": 1799844,
+        "afterUnmountBytes": 620760
+      },
+      {
+        "mountMs": 16.399999976158142,
+        "updatesMs": 52.69999998807907,
+        "mountedBytes": 1800064,
+        "afterUnmountBytes": 620772
+      },
+      {
+        "mountMs": 16.30000001192093,
+        "updatesMs": 52.5,
+        "mountedBytes": 1799960,
+        "afterUnmountBytes": 620772
+      },
+      {
+        "mountMs": 16.200000047683716,
+        "updatesMs": 51.10000002384186,
+        "mountedBytes": 1799856,
+        "afterUnmountBytes": 620772
+      },
+      {
+        "mountMs": 16.099999964237213,
+        "updatesMs": 51.09999996423721,
+        "mountedBytes": 1799856,
+        "afterUnmountBytes": 620760
+      },
+      {
+        "mountMs": 15.599999964237213,
+        "updatesMs": 55.19999998807907,
+        "mountedBytes": 1799896,
+        "afterUnmountBytes": 620772
+      },
+      {
+        "mountMs": 16,
+        "updatesMs": 53.69999998807907,
+        "mountedBytes": 1798964,
+        "afterUnmountBytes": 619880
+      },
+      {
+        "mountMs": 15.800000011920929,
+        "updatesMs": 51.10000002384186,
+        "mountedBytes": 1799068,
+        "afterUnmountBytes": 619880
+      },
+      {
+        "mountMs": 16.399999976158142,
+        "updatesMs": 52.10000002384186,
+        "mountedBytes": 1798964,
+        "afterUnmountBytes": 619880
+      }
+    ],
+    "react-current": [
+      {
+        "mountMs": 16.19999998807907,
+        "updatesMs": 45.09999996423721,
+        "mountedBytes": 1807140,
+        "afterUnmountBytes": 626828
+      },
+      {
+        "mountMs": 16.30000001192093,
+        "updatesMs": 44.80000001192093,
+        "mountedBytes": 1807140,
+        "afterUnmountBytes": 626828
+      },
+      {
+        "mountMs": 16.19999998807907,
+        "updatesMs": 47,
+        "mountedBytes": 1806984,
+        "afterUnmountBytes": 625936
+      },
+      {
+        "mountMs": 16.100000023841858,
+        "updatesMs": 46.10000002384186,
+        "mountedBytes": 1807140,
+        "afterUnmountBytes": 626828
+      },
+      {
+        "mountMs": 15.700000047683716,
+        "updatesMs": 46.30000001192093,
+        "mountedBytes": 1806248,
+        "afterUnmountBytes": 625936
+      },
+      {
+        "mountMs": 16.400000035762787,
+        "updatesMs": 44.90000003576279,
+        "mountedBytes": 1806248,
+        "afterUnmountBytes": 625936
+      },
+      {
+        "mountMs": 16.30000001192093,
+        "updatesMs": 47.80000001192093,
+        "mountedBytes": 1807140,
+        "afterUnmountBytes": 626816
+      },
+      {
+        "mountMs": 16.099999964237213,
+        "updatesMs": 45.80000001192093,
+        "mountedBytes": 1807140,
+        "afterUnmountBytes": 626828
+      },
+      {
+        "mountMs": 16,
+        "updatesMs": 45.40000003576279,
+        "mountedBytes": 1807140,
+        "afterUnmountBytes": 626828
+      }
+    ],
+    "solid-baseline": [
+      {
+        "mountMs": 14,
+        "updatesMs": 76.80000001192093,
+        "mountedBytes": 1649952,
+        "afterUnmountBytes": 501184
+      },
+      {
+        "mountMs": 14.099999964237213,
+        "updatesMs": 76.09999996423721,
+        "mountedBytes": 1649748,
+        "afterUnmountBytes": 445180
+      },
+      {
+        "mountMs": 14,
+        "updatesMs": 75.79999995231628,
+        "mountedBytes": 1652236,
+        "afterUnmountBytes": 501292
+      },
+      {
+        "mountMs": 13.899999976158142,
+        "updatesMs": 77.80000001192093,
+        "mountedBytes": 1653044,
+        "afterUnmountBytes": 501400
+      },
+      {
+        "mountMs": 13.5,
+        "updatesMs": 75.90000003576279,
+        "mountedBytes": 1650440,
+        "afterUnmountBytes": 501588
+      },
+      {
+        "mountMs": 13.699999988079071,
+        "updatesMs": 78.70000004768372,
+        "mountedBytes": 1649536,
+        "afterUnmountBytes": 445584
+      },
+      {
+        "mountMs": 13.400000035762787,
+        "updatesMs": 75.30000001192093,
+        "mountedBytes": 1649156,
+        "afterUnmountBytes": 501304
+      },
+      {
+        "mountMs": 13.5,
+        "updatesMs": 74.69999998807907,
+        "mountedBytes": 1650676,
+        "afterUnmountBytes": 501208
+      },
+      {
+        "mountMs": 14,
+        "updatesMs": 76,
+        "mountedBytes": 1653308,
+        "afterUnmountBytes": 445648
+      }
+    ],
+    "solid-current": [
+      {
+        "mountMs": 13.699999988079071,
+        "updatesMs": 69.10000002384186,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 445620
+      },
+      {
+        "mountMs": 13.199999988079071,
+        "updatesMs": 69.40000003576279,
+        "mountedBytes": 1653484,
+        "afterUnmountBytes": 501504
+      },
+      {
+        "mountMs": 13.600000023841858,
+        "updatesMs": 70.39999997615814,
+        "mountedBytes": 1652656,
+        "afterUnmountBytes": 445500
+      },
+      {
+        "mountMs": 13.600000023841858,
+        "updatesMs": 69,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 501636
+      },
+      {
+        "mountMs": 13.5,
+        "updatesMs": 67.80000001192093,
+        "mountedBytes": 1654532,
+        "afterUnmountBytes": 445620
+      },
+      {
+        "mountMs": 13.300000011920929,
+        "updatesMs": 67.5,
+        "mountedBytes": 1653616,
+        "afterUnmountBytes": 445620
+      },
+      {
+        "mountMs": 13.100000023841858,
+        "updatesMs": 69.59999996423721,
+        "mountedBytes": 1653572,
+        "afterUnmountBytes": 501516
+      },
+      {
+        "mountMs": 13.399999976158142,
+        "updatesMs": 68.69999998807907,
+        "mountedBytes": 1652688,
+        "afterUnmountBytes": 501516
+      },
+      {
+        "mountMs": 13.599999964237213,
+        "updatesMs": 68.90000003576279,
+        "mountedBytes": 1653572,
+        "afterUnmountBytes": 501516
+      }
+    ]
+  }
+}
