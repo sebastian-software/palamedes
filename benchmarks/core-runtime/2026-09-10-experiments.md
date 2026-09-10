@@ -1,5 +1,10 @@
 # Runtime lookup experiments, 2026-09-10
 
+**Historical experiment:** the last-used Intl formatter design below was
+subsequently replaced by locale buckets after testing mixed table formats.
+See [the revised comparison and decision](2026-09-10-locale-buckets.md).
+The original measurements remain here for traceability.
+
 Base: `f5112b8fcdda2a5f9d8cb6589d76f3b5756d5f1d` (main, after #1167).
 Environment: Chromium 151.0.7922.34, macOS arm64, Apple M1 Pro, Node 24.15.0.
 Each comparison alternates variants across nine fresh contexts. Timings are
@@ -19,7 +24,7 @@ the import, forced-GC, and checksum methodology.
    218.0 ms. This is not a persuasive benefit for widening the render pipeline's
    input type and adding deferred error-resolution logic. The prototype is
    preserved as [a non-production patch](experiments/2026-09-10-direct-call.patch).
-3. **Keep last-used number/plural formatter references.** The existing bounded
+3. **Initially keep last-used number/plural formatter references (superseded).** The existing bounded
    Maps remain the source of reusable Intl objects. Small last-used slots avoid
    composite keys on repeated formats. Separate scalar fields avoid allocating
    a cache-entry wrapper when styles alternate. No formatter is created eagerly

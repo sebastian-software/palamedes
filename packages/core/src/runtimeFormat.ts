@@ -1,22 +1,23 @@
+import { createLocaleFormatterCache } from "./localeFormatterCache";
+
 export type MessageFormat = "number" | "date" | "time";
 
-const numberFormatCache = new Map<string, Intl.NumberFormat>();
-const pluralRulesCache = new Map<string, Intl.PluralRules>();
 const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>();
 const DATE_ONLY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 // Intl instances are keyed by (locale, style): a handful per app, so a small
 // bound is plenty and keeps the retained memory of these heavy objects low.
 const FORMATTER_CACHE_LIMIT = 64;
-// Most browser calls reuse the same locale and format. These slots reference
-// existing bounded-cache entries and avoid rebuilding their string keys. Keep
-// the fields separate so alternating styles do not allocate cache wrappers.
-let lastNumberFormatter: Intl.NumberFormat | undefined;
-let lastNumberLocale: string | undefined;
-let lastNumberStyle: string | undefined;
-let lastPluralRules: Intl.PluralRules | undefined;
-let lastPluralLocale: string | undefined;
-let lastPluralType: string | undefined;
+const getNumberFormatter = createLocaleFormatterCache(
+  (locale: string | undefined, style: string | undefined) =>
+    new Intl.NumberFormat(locale, parseNumberFormatOptions(style)),
+  FORMATTER_CACHE_LIMIT,
+);
+const getCachedPluralRules = createLocaleFormatterCache(
+  (locale: string | undefined, type: "cardinal" | "ordinal") =>
+    new Intl.PluralRules(locale, { type }),
+  FORMATTER_CACHE_LIMIT,
+);
 
 export function formatMessageArgument(
   format: MessageFormat,
@@ -45,32 +46,6 @@ export function formatMessageArgument(
 
 function isDateOnlyIsoString(value: unknown): value is string {
   return typeof value === "string" && DATE_ONLY_ISO_PATTERN.test(value);
-}
-
-function getNumberFormatter(
-  locale: string | undefined,
-  style: string | undefined,
-): Intl.NumberFormat {
-  if (
-    lastNumberFormatter !== undefined &&
-    lastNumberLocale === locale &&
-    lastNumberStyle === style
-  ) {
-    return lastNumberFormatter;
-  }
-  const cacheKey = `${locale ?? ""}\0${style ?? ""}`;
-  const cached = numberFormatCache.get(cacheKey);
-  const formatter =
-    cached ??
-    rememberFormatter(
-      numberFormatCache,
-      cacheKey,
-      new Intl.NumberFormat(locale, parseNumberFormatOptions(style)),
-    );
-  lastNumberLocale = locale;
-  lastNumberStyle = style;
-  lastNumberFormatter = formatter;
-  return formatter;
 }
 
 function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatOptions {
@@ -193,27 +168,14 @@ function normalizeFormattedNumberValue(value: unknown): number | undefined {
   return undefined;
 }
 
-function getPluralRules(locale: string | undefined, kind: string): Intl.PluralRules {
-  const type = kind === "selectordinal" ? "ordinal" : "cardinal";
-  if (lastPluralRules !== undefined && lastPluralLocale === locale && lastPluralType === type) {
-    return lastPluralRules;
-  }
-  const cacheKey = `${locale ?? ""}\0${type}`;
-  const cached = pluralRulesCache.get(cacheKey);
-  const formatter =
-    cached ?? rememberFormatter(pluralRulesCache, cacheKey, new Intl.PluralRules(locale, { type }));
-  lastPluralLocale = locale;
-  lastPluralType = type;
-  lastPluralRules = formatter;
-  return formatter;
-}
-
 export function selectPluralCategory(
   value: number,
   locale: string | undefined,
   kind: "plural" | "selectordinal",
 ): Intl.LDMLPluralRule {
-  return getPluralRules(locale, kind).select(value);
+  return getCachedPluralRules(locale, kind === "selectordinal" ? "ordinal" : "cardinal").select(
+    value,
+  );
 }
 
 function rememberFormatter<TFormatter>(

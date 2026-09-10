@@ -1,5 +1,11 @@
 # Compiled Core browser benchmark
 
+For the current formatter-cache comparison, including five alternating table
+formats and controls that isolate the formatter changes, see
+[Locale-bucket experiments](2026-09-10-locale-buckets.md). Earlier runtime
+experiments remain documented separately below and in
+[the initial follow-up report](2026-09-10-experiments.md).
+
 This benchmark measures the additional storage created by `i18n.load()` and
 string rendering through `i18n._()` in Chromium. It uses production Core builds
 and a catalog emitted by the native `renderCatalogModule()` generator.

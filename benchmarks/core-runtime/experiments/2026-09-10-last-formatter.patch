@@ -1,0 +1,75 @@
+diff --git a/packages/core/src/runtimeFormat.ts b/packages/core/src/runtimeFormat.ts
+index 8b44aec9..1dc35b69 100644
+--- a/packages/core/src/runtimeFormat.ts
++++ b/packages/core/src/runtimeFormat.ts
+@@ -8,6 +8,15 @@ const DATE_ONLY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+ // Intl instances are keyed by (locale, style): a handful per app, so a small
+ // bound is plenty and keeps the retained memory of these heavy objects low.
+ const FORMATTER_CACHE_LIMIT = 64;
++// Most browser calls reuse the same locale and format. These slots reference
++// existing bounded-cache entries and avoid rebuilding their string keys. Keep
++// the fields separate so alternating styles do not allocate cache wrappers.
++let lastNumberFormatter: Intl.NumberFormat | undefined;
++let lastNumberLocale: string | undefined;
++let lastNumberStyle: string | undefined;
++let lastPluralRules: Intl.PluralRules | undefined;
++let lastPluralLocale: string | undefined;
++let lastPluralType: string | undefined;
+
+ export function formatMessageArgument(
+   format: MessageFormat,
+@@ -42,14 +51,26 @@ function getNumberFormatter(
+   locale: string | undefined,
+   style: string | undefined,
+ ): Intl.NumberFormat {
++  if (
++    lastNumberFormatter !== undefined &&
++    lastNumberLocale === locale &&
++    lastNumberStyle === style
++  ) {
++    return lastNumberFormatter;
++  }
+   const cacheKey = `${locale ?? ""}\0${style ?? ""}`;
+   const cached = numberFormatCache.get(cacheKey);
+-  if (cached) {
+-    return cached;
+-  }
+-
+-  const formatter = new Intl.NumberFormat(locale, parseNumberFormatOptions(style));
+-  return rememberFormatter(numberFormatCache, cacheKey, formatter);
++  const formatter =
++    cached ??
++    rememberFormatter(
++      numberFormatCache,
++      cacheKey,
++      new Intl.NumberFormat(locale, parseNumberFormatOptions(style)),
++    );
++  lastNumberLocale = locale;
++  lastNumberStyle = style;
++  lastNumberFormatter = formatter;
++  return formatter;
+ }
+
+ function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatOptions {
+@@ -174,12 +195,17 @@ function normalizeFormattedNumberValue(value: unknown): number | undefined {
+
+ function getPluralRules(locale: string | undefined, kind: string): Intl.PluralRules {
+   const type = kind === "selectordinal" ? "ordinal" : "cardinal";
++  if (lastPluralRules !== undefined && lastPluralLocale === locale && lastPluralType === type) {
++    return lastPluralRules;
++  }
+   const cacheKey = `${locale ?? ""}\0${type}`;
+   const cached = pluralRulesCache.get(cacheKey);
+-  if (cached) {
+-    return cached;
+-  }
+-  return rememberFormatter(pluralRulesCache, cacheKey, new Intl.PluralRules(locale, { type }));
++  const formatter =
++    cached ?? rememberFormatter(pluralRulesCache, cacheKey, new Intl.PluralRules(locale, { type }));
++  lastPluralLocale = locale;
++  lastPluralType = type;
++  lastPluralRules = formatter;
++  return formatter;
+ }
+
+ export function selectPluralCategory(
