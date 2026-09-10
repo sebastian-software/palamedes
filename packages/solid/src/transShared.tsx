@@ -107,7 +107,17 @@ export function createSolidMessageRuntime(
         return renderNodes(nodes, values, runtime, locale);
       },
       join(...parts: Array<string | Element[]>) {
-        return parts.flatMap((part) => (typeof part === "string" ? [part] : part));
+        const result: Element[] = [];
+        for (const part of parts) {
+          if (typeof part === "string") {
+            result.push(part);
+          } else {
+            for (let index = 0; index < part.length; index += 1) {
+              if (index in part) result.push(part[index]);
+            }
+          }
+        }
+        return result;
       },
       value(value: unknown) {
         return [renderVariable(value)];
