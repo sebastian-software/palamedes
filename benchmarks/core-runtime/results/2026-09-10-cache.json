@@ -1,0 +1,323 @@
+{
+  "environment": {
+    "browser": "151.0.7922.34",
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro"
+  },
+  "messageCount": 30000,
+  "runs": 9,
+  "warmup": 10000,
+  "iterations": 300000,
+  "summary": {
+    "baseline": {
+      "loadMs": 10.300000011920929,
+      "retainedBytes": 795512,
+      "constantMs": 6.300000011920929,
+      "interpolationMs": 54.19999998807907,
+      "pluralMs": 243.4000000357628
+    },
+    "current": {
+      "loadMs": 10.399999976158142,
+      "retainedBytes": 795512,
+      "constantMs": 6.300000011920929,
+      "interpolationMs": 44.30000001192093,
+      "pluralMs": 231
+    }
+  },
+  "samples": {
+    "baseline": [
+      {
+        "loadMs": 12.800000011920929,
+        "retainedBytes": 802360,
+        "constant": {
+          "ms": 8.5,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 54.30000001192093,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 250.30000001192093,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.300000011920929,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 54,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 237.69999998807907,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.199999988079071,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.199999988079071,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 54.19999998807907,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 241.79999995231628,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.800000011920929,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 54.19999998807907,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 243.9000000357628,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.299999952316284,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 54,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 241.80000001192093,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.300000011920929,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.100000023841858,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 53,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 248.60000002384186,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.300000011920929,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.299999952316284,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 55.30000001192093,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 243.4000000357628,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 11.099999964237213,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.299999952316284,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 54.90000003576279,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 250,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.5,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.5,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 53.69999998807907,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 231.20000004768372,
+          "checksum": 3489300
+        }
+      }
+    ],
+    "current": [
+      {
+        "loadMs": 10.399999976158142,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 44.60000002384186,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 238.70000004768372,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.099999964237213,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 44.09999996423721,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 233.0999999642372,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.399999976158142,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.399999976158142,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 47.19999998807907,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 227.9000000357628,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.800000011920929,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.199999988079071,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 42.80000001192093,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 240.30000001192093,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.099999964237213,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.5,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 45.5,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 229,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.5,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.099999964237213,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 43.30000001192093,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 229.19999998807907,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.199999988079071,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 45.59999996423721,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 245.10000002384186,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.400000035762787,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.400000035762787,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 44.30000001192093,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 231,
+          "checksum": 3489300
+        }
+      },
+      {
+        "loadMs": 10.699999988079071,
+        "retainedBytes": 795512,
+        "constant": {
+          "ms": 6.300000011920929,
+          "checksum": 3488400
+        },
+        "interpolation": {
+          "ms": 44,
+          "checksum": 6789300
+        },
+        "plural": {
+          "ms": 226.5,
+          "checksum": 3489300
+        }
+      }
+    ]
+  }
+}

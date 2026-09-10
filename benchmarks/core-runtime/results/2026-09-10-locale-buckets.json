@@ -1,0 +1,1382 @@
+{
+  "environment": {
+    "browser": "151.0.7922.34",
+    "node": "v24.15.0",
+    "cpu": "Apple M1 Pro",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "runs": 9,
+  "iterations": 300000,
+  "warmup": 10000,
+  "summary": {
+    "main": {
+      "repeatedCurrency": 125.69999998807907,
+      "tableCells": 127,
+      "shuffledCells": 125.60000002384186,
+      "tableRows": 118.69999998807907,
+      "alternatingLocales": 139.5,
+      "plural": 211.80000001192093
+    },
+    "runtimeOnly": {
+      "repeatedCurrency": 116,
+      "tableCells": 115,
+      "shuffledCells": 118,
+      "tableRows": 116.60000002384186,
+      "alternatingLocales": 126.30000001192093,
+      "plural": 197.70000004768372
+    },
+    "lastFormatter": {
+      "repeatedCurrency": 92.80000001192093,
+      "tableCells": 117,
+      "shuffledCells": 114.69999998807907,
+      "tableRows": 116.80000001192093,
+      "alternatingLocales": 126.89999997615814,
+      "plural": 170.0999999642372
+    },
+    "localeBucket": {
+      "repeatedCurrency": 97.5,
+      "tableCells": 98.80000001192093,
+      "shuffledCells": 102.40000003576279,
+      "tableRows": 101.59999996423721,
+      "alternatingLocales": 108.30000001192093,
+      "plural": 176.5999999642372
+    }
+  },
+  "samples": {
+    "main": [
+      {
+        "repeatedCurrency": {
+          "ms": 126.90000003576279,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 127.19999998807907,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 126.70000004768372,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 119.60000002384186,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 141.10000002384186,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 220.70000004768372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 127,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 127.30000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 124.89999997615814,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 119,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 141.19999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 219.39999997615814,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 127.30000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 128.10000002384186,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 126.19999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 119,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 142.19999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 216,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 126.30000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 127,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 126.29999995231628,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 118.60000002384186,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 138.80000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 208.5999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 125.69999998807907,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 126.59999996423721,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 125,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117.80000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 137.5999999642372,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 214.80000001192093,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 125.19999998807907,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 125.79999995231628,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 123.80000001192093,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117.10000002384186,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 137.39999997615814,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 210.80000001192093,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 124.39999997615814,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 125.40000003576279,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 124.69999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 118.69999998807907,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 138.9000000357628,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 211.80000001192093,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 125.39999997615814,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 129.30000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 129.4000000357628,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 122.30000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 140.10000002384186,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 211.10000002384186,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 124.30000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 125.80000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 125.60000002384186,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117.59999996423721,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 139.5,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 211,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      }
+    ],
+    "runtimeOnly": [
+      {
+        "repeatedCurrency": {
+          "ms": 116,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 116,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 118.69999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 116.60000002384186,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 126.69999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 198.60000002384186,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 114.69999998807907,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 113.10000002384186,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 116,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 116.30000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 126.30000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 194,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 118.10000002384186,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 116.39999997615814,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 120.80000001192093,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 121.19999998807907,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 131.0999999642372,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 198.9000000357628,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 113.20000004768372,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 112.80000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 115.39999997615814,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 114.5,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 124.19999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 197.70000004768372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 118.20000004768372,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 116.5,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 118.5,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117.30000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 129.10000002384186,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 200.4000000357628,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 116.79999995231628,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 116.19999998807907,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 118.40000003576279,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117.90000003576279,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 127.30000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 199.39999997615814,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 113.20000004768372,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 114.09999996423721,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 115.60000002384186,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 113.39999997615814,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 125.69999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 194.9000000357628,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 117.20000004768372,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 115,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 117.60000002384186,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 116.69999998807907,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 125.89999997615814,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 197.69999998807907,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 115.30000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 113.80000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 118,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 115.80000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 125,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 192.89999997615814,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      }
+    ],
+    "lastFormatter": [
+      {
+        "repeatedCurrency": {
+          "ms": 92.80000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 119.60000002384186,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 117.60000002384186,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 120.80000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 128,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 176,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 92.10000002384186,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 118.40000003576279,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 115.80000001192093,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 116.80000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 127.19999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 170.5,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 92.70000004768372,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 117,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 114.69999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 115.70000004768372,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 126.5,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 167.5999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 92.5,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 117.09999996423721,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 114.90000003576279,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 115.89999997615814,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 126.89999997615814,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 170.9000000357628,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 92.60000002384186,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 113.89999997615814,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 113.09999996423721,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 114.89999997615814,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 124.5,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 168.89999997615814,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 93.60000002384186,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 115.80000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 112.90000003576279,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 116.30000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 126.89999997615814,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 169.30000001192093,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 96.90000003576279,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 116.69999998807907,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 114.10000002384186,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117.80000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 125.79999995231628,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 170.0999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 93.80000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 122.19999998807907,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 119.90000003576279,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 122,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 130.80000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 170.69999998807907,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 94.09999996423721,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 115.79999995231628,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 113.60000002384186,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 117,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 126.30000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 168.0999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      }
+    ],
+    "localeBucket": [
+      {
+        "repeatedCurrency": {
+          "ms": 96.80000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 98.80000001192093,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 101.80000001192093,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 101.09999996423721,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 109.69999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 173.5999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 100.5,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 101,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 104.19999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 103.09999996423721,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 110.69999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 180.20000004768372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 97.5,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 100.10000002384186,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 103.40000003576279,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 104.60000002384186,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 110,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 179.89999997615814,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 97.5,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 98.60000002384186,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 102.79999995231628,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 102.89999997615814,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 107.59999996423721,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 175.5,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 96.60000002384186,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 98.60000002384186,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 101.69999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 100.59999996423721,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 107.30000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 176.9000000357628,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 99.89999997615814,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 100.09999996423721,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 103.20000004768372,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 101.59999996423721,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 108.30000001192093,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 178.39999997615814,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 99.80000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 96.89999997615814,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 101.29999995231628,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 100.80000001192093,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 107.69999998807907,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 169.5,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 96.69999998807907,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 100.90000003576279,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 102.40000003576279,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 103.90000003576279,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 109.10000002384186,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 175.0999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      },
+      {
+        "repeatedCurrency": {
+          "ms": 97.80000001192093,
+          "checksum": 2383200,
+          "calls": 300000
+        },
+        "tableCells": {
+          "ms": 97.69999998807907,
+          "checksum": 2025000,
+          "calls": 300000
+        },
+        "shuffledCells": {
+          "ms": 101.19999998807907,
+          "checksum": 2027820,
+          "calls": 300000
+        },
+        "tableRows": {
+          "ms": 100.89999997615814,
+          "checksum": 2745000,
+          "calls": 60000
+        },
+        "alternatingLocales": {
+          "ms": 107.90000003576279,
+          "checksum": 2185000,
+          "calls": 300000
+        },
+        "plural": {
+          "ms": 176.5999999642372,
+          "checksum": 2057100,
+          "calls": 300000
+        }
+      }
+    ]
+  },
+  "lookupControls": {
+    "iterations": 3000000,
+    "warmup": 100000,
+    "summary": {
+      "compositeKey": 122.39999997615814,
+      "precomputedCompositeKey": 24.69999998807907,
+      "nestedMaps": 32.69999998807907,
+      "selectedLocaleBucket": 23.80000001192093
+    },
+    "samples": [
+      {
+        "compositeKey": {
+          "ms": 120.59999996423721,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 24.69999998807907,
+          "checksum": 9000000
+        },
+        "nestedMaps": {
+          "ms": 32.80000001192093,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 22.900000035762787,
+          "checksum": 9000000
+        }
+      },
+      {
+        "compositeKey": {
+          "ms": 120.90000003576279,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 25.399999976158142,
+          "checksum": 9000000
+        },
+        "nestedMaps": {
+          "ms": 32.69999998807907,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 22.099999964237213,
+          "checksum": 9000000
+        }
+      },
+      {
+        "nestedMaps": {
+          "ms": 22.69999998807907,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 25.400000035762787,
+          "checksum": 9000000
+        },
+        "compositeKey": {
+          "ms": 143.39999997615814,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 22.600000023841858,
+          "checksum": 9000000
+        }
+      },
+      {
+        "nestedMaps": {
+          "ms": 23.30000001192093,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 25.80000001192093,
+          "checksum": 9000000
+        },
+        "compositeKey": {
+          "ms": 144.5,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 23.299999952316284,
+          "checksum": 9000000
+        }
+      },
+      {
+        "compositeKey": {
+          "ms": 122.39999997615814,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 24.899999976158142,
+          "checksum": 9000000
+        },
+        "nestedMaps": {
+          "ms": 32.90000003576279,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 23.5,
+          "checksum": 9000000
+        }
+      },
+      {
+        "compositeKey": {
+          "ms": 122.30000001192093,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 25.399999976158142,
+          "checksum": 9000000
+        },
+        "nestedMaps": {
+          "ms": 33.40000003576279,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 22.600000023841858,
+          "checksum": 9000000
+        }
+      },
+      {
+        "nestedMaps": {
+          "ms": 23,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 25.5,
+          "checksum": 9000000
+        },
+        "compositeKey": {
+          "ms": 144,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 22.30000001192093,
+          "checksum": 9000000
+        }
+      },
+      {
+        "nestedMaps": {
+          "ms": 23,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 25.69999998807907,
+          "checksum": 9000000
+        },
+        "compositeKey": {
+          "ms": 143.5999999642372,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 23,
+          "checksum": 9000000
+        }
+      },
+      {
+        "compositeKey": {
+          "ms": 120.80000001192093,
+          "checksum": 9000000
+        },
+        "precomputedCompositeKey": {
+          "ms": 24.69999998807907,
+          "checksum": 9000000
+        },
+        "nestedMaps": {
+          "ms": 33.09999996423721,
+          "checksum": 9000000
+        },
+        "selectedLocaleBucket": {
+          "ms": 23.80000001192093,
+          "checksum": 9000000
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,85 @@
+--- a/packages/core/src/i18nRuntime.ts
++++ b/packages/core/src/i18nRuntime.ts
+@@ -5,6 +5,7 @@
+   type CatalogMessage,
+   type CatalogMessages,
+   type CompiledCatalogMessages,
++  type CompiledMessage,
+   type CompiledMessageRuntime,
+   type MessageValues,
+   type PatternFormatter,
+@@ -160,13 +161,16 @@
+   }
+
+   function renderResolvedMessage<TResult>(
+-    message: ResolvedMessage,
++    message: ResolvedMessage | CompiledMessage,
+     values: MessageValues,
+     runtime: CompiledMessageRuntime<TResult>,
+     id?: string,
+     metadata?: MessageMetadata,
+   ): TResult {
+     try {
++      if (typeof message === "function") {
++        return message<TResult>(values, runtime);
++      }
+       if (typeof message.value === "function") {
+         return message.value<TResult>(values, runtime);
+       }
+@@ -178,27 +182,30 @@
+       }
+       return runtime.pattern(message.value, values);
+     } catch (error) {
+-      const pattern = getResolvedPattern(message);
++      const resolved = typeof message === "function"
++        ? resolveMessage(message, id ?? "", metadata)
++        : message;
++      const pattern = getResolvedPattern(resolved);
+       notifyError({
+         id,
+         locale: activeLocale,
+         error: normalizeError(error),
+         pattern,
+-        fallback: message.fallback,
++        fallback: resolved.fallback,
+         metadata,
+       });
+
+-      if (message.fromCatalog && pattern !== message.fallback) {
++      if (resolved.fromCatalog && pattern !== resolved.fallback) {
+         try {
+           return patternSupport === undefined
+-            ? runtime.join(message.fallback)
+-            : runtime.pattern(message.fallback, values);
++            ? runtime.join(resolved.fallback)
++            : runtime.pattern(resolved.fallback, values);
+         } catch {
+           // Fall through to plain source text when the fallback is malformed.
+         }
+       }
+
+-      return runtime.join(message.fallback);
++      return runtime.join(resolved.fallback);
+     }
+   }
+
+@@ -291,8 +298,9 @@
+     },
+
+     renderMessage(id, values, runtime, metadata) {
++      const loaded = getLoadedMessage(id);
+       return renderResolvedMessage(
+-        resolveMessage(getLoadedMessage(id), id, metadata),
++        typeof loaded === "function" ? loaded : resolveMessage(loaded, id, metadata),
+         values,
+         runtime,
+         id,
+@@ -317,7 +325,7 @@
+         return loaded;
+       }
+       return renderResolvedMessage(
+-        resolveMessage(loaded, id, metadata),
++        typeof loaded === "function" ? loaded : resolveMessage(loaded, id, metadata),
+         values ?? {},
+         getStringRuntime(activeLocale),
+         id,
