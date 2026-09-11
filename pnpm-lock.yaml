@@ -1631,6 +1631,9 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../config
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../core
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../core-node

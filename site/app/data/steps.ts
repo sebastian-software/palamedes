@@ -175,7 +175,7 @@ $ pnpm dev`,
     {
       title: "Install",
       body: "Core, runtime, React adapter, and the Next plugin — plus the CLI as a dev dependency.",
-      code: `pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin
+      code: `pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin server-only
 pnpm add -D @palamedes/cli @palamedes/config`,
     },
     PACKAGE_BOUNDARY_STEP,
@@ -196,27 +196,27 @@ catalogs:
 import { withPalamedes } from "@palamedes/next-plugin"
 export default withPalamedes({})
 
-// src/lib/i18n.server.ts
+// src/lib/load-i18n.server.ts
 import "server-only"
-import { createI18n } from "@palamedes/core/compiled"
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
+import { cache } from "react"
+import { createNextServerI18n } from "@palamedes/next-plugin/server"
 
-export const serverI18n = createNextServerI18nScope<ReturnType<typeof createI18n>>()`,
+export const createActiveServerI18n = cache(() => createNextServerI18n({ locale: "de" }))`,
     },
     {
       title: "Write & extract",
       body: "Author the message in a Server Component and run it inside the request-local server scope, then extract catalogs.",
       code: `// src/app/page.tsx
 import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"
+import { createActiveServerI18n } from "../lib/load-i18n.server"
 
 function translateWelcome() {
   return t\`Welcome to Palamedes\`
 }
 
 export default async function Page() {
-  const i18n = await createActiveServerI18n()
-  return runWithServerI18n(i18n, () => <h1>{translateWelcome()}</h1>)
+  await createActiveServerI18n()
+  return <h1>{translateWelcome()}</h1>
 }
 
 $ pmds extract`,
@@ -230,31 +230,8 @@ msgstr "Willkommen bei Palamedes"`,
     },
     {
       title: "Load & see it render",
-      body: "Load the catalogs in server code, activate the request scope, and run Next.js.",
-      aside:
-        'TypeScript needs an ambient declaration for .po imports — add src/po.d.ts with `declare module "*.po"`.',
-      code: `${PO_DECLARATION}
-
-// src/lib/load-i18n.server.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { serverI18n } from "./i18n.server"
-import { messages as enMessages } from "../locales/en.po"
-import { messages as deMessages } from "../locales/de.po"
-
-export async function createActiveServerI18n() {
-  const i18n = createI18n()
-  i18n.load("en", enMessages)
-  i18n.load("de", deMessages)
-  i18n.activate("de")
-  serverI18n.activate(i18n)
-  return i18n
-}
-
-export function runWithServerI18n<Result>(i18n: ReturnType<typeof createI18n>, callback: () => Result) {
-  return serverI18n.run(i18n, callback)
-}
-
-$ pnpm dev`,
+      body: "The adapter loads only the active server locale and shares its immutable catalog across requests. Run Next.js to render the translation.",
+      code: `$ pnpm dev`,
     },
   ],
 };

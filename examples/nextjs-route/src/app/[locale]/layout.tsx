@@ -28,7 +28,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
       <body>{children}</body>
     </html>
   );

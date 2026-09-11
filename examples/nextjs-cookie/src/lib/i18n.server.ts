@@ -3,10 +3,10 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { headers } from "next/headers";
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import { createNextServerI18n, createNextServerI18nScope } from "@palamedes/next-plugin/server";
 import type { PalamedesI18n } from "@palamedes/core";
 import type { LocaleSource } from "@palamedes/core/locale";
-import { createExampleI18n, type Locale, loadMessages, locales } from "./i18n";
+import { type Locale, locales } from "./i18n";
 
 export const serverI18nScope = createNextServerI18nScope<PalamedesI18n>();
 
@@ -36,11 +36,7 @@ const resolveActiveServerI18n = cache(
   }> => {
     const resolved = locale ? { locale, source: "cookie" as const } : await getLocale();
     const resolvedLocale = resolved.locale;
-    const messages = await loadMessages(resolvedLocale);
-    const i18n = createExampleI18n();
-
-    i18n.load(resolvedLocale, messages);
-    i18n.activate(resolvedLocale);
+    const i18n = await createNextServerI18n({ locale: resolvedLocale });
 
     return {
       i18n,

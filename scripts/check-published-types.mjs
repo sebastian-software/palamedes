@@ -46,7 +46,10 @@ const UNTYPED_PACKAGES = new Map([
 
 /** Export subpaths that resolve to bundler plugin files rather than modules. */
 const UNTYPED_SUBPATHS = new Map([
-  ["@palamedes/next-plugin", new Set(["./palamedes-loader", "./palamedes-po-loader"])],
+  [
+    "@palamedes/next-plugin",
+    new Set(["./palamedes-loader", "./palamedes-po-loader", "./palamedes-server-catalogs-loader"]),
+  ],
 ]);
 
 const SOURCE_FALLBACK_DOC_TARGETS = [
@@ -57,6 +60,7 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
   {
     packageDirectory: "packages/next-plugin",
     docs: "docs/api/next-plugin.md",
+    compiledOnlyDefault: true,
   },
   {
     packageDirectory: "packages/remix",

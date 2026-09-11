@@ -242,7 +242,7 @@ describe("palamedes-loader.cjs", () => {
 
     const output = await runLoader({ clientMessageSplitting: true });
 
-    expect(output).toContain("_existingI18n?.locale ?? document.documentElement.lang");
+    expect(output).toContain("_locale = document.documentElement.lang");
     expect(output).toContain("_modules = await Promise.all");
     expect(output).toContain("_fragments = await Promise.all");
     expect(output).toContain('"en": () => import("./locales/en.po?palamedes-selected=');
@@ -289,7 +289,7 @@ describe("palamedes-loader.cjs", () => {
     };
 
     try {
-      globalThis.document = { documentElement: { lang: "de" } } as Document;
+      globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
       globalThis.__pmds_test_getI18n = () => i18n;
 
       const output = await runLoader({ clientMessageSplitting: true });
@@ -328,7 +328,7 @@ describe("palamedes-loader.cjs", () => {
     }
   });
 
-  it("uses the installed client locale when the document locale changes", async () => {
+  it("rejects an unsupported changed document locale instead of keeping stale messages", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",
       map: null,
@@ -346,7 +346,7 @@ describe("palamedes-loader.cjs", () => {
     const initializeClientI18n = vi.fn();
 
     try {
-      globalThis.document = { documentElement: { lang: "fr" } } as Document;
+      globalThis.document = { documentElement: { lang: "fr", dataset: {} } } as Document;
       const output = await runLoader({
         clientMessageSplitting: true,
         clientFragmentFailureMode: "degrade",
@@ -360,17 +360,17 @@ describe("palamedes-loader.cjs", () => {
             return { messages: { id: "translated" } };
           throw new Error(`Unexpected import: ${specifier}`);
         }),
-      ).resolves.toBeUndefined();
-      expect(globalThis.__pmds_test_body_ran).toBe(true);
+      ).rejects.toThrow("document locale");
+      expect(globalThis.__pmds_test_body_ran).toBeUndefined();
       expect(initializeClientI18n).not.toHaveBeenCalled();
-      expect(loaded).toEqual([{ locale: "de", messages: { id: "translated" } }]);
+      expect(loaded).toEqual([]);
     } finally {
       restoreGlobal("document", originalDocument);
       restoreGlobal("__pmds_test_body_ran", originalBodyRan);
     }
   });
 
-  it("degrades an unsupported document locale before a client i18n is installed", async () => {
+  it("rejects an unsupported document locale before a client i18n is installed", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",
       map: null,
@@ -381,7 +381,7 @@ describe("palamedes-loader.cjs", () => {
     const originalConsoleError = console.error;
     const errors: unknown[][] = [];
     try {
-      globalThis.document = { documentElement: { lang: "fr" } } as Document;
+      globalThis.document = { documentElement: { lang: "fr", dataset: {} } } as Document;
       console.error = (...args: unknown[]) => errors.push(args);
       const output = await runLoader({
         clientMessageSplitting: true,
@@ -399,10 +399,9 @@ describe("palamedes-loader.cjs", () => {
             };
           throw new Error(`Unexpected import: ${specifier}`);
         }),
-      ).resolves.toBeUndefined();
-      expect(globalThis.__pmds_test_body_ran).toBe(true);
-      expect(errors).toHaveLength(1);
-      expect(errors[0]?.[0]).toBeInstanceOf(Error);
+      ).rejects.toThrow("document locale");
+      expect(globalThis.__pmds_test_body_ran).toBeUndefined();
+      expect(errors).toHaveLength(0);
     } finally {
       restoreGlobal("document", originalDocument);
       restoreGlobal("__pmds_test_body_ran", originalBodyRan);
@@ -410,7 +409,7 @@ describe("palamedes-loader.cjs", () => {
     }
   });
 
-  it("degrades a rejected production catalog fragment, logs it, and hydrates the module", async () => {
+  it("rejects the module when any production fragment fails, without partial registration", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",
       map: null,
@@ -445,7 +444,7 @@ describe("palamedes-loader.cjs", () => {
     };
 
     try {
-      globalThis.document = { documentElement: { lang: "de" } } as Document;
+      globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
       console.error = (...args: unknown[]) => errors.push(args);
       const adversarialPath = "/repo/src/fragment` ${globalThis.__pmds_test_injected = true}.tsx";
 
@@ -456,7 +455,7 @@ describe("palamedes-loader.cjs", () => {
         },
         { resourcePath: adversarialPath },
       );
-      expect(output).toContain("Continuing without that fragment");
+      expect(output).not.toContain("Continuing without that fragment");
       const modulePromise = executeGeneratedClientModule(output, async (specifier) => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => i18n };
@@ -475,20 +474,13 @@ describe("palamedes-loader.cjs", () => {
         throw new Error(`Unexpected import: ${specifier}`);
       });
 
-      await expect(modulePromise).resolves.toBeUndefined();
-      expect(globalThis.__pmds_test_body_ran).toBe(true);
-      expect(loaded).toEqual([{ locale: "de", messages: { id: "translated" } }]);
+      await expect(modulePromise).rejects.toBe(bootstrapError);
+      expect(globalThis.__pmds_test_body_ran).toBeUndefined();
+      expect(loaded).toEqual([]);
       expect(fragmentRequests).toBe(1);
       expect(successfulFragmentRequests).toBe(1);
       expect((globalThis as Record<string, unknown>).__pmds_test_injected).toBeUndefined();
-      expect(errors).toEqual([
-        [
-          "Palamedes client graph message splitting failed to load a catalog fragment for src/fragment` ${globalThis.__pmds_test_injected = true}.tsx (",
-          "de",
-          "). Continuing without that fragment.",
-          bootstrapError,
-        ],
-      ]);
+      expect(errors).toEqual([]);
     } finally {
       restoreGlobal("document", originalDocument);
       restoreGlobal("__pmds_test_body_ran", originalBodyRan);
@@ -497,7 +489,7 @@ describe("palamedes-loader.cjs", () => {
     }
   });
 
-  it("degrades an invalid resolved production catalog fragment and hydrates the module", async () => {
+  it("rejects an invalid resolved catalog before module evaluation", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",
       map: null,
@@ -520,7 +512,7 @@ describe("palamedes-loader.cjs", () => {
     };
 
     try {
-      globalThis.document = { documentElement: { lang: "de" } } as Document;
+      globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
       console.error = (...args: unknown[]) => errors.push(args);
 
       const output = await runLoader({
@@ -540,17 +532,10 @@ describe("palamedes-loader.cjs", () => {
         throw new Error(`Unexpected import: ${specifier}`);
       });
 
-      await expect(modulePromise).resolves.toBeUndefined();
-      expect(globalThis.__pmds_test_body_ran).toBe(true);
+      await expect(modulePromise).rejects.toBe(catalogError);
+      expect(globalThis.__pmds_test_body_ran).toBeUndefined();
       expect(loaded).toEqual([]);
-      expect(errors).toEqual([
-        [
-          "Palamedes client graph message splitting failed to load a catalog fragment for src/page.tsx (",
-          "de",
-          "). Continuing without that fragment.",
-          catalogError,
-        ],
-      ]);
+      expect(errors).toEqual([]);
     } finally {
       restoreGlobal("document", originalDocument);
       restoreGlobal("__pmds_test_body_ran", originalBodyRan);
@@ -587,7 +572,7 @@ describe("palamedes-loader.cjs", () => {
       };
 
       try {
-        globalThis.document = { documentElement: { lang: "de" } } as Document;
+        globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
         const output = await runLoader({
           clientMessageSplitting: true,
           clientFragmentFailureMode,
@@ -620,7 +605,7 @@ describe("palamedes-loader.cjs", () => {
     },
   );
 
-  it("continues production hydration when diagnostic logging throws", async () => {
+  it("preserves the fragment error when diagnostic logging would throw", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",
       map: null,
@@ -634,7 +619,7 @@ describe("palamedes-loader.cjs", () => {
     const loggerError = new Error("logger failed");
 
     try {
-      globalThis.document = { documentElement: { lang: "de" } } as Document;
+      globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
       console.error = () => {
         throw loggerError;
       };
@@ -656,8 +641,8 @@ describe("palamedes-loader.cjs", () => {
         throw new Error(`Unexpected import: ${specifier}`);
       });
 
-      await expect(modulePromise).resolves.toBeUndefined();
-      expect(globalThis.__pmds_test_body_ran).toBe(true);
+      await expect(modulePromise).rejects.toBe(bootstrapError);
+      expect(globalThis.__pmds_test_body_ran).toBeUndefined();
     } finally {
       restoreGlobal("document", originalDocument);
       restoreGlobal("__pmds_test_body_ran", originalBodyRan);
@@ -677,7 +662,7 @@ describe("palamedes-loader.cjs", () => {
     const bootstrapError = new Error("fragment failed to load");
 
     try {
-      globalThis.document = { documentElement: { lang: "de" } } as Document;
+      globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
 
       const output = await runLoader({
         clientMessageSplitting: true,
@@ -716,7 +701,7 @@ describe("palamedes-loader.cjs", () => {
     const bootstrapError = new Error("runtime failed to load");
 
     try {
-      globalThis.document = { documentElement: { lang: "de" } } as Document;
+      globalThis.document = { documentElement: { lang: "de", dataset: {} } } as Document;
 
       const output = await runLoader({
         clientMessageSplitting: true,

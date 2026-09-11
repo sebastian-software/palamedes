@@ -1,10 +1,10 @@
 import "server-only";
 
 import { headers } from "next/headers";
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import { createNextServerI18n, createNextServerI18nScope } from "@palamedes/next-plugin/server";
 import type { PalamedesI18n } from "@palamedes/core";
 import type { LocaleSource, LocaleSuggestion } from "@palamedes/core/locale";
-import { createExampleI18n, type Locale, loadMessages, locales } from "./i18n";
+import { type Locale, locales } from "./i18n";
 
 export const serverI18nScope = createNextServerI18nScope<PalamedesI18n>();
 
@@ -44,11 +44,7 @@ export async function createActiveServerI18n(locale: Locale): Promise<{
   i18n: PalamedesI18n;
   locale: Locale;
 }> {
-  const messages = await loadMessages(locale);
-  const i18n = createExampleI18n();
-
-  i18n.load(locale, messages);
-  i18n.activate(locale);
+  const i18n = await createNextServerI18n({ locale });
   serverI18nScope.activate(i18n);
 
   return {

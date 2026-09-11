@@ -27,7 +27,8 @@
     "palamedes-config-cache.cjs",
     "palamedes-loader.cjs",
     "palamedes-dev-warning.cjs",
-    "palamedes-po-loader.cjs"
+    "palamedes-po-loader.cjs",
+    "palamedes-server-catalogs-loader.cjs"
   ],
   "type": "module",
   "sideEffects": false,
@@ -76,7 +77,18 @@
       }
     },
     "./palamedes-loader": "./palamedes-loader.cjs",
-    "./palamedes-po-loader": "./palamedes-po-loader.cjs"
+    "./palamedes-po-loader": "./palamedes-po-loader.cjs",
+    "./server-catalogs": {
+      "import": {
+        "types": "./dist/server-catalogs.d.mts",
+        "default": "./dist/server-catalogs.mjs"
+      },
+      "require": {
+        "types": "./dist/server-catalogs.d.cts",
+        "default": "./dist/server-catalogs.cjs"
+      }
+    },
+    "./palamedes-server-catalogs-loader": "./palamedes-server-catalogs-loader.cjs"
   },
   "publishConfig": {
     "access": "public"
@@ -89,6 +101,7 @@
   "dependencies": {
     "@jridgewell/sourcemap-codec": "1.6.0",
     "@palamedes/config": "workspace:^",
+    "@palamedes/core": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"
