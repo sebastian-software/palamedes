@@ -274,6 +274,7 @@ describe("createRemixI18nServer", () => {
         path.join(localesRoot, "de.po"),
         'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
       );
+      registry.invalidate();
       await expect(remixI18n.run(request, ({ i18n }) => i18n._(greetingId))).resolves.toBe(
         "Guten Tag",
       );

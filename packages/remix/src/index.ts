@@ -192,12 +192,15 @@ export function createPalamedesRemixCatalogAssetRegistry(
     return key;
   };
 
+  const refreshCatalogState = (): void => {
+    refreshConfig();
+    refreshCatalogGeneration();
+  };
+
   return {
     register,
 
     load(locale) {
-      refreshConfig();
-      refreshCatalogGeneration();
       if (!config.locales.includes(locale)) {
         return Promise.reject(new Error(`Unsupported Palamedes catalog locale "${locale}".`));
       }
@@ -205,8 +208,6 @@ export function createPalamedesRemixCatalogAssetRegistry(
     },
 
     generation() {
-      refreshConfig();
-      refreshCatalogGeneration();
       return `${configDigest}:${catalogGenerationDigest}`;
     },
 
@@ -215,8 +216,6 @@ export function createPalamedesRemixCatalogAssetRegistry(
     },
 
     serve(request) {
-      refreshConfig();
-      refreshCatalogGeneration();
       const url = new URL(request.url);
       const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/`;
       if (!url.pathname.startsWith(prefix) || !url.pathname.endsWith(".js")) {
@@ -297,10 +296,12 @@ export function createPalamedesRemixCatalogAssetRegistry(
 
     invalidate(sourcePath) {
       if (sourcePath === undefined) {
+        refreshCatalogState();
         entries.clear();
         keysBySource.clear();
         serverCatalogStore.invalidate();
       } else {
+        refreshCatalogGeneration();
         const key = keysBySource.get(sourcePath);
         if (key) {
           entries.delete(key);

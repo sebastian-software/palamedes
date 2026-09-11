@@ -552,10 +552,54 @@ describe("createPalamedesRemixAssetLoader", () => {
       path.join(rootDir, "app", "locales", "de.po"),
       'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag {name}"\n',
     );
+    registry.invalidate();
     const next = await registry.load?.("de");
     expect(registry.generation?.()).not.toBe(generationBefore);
     expect(next).not.toBe(first);
     expect(Object.values(next ?? {})).toEqual([expect.any(Function)]);
+  });
+
+  it("keeps warm server catalog loads O(1) until explicit invalidation", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-server-catalog-warm-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello"\n',
+    );
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const first = await registry.load?.("de");
+    const generation = registry.generation?.();
+
+    for (let index = 0; index < 100; index += 1) {
+      expect(await registry.load?.("de")).toBe(first);
+    }
+
+    expect(registry.generation?.()).toBe(generation);
+
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
+    );
+    expect(await registry.load?.("de")).toBe(first);
+
+    registry.invalidate();
+    expect(await registry.load?.("de")).not.toBe(first);
   });
 
   it("honors browser-specific include and exclude filters", () => {
