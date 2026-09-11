@@ -94,7 +94,7 @@ const result = {
   mixedLocaleMs,
   sharedCatalog: {
     ...stats,
-    requestMessageEntriesAllocated: sharedRequestLoadEnumerations,
+    catalogEnumerationsDuringRequestLoads: sharedRequestLoadEnumerations,
     retainedHeapDeltaBytes: sharedHeap.deltaBytes,
   },
   perRequestMapBaseline: {
@@ -107,7 +107,7 @@ const result = {
   messageSizeSweep,
 };
 
-if (result.sharedCatalog.requestMessageEntriesAllocated !== 0) {
+if (result.sharedCatalog.catalogEnumerationsDuringRequestLoads !== 0) {
   throw new Error(
     "The shared-catalog regression guard detected catalog enumeration during request loads.",
   );
