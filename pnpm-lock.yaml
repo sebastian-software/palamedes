@@ -1300,6 +1300,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/waku':
+        specifier: workspace:^
+        version: link:../../packages/waku
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -1352,6 +1355,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/waku':
+        specifier: workspace:^
+        version: link:../../packages/waku
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -1404,6 +1410,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/waku':
+        specifier: workspace:^
+        version: link:../../packages/waku
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -1939,6 +1948,12 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@palamedes/vite-plugin':
+        specifier: workspace:^
+        version: link:../vite-plugin
+      hono:
+        specifier: ^4.13.5
+        version: 4.13.5
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
