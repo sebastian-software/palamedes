@@ -241,17 +241,24 @@ function readTagAttribute(
   tag: string,
   name: "nonce" | "src" | "type" | "integrity" | "crossorigin" | "referrerpolicy",
 ): string | undefined {
-  let index = tag.indexOf("<script") + "<script".length;
-  while (index >= "<script".length && index < tag.length) {
+  const scriptStart = tag.search(/<script\b/iu);
+  if (scriptStart < 0) return undefined;
+  let index = scriptStart + "<script".length;
+  while (index < tag.length) {
     while (/\s/u.test(tag[index] ?? "")) index += 1;
     if (tag[index] === ">" || index >= tag.length) break;
     const nameStart = index;
     while (index < tag.length && !/[\s=/>]/u.test(tag[index] ?? "")) index += 1;
+    if (index === nameStart) {
+      index += 1;
+      continue;
+    }
     const attributeName = tag.slice(nameStart, index).toLowerCase();
+    const afterName = index;
     while (/\s/u.test(tag[index] ?? "")) index += 1;
     if (tag[index] !== "=") {
       if (attributeName === name) return "";
-      while (index < tag.length && !/[\s>]/u.test(tag[index] ?? "")) index += 1;
+      index = afterName;
       continue;
     }
     index += 1;

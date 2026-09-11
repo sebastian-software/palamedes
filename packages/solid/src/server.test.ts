@@ -160,6 +160,34 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     );
   });
 
+  it("recognizes uppercase Solid tags after boolean attributes", async () => {
+    const html = `<html><head><SCRIPT ASYNC TYPE="module" SRC="${SOLID_CLIENT_ENTRY}"></SCRIPT></head><body></body></html>`;
+    const output = await transformDocument(html);
+
+    expect(output).toContain(`import("${SOLID_CLIENT_ENTRY}")`);
+    expect(output).not.toContain(`SRC="${SOLID_CLIENT_ENTRY}"`);
+  });
+
+  it("rejects boolean crossorigin and ignores quoted data-attribute spoofs", async () => {
+    const trustedHtml = `<html><head><SCRIPT ASYNC CROSSORIGIN TYPE="module" SRC="${SOLID_CLIENT_ENTRY}"></SCRIPT></head><body></body></html>`;
+    await expect(transformDocument(trustedHtml)).rejects.toThrow(/crossorigin/iu);
+
+    const foreignSource = "/assets/application.js";
+    const foreignHtml = `<html><head><SCRIPT DATA-SPOOF='type="module" src="${SOLID_CLIENT_ENTRY}" crossorigin' TYPE="module" SRC="${foreignSource}"></SCRIPT></head><body></body></html>`;
+    const output = await transformDocument(foreignHtml);
+
+    expect(output).toContain(
+      `<SCRIPT DATA-SPOOF='type="module" src="${SOLID_CLIENT_ENTRY}" crossorigin' TYPE="module" SRC="${foreignSource}"></SCRIPT>`,
+    );
+  });
+
+  it("advances past a self-closing script marker", async () => {
+    const html = `<html><head><script type="module" src="${SOLID_CLIENT_ENTRY}" /></script></head><body></body></html>`;
+    const output = await transformDocument(html);
+
+    expect(output).toContain(`import("${SOLID_CLIENT_ENTRY}")`);
+  });
+
   it("gates the generated Solid entry beneath a custom Vite base", async () => {
     const html =
       '<html><head><script type="module" src="/custom/base/assets/virtual_solid-ssr-entry-client-abc123.js"></script></head><body></body></html>';
