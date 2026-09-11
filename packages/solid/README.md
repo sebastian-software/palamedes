@@ -6,8 +6,9 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-0f172a.svg)](https://github.com/sebastian-software/palamedes#license)
 
 Use this package when your Solid app wants translated JSX that feels native to
-Solid: `Trans`, `Plural`, `Select`, and `SelectOrdinal`, plus a small headless
-helper layer for locale-aware UI.
+Solid: the parser-free `Trans` runtime component, compile-time `Plural`,
+`Select`, and `SelectOrdinal` macros, plus a small headless helper layer for
+locale-aware UI.
 
 Palamedes keeps the runtime model provider-free. Transformed code resolves the
 active i18n instance through `getI18n()` from
@@ -64,22 +65,36 @@ components that depend on raw ICU parsing must migrate to compiled messages. Ric
 `FlowComponent<{}, Element>` functions and receive their nested content through
 `props.children`.
 
-## Runtime Components
+## Runtime and macro entry points
 
-Besides the macro entry point, the package's main entry exports the runtime
-components `Trans`, `Plural`, `Select`, and `SelectOrdinal`. These are what
-macro-transformed JSX renders through, and all of them resolve messages through
-the active i18n instance. The choice components accept plural categories
-(`zero` … `other`), exact matches written as `_0`/`_1`/… (normalized to ICU
-`=N`, mirroring the macro transform), and `offset`; invalid option props and
-option text with unbalanced braces are rejected with a descriptive error
-instead of silently misrendering.
+The package root exports the parser-free runtime `Trans` and the headless
+locale-switch helpers. Macro-transformed JSX renders through that runtime and
+reads the active i18n instance.
+
+`Plural`, `Select`, and `SelectOrdinal` are compile-time components. Import
+them from `@palamedes/solid/macro`; the transform lowers them to the parser-free
+runtime before the application runs. The package root does not export choice
+components or a runtime parser for hand-written choice trees:
+
+```tsx
+import { Plural } from "@palamedes/solid/macro";
+
+export function AttendeeCount(props: { count: () => number }) {
+  return <Plural value={props.count()} one="# attendee" other="# attendees" />;
+}
+```
+
+Choice macros accept plural categories (`zero` … `other`), exact matches
+written as `_0`/`_1`/… (normalized to ICU `=N`), and `offset`. Invalid option
+props and option text with unbalanced braces are rejected during compilation.
 
 `offset` maps to ICU `offset:N` and covers "and N others" sentences, where the
 number shown is smaller than the number counted:
 
 ```tsx
-<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />
+import { Plural } from "@palamedes/solid/macro";
+
+<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />;
 ```
 
 Exact `_N` keys match the raw value; plural categories select on
@@ -152,8 +167,10 @@ return serverI18nScope.run(i18n, () => next());
 state isolated while sharing compiled catalog content between requests. The
 delivery middleware's default initial error document contains only a reload
 and home link; pass trusted `errorHtml` when the host needs a different
-catalog-free document. A `nonce` adds the same CSP nonce to import maps,
-readiness/bootstrap code, and Solid's inline hydration scripts. Avoid
+catalog-free document. The adapter's `nonce` applies only to its own import
+map and readiness/bootstrap delivery tags. Solid's `HydrationScript` and
+`renderToStream` own framework hydration scripts; pass the host request nonce
+to those Solid APIs as well when the document uses a nonce-based CSP. Avoid
 importing `.po` files, the parser, or a catalog virtual module in application
 code; author messages with `@palamedes/solid/macro` and
 `@palamedes/core/macro` so the compiler emits compiled-only runtime calls.

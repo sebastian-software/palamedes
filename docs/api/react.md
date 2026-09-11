@@ -6,15 +6,9 @@ points, and headless locale-switch helpers.
 ## Exports
 
 - `Trans`
-- `Plural`
-- `Select`
-- `SelectOrdinal`
 - `buildLocaleSwitchItems(options)`
 - `Fragment`
 - `TransProps`
-- `PluralProps`
-- `SelectProps`
-- `SelectOrdinalProps`
 - `BuildLocaleSwitchItemsOptions`
 - `LocaleSwitchItem`
 
@@ -57,20 +51,26 @@ import { Trans } from "@palamedes/react";
 For authoring source strings, prefer macro imports from
 `@palamedes/react/macro` so the build can extract and transform messages.
 
-## Choice Components
+## Choice macros
 
-`Plural`, `Select`, and `SelectOrdinal` take the branch text as props: plural
-categories (`zero`, `one`, `two`, `few`, `many`, `other`) and exact matches
-spelled `_0`, `_1`, … because a JSX attribute cannot start with `=`. Exact
-matches are normalized to ICU `=N`, mirroring the macro transform. `other` is
-required.
+`Plural`, `Select`, and `SelectOrdinal` are compile-time components. Import
+them from `@palamedes/react/macro`; they are transformed into the parser-free
+runtime before the application runs. The package root does not export choice
+components or a runtime parser for hand-written choice trees.
+
+Choice macros take branch text as props: plural categories (`zero`, `one`,
+`two`, `few`, `many`, `other`) and exact matches spelled `_0`, `_1`, … because
+a JSX attribute cannot start with `=`. Exact matches are normalized to ICU
+`=N`, mirroring the macro transform. `other` is required.
 
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern. Use it for "and N others" sentences where the number shown
 is smaller than the number counted:
 
 ```tsx
-<Plural value={attendees} offset={1} _0="nobody else" one="# other" other="# others" />
+import { Plural } from "@palamedes/react/macro";
+
+<Plural value={attendees} offset={1} _0="nobody else" one="# other" other="# others" />;
 ```
 
 - exact `_N` / `=N` keys match the **raw** value, before the offset is

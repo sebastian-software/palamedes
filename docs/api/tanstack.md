@@ -42,10 +42,11 @@ immutable server store, and production document delivery; the application
 supplies locale policy only.
 
 The resolver receives the original Fetch `Request`, including headers and
-cookies. It owns locale negotiation, catalog loading, and creation of a fresh
-i18n instance; Palamedes owns activation and cleanup. An initializer failure
-stops the server function and throws an error beginning `Palamedes TanStack
-i18n initialization failed`, with the original cause attached.
+cookies, and owns locale negotiation only. The adapter loads the configured
+compiled catalog for that locale and creates the fresh i18n instance;
+applications do not import catalogs or maintain loader maps. An initializer
+failure stops the server function and throws an error beginning `Palamedes
+TanStack i18n initialization failed`, with the original cause attached.
 
 Start invokes this boundary before page rendering and before decoding a server
 function. The scope stays active through awaited `next()`, including validation,
@@ -53,6 +54,23 @@ handler work, and synchronous, asynchronous, or cross-module helpers that call
 translated code. Production HTML receives the active locale import map and
 readiness probe before route modules execute; the default client directory is
 `dist/client`.
+
+## CSP and route-local server functions
+
+When the host uses a nonce-based CSP, pass the request nonce to TanStack
+Router's native `ssr.nonce` option and pass the same value to the adapter's
+`catalogDelivery.nonce` option. The router owns its framework scripts; the
+adapter owns its generated import map and catalog-readiness scripts. Keeping
+one request nonce for both preserves CSP coverage without authoring inline
+scripts in the application.
+
+For a route-locale application, a `createServerFn()` request targets the
+server-function endpoint rather than the page URL. Do not derive its locale
+from `Referer`: a `no-referrer` policy removes that signal, and it is not an
+authoritative locale source. Send the selected route locale in an explicit
+request header (for example, `x-palamedes-locale`) and have the application
+locale resolver validate that header against its own locale controls. The
+header carries policy only; catalog loading remains adapter-owned.
 
 ## SSR page rendering
 

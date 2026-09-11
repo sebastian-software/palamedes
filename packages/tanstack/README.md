@@ -52,6 +52,18 @@ If the resolver fails, the server function does not run and the middleware
 throws an error beginning `Palamedes TanStack i18n initialization failed`, with
 the original cause attached.
 
+For a nonce-based CSP, give TanStack Router's native `ssr.nonce` option and the
+adapter's `catalogDelivery.nonce` option the same request nonce. The router
+owns its framework scripts; the adapter owns its generated import map and
+catalog-readiness tags.
+
+With a route-locale strategy, a `createServerFn()` request reaches the
+server-function endpoint and may have no `Referer` under a `no-referrer`
+policy. Send the selected locale in an explicit request header such as
+`x-palamedes-locale`, and validate it in the application's locale resolver.
+That header carries locale policy only; the adapter still loads the configured
+compiled catalog.
+
 ## SSR page rendering
 
 The request middleware also owns SSR, so the server entry only needs to call the
