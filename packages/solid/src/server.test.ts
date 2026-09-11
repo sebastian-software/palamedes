@@ -142,6 +142,24 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).not.toContain('nonce="solid-test" src="/assets/application.js"');
   });
 
+  it("rejects a trusted Solid entry with fetch security attributes", async () => {
+    const html = `<html><head><script type="module" src="${SOLID_CLIENT_ENTRY}" integrity="sha256-test" crossorigin="anonymous" referrerpolicy="no-referrer"></script></head><body></body></html>`;
+
+    await expect(transformDocument(html)).rejects.toThrow(
+      /unsupported fetch attributes: integrity, crossorigin, referrerpolicy/iu,
+    );
+  });
+
+  it("leaves foreign entries with fetch security attributes unchanged", async () => {
+    const source = "/assets/application.js";
+    const html = `<html><head><script type="module" src="${source}" integrity="sha256-test" crossorigin="anonymous" referrerpolicy="no-referrer"></script></head><body></body></html>`;
+    const output = await transformDocument(html);
+
+    expect(output).toContain(
+      `<script type="module" src="${source}" integrity="sha256-test" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`,
+    );
+  });
+
   it("gates the generated Solid entry beneath a custom Vite base", async () => {
     const html =
       '<html><head><script type="module" src="/custom/base/assets/virtual_solid-ssr-entry-client-abc123.js"></script></head><body></body></html>';

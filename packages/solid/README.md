@@ -156,8 +156,11 @@ request-scoped context containing a server-generated nonce; do not derive it
 from an arbitrary client-supplied header. A `nonce` adds the same CSP nonce to
 Palamedes import maps and readiness/bootstrap code. The host must pass that
 nonce to Solid's native SSR renderer for its inline hydration scripts. Avoid
-importing `.po` files, the parser, or a catalog virtual module in application
-code; author messages with `@palamedes/solid/macro` and
+putting `integrity`, `crossorigin`, or `referrerpolicy` on the Solid client
+entry: the adapter rejects those entries because its dynamic import gate cannot
+preserve their fetch semantics. Keep such entries outside this delivery path.
+Also avoid importing `.po` files, the parser, or a catalog virtual module in
+application code; author messages with `@palamedes/solid/macro` and
 `@palamedes/core/macro` so the compiler emits compiled-only runtime calls.
 
 ## Related Docs
