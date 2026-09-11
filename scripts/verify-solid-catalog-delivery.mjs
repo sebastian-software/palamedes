@@ -1,8 +1,72 @@
+import { spawn } from "node:child_process";
+import { createServer, request as httpRequest } from "node:http";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { chromium } from "@playwright/test";
 
-const baseUrl = process.env.PALAMEDES_SOLID_URL ?? "http://127.0.0.1:4061/";
-const cspUrl = process.env.PALAMEDES_SOLID_CSP_URL;
+const root = path.dirname(fileURLToPath(new URL("../", import.meta.url)));
+const example = path.join(root, "examples/solid-cookie");
+const ownsHost = !process.env.PALAMEDES_SOLID_URL;
+const hostPort = Number(process.env.PALAMEDES_SOLID_PORT ?? 4061);
+const cspPort = Number(process.env.PALAMEDES_SOLID_CSP_PORT ?? 4063);
+const baseUrl = process.env.PALAMEDES_SOLID_URL ?? `http://127.0.0.1:${hostPort}/`;
+let cspUrl = process.env.PALAMEDES_SOLID_CSP_URL;
 const locales = ["en", "de"];
+
+function run(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: root, stdio: "inherit", ...options });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with ${code ?? signal}`));
+    });
+  });
+}
+
+async function waitForHost(url, child) {
+  const deadline = Date.now() + 45_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) throw new Error(`Solid host exited with ${child.exitCode}`);
+    try {
+      const response = await fetch(url);
+      if (response.status < 500) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Solid host did not become ready: ${url}`);
+}
+
+function createCspProxy(targetUrl, port) {
+  const nonce = process.env.PALAMEDES_CSP_NONCE ?? "palamedes-solid-csp";
+  const server = createServer((request, response) => {
+    const target = new URL(request.url ?? "/", targetUrl);
+    const upstream = httpRequest(
+      target,
+      {
+        method: request.method,
+        headers: { ...request.headers, host: target.host },
+      },
+      (upstreamResponse) => {
+        const headers = { ...upstreamResponse.headers };
+        delete headers["content-length"];
+        headers["content-security-policy"] =
+          `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'`;
+        response.writeHead(upstreamResponse.statusCode ?? 502, headers);
+        upstreamResponse.pipe(response);
+      },
+    );
+    upstream.on("error", (error) => {
+      if (!response.headersSent) response.writeHead(502);
+      response.end(String(error));
+    });
+    request.pipe(upstream);
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => resolve(server));
+  });
+}
 
 function localeHeaders(locale) {
   return { Cookie: `locale=${locale}` };
@@ -138,10 +202,37 @@ async function csp() {
   }
 }
 
-for (const locale of locales) {
-  await initialFailure(locale, "abort");
-  await initialFailure(locale, "eval");
-  await normalAndLazyFailure(locale, "abort");
-  await normalAndLazyFailure(locale, "eval");
+let host;
+let cspProxy;
+try {
+  if (ownsHost) {
+    await run("pnpm", ["--filter", "@palamedes/example-solid-cookie", "build"]);
+    const hostBinary = path.join(example, "node_modules/.bin/vite");
+    host = spawn(hostBinary, ["preview", "--host", "127.0.0.1", "--port", String(hostPort)], {
+      cwd: example,
+      env: {
+        ...process.env,
+        PALAMEDES_CSP_NONCE: process.env.PALAMEDES_CSP_NONCE ?? "palamedes-solid-csp",
+      },
+      stdio: "inherit",
+    });
+    await waitForHost(baseUrl, host);
+    cspProxy = await createCspProxy(baseUrl, cspPort);
+    cspUrl = `http://127.0.0.1:${cspPort}/`;
+  } else if (!cspUrl) {
+    throw new Error(
+      "CSP proof requires PALAMEDES_SOLID_CSP_URL from a host with a nonce CSP header",
+    );
+  }
+
+  for (const locale of locales) {
+    await initialFailure(locale, "abort");
+    await initialFailure(locale, "eval");
+    await normalAndLazyFailure(locale, "abort");
+    await normalAndLazyFailure(locale, "eval");
+  }
+  await csp();
+} finally {
+  if (cspProxy) await new Promise((resolve) => cspProxy.close(resolve));
+  if (host && host.exitCode === null) host.kill("SIGTERM");
 }
-await csp();
