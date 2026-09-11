@@ -160,6 +160,51 @@ try {
       expectText(enPage, "server-rendered-message", "Server render confirmed locale."),
     ]);
     await Promise.all([deContext.close(), enContext.close()]);
+
+    const initialFailureContext = await browser.newContext();
+    try {
+      await initialFailureContext.addCookies([{ name: "locale", value: "de", url: baseUrl }]);
+      const initialFailurePage = await initialFailureContext.newPage();
+      await initialFailurePage.route("**/assets/palamedes-m-*.de-*.js", (route) => route.abort());
+      await initialFailurePage.goto(baseUrl);
+      await initialFailurePage.getByRole("alert").waitFor({ state: "visible", timeout: 10_000 });
+      if (!(await initialFailurePage.getByText("Reload page").isVisible())) {
+        throw new Error(
+          "An initial catalog failure did not render the catalog-independent recovery UI.",
+        );
+      }
+      await initialFailurePage.unroute("**/assets/palamedes-m-*.de-*.js");
+      await initialFailurePage.reload();
+      await expectText(
+        initialFailurePage,
+        "server-rendered-message",
+        "Server-Rendern bestätigte Sprache.",
+      );
+    } finally {
+      await initialFailureContext.close();
+    }
+
+    const lazyFailureContext = await browser.newContext();
+    try {
+      await lazyFailureContext.addCookies([{ name: "locale", value: "en", url: baseUrl }]);
+      const lazyFailurePage = await lazyFailureContext.newPage();
+      await lazyFailurePage.route("**/assets/lazy-browser-message-*.js", (route) => route.abort());
+      await lazyFailurePage.goto(baseUrl);
+      await lazyFailurePage.getByTestId("lazy-browser-trigger").click();
+      await lazyFailurePage
+        .getByTestId("lazy-browser-error")
+        .waitFor({ state: "visible", timeout: 10_000 });
+      await lazyFailurePage.unroute("**/assets/lazy-browser-message-*.js");
+      await lazyFailurePage.reload();
+      await lazyFailurePage.getByTestId("lazy-browser-trigger").click();
+      await expectText(
+        lazyFailurePage,
+        "lazy-browser-message",
+        "Lazy browser fragment confirmed locale.",
+      );
+    } finally {
+      await lazyFailureContext.close();
+    }
   } finally {
     await browser.close();
   }
