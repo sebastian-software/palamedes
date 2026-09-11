@@ -102,11 +102,13 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/server-test.test.ts src/server-unavailable.test.ts",
+    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts",
     "stub": "unbuild --stub"
   },
+  "dependencies": {
+    "@palamedes/core": "workspace:^"
+  },
   "devDependencies": {
-    "@palamedes/core": "workspace:^",
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",

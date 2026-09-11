@@ -112,6 +112,39 @@ For a fuller walkthrough, including Hono and Express examples, see:
 
 - [Palamedes in backend servers](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 
+### Shared server catalog loads
+
+Adapters that load generated catalogs dynamically can share complete immutable
+catalogs within one Node process:
+
+```ts
+import { createI18n } from "@palamedes/core";
+import { createServerCatalogStore } from "@palamedes/runtime/server";
+
+const catalogs = createServerCatalogStore({
+  async load({ locale, generation }) {
+    const fragments = await loadGeneratedCatalogFragments(locale, generation);
+    return fragments;
+  },
+});
+
+const messages = await catalogs.load(requestLocale);
+const i18n = createI18n({ locale: requestLocale, timeZone: requestTimeZone });
+i18n.load(requestLocale, messages);
+```
+
+The loader runs once for concurrent requests for a locale and its ordered
+compiled fragments are merged once per development generation. Later requests
+reuse the frozen message functions and constants; request-local locale, time
+zone, and i18n instances remain independent. Call `invalidate(locale)` after a
+catalog or configuration edit so a new generation can load without letting an
+older in-flight result replace it. Loader failures are evicted and can be
+retried by the next request.
+
+The ESM module loader may retain every locale module evaluated during a process
+lifetime. The store therefore makes no bounded-LRU or external-cache promise;
+hosts should choose their locale set and process lifetime accordingly.
+
 ## API
 
 - `getI18n()`

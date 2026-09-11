@@ -1771,10 +1771,11 @@ importers:
         version: 4.1.11(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/runtime:
-    devDependencies:
+    dependencies:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../core
+    devDependencies:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3

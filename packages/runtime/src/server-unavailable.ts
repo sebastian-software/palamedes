@@ -1,6 +1,13 @@
 import type { CreateServerI18nScopeOptions, I18nInstance, ServerI18nScope } from "./index";
+import type { ServerCatalogLoader, ServerCatalogStore } from "./serverCatalog";
 
 export type { CreateServerI18nScopeOptions, ServerI18nScope } from "./index";
+export type {
+  ServerCatalogLoadContext,
+  ServerCatalogLoader,
+  ServerCatalogStore,
+  ServerCatalogStoreStats,
+} from "./serverCatalog";
 
 export type ServerI18nResolver<T extends I18nInstance = I18nInstance> = (
   request: Request,
@@ -28,5 +35,11 @@ export function createScopedI18nRunner<T extends I18nInstance = I18nInstance>(
   _resolveI18n: ServerI18nResolver<T>,
   _options: CreateScopedI18nRunnerOptions,
 ): ScopedI18nRunner<T> {
+  throw new Error(SERVER_RUNTIME_UNAVAILABLE_MESSAGE);
+}
+
+export function createServerCatalogStore<TLocale extends string = string>(_options: {
+  load: ServerCatalogLoader<TLocale>;
+}): ServerCatalogStore<TLocale> {
   throw new Error(SERVER_RUNTIME_UNAVAILABLE_MESSAGE);
 }
