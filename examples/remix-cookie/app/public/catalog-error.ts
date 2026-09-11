@@ -19,9 +19,11 @@ window.addEventListener(
   "error",
   (event) => {
     const target = event.target;
+    const assetUrl = event instanceof ErrorEvent ? event.filename : "";
     if (
-      target instanceof HTMLScriptElement &&
-      target.src.includes("/assets/app/public/client.tsx")
+      (target instanceof HTMLScriptElement &&
+        target.src.includes("/assets/app/public/client.tsx")) ||
+      /\/assets\/(?:app\/public\/client\.tsx|__palamedes\/catalog-fragments\/)/u.test(assetUrl)
     ) {
       renderCatalogFailure();
     }

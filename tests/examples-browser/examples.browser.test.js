@@ -241,13 +241,34 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
   }
 
   const page = await launchPage([]);
-  let failure = "network";
+  let failure = "entry-network";
+  const cspViolations = [];
+  page.on("console", (message) => {
+    if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text())) {
+      cspViolations.push(message.text());
+    }
+  });
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      headers: {
+        ...response.headers(),
+        "content-security-policy":
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'",
+      },
+    });
+  });
   await page.route("**/assets/app/public/client.tsx", async (route) => {
-    if (failure === "network") {
+    if (failure === "entry-network") {
       await route.abort("failed");
       return;
     }
-    if (failure === "evaluation") {
+    if (failure === "entry-evaluation") {
       await route.fulfill({
         body: 'throw new Error("injected Remix entry evaluation failure");',
         contentType: "application/javascript",
@@ -257,10 +278,25 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
     }
     await route.continue();
   });
+  await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
+    if (failure === "fragment-network") {
+      await route.abort("failed");
+      return;
+    }
+    if (failure === "fragment-evaluation") {
+      await route.fulfill({
+        body: 'throw new Error("injected Remix catalog fragment evaluation failure");',
+        contentType: "application/javascript",
+        status: 200,
+      });
+      return;
+    }
+    await route.continue();
+  });
 
   await page.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("catalog-error")).toBeVisible();
-  await expect(page.getByTestId("catalog-error")).toContainText(
+  await page.getByTestId("catalog-error").waitFor({ state: "visible" });
+  expect(await page.getByTestId("catalog-error").textContent()).toContain(
     "Translations are temporarily unavailable",
   );
 
@@ -268,14 +304,31 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
   await page.getByTestId("catalog-error-reload").click();
   await waitForClientReady(page);
 
-  failure = "evaluation";
+  failure = "entry-evaluation";
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("catalog-error")).toBeVisible();
-  await expect(page.getByTestId("catalog-error-reload")).toBeVisible();
+  await page.getByTestId("catalog-error").waitFor({ state: "visible" });
+  await page.getByTestId("catalog-error-reload").waitFor({ state: "visible" });
 
   failure = "ok";
   await page.getByTestId("catalog-error-reload").click();
   await waitForClientReady(page);
+
+  failure = "fragment-network";
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByTestId("catalog-error").waitFor({ state: "visible" });
+
+  failure = "ok";
+  await page.getByTestId("catalog-error-reload").click();
+  await waitForClientReady(page);
+
+  failure = "fragment-evaluation";
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByTestId("catalog-error").waitFor({ state: "visible" });
+
+  failure = "ok";
+  await page.getByTestId("catalog-error-reload").click();
+  await waitForClientReady(page);
+  expect(cspViolations).toEqual([]);
 });
 
 test("Waku initial HTML document uses the request locale", async () => {
