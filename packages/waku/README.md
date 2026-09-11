@@ -60,7 +60,7 @@ It must return a fresh activated i18n instance for each request.
 ```ts
 // src/pages/_interceptors/palamedes.server.ts
 import { createWakuI18nInterceptor } from "@palamedes/waku";
-import { createRequestI18n } from "../lib/i18n.server";
+import { createRequestI18n } from "../../lib/i18n.server";
 
 export default createWakuI18nInterceptor(async (request) => {
   return await createRequestI18n(request);

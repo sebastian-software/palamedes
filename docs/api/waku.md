@@ -25,8 +25,14 @@ files from an RSC or browser module.
 ```ts
 // src/lib/i18n.server.ts
 import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { locales } from "./i18n";
 
-export function createRequestI18n(locale: string) {
+export function createRequestI18n(request: Request) {
+  const { locale } = locales.resolve({
+    strategy: "cookie",
+    acceptLanguageHeader: request.headers.get("accept-language"),
+    cookieHeader: request.headers.get("cookie"),
+  });
   return createViteServerI18n({ locale });
 }
 ```
@@ -72,7 +78,7 @@ the interceptor.
 ```ts
 // src/pages/_interceptors/palamedes.server.ts
 import { createWakuI18nInterceptor } from "@palamedes/waku";
-import { createRequestI18n } from "../lib/i18n.server";
+import { createRequestI18n } from "../../lib/i18n.server";
 
 export default createWakuI18nInterceptor(async (request) => {
   return await createRequestI18n(request);
@@ -80,8 +86,9 @@ export default createWakuI18nInterceptor(async (request) => {
 ```
 
 The resolver receives Waku's original Fetch `Request`, including headers and
-cookies. It owns locale negotiation, catalog loading, and creation of a fresh
-i18n instance; Palamedes owns activation and cleanup. If it fails, the action
+cookies. It resolves the application locale and delegates catalog loading and
+instance creation to `createViteServerI18n`; the interceptor owns activation
+and cleanup. If it fails, the action
 body does not run and the server throws an error beginning `Palamedes Waku i18n
 initialization failed` with the original cause attached.
 
