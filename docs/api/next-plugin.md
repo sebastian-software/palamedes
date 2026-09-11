@@ -70,12 +70,12 @@ Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
 file below a dot-directory is transformed and participates in
 `failOnMissing` validation.
 
-Production output keeps authored source fallbacks by default so deploy skew or
-a missing split catalog remains readable. Set `keepSourceFallbacks: false` only
-when bundle size or source-text exposure outweighs that resilience; then a
-missing entry renders its compiled id. The parser-free runtime intentionally
-does not parse retained ICU source patterns, so use `@palamedes/core` if a
-fallback must interpolate and use `onMissing` to measure misses.
+`keepSourceFallbacks` retains its legacy option name and defaults to `true`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: false` for compact output without authored source text.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
 
 ## Usage
 
@@ -218,12 +218,12 @@ Palamedes intentionally provides no in-document locale-switching mode. See
 [Locale strategies](../locale-strategies.md#unsupported-root-key-escape-hatch)
 for the unsupported root-key escape hatch and its limitations.
 
-Production output retains authored messages by default, so a missing catalog
-fragment stays readable during a staggered deploy. It still omits translator
-comments and context metadata from runtime descriptors. Set
-`keepSourceFallbacks: false` to opt into smaller, hash-only output when source
-text cannot ship. The option is forwarded identically to the Turbopack and
-webpack transform loaders.
+`keepSourceFallbacks` retains its legacy option name and defaults to `true`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: false` for compact output without authored source text.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
 
 Production does not immediately retry a rejected fragment import. This is a
 deliberate trade-off: likely deterministic CDN, ad-blocker, or stale-deploy

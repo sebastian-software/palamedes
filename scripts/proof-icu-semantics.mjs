@@ -25,10 +25,11 @@ const {
   compileCatalogArtifact,
   extractMessagesNative,
   parsePo,
+  renderCatalogModule,
   transformMacrosNative,
   updateCatalogFile,
 } = coreNode;
-const { createI18n, parseMessagePattern } = core;
+const { createI18n } = core;
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-icu-proof-"));
 
@@ -114,12 +115,6 @@ export function getI18n() {
     "the translated ICU message changed during the catalog update",
   );
 
-  assert.deepEqual(
-    semanticShape(parseMessagePattern(expected.translation)),
-    semanticShape(parseMessagePattern(expected.message)),
-    "the translation changed the ICU selector structure",
-  );
-
   const artifact = compileCatalogArtifact(
     {
       rootDir: tempRoot,
@@ -151,8 +146,18 @@ export function getI18n() {
     "catalog compilation changed the translation",
   );
 
+  const generatedCatalogPath = path.join(tempRoot, "de-catalog.mjs");
+  const generatedCatalog = renderCatalogModule(artifact.messages).replace(
+    '"@palamedes/core/compiled"',
+    JSON.stringify(
+      pathToFileURL(path.join(repoRoot, "packages", "core", "dist", "compiled.mjs")).href,
+    ),
+  );
+  await writeFile(generatedCatalogPath, generatedCatalog, "utf8");
+  const { messages: compiledCatalog } = await import(pathToFileURL(generatedCatalogPath).href);
+
   const i18n = createI18n();
-  i18n.load("de", artifact.messages);
+  i18n.load("de", compiledCatalog);
   i18n.activate("de");
 
   globalThis[runtimeSymbol] = i18n;
@@ -182,7 +187,7 @@ export function getI18n() {
         pipeline: ["source", "extraction", "transform", "po-catalog", "compile", "runtime"],
         messageSha256: sha256(expected.message),
         translationSha256: sha256(expected.translation),
-        selectorShape: semanticShape(parseMessagePattern(expected.message)),
+        selectorShape: "validated by native compilation and runtime scenarios",
         runtimeScenarios: expected.scenarios.length,
       },
       null,
@@ -204,47 +209,6 @@ function toCatalogPlaceholders(placeholders) {
   }
 
   return Object.fromEntries(Object.entries(placeholders).map(([name, value]) => [name, [value]]));
-}
-
-function semanticShape(nodes) {
-  return nodes.map((node) => {
-    switch (node.type) {
-      case "text":
-        return {
-          type: "text",
-          poundSigns: [...node.value].filter((character) => character === "#").length,
-        };
-      case "variable":
-        return { type: "variable", variable: node.variable };
-      case "formatted":
-        return {
-          type: "formatted",
-          variable: node.variable,
-          format: node.format,
-          style: node.style ?? null,
-        };
-      case "tag":
-        return {
-          type: "tag",
-          name: node.name,
-          children: semanticShape(node.children),
-        };
-      case "choice":
-        return {
-          type: "choice",
-          variable: node.variable,
-          kind: node.kind,
-          offset: node.offset ?? 0,
-          options: Object.fromEntries(
-            Object.entries(node.options)
-              .sort(([left], [right]) => left.localeCompare(right))
-              .map(([key, children]) => [key, semanticShape(children)]),
-          ),
-        };
-    }
-
-    throw new Error(`Unsupported ICU node type: ${node.type}`);
-  });
 }
 
 function sha256(value) {

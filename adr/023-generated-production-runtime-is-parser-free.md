@@ -109,7 +109,13 @@ expose one compiled implementation without another package or version boundary.
 
 ## Implementation status
 
-The `compiled` entrypoints already provide the parser-free path. Package-root
-compatibility, parser-dependent examples, Remix delivery, and legacy generated
-fallbacks have not yet been migrated. This ADR records the accepted target,
-not a claim that those implementation changes have shipped.
+The current v2 migration has converged the Core, React, Solid, Next and Vite
+application roots on the parser-free compiled runtime, with public ESM/CJS
+checks guarding the absence of parser exports and browser parser code. Remix
+server catalogs are now required to be generated `CompiledCatalogMessages`, and
+the old inert serialized ICU bootstrap is rejected with an explicit #1214
+asset-pipeline diagnostic. Remix executable browser delivery, active-locale
+asset selection and lazy host integration remain open work in #1214; shared
+server catalog loading remains coordinated with #1207. This ADR records the
+implemented runtime boundary and the remaining host migration work, not a claim
+that the complete Remix delivery slice has shipped.

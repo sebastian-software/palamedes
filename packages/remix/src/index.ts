@@ -37,10 +37,11 @@ export type PalamedesRemixRegisterOptions = {
   runtimeModule?: string;
 
   /**
-   * Preserve authored source messages as runtime fallbacks.
+   * Preserve authored source messages as diagnostic metadata only.
    * Defaults to `true` in every environment. Set to `false` for compact,
    * hash-only output when bundle size or embedding authored source text is a
    * concern.
+   * V2 runtime misses throw; this metadata never provides replacement output.
    */
   keepSourceFallbacks?: boolean;
 

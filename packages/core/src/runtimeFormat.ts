@@ -29,7 +29,7 @@ export function formatMessageArgument(
   if (format === "number") {
     const numericValue = normalizeFormattedNumberValue(value);
     if (numericValue === undefined) {
-      return stringifyValue(value);
+      throw new TypeError("Expected a finite numeric value for a compiled number formatter.");
     }
 
     return getNumberFormatter(locale, style).format(numericValue);
@@ -37,7 +37,7 @@ export function formatMessageArgument(
 
   const dateValue = normalizeDateValue(value);
   if (!dateValue) {
-    return stringifyValue(value);
+    throw new TypeError("Expected a valid date value for a compiled date/time formatter.");
   }
 
   const formatterTimeZone = isDateOnlyIsoString(value) ? "UTC" : timeZone;
@@ -64,12 +64,8 @@ function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatO
     return { maximumFractionDigits: 0 };
   }
 
-  if (!normalized.startsWith("::")) {
-    return {};
-  }
-
-  if (!skeleton.startsWith("currency/")) {
-    return {};
+  if (!normalized.startsWith("::currency/")) {
+    throw new RangeError(`Unsupported compiled number style ${JSON.stringify(style)}.`);
   }
 
   const currency = skeleton.slice("currency/".length).trim().toUpperCase();
@@ -80,7 +76,7 @@ function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatO
     };
   }
 
-  return {};
+  throw new RangeError(`Unsupported compiled currency style ${JSON.stringify(style)}.`);
 }
 
 function normalizeDateValue(value: unknown): Date | undefined {
@@ -125,6 +121,8 @@ function normalizeDateTimeStyle(
     return style;
   }
 
+  if (style !== undefined && style.trim() !== "")
+    throw new RangeError(`Unsupported compiled ${format} style ${JSON.stringify(style)}.`);
   return format === "time" ? "short" : undefined;
 }
 
@@ -212,9 +210,7 @@ export function stringifyValue(value: unknown): string {
   }
 
   if (value instanceof Date) {
-    // An invalid Date degrades to "Invalid Date" instead of letting
-    // toISOString() throw and abort adapter rendering.
-    return Number.isNaN(value.getTime()) ? String(value) : value.toISOString();
+    return value.toISOString();
   }
 
   return String(value);

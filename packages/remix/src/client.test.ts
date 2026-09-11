@@ -1,4 +1,4 @@
-import { createI18n } from "@palamedes/core";
+import { createI18n, defineCompiledCatalog } from "@palamedes/core";
 import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,7 +15,7 @@ describe("Remix client i18n bootstrap", () => {
     vi.unstubAllGlobals();
   });
 
-  it("installs the document catalog before translated browser code runs", () => {
+  it("rejects inert document catalogs until the Remix asset pipeline is used", () => {
     vi.stubGlobal("window", {});
     const document = createBootstrapDocument("de", {
       locale: "de",
@@ -23,10 +23,10 @@ describe("Remix client i18n bootstrap", () => {
       messages: { greeting: "Hallo {name}" },
     });
 
-    const i18n = initializeRemixClientI18n({ createI18n, document });
-
-    expect(i18n.locale).toBe("de");
-    expect(getI18n()._("greeting", { name: "Ada" })).toBe("Hallo Ada");
+    expect(() => initializeRemixClientI18n({ createI18n, document })).toThrow(
+      /inert serialized ICU catalog.*asset pipeline.*#1214/u,
+    );
+    expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });
 
   it("supports an explicit payload for custom document and CSP integrations", () => {
@@ -37,7 +37,7 @@ describe("Remix client i18n bootstrap", () => {
       bootstrap: {
         locale: "en",
         catalogVersion: "deployment-42",
-        messages: { greeting: "Hello" },
+        messages: defineCompiledCatalog({ greeting: "Hello" }),
       },
     });
 
@@ -65,34 +65,40 @@ describe("Remix client i18n bootstrap", () => {
 
     initializeRemixClientI18n({
       createI18n,
-      document: createBootstrapDocument("en", {
+      document: createBootstrapDocument("en", undefined),
+      bootstrap: {
         locale: "en",
         catalogVersion: "en-v1",
-        messages: { greeting: "Hello" },
-      }),
+        messages: defineCompiledCatalog({ greeting: "Hello" }),
+      },
     });
     expect(getI18n()._("greeting")).toBe("Hello");
 
     resetI18nRuntime();
     initializeRemixClientI18n({
       createI18n,
-      document: createBootstrapDocument("de", {
+      document: createBootstrapDocument("de", undefined),
+      bootstrap: {
         locale: "de",
         catalogVersion: "de-v1",
-        messages: { greeting: "Hallo" },
-      }),
+        messages: defineCompiledCatalog({ greeting: "Hallo" }),
+      },
     });
     expect(getI18n()._("greeting")).toBe("Hallo");
   });
 
   it("requires a full navigation instead of replacing a catalog in one document", () => {
     vi.stubGlobal("window", {});
-    const document = createBootstrapDocument("en", {
-      locale: "en",
-      catalogVersion: "en-v1",
-      messages: { greeting: "Hello" },
+    const document = createBootstrapDocument("en", undefined);
+    initializeRemixClientI18n({
+      createI18n,
+      document,
+      bootstrap: {
+        locale: "en",
+        catalogVersion: "en-v1",
+        messages: defineCompiledCatalog({ greeting: "Hello" }),
+      },
     });
-    initializeRemixClientI18n({ createI18n, document });
 
     expect(() =>
       initializeRemixClientI18n({
@@ -101,7 +107,7 @@ describe("Remix client i18n bootstrap", () => {
         bootstrap: {
           locale: "en",
           catalogVersion: "en-v2",
-          messages: { greeting: "Hello again" },
+          messages: defineCompiledCatalog({ greeting: "Hello again" }),
         },
       }),
     ).toThrow(/cannot replace catalog.*full document navigation/u);
@@ -173,6 +179,9 @@ describe("Remix client i18n bootstrap", () => {
           activate() {},
           getMessage: () => "",
           getMessageNodes: () => [],
+          renderMessage<TResult>() {
+            throw new Error("renderMessage is not available in this test double");
+          },
           reportError() {},
         }),
         bootstrap: {
@@ -181,7 +190,7 @@ describe("Remix client i18n bootstrap", () => {
           messages: { greeting: "Hello" },
         },
       }),
-    ).toThrow(/parser-capable @palamedes\/core createI18n/u);
+    ).toThrow(/inert serialized ICU catalog.*#1214/u);
     expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });
 });

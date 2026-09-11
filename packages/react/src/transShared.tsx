@@ -6,13 +6,11 @@ import {
   createCompiledMessageRuntime,
   formatMessageArgument,
   replacePoundPlaceholders,
-  resolveChoice,
   stringifyValue,
 } from "@palamedes/core/compiled";
 import type {
   CompiledMessageRuntime,
   MessageMetadata,
-  MessageNode,
   PalamedesI18n,
 } from "@palamedes/core/compiled";
 
@@ -27,17 +25,7 @@ export type TransProps = {
   components?: Record<string, ReactElement>;
 };
 
-type PatternParser = (pattern: string) => MessageNode[];
-type RendererI18n = Pick<
-  PalamedesI18n,
-  | "locale"
-  | "timeZone"
-  | "getMessage"
-  | "getMessageNodes"
-  | "parsePattern"
-  | "renderMessage"
-  | "reportError"
->;
+type RendererI18n = Pick<PalamedesI18n, "locale" | "timeZone" | "renderMessage">;
 type ResettableReactMessageRuntime = {
   reset: (components: Record<string, ReactElement>) => void;
   runtime: CompiledMessageRuntime<ReactNode[]>;
@@ -51,9 +39,9 @@ type CachedReactMessageRuntime = ResettableReactMessageRuntime & {
 const EMPTY_COMPONENTS: Record<string, ReactElement> = Object.freeze({});
 const EMPTY_VALUES: Record<string, unknown> = Object.freeze({});
 
-/** Creates the shared Trans component for compatibility and compiled entries. */
-export function createTrans(useI18n: () => RendererI18n, fallbackParser?: PatternParser) {
-  const runtimeCache = createReactMessageRuntimeCache(fallbackParser);
+/** Creates the shared Trans component for package-root and compiled entries. */
+export function createTrans(useI18n: () => RendererI18n) {
+  const runtimeCache = createReactMessageRuntimeCache();
   return function Trans({
     id,
     message,
@@ -68,7 +56,6 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
       message,
       context,
       comment,
-      renderUncompiledPattern: fallbackParser !== undefined,
     };
     const lease = runtimeCache.acquire(i18n, components ?? EMPTY_COMPONENTS);
     try {
@@ -81,7 +68,7 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
   };
 }
 
-export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
+export function createReactMessageRuntimeCache() {
   // Cache one idle renderer per i18n instance. Nested synchronous renders get a
   // temporary renderer so they cannot overwrite an outer render's components
   // or keys. Weak keys keep request-scoped instances collectable.
@@ -101,7 +88,7 @@ export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
       ) {
         const canCache = cached?.inUse !== true;
         cached = {
-          ...createResettableReactMessageRuntime(i18n, components, fallbackParser),
+          ...createResettableReactMessageRuntime(i18n, components),
           locale: i18n.locale,
           timeZone: i18n.timeZone,
           inUse: false,
@@ -127,42 +114,19 @@ export function renderI18nMessage(
   runtime: CompiledMessageRuntime<ReactNode[]>,
   metadata: MessageMetadata,
 ): ReactNode[] {
-  if (typeof i18n.renderMessage === "function") {
-    return i18n.renderMessage(id, values, runtime, metadata);
-  }
-
-  const nodes = i18n.getMessageNodes(id, metadata);
-  try {
-    return renderNodes(nodes, values, runtime, i18n.locale);
-  } catch (error) {
-    const fallback = metadata.message ?? id;
-    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false });
-    i18n.reportError?.({ id, error, pattern, fallback, metadata });
-
-    if (pattern !== fallback) {
-      try {
-        return runtime.pattern(fallback, values);
-      } catch {
-        // Fall through to plain source text when the fallback is malformed.
-      }
-    }
-
-    return runtime.join(fallback);
-  }
+  return i18n.renderMessage(id, values, runtime, metadata);
 }
 
 export function createReactMessageRuntime(
   i18n: RendererI18n,
   components: Record<string, ReactElement>,
-  fallbackParser?: PatternParser,
 ): CompiledMessageRuntime<ReactNode[]> {
-  return createResettableReactMessageRuntime(i18n, components, fallbackParser).runtime;
+  return createResettableReactMessageRuntime(i18n, components).runtime;
 }
 
 function createResettableReactMessageRuntime(
   i18n: RendererI18n,
   components: Record<string, ReactElement>,
-  fallbackParser?: PatternParser,
 ): ResettableReactMessageRuntime {
   const locale = i18n.locale;
   const timeZone = i18n.timeZone;
@@ -171,10 +135,6 @@ function createResettableReactMessageRuntime(
   const runtime: CompiledMessageRuntime<ReactNode[]> = createCompiledMessageRuntime<ReactNode[]>(
     locale,
     {
-      pattern(pattern, values) {
-        const nodes = parsePattern(i18n, pattern, fallbackParser);
-        return renderNodes(nodes, values, runtime, locale);
-      },
       join(...parts) {
         const result: ReactNode[] = [];
         for (const part of parts) {
@@ -222,65 +182,6 @@ function createResettableReactMessageRuntime(
     },
     runtime,
   };
-}
-
-function parsePattern(
-  i18n: RendererI18n,
-  pattern: string,
-  fallbackParser?: PatternParser,
-): MessageNode[] {
-  if (i18n.parsePattern !== undefined) {
-    return i18n.parsePattern(pattern);
-  }
-  if (fallbackParser !== undefined) {
-    return fallbackParser(pattern);
-  }
-  // Older custom instances predate the parse-only capability. Preserve their
-  // compatibility behavior while current full runtimes avoid catalog lookup.
-  return i18n.getMessageNodes(pattern, { message: pattern, reportMissing: false });
-}
-
-function renderNodes(
-  nodes: MessageNode[],
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<ReactNode[]>,
-  locale: string,
-  pluralValue?: number,
-): ReactNode[] {
-  return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue));
-}
-
-function renderNode(
-  node: MessageNode,
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<ReactNode[]>,
-  locale: string,
-  pluralValue?: number,
-): ReactNode[] {
-  switch (node.type) {
-    case "text":
-      return [
-        pluralValue === undefined
-          ? node.value
-          : replacePoundPlaceholders(node.value, pluralValue, locale),
-      ];
-    case "literal":
-      return runtime.literal(node.value);
-    case "variable":
-      return runtime.value(values, node.name);
-    case "formatted":
-      return runtime[node.format](values, node.variable, node.style);
-    case "tag":
-      return runtime.tag(
-        node.name,
-        renderNodes(node.children, values, runtime, locale, pluralValue),
-      );
-    case "choice": {
-      const resolved = resolveChoice(node, values[node.variable], locale);
-      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue;
-      return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue);
-    }
-  }
 }
 
 function renderVariable(value: unknown, key: number): ReactNode {

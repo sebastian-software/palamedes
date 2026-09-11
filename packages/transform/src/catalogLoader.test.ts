@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createI18n, defineCompiledCatalog, formatMessagePattern } from "@palamedes/core";
+import { createI18n, defineCompiledCatalog } from "@palamedes/core";
 import { renderCatalogModule as renderNativeCatalogModule } from "@palamedes/core-node";
 
 import {
@@ -95,21 +95,11 @@ describe("catalog loader helpers", () => {
       expect(i18n._("inbox", { count: 2 })).toBe("2 Nachrichten");
       expect(i18n._("hashSelect", { gender: "other" })).toBe("# Profil");
       expect(i18n._("nestedSelect", { count: 2, gender: "other" })).toBe("2 Profile");
-      expect(i18n._("formatted", { amount: 12.3 })).toBe(
-        formatMessagePattern(patterns.formatted, { amount: 12.3 }, "de"),
-      );
-      expect(i18n._("quoted", { name: "Ada" })).toBe(
-        formatMessagePattern(patterns.quoted, { name: "Ada" }, "de"),
-      );
-      expect(i18n._("rich", { name: "Ada" })).toBe(
-        formatMessagePattern(patterns.rich, { name: "Ada" }, "de"),
-      );
-      expect(i18n._("offset", { count: 4 })).toBe(
-        formatMessagePattern(patterns.offset, { count: 4 }, "de"),
-      );
-      expect(i18n._("ordinal", { count: 3 })).toBe(
-        formatMessagePattern(patterns.ordinal, { count: 3 }, "de"),
-      );
+      expect(i18n._("formatted", { amount: 12.3 })).toBe("Summe: 12,30\u00a0€");
+      expect(i18n._("quoted", { name: "Ada" })).toBe("Literal {name}, Wert: Ada");
+      expect(i18n._("rich", { name: "Ada" })).toBe("Hallo Ada");
+      expect(i18n._("offset", { count: 4 })).toBe("3 weitere");
+      expect(i18n._("ordinal", { count: 3 })).toBe("3th");
     } finally {
       delete (globalThis as Record<string, unknown>)[globalKey];
     }

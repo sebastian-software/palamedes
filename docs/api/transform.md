@@ -53,15 +53,12 @@ Most apps should use a framework plugin instead of this package directly.
 
 ## Runtime fallback options
 
-`TransformOptions.keepSourceFallbacks` defaults to `false`. When enabled, the
-transform includes the authored message in generated `i18n._()` descriptors and
-`Trans` props so missing catalogs can render readable source text.
-
-The first-party Vite, Next, and Remix adapters enable this option by default,
-including in production, because independently loaded catalog chunks can lag a
-code deploy. Direct transform callers keep the compact default and must opt in
-when readable misses are required. Retained ICU text is formatted only by a
-parser-capable runtime; the parser-free compiled runtime returns it literally.
+`keepSourceFallbacks` retains its legacy option name and defaults to `false`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: false` for compact output without authored source text.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
 
 `stripMessageField` is the deprecated inverse compatibility option. An explicit
 `keepSourceFallbacks` value takes precedence; new integrations should use only

@@ -92,28 +92,33 @@ describe("parser-free compiled runtime", () => {
   it("rejects hand-written string catalogs at the load boundary", () => {
     const i18n = createI18n();
 
-    expect(i18n.parsePattern).toBeUndefined();
+    expect(i18n).not.toHaveProperty("parsePattern");
     expect(() =>
       i18n.load("de", { greeting: "Hallo {name}" } as unknown as CompiledCatalogMessages),
     ).toThrow(/only accepts generated CompiledCatalogMessages/);
   });
 
-  it("reports lazy-pattern calls and degrades to the source fallback", () => {
+  it("reports rejected v1 lazy-pattern artifacts without source substitution", () => {
     const onError = vi.fn();
-    const lazy: CompiledMessage = (values, runtime) => runtime.pattern("Hallo {name}", values);
+    // Simulate an old compiled artifact that requires the removed parser ABI.
+    const lazy: CompiledMessage = (values, runtime) =>
+      // @ts-expect-error v1 pattern instructions are not part of the v2 ABI.
+      runtime.pattern("Hallo {name}", values);
     const i18n = createI18n({ locale: "de", onError });
     i18n.load("de", defineCompiledCatalog({ lazy }));
 
-    expect(i18n._("lazy", { name: "Ada" }, { message: "Hello {name}" })).toBe("Hello {name}");
+    expect(() => i18n._("lazy", { name: "Ada" }, { message: "Hello {name}" })).toThrow(TypeError);
     expect(onError).toHaveBeenCalledOnce();
   });
 
-  it("does not parse unresolved fallbacks with the parser-free string renderer", () => {
+  it("throws instead of returning unresolved fallback text or IDs", () => {
     const onError = vi.fn();
     const i18n = createI18n({ onError });
 
-    expect(i18n._("missing", { name: "Ada" }, { message: "Hello {name}" })).toBe("Hello {name}");
-    expect(i18n._("missing", { name: "Ada" })).toBe("missing");
+    expect(() => i18n._("missing", { name: "Ada" }, { message: "Hello {name}" })).toThrow(
+      /required compiled message/,
+    );
+    expect(() => i18n._("missing", { name: "Ada" })).toThrow(/required compiled message/);
     expect(onError).not.toHaveBeenCalled();
   });
 });

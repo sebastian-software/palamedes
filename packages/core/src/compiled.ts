@@ -1,25 +1,19 @@
-import type { CompiledCatalogMessages as InternalCompiledCatalogMessages } from "./compiledMessage";
 import { createI18nRuntime, type CreateI18nOptions, type PalamedesI18n } from "./i18nRuntime";
 
-export type CompiledPalamedesI18n = Omit<PalamedesI18n, "load"> & {
-  load: (locale: string, messages: InternalCompiledCatalogMessages) => void;
-};
+export type CompiledPalamedesI18n = PalamedesI18n;
 
-/**
- * Creates the parser-free runtime for generated executable catalogs.
- *
- * Use the main `@palamedes/core` entry when loading hand-written ICU string
- * catalogs or calling parser compatibility APIs.
- */
-export function createI18n(options: CreateI18nOptions = {}): CompiledPalamedesI18n {
-  return createI18nRuntime(options) as CompiledPalamedesI18n;
+/** Creates the compiled-only application runtime. */
+export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
+  return createI18nRuntime(options);
 }
 
-export { DEFAULT_LOCALE } from "./i18nRuntime";
+export { DEFAULT_LOCALE, MissingCompiledMessageError } from "./i18nRuntime";
 export {
   createCompiledMessageRuntime,
   defineCompiledCatalog,
+  isCompiledCatalog,
   type CatalogMessage,
+  type CatalogMessages,
   type CompiledCatalogMessages,
   type CompiledMessage,
   type CompiledMessageBranch,
@@ -34,13 +28,11 @@ export {
   stringifyValue,
   type MessageFormat,
 } from "./runtimeFormat";
-export { resolveChoice, type ResolvedChoice } from "./runtimeChoice";
 export type {
   CreateI18nOptions,
   MessageFormatErrorInfo,
   MessageMetadata,
   MissingMessageInfo,
   PalamedesI18n,
-  ReportedMessageError,
 } from "./i18nRuntime";
-export type { MessageNode } from "./messageFormat";
+export type { PluralProps, SelectProps, SelectOrdinalProps } from "./choice";

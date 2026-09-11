@@ -72,7 +72,7 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
     file: "adr/004-internal-compiled-lookup-keys.md",
     snippets: [
       "Low-level transforms generate compact runtime calls without embedding the authored source message by default.",
-      "First-party host adapters override that low-level default and preserve source fallbacks in both development and production",
+      "First-party host adapters retain diagnostic source metadata by default.",
       "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
     ],
   },
@@ -357,7 +357,6 @@ try {
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
-import { Select as RuntimeSelect } from "@palamedes/react"
 import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/react/macro"
 import {
   Plural as SolidPlural,
@@ -399,15 +398,10 @@ export const macroProps = [
 Select({ value: "a", a: "A", other: "Other", context: "navigation", comment: "Choice" })
 Select({ value: 2, two: "Two", other: "Other" })
 SolidSelect({ value: "a", a: "A", other: "Other", context: "navigation", comment: "Choice" })
-RuntimeSelect({ value: "female", female: "She", other: "They" })
 // @ts-expect-error React Select macro branches must be strings.
 Select({ value: "a", a: 1, other: "Other" })
 // @ts-expect-error React Select macro branches cannot be undefined.
 Select({ value: "a", a: undefined, other: "Other" })
-// @ts-expect-error React runtime Select branches must be strings.
-RuntimeSelect({ value: "a", a: 1, other: "Other" })
-// @ts-expect-error React runtime Select branches cannot be undefined.
-RuntimeSelect({ value: "a", a: undefined, other: "Other" })
 
 // @ts-expect-error Choice macros require their fallback branch.
 const missingPluralFallback: Parameters<typeof Plural>[0] = { value: 2, one: "one" }
@@ -454,14 +448,12 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
     commonJsFixture,
     `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
 import coreMacro = require("@palamedes/core/macro")
-import reactRuntime = require("@palamedes/react")
 import reactMacro = require("@palamedes/react/macro")
 import nextPlugin = require("@palamedes/next-plugin")
 import vitePlugin = require("@palamedes/vite-plugin")
 
 export const selectLengths = [
   coreMacro.select("a", { a: "A", other: "Other" }).length,
-  reactRuntime.Select({ value: "female", female: "She", other: "They" }),
   reactMacro.Select({ value: "a", a: "A", other: "Other" }),
 ]
 // @ts-expect-error Core Select macro branches must be strings in CommonJS too.
@@ -474,10 +466,6 @@ coreMacro.select("a", { a: "A" })
 reactMacro.Select({ value: "a", a: 1, other: "Other" })
 // @ts-expect-error React Select macro branches cannot be undefined in CommonJS either.
 reactMacro.Select({ value: "a", a: undefined, other: "Other" })
-// @ts-expect-error React runtime Select branches must be strings in CommonJS too.
-reactRuntime.Select({ value: "a", a: 1, other: "Other" })
-// @ts-expect-error React runtime Select branches cannot be undefined in CommonJS either.
-reactRuntime.Select({ value: "a", a: undefined, other: "Other" })
 
 export const config = nextPlugin.withPalamedes({})
 export const vitePlugins = vitePlugin.palamedes()

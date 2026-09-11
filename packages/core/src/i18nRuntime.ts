@@ -1,24 +1,17 @@
 import {
-  compiledMessageSource,
   createStringMessageRuntime,
   isCompiledCatalog,
   type CatalogMessage,
-  type CatalogMessages,
   type CompiledCatalogMessages,
   type CompiledMessageRuntime,
   type MessageValues,
-  type PatternFormatter,
 } from "./compiledMessage";
-import type { MessageNode } from "./messageFormat";
 
+/** Authored identity retained for diagnostics, never a replacement message. */
 export type MessageMetadata = {
   message?: string;
   context?: string;
   comment?: string;
-  /** Suppress `onMissing` for a lookup whose source fallback is expected to miss. */
-  reportMissing?: boolean;
-  /** The host renderer can parse an uncompiled ICU source fallback. */
-  renderUncompiledPattern?: boolean;
 };
 
 export const DEFAULT_LOCALE = "en";
@@ -29,323 +22,132 @@ export type MissingMessageInfo = {
   metadata?: MessageMetadata;
 };
 
-export type MessageFormatErrorInfo = {
-  id?: string;
-  locale: string;
-  error: Error;
-  pattern: string;
-  fallback: string;
-  metadata?: MessageMetadata;
-};
-
-export type ReportedMessageError = {
-  id?: string;
-  error: unknown;
-  pattern: string;
-  fallback: string;
-  metadata?: MessageMetadata;
-};
+export type MessageFormatErrorInfo = MissingMessageInfo & { error: Error };
 
 export type CreateI18nOptions = {
   locale?: string;
-  /**
-   * IANA time zone used for ICU `{value, date}` and `{value, time}` arguments.
-   * Set this to the same value while rendering on the server and client to
-   * avoid hydration differences caused by their ambient host time zones.
-   */
+  /** Use the same IANA time zone on the server and client for hydration. */
   timeZone?: string;
+  /** Observes a missing dependency. Rendering still throws after this hook. */
   onMissing?: (info: MissingMessageInfo) => void;
+  /** Observes execution failures. Rendering still throws after this hook. */
   onError?: (info: MessageFormatErrorInfo) => void;
 };
 
 export type PalamedesI18n = {
   readonly locale: string;
-  /** The optional IANA time zone configured when this instance was created. */
   readonly timeZone?: string;
   _: (id: string, values?: MessageValues, metadata?: MessageMetadata) => string;
-  load: (locale: string, messages: CatalogMessages | CompiledCatalogMessages) => void;
+  load: (locale: string, messages: CompiledCatalogMessages) => void;
   activate: (locale: string) => void;
-  getMessage: (id: string, metadata?: MessageMetadata) => string;
-  getMessageNodes: (id: string, metadata?: MessageMetadata) => MessageNode[];
-  /** Parse a raw ICU pattern without performing a catalog lookup when supported. */
-  parsePattern?: (pattern: string) => MessageNode[];
-  /** Execute a message directly against a host renderer such as React or Solid. */
-  renderMessage?: <TResult>(
+  renderMessage: <TResult>(
     id: string,
     values: MessageValues,
     runtime: CompiledMessageRuntime<TResult>,
     metadata?: MessageMetadata,
   ) => TResult;
-  reportError: (info: ReportedMessageError) => void;
 };
 
-type ResolvedMessage = {
-  value: CatalogMessage;
-  fallback: string;
-  compiled: boolean;
-  fromCatalog: boolean;
-};
+/** Developer details are properties; ordinary host error UI need not display IDs. */
+export class MissingCompiledMessageError extends Error {
+  public readonly id: string;
+  public readonly locale: string;
+  public readonly metadata?: MessageMetadata;
 
-// Generated entries already distinguish constants from executable messages.
-// Only compatibility strings need a wrapper to retain their ICU semantics.
-type LoadedMessage = CatalogMessage | { pattern: string };
+  public constructor(info: MissingMessageInfo) {
+    super(
+      "A required compiled message is unavailable. Reload the application or contact its maintainer.",
+    );
+    this.name = "MissingCompiledMessageError";
+    this.id = info.id;
+    this.locale = info.locale;
+    this.metadata = info.metadata;
+  }
+}
 
-type LoadedCatalog = Record<string, LoadedMessage>;
-
-export type I18nPatternSupport = {
-  formatPattern: PatternFormatter;
-  parsePattern: (pattern: string) => MessageNode[];
-};
-
-/** Shared instance state machine used by the full and parser-free entries. */
-export function createI18nRuntime(
-  options: CreateI18nOptions = {},
-  patternSupport?: I18nPatternSupport,
-): PalamedesI18n {
-  const catalogs = new Map<string, LoadedCatalog>();
+/** The one public runtime used by package roots and compiled aliases. */
+export function createI18nRuntime(options: CreateI18nOptions = {}): PalamedesI18n {
+  const catalogs = new Map<string, Record<string, CatalogMessage>>();
   let stringRuntime: CompiledMessageRuntime<string> | undefined;
   let stringRuntimeLocale: string | undefined;
   let activeLocale = options.locale ?? DEFAULT_LOCALE;
   const timeZone = validateTimeZone(options.timeZone);
 
-  function notifyMissing(info: MissingMessageInfo): void {
+  function resolveMessage(id: string, metadata?: MessageMetadata): CatalogMessage {
+    const value = catalogs.get(activeLocale)?.[id];
+    if (value !== undefined) return value;
+    const info = { id, locale: activeLocale, metadata };
     try {
       options.onMissing?.(info);
     } catch {
-      // Telemetry hooks should not make message rendering fail.
+      // An observer cannot replace the original catalog failure.
     }
-  }
-
-  function notifyError(info: MessageFormatErrorInfo): void {
-    try {
-      options.onError?.(info);
-    } catch {
-      // Telemetry hooks should not make message rendering fail.
-    }
-  }
-
-  function getLoadedMessage(id: string): LoadedMessage | undefined {
-    const catalog = catalogs.get(activeLocale);
-    // Loaded catalogs have a null prototype, including for special message IDs.
-    return catalog?.[id];
-  }
-
-  function resolveMessage(
-    loaded: LoadedMessage | undefined,
-    id: string,
-    metadata?: MessageMetadata,
-  ): ResolvedMessage {
-    const fallback = metadata?.message ?? id;
-
-    if (loaded !== undefined) {
-      const compiled = typeof loaded !== "object";
-      return {
-        value: compiled ? loaded : loaded.pattern,
-        fallback,
-        compiled,
-        fromCatalog: true,
-      };
-    }
-
-    if (metadata?.reportMissing !== false) {
-      notifyMissing({ id, locale: activeLocale, metadata });
-    }
-
-    return {
-      value: fallback,
-      fallback,
-      compiled: false,
-      fromCatalog: false,
-    };
+    throw new MissingCompiledMessageError(info);
   }
 
   function renderResolvedMessage<TResult>(
-    message: ResolvedMessage,
+    value: CatalogMessage,
+    id: string,
     values: MessageValues,
     runtime: CompiledMessageRuntime<TResult>,
-    id?: string,
     metadata?: MessageMetadata,
   ): TResult {
+    const locale = activeLocale;
     try {
-      if (typeof message.value === "function") {
-        return message.value<TResult>(values, runtime);
-      }
-      if (
-        message.compiled ||
-        (patternSupport === undefined && !metadata?.renderUncompiledPattern)
-      ) {
-        return runtime.join(message.value);
-      }
-      return runtime.pattern(message.value, values);
+      return typeof value === "function" ? value<TResult>(values, runtime) : runtime.join(value);
     } catch (error) {
-      const pattern = getResolvedPattern(message);
-      notifyError({
-        id,
-        locale: activeLocale,
-        error: normalizeError(error),
-        pattern,
-        fallback: message.fallback,
-        metadata,
-      });
-
-      if (message.fromCatalog && pattern !== message.fallback) {
-        try {
-          return patternSupport === undefined
-            ? runtime.join(message.fallback)
-            : runtime.pattern(message.fallback, values);
-        } catch {
-          // Fall through to plain source text when the fallback is malformed.
-        }
-      }
-
-      return runtime.join(message.fallback);
-    }
-  }
-
-  function getStringRuntime(locale: string): CompiledMessageRuntime<string> {
-    // Locale is stable for a browser document. Keep only the last renderer,
-    // while still rebuilding lazily when callers activate another locale.
-    if (stringRuntime === undefined || stringRuntimeLocale !== locale) {
-      stringRuntime = createStringMessageRuntime(
-        locale,
-        patternSupport?.formatPattern ?? noParser,
-        timeZone,
-      );
-      stringRuntimeLocale = locale;
-    }
-    return stringRuntime;
-  }
-
-  function parseResolvedMessage(
-    message: ResolvedMessage,
-    id?: string,
-    metadata?: MessageMetadata,
-  ): MessageNode[] {
-    if (patternSupport === undefined) {
-      throw new Error(
-        "getMessageNodes() requires the compatibility runtime from @palamedes/core; the parser-free @palamedes/core/compiled entry renders generated messages directly.",
-      );
-    }
-
-    const pattern = getResolvedPattern(message);
-    try {
-      return patternSupport.parsePattern(pattern);
-    } catch (error) {
-      notifyError({
-        id,
-        locale: activeLocale,
-        error: normalizeError(error),
-        pattern,
-        fallback: message.fallback,
-        metadata,
-      });
-    }
-
-    if (message.fromCatalog && pattern !== message.fallback) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
       try {
-        return patternSupport.parsePattern(message.fallback);
+        options.onError?.({ id, locale, error: normalized, metadata });
       } catch {
-        // Fall through to plain source text when the fallback is malformed.
+        // Telemetry cannot suppress or replace a rendering failure.
       }
+      throw normalized;
     }
-
-    return [{ type: "text", value: message.fallback }];
   }
 
   return {
     get locale() {
       return activeLocale;
     },
-
     get timeZone() {
       return timeZone;
     },
-
     load(locale, messages) {
-      if (patternSupport === undefined && !isCompiledCatalog(messages)) {
+      if (!isCompiledCatalog(messages)) {
         throw new TypeError(
-          "The parser-free runtime only accepts generated CompiledCatalogMessages. Import createI18n from @palamedes/core for hand-written string catalogs.",
+          "Palamedes v2 only accepts generated CompiledCatalogMessages. Compile ICU catalogs before loading them; switching runtime import paths cannot enable parsing.",
         );
       }
-
-      const current = catalogs.get(locale) ?? (Object.create(null) as LoadedCatalog);
-      const compiledCatalog = isCompiledCatalog(messages);
-
-      for (const [id, value] of Object.entries(messages)) {
-        current[id] = compiledCatalog || typeof value === "function" ? value : { pattern: value };
+      const entries = Object.entries(messages);
+      for (const [id, value] of entries) {
+        if (typeof value !== "string" && typeof value !== "function") {
+          throw new TypeError(
+            `Invalid compiled catalog entry ${JSON.stringify(id)} for locale ${JSON.stringify(locale)}.`,
+          );
+        }
       }
-
+      const current =
+        catalogs.get(locale) ?? (Object.create(null) as Record<string, CatalogMessage>);
+      for (const [id, value] of entries) current[id] = value;
       catalogs.set(locale, current);
     },
-
     activate(locale) {
       activeLocale = locale;
     },
-
-    getMessage(id, metadata) {
-      return getResolvedPattern(resolveMessage(getLoadedMessage(id), id, metadata));
-    },
-
-    getMessageNodes(id, metadata) {
-      return parseResolvedMessage(resolveMessage(getLoadedMessage(id), id, metadata), id, metadata);
-    },
-
     renderMessage(id, values, runtime, metadata) {
-      return renderResolvedMessage(
-        resolveMessage(getLoadedMessage(id), id, metadata),
-        values,
-        runtime,
-        id,
-        metadata,
-      );
+      return renderResolvedMessage(resolveMessage(id, metadata), id, values, runtime, metadata);
     },
-
-    reportError(info) {
-      notifyError({
-        id: info.id,
-        locale: activeLocale,
-        error: normalizeError(info.error),
-        pattern: info.pattern,
-        fallback: info.fallback,
-        metadata: info.metadata,
-      });
-    },
-
     _(id, values, metadata) {
-      const loaded = getLoadedMessage(id);
-      if (typeof loaded === "string") {
-        return loaded;
+      const value = resolveMessage(id, metadata);
+      if (typeof value === "string") return value;
+      if (stringRuntime === undefined || stringRuntimeLocale !== activeLocale) {
+        stringRuntime = createStringMessageRuntime(activeLocale, timeZone);
+        stringRuntimeLocale = activeLocale;
       }
-      return renderResolvedMessage(
-        resolveMessage(loaded, id, metadata),
-        values ?? {},
-        getStringRuntime(activeLocale),
-        id,
-        metadata,
-      );
+      return renderResolvedMessage(value, id, values ?? {}, stringRuntime, metadata);
     },
   };
-}
-
-function getResolvedPattern(message: ResolvedMessage): string {
-  if (typeof message.value === "string") {
-    return message.value;
-  }
-  try {
-    return compiledMessageSource(message.value);
-  } catch {
-    return message.fallback;
-  }
-}
-
-function noParser(pattern: string): never {
-  throw new Error(
-    `The generated message requires the compatibility ICU parser: ${JSON.stringify(pattern)}`,
-  );
-}
-
-function normalizeError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 function validateTimeZone(timeZone: string | undefined): string | undefined {

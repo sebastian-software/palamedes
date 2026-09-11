@@ -57,12 +57,8 @@ export type RemixI18nServerOptions<
 > = {
   locales: LocaleControls<TLocale>;
   strategy: RemixLocaleStrategy;
-  loadMessages: (locale: TLocale) => CatalogMessages | CompiledCatalogMessages;
-  /**
-   * Load serializable ICU strings for the browser document. Defaults to
-   * `loadMessages`; provide this separately when server catalogs contain
-   * executable compiled messages.
-   */
+  loadMessages: (locale: TLocale) => CompiledCatalogMessages;
+  /** Legacy inert ICU strings for migration diagnostics; #1214 replaces this with executable assets. */
   loadClientMessages?: (locale: TLocale) => CatalogMessages;
   /** Override the deterministic content hash used for client catalog versions. */
   catalogVersion?: string | ((input: { locale: TLocale; messages: CatalogMessages }) => string);
@@ -122,14 +118,14 @@ export function createRemixI18nServer<
   T extends PalamedesI18n = PalamedesI18n,
 >(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
   const scope = createServerI18nScope<T>();
-  const catalogCache = new Map<TLocale, CatalogMessages | CompiledCatalogMessages>();
+  const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
   const clientBootstrapCache = new Map<TLocale, RemixI18nBootstrap<TLocale>>();
   const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
   const createI18nInstance = options.createI18n ?? (() => createI18n() as unknown as T);
   const cookieName = options.cookieName ?? "locale";
   const cookieMaxAge = options.cookieMaxAge ?? 60 * 60 * 24 * 365;
 
-  const getMessages = (locale: TLocale): CatalogMessages | CompiledCatalogMessages => {
+  const getMessages = (locale: TLocale): CompiledCatalogMessages => {
     const cached = catalogCache.get(locale);
     if (cached) {
       return cached;
@@ -250,7 +246,7 @@ function validateClientMessages<TLocale extends string>(
   for (const [id, message] of Object.entries(messages)) {
     if (typeof message !== "string") {
       throw new TypeError(
-        `Palamedes Remix client catalog for locale "${locale}" contains non-string message "${id}". Supply loadClientMessages() with serializable ICU strings, for example compileCatalogArtifact(...).messages.`,
+        `Palamedes Remix client catalog for locale "${locale}" contains non-string message "${id}". The legacy string transport cannot carry executable catalogs; migrate this host to the #1214 asset pipeline.`,
       );
     }
     serializable[id] = message;

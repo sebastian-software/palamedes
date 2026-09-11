@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import type { CatalogMessages } from "@palamedes/core";
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
 import { compileCatalogArtifact } from "@palamedes/core-node";
 import { createRemixI18nServer } from "@palamedes/remix/server";
@@ -28,7 +29,7 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels;
 export const normalizeLocale = locales.normalizeLocale;
 
-const CATALOGS: Record<Locale, CatalogMessages> = {
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
@@ -41,7 +42,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale);
 }
 
-export function loadMessages(locale: Locale): CatalogMessages {
+export function loadMessages(locale: Locale): CompiledCatalogMessages {
   return CATALOGS[locale];
 }
 

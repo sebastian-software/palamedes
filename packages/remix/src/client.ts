@@ -1,4 +1,9 @@
-import type { CatalogMessages, PalamedesI18n } from "@palamedes/core";
+import {
+  isCompiledCatalog,
+  type CatalogMessages,
+  type CompiledCatalogMessages,
+  type PalamedesI18n,
+} from "@palamedes/core";
 import { isServerEnvironment, setClientI18n } from "@palamedes/runtime";
 
 export const REMIX_I18N_BOOTSTRAP_ID = "palamedes-i18n-bootstrap";
@@ -11,7 +16,7 @@ const initializedDocuments = new WeakMap<
 export type RemixI18nBootstrap<TLocale extends string = string> = {
   locale: TLocale;
   catalogVersion: string;
-  messages: CatalogMessages;
+  messages: CatalogMessages | CompiledCatalogMessages;
 };
 
 export type RemixI18nBootstrapDocument = {
@@ -127,6 +132,12 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
     return initialized.i18n as T;
   }
 
+  if (!isCompiledCatalog(bootstrap.messages)) {
+    throw new TypeError(
+      `Palamedes Remix client bootstrap for locale "${bootstrap.locale}" contains an inert serialized ICU catalog. The parser-free runtime requires an executable compiled catalog asset; migrate this host to the Remix asset pipeline described by issue #1214.`,
+    );
+  }
+
   let i18n: T;
   try {
     i18n = options.createI18n();
@@ -134,7 +145,7 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
     i18n.activate(bootstrap.locale);
   } catch (error) {
     throw new Error(
-      `Palamedes Remix client bootstrap could not install catalog "${bootstrap.catalogVersion}" for locale "${bootstrap.locale}". Use the parser-capable @palamedes/core createI18n() with serialized ICU string catalogs.`,
+      `Palamedes Remix client bootstrap could not install compiled catalog "${bootstrap.catalogVersion}" for locale "${bootstrap.locale}". Verify the executable catalog asset and its generated runtime.`,
       { cause: error },
     );
   }
@@ -163,6 +174,14 @@ function validateBootstrap<TLocale extends string>(value: unknown): RemixI18nBoo
   }
   if (!isPlainObject(value.messages)) {
     throw invalidBootstrap('"messages" must be an object containing ICU strings');
+  }
+
+  if (isCompiledCatalog(value.messages)) {
+    return {
+      locale: value.locale as TLocale,
+      catalogVersion: value.catalogVersion,
+      messages: value.messages,
+    };
   }
 
   const messages: CatalogMessages = Object.create(null) as CatalogMessages;

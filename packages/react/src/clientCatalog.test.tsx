@@ -6,8 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createI18n, defineCompiledCatalog } from "@palamedes/core/compiled";
 import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
 
+import { compileTestMessages } from "../../../scripts/test-support/compiled-messages.mjs";
+
 import { createClientCatalogBoundary } from "./client";
-import { Plural, Select, SelectOrdinal, Trans } from "./index";
+import { Trans } from "./index";
 
 type Locale = "de" | "en";
 
@@ -157,10 +159,22 @@ describe("createClientCatalogBoundary", () => {
     expect(loadCatalog).toHaveBeenCalledOnce();
   });
 
-  it("formats compat ICU fallbacks after initializing a parser-free client catalog", async () => {
+  it("renders compiled source-language messages after initializing a client catalog", async () => {
     document.documentElement.lang = "en";
     const Boundary = createClientCatalogBoundary<Locale>({
-      loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
+      loadCatalog: () =>
+        fulfilled({
+          messages: defineCompiledCatalog(
+            compileTestMessages({
+              greeting: "Hello {name}",
+              date: "{when, date, full}",
+              plural: "{value, plural, one {# item} other {# items}}",
+              select: "{value, select, female {She} other {They}}",
+              ordinal: "{value, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+              when: "{when, date, full} {when, time, short}",
+            }),
+          ),
+        }),
       resolveClientLocale: () => document.documentElement.lang as Locale,
     });
     const when = new Date(Date.UTC(2026, 4, 8, 12, 0, 0));
@@ -173,9 +187,9 @@ describe("createClientCatalogBoundary", () => {
             <>
               <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
               <Trans id="date" message="{when, date, full}" values={{ when }} />
-              <Plural value={3} one="# item" other="# items" />
-              <Select value="female" female="She" other="They" />
-              <SelectOrdinal value={3} one="#st" two="#nd" few="#rd" other="#th" />
+              <Trans id="plural" values={{ value: 3 }} />
+              <Trans id="select" values={{ value: "female" }} />
+              <Trans id="ordinal" values={{ value: 3 }} />
             </>
           </Boundary>
         </Suspense>,
@@ -196,7 +210,19 @@ describe("createClientCatalogBoundary", () => {
     );
     const Boundary = createClientCatalogBoundary<Locale>({
       createI18n: createConfiguredI18n,
-      loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
+      loadCatalog: () =>
+        fulfilled({
+          messages: defineCompiledCatalog(
+            compileTestMessages({
+              greeting: "Hello {name}",
+              date: "{when, date, full}",
+              plural: "{value, plural, one {# item} other {# items}}",
+              select: "{value, select, female {She} other {They}}",
+              ordinal: "{value, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+              when: "{when, date, full} {when, time, short}",
+            }),
+          ),
+        }),
       resolveClientLocale: () => document.documentElement.lang as Locale,
     });
     const when = new Date("2026-09-18T17:30:00Z");
