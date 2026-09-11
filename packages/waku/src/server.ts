@@ -48,7 +48,11 @@ export function createWakuCatalogDeliveryMiddleware(
           }),
         ),
       )
-      .pipeThrough(Transform.toWeb(createDelayedFailureProbeTransform()));
+      .pipeThrough(
+        Transform.toWeb(
+          createWakuBootstrapGateTransform({ allowMissingPromise: options.development === true }),
+        ),
+      );
     context.res = new Response(body, {
       headers: response.headers,
       status: response.status,
@@ -57,38 +61,72 @@ export function createWakuCatalogDeliveryMiddleware(
   };
 }
 
-const FAILURE_REPLACEMENT = "document.body.replaceChildren(template.content.cloneNode(true));";
-const DELAYED_FAILURE_REPLACEMENT =
-  "setTimeout(() => document.body.replaceChildren(template.content.cloneNode(true)), 100);";
+const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
+const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
+const WAKU_ENTRY_PATTERN =
+  /import\(((["'])\/assets\/index-[^"']+\.js\2)\)\.catch\(\(err\) =>/u;
+const HEAD_END = "</head>";
+const TAIL_SIZE = 192;
 
 /**
- * Waku's own entry module is emitted after the adapter's import probe. Delay
- * replacing the SSR shell for one task window so that a rejected fragment
- * cannot be followed by Waku hydrating and clearing the host error document.
- * The transform keeps only a marker-sized tail, preserving streaming.
+ * Waku emits an inline entry bootstrap after the document head. Gate that
+ * import on the exact same catalog-import promise used by the delivery probe.
+ * This keeps Waku from mounting over the host error document when an initial
+ * fragment fails, without timing delays or app-owned DOM handling.
  */
-function createDelayedFailureProbeTransform(): Transform {
-  let pending = "";
+function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolean }): Transform {
+  let head = "";
+  let headComplete = false;
+  let tail = "";
+
+  function gateCatalogProbe(value: string) {
+    if (!value.includes("try{await Promise.all(")) return value;
+    return value.replace(
+      "try{await Promise.all(",
+      `try{globalThis[${CATALOG_READY_PROMISE}]=Promise.all(`,
+    ).replace(
+      `);globalThis[${CATALOG_READY}]=true`,
+      `);await globalThis[${CATALOG_READY_PROMISE}];globalThis[${CATALOG_READY}]=true`,
+    );
+  }
+
+  function gateWakuEntry(value: string) {
+    const importExpression = options.allowMissingPromise
+      ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import($1)) : import($1))`
+      : `globalThis[${CATALOG_READY_PROMISE}].then(() => import($1))`;
+    return value.replace(
+      WAKU_ENTRY_PATTERN,
+      `${importExpression}.catch((err) =>`,
+    );
+  }
+
   return new Transform({
     transform(chunk, _encoding, callback) {
-      pending += chunk.toString("utf8");
-      const markerIndex = pending.indexOf(FAILURE_REPLACEMENT);
-      if (markerIndex >= 0) {
-        this.push(
-          pending.slice(0, markerIndex) +
-            DELAYED_FAILURE_REPLACEMENT +
-            pending.slice(markerIndex + FAILURE_REPLACEMENT.length),
-        );
-        pending = "";
-      } else if (pending.length > FAILURE_REPLACEMENT.length) {
-        const keep = FAILURE_REPLACEMENT.length - 1;
-        this.push(pending.slice(0, -keep));
-        pending = pending.slice(-keep);
+      const value = chunk.toString("utf8");
+      if (!headComplete) {
+        head += value;
+        const headEnd = head.indexOf(HEAD_END);
+        if (headEnd < 0) {
+          callback();
+          return;
+        }
+        headComplete = true;
+        const transformedHead = gateCatalogProbe(head.slice(0, headEnd + HEAD_END.length));
+        this.push(transformedHead);
+        tail = head.slice(headEnd + HEAD_END.length);
+        head = "";
+      } else {
+        tail += value;
+      }
+      if (tail.length > TAIL_SIZE) {
+        this.push(gateWakuEntry(tail.slice(0, -TAIL_SIZE)));
+        tail = tail.slice(-TAIL_SIZE);
       }
       callback();
     },
     flush(callback) {
-      if (pending) this.push(pending);
+      if (!headComplete) this.push(gateCatalogProbe(head));
+      else if (tail) this.push(gateWakuEntry(tail));
       callback();
     },
   });
