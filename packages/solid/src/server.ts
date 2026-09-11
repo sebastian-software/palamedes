@@ -24,6 +24,11 @@ const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-pro
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 const TAIL_SIZE = 512;
 const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>[\s\S]*?<\/script>/iu;
+const SOLID_PRODUCTION_ENTRY_PATTERN =
+  /(?:^|\/)virtual[_-]solid-ssr-entry-client(?:-[^/?#]+)?\.(?:c|m)?js(?:[?#].*)?$/iu;
+const SOLID_DEVELOPMENT_ENTRY_PATTERN =
+  /(?:^|\/)(?:__x00__)?virtual:solid-ssr-entry-client\.(?:c|m)?tsx?(?:[?#].*)?$/iu;
+const SOLID_AUTHORED_ENTRY_PATTERN = /(?:^|\/)entry-client\.(?:c|m)?(?:jsx?|tsx?)(?:[?#].*)?$/iu;
 
 /**
  * Connects Vite's active-locale import-map delivery to Solid's Fetch
@@ -58,6 +63,7 @@ export function createSolidCatalogDeliveryMiddleware(
           createSolidBootstrapGateTransform({
             allowMissingPromise: options.development === true,
             nonce,
+            trustedChunkKeys: binding ? Object.keys(binding.chunkImports) : [],
           }),
         ) as unknown as TransformStream<Uint8Array>,
       );
@@ -74,6 +80,7 @@ export function createSolidCatalogDeliveryMiddleware(
 function createSolidBootstrapGateTransform(options: {
   allowMissingPromise: boolean;
   nonce?: string;
+  trustedChunkKeys: readonly string[];
 }): Transform {
   const decoder = new StringDecoder("utf8");
   let tail = "";
@@ -102,18 +109,21 @@ function createSolidBootstrapGateTransform(options: {
           /\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']([^"']+)["']|\bsrc\s*=\s*["']([^"']+)["'][^>]*\btype\s*=\s*["']module["']/iu,
         );
         let replacement = script;
-        if (moduleSource) {
+        if (
+          moduleSource &&
+          isTrustedSolidEntrySource(
+            moduleSource[1] ?? moduleSource[2],
+            options.trustedChunkKeys,
+            options.allowMissingPromise,
+          )
+        ) {
           const source = JSON.stringify(moduleSource[1] ?? moduleSource[2]);
-          const nonce = options.nonce ? ` nonce="${escapeAttribute(options.nonce)}"` : "";
+          const nonceValue = options.nonce ?? readCspNonce(script);
+          const nonce = nonceValue ? ` nonce="${escapeAttribute(nonceValue)}"` : "";
           const importExpression = options.allowMissingPromise
             ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
             : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
           replacement = `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; });</script>`;
-        } else if (options.nonce && !/<script\b[^>]*\snonce\s*=\s*["']/iu.test(script)) {
-          replacement = script.replace(
-            /^<script\b/iu,
-            `<script nonce="${escapeAttribute(options.nonce)}"`,
-          );
         }
         stream.push(tail.slice(0, match.index) + replacement);
         tail = tail.slice(end);
@@ -141,6 +151,41 @@ function createSolidBootstrapGateTransform(options: {
       return;
     }
   }
+}
+
+function isTrustedSolidEntrySource(
+  source: string,
+  trustedChunkKeys: readonly string[],
+  allowDevelopmentEntry: boolean,
+): boolean {
+  // Solid's generated entries are same-origin URLs. Do not gate arbitrary
+  // application or third-party modules merely because they are module tags.
+  if (!source.startsWith("/") || source.startsWith("//")) return false;
+  if (allowDevelopmentEntry) {
+    return (
+      SOLID_DEVELOPMENT_ENTRY_PATTERN.test(source) || SOLID_AUTHORED_ENTRY_PATTERN.test(source)
+    );
+  }
+  const key = assetKey(source);
+  return (
+    SOLID_PRODUCTION_ENTRY_PATTERN.test(source) ||
+    (trustedChunkKeys.includes(key) && SOLID_AUTHORED_ENTRY_PATTERN.test(source))
+  );
+}
+
+function assetKey(href: string): string {
+  let pathname = href;
+  try {
+    pathname = new URL(href, "https://palamedes.invalid").pathname;
+  } catch {
+    // Preserve malformed but useful Vite URLs for the manifest lookup below.
+  }
+  const assets = pathname.indexOf("assets/");
+  return (assets !== -1 ? pathname.slice(assets) : pathname).replace(/^\/+/, "");
+}
+
+function readCspNonce(script: string): string | undefined {
+  return script.match(/\bnonce\s*=\s*["']([^"']*)["']/iu)?.[1];
 }
 
 function lastScriptStart(value: string): number {
