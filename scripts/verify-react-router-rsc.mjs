@@ -195,10 +195,13 @@ try {
         .getByTestId("lazy-browser-error")
         .waitFor({ state: "visible", timeout: 10_000 });
       await lazyFailurePage.unroute("**/assets/lazy-browser-message-*.js");
-      await lazyFailurePage.reload();
-      await lazyFailurePage.getByTestId("lazy-browser-trigger").click();
+      await lazyFailurePage.close();
+      const recoveryPage = await lazyFailureContext.newPage();
+      await recoveryPage.goto(baseUrl);
+      await delay(500);
+      await recoveryPage.getByTestId("lazy-browser-trigger").click();
       await expectText(
-        lazyFailurePage,
+        recoveryPage,
         "lazy-browser-message",
         "Lazy browser fragment confirmed locale.",
       );
