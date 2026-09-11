@@ -10,8 +10,8 @@ applications do not change until an interceptor is registered.
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
 
-The adapter supports `waku@^1.0.0-rc.0` and Node.js 22.22 or newer. Macros
-still need the standard Vite transformation and catalog-loading setup.
+The adapter supports `waku@^1.0.0-rc.0` and Node.js 22.22 or newer. Register the Palamedes Vite plugin for macro transformation and generated catalog
+delivery; application-owned catalog imports or loader maps are unnecessary.
 `@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
 unsupported.
 

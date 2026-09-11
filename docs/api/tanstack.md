@@ -12,8 +12,8 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 ```
 
 The adapter supports `@tanstack/react-start@^1.168.38` and Node.js 22.22 or
-newer. Palamedes macros still need the standard Vite transformation and catalog
-loading setup. `@palamedes/tanstack` is ESM-only: use ESM imports, not
+newer. Register the Palamedes Vite plugin for macro transformation and generated
+catalog delivery; application-owned catalog imports or loader maps are unnecessary. `@palamedes/tanstack` is ESM-only: use ESM imports, not
 `require("@palamedes/tanstack")`.
 
 ## Recommended: global request middleware
