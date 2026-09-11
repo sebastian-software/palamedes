@@ -36,16 +36,14 @@ describe("catalog loader helpers", () => {
     );
   });
 
-  it("emits message functions and leaves invalid patterns lazy", () => {
-    expect(
+  it("rejects invalid and unsupported patterns instead of emitting lazy parser calls", () => {
+    expect(() =>
       renderCatalogModule({
         greeting: "Hallo {name}",
         broken: "Hallo {name",
         unsupported: "{items, list, other {Items}}",
       }),
-    ).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";const __pm0=(v,r)=>r.pattern("Hallo {name",v);const __pm1=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pm2=(v,r)=>r.pattern("{items, list, other {Items}}",v);export const messages=__palamedesDefineCompiledCatalog({["broken"]:__pm0,["greeting"]:__pm1,["unsupported"]:__pm2});export default { messages };',
-    );
+    ).toThrow(/cannot be lowered to the parser-free runtime/);
   });
 
   it("hoists plural branches instead of allocating them during rendering", () => {
@@ -177,7 +175,7 @@ describe("catalog loader helpers", () => {
     ).toBe(renderCatalogModule(baseResult.messages));
   });
 
-  it("fails compile diagnostics or emits warnings depending on configuration", () => {
+  it("always fails compile diagnostics and explains the removed opt-out", () => {
     const result: CatalogCompileArtifactResult = {
       ...baseResult,
       diagnostics: [
@@ -194,19 +192,40 @@ describe("catalog loader helpers", () => {
     expect(() =>
       createCatalogLoaderResult(result, {
         locale: "de",
-        failOnCompileError: true,
-        compileFailureHint: "configured failOnCompileError",
+        failOnCompileError: false,
       }),
-    ).toThrow(/configured failOnCompileError/);
+    ).toThrow(/failOnCompileError no longer changes this behavior/);
 
-    expect(
+    expect(() =>
       createCatalogLoaderResult(result, {
         locale: "de",
-        diagnosticsWarningHint: "warning hint",
-      }).warnings,
-    ).toStrictEqual([
-      "Catalog diagnostics for locale de:\n\n[error] icu (de)\nBroken ICU\nSource: Inbox\n\nwarning hint",
-    ]);
+      }),
+    ).toThrow(/Failed to compile catalog for locale de/);
+  });
+
+  it("reports invalid fallback diagnostics before a missing translation failure", () => {
+    const result: CatalogCompileArtifactResult = {
+      ...baseResult,
+      missing: [{ sourceKey: { message: "Broken {name" } }],
+      diagnostics: [
+        {
+          severity: "error",
+          code: "compile.invalid_icu_message",
+          message: "Expected ',' at line 1, column 13",
+          sourceKey: { message: "Broken {name" },
+          locale: "en",
+        },
+      ],
+    };
+
+    expect(() =>
+      createCatalogLoaderResult(result, {
+        locale: "de",
+        failOnMissing: true,
+        failOnCompileError: false,
+        missingFailureHint: "missing hint",
+      }),
+    ).toThrow(/compile\.invalid_icu_message[\s\S]*Locale: en[\s\S]*failOnCompileError/);
   });
 
   it("omits compile failure guidance when warning diagnostics do not fail the build", () => {
@@ -226,8 +245,6 @@ describe("catalog loader helpers", () => {
     expect(
       createCatalogLoaderResult(result, {
         locale: "de",
-        failOnCompileError: true,
-        diagnosticsWarningHint: "set failOnCompileError",
       }).warnings,
     ).toStrictEqual([
       "Catalog diagnostics for locale de:\n\n[warning] icu (de)\nSuspicious ICU\nSource: Inbox",

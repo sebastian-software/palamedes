@@ -89,7 +89,10 @@ contract explicit and reviewable in catalog artifacts.
 
 ## Implementation status
 
-The supported formatter subset and diagnostics exist. Unsupported-style
-warnings, optional host error gates, and generated lazy-parser fallbacks still
-require migration to mandatory compilation failure. The accepted policy does
-not imply that those implementation changes have shipped.
+The supported formatter subset and diagnostics are enforced during module
+compilation. Unsupported styles are fatal, as are unsupported formatter kinds,
+and generated modules never emit a lazy-parser fallback. Artifact inspection
+APIs still return structured diagnostics so audits can report the complete or
+selected validation scope without claiming that an executable module was
+produced. The deprecated `failOnCompileError` option emits a v2 migration
+diagnostic and cannot downgrade an error.

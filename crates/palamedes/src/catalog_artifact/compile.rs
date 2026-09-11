@@ -81,7 +81,10 @@ const fn runtime_icu_style_support(supported: bool) -> IcuFormatterSupport {
         IcuFormatterSupport::Supported
     } else {
         IcuFormatterSupport::UnsupportedStyle {
-            severity: IcuDiagnosticSeverity::Warning,
+            // Unsupported styles change authored semantics when lowered to
+            // the parser-free runtime, so they are fatal instead of silently
+            // falling back to default Intl options.
+            severity: IcuDiagnosticSeverity::Error,
         }
     }
 }

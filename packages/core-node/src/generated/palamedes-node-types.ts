@@ -357,6 +357,10 @@ export interface CatalogModuleRequest {
   locale: string;
   pseudoLocale?: string;
   failOnMissing?: boolean;
+  /**
+   * Deprecated v1 option. v2 always rejects compile errors regardless of
+   * this value; presence is retained only for a migration diagnostic.
+   */
   failOnCompileError?: boolean;
   missingFailureHint?: string;
   compileFailureHint?: string;

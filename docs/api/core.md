@@ -369,8 +369,8 @@ Currency formatting must use the `::currency/ISO` skeleton form; bare
 
 Catalog artifact compilation reports `list`, `duration`, `ago`, `name`, and
 other unsupported formatter kinds as errors. Unsupported styles on `number`,
-`date`, and `time` are warnings because the runtime currently falls back to the
-default `Intl` formatter for that argument type.
+`date`, and `time` are errors as well; default `Intl` formatting is never used
+to silently replace an unsupported authored style.
 
 Plural and selectordinal arguments require a present, numeric value (numeric
 strings are accepted). A missing or non-numeric value throws instead of

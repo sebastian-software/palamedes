@@ -121,10 +121,9 @@ without needing a runtime parser.
 
 ## Implementation status
 
-The compiled representation is implemented. Removal of the former runtime
-compatibility model is not yet complete: package roots still expose parser
-capabilities, generated invalid-message fallbacks can still request parsing,
-some examples use raw ICU at runtime, and Remix client delivery uses serialized
-ICU catalogs. These are migration work, not exceptions to the decision.
+The compiled representation is implemented. Catalog module compilation now
+rejects invalid or unsupported messages instead of generating a lazy-parser
+fallback; package-root parser removal, some raw-ICU examples, and Remix client
+delivery remain migration work, not exceptions to the decision.
 Exact API migration and host delivery-error integration remain implementation work in the
 [active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).

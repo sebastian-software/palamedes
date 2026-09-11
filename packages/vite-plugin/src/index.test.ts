@@ -129,8 +129,17 @@ describe("palamedes vite plugin", () => {
       expect.objectContaining({
         locale: "de",
         failOnMissing: false,
-        failOnCompileError: false,
       }),
+    );
+  });
+
+  it("propagates strict compile failures when the removed opt-out is false", async () => {
+    mocks.compileCatalogModule.mockRejectedValue(
+      new Error("failOnCompileError no longer changes this behavior"),
+    );
+
+    await expect(runPoTransform({}, { failOnCompileError: false })).rejects.toThrow(
+      /failOnCompileError no longer changes this behavior/,
     );
   });
 

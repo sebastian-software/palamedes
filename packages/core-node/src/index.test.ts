@@ -2017,6 +2017,69 @@ msgstr "{count, plural, one {# Nachricht} other {# Nachrichten}}"
     expect(result.locale).toBe("de");
   });
 
+  it("rejects invalid catalog modules even when the removed opt-out is false", async () => {
+    const rootDir = await createTempDir();
+    const enCatalog = path.join(rootDir, "locales", "en");
+    const deCatalog = path.join(rootDir, "locales", "de");
+
+    await mkdir(enCatalog, { recursive: true });
+    await mkdir(deCatalog, { recursive: true });
+    await writeFile(
+      path.join(enCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "Broken {name"
+msgstr "Broken {name"
+`,
+    );
+    const resourcePath = path.join(deCatalog, "messages.po");
+    await writeFile(
+      resourcePath,
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+`,
+    );
+
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    };
+    const compileOptions = {
+      locale: "de",
+      failOnCompileError: false,
+    } as const;
+    let syncError: unknown;
+    try {
+      compileCatalogModule(config, resourcePath, compileOptions);
+    } catch (error) {
+      syncError = error;
+    }
+    expect(syncError).toBeInstanceOf(Error);
+    expect((syncError as Error).message).toContain(
+      `Failed to compile catalog for locale de at ${resourcePath}`,
+    );
+    expect((syncError as Error).message).toContain("Locale: en");
+    expect((syncError as Error).message).toContain("Source: Broken {name");
+    expect((syncError as Error).message).toContain(
+      "`failOnCompileError` no longer changes this behavior",
+    );
+
+    expect(() =>
+      compileCatalogModule(config, resourcePath, {
+        ...compileOptions,
+        failOnMissing: true,
+      }),
+    ).toThrow(/Locale: en/);
+    await expect(compileCatalogModuleAsync(config, resourcePath, compileOptions)).rejects.toThrow(
+      /Locale: en/,
+    );
+  });
+
   it("resolves the module locale from the catalog path, not the caller-supplied locale", async () => {
     const rootDir = await createTempDir();
     const enCatalog = path.join(rootDir, "locales", "en");

@@ -227,7 +227,8 @@ export type PalamedesPluginOptions = {
 
   /**
    * If true, fail compilation on message compilation errors.
-   * @default false
+   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU;
+   * remove this option.
    */
   failOnCompileError?: boolean;
 
@@ -298,7 +299,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     exclude = /node_modules/,
     enablePoLoader = true,
     failOnMissing = false,
-    failOnCompileError = false,
+    failOnCompileError,
     framework = "react",
     runtimeModule,
     keepSourceFallbacks,
@@ -996,13 +997,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           locale,
           pseudoLocale: cfg.pseudoLocale,
           failOnMissing,
-          failOnCompileError,
+          ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
           missingFailureHint:
             "You see this error because `failOnMissing=true` in Vite plugin configuration.",
-          compileFailureHint:
-            "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
-          diagnosticsWarningHint:
-            "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
         });
 
         result.watchFiles.forEach((file: string) => this.addWatchFile(file));

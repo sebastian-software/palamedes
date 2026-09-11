@@ -34,6 +34,7 @@ interface WithPalamedesOptions {
   /** @deprecated Use projectRoot. */
   cwd?: string;
   failOnMissing?: boolean;
+  /** @deprecated Invalid and unsupported ICU is always fatal in v2. */
   failOnCompileError?: boolean;
   runtimeModule?: string;
   keepSourceFallbacks?: boolean;
@@ -49,7 +50,8 @@ Defaults:
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
-- `failOnCompileError`: `false`
+- `failOnCompileError`: deprecated compatibility option; it no longer
+  downgrades invalid or unsupported ICU to a warning.
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true`
 - `serverFunctions`: `false`

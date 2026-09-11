@@ -367,6 +367,10 @@ export type CatalogModuleOptions = {
   locale: string;
   pseudoLocale?: string;
   failOnMissing?: boolean;
+  /**
+   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU.
+   * Remove this option; it no longer changes compilation behavior.
+   */
   failOnCompileError?: boolean;
   missingFailureHint?: string;
   compileFailureHint?: string;
@@ -1080,7 +1084,7 @@ export function compileCatalogModule(
     locale: options.locale,
     pseudoLocale: options.pseudoLocale,
     failOnMissing: options.failOnMissing ?? false,
-    failOnCompileError: options.failOnCompileError ?? false,
+    failOnCompileError: options.failOnCompileError,
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
@@ -1101,7 +1105,7 @@ export async function compileCatalogModuleAsync(
     locale: options.locale,
     pseudoLocale: options.pseudoLocale,
     failOnMissing: options.failOnMissing ?? false,
-    failOnCompileError: options.failOnCompileError ?? false,
+    failOnCompileError: options.failOnCompileError,
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
