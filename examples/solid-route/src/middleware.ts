@@ -14,7 +14,7 @@ export default [
     }
 
     const locale = normalizeLocale(url.pathname.split("/").filter(Boolean)[0]);
-    return serverI18nScope.run(createServerI18n(locale), async () => {
+    return serverI18nScope.run(await createServerI18n(locale), async () => {
       await waitForServerI18nTestBarrier(request);
       const response = await next();
       markServerI18nTestBarrierReached(request, response.headers);

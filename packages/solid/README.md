@@ -124,6 +124,30 @@ function LocaleToolbar(props: { locale: "en" | "de" }) {
 Locale links deliberately navigate the document. Components and macros read the
 plain runtime getter and do not subscribe to in-document locale replacement.
 
+## SSR and split catalogs
+
+For SSR applications, configure the Vite plugin with
+`experimentalGraphSplitting: true`, install the client instance with
+`setClientI18n`, and load the request catalog through the server-only virtual
+module:
+
+```ts
+import { loadServerCatalog } from "virtual:palamedes/server-catalogs";
+
+const i18n = createI18n();
+i18n.load(locale, await loadServerCatalog(locale));
+i18n.activate(locale);
+```
+
+The virtual module creates lazy imports for the configured catalogs and uses
+the runtime server catalog store. It keeps request-local i18n state isolated
+while sharing compiled catalog content between requests. Client sidecars are
+registered as their route chunks evaluate, so an app should use a regular
+Solid `ErrorBoundary` for its host error UI when a sidecar is unavailable.
+Avoid importing `.po` files or the parser in application code; author messages
+with `@palamedes/solid/macro` and `@palamedes/core/macro` so the compiler can
+emit compiled-only runtime calls.
+
 ## Related Docs
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)

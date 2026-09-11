@@ -7,3 +7,9 @@ declare module "*.po" {
 
   export default catalog;
 }
+
+declare module "virtual:palamedes/server-catalogs" {
+  export function loadServerCatalog(
+    locale: string,
+  ): Promise<import("@palamedes/core/compiled").CompiledCatalogMessages>;
+}
