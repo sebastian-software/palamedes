@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn ferrocat_version_matches_declared_dependency() {
-        let manifest = include_str!("../Cargo.toml");
+        let manifest = include_str!("../../../Cargo.toml");
         let declared = dependency_version(manifest, "ferrocat")
             .expect("ferrocat dependency should be declared");
 
