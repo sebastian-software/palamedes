@@ -24,6 +24,7 @@ import {
   compileCatalogModule,
   renderCatalogModule,
 } from "@palamedes/core-node";
+import { createServerCatalogStore } from "@palamedes/runtime/server";
 import {
   resolveMacroRuntimeModule,
   transformPalamedesMacros,
@@ -127,7 +128,30 @@ export function createPalamedesRemixCatalogAssetRegistry(
   const basePath = options.basePath ?? "/assets";
   const entries = new Map<string, { sourcePath: string; compiledIds: string[] }>();
   const keysBySource = new Map<string, string>();
-  const catalogLoads = new Map<string, Promise<CompiledCatalogMessages>>();
+  const serverCatalogStore = createServerCatalogStore({
+    load: async ({ locale }) => {
+      const catalogs = config.catalogs;
+      if (catalogs.length === 0) {
+        throw new Error("Palamedes config does not define a catalog for server loading.");
+      }
+      const result = compileCatalogModule(
+        toCatalogArtifactConfig(config),
+        catalogResourcePath(config, catalogs[0], locale),
+        {
+          locale,
+          pseudoLocale: config.pseudoLocale,
+          missingFailureHint:
+            "You see this error because executable Remix server catalog compilation failed on a missing translation.",
+          compileFailureHint:
+            "These errors fail loading because executable Remix server catalog compilation was configured as fatal.",
+          diagnosticsWarningHint:
+            "Inspect the generated Remix server catalog diagnostics before deploying this locale.",
+        },
+      );
+      result.warnings.forEach((warning) => console.warn(warning));
+      return [evaluateCompiledCatalogModule(result.code)];
+    },
+  });
 
   const refreshConfig = (): void => {
     const nextConfig = loadPalamedesConfigSync(options);
@@ -140,7 +164,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = catalogDigest(config);
     entries.clear();
     keysBySource.clear();
-    catalogLoads.clear();
+    serverCatalogStore.invalidate();
   };
 
   const refreshCatalogGeneration = (): void => {
@@ -151,7 +175,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = nextDigest;
     entries.clear();
     keysBySource.clear();
-    catalogLoads.clear();
+    serverCatalogStore.invalidate();
   };
 
   const register = (sourcePath: string, compiledIds: readonly string[]): string => {
@@ -177,42 +201,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
       if (!config.locales.includes(locale)) {
         return Promise.reject(new Error(`Unsupported Palamedes catalog locale "${locale}".`));
       }
-      const cached = catalogLoads.get(locale);
-      if (cached) {
-        return cached;
-      }
-
-      const load = Promise.resolve()
-        .then(() => {
-          const catalogs = config.catalogs;
-          if (catalogs.length === 0) {
-            throw new Error("Palamedes config does not define a catalog for server loading.");
-          }
-          const result = compileCatalogModule(
-            toCatalogArtifactConfig(config),
-            catalogResourcePath(config, catalogs[0], locale),
-            {
-              locale,
-              pseudoLocale: config.pseudoLocale,
-              missingFailureHint:
-                "You see this error because executable Remix server catalog compilation failed on a missing translation.",
-              compileFailureHint:
-                "These errors fail loading because executable Remix server catalog compilation was configured as fatal.",
-              diagnosticsWarningHint:
-                "Inspect the generated Remix server catalog diagnostics before deploying this locale.",
-            },
-          );
-          result.warnings.forEach((warning) => console.warn(warning));
-          return evaluateCompiledCatalogModule(result.code);
-        })
-        .catch((error) => {
-          if (catalogLoads.get(locale) === load) {
-            catalogLoads.delete(locale);
-          }
-          throw error;
-        });
-      catalogLoads.set(locale, load);
-      return load;
+      return serverCatalogStore.load(locale);
     },
 
     generation() {
@@ -310,7 +299,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
       if (sourcePath === undefined) {
         entries.clear();
         keysBySource.clear();
-        catalogLoads.clear();
+        serverCatalogStore.invalidate();
       } else {
         const key = keysBySource.get(sourcePath);
         if (key) {

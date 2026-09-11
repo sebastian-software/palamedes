@@ -13,7 +13,11 @@ import {
   type CatalogArtifactConfig,
 } from "@palamedes/core-node";
 import type { I18nInstance } from "@palamedes/runtime";
-import { createScopedI18nRunner, createServerI18nScope } from "@palamedes/runtime/server";
+import {
+  createScopedI18nRunner,
+  createServerCatalogStore,
+  createServerI18nScope,
+} from "@palamedes/runtime/server";
 import { AcceptLanguage } from "remix/headers";
 import { createContextKey, type Middleware, type RequestContext } from "remix/router";
 
@@ -150,7 +154,6 @@ export function createRemixI18nServer<
 >(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
   const scope = createServerI18nScope<T>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
-  const catalogLoads = new Map<TLocale, Promise<CompiledCatalogMessages>>();
   const clientBootstrapCache = new Map<TLocale, RemixI18nBootstrap<TLocale>>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
@@ -165,6 +168,21 @@ export function createRemixI18nServer<
     );
   }
 
+  const registryLoad = options.catalogAssets?.registry?.load;
+  const serverCatalogStore = createServerCatalogStore<TLocale>({
+    load: async ({ locale }) => {
+      if (options.loadMessages) {
+        return [await options.loadMessages(locale)];
+      }
+      if (registryLoad) {
+        return [await registryLoad(locale)];
+      }
+      throw new Error(
+        "Palamedes Remix requires loadMessages or catalogAssets.registry for server catalog loading.",
+      );
+    },
+  });
+
   const refreshRegistryGeneration = (): void => {
     const next = options.catalogAssets?.registry?.generation?.();
     if (next === undefined || next === serverRegistryGeneration) {
@@ -173,7 +191,7 @@ export function createRemixI18nServer<
     }
     serverRegistryGeneration = next;
     catalogCache.clear();
-    catalogLoads.clear();
+    serverCatalogStore.invalidate();
     clientBootstrapCache.clear();
     clientCatalogAssetCache.clear();
   };
@@ -206,36 +224,14 @@ export function createRemixI18nServer<
     if (cached) {
       return cached;
     }
-    const inFlight = catalogLoads.get(locale);
-    if (inFlight) {
-      return await inFlight;
+    const ready = serverCatalogStore.getReady(locale);
+    if (ready) {
+      catalogCache.set(locale, ready);
+      return ready;
     }
-
-    const load = Promise.resolve()
-      .then(() => {
-        if (options.loadMessages) {
-          return options.loadMessages(locale);
-        }
-        const load = options.catalogAssets?.registry?.load;
-        if (load) {
-          return load(locale);
-        }
-        throw new Error(
-          "Palamedes Remix requires loadMessages or catalogAssets.registry for server catalog loading.",
-        );
-      })
-      .then((messages) => {
-        catalogCache.set(locale, messages);
-        return messages;
-      })
-      .catch((error) => {
-        if (catalogLoads.get(locale) === load) {
-          catalogLoads.delete(locale);
-        }
-        throw error;
-      });
-    catalogLoads.set(locale, load);
-    return await load;
+    const messages = await serverCatalogStore.load(locale);
+    catalogCache.set(locale, messages);
+    return messages;
   };
 
   const createScopedContext = async (input: Request | RemixLocaleResolutionInput) => {
