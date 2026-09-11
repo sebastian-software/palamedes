@@ -26,3 +26,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return <Outlet />;
 }
+
+export function ErrorBoundary() {
+  return (
+    <main role="alert">
+      <h1>This page is temporarily unavailable.</h1>
+      <p>Reload the page to try again.</p>
+      <a href="">Reload page</a> <a href="/">Go home</a>
+    </main>
+  );
+}

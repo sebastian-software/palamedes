@@ -148,6 +148,14 @@ try {
       expectText(enPage, "server-function-default", "Default parameter confirmed locale."),
     ]);
     await Promise.all([
+      dePage.getByTestId("lazy-browser-trigger").click(),
+      enPage.getByTestId("lazy-browser-trigger").click(),
+    ]);
+    await Promise.all([
+      expectText(dePage, "lazy-browser-message", "Lokales Browserfragment bestätigte Sprache."),
+      expectText(enPage, "lazy-browser-message", "Lazy browser fragment confirmed locale."),
+    ]);
+    await Promise.all([
       expectText(dePage, "server-rendered-message", "Server-Rendern bestätigte Sprache."),
       expectText(enPage, "server-rendered-message", "Server render confirmed locale."),
     ]);

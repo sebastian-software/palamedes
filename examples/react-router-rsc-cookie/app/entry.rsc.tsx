@@ -1,4 +1,5 @@
 import type { RouterContextProvider } from "react-router";
+import path from "node:path";
 import defaultEntry from "@react-router/dev/config/default-rsc-entries/entry.rsc";
 import { createReactRouterRscI18nRequestScope } from "@palamedes/react-router-rsc";
 import {
@@ -8,7 +9,12 @@ import {
 
 import { createRequestI18n } from "./lib/i18n";
 
-const palamedesI18n = createReactRouterRscI18nRequestScope(createRequestI18n);
+const palamedesI18n = createReactRouterRscI18nRequestScope(createRequestI18n, {
+  catalogDelivery: {
+    clientDirectory: path.resolve(import.meta.dirname, "../client"),
+    development: import.meta.env?.DEV ?? false,
+  },
+});
 
 export default {
   fetch(request: Request, requestContext?: RouterContextProvider) {

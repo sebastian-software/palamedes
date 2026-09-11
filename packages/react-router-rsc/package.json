@@ -34,7 +34,8 @@
     "stub": "unbuild --stub"
   },
   "dependencies": {
-    "@palamedes/runtime": "workspace:^"
+    "@palamedes/runtime": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^"
   },
   "devDependencies": {
     "@react-router/dev": "8.3.1",
