@@ -101,9 +101,11 @@ function LocaleToolbar({ locale }: { locale: "en" | "de" }) {
 
 ## Render-Safe Client Catalogs
 
-Next.js App Router applications can keep generated catalogs in per-locale
-chunks while giving translated Client Components the right catalog on their
-first hydration render. Define the boundary once in a `"use client"` module:
+For a custom React host that owns per-locale compiled assets, the client
+boundary can give translated Client Components the right catalog on their first
+hydration render. The standard Next adapter owns this delivery automatically;
+use the boundary only when the host intentionally supplies an equivalent
+transport. Define it once in a `"use client"` module:
 
 ```tsx
 "use client";

@@ -1,14 +1,15 @@
 # `@palamedes/next-plugin`
 
-`@palamedes/next-plugin` wires Palamedes macro transformation and `.po` loading
-into Next.js.
+`@palamedes/next-plugin` wires Palamedes macro transformation and automatic
+compiled catalog delivery into Next.js.
 
 For an executable App Router Server Component path, start with
 [First Working Translation with Next.js](../nextjs-first-run.md).
 
-Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
-`.po` import loader. See [Catalog formats](../catalog-formats.md) for the
-storage/import boundary.
+Catalog storage can be PO or FCL in `palamedes.yaml`, but the automatic Next
+graph/server-splitting path currently supports PO catalogs only. A configured
+FCL catalog is rejected by that path. See [Catalog formats](../catalog-formats.md)
+for the storage/import boundary.
 
 ## Exports
 
@@ -152,8 +153,9 @@ locale-loader map, import-map HTML, or executable RSC payload is required.
 Set `<html lang>` from the server locale policy. Optional
 `data-palamedes-time-zone` preserves the selected client formatting time zone.
 Locale changes require a full document navigation. Raw ICU catalogs are never
-accepted by application runtimes. PO is the supported import format; the legacy
-`messageSplitting: false` option throws instead of selecting an older mode.
+accepted by application runtimes. PO is currently required for automatic Next
+graph delivery; the legacy `messageSplitting: false` option throws instead of
+selecting an older mode.
 
 Required fragment failures stop dependent module execution in both development
 and production. Missing compiled entries also throw. Provide ordinary Next

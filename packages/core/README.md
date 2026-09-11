@@ -131,16 +131,12 @@ Generated catalog modules, transformed `Trans` components, and compiled MDX
 select their matching `compiled` entrypoints automatically. The explicit Core
 import above keeps the parser out of the application's own i18n factory too.
 
-Hand-written string catalogs keep the bounded lazy parser and the same
-`onError` fallback behavior through `createI18n` from `@palamedes/core`. The
-parser-free factory rejects those unbranded catalogs at `load()` so an
-accidental compatibility dependency cannot silently enlarge the browser
-bundle. Generated catalogs are executable modules rather than JSON data: JSON
-serialization intentionally omits their function entries.
-
-The package-root instance also exposes an optional `parsePattern(pattern)`
-adapter capability. It parses the argument as a raw ICU pattern without a
-catalog lookup; the parser-free factory intentionally omits it.
+Both public entrypoints accept only branded `CompiledCatalogMessages` at
+runtime. `CatalogMessages` remains a type for build-time string data; compile
+those catalogs before application execution. Generated catalogs are executable
+modules rather than JSON data: JSON serialization intentionally omits their
+function entries. ICU parsing belongs to authoring, validation, and compilation
+tooling, not to the application runtime.
 
 Palamedes supports the common ICU argument types that product UIs usually need
 inside translated sentences:

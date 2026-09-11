@@ -276,35 +276,41 @@ merge ambiguous entries or entries with different contexts. See
 
 ## Common Migration Errors
 
-### "No active client i18n instance"
+### "Catalog dependency failed before translated UI"
 
 Cause:
 
-- transformed code is running before `setClientI18n(...)`
+- the adapter could not load the active locale's compiled fragment, or the
+  document locale does not match the host's locale policy
 
 Fix:
 
-- register the active client instance during app startup before translated UI renders
+- keep the ordinary host error view independent of translated messages and
+  offer a full document reload; verify that the adapter config covers the
+  translated module and that `<html lang>` is set before the entry runs
 
-### "No active server i18n instance"
+Supported adapters initialize the client runtime and derive catalog
+dependencies automatically. Do not add `setClientI18n`, direct locale imports,
+or an application loader map to recover this failure.
 
-Cause:
+### "No active server i18n instance" in a custom integration
 
-- server-side translated code runs before `setServerI18nGetter(...)`
-
-Fix:
-
-- expose the request-local i18n instance through `@palamedes/runtime`
+Supported host adapters create the request-local scope and load the active
+compiled catalog themselves. An explicit custom server integration must expose
+its request-local instance through `@palamedes/runtime`; this is outside the
+standard adapter path.
 
 ### Extraction works, but translations do not render
 
 Cause:
 
-- catalogs exist, but the active locale has not loaded messages into the runtime instance
+- the translated source module is outside the configured catalog `include`
+  pattern, or its document locale was not selected before entry evaluation
 
 Fix:
 
-- explicitly load and activate locale messages before rendering
+- fix the catalog configuration and host locale policy; supported adapters
+  derive and await the active compiled fragment before rendering
 
 ### Explicit `id` usage now fails
 

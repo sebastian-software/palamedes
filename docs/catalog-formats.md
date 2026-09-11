@@ -73,9 +73,12 @@ Catalog storage and framework module loading are related but separate:
 
 - `pmds extract`, `pmds audit`, `pmds catalog merge`, and native compile APIs
   understand both PO and FCL through the Palamedes config.
-- The current first-party Vite and Next import loaders are still `.po` import
-  loaders. Keep app-facing imports on PO unless the host adapter explicitly
-  documents FCL imports.
+- The Vite catalog loader has a tested PO/FCL compilation path. That loader
+  check does not by itself promise a custom application transport; use the
+  adapter's documented delivery path.
+- Next's automatic graph/server-splitting path currently supports PO catalogs
+  only. A configured FCL catalog is rejected by that splitting path, so keep
+  Next v2 graph delivery on PO until a later adapter contract documents FCL.
 - `pmds catalog convert` can write `.fcl` files beside existing `.po` files so
   teams can trial FCL storage before changing config.
 

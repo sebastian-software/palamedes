@@ -130,9 +130,10 @@ reset alone cannot guarantee recovery. Compiled translation fallbacks are
 resolved during the build and remain independent of delivery failures.
 
 `messageSplitting` is a deprecated compatibility option. Remove it; `false`
-is rejected because automatic delivery is the v2 contract. Only PO catalog
-imports are supported by this adapter. Keep server adapter imports behind
-`server-only`; they require Node and are not Edge runtime entry points.
+is rejected because automatic delivery is the v2 contract. Automatic Next
+server splitting currently supports PO catalogs only. Keep server adapter
+imports behind `server-only`; they require Node and are not Edge runtime
+entry points.
 
 The Next render-lifetime adapter supports the package's declared Next 16 peer
 range and is verified against Next 16.3.4. It intentionally binds to Next's

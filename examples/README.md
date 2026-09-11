@@ -29,10 +29,10 @@ Public demo URLs are documented as the live reference surface, but reachability
 depends on the hosting and DNS rows in
 [docs/demo-deployments.md](../docs/demo-deployments.md).
 
-The server-framework matrix intentionally uses the package-root compatibility
-runtime: its ticket panels directly author ICU patterns through `Trans` to test
-that fallback surface. The focused Vite MDX example is the end-to-end proof for
-the parser-free generated path through the `compiled` entrypoints.
+The server-framework matrix uses the same compiled-only application runtime as
+production: macros author source messages, and the host adapters deliver the
+compiled active-locale dependencies. The focused Vite MDX example adds the
+end-to-end parser-free build proof through the `compiled` entrypoints.
 
 This file is the canonical documentation for the full matrix. Individual
 example READMEs are optional and should stay short; add one only when a specific

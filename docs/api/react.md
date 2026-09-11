@@ -98,15 +98,16 @@ const items = buildLocaleSwitchItems({
 });
 ```
 
-Initialize the client i18n before hydration when translated client components
-render in the initial HTML. Prefer `createClientCatalogBoundary()` for compiled
-catalog chunks; it owns the loading boundary and initializes the getter before
-translated descendants hydrate.
+Supported host adapters initialize the client runtime and deliver compiled
+active-locale dependencies automatically. `createClientCatalogBoundary()` is a
+low-level custom React escape hatch for a host that owns an equivalent transport;
+it is not required for the standard Vite or Next integration and should not be
+used to add an application catalog loader map.
 
 ## Client Catalog Boundaries
 
-For the recommended document-reload model, create a boundary once in a
-`"use client"` module:
+For a custom React host that owns document reloads and compiled asset delivery,
+create a boundary once in a `"use client"` module:
 
 ```tsx
 import { createI18n } from "@palamedes/core/compiled";
@@ -126,7 +127,7 @@ export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
 ```
 
 The optional `createI18n` factory is used for both server rendering and client
-hydration. Give the server's application-owned factory the same options,
+hydration. Give the custom host's server factory the same options,
 especially `timeZone`, whenever translated markup includes ICU dates or times.
 
 The active locale starts loading when the browser module evaluates. The
