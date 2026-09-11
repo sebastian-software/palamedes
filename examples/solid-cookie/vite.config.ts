@@ -4,6 +4,14 @@ import solid from "@solidjs/vite-plugin";
 import { fileRoutes } from "filesystem-routing/vite";
 import { palamedes } from "@palamedes/vite-plugin";
 
+const nativeProductionEntries =
+  process.env.NODE_ENV === "production"
+    ? {
+        entryServer: "./src/entry-server-csp.tsx",
+        entryClient: "./src/entry-client-csp.tsx",
+      }
+    : {};
+
 export default defineConfig({
   plugins: [
     palamedes({ framework: "solid" }),
@@ -13,8 +21,8 @@ export default defineConfig({
       ssr: true,
       start: {
         middleware: "./src/middleware.ts",
-        entryServer: "./src/entry-server.tsx",
-        entryClient: "./src/entry-client.tsx",
+        document: "./src/Document.tsx",
+        ...nativeProductionEntries,
       },
     }),
     fileRoutes(),
