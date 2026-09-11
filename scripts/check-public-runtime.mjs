@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -44,6 +46,43 @@ for (const format of ["mjs", "cjs"]) {
   for (const removed of ["parsePattern", "getMessage", "getMessageNodes", "reportError"])
     assert.ok(!(removed in runtime));
 }
+// Exercise the published Remix module formats, not only their declarations.
+// This catches ESM-only resolution APIs accidentally emitted as undefined in CJS.
+const fixture = await mkdtemp(path.join(tmpdir(), "palamedes-runtime-contract-"));
+try {
+  await mkdir(path.join(fixture, "locales"));
+  await writeFile(
+    path.join(fixture, "palamedes.yaml"),
+    "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+  );
+  await writeFile(
+    path.join(fixture, "locales/en.po"),
+    'msgid ""\nmsgstr ""\n"Language: en\\n"\n"Content-Type: text/plain; charset=UTF-8\\n"\n\nmsgid "Hello {name}"\nmsgstr "Hello {name}"\n',
+  );
+  for (const format of ["mjs", "cjs"]) {
+    const load = async (name, entry = "index") => {
+      const url = new URL(`../packages/${name}/dist/${entry}.${format}`, import.meta.url);
+      return format === "mjs" ? import(url.href) : require(fileURLToPath(url));
+    };
+    const [remix, core] = await Promise.all([load("remix"), load("core")]);
+    const registry = remix.createPalamedesRemixCatalogAssetRegistry({ cwd: fixture, watch: false });
+    try {
+      const messages = await registry.load("en");
+      assert.ok(core.isCompiledCatalog(messages));
+      assert.equal(await registry.load("en"), messages);
+      const i18n = core.createI18n({ locale: "en" });
+      i18n.load("en", messages);
+      const keys = Object.keys(messages);
+      assert.equal(keys.length, 1);
+      assert.equal(i18n._(keys[0], { name: "Ada" }), "Hello Ada");
+    } finally {
+      registry.close?.();
+    }
+  }
+} finally {
+  await rm(fixture, { recursive: true, force: true });
+}
+
 console.log(
-  "Public Core/React/Solid/runtime artifacts are parser-free; ESM and CJS Core aliases execute the same contract.",
+  "Public application artifacts are parser-free; ESM/CJS Core aliases and native Remix catalog imports execute the same contract.",
 );
