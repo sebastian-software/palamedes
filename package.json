@@ -75,7 +75,7 @@
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
     "test:rust": "cargo test --workspace",
-    "agent:check": "pnpm build && concurrently --kill-others-on-fail --group --names release,published-types,llms,decisions,format,lint,test,types,rustfmt,rust \"pnpm check:release-set\" \"pnpm check:published-types\" \"pnpm check:llms\" \"pnpm check:decisions\" \"pnpm format:check\" \"pnpm lint\" \"pnpm test\" \"pnpm check-types\" \"cargo fmt --all --check\" \"cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked\"",
+    "agent:check": "pnpm build && pnpm test && concurrently --kill-others-on-fail --group --names release,published-types,llms,decisions,format,lint,types,rustfmt,rust \"pnpm check:release-set\" \"pnpm check:published-types\" \"pnpm check:llms\" \"pnpm check:decisions\" \"pnpm format:check\" \"pnpm lint\" \"pnpm check-types\" \"cargo fmt --all --check\" \"cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked\"",
     "check:runtime": "node ./scripts/check-public-runtime.mjs"
   },
   "devDependencies": {
