@@ -152,6 +152,55 @@ describe("palamedes vite plugin", () => {
     );
   });
 
+  it("generates a server-only lazy catalog store for configured locales", async () => {
+    const addWatchFile = vi.fn();
+    const serverCatalogs = palamedes().find(
+      (plugin) => plugin.name === "palamedes:server-catalogs",
+    );
+    if (typeof serverCatalogs?.load !== "function") {
+      throw new TypeError("Expected server catalog virtual module hook");
+    }
+
+    const result = await serverCatalogs.load.call(
+      {
+        addWatchFile,
+        environment: { name: "ssr", config: { consumer: "server" } },
+      } as never,
+      "\0palamedes:server-catalogs",
+      { ssr: true } as never,
+    );
+
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).toContain('import { createServerCatalogStore } from "@palamedes/runtime/server";');
+    expect(code).toContain('"en": () => Promise.all([');
+    expect(code).toContain('"de": () => Promise.all([');
+    expect(code).toContain('"pseudo": () => Promise.all([');
+    expect(code).toContain('import("/repo/src/locales/en.po")');
+    expect(code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
+  });
+
+  it("rejects the server catalog virtual module in browser environments", async () => {
+    const serverCatalogs = palamedes().find(
+      (plugin) => plugin.name === "palamedes:server-catalogs",
+    );
+    if (typeof serverCatalogs?.load !== "function") {
+      throw new TypeError("Expected server catalog virtual module hook");
+    }
+    const error = vi.fn((message: string) => {
+      throw new Error(message);
+    });
+
+    await expect(
+      serverCatalogs.load.call(
+        { error, environment: { name: "client", config: { consumer: "client" } } } as never,
+        "\0palamedes:server-catalogs",
+        { ssr: false } as never,
+      ),
+    ).rejects.toThrow("virtual:palamedes/server-catalogs is server-only");
+    expect(error).toHaveBeenCalledOnce();
+  });
+
   it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
     "transforms %s with the shared bundler default",
     (file) => {

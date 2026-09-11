@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { t } from "@palamedes/core/macro";
-import { activateServerI18n } from "./i18n.server";
 import { getLocaleLabel, locales, normalizeLocale } from "./i18n";
 
 export const loadDocumentLocale = createServerFn({ method: "GET" }).handler(() => {
@@ -25,8 +24,6 @@ export const loadHomePageData = createServerFn({ method: "GET" }).handler(async 
     acceptLanguageHeader,
     requestHost: host,
   });
-  activateServerI18n(locale);
-
   return {
     banner: locales.suggest({
       acceptLanguageHeader,
@@ -48,8 +45,6 @@ export const getLocalizedServerStatus = createServerFn({ method: "GET" })
   }))
   .handler(async ({ data }) => {
     const locale = data.locale;
-    activateServerI18n(locale);
-
     return {
       locale,
       localeLabel: getLocaleLabel(locale),

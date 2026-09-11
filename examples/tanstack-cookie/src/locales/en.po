@@ -91,6 +91,14 @@ msgstr "each"
 msgid "Fewer tickets"
 msgstr "Fewer tickets"
 
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Lazy feature"
+msgstr "Lazy feature"
+
+#: examples/tanstack-cookie/src/components/LazyFeature.tsx
+msgid "Lazy translated feature"
+msgstr "Lazy translated feature"
+
 #: examples/tanstack-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Locale"
@@ -110,6 +118,10 @@ msgstr "Number"
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 msgid "one switch, every format"
 msgstr "one switch, every format"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Open lazy feature"
+msgstr "Open lazy feature"
 
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 msgid "Plural"
@@ -138,6 +150,10 @@ msgstr "server locale"
 #: examples/tanstack-cookie/src/lib/server-function-helpers.server.ts#synchronousServerFunctionMessage
 msgid "Synchronous server helper confirmed locale."
 msgstr "Synchronous server helper confirmed locale."
+
+#: examples/tanstack-cookie/src/components/LazyFeature.tsx
+msgid "This panel was loaded after the page became interactive."
+msgstr "This panel was loaded after the page became interactive."
 
 #: examples/tanstack-cookie/src/routes/index.tsx#Home
 msgid ""

@@ -9,12 +9,12 @@ msgstr ""
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{amount, number, ::currency/EUR}"
-msgstr ""
+msgstr "{amount, number, ::currency/EUR}"
 
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{count, number}"
-msgstr ""
+msgstr "{count, number}"
 
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
@@ -27,15 +27,15 @@ msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
 
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{when, date, full}"
-msgstr ""
+msgstr "{when, date, full}"
 
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 msgid "{when, date, medium}"
-msgstr ""
+msgstr "{when, date, medium}"
 
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{when, time, short}"
-msgstr ""
+msgstr "{when, time, short}"
 
 #: examples/tanstack-cookie/src/components/ClientReady.tsx#ClientReady
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
@@ -91,6 +91,14 @@ msgstr "cada una"
 msgid "Fewer tickets"
 msgstr "Menos entradas"
 
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Lazy feature"
+msgstr "Función diferida"
+
+#: examples/tanstack-cookie/src/components/LazyFeature.tsx
+msgid "Lazy translated feature"
+msgstr "Función diferida traducida"
+
 #: examples/tanstack-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Idioma"
@@ -110,6 +118,10 @@ msgstr "Número"
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 msgid "one switch, every format"
 msgstr "un clic, todos los formatos"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Open lazy feature"
+msgstr "Abrir función diferida"
 
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 msgid "Plural"
@@ -138,6 +150,10 @@ msgstr "idioma del servidor"
 #: examples/tanstack-cookie/src/lib/server-function-helpers.server.ts#synchronousServerFunctionMessage
 msgid "Synchronous server helper confirmed locale."
 msgstr "El asistente síncrono del servidor confirmó el idioma."
+
+#: examples/tanstack-cookie/src/components/LazyFeature.tsx
+msgid "This panel was loaded after the page became interactive."
+msgstr "Este panel se cargó después de activar la página."
 
 #: examples/tanstack-cookie/src/routes/index.tsx#Home
 msgid ""
