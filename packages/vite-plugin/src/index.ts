@@ -95,6 +95,42 @@ type EnvironmentAwarePluginContext = {
   };
 };
 
+const ROUTE_FACADE_VERSION = "v2";
+
+type RouteFacadeChunk = {
+  code: string;
+  fileName: string;
+  exports: readonly string[];
+};
+
+function routeFacadeSource(relative: string, exports: readonly string[]): string {
+  const renderedExports = exports
+    .map((name, index) => {
+      const value = `__export${index}`;
+      const failedExport =
+        name === "default"
+          ? "function(){throw failure}"
+          : name === "meta" || name === "links"
+            ? "()=>[]"
+            : "undefined";
+      return `const ${value}=failure?${failedExport}:route[${JSON.stringify(name)}];export{${value} as ${name}};`;
+    })
+    .join("\n");
+  return `/*palamedes-route-facade:${ROUTE_FACADE_VERSION}*/let route,failure;try{route=await import(${JSON.stringify(relative)})}catch(error){if(!globalThis[Symbol.for("palamedes.document-catalogs-ready")])throw error;failure=error}\n${renderedExports}`;
+}
+
+function createRouteFacade(chunk: RouteFacadeChunk): {
+  assetFileName: string;
+  assetSource: string;
+  facadeSource: string;
+} {
+  const hash = createHash("sha256").update(chunk.code).digest("hex").slice(0, 12);
+  const assetFileName = `${path.posix.dirname(chunk.fileName)}/palamedes-route-${hash}.js`;
+  const relative = `./${path.posix.basename(assetFileName)}`;
+  const facadeSource = routeFacadeSource(relative, chunk.exports);
+  return { assetFileName, assetSource: chunk.code, facadeSource };
+}
+
 function isServerEnvironment(context: unknown, ssr = false, legacyBuildSsr = false): boolean {
   const environment = (context as EnvironmentAwarePluginContext).environment;
   // Vite <=5 has no environment context, so use the root build.ssr flag only
@@ -964,9 +1000,16 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   plugins.push({
     name: "palamedes:react-router-route-boundaries",
     augmentChunkHash(chunk) {
-      return chunk.facadeModuleId?.includes("?__react-router-build-client-route")
-        ? "palamedes-route-error-boundary-v1"
-        : undefined;
+      if (!chunk.facadeModuleId?.includes("?__react-router-build-client-route")) return undefined;
+      return (
+        createHash("sha256")
+          // Rollup calls augmentChunkHash before rendered code exists. Hash the
+          // complete generated template with a stable route-asset placeholder;
+          // this couples facade-generator changes and export-shape changes to
+          // the entry filename instead of relying on a fixed marker.
+          .update(routeFacadeSource("./palamedes-route-[content-hash].js", chunk.exports))
+          .digest("hex")
+      );
     },
     generateBundle(_options, bundle) {
       for (const chunk of Object.values(bundle)) {
@@ -975,23 +1018,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
         )
           continue;
-        const hash = createHash("sha256").update(chunk.code).digest("hex").slice(0, 12);
-        const fileName = `${path.posix.dirname(chunk.fileName)}/palamedes-route-${hash}.js`;
-        this.emitFile({ type: "asset", fileName, source: chunk.code });
-        const relative = `./${path.posix.basename(fileName)}`;
-        const exports = chunk.exports
-          .map((name, index) => {
-            const value = `__export${index}`;
-            const failedExport =
-              name === "default"
-                ? "function(){throw failure}"
-                : name === "meta" || name === "links"
-                  ? "()=>[]"
-                  : "undefined";
-            return `const ${value}=failure?${failedExport}:route[${JSON.stringify(name)}];export{${value} as ${name}};`;
-          })
-          .join("\n");
-        chunk.code = `let route,failure;try{route=await import(${JSON.stringify(relative)})}catch(error){if(!globalThis[Symbol.for("palamedes.document-catalogs-ready")])throw error;failure=error}\n${exports}`;
+        const facade = createRouteFacade(chunk);
+        this.emitFile({
+          type: "asset",
+          fileName: facade.assetFileName,
+          source: facade.assetSource,
+        });
+        chunk.code = facade.facadeSource;
         chunk.map = null;
       }
     },

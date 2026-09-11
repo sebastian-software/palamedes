@@ -106,6 +106,27 @@ beforeEach(() => {
 });
 
 describe("palamedes vite plugin", () => {
+  it("hashes generated route facade output instead of a fixed marker", () => {
+    const routePlugin = palamedes().find(
+      (plugin) => plugin.name === "palamedes:react-router-route-boundaries",
+    );
+    if (!routePlugin?.augmentChunkHash) throw new Error("Route facade plugin is missing.");
+    const route = {
+      facadeModuleId: "/repo/routes/home.tsx?__react-router-build-client-route",
+      code: "export default function Home() {}",
+      fileName: "assets/home.js",
+      exports: ["default"],
+    };
+    const withNamedExport = { ...route, exports: ["default", "meta"] };
+    const augmentChunkHash =
+      typeof routePlugin.augmentChunkHash === "function"
+        ? routePlugin.augmentChunkHash
+        : routePlugin.augmentChunkHash.handler;
+    expect(augmentChunkHash.call({} as never, route as never)).not.toBe(
+      augmentChunkHash.call({} as never, withNamedExport as never),
+    );
+  });
+
   it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
     "transforms %s with the shared bundler default",
     (file) => {
