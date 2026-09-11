@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "@playwright/test";
-import { EXAMPLE_MATRIX, ROOT } from "./example-matrix.mjs";
+import { EXAMPLE_MATRIX } from "./example-matrix.mjs";
 import { startCommand, stopCommand } from "./example-process.mjs";
 
 const example = EXAMPLE_MATRIX.find(({ id }) => id === "tanstack-cookie");

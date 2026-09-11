@@ -172,7 +172,7 @@ function createScriptNonceTransform(nonce: string): Transform {
   });
 }
 
-const TANSTACK_ENTRY_PATTERN = /\bsrc=(['"])(\/assets\/index-[^'"]+\.js)\1/iu;
+const TANSTACK_ENTRY_PATTERN = /\ssrc=(['"])(\/assets\/index-[^'"]+\.js)\1/iu;
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 
