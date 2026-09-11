@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/vite-plugin",
-  "version": "1.25.0",
+  "version": "2.0.0",
   "description": "Vite plugin for Palamedes using OXC-based macro transformation",
   "keywords": [
     "i18n",

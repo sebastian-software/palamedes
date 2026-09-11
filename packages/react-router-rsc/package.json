@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/react-router-rsc",
-  "version": "1.25.0",
+  "version": "2.0.0",
   "description": "Experimental React Router RSC request-scoped i18n for Palamedes",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",

@@ -106,6 +106,17 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [2.0.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.25.0...palamedes-v2.0.0) (2026-09-11)
+
+
+### Performance Improvements
+
+* **core:** cache formatters by locale across mixed formats ([2ef188b](https://github.com/sebastian-software/palamedes/commit/2ef188b0dbd91434d61e4355fb01560e4d917cc6))
+* **core:** streamline runtime and Intl formatter lookups ([198aff8](https://github.com/sebastian-software/palamedes/commit/198aff8b41010b56c6f8ccf99c96d5cac37a59a1))
+* **core:** streamline runtime lookups and cache formatters by locale ([3e0583d](https://github.com/sebastian-software/palamedes/commit/3e0583dce7d75befd62bca2f5f04b48b95a6afff))
+* **renderers:** reduce join allocations and release React render state ([c77c95d](https://github.com/sebastian-software/palamedes/commit/c77c95dd37f0d20c44a94d3656d35ab7a66ddf58))
+* **renderers:** reduce join allocations and release React render state ([10f5043](https://github.com/sebastian-software/palamedes/commit/10f50433e82bc310b091ef1f263fa7d87bca5228))
+
 ## [1.25.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.24.0...palamedes-v1.25.0) (2026-09-09)
 
 
