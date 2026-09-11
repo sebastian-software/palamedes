@@ -25,7 +25,7 @@ test-support = ["palamedes/test-support"]
 [dependencies]
 napi = { version = "3.12.2", default-features = false, features = ["napi9"] }
 napi-derive = "3.6.3"
-palamedes = { path = "../palamedes" }
+palamedes = { version = "1.25.0", path = "../.." }
 serde_json = "1.0.151"
 
 [dev-dependencies]

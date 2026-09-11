@@ -27,48 +27,6 @@ const publishWorkflow = readText(".github/workflows/publish.yml");
 const rootReleasePath = ".";
 const rootReleaseConfig = releaseConfig.packages?.[rootReleasePath];
 const rootReleaseExtraFiles = rootReleaseConfig?.["extra-files"] ?? [];
-const requiredTomlExtraFiles = [
-  {
-    type: "toml",
-    path: "crates/palamedes/Cargo.toml",
-    jsonpath: "$.package.version",
-  },
-  {
-    type: "toml",
-    path: "crates/palamedes-node/Cargo.toml",
-    jsonpath: "$.package.version",
-  },
-  {
-    type: "toml",
-    path: "crates/palamedes-cli/Cargo.toml",
-    jsonpath: "$.package.version",
-  },
-  {
-    type: "toml",
-    path: "crates/palamedes-plugin/Cargo.toml",
-    jsonpath: "$.package.version",
-  },
-  {
-    type: "toml",
-    path: "Cargo.lock",
-    jsonpath: '$.package[?(@.name.value=="palamedes")].version',
-  },
-  {
-    type: "toml",
-    path: "Cargo.lock",
-    jsonpath: '$.package[?(@.name.value=="palamedes-node")].version',
-  },
-  {
-    type: "toml",
-    path: "Cargo.lock",
-    jsonpath: '$.package[?(@.name.value=="palamedes-cli")].version',
-  },
-  {
-    type: "toml",
-    path: "Cargo.lock",
-    jsonpath: '$.package[?(@.name.value=="palamedes-plugin")].version',
-  },
-];
 
 const publicPackages = publicWorkspacePackages(root).map(({ directory, name, version }) => ({
   isNative: nativePackagePattern.test(name),
@@ -121,9 +79,8 @@ const workflowFilters = new Set(
 const nativeMatrixPackages = new Set(
   Array.from(publishWorkflow.matchAll(/package_name:\s+"([^"]+)"/g), (match) => match[1]),
 );
-const expectedVersion = publicPackages[0]?.version;
-const versionFile = rootReleaseConfig?.["version-file"];
-const versionFileVersion = versionFile ? readText(versionFile).trim() : undefined;
+const rootCargoPath = "Cargo.toml";
+const expectedVersion = cargoManifestVersion(rootCargoPath);
 
 function hasExtraFile(expectedFile) {
   return rootReleaseExtraFiles.some(
@@ -166,19 +123,17 @@ if (!rootReleaseConfig) {
     fail(`root release component is ${rootReleaseConfig.component}, expected palamedes`);
   }
 
-  if (rootReleaseConfig["release-type"] !== "simple") {
-    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected simple`);
+  if (rootReleaseConfig["release-type"] !== "rust") {
+    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected rust`);
   }
 
-  if (versionFile !== ".release-please-version") {
-    fail(`root release version file is ${versionFile}, expected .release-please-version`);
+  const rootCargo = readText(rootCargoPath);
+  if (!/^\[package\]/mu.test(rootCargo)) {
+    fail("root Cargo.toml must define the product [package]");
   }
-}
-
-if (versionFileVersion !== expectedVersion) {
-  fail(
-    `${versionFile} tracks ${versionFileVersion}, but public packages are at ${expectedVersion}`,
-  );
+  if (!/path\s*=\s*"crates\/palamedes\/src\/lib\.rs"/mu.test(rootCargo)) {
+    fail("root Cargo.toml must keep the palamedes library source at crates/palamedes/src/lib.rs");
+  }
 }
 
 if (releaseManifest[rootReleasePath] !== expectedVersion) {
@@ -187,14 +142,12 @@ if (releaseManifest[rootReleasePath] !== expectedVersion) {
   );
 }
 
-for (const requiredFile of requiredTomlExtraFiles) {
-  if (!hasExtraFile(requiredFile)) {
-    fail(`${requiredFile.path} ${requiredFile.jsonpath} is missing from root release extra-files`);
-  }
+if (rootReleaseExtraFiles.some((file) => file?.type === "toml")) {
+  fail("root release extra-files must not update Cargo.toml or Cargo.lock");
 }
 
 for (const [name, version] of [
-  ["palamedes", cargoManifestVersion("crates/palamedes/Cargo.toml")],
+  ["palamedes", cargoManifestVersion("Cargo.toml")],
   ["palamedes-node", cargoManifestVersion("crates/palamedes-node/Cargo.toml")],
   ["palamedes-cli", cargoManifestVersion("crates/palamedes-cli/Cargo.toml")],
   ["palamedes-plugin", cargoManifestVersion("crates/palamedes-plugin/Cargo.toml")],
