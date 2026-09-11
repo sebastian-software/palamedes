@@ -10,7 +10,11 @@ const origin = `http://127.0.0.1:${example.port}`;
 const server = startCommand({
   args: example.start,
   cwd: example.cwd,
-  env: { ...example.startEnv, NODE_ENV: "production" },
+  env: {
+    ...example.startEnv,
+    NODE_ENV: "production",
+    PALAMEDES_CSP_NONCE: "tanstack-proof",
+  },
 });
 let browser;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,10 +55,9 @@ try {
             };
             delete headers["content-length"];
             delete headers["content-encoding"];
-            const nonceBody = body.replace(/<script\b/giu, '<script nonce="tanstack-proof"');
             return route.fulfill({
               response,
-              body: nonceBody.replace(
+              body: body.replace(
                 "</body>",
                 '<script>document.documentElement.dataset.tanstackUnauthorizedInline = "executed";</script></body>',
               ),

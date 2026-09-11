@@ -175,7 +175,9 @@ describe("palamedes vite plugin", () => {
     expect(code).toContain('"en": () => Promise.all([');
     expect(code).toContain('"de": () => Promise.all([');
     expect(code).toContain('"pseudo": () => Promise.all([');
-    expect(code).toContain('import("/repo/src/locales/en.po")');
+    expect(code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/en.po").replaceAll("\\", "/"))})`,
+    );
     expect(code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
     expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
   });

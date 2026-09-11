@@ -1104,7 +1104,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           const imports = cfg.catalogs.map((catalog) => catalogResourcePath(cfg, catalog, locale));
           const expressions = imports.map(
             (resourcePath) =>
-              `import(${JSON.stringify(resourcePath)}).then((module) => module.messages)`,
+              `import(${JSON.stringify(resourcePath.replaceAll("\\", "/"))}).then((module) => module.messages)`,
           );
           return [
             locale,
