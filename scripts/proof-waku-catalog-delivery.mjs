@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
 import { chromium } from "@playwright/test";
+import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const chromePath = [
@@ -42,22 +42,15 @@ function urlFor(example, locale) {
 
 function start(example) {
   const cwd = `${root}/examples/${example.directory}`;
-  const server = spawn("pnpm", ["exec", "waku", "start", "--port", String(example.port)], {
+  const server = startCommand({
+    args: ["exec", "waku", "start", "--port", String(example.port)],
     cwd,
     env: { ...process.env, NODE_ENV: "production", PORT: String(example.port) },
-    stdio: ["ignore", "pipe", "pipe"],
   });
-  let output = "";
-  server.stdout.on("data", (chunk) => {
-    output += chunk;
-  });
-  server.stderr.on("data", (chunk) => {
-    output += chunk;
-  });
-  return { server, getOutput: () => output };
+  return { server };
 }
 
-async function waitForServer(origin, output) {
+async function waitForServer(origin) {
   const deadline = Date.now() + 30_000;
   const target = new URL(origin);
   const probe =
@@ -71,11 +64,7 @@ async function waitForServer(origin, output) {
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Waku server did not start at ${origin}: ${output()}`);
-}
-
-function stop(server) {
-  server.kill("SIGTERM");
+  throw new Error(`Waku server did not start at ${origin}`);
 }
 
 function cspForDocument(body) {
@@ -150,10 +139,15 @@ async function createContext(browser, example, expectedLocale, options = {}) {
       // loopback address to Playwright's response fulfiller. Let the real
       // document response pass through for this strategy; catalog assets are
       // still inspected and fault-injected below.
-      if (example.strategy === "tld") return route.continue();
+      if (example.strategy === "subdomain" || example.strategy === "tld") {
+        return route.continue();
+      }
       const response = await fetchUpstream(route);
-      const body = response.body;
-      const headers = { ...response.headers, "content-security-policy": cspForDocument(body) };
+      const body = `${response.body}<script>globalThis.__palamedesUnauthorizedInline = true;</script>`;
+      const headers = {
+        ...response.headers,
+        "content-security-policy": cspForDocument(response.body),
+      };
       assert(!headers["content-security-policy"].includes("unsafe-inline"));
       assert(!headers["content-security-policy"].includes("unsafe-eval"));
       return route.fulfill({ status: response.status, body, headers });
@@ -187,7 +181,12 @@ async function createContext(browser, example, expectedLocale, options = {}) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    if (
+      message.type() === "error" &&
+      !/violates the following Content Security Policy/iu.test(message.text())
+    ) {
+      errors.push(message.text());
+    }
   });
   return {
     context,
@@ -220,6 +219,20 @@ async function waitReady(page) {
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 15_000 });
 }
 
+async function assertUnauthorizedInlineBlocked(page) {
+  assert.equal(
+    await page.evaluate(() => Boolean(globalThis.__palamedesUnauthorizedInline)),
+    false,
+    "CSP allowed an unauthorized inline script",
+  );
+}
+
+function deliveryProofLabel(example) {
+  return example.strategy === "subdomain" || example.strategy === "tld"
+    ? "native mapped-host response"
+    : "CSP";
+}
+
 function assertHealthy(proof, locale, start = 0) {
   const requests = proof.requested.slice(start);
   assert(requests.length > 0, "no Waku catalog request observed");
@@ -237,6 +250,9 @@ async function runHealthy(browser, example, locale) {
     }
     await proof.page.goto(urlFor(example, locale), { waitUntil: "domcontentloaded" });
     await waitReady(proof.page);
+    if (example.strategy !== "subdomain" && example.strategy !== "tld") {
+      await assertUnauthorizedInlineBlocked(proof.page);
+    }
     assert.equal(await proof.page.locator("html").getAttribute("lang"), locale);
     assertHealthy(proof, locale);
 
@@ -262,7 +278,7 @@ async function runHealthy(browser, example, locale) {
       assertHealthy(proof, "de", beforeReload);
     }
     console.log(
-      `${example.id} ${locale}: active-only native exports, locale switch and reload passed under CSP`,
+      `${example.id} ${locale}: active-only native exports, locale switch and reload passed under ${deliveryProofLabel(example)}`,
     );
   } finally {
     await proof.context.close();
@@ -279,6 +295,9 @@ async function runInitialFailure(browser, example, locale, failure) {
     }
     await proof.page.goto(urlFor(example, locale), { waitUntil: "domcontentloaded" });
     await proof.page.locator("[data-palamedes-catalog-error]").waitFor({ timeout: 15_000 });
+    if (example.strategy !== "subdomain" && example.strategy !== "tld") {
+      await assertUnauthorizedInlineBlocked(proof.page);
+    }
     assert(proof.injected, "initial failure was not injected into a catalog dependency");
     const text = await proof.page.locator("body").innerText();
     assert.match(text, /Reload page/u);
@@ -290,7 +309,7 @@ async function runInitialFailure(browser, example, locale, failure) {
     assert.equal(await proof.page.locator("[data-palamedes-catalog-error]").count(), 0);
     assert.equal(await proof.page.locator("html").getAttribute("lang"), locale);
     console.log(
-      `${example.id} ${locale} initial ${failure}: catalog-free UI and reload recovery passed under CSP`,
+      `${example.id} ${locale} initial ${failure}: catalog-free UI and reload recovery passed under ${deliveryProofLabel(example)}`,
     );
   } finally {
     await proof.context.close();
@@ -307,6 +326,7 @@ async function runLazyFailure(browser, locale, failure) {
     proof.disarm();
     await proof.page.goto(urlFor(example, locale), { waitUntil: "domcontentloaded" });
     await waitReady(proof.page);
+    await assertUnauthorizedInlineBlocked(proof.page);
     assertHealthy(proof, locale);
     proof.arm();
     await proof.page.getByRole("button", { name: "Show lazy catalog details" }).click();
@@ -338,35 +358,32 @@ const servers = [];
 try {
   const args = [
     `--host-resolver-rules=${TLD_HOSTS.map((host) => `MAP ${host} 127.0.0.1`).join(",")}`,
-    // The subdomain and TLD examples intentionally use public-looking hosts
-    // mapped to loopback. Keep the browser proof focused on the adapter's
-    // delivery behavior instead of Chromium's private-network prompt.
-    "--disable-features=BlockInsecurePrivateNetworkRequests",
-    "--disable-web-security",
   ];
   browser = await chromium.launch(chromePath ? { executablePath: chromePath, args } : { args });
   for (const example of examples) {
+    await ensurePortFree(example.port);
     const started = start(example);
     servers.push(started.server);
-    await waitForServer(urlFor(example, "en"), started.getOutput);
+    await waitForServer(urlFor(example, "en"));
     for (const locale of ["en", "de"]) {
       await runHealthy(browser, example, locale);
       for (const failure of failures) await runInitialFailure(browser, example, locale, failure);
     }
-    stop(started.server);
+    await stopCommand(started.server);
     servers.pop();
   }
 
   const lazyExample = examples[0];
+  await ensurePortFree(lazyExample.port);
   const lazyServer = start(lazyExample);
   servers.push(lazyServer.server);
-  await waitForServer(urlFor(lazyExample, "en"), lazyServer.getOutput);
+  await waitForServer(urlFor(lazyExample, "en"));
   for (const locale of ["en", "de"]) {
     for (const failure of failures) await runLazyFailure(browser, locale, failure);
   }
-  stop(lazyServer.server);
+  await stopCommand(lazyServer.server);
   servers.pop();
 } finally {
-  for (const server of servers) stop(server);
+  for (const server of servers) await stopCommand(server);
   await browser?.close();
 }
