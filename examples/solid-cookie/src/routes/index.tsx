@@ -4,6 +4,7 @@ import { Trans } from "@palamedes/solid/macro";
 import { EVENT } from "@palamedes/example-ui";
 import { ClientReady } from "../components/ClientReady";
 import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { LazyCatalogPanel } from "../components/LazyCatalogPanel";
 import { ProofPanel } from "../components/ProofPanel";
 import { TicketPanel } from "../components/TicketPanel";
 import { loadHomePageData } from "../lib/server";
@@ -46,6 +47,7 @@ function HomePageContent(props: { data: HomePageData }) {
         <TicketPanel locale={props.data.locale} />
         <ProofPanel locale={props.data.locale} />
       </div>
+      <LazyCatalogPanel />
 
       <footer class="foot">
         <span class="foot-badge">Palamedes</span>

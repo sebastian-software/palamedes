@@ -126,27 +126,36 @@ plain runtime getter and do not subscribe to in-document locale replacement.
 
 ## SSR and split catalogs
 
-For SSR applications, configure the Vite plugin with
-`experimentalGraphSplitting: true`, install the client instance with
-`setClientI18n`, and load the request catalog through the server-only virtual
-module:
+For SSR applications, configure the Vite plugin with compiled graph delivery
+and install `createSolidCatalogDeliveryMiddleware` before the framework's
+HTML middleware. It injects the active-locale import map, waits for the
+initial catalog fragments before importing the Solid client entry, and leaves
+the host's ordinary error UI responsible for lazy route failures:
 
 ```ts
-import { loadServerCatalog } from "virtual:palamedes/server-catalogs";
+import path from "node:path";
+import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 
-const i18n = createI18n();
-i18n.load(locale, await loadServerCatalog(locale));
-i18n.activate(locale);
+const catalogDelivery = createSolidCatalogDeliveryMiddleware({
+  clientDirectory: path.resolve(process.cwd(), ".output/public"),
+  resolveLocale: (request) => resolveLocale(request),
+  nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
+});
+
+const i18n = await createViteServerI18n({ locale });
+return serverI18nScope.run(i18n, () => next());
 ```
 
-The virtual module creates lazy imports for the configured catalogs and uses
-the runtime server catalog store. It keeps request-local i18n state isolated
-while sharing compiled catalog content between requests. Client sidecars are
-registered as their route chunks evaluate, so an app should use a regular
-Solid `ErrorBoundary` for its host error UI when a sidecar is unavailable.
-Avoid importing `.po` files or the parser in application code; author messages
-with `@palamedes/solid/macro` and `@palamedes/core/macro` so the compiler can
-emit compiled-only runtime calls.
+`createViteServerI18n` owns the lazy server catalog store and keeps request
+state isolated while sharing compiled catalog content between requests. The
+delivery middleware's default initial error document contains only a reload
+and home link; pass trusted `errorHtml` when the host needs a different
+catalog-free document. A `nonce` adds the same CSP nonce to import maps,
+readiness/bootstrap code, and Solid's inline hydration scripts. Avoid
+importing `.po` files, the parser, or a catalog virtual module in application
+code; author messages with `@palamedes/solid/macro` and
+`@palamedes/core/macro` so the compiler emits compiled-only runtime calls.
 
 ## Related Docs
 

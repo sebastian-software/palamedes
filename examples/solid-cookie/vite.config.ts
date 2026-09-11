@@ -6,7 +6,7 @@ import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
   plugins: [
-    palamedes({ framework: "solid", experimentalGraphSplitting: true }),
+    palamedes({ framework: "solid" }),
     solid({
       extensions: [".jsx", ".tsx"],
       serverFunctions: true,

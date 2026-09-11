@@ -83,6 +83,10 @@ msgstr "cada una"
 msgid "Fewer tickets"
 msgstr "Menos entradas"
 
+#: examples/solid-cookie/src/components/LazyCatalogDetails.tsx
+msgid "Lazy catalog detail loaded."
+msgstr ""
+
 #: examples/solid-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Idioma"

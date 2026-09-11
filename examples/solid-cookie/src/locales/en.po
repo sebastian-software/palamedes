@@ -83,6 +83,10 @@ msgstr "each"
 msgid "Fewer tickets"
 msgstr "Fewer tickets"
 
+#: examples/solid-cookie/src/components/LazyCatalogDetails.tsx
+msgid "Lazy catalog detail loaded."
+msgstr "Lazy catalog detail loaded."
+
 #: examples/solid-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Locale"

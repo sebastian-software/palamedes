@@ -1821,7 +1821,13 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@palamedes/vite-plugin':
+        specifier: workspace:^
+        version: link:../vite-plugin
     devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
       '@solidjs/vite-plugin':
         specifier: 3.0.0-next.37
         version: 3.0.0-next.37(@solidjs/web@2.0.0-rc.3(solid-js@2.0.0-rc.3))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.3)(supports-color@10.2.2)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
