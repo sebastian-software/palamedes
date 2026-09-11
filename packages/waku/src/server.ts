@@ -62,10 +62,7 @@ export function createWakuCatalogDeliveryMiddleware(
 }
 
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
-const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
-const WAKU_ENTRY_PATTERN =
-  /import\(((["'])\/assets\/index-[^"']+\.js\2)\)\.catch\(\(err\) =>/u;
-const HEAD_END = "</head>";
+const WAKU_ENTRY_PATTERN = /import\(((['"])\/assets\/index-[^"']+\.js\2)\)\.catch\(\(err\) =>/u;
 const TAIL_SIZE = 192;
 
 /**
@@ -75,49 +72,18 @@ const TAIL_SIZE = 192;
  * fragment fails, without timing delays or app-owned DOM handling.
  */
 function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolean }): Transform {
-  let head = "";
-  let headComplete = false;
   let tail = "";
-
-  function gateCatalogProbe(value: string) {
-    if (!value.includes("try{await Promise.all(")) return value;
-    return value.replace(
-      "try{await Promise.all(",
-      `try{globalThis[${CATALOG_READY_PROMISE}]=Promise.all(`,
-    ).replace(
-      `);globalThis[${CATALOG_READY}]=true`,
-      `);await globalThis[${CATALOG_READY_PROMISE}];globalThis[${CATALOG_READY}]=true`,
-    );
-  }
 
   function gateWakuEntry(value: string) {
     const importExpression = options.allowMissingPromise
       ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import($1)) : import($1))`
       : `globalThis[${CATALOG_READY_PROMISE}].then(() => import($1))`;
-    return value.replace(
-      WAKU_ENTRY_PATTERN,
-      `${importExpression}.catch((err) =>`,
-    );
+    return value.replace(WAKU_ENTRY_PATTERN, `${importExpression}.catch((err) =>`);
   }
 
   return new Transform({
     transform(chunk, _encoding, callback) {
-      const value = chunk.toString("utf8");
-      if (!headComplete) {
-        head += value;
-        const headEnd = head.indexOf(HEAD_END);
-        if (headEnd < 0) {
-          callback();
-          return;
-        }
-        headComplete = true;
-        const transformedHead = gateCatalogProbe(head.slice(0, headEnd + HEAD_END.length));
-        this.push(transformedHead);
-        tail = head.slice(headEnd + HEAD_END.length);
-        head = "";
-      } else {
-        tail += value;
-      }
+      tail += chunk.toString("utf8");
       if (tail.length > TAIL_SIZE) {
         this.push(gateWakuEntry(tail.slice(0, -TAIL_SIZE)));
         tail = tail.slice(-TAIL_SIZE);
@@ -125,8 +91,7 @@ function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolea
       callback();
     },
     flush(callback) {
-      if (!headComplete) this.push(gateCatalogProbe(head));
-      else if (tail) this.push(gateWakuEntry(tail));
+      if (tail) this.push(gateWakuEntry(tail));
       callback();
     },
   });
