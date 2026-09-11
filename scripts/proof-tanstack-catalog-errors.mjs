@@ -30,13 +30,15 @@ try {
   ].find((value) => value && fs.existsSync(value));
   browser = await chromium.launch(executablePath ? { executablePath } : {});
   for (const locale of ["en", "de"])
-    for (const phase of ["initial", "navigation"])
+    for (const phase of ["initial", "lazy"])
       for (const failure of ["network", "evaluation"]) {
         const context = await browser.newContext();
         await context.addCookies([{ name: "locale", value: locale, url: origin }]);
         let armed = phase === "initial";
         let injected = false;
-        let expectedLocale = locale;
+        const expectedLocale = locale;
+        const catalogRequests = new Set();
+        const initialCatalogs = new Set();
         await context.route("**/*", async (route) => {
           const request = route.request();
           if (request.resourceType() === "document") {
@@ -58,38 +60,57 @@ try {
           const match = request.url().match(/palamedes-m-[^/]+\.([a-z]+)-[^/]+\.js(?:\?|$)/u);
           if (!match) return route.continue();
           assert.equal(match[1], expectedLocale, `inactive locale requested: ${request.url()}`);
-          if (!armed || injected) return route.continue();
+          catalogRequests.add(request.url());
+          if (!armed) {
+            initialCatalogs.add(request.url());
+            return route.continue();
+          }
+          if (phase === "lazy" && initialCatalogs.has(request.url())) return route.continue();
+          if (injected) return route.continue();
           injected = true;
           if (failure === "network") return route.abort("failed");
           const response = await route.fetch();
           const source = await response.text();
           return route.fulfill({
             response,
-            body: source.replace(
-              "export const messages=",
-              'export const messages=(()=>{throw new Error("INJECTED_CATALOG_FAILURE")})()//',
-            ),
+            body: `${source}\n;throw new Error("INJECTED_CATALOG_FAILURE");\n`,
           });
         });
         const page = await context.newPage();
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message));
         await page.goto(origin, { waitUntil: "domcontentloaded" });
-        if (phase === "navigation") {
+        if (phase === "lazy") {
           await page.getByTestId("client-ready").waitFor({ state: "attached" });
+          assert.equal(await page.getByTestId("lazy-feature").count(), 0);
+          const catalogsBeforeClick = new Set(catalogRequests);
           armed = true;
-          expectedLocale = "de";
-          await page.getByTestId("locale-switch-de").click();
+          await page.getByTestId("lazy-feature-trigger").click();
+          await page.locator('main[role="alert"]').waitFor({ state: "visible" });
+          assert(
+            [...catalogRequests].some((url) => !catalogsBeforeClick.has(url)),
+            `${locale} ${phase} ${failure}: no post-mount catalog request`,
+          );
+        } else {
+          await page.locator('main[role="alert"]').waitFor({ state: "visible" });
         }
-        await page.locator('main[role="alert"]').waitFor({ state: "visible" });
         assert(injected, `${locale} ${phase} ${failure}: sidecar was not intercepted`);
         assert.match(await page.locator('main[role="alert"]').innerText(), /Reload page/u);
+        assert.equal(await page.getByTestId("lazy-feature").count(), 0);
         armed = false;
         await page.locator('main[role="alert"]').getByText("Reload page", { exact: true }).click();
         await page.waitForLoadState("networkidle");
         assert.equal(await page.locator('main[role="alert"]').count(), 0);
         assert.match(await page.locator("body").innerText(), /Frontend Stage/u);
         assert.deepEqual(pageErrors, []);
+        if (phase === "lazy") {
+          await page.getByTestId("lazy-feature-trigger").click();
+          await page.getByTestId("lazy-feature").waitFor({ state: "visible" });
+          assert.match(
+            await page.getByTestId("lazy-feature").innerText(),
+            locale === "de" ? /Übersetzte Lazy-Funktion/u : /Lazy translated feature/u,
+          );
+        }
         console.log(`${locale} ${phase} ${failure}: passed`);
         await context.close();
       }
