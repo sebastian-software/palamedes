@@ -21,6 +21,7 @@ const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-react-router-r
 try {
   const archiveDir = path.join(fixtureRoot, "archives");
   mkdirSync(archiveDir);
+  const coreArchive = packPackage(path.join(repoRoot, "packages", "core"), archiveDir);
   const runtimeArchive = packPackage(runtimeDir, archiveDir);
   const reactRouterRscArchive = packPackage(packageDir, archiveDir);
   const consumerRoot = path.join(fixtureRoot, "consumer");
@@ -33,6 +34,7 @@ try {
         private: true,
         type: "module",
         dependencies: {
+          "@palamedes/core": `file:${coreArchive}`,
           "@palamedes/runtime": `file:${runtimeArchive}`,
           "@palamedes/react-router-rsc": `file:${reactRouterRscArchive}`,
         },
@@ -43,7 +45,7 @@ try {
   );
   writeFileSync(
     path.join(consumerRoot, "pnpm-workspace.yaml"),
-    `overrides:\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
+    `overrides:\n  "@palamedes/core": "file:${coreArchive}"\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
   );
   runPackageManager(consumerRoot, ["install", "--ignore-scripts"]);
 

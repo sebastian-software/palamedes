@@ -67,15 +67,20 @@ export class MissingCompiledMessageError extends Error {
 
 /** The one public runtime used by package roots and compiled aliases. */
 export function createI18nRuntime(options: CreateI18nOptions = {}): PalamedesI18n {
-  const catalogs = new Map<string, Record<string, CatalogMessage>>();
+  const catalogs = new Map<string, readonly CompiledCatalogMessages[]>();
   let stringRuntime: CompiledMessageRuntime<string> | undefined;
   let stringRuntimeLocale: string | undefined;
   let activeLocale = options.locale ?? DEFAULT_LOCALE;
   const timeZone = validateTimeZone(options.timeZone);
 
   function resolveMessage(id: string, metadata?: MessageMetadata): CatalogMessage {
-    const value = catalogs.get(activeLocale)?.[id];
-    if (value !== undefined) return value;
+    const layers = catalogs.get(activeLocale);
+    if (layers) {
+      for (let index = layers.length - 1; index >= 0; index -= 1) {
+        const layer = layers[index];
+        if (layer && Object.hasOwn(layer, id)) return layer[id]!;
+      }
+    }
     const info = { id, locale: activeLocale, metadata };
     try {
       options.onMissing?.(info);
@@ -119,18 +124,8 @@ export function createI18nRuntime(options: CreateI18nOptions = {}): PalamedesI18
           "Palamedes v2 only accepts generated CompiledCatalogMessages. Compile ICU catalogs before loading them; switching runtime import paths cannot enable parsing.",
         );
       }
-      const entries = Object.entries(messages);
-      for (const [id, value] of entries) {
-        if (typeof value !== "string" && typeof value !== "function") {
-          throw new TypeError(
-            `Invalid compiled catalog entry ${JSON.stringify(id)} for locale ${JSON.stringify(locale)}.`,
-          );
-        }
-      }
-      const current =
-        catalogs.get(locale) ?? (Object.create(null) as Record<string, CatalogMessage>);
-      for (const [id, value] of entries) current[id] = value;
-      catalogs.set(locale, current);
+      const current = catalogs.get(locale);
+      catalogs.set(locale, current ? [...current, messages] : [messages]);
     },
     activate(locale) {
       activeLocale = locale;

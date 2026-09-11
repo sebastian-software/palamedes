@@ -40,6 +40,7 @@
     "verify:site-docs-dev": "node ./site/scripts/verify-docs-development.mjs",
     "verify:site-streamline": "node ./scripts/verify-site-streamline-assets.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
+    "benchmark:server-catalog": "pnpm --filter @palamedes/core --filter @palamedes/runtime --workspace-concurrency=1 build && node --expose-gc ./scripts/benchmark-server-catalog.mjs",
     "benchmark:proof:large": "pnpm build && node ./scripts/benchmark-proof.mjs --large-messages 10000",
     "bench:e2e": "pnpm benchmark:e2e-workflow",
     "benchmark:e2e-workflow": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark",

@@ -54,32 +54,64 @@ type CompiledCatalogBrand = {
   readonly [COMPILED_CATALOG_TYPE]: true;
 };
 
-export type CompiledCatalogMessages = Record<string, CatalogMessage> & CompiledCatalogBrand;
+export type CompiledCatalogMessages = Readonly<Record<string, CatalogMessage>> &
+  CompiledCatalogBrand;
 export type LoadableCatalogMessages = CatalogMessages | CompiledCatalogMessages;
 
 const COMPILED_CATALOG_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog");
+const COMPILED_CATALOG_REGISTRY_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog-registry/v2");
+
+let localCatalogRegistry: WeakSet<object> | undefined;
 
 /** Marks generated strings as constants; function entries are executable messages. */
 export function defineCompiledCatalog<TMessages extends Record<string, CatalogMessage>>(
   messages: TMessages,
-): TMessages & CompiledCatalogBrand {
-  Object.defineProperty(messages, COMPILED_CATALOG_SYMBOL, {
+): Readonly<TMessages> & CompiledCatalogBrand {
+  const snapshot: Record<string, CatalogMessage> = Object.create(null);
+  for (const id of Object.keys(messages)) {
+    const value = messages[id];
+    if (typeof value !== "string" && typeof value !== "function") {
+      throw new TypeError(`Invalid compiled catalog entry ${JSON.stringify(id)}.`);
+    }
+    snapshot[id] = value;
+  }
+  Object.defineProperty(snapshot, COMPILED_CATALOG_SYMBOL, {
     configurable: false,
     enumerable: false,
     value: true,
     writable: false,
   });
-  return messages as TMessages & CompiledCatalogBrand;
+  Object.freeze(snapshot);
+  getCatalogRegistryForWrite().add(snapshot);
+  return snapshot as Readonly<TMessages> & CompiledCatalogBrand;
 }
 
 export function isCompiledCatalog(messages: unknown): messages is CompiledCatalogMessages {
   return (
     typeof messages === "object" &&
     messages !== null &&
+    getCatalogRegistryForRead()?.has(messages) === true &&
     (messages as LoadableCatalogMessages & Record<symbol, boolean | undefined>)[
       COMPILED_CATALOG_SYMBOL
     ] === true
   );
+}
+
+function getCatalogRegistryForWrite(): WeakSet<object> {
+  if (localCatalogRegistry) return localCatalogRegistry;
+  const globalCatalogState = globalThis as typeof globalThis &
+    Record<symbol, WeakSet<object> | undefined>;
+  localCatalogRegistry =
+    globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] ?? new WeakSet<object>();
+  globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] = localCatalogRegistry;
+  return localCatalogRegistry;
+}
+
+function getCatalogRegistryForRead(): WeakSet<object> | undefined {
+  if (localCatalogRegistry) return localCatalogRegistry;
+  const globalCatalogState = globalThis as typeof globalThis &
+    Record<symbol, WeakSet<object> | undefined>;
+  return globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL];
 }
 
 export type ExecutableMessageRenderer<TResult> = {

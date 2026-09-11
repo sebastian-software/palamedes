@@ -45,7 +45,7 @@ describe.each([
     const i18n = create();
     const messages = defineCompiledCatalog({ greeting: "Hello", untouched: "Keep" });
     i18n.load("en", messages);
-    messages.greeting = "Mutated after loading";
+    expect(Object.isFrozen(messages)).toBe(true);
     expect(i18n._("greeting")).toBe("Hello");
 
     i18n.load("de", defineCompiledCatalog({ greeting: "Hallo" }));
@@ -61,6 +61,25 @@ describe.each([
     expect(i18n._("greeting")).toBe("Hallo");
     i18n.activate("en");
     expect(i18n._("greeting")).toBe("Replaced");
+  });
+
+  it("does not enumerate catalog entries again for warmed loads", () => {
+    const catalog = defineCompiledCatalog({ greeting: "Hello" });
+    const ownKeys = vi.spyOn(Object, "keys");
+    const entries = vi.spyOn(Object, "entries");
+
+    for (let index = 0; index < 200; index += 1) {
+      const i18n = create();
+      i18n.load("en", catalog);
+      expect(i18n._("greeting")).toBe("Hello");
+    }
+
+    const ownKeysCount = ownKeys.mock.calls.length;
+    const entriesCount = entries.mock.calls.length;
+    ownKeys.mockRestore();
+    entries.mockRestore();
+    expect(ownKeysCount).toBe(0);
+    expect(entriesCount).toBe(0);
   });
 
   it("still passes compiled constants through the supplied host renderer", () => {

@@ -5,11 +5,14 @@ import { describe, expect, it } from "vitest";
 import type { I18nInstance } from "./index";
 import * as server from "./server";
 import * as serverUnavailable from "./server-unavailable";
-import { createServerI18nScope } from "./server-unavailable";
+import { createServerCatalogStore, createServerI18nScope } from "./server-unavailable";
 
 describe("@palamedes/runtime/server fallback", () => {
   it("throws an actionable error outside Node server runtimes", () => {
     expect(() => createServerI18nScope<I18nInstance>()).toThrow(
+      /only available in Node\.js server runtimes/,
+    );
+    expect(() => createServerCatalogStore({ load: async () => [] })).toThrow(
       /only available in Node\.js server runtimes/,
     );
   });

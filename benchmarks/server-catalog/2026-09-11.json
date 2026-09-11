@@ -1,0 +1,87 @@
+{
+  "environment": {
+    "date": "2026-09-11",
+    "node": "24.15.0",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "command": "node --expose-gc scripts/benchmark-server-catalog.mjs"
+  },
+  "fixture": {
+    "localeCount": 8,
+    "messageCount": 2000,
+    "requestCount": 2000
+  },
+  "coldCatalogLoadMs": 1.0914169999999999,
+  "firstRequestMs": 13.009375000000006,
+  "warmRequestMs": 67.444459,
+  "warmRequestMsPerRequest": 0.0337222295,
+  "mixedLocaleMs": 82.791334,
+  "sharedCatalog": {
+    "readyLocales": 8,
+    "inFlightLocales": 0,
+    "retainedFragments": 8,
+    "retainedMessages": 16000,
+    "catalogEnumerationsDuringRequestLoads": 0,
+    "retainedHeapDeltaBytes": 2886632
+  },
+  "perRequestMapBaseline": {
+    "requestMessageEntriesAllocated": 4000000,
+    "retainedHeapDeltaBytes": 199885984
+  },
+  "esmModuleRetention": {
+    "localesImported": 8,
+    "retainedHeapDeltaBytes": 4718880,
+    "messageCount": 2000,
+    "note": "ESM module caching may retain every used locale catalog for the process lifetime."
+  },
+  "concurrentColdMs": 5.415458999999828,
+  "workers": {
+    "processCount": 2,
+    "samples": [
+      {
+        "rssBytes": 69009408,
+        "heapUsedBytes": 7174344,
+        "stats": {
+          "readyLocales": 8,
+          "inFlightLocales": 0,
+          "retainedFragments": 8,
+          "retainedMessages": 16000
+        }
+      },
+      {
+        "rssBytes": 68616192,
+        "heapUsedBytes": 7174344,
+        "stats": {
+          "readyLocales": 8,
+          "inFlightLocales": 0,
+          "retainedFragments": 8,
+          "retainedMessages": 16000
+        }
+      }
+    ],
+    "note": "Each worker has its own module cache and shared catalog storage."
+  },
+  "messageSizeSweep": [
+    {
+      "messageCount": 100,
+      "coldCatalogLoadMs": 0.061707999999953245,
+      "warmRequestMs": 62.44225000000006,
+      "warmRequestMsPerRequest": 0.03122112500000003,
+      "retainedMessages": 100
+    },
+    {
+      "messageCount": 2000,
+      "coldCatalogLoadMs": 0.5792079999998805,
+      "warmRequestMs": 67.68491600000016,
+      "warmRequestMsPerRequest": 0.03384245800000008,
+      "retainedMessages": 2000
+    },
+    {
+      "messageCount": 10000,
+      "coldCatalogLoadMs": 3.7001249999998436,
+      "warmRequestMs": 66.41604200000029,
+      "warmRequestMsPerRequest": 0.03320802100000014,
+      "retainedMessages": 10000
+    }
+  ]
+}

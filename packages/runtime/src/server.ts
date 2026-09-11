@@ -8,6 +8,13 @@ import {
 } from "./index";
 
 export type { CreateServerI18nScopeOptions, ServerI18nScope } from "./index";
+export {
+  createServerCatalogStore,
+  type ServerCatalogLoadContext,
+  type ServerCatalogLoader,
+  type ServerCatalogStore,
+  type ServerCatalogStoreStats,
+} from "./serverCatalog";
 
 /** Resolves the i18n instance that belongs to an incoming server request. */
 export type ServerI18nResolver<T extends I18nInstance = I18nInstance> = (
