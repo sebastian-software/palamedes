@@ -17,6 +17,13 @@ function resolveDocumentLocale(): Locale {
   return resolveCookieLocale(getRequestEvent()?.request).locale;
 }
 
+function resolveDocumentNonce(): string | undefined {
+  if (typeof document !== "undefined") return undefined;
+  const requestNonce = getRequestEvent()?.request.headers.get("x-csp-nonce");
+  if (requestNonce) return requestNonce;
+  return typeof process !== "undefined" ? process.env.PALAMEDES_CSP_NONCE : undefined;
+}
+
 export default function Document(props: ParentProps) {
   const locale = resolveDocumentLocale();
 
@@ -25,7 +32,7 @@ export default function Document(props: ParentProps) {
       <head>
         <meta charset="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />
-        <HydrationScript />
+        <HydrationScript nonce={resolveDocumentNonce()} />
       </head>
       <body>{props.children}</body>
     </html>
