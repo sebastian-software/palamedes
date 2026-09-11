@@ -150,6 +150,15 @@ Relative bases are rejected because import-map entries would resolve against
 each document URL; set `base: "/"` or an absolute deployment path/URL, or use
 the default `localeBinding: "embed"` form.
 
+React Router framework hosts can use `@palamedes/vite-plugin/react-router` to
+bind the active locale and transform the streamed document. The adapter reads
+the generated split manifest, inserts the import map before module execution,
+and adds preloads for the initial evaluated chunks. Applications do not read
+`palamedes-split-manifest.json` or splice response HTML themselves. The
+browser-only `@palamedes/vite-plugin/react-router-client` subpath exposes the
+filtered fragment failure store for host error UI. A development server without
+a client manifest keeps the embedded sidecar behavior; production fails closed.
+
 The package peer range remains broad because macros and catalog loading work on
 supported Vite releases independently of the React MDX compiler.
 See the [MDX guide](https://github.com/sebastian-software/palamedes/blob/main/docs/mdx.md).

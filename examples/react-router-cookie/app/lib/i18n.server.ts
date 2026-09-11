@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 import { createServerI18nScope } from "@palamedes/runtime/server";
+import { createReactRouterCatalogDelivery } from "@palamedes/vite-plugin/react-router";
 import { messages as enMessages } from "../locales/en.po";
 import { messages as deMessages } from "../locales/de.po";
 import { messages as esMessages } from "../locales/es.po";
@@ -17,6 +17,11 @@ const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
 };
 
 export const serverI18nScope = createServerI18nScope<ReturnType<typeof createExampleI18n>>();
+
+export const catalogDelivery = createReactRouterCatalogDelivery({
+  clientDirectory: path.resolve(process.cwd(), "build/client"),
+  development: process.env.NODE_ENV !== "production",
+});
 
 export function createServerI18n(locale: Locale) {
   const i18n = createExampleI18n();
@@ -35,39 +40,4 @@ export function activateServerI18n(locale: Locale) {
 // module loads, and can preload the mapped assets of the chunks it serves so
 // messages download in parallel with the code. In dev the manifest does not
 // exist (dev serves the embedded form) and this returns null.
-export type LocaleBinding = {
-  importMapJson: string;
-  imports: Record<string, string>;
-  chunkImports: Record<string, string[]>;
-};
-
-const bindingCache = new Map<Locale, LocaleBinding | null>();
-
-function readLocaleBinding(locale: Locale): LocaleBinding | null {
-  try {
-    const clientDir = path.resolve(import.meta.dirname, "../client");
-    const manifest = JSON.parse(
-      readFileSync(path.join(clientDir, "palamedes-split-manifest.json"), "utf8"),
-    ) as { importMaps: Record<string, string>; chunkImports?: Record<string, string[]> };
-    const mapFile = manifest.importMaps[locale];
-    if (!mapFile) {
-      return null;
-    }
-    const importMapJson = readFileSync(path.join(clientDir, mapFile), "utf8");
-    const parsed = JSON.parse(importMapJson) as { imports: Record<string, string> };
-    return {
-      importMapJson,
-      imports: parsed.imports,
-      chunkImports: manifest.chunkImports ?? {},
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function getLocaleBinding(locale: Locale): LocaleBinding | null {
-  if (!bindingCache.has(locale)) {
-    bindingCache.set(locale, readLocaleBinding(locale));
-  }
-  return bindingCache.get(locale) ?? null;
-}
+export const getLocaleBinding = (locale: Locale) => catalogDelivery.getLocaleBinding(locale);
