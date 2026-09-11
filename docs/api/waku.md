@@ -56,9 +56,12 @@ middlewareFns: [
 `palamedes-split-manifest.json`. If an active fragment cannot be fetched or
 evaluated, the middleware renders its catalog-free reload document and keeps
 the diagnostic out of the response. Set `errorHtml` to provide a trusted host
-recovery document. For a strict CSP, pass the request-scoped `nonce` and allow
-that nonce plus same-origin module assets in the host policy. RSC and action
-responses pass through unchanged.
+recovery document. The `nonce` option applies only to Palamedes-generated
+import-map and readiness scripts. Set Waku's framework nonce with
+`unstable_setNonce` from `waku/router/server` in a request interceptor before
+rendering. Existing framework nonces are preserved; application and external
+scripts are never automatically authorized. Allow the nonce and permitted
+module origins in the host CSP. RSC and action responses pass through unchanged.
 
 ## Interceptor registration
 

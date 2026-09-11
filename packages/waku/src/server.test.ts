@@ -80,7 +80,7 @@ throw err;
     expect(output).toContain("prefix 😀");
   });
 
-  it("keeps long streamed script attributes intact and distinguishes data-nonce", async () => {
+  it("does not authorize arbitrary scripts with a host nonce", async () => {
     const input = `<script data-nonce="untrusted" data-label="${"x".repeat(1000)}">console.log("你好")</script>`;
     const bytes = Buffer.byteLength(input);
     const output = await transformHtml(
@@ -88,7 +88,7 @@ throw err;
       Array.from({ length: bytes - 1 }, (_, index) => index + 1),
       "trusted",
     );
-    expect(output).toContain(' nonce="trusted">');
+    expect(output).toBe(input);
     expect(output).toContain(`data-label="${"x".repeat(1000)}"`);
     expect(output).toContain('console.log("你好")');
   });
@@ -118,7 +118,7 @@ throw err;
     expect(output).toContain("? globalThis[Symbol.for");
   });
 
-  it("adds the host nonce to Waku inline scripts while preserving existing nonces", async () => {
+  it("preserves ordinary inline scripts and existing framework nonces", async () => {
     const input =
       '<script>const source = "<script>"; const emoji = "😀";</script><script nonce="existing">window.ok = true;</script>';
     const output = await transformHtml(
@@ -127,8 +127,25 @@ throw err;
       "nonce<&",
     );
 
-    expect(output).toContain('<script nonce="nonce&lt;&amp;">');
+    expect(output).toBe(input);
     expect(output).toContain('<script nonce="existing">');
     expect(output).toContain('const source = "<script>"; const emoji = "😀"');
+  });
+  it.each(["/app/assets/index-abc.js", "https://cdn.example.test/app/assets/index-abc.js"])(
+    "gates a framework entry under the configured asset base: %s",
+    async (source) => {
+      const input = `<script id="_R_">import(${JSON.stringify(source)})</script>`;
+      const bytes = Buffer.byteLength(input);
+      const output = await transformHtml(
+        input,
+        Array.from({ length: bytes - 1 }, (_, index) => index + 1),
+      );
+      expect(output).toContain(`.then(() => import(${JSON.stringify(source)}))`);
+    },
+  );
+  it("does not add a nonce to external scripts or application inline code", async () => {
+    const input =
+      '<script src="https://untrusted.example/script.js"></script><script>window.untrusted=true</script>';
+    expect(await transformHtml(input, [12, 65], "trusted")).toBe(input);
   });
 });

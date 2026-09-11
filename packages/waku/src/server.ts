@@ -50,9 +50,6 @@ export function createWakuCatalogDeliveryMiddleware(
         ),
       )
       .pipeThrough(
-        webTransform(nonce ? createWakuScriptNonceTransform(nonce) : createPassThrough()),
-      )
-      .pipeThrough(
         webTransform(
           createWakuBootstrapGateTransform({ allowMissingPromise: options.development === true }),
         ),
@@ -74,7 +71,8 @@ function webTransform(transform: Transform): ReadableWritablePair<Uint8Array, Ui
 
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
-const WAKU_ENTRY_PATTERN = /import\(((['"])\/assets\/index-[^"']+\.js\2)\)/u;
+const WAKU_ENTRY_PATTERN =
+  /import\(((['"])(?:https?:\/\/[^"']+)?\/(?:[^"']*\/)?index-[^"']+\.js\2)\)/u;
 const TAIL_SIZE = 192;
 
 /**
@@ -139,93 +137,10 @@ function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolea
   }
 }
 
-function createWakuScriptNonceTransform(nonce: string): Transform {
-  const decoder = new StringDecoder("utf8");
-  let tail = "";
-  let inScript = false;
-  const escapedNonce = escapeAttribute(nonce);
-
-  return new Transform({
-    transform(chunk, _encoding, callback) {
-      tail += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      flushSafePrefix(this, false);
-      callback();
-    },
-    flush(callback) {
-      tail += decoder.end();
-      flushSafePrefix(this, true);
-      callback();
-    },
-  });
-
-  function flushSafePrefix(stream: Transform, flush: boolean) {
-    while (true) {
-      if (inScript) {
-        const close = /<\/script\s*>/iu.exec(tail);
-        if (close) {
-          const end = close.index + close[0].length;
-          if (!flush && end > tail.length - TAIL_SIZE) break;
-          stream.push(tail.slice(0, end));
-          tail = tail.slice(end);
-          inScript = false;
-          continue;
-        }
-        if (flush) {
-          if (tail) stream.push(tail);
-          tail = "";
-        } else if (tail.length > TAIL_SIZE) {
-          const safeEnd = unicodeCut(tail, tail.length - TAIL_SIZE);
-          stream.push(tail.slice(0, safeEnd));
-          tail = tail.slice(safeEnd);
-        }
-        return;
-      }
-
-      const match = /<script\b[^>]*>/iu.exec(tail);
-      if (match) {
-        const end = match.index + match[0].length;
-        if (!flush && end > tail.length - TAIL_SIZE) break;
-        const tag = /(?:^|\s)nonce\s*=/iu.test(match[0])
-          ? match[0]
-          : `${match[0].slice(0, -1)} nonce="${escapedNonce}">`;
-        stream.push(tail.slice(0, match.index) + tag);
-        tail = tail.slice(end);
-        inScript = true;
-        continue;
-      }
-      if (flush) {
-        if (tail) stream.push(tail);
-        tail = "";
-      } else if (tail.length > TAIL_SIZE) {
-        let safeEnd = tail.length - TAIL_SIZE;
-        const open = tail.toLowerCase().lastIndexOf("<script");
-        if (open !== -1 && open < safeEnd && !tail.slice(open).includes(">")) safeEnd = open;
-        safeEnd = unicodeCut(tail, safeEnd);
-        stream.push(tail.slice(0, safeEnd));
-        tail = tail.slice(safeEnd);
-      }
-      return;
-    }
-  }
-}
-
-function createPassThrough(): Transform {
-  return new Transform({
-    transform(chunk, _encoding, callback) {
-      this.push(chunk);
-      callback();
-    },
-  });
-}
-
 function unicodeCut(value: string, end: number): number {
   const before = value.charCodeAt(end - 1);
   const after = value.charCodeAt(end);
   return before >= 0xd8_00 && before <= 0xdb_ff && after >= 0xdc_00 && after <= 0xdf_ff
     ? end - 1
     : end;
-}
-
-function escapeAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }

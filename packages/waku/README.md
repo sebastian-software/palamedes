@@ -41,10 +41,12 @@ The middleware transforms HTML document streams after Waku renders them. RSC
 and action responses pass through unchanged. If an active fragment cannot be
 loaded before hydration, it presents a catalog-free reload/home document and
 does not expose internal module diagnostics. The middleware accepts no locale
-policy; `resolveLocale` remains the host application's responsibility. When a
-`nonce` is provided, it is applied to Waku's inline bootstrap and Flight
-scripts as well as Palamedes' generated scripts; configure the host CSP to
-allow that nonce and the application's same-origin module assets. Lazy client
+policy; `resolveLocale` remains the host application's responsibility. The `nonce` option applies only to Palamedes-generated import-map and readiness
+scripts. Set Waku's framework nonce with `unstable_setNonce` from
+`waku/router/server` in the host request interceptor before rendering. Existing
+framework nonces are preserved; application and external scripts are never
+automatically authorized. Configure the host CSP for the selected nonce and
+its permitted module origins. Lazy client
 component failures after hydration remain ordinary React error-boundary
 failures, so the host can provide its normal recovery UI.
 
