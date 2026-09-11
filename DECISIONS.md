@@ -54,7 +54,7 @@ Then read the remaining cross-cutting decisions:
 20. [ADR-020: Locale Is Fixed for a Browser Document](./adr/020-locale-is-fixed-for-a-browser-document.md)
 21. [ADR-021: Shared Cross-Repository Site UI](./adr/021-shared-cross-repository-site-ui.md)
 22. [ADR-022: Generated Catalogs Use Executable Message Functions](./adr/022-generated-catalogs-use-executable-message-functions.md)
-23. [ADR-023: Generated Production Runtime Is Parser-Free](./adr/023-generated-production-runtime-is-parser-free.md)
+23. [ADR-023: Public Application Runtime Is Parser-Free](./adr/023-generated-production-runtime-is-parser-free.md)
 24. [ADR-024: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch](./adr/024-npm-launcher-is-a-packaging-bridge.md)
 25. [ADR-025: React Router RSC Entry Request Scope](./adr/025-react-router-rsc-entry-request-scope.md)
 26. [ADR-026: Editorial Visual Brand System](./adr/026-editorial-visual-brand-system.md)

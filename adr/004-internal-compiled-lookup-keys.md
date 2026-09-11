@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
+**Revised:** 2026-09-11
 
 ## Context
 
@@ -35,12 +36,25 @@ This key:
 
 The derivation strategy is fixed and not a configurable application-level feature. Palamedes follows Ferrocat's public `FerrocatV1` compiled-key contract for this purpose rather than owning a separate private algorithm.
 
-Low-level transforms generate compact runtime calls without embedding the
-authored source message by default. First-party host adapters override that
-low-level default and preserve source fallbacks in both development and
-production, so deploy skew and partial catalogs remain readable. Set
-`keepSourceFallbacks: false` for compact, hash-only output when bundle size or
-embedding authored source text is a concern.
+A missing translation is resolved during catalog compilation through the
+configured fallback locales and ultimately the source message. That fallback
+is compiled like a translation; `failOnMissing` can require a translation in
+the target locale instead. This compiled translation fallback remains valid;
+it is not recovery from a failed runtime catalog load.
+
+A failed catalog or fragment load, or an unexpected missing compiled entry,
+must not render an internal key, raw ICU pattern, or substitute source text in
+the affected application output. Such failures propagate to the host's error
+handling. UI integrations must prevent the affected subtree or route from
+rendering incomplete localized content and use the appropriate error boundary
+or host equivalent. Server execution must report failure rather than return a
+partially localized result as success.
+
+Internal keys may appear in developer diagnostics, never as user-facing
+message output or raw error UI. Any retained source metadata is for diagnostics,
+not an alternate runtime rendering path. The precise diagnostic metadata and
+migration of `keepSourceFallbacks` remain to be resolved in the
+[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
 
 Source code, extraction, catalog updates, parsed catalog data, and user-facing diagnostics remain source-string-first.
 
@@ -62,6 +76,33 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 
 - Palamedes can keep runtime payloads compact without reintroducing an author-facing ID model.
 - Transformed code and compiled catalogs may contain opaque short keys without changing the public authoring contract.
-- First-party production adapters preserve authored source fallbacks by default, so missing catalog setup remains readable during deploy skew or with partial catalogs. Applications that explicitly disable source fallbacks must load compiled catalogs before translated code renders or the internal key can become user-visible.
+- Runtime catalog failures reach host error handling; the affected application
+  content is not rendered using source text or internal keys. Build-time
+  translation fallbacks are ordinary compiled messages and remain supported.
 - Documentation must describe the keys as implementation detail, not as product identity.
 - The runtime key contract can be shared cleanly between transformed code and compiled catalog artifacts without turning those keys into a public authoring concept.
+
+## Implementation status
+
+The accepted failure contract above targets Palamedes v2. The published 1.x
+behavior remains in force until the coordinated major release:
+
+Low-level transforms generate compact runtime calls without embedding the
+authored source message by default. First-party host adapters override that
+low-level default and preserve source fallbacks in both development and
+production, so deploy skew and partial catalogs remain readable. Set
+`keepSourceFallbacks: false` for compact, hash-only output when bundle size or
+embedding authored source text is a concern.
+
+This describes existing 1.x behavior, not an exception to the v2 decision.
+Migration of these defaults and options is tracked in
+[#1206](https://github.com/sebastian-software/palamedes/issues/1206) and the host
+delivery slices under [#1204](https://github.com/sebastian-software/palamedes/issues/1204).
+
+Current Core lookup still returns source metadata or the internal key on a
+missing entry. Next currently catches some production fragment failures and
+continues, and first-party plugin defaults retain source fallback text. These
+behaviors must be migrated to the accepted failure contract. A rejected module
+import alone is not proof of usable error handling: adapters must verify initial
+loading, hydration, and navigation against their host's actual error boundary
+or document-level failure path.
