@@ -234,6 +234,168 @@ async function captureScreenshot(page, example, state) {
   });
 }
 
+test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
+  const example = activeExample();
+  if (example.id !== "remix-cookie") {
+    return;
+  }
+
+  const page = await launchPage([]);
+  let failure = "entry-network";
+  const cspViolations = [];
+  page.on("console", (message) => {
+    if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text())) {
+      cspViolations.push(message.text());
+    }
+  });
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      headers: {
+        ...response.headers(),
+        "content-security-policy":
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'",
+      },
+    });
+  });
+  await page.route("**/assets/app/public/client.tsx", async (route) => {
+    if (failure === "entry-network") {
+      await route.abort("failed");
+      return;
+    }
+    if (failure === "entry-evaluation") {
+      await route.fulfill({
+        body: 'throw new Error("injected Remix entry evaluation failure");',
+        contentType: "application/javascript",
+        status: 200,
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
+    if (failure === "fragment-network") {
+      await route.abort("failed");
+      return;
+    }
+    if (failure === "fragment-evaluation") {
+      await route.fulfill({
+        body: 'throw new Error("injected Remix catalog fragment evaluation failure");',
+        contentType: "application/javascript",
+        status: 200,
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("alert").waitFor({ state: "visible" });
+  expect(await page.getByRole("alert").textContent()).toContain("Something went wrong");
+
+  failure = "ok";
+  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  await waitForClientReady(page);
+
+  failure = "entry-evaluation";
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("alert").waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Reload", exact: true }).waitFor({ state: "visible" });
+
+  failure = "ok";
+  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  await waitForClientReady(page);
+
+  failure = "fragment-network";
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("alert").waitFor({ state: "visible" });
+
+  failure = "ok";
+  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  await waitForClientReady(page);
+
+  failure = "fragment-evaluation";
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("alert").waitFor({ state: "visible" });
+
+  failure = "ok";
+  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  await waitForClientReady(page);
+  expect(cspViolations).toEqual([]);
+});
+
+test("Remix lazy catalog failures recover in all document locales under CSP", async () => {
+  const example = activeExample();
+  if (example.id !== "remix-cookie") return;
+  for (const locale of ["en", "de", "es"]) {
+    for (const mode of ["network", "evaluation"]) {
+      const page = await launchPage([]);
+      await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
+      let fail = false;
+      const fragments = [];
+      const violations = [];
+      page.on("console", (message) => {
+        if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text()))
+          violations.push(message.text());
+      });
+      await page.route("**/*", async (route) => {
+        if (route.request().resourceType() !== "document") return route.continue();
+        const response = await route.fetch();
+        await route.fulfill({
+          response,
+          headers: {
+            ...response.headers(),
+            "content-security-policy":
+              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'",
+          },
+        });
+      });
+      await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
+        fragments.push(route.request().url());
+        if (!fail) return route.continue();
+        if (mode === "network") return route.abort("failed");
+        await route.fulfill({
+          contentType: "application/javascript",
+          body: 'throw new Error("injected catalog evaluation failure")',
+        });
+      });
+      await page.goto(example.baseUrl, { waitUntil: "domcontentloaded" });
+      await waitForClientReady(page);
+      const initialCount = fragments.length;
+      fail = true;
+      await page.getByTestId("client-load-lazy").click();
+      await page.getByRole("alert").waitFor();
+      expect(fragments.length).toBeGreaterThan(initialCount);
+      expect(fragments.every((url) => new URL(url).searchParams.get("locale") === locale)).toBe(
+        true,
+      );
+      expect(await page.getByRole("alert").textContent()).not.toMatch(
+        /injected|Palamedes|catalog/iu,
+      );
+      expect(await page.locator("html").getAttribute("data-remix-lazy-body")).toBeNull();
+      fail = false;
+      await page.getByRole("button", { name: "Reload", exact: true }).click();
+      await waitForClientReady(page);
+      await page.getByTestId("client-load-lazy").click();
+      await page.getByTestId("client-lazy-message").waitFor();
+      expect(await page.getByTestId("client-lazy-message").textContent()).toBe(
+        {
+          en: "This message arrived after the page was ready",
+          de: "Diese Nachricht kam nach dem Laden der Seite an",
+          es: "Este mensaje llegó después de que la página estuviera lista",
+        }[locale],
+      );
+      expect(violations).toEqual([]);
+      await page.context().browser()?.close();
+    }
+  }
+});
+
 test("Waku initial HTML document uses the request locale", async () => {
   const example = activeExample();
   if (example.framework !== "waku") {
@@ -291,7 +453,7 @@ test("matrix example browser contract", async () => {
     expect(initialHtml).toContain("guía del cliente de Remix");
     expect(initialHtml).toContain("/assets/__palamedes/catalog/es.js");
     expect(initialHtml).not.toContain('id="palamedes-i18n-bootstrap"');
-    expect(initialHtml).toContain('src="/assets/app/public/client.tsx"');
+    expect(initialHtml).toContain('src="/assets/__palamedes/entry/');
     expect(initialHtml).not.toContain('data-testid="client-ready"');
   }
 

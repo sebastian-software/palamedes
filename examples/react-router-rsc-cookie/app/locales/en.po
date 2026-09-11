@@ -1,25 +1,39 @@
 msgid ""
 msgstr ""
-"Content-Type: text/plain; charset=UTF-8\\n"
-"Language: en\\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=UTF-8\\nLanguage: en\\n\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
 
+#: examples/react-router-rsc-cookie/app/lib/server-helpers.ts#asynchronousServerFunctionMessage
 msgid "Asynchronous helper confirmed locale."
 msgstr "Asynchronous helper confirmed locale."
 
+#: examples/react-router-rsc-cookie/app/lib/cross-module-helper.ts#crossModuleServerFunctionMessage
 msgid "Cross-module helper confirmed locale."
 msgstr "Cross-module helper confirmed locale."
 
+#: examples/react-router-rsc-cookie/app/lib/server-function.ts#readLocalizedServerFunction
 msgid "Default parameter confirmed locale."
 msgstr "Default parameter confirmed locale."
 
+#: examples/react-router-rsc-cookie/app/lib/server-function.ts#readLocalizedServerFunction
 msgid "Direct Server Function macro confirmed locale."
 msgstr "Direct Server Function macro confirmed locale."
 
+#: examples/react-router-rsc-cookie/app/components/lazy-browser-message.tsx
+msgid "Lazy browser fragment confirmed locale."
+msgstr "Lazy browser fragment confirmed locale."
+
+#: examples/react-router-rsc-cookie/app/routes/home.tsx#ServerComponent
 msgid "React Router RSC request scope"
 msgstr "React Router RSC request scope"
 
+#: examples/react-router-rsc-cookie/app/routes/home.tsx#ServerComponent
 msgid "Server render confirmed locale."
 msgstr "Server render confirmed locale."
 
+#: examples/react-router-rsc-cookie/app/lib/server-helpers.ts#synchronousServerFunctionMessage
 msgid "Synchronous helper confirmed locale."
 msgstr "Synchronous helper confirmed locale."
