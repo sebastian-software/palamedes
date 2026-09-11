@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 
-const root = path.dirname(fileURLToPath(new URL("../", import.meta.url)));
+const root = fileURLToPath(new URL("../", import.meta.url));
 const example = path.join(root, "examples/solid-cookie");
 const ownsHost = !process.env.PALAMEDES_SOLID_URL;
 const hostPort = Number(process.env.PALAMEDES_SOLID_PORT ?? 4061);
@@ -234,5 +234,8 @@ try {
   await csp();
 } finally {
   if (cspProxy) await new Promise((resolve) => cspProxy.close(resolve));
-  if (host && host.exitCode === null) host.kill("SIGTERM");
+  if (host && host.exitCode === null) {
+    host.kill("SIGTERM");
+    await new Promise((resolve) => host.once("exit", resolve));
+  }
 }
