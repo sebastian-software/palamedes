@@ -473,6 +473,7 @@ test("matrix example browser contract", async () => {
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
       .toContain("Palamedes MDX handbook");
 
+    await verifyObservedArtifacts.checkpoint();
     await page.getByTestId("page-link-extraction").click();
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
@@ -508,6 +509,7 @@ test("matrix example browser contract", async () => {
       .toBe("Añadir al carrito");
   }
   await expectRemixClientProof(page, "es", 1);
+  await verifyObservedArtifacts.checkpoint();
   if (example.id === "remix-cookie") {
     await page.getByTestId("client-increment").click();
     await expectRemixClientProof(page, "es", 2);

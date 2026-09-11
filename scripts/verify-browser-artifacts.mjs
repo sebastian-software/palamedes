@@ -73,7 +73,8 @@ export function observeBrowserArtifacts(page, example) {
       ),
     );
   });
-  return async () => {
+  let initial;
+  const finish = async () => {
     const responses = await Promise.all(pending);
     assert.ok(responses.length, `${example.id} did not fetch browser JavaScript`);
     let decodedBytes = 0;
@@ -89,6 +90,7 @@ export function observeBrowserArtifacts(page, example) {
     }
     await record("network", {
       example: example.id,
+      initial,
       responses: responses.length,
       uniqueModuleUrls: modules.size,
       decodedBytes,
@@ -96,4 +98,15 @@ export function observeBrowserArtifacts(page, example) {
       scope: "observed host interaction and locale navigation; decoded response bodies",
     });
   };
+  finish.checkpoint = async () => {
+    const responses = await Promise.all(pending);
+    for (const response of responses) if (response.error) throw response.error;
+    initial = {
+      responses: responses.length,
+      uniqueModuleUrls: new Set(responses.map(({ url }) => url)).size,
+      decodedBytes: responses.reduce((sum, { body }) => sum + body.byteLength, 0),
+      scope: "initial document ready, before test navigation or interaction",
+    };
+  };
+  return finish;
 }
