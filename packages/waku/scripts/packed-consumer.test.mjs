@@ -21,6 +21,7 @@ const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-waku-packed-")
 try {
   const archiveDir = path.join(fixtureRoot, "archives");
   mkdirSync(archiveDir);
+  const coreArchive = packPackage(path.join(repoRoot, "packages", "core"), archiveDir);
   const runtimeArchive = packPackage(runtimeDir, archiveDir);
   const wakuArchive = packPackage(packageDir, archiveDir);
   const consumerRoot = path.join(fixtureRoot, "consumer");
@@ -33,6 +34,7 @@ try {
         private: true,
         type: "module",
         dependencies: {
+          "@palamedes/core": `file:${coreArchive}`,
           "@palamedes/runtime": `file:${runtimeArchive}`,
           "@palamedes/waku": `file:${wakuArchive}`,
           waku: "1.0.0-rc.0",
@@ -44,7 +46,7 @@ try {
   );
   writeFileSync(
     path.join(consumerRoot, "pnpm-workspace.yaml"),
-    `overrides:\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
+    `overrides:\n  "@palamedes/core": "file:${coreArchive}"\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
   );
   runPackageManager(consumerRoot, ["install", "--ignore-scripts"]);
 
