@@ -571,6 +571,8 @@ pub struct CatalogModuleRequest {
     pub locale: String,
     pub pseudo_locale: Option<String>,
     pub fail_on_missing: Option<bool>,
+    /// Deprecated v1 option. v2 always rejects compile errors regardless of
+    /// this value; presence is retained only for a migration diagnostic.
     pub fail_on_compile_error: Option<bool>,
     pub missing_failure_hint: Option<String>,
     pub compile_failure_hint: Option<String>,
@@ -590,7 +592,10 @@ struct CatalogModuleRenderOptions {
     resource_path: String,
     pseudo_locale: Option<String>,
     fail_on_missing: bool,
-    fail_on_compile_error: bool,
+    /// Whether the removed v1 `failOnCompileError` option was supplied. The
+    /// option no longer controls fatal diagnostics, but retaining presence
+    /// lets v2 emit an actionable migration message for existing configs.
+    fail_on_compile_error: Option<bool>,
     missing_failure_hint: Option<String>,
     compile_failure_hint: Option<String>,
     diagnostics_warning_hint: Option<String>,
@@ -2101,7 +2106,7 @@ fn compile_catalog_module_impl(request: CatalogModuleRequest) -> Result<CatalogM
         resource_path: resource_path.clone(),
         pseudo_locale: pseudo_locale.or_else(|| config.pseudo_locale.clone()),
         fail_on_missing: fail_on_missing.unwrap_or(false),
-        fail_on_compile_error: fail_on_compile_error.unwrap_or(false),
+        fail_on_compile_error,
         missing_failure_hint,
         compile_failure_hint,
         diagnostics_warning_hint,
@@ -2217,16 +2222,6 @@ fn create_catalog_module_result(
         .cloned()
         .unwrap_or_else(|| options.locale.clone());
 
-    if options.pseudo_locale.as_deref() != Some(locale.as_str())
-        && !artifact.missing.is_empty()
-        && options.fail_on_missing
-    {
-        return Err(napi::Error::from_reason(append_hint(
-            create_missing_error_message(&locale, &artifact.missing),
-            options.missing_failure_hint.as_deref(),
-        )));
-    }
-
     let mut warnings = Vec::new();
     if !artifact.diagnostics.is_empty() {
         let error_diagnostics = artifact
@@ -2237,21 +2232,34 @@ fn create_catalog_module_result(
             })
             .collect::<Vec<_>>();
 
-        if options.fail_on_compile_error && !error_diagnostics.is_empty() {
-            return Err(napi::Error::from_reason(append_hint(
-                create_compile_error_message(&locale, &error_diagnostics),
-                options.compile_failure_hint.as_deref(),
-            )));
+        if !error_diagnostics.is_empty() {
+            let mut message =
+                create_compile_error_message(&locale, &options.resource_path, &error_diagnostics);
+            message = append_hint(message, options.compile_failure_hint.as_deref());
+            if options.fail_on_compile_error.is_some() {
+                message = append_hint(message, Some(FAIL_ON_COMPILE_ERROR_MIGRATION));
+            }
+            return Err(napi::Error::from_reason(message));
         }
 
         warnings.push(append_hint(
-            create_diagnostic_message(&locale, &artifact.diagnostics),
-            if options.fail_on_compile_error {
-                None
-            } else {
-                options.diagnostics_warning_hint.as_deref()
-            },
+            create_diagnostic_message(&locale, &options.resource_path, &artifact.diagnostics),
+            options.diagnostics_warning_hint.as_deref(),
         ));
+    }
+
+    if options.pseudo_locale.as_deref() != Some(locale.as_str())
+        && !artifact.missing.is_empty()
+        && options.fail_on_missing
+    {
+        return Err(napi::Error::from_reason(append_hint(
+            create_missing_error_message(&locale, &options.resource_path, &artifact.missing),
+            options.missing_failure_hint.as_deref(),
+        )));
+    }
+
+    if options.fail_on_compile_error.is_some() {
+        warnings.push(FAIL_ON_COMPILE_ERROR_MIGRATION.to_owned());
     }
 
     Ok(CatalogModuleResult {
@@ -2299,9 +2307,16 @@ fn render_catalog_module_with_context(
         let value = match compiled.get(id) {
             None => render_javascript_string(pattern, locale, resource_path)?,
             Some(palamedes::RuntimeCompiledMessage::Lazy) => {
-                renderer.render_lazy_message(pattern, &context)?
+                return Err(napi::Error::from_reason(format!(
+                    "Failed to compile catalog message for locale {locale} at {resource_path}: ICU pattern cannot be lowered to the parser-free runtime (message: {pattern:?})"
+                )));
             }
             Some(palamedes::RuntimeCompiledMessage::Nodes(nodes)) => {
+                if let Some((formatter, style)) = unsupported_runtime_formatter_style(nodes) {
+                    return Err(napi::Error::from_reason(format!(
+                        "Failed to compile catalog message for locale {locale} at {resource_path}: unsupported {formatter} formatter style {style:?} (message: {pattern:?})"
+                    )));
+                }
                 renderer.render_message(nodes, &context)?
             }
         };
@@ -2329,18 +2344,6 @@ struct RuntimeModuleContext<'a> {
 }
 
 impl RuntimeModuleRenderer {
-    fn render_lazy_message(
-        &mut self,
-        pattern: &str,
-        context: &RuntimeModuleContext<'_>,
-    ) -> Result<String> {
-        let name = self.message_name();
-        let pattern = render_javascript_string(pattern, context.locale, context.resource_path)?;
-        self.declarations
-            .push_str(&format!("const {name}=(v,r)=>r.pattern({pattern},v);"));
-        Ok(name)
-    }
-
     fn render_message(
         &mut self,
         nodes: &[palamedes::RuntimeMessageNode],
@@ -2505,6 +2508,7 @@ fn render_javascript_string(value: &str, locale: &str, resource_path: &str) -> R
 
 fn create_missing_error_message(
     locale: &str,
+    resource_path: &str,
     missing_messages: &[palamedes::CatalogArtifactMissingMessage],
 ) -> String {
     let lines = missing_messages
@@ -2512,7 +2516,7 @@ fn create_missing_error_message(
         .map(|missing| render_source_key(&missing.source_key))
         .collect::<Vec<_>>();
     format!(
-        "Failed to compile catalog for locale {locale}!\n\nMissing {} translation(s):\n{}",
+        "Failed to compile catalog for locale {locale} at {resource_path}!\n\nMissing {} translation(s):\n{}",
         missing_messages.len(),
         lines.join("\n")
     )
@@ -2520,6 +2524,7 @@ fn create_missing_error_message(
 
 fn create_diagnostic_message(
     locale: &str,
+    resource_path: &str,
     diagnostics: &[palamedes::CatalogArtifactDiagnostic],
 ) -> String {
     let lines = diagnostics
@@ -2536,13 +2541,14 @@ fn create_diagnostic_message(
         })
         .collect::<Vec<_>>();
     format!(
-        "Catalog diagnostics for locale {locale}:\n\n{}",
+        "Catalog diagnostics for locale {locale} at {resource_path}:\n\n{}",
         lines.join("\n\n")
     )
 }
 
 fn create_compile_error_message(
     locale: &str,
+    resource_path: &str,
     diagnostics: &[&palamedes::CatalogArtifactDiagnostic],
 ) -> String {
     let lines = diagnostics
@@ -2556,10 +2562,76 @@ fn create_compile_error_message(
         })
         .collect::<Vec<_>>();
     format!(
-        "Failed to compile catalog for locale {locale}!\n\nCompilation error for {} translation(s):\n{}",
+        "Failed to compile catalog for locale {locale} at {resource_path}!\n\nCompilation error for {} translation(s):\n{}",
         diagnostics.len(),
         lines.join("\n\n")
     )
+}
+
+const FAIL_ON_COMPILE_ERROR_MIGRATION: &str = "Palamedes v2 always rejects invalid or unsupported ICU during catalog compilation; `failOnCompileError` no longer changes this behavior. Remove the option from the host configuration.";
+
+fn unsupported_runtime_formatter_style(
+    nodes: &[palamedes::RuntimeMessageNode],
+) -> Option<(String, String)> {
+    for node in nodes {
+        match node {
+            palamedes::RuntimeMessageNode::Formatted { format, style, .. }
+                if !is_supported_runtime_formatter_style(format, style.as_deref()) =>
+            {
+                return Some((
+                    runtime_formatter_name(format).to_owned(),
+                    style.clone().unwrap_or_default(),
+                ));
+            }
+            palamedes::RuntimeMessageNode::Choice { options, .. } => {
+                for branch in options.values() {
+                    if let Some(result) = unsupported_runtime_formatter_style(branch) {
+                        return Some(result);
+                    }
+                }
+            }
+            palamedes::RuntimeMessageNode::Tag { children, .. } => {
+                if let Some(result) = unsupported_runtime_formatter_style(children) {
+                    return Some(result);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn is_supported_runtime_formatter_style(
+    format: &palamedes::RuntimeMessageFormat,
+    style: Option<&str>,
+) -> bool {
+    let Some(style) = style.map(str::trim).filter(|style| !style.is_empty()) else {
+        return true;
+    };
+
+    match format {
+        palamedes::RuntimeMessageFormat::Number => {
+            if let Some(skeleton) = style.strip_prefix("::") {
+                return matches!(skeleton, "percent" | "integer")
+                    || skeleton.strip_prefix("currency/").is_some_and(|currency| {
+                        currency.len() == 3
+                            && currency.bytes().all(|byte| byte.is_ascii_alphabetic())
+                    });
+            }
+            matches!(style, "percent" | "integer")
+        }
+        palamedes::RuntimeMessageFormat::Date | palamedes::RuntimeMessageFormat::Time => {
+            matches!(style, "short" | "medium" | "long" | "full")
+        }
+    }
+}
+
+fn runtime_formatter_name(format: &palamedes::RuntimeMessageFormat) -> &'static str {
+    match format {
+        palamedes::RuntimeMessageFormat::Number => "number",
+        palamedes::RuntimeMessageFormat::Date => "date",
+        palamedes::RuntimeMessageFormat::Time => "time",
+    }
 }
 
 fn render_diagnostic_severity(severity: &palamedes::CatalogArtifactDiagnosticSeverity) -> &str {
@@ -2586,7 +2658,9 @@ fn append_hint(message: String, hint: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::widen_confidence;
+    use std::collections::BTreeMap;
+
+    use super::{render_catalog_module, widen_confidence};
 
     #[test]
     fn confidence_round_trips_through_the_boundary() {
@@ -2608,5 +2682,23 @@ mod tests {
         let widened = widen_confidence(0.123_456_789_f64 as f32);
 
         assert_eq!(widened, 0.123_456_79);
+    }
+
+    #[test]
+    fn direct_catalog_render_rejects_unsupported_formatter_styles() {
+        for pattern in [
+            "{amount, number, ::compact-short}",
+            "{amount, number, currency/EUR}",
+            "{when, date, yyyy-MM-dd}",
+        ] {
+            let error =
+                render_catalog_module(BTreeMap::from([("message".to_owned(), pattern.to_owned())]))
+                    .expect_err("unsupported styles must not produce executable modules");
+            assert!(
+                error.reason.contains("unsupported") && error.reason.contains(pattern),
+                "unexpected diagnostic: {}",
+                error.reason
+            );
+        }
     }
 }

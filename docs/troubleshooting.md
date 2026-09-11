@@ -134,7 +134,7 @@ Fix:
   `palamedes.yaml`; plugin integrations skip missing-translation failures
   for that locale.
 
-## `failOnCompileError` Breaks The Build
+## Invalid ICU Breaks The Build
 
 Symptom:
 
@@ -152,7 +152,10 @@ Fix:
 - Compare the translated ICU placeholders with the source message.
 - Re-run `pnpm exec pmds audit --fail-on error` locally after editing the
   catalog.
-- Keep `failOnCompileError: true` in CI when catalogs are managed in the repo.
+- Invalid and unsupported ICU is always fatal in Palamedes v2. Remove the
+  deprecated `failOnCompileError` option; setting it to `false` no longer
+  downgrades an error to a warning. The compiler includes a migration message
+  when an existing configuration still supplies the option.
 
 ## Native Binding Fails To Load
 

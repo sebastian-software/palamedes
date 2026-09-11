@@ -161,7 +161,9 @@ unsafe attribute, restricted-element, or non-render rewrites.
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party Vite, Next, and Remix `.po` loaders. Pass
 the artifact config, the resource path, and options such as `locale`, `pseudoLocale`,
-`failOnMissing`, and `failOnCompileError`. The generated module contains one map
+`failOnMissing`, and the deprecated `failOnCompileError` migration option. The
+deprecated option no longer controls diagnostics: invalid or unsupported ICU
+always fails in development and production. The generated module contains one map
 of constant strings and executable message functions lowered from Ferrocat's
 AST, so valid dynamic messages need neither ICU parsing nor AST interpretation
 in the browser.

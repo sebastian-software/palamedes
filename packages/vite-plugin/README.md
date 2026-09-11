@@ -59,6 +59,9 @@ export default defineConfig({
 });
 ```
 
+`failOnCompileError` is deprecated in v2. Invalid or unsupported ICU always
+fails catalog compilation, including when the option is `false`.
+
 ```ts
 import { defineConfig } from "vite";
 import solid from "@solidjs/vite-plugin";
@@ -96,7 +99,6 @@ palamedes({
   cwd: process.cwd(),
   skipValidation: false,
   failOnMissing: false,
-  failOnCompileError: false,
   framework: "react",
   keepSourceFallbacks: undefined,
   mdx: {

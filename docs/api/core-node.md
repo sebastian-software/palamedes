@@ -43,9 +43,13 @@ analysis pass. See [MDX messages](../mdx.md).
 
 `compileCatalogArtifact()` and `compileCatalogArtifactSelected()` include
 runtime formatter diagnostics in their `diagnostics` arrays. Unsupported
-formatter kinds such as `list`, `duration`, `ago`, and `name` are errors.
-Unsupported styles on supported `number`, `date`, and `time` formatters are
-warnings because the runtime falls back to default `Intl` formatting.
+formatter kinds such as `list`, `duration`, `ago`, and `name`, plus unsupported
+styles on supported `number`, `date`, and `time` formatters, are errors.
+The full API validates every message in the resolved catalog set. The selected
+API validates only the requested compiled IDs; use the full API or
+`auditCatalogs` for a whole-catalog audit. Artifact APIs retain structured
+diagnostics for inspection, while module APIs reject an artifact containing an
+error diagnostic.
 
 `compileCatalogModule(config, resourcePath, options)` renders the compiled
 catalog artifact as a JavaScript module. The locale is resolved from the

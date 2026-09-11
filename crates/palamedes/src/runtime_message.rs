@@ -5,7 +5,8 @@ use ferrocat_icu::{IcuNode, IcuPluralKind, parse_icu};
 /// Runtime-ready message programs keyed by compiled message ID.
 ///
 /// Constant text is omitted from this map. Messages that cannot be represented
-/// by the browser runtime retain a lazy-parser marker.
+/// by the parser-free runtime retain an unlowerable marker so module rendering
+/// can reject them instead of emitting a runtime parser fallback.
 pub type RuntimeCompiledMessages = BTreeMap<String, RuntimeCompiledMessage>;
 
 /// Build-time result for one non-constant catalog message.
@@ -13,7 +14,7 @@ pub type RuntimeCompiledMessages = BTreeMap<String, RuntimeCompiledMessage>;
 pub enum RuntimeCompiledMessage {
     /// Runtime-ready program input.
     Nodes(Vec<RuntimeMessageNode>),
-    /// Keep the browser runtime's resilient lazy-parser path.
+    /// The message cannot be lowered to the parser-free runtime ABI.
     Lazy,
 }
 
@@ -311,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_unsupported_formatter_kinds_lazy() {
+    fn marks_unsupported_formatter_kinds_as_unlowerable() {
         let messages = BTreeMap::from([("message".to_owned(), "Items: {items, list}".to_owned())]);
         assert_eq!(
             compile_runtime_catalog_messages(&messages).get("message"),

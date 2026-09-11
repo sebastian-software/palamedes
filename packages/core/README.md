@@ -195,8 +195,9 @@ Currency formatting must use the `::currency/ISO_CODE` skeleton form; bare
 
 Catalog artifact compilation reports unsupported formatter kinds such as `list`,
 `duration`, `ago`, and `name` as errors because the runtime does not render
-those kinds. Unsupported styles on `number`, `date`, and `time` are warnings:
-the runtime falls back to the default `Intl` formatter for that argument type.
+those kinds. Unsupported styles on `number`, `date`, and `time` are errors as
+well; the compiler never falls back to default `Intl` formatting for an
+unsupported authored style.
 
 ### Quoting And Literal Text
 

@@ -55,7 +55,8 @@ export type PalamedesRemixRegisterOptions = {
 
   /**
    * Fail `.po` catalog compilation when catalog diagnostics include errors.
-   * @default false
+   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU;
+   * remove this option.
    */
   failOnCompileError?: boolean;
 };
@@ -239,13 +240,11 @@ function loadCatalogModule(
       locale,
       pseudoLocale: config.pseudoLocale,
       failOnMissing: options.failOnMissing === true,
-      failOnCompileError: options.failOnCompileError === true,
+      ...(options.failOnCompileError === undefined
+        ? {}
+        : { failOnCompileError: options.failOnCompileError }),
       missingFailureHint:
         "You see this error because `failOnMissing=true` in Palamedes Remix register options.",
-      compileFailureHint:
-        "These errors fail loading because `failOnCompileError=true` in Palamedes Remix register options.",
-      diagnosticsWarningHint:
-        "You can fail loading on error diagnostics by setting `failOnCompileError=true` in Palamedes Remix register options.",
     },
   );
 

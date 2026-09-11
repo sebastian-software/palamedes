@@ -24,6 +24,7 @@ interface PalamedesPluginOptions {
   cwd?: string;
   skipValidation?: boolean;
   failOnMissing?: boolean;
+  /** @deprecated Invalid and unsupported ICU is always fatal in v2. */
   failOnCompileError?: boolean;
   framework?: "react" | "solid" | "none";
   runtimeModule?: string;
@@ -39,7 +40,8 @@ Defaults:
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
-- `failOnCompileError`: `false`
+- `failOnCompileError`: deprecated compatibility option; it no longer
+  downgrades invalid or unsupported ICU to a warning.
 - `framework`: `"react"`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true`

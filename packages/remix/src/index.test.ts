@@ -193,6 +193,17 @@ describe("createPalamedesRemixLoadHook", () => {
     );
   });
 
+  it("propagates strict compile failures when the removed opt-out is false", () => {
+    mocks.compileCatalogModule.mockImplementation(() => {
+      throw new Error("failOnCompileError no longer changes this behavior");
+    });
+    const load = createPalamedesRemixLoadHook({ failOnCompileError: false });
+
+    expect(() =>
+      load(new URL("file:///repo/app/locales/de.po").href, loadContext, vi.fn()),
+    ).toThrow(/failOnCompileError no longer changes this behavior/);
+  });
+
   it("loads the config dependency as an empty module for node watch mode", () => {
     const load = createPalamedesRemixLoadHook();
     const nextLoad = vi.fn();

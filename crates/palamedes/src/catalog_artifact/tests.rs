@@ -261,6 +261,40 @@ msgstr "{name"
 }
 
 #[test]
+fn compile_catalog_artifact_reports_invalid_source_used_as_fallback() {
+    let fixture = create_fixture_dir("catalog-artifact-invalid-source-fallback");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    write_test_catalog(&locale_dir, "en", &[("Broken {name", "")]);
+    write_test_catalog(&locale_dir, "de", &[]);
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+
+    let result = compile_catalog_artifact(&request).expect("artifact diagnostics");
+    assert!(result.diagnostics.iter().any(|diagnostic| {
+        diagnostic.locale == "en"
+            && diagnostic.source_key.message == "Broken {name"
+            && diagnostic.severity == CatalogArtifactDiagnosticSeverity::Error
+    }));
+    assert_eq!(result.missing.len(), 1);
+    assert_eq!(result.missing[0].resolved_locale.as_deref(), Some("en"));
+}
+
+#[test]
 fn compile_catalog_artifact_accepts_runtime_literal_apostrophes() {
     let fixture = create_fixture_dir("catalog-artifact-apostrophes");
     let locale_dir = fixture.join("src/locales");
@@ -1068,7 +1102,9 @@ fn compile_catalog_artifact_selected_reports_runtime_unsupported_formatter_kinds
         .into_iter()
         .map(|message| (message, ""))
         .collect::<Vec<_>>();
-    write_test_catalog(&locale_dir, "en", &source_entries);
+    let mut source_entries_with_unselected = source_entries.clone();
+    source_entries_with_unselected.push(("Unselected {items, list}", ""));
+    write_test_catalog(&locale_dir, "en", &source_entries_with_unselected);
     write_test_catalog(&locale_dir, "de", &[]);
 
     let request = CatalogArtifactSelectedRequest {
@@ -1098,6 +1134,11 @@ fn compile_catalog_artifact_selected_reports_runtime_unsupported_formatter_kinds
 
     assert_eq!(result.messages.len(), 4);
     assert_eq!(diagnostics.len(), 4);
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.source_key.message != "Unselected {items, list}")
+    );
     assert!(diagnostics.iter().all(|diagnostic| {
         diagnostic.severity == CatalogArtifactDiagnosticSeverity::Error && diagnostic.locale == "en"
     }));
@@ -1169,8 +1210,7 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
 
     assert_eq!(diagnostics.len(), 3);
     assert!(diagnostics.iter().all(|diagnostic| {
-        diagnostic.severity == CatalogArtifactDiagnosticSeverity::Warning
-            && diagnostic.locale == "de"
+        diagnostic.severity == CatalogArtifactDiagnosticSeverity::Error && diagnostic.locale == "de"
     }));
     assert!(
         diagnostics
