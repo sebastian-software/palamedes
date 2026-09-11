@@ -1,3 +1,4 @@
+import { HostErrorBoundary } from "../components/HostErrorBoundary";
 import type { ReactNode } from "react";
 import { unstable_getHeaders } from "waku/router/server";
 import "@palamedes/example-ui/styles.css";
@@ -17,7 +18,9 @@ export default function Root({ children }: { children: ReactNode }) {
         <meta charSet="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />
       </head>
-      <body>{children}</body>
+      <body>
+        <HostErrorBoundary>{children}</HostErrorBoundary>
+      </body>
     </html>
   );
 }

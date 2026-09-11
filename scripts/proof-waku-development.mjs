@@ -21,6 +21,87 @@ async function waitForServer() {
   throw new Error("Waku development server did not start");
 }
 
+async function verifyFailure(browser, locale, phase, failure) {
+  const context = await browser.newContext();
+  await context.addCookies([{ name: "locale", value: locale, url: origin }]);
+  let armed = phase === "initial";
+  let injected = false;
+  const requested = [];
+  await context.route("**/*", async (route) => {
+    const url = decodeURIComponent(route.request().url());
+    if (!/palamedes:messages\/[^/]+\/(?:en|de|es)(?:[/?#]|$)/u.test(url)) {
+      return route.continue();
+    }
+    requested.push(url);
+    assert.match(url, new RegExp(`/${locale}(?:[/?#]|$)`, "u"));
+    if (armed && failure === "network") {
+      injected = true;
+      return route.abort("failed");
+    }
+    const response = await route.fetch();
+    const source = await response.text();
+    const headers = { ...response.headers(), "cache-control": "no-store" };
+    delete headers.etag;
+    delete headers["last-modified"];
+    delete headers["content-length"];
+    if (!armed) return route.fulfill({ response, headers, body: source });
+    injected = true;
+    // Keep the real generated exports. The failure must occur during native
+    // module evaluation, not while linking a deliberately missing export.
+    return route.fulfill({
+      response,
+      headers,
+      body: `${source}\nthrow new Error("WAKU_DEV_CATALOG_EVALUATION");\n`,
+    });
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(origin, { waitUntil: "domcontentloaded" });
+    if (phase === "lazy") {
+      await page.getByTestId("client-ready").waitFor({ state: "attached" });
+      assert.equal(
+        await page.evaluate(() => Boolean(globalThis.__palamedesWakuLazyCatalogBody)),
+        false,
+      );
+      armed = true;
+      await page.getByRole("button", { name: "Show lazy catalog details" }).click();
+      await page
+        .locator("[data-testid=lazy-catalog-error], [data-palamedes-catalog-error]")
+        .first()
+        .waitFor();
+    } else {
+      await page.locator("[data-palamedes-catalog-error]").waitFor();
+      assert.equal(await page.getByTestId("client-ready").count(), 0);
+    }
+    assert(injected, `${locale} ${phase} ${failure} did not reject a catalog dependency`);
+    assert.equal(await page.getByTestId("lazy-catalog-details").count(), 0);
+    assert.equal(
+      await page.evaluate(() => Boolean(globalThis.__palamedesWakuLazyCatalogBody)),
+      false,
+    );
+    assert.doesNotMatch(
+      await page.locator("body").innerText(),
+      /WAKU_DEV_CATALOG|MissingCompiled|palamedes:messages|\{[^}]*plural/u,
+    );
+    armed = false;
+    await page.getByText("Reload page", { exact: true }).click();
+    await page.getByTestId("client-ready").waitFor({ state: "attached" });
+    assert.equal(await page.locator("html").getAttribute("lang"), locale);
+    await page.getByRole("button", { name: "Show lazy catalog details" }).click();
+    await page.getByTestId("lazy-catalog-details").waitFor();
+    assert.equal(
+      await page.evaluate(() => Boolean(globalThis.__palamedesWakuLazyCatalogBody)),
+      true,
+    );
+    assert(requested.length > 0);
+    console.log(
+      `Waku development ${locale} ${phase} ${failure}: dependency rejection, generic UI and reload recovery passed`,
+    );
+  } finally {
+    await context.close();
+  }
+}
+
 await ensurePortFree(4198);
 const server = startCommand({
   args: ["exec", "waku", "dev", "--port", "4198"],
@@ -72,6 +153,14 @@ try {
     .waitFor({ timeout: 15_000 });
   console.log("Waku development: active locale, lazy catalog loading and PO invalidation passed");
   await context.close();
+  writeFileSync(catalogPath, original);
+  for (const locale of ["en", "de"]) {
+    for (const phase of ["initial", "lazy"]) {
+      for (const failure of ["network", "evaluation"]) {
+        await verifyFailure(browser, locale, phase, failure);
+      }
+    }
+  }
 } finally {
   writeFileSync(catalogPath, original);
   await browser?.close();
