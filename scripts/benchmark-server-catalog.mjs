@@ -156,31 +156,31 @@ function parseMessageSizes() {
 }
 
 async function measureMessageSizes() {
-  return Promise.all(
-    messageSizes.map(async (size) => {
-      const catalogsForSize = createCatalogs(size);
-      const sizeStore = createServerCatalogStore({
-        async load({ locale }) {
-          return [catalogsForSize.get(locale)];
-        },
-      });
-      const coldStart = performance.now();
-      const snapshot = await sizeStore.load("locale-0");
-      const coldCatalogLoadMs = performance.now() - coldStart;
-      const warmStart = performance.now();
-      for (let index = 0; index < requestCount; index += 1) {
-        createRequest(snapshot, "locale-0", index);
-      }
-      const warmRequestMs = performance.now() - warmStart;
-      return {
-        messageCount: size,
-        coldCatalogLoadMs,
-        warmRequestMs,
-        warmRequestMsPerRequest: warmRequestMs / requestCount,
-        retainedMessages: sizeStore.stats().retainedMessages,
-      };
-    }),
-  );
+  const results = [];
+  for (const size of messageSizes) {
+    const catalogsForSize = createCatalogs(size);
+    const sizeStore = createServerCatalogStore({
+      async load({ locale }) {
+        return [catalogsForSize.get(locale)];
+      },
+    });
+    const coldStart = performance.now();
+    const snapshot = await sizeStore.load("locale-0");
+    const coldCatalogLoadMs = performance.now() - coldStart;
+    const warmStart = performance.now();
+    for (let index = 0; index < requestCount; index += 1) {
+      createRequest(snapshot, "locale-0", index);
+    }
+    const warmRequestMs = performance.now() - warmStart;
+    results.push({
+      messageCount: size,
+      coldCatalogLoadMs,
+      warmRequestMs,
+      warmRequestMsPerRequest: warmRequestMs / requestCount,
+      retainedMessages: sizeStore.stats().retainedMessages,
+    });
+  }
+  return results;
 }
 
 async function measureConcurrentColdLoads() {
