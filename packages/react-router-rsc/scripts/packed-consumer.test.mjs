@@ -14,15 +14,18 @@ import path from "node:path";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(packageDir, "../..");
+const coreDir = path.join(repoRoot, "packages", "core");
 const runtimeDir = path.join(repoRoot, "packages", "runtime");
+const vitePluginDir = path.join(repoRoot, "packages", "vite-plugin");
 const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-react-router-rsc-packed-"));
 
 try {
   const archiveDir = path.join(fixtureRoot, "archives");
   mkdirSync(archiveDir);
-  const coreArchive = packPackage(path.join(repoRoot, "packages", "core"), archiveDir);
+  const coreArchive = packPackage(coreDir, archiveDir);
   const runtimeArchive = packPackage(runtimeDir, archiveDir);
+  const vitePluginArchive = packPackage(vitePluginDir, archiveDir);
   const reactRouterRscArchive = packPackage(packageDir, archiveDir);
   const consumerRoot = path.join(fixtureRoot, "consumer");
   mkdirSync(consumerRoot);
@@ -36,6 +39,7 @@ try {
         dependencies: {
           "@palamedes/core": `file:${coreArchive}`,
           "@palamedes/runtime": `file:${runtimeArchive}`,
+          "@palamedes/vite-plugin": `file:${vitePluginArchive}`,
           "@palamedes/react-router-rsc": `file:${reactRouterRscArchive}`,
         },
       },
@@ -45,7 +49,7 @@ try {
   );
   writeFileSync(
     path.join(consumerRoot, "pnpm-workspace.yaml"),
-    `overrides:\n  "@palamedes/core": "file:${coreArchive}"\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
+    `overrides:\n  "@palamedes/core": "file:${coreArchive}"\n  "@palamedes/runtime": "file:${runtimeArchive}"\n  "@palamedes/vite-plugin": "file:${vitePluginArchive}"\n`,
   );
   runPackageManager(consumerRoot, ["install", "--ignore-scripts"]);
 
@@ -60,6 +64,11 @@ try {
     types: "./dist/index.d.ts",
     import: "./dist/index.mjs",
   });
+  assert.deepEqual(manifest.exports["./client"], {
+    types: "./dist/client.d.ts",
+    import: "./dist/client.mjs",
+  });
+  assert.deepEqual(manifest.sideEffects, ["./dist/client.mjs"]);
   assert.equal(Object.hasOwn(manifest, "main"), false);
   assert.equal(Object.hasOwn(manifest, "module"), false);
   assert.equal(existsSync(path.join(installedPackage, "dist", "index.cjs")), false);

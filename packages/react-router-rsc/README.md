@@ -66,6 +66,13 @@ if (import.meta.hot) {
 }
 ```
 
+Use the adapter-owned client bootstrap in `app/entry.client.tsx`; it waits for
+catalog delivery before loading React Router's standard RSC entry:
+
+```tsx
+import "@palamedes/react-router-rsc/client";
+```
+
 For a production Vite build, let the adapter deliver the active locale's
 generated import map to the document response. The adapter reads the generated
 manifest after RSC has resolved the request locale and leaves Server Function
