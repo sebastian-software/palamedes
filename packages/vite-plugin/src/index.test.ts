@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -794,13 +795,8 @@ describe("automatic graph splitting", () => {
       .code!.replace(/^import .*;\n/gm, "")
       .replaceAll("import(", "loadFragment(");
     const events: string[] = [];
-    const run = new Function(
-      "document",
-      "initializeClientI18n",
-      "createI18n",
-      "loadFragment",
-      "events",
-      `return (async()=>{${code};events.push("body")})()`,
+    const run = runInNewContext(
+      `(document, initializeClientI18n, createI18n, loadFragment, events) => (async()=>{${code};events.push("body")})()`,
     );
     const document = { documentElement: { lang: "de", dataset: {} } };
     const i18n = { load: (locale: string) => events.push(`loaded:${locale}`) };
@@ -993,9 +989,13 @@ describe("automatic graph splitting", () => {
 
   it("externalizes generated specifiers without modifying host external filters", async () => {
     const { sidecarPlugin } = await runSidecarLoad(["id-a"]);
-    const resolve = sidecarPlugin.resolveId as Function;
-    expect(resolve("#pmds/abc123")).toEqual({ id: "#pmds/abc123", external: true });
-    expect(resolve("react")).toBeUndefined();
+    const resolve = sidecarPlugin.resolveId;
+    if (typeof resolve !== "function") throw new Error("Missing resolver hook");
+    expect(resolve.call({} as never, "#pmds/abc123", undefined, {} as never)).toEqual({
+      id: "#pmds/abc123",
+      external: true,
+    });
+    expect(resolve.call({} as never, "react", undefined, {} as never)).toBeUndefined();
     expect(sidecarPlugin.config).toBeUndefined();
   });
 

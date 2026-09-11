@@ -252,9 +252,8 @@ export type PalamedesPluginOptions = {
 
   /**
    * Preserve authored source messages as diagnostic metadata only.
-   * Defaults to `true` in every environment. Set to `false` for compact,
-   * hash-only output when bundle size or embedding authored source text is a
-   * concern.
+   * Defaults to `false` in every environment. Set to `true` to retain
+   * authored source text for diagnostics.
    * V2 runtime misses throw; this metadata never provides replacement output.
    */
   keepSourceFallbacks?: boolean;
@@ -266,29 +265,8 @@ export type PalamedesPluginOptions = {
   mdx?: PalamedesMdxConfig | false;
 
   /**
-   * EXPERIMENTAL: emit one generated message sidecar module per transformed
-   * source file, containing only the compiled messages that file references,
-   * and append a static import of it to the transformed output. Messages then
-   * travel through the bundler's module graph with the code that uses them,
-   * so route-level code splitting splits messages without any route
-   * configuration. Requires the application to install its client instance
-   * with `setClientI18n` instead of importing `.po` catalogs eagerly.
-   *
-   * The object form selects how the locale dimension binds:
-   *
-   * - `localeBinding: "embed"` (default) — every sidecar embeds all locales;
-   *   simplest, works everywhere, ships `locales ×` the route's messages.
-   * - `localeBinding: "import-map"` — production client builds import each
-   *   sidecar through a bare `#pmds/<key>` specifier and the build emits one
-   *   dependency-free message asset per (sidecar × locale) plus one import
-   *   map per locale and a `palamedes-split-manifest.json`. The server must
-   *   inject the active locale's import map into the HTML before any module
-   *   loads; the browser then downloads only the active locale's messages,
-   *   and translation-only deploys change message assets and import maps
-   *   while code chunks keep their hashes. Locale switching requires a
-   *   document navigation. Dev servers and SSR builds keep the embedded
-   *   form.
-   * @default false
+   * @deprecated Compiled graph delivery is automatic in every environment.
+   * Legacy enabled forms use active-locale delivery. `false` is rejected.
    */
   experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
 };
@@ -850,9 +828,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           if (isBuildCommand) {
             const boundCode =
               `import { locale as l, messages as m } from "${BARE_MESSAGES_PREFIX}${key}";\n` +
-              `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
-              initialize +
-              `if (l !== locale) throw new Error("Compiled catalog locale does not match the document.");\n` +
+              `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n${
+                initialize
+              }if (l !== locale) throw new Error("Compiled catalog locale does not match the document.");\n` +
               `i18n.load(locale, defineCompiledCatalog(m));\n`;
             return { code: boundCode, map: null, moduleSideEffects: true };
           }
@@ -866,9 +844,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             )
             .join(",");
           return {
-            code:
-              initialize +
-              `const loaders={${loaders}};\nconst fragment=await loaders[locale]();\ni18n.load(locale, fragment.messages);\n`,
+            code: `${
+              initialize
+            }const loaders={${loaders}};\nconst fragment=await loaders[locale]();\ni18n.load(locale, fragment.messages);\n`,
             map: null,
             moduleSideEffects: true,
           };
@@ -967,6 +945,92 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
     });
   }
+
+  // React Router reloads the old document when importing a lazy route rejects.
+  // A generated facade keeps that import valid and throws from the route's
+  // normal render boundary instead, so its catalog-independent error UI runs.
+  plugins.push({
+    name: "palamedes:react-router-route-boundaries",
+    augmentChunkHash(chunk) {
+      return chunk.facadeModuleId?.includes("?__react-router-build-client-route")
+        ? "palamedes-route-error-boundary-v1"
+        : undefined;
+    },
+    generateBundle(_options, bundle) {
+      for (const chunk of Object.values(bundle)) {
+        if (
+          chunk.type !== "chunk" ||
+          !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
+        )
+          continue;
+        const hash = createHash("sha256").update(chunk.code).digest("hex").slice(0, 12);
+        const fileName = `${path.posix.dirname(chunk.fileName)}/palamedes-route-${hash}.js`;
+        this.emitFile({ type: "asset", fileName, source: chunk.code });
+        const relative = `./${path.posix.basename(fileName)}`;
+        const exports = chunk.exports
+          .map((name, index) => {
+            const value = `__export${index}`;
+            const failedExport =
+              name === "default"
+                ? "function(){throw failure}"
+                : name === "meta" || name === "links"
+                  ? "()=>[]"
+                  : "undefined";
+            return `const ${value}=failure?${failedExport}:route[${JSON.stringify(name)}];export{${value} as ${name}};`;
+          })
+          .join("\n");
+        chunk.code = `let route,failure;try{route=await import(${JSON.stringify(relative)})}catch(error){if(!globalThis[Symbol.for("palamedes.document-catalogs-ready")])throw error;failure=error}\n${exports}`;
+        chunk.map = null;
+      }
+    },
+  });
+
+  // Static HTML applications have no SSR host to bind an import map. Delay
+  // their module entry until the document's locale policy selected a map.
+  plugins.push({
+    name: "palamedes:html-delivery",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      const manifestAsset = bundle[SPLIT_MANIFEST_NAME];
+      if (!manifestAsset || manifestAsset.type !== "asset") return;
+      const manifest = JSON.parse(String(manifestAsset.source)) as {
+        importMaps: Record<string, string>;
+      };
+      const maps = Object.fromEntries(
+        Object.entries(manifest.importMaps).map(([locale, file]) => {
+          const asset = bundle[file];
+          if (!asset || asset.type !== "asset")
+            throw new Error("Missing generated locale import map.");
+          return [locale, JSON.parse(String(asset.source))];
+        }),
+      );
+      for (const output of Object.values(bundle)) {
+        if (output.type !== "asset" || !output.fileName.endsWith(".html")) continue;
+        const entries: string[] = [];
+        let nonceAttribute = "";
+        let html = String(output.source).replace(
+          /<script\b[^>]*type=["']module["'][^>]*>[\s\S]*?<\/script>/giu,
+          (script) => {
+            const src = script.match(/\bsrc=["']([^"']+)["']/iu)?.[1];
+            if (!src) return script;
+            nonceAttribute ||= script.match(/\bnonce=["'][^"']*["']/iu)?.[0] ?? "";
+            entries.push(src);
+            return "";
+          },
+        );
+        if (!entries.length) continue;
+        html = html.replace(/<link\b[^>]*rel=["']modulepreload["'][^>]*>/giu, "");
+        const code = `const maps=${JSON.stringify(maps)};try{const locale=document.documentElement.lang;if(!Object.hasOwn(maps,locale))throw new Error("Unsupported document catalog locale.");const map=document.createElement("script");map.type="importmap";map.nonce=document.querySelector("script[data-palamedes-entry]")?.nonce||"";map.textContent=JSON.stringify(maps[locale]);document.head.append(map);await Promise.all(${JSON.stringify(entries)}.map(url=>import(url)))}catch(error){const template=document.querySelector("template[data-palamedes-error]");if(template){document.body.replaceChildren(template.content.cloneNode(true));}else{document.body.innerHTML='<main role="alert"><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="">Reload page</a> <a href="/">Go home</a></main>';}}`;
+        const hash = createHash("sha256").update(code).digest("hex").slice(0, 12);
+        const fileName = `assets/palamedes-entry-${hash}.js`;
+        this.emitFile({ type: "asset", fileName, source: code });
+        output.source = html.replace(
+          "</body>",
+          `<script type="module" data-palamedes-entry ${nonceAttribute} src="${resolvedBase}${fileName}"></script></body>`,
+        );
+      }
+    },
+  });
 
   // Plugin 4: PO file loader
   plugins.push({

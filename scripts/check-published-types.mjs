@@ -56,6 +56,7 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
   {
     packageDirectory: "packages/vite-plugin",
     docs: "docs/api/vite-plugin.md",
+    compiledOnlyDefault: true,
   },
   {
     packageDirectory: "packages/next-plugin",

@@ -51,6 +51,12 @@ describe("React Router catalog delivery", () => {
     );
   });
 
+  it("ignores stale production assets while the development server owns dependencies", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createReactRouterCatalogDelivery({ clientDirectory, development: true });
+    expect(delivery.getLocaleBinding("de")).toBeNull();
+  });
+
   it("fails closed for missing production assets and permits a pre-build dev server", async () => {
     const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-empty-"));
     fixtureDirectories.push(clientDirectory);
@@ -80,6 +86,26 @@ describe("React Router catalog delivery", () => {
     );
     expect(chunks).toContain('<link rel="modulepreload" href="/app/assets/route.de.js">');
     expect(chunks.indexOf("importmap")).toBeLessThan(chunks.indexOf("</head>"));
+    expect(chunks.indexOf("importmap")).toBeLessThan(chunks.indexOf('rel="modulepreload"'));
+  });
+
+  it("preserves UTF-8 across streamed chunk boundaries", async () => {
+    const delivery = createReactRouterCatalogDelivery({ clientDirectory: await createFixture() });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+    const chunks: Buffer[] = [];
+    transform.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    const done = new Promise<void>((resolve, reject) => {
+      transform.once("end", resolve);
+      transform.once("error", reject);
+    });
+    const html = "<html><head><title>Grüße</title></head><body>España 日本</body></html>";
+    for (const byte of Buffer.from(html)) transform.write(Buffer.from([byte]));
+    transform.end();
+    await done;
+    const result = Buffer.concat(chunks).toString("utf8");
+    expect(result).toContain("<title>Grüße</title>");
+    expect(result).toContain("<body>España 日本</body>");
+    expect(result).not.toContain("�");
   });
 
   it("does not invent a catalog boundary when development has no manifest", async () => {

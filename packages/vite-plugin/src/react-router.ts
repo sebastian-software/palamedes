@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { PassThrough, Transform, type TransformCallback } from "node:stream";
 
 const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json";
@@ -20,7 +21,7 @@ export type ReactRouterCatalogBinding = {
 export type ReactRouterCatalogDeliveryOptions = {
   /** React Router's built client directory, normally `build/client`. */
   readonly clientDirectory: string;
-  /** Permit the dev server's embedded sidecar mode before a client build exists. */
+  /** Use development-generated active-locale dependencies before a client build exists. */
   readonly development?: boolean;
   /** Override the generated manifest filename for a custom Vite output. */
   readonly manifestName?: string;
@@ -52,6 +53,7 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
   let manifest: ReactRouterCatalogManifest | null | undefined;
 
   function readManifest(): ReactRouterCatalogManifest | null {
+    if (options.development) return null;
     const manifestPath = path.join(clientDirectory, manifestName);
     let stamp: string;
     try {
@@ -103,8 +105,8 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
     let importMapJson: string;
     try {
       importMapJson = readFileSync(mapPath, "utf8");
-      const parsed = JSON.parse(importMapJson) as { imports?: unknown };
-      if (!isStringRecord(parsed.imports)) throw new TypeError("the imports object is missing");
+      const candidate = JSON.parse(importMapJson) as { imports?: unknown };
+      if (!isStringRecord(candidate.imports)) throw new TypeError("the imports object is missing");
     } catch (error) {
       throw new Error(
         `Palamedes React Router delivery could not read the generated import map for locale ${JSON.stringify(locale)} at ${mapPath}.`,
@@ -131,15 +133,17 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
       ? ` nonce="${escapeAttribute(transformOptions.nonce)}"`
       : "";
     const importMap = `<script type="importmap"${nonce}>${escapeScriptData(binding.importMapJson)}</script>`;
+    const decoder = new StringDecoder("utf8");
     let buffered = "";
     let injected = false;
     return new Transform({
       transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
+        const text = Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
         if (injected) {
-          callback(null, chunk as Buffer | string);
+          callback(null, text);
           return;
         }
-        buffered += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+        buffered += text;
         const headEnd = buffered.indexOf("</head>");
         if (headEnd === -1) {
           callback();
@@ -155,16 +159,18 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
         // React Router imports initial routes before executing entry.client.
         // This independent module observes the same dependency promises and can
         // show ordinary host error markup even when that entry never executes.
-        const probe = preloads.length
-          ? `<script type="module"${nonce}>try{await Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)))}catch(error){const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));}</script>`
-          : "";
+        const probe = `<script${nonce}>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]=Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)));globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(()=>{globalThis[Symbol.for("palamedes.document-catalogs-ready")]=true}).catch(async()=>{if(!document.body)await new Promise(resolve=>document.addEventListener("DOMContentLoaded",resolve,{once:true}));const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));});</script>`;
         const links = preloads
           .map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`)
           .join("");
-        callback(null, `${head}${importMap}${probe}${links}${tail}`);
+        callback(
+          null,
+          `${head.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`,
+        );
         buffered = "";
       },
       flush(callback) {
+        buffered += decoder.end();
         if (buffered) this.push(buffered);
         callback();
       },
@@ -207,7 +213,7 @@ function validateManifest(value: unknown, manifestPath: string): ReactRouterCata
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (
-    !!value &&
+    Boolean(value) &&
     typeof value === "object" &&
     Object.values(value).every((item) => typeof item === "string")
   );
@@ -215,7 +221,7 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 
 function isArrayRecord(value: unknown): value is Record<string, readonly string[]> {
   return (
-    !!value &&
+    Boolean(value) &&
     typeof value === "object" &&
     Object.values(value).every(
       (item) => Array.isArray(item) && item.every((entry) => typeof entry === "string"),
@@ -224,7 +230,7 @@ function isArrayRecord(value: unknown): value is Record<string, readonly string[
 }
 
 function isMissingFile(error: unknown): boolean {
-  return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";
+  return Boolean(error) && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }
 
 function escapeAttribute(value: string): string {
@@ -253,7 +259,7 @@ function assetKey(href: string): string {
     // Keep the original path for malformed but still useful Vite hrefs.
   }
   const assets = pathname.indexOf("assets/");
-  return (assets >= 0 ? pathname.slice(assets) : pathname).replace(/^\/+/, "");
+  return (assets !== -1 ? pathname.slice(assets) : pathname).replace(/^\/+/, "");
 }
 
 function escapeScriptData(value: string): string {
