@@ -366,9 +366,11 @@ describe("withPalamedes turbopack config", () => {
   it("registers the po loader rule unless disabled", () => {
     const enabled = getRules(withPalamedes());
     expect((enabled["*.po"] as RuleItem).as).toBe("*.js");
+    expect((enabled["*.fcl"] as RuleItem).as).toBe("*.js");
 
     const disabled = getRules(withPalamedes({}, { enablePoLoader: false }));
     expect(disabled["*.po"]).toBeUndefined();
+    expect(disabled["*.fcl"]).toBeUndefined();
   });
 
   it("wraps a user loader shorthand into a rule config before appending", () => {
@@ -584,6 +586,7 @@ describe("withPalamedes webpack config", () => {
     );
 
     expect(poRule).toBeDefined();
+    expect(poRule?.test?.test("/app/locales/de/messages.fcl")).toBe(true);
     expect(poRule?.exclude).toBeInstanceOf(RegExp);
     expect(poRule?.exclude?.test("/app/node_modules/some-dep/messages/de.po")).toBe(true);
     expect(poRule?.exclude?.test("/app/src/locales/de.po")).toBe(false);

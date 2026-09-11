@@ -1,3 +1,4 @@
+import { catalogResourcePath } from "@palamedes/config";
 import { createRequire } from "node:module";
 import path from "node:path";
 import Module from "node:module";
@@ -52,7 +53,7 @@ beforeEach(() => {
 
   moduleLoader._load = (request, parent, isMain) => {
     if (request === "@palamedes/config") {
-      return { loadPalamedesConfig };
+      return { catalogResourcePath, loadPalamedesConfig };
     }
     if (request === "@palamedes/core-node") {
       return {
@@ -95,6 +96,36 @@ describe("palamedes-po-loader.cjs", () => {
       }),
     );
   });
+
+  it.each([
+    {
+      catalogPath: "locales/{locale}/messages.fcl",
+      format: "fcl",
+      resourcePath: "/repo/locales/de/messages.fcl",
+    },
+    {
+      catalogPath: "locales/messages-{locale}.po",
+      format: "po",
+      resourcePath: "/repo/locales/messages-de.po",
+    },
+  ])(
+    "uses the configured locale for $catalogPath",
+    async ({ catalogPath, format, resourcePath }) => {
+      loadPalamedesConfig.mockResolvedValue({
+        configPath: "/repo/palamedes.yaml",
+        rootDir: "/repo",
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [{ path: catalogPath, format, include: ["src"] }],
+      });
+      await runLoader({}, { resourcePath });
+      expect(compileCatalogModule).toHaveBeenCalledWith(
+        expect.anything(),
+        resourcePath,
+        expect.objectContaining({ locale: "de" }),
+      );
+    },
+  );
 
   it("propagates strict compile failures when the removed opt-out is false", async () => {
     compileCatalogModule.mockRejectedValue(

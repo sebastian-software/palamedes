@@ -1,7 +1,7 @@
 "use strict";
 
 const path = require("node:path");
-const { loadPalamedesConfig } = require("@palamedes/config");
+const { catalogResourcePath, loadPalamedesConfig } = require("@palamedes/config");
 const {
   compileCatalogArtifactSelectedAsync,
   compileCatalogModuleAsync,
@@ -33,7 +33,13 @@ module.exports = function palamedesPoLoader() {
       loadPalamedesConfig,
       resolveLoaderCwd(this, options),
     );
-    const locale = path.basename(this.resourcePath, ".po");
+    const resource = path.resolve(this.resourcePath);
+    const locale =
+      cfg.locales.find((candidate) =>
+        cfg.catalogs.some(
+          (catalog) => path.resolve(catalogResourcePath(cfg, catalog, candidate)) === resource,
+        ),
+      ) ?? path.basename(this.resourcePath, path.extname(this.resourcePath));
     const artifactConfig = {
       rootDir: cfg.rootDir,
       locales: cfg.locales,

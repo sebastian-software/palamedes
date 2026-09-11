@@ -567,18 +567,20 @@ export function withPalamedes(
 
   // Compile local .po files
   if (enablePoLoader) {
-    appendTurbopackRule(rules, "*.po", {
-      condition: {
-        not: "foreign",
-      },
-      loaders: [
-        {
-          loader: poLoaderPath,
-          options: poLoaderOptions,
+    for (const extension of ["po", "fcl"]) {
+      appendTurbopackRule(rules, `*.${extension}`, {
+        condition: {
+          not: "foreign",
         },
-      ],
-      as: "*.js",
-    });
+        loaders: [
+          {
+            loader: poLoaderPath,
+            options: poLoaderOptions,
+          },
+        ],
+        as: "*.js",
+      });
+    }
   }
 
   return {
@@ -692,7 +694,7 @@ export function withPalamedes(
       // catalog loader would fail the whole build.
       if (enablePoLoader) {
         config.module.rules.push({
-          test: /\.po$/,
+          test: /\.(?:po|fcl)$/,
           exclude: /node_modules/,
           type: "javascript/auto",
           use: [
