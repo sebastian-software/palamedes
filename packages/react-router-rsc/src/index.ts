@@ -92,10 +92,12 @@ function transformDocumentResponse<Result>(
         ...(errorHtml ? { errorHtml } : {}),
         ...(nonce ? { nonce } : {}),
       }),
-    ),
+    ) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
   );
+  const headers = new Headers(result.headers);
+  headers.delete("content-length");
   return new Response(body, {
-    headers: result.headers,
+    headers,
     status: result.status,
     statusText: result.statusText,
   }) as Result;

@@ -10,18 +10,21 @@ class LazyBrowserMessageBoundary extends Component<
   { children: React.ReactNode },
   { failed: boolean }
 > {
-  state = { failed: false };
+  public override state = { failed: false };
 
-  static getDerivedStateFromError() {
+  public static getDerivedStateFromError() {
     return { failed: true };
   }
 
-  render() {
+  public override render() {
     if (this.state.failed) {
       return (
         <div data-testid="lazy-browser-error" role="alert">
           <p>This localized fragment is temporarily unavailable.</p>
-          <a href="">Reload page</a> <a href="/">Go home</a>
+          <button type="button" onClick={() => window.location.reload()}>
+            Reload page
+          </button>{" "}
+          <a href="/">Go home</a>
         </div>
       );
     }
