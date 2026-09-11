@@ -251,11 +251,18 @@ export function createRemixI18nServer<
     }
     try {
       const asset = createClientCatalogAsset(locale);
+      const etag = `"${asset.catalogVersion}"`;
+      if (request.headers.get("if-none-match") === etag) {
+        return new Response(null, {
+          status: 304,
+          headers: { etag, "cache-control": "no-cache" },
+        });
+      }
       return new Response(asset.source, {
         headers: {
           "cache-control": "no-cache",
           "content-type": "application/javascript; charset=utf-8",
-          etag: `"${asset.catalogVersion}"`,
+          etag,
           vary: "Accept-Encoding",
         },
       });

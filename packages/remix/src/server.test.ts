@@ -351,6 +351,12 @@ describe("createRemixI18nServer", () => {
       );
       expect(response?.status).toBe(200);
       expect(response?.headers.get("content-type")).toContain("javascript");
+      const cached = remixI18n.serveClientCatalogAsset(
+        new Request("https://example.test/assets/__palamedes/catalog/de.js", {
+          headers: { "if-none-match": response?.headers.get("etag") ?? "" },
+        }),
+      );
+      expect(cached?.status).toBe(304);
       expect(
         remixI18n.serveClientCatalogAsset(
           new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
