@@ -1,4 +1,5 @@
 import {
+  createI18n,
   defineCompiledCatalog,
   isCompiledCatalog,
   type CatalogMessages,
@@ -212,6 +213,46 @@ export async function initializeRemixClientI18nAsync<
   });
   await loadRegisteredMessages(initialized, module.locale);
   return initialized;
+}
+
+/** Start an application entry after the document's executable catalog is ready.
+ * The optional error markup belongs to the host and must not depend on translations.
+ */
+export async function startRemixClient(
+  loadEntry: () => Promise<unknown>,
+  options: { errorHtml?: string } = {},
+): Promise<void> {
+  let failed = false;
+  const renderFailure = async (): Promise<void> => {
+    if (failed) return;
+    failed = true;
+    if (!document.body) {
+      await new Promise<void>((resolve) =>
+        document.addEventListener("DOMContentLoaded", () => resolve(), { once: true }),
+      );
+    }
+    const template = document.createElement("template");
+    template.innerHTML =
+      options.errorHtml ??
+      '<main role="alert"><h1>Something went wrong</h1><p>Please reload the page to try again.</p><button type="button" data-palamedes-reload>Reload</button><a href="/">Home</a></main>';
+    document.body.replaceChildren(template.content.cloneNode(true));
+    document
+      .querySelector("[data-palamedes-reload]")
+      ?.addEventListener("click", () => window.location.reload());
+  };
+  window.addEventListener("palamedes:catalog-error", () => {
+    void renderFailure();
+  });
+  try {
+    const catalogLink = document.querySelector<HTMLLinkElement>(
+      "link[data-palamedes-catalog-locale]",
+    );
+    if (!catalogLink) throw new Error("Palamedes Remix document catalog is missing.");
+    await initializeRemixClientI18nAsync({ createI18n, catalogUrl: catalogLink.href });
+    await loadEntry();
+  } catch {
+    await renderFailure();
+  }
 }
 
 function validateCatalogModule<TLocale extends string>(

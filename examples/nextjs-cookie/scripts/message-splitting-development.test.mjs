@@ -85,7 +85,15 @@ async function reloadUntil(page, locator, expectedText) {
   const deadline = Date.now() + 15_000;
   let actualText = "";
   while (Date.now() < deadline) {
-    await page.reload();
+    try {
+      await page.reload({ waitUntil: "domcontentloaded" });
+    } catch (error) {
+      // Turbopack can replace our reload with its own document navigation
+      // after a watched catalog changes. Observe that navigation; other
+      // browser/server failures must still fail this integration proof.
+      if (page.isClosed() || !String(error).includes("net::ERR_ABORTED")) throw error;
+      await page.waitForLoadState("domcontentloaded");
+    }
     await locator.waitFor();
     actualText = (await locator.textContent()) ?? "";
     if (actualText === expectedText) return;

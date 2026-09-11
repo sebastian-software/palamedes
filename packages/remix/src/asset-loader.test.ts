@@ -14,6 +14,7 @@ import { pathToFileURL } from "node:url";
 import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { isCompiledCatalog } from "@palamedes/core/compiled";
 import { transformPalamedesMacros } from "@palamedes/transform";
 
 import {
@@ -162,6 +163,8 @@ describe("createPalamedesRemixAssetLoader", () => {
       __palamedesRejectedModuleBody?: number;
     };
     testGlobal.__palamedesRejectedModuleBody = 0;
+    const dispatch = vi.fn();
+    vi.stubGlobal("dispatchEvent", dispatch);
     const globalRecord = globalThis as unknown as Record<string, unknown>;
     globalRecord.document = {
       baseURI: "https://example.test/",
@@ -171,6 +174,10 @@ describe("createPalamedesRemixAssetLoader", () => {
       "fragment failed",
     );
     expect(testGlobal.__palamedesRejectedModuleBody).toBe(0);
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "palamedes:catalog-error" }),
+    );
+    vi.unstubAllGlobals();
     delete testGlobal.__palamedesRejectedModuleBody;
     delete globalRecord.document;
   });
@@ -494,13 +501,14 @@ describe("createPalamedesRemixAssetLoader", () => {
       deCatalogPath,
       'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo aktualisiert"\n\nmsgid "Other"\nmsgstr "Andere"\n',
     );
+    registry.invalidate();
     const catalogChangedKey = registry.register(sourcePath, compiledIds);
-    expect(catalogChangedKey).not.toBe(firstKey);
+    expect(catalogChangedKey).toBe(firstKey);
     expect(
       registry.serve(
         new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
       )?.status,
-    ).toBe(404);
+    ).toBe(200);
 
     const secondKey = registry.register(sourcePath, ["stale-generation-proof"]);
     expect(secondKey).not.toBe(firstKey);
@@ -514,6 +522,189 @@ describe("createPalamedesRemixAssetLoader", () => {
         new Request(`https://example.test/assets/__palamedes/catalog-fragments/${secondKey}.js`),
       )?.status,
     ).toBe(200);
+  });
+
+  it("loads one executable server catalog lazily and shares it across concurrent requests", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-server-catalog-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello {name}"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo {name}"\n',
+    );
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const [first, second] = await Promise.all([registry.load?.("de"), registry.load?.("de")]);
+    expect(first).toBeDefined();
+    expect(first).toBe(second);
+    expect(isCompiledCatalog(first)).toBe(true);
+    expect(Object.values(first ?? {})).toEqual([expect.any(Function)]);
+
+    const generationBefore = registry.generation?.();
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag {name}"\n',
+    );
+    registry.invalidate();
+    const next = await registry.load?.("de");
+    expect(registry.generation?.()).not.toBe(generationBefore);
+    expect(next).not.toBe(first);
+    expect(Object.values(next ?? {})).toEqual([expect.any(Function)]);
+  });
+
+  it("loads every configured server catalog in declaration order", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-multiple-catalogs-"));
+    tempDirectories.push(rootDir);
+    for (const name of ["first", "second"])
+      mkdirSync(path.join(rootDir, name), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: first/{locale}\n    include: [app]\n  - path: second/{locale}\n    include: [app]\n",
+    );
+    for (const locale of ["en", "de"]) {
+      for (const name of ["first", "second"]) {
+        writeFileSync(
+          path.join(rootDir, name, `${locale}.po`),
+          `msgid ""\nmsgstr ""\n\nmsgid "${name}"\nmsgstr "${locale}-${name}"\n\nmsgid "Shared"\nmsgstr "${locale}-${name}-shared"\n`,
+        );
+      }
+    }
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const messages = await registry.load?.("de");
+    expect(Object.values(messages ?? {}).sort()).toEqual([
+      "de-first",
+      "de-second",
+      "de-second-shared",
+    ]);
+  });
+
+  it("watches catalog edits without invalidating cached browser module URLs", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-watch-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app"));
+    mkdirSync(path.join(rootDir, "locales"));
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+    );
+    for (const locale of ["en", "de"])
+      writeFileSync(
+        path.join(rootDir, "locales", `${locale}.po`),
+        'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Before"\n',
+      );
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir, watch: true });
+    try {
+      const sourcePath = path.join(rootDir, "app", "message.ts");
+      const ids = transformPalamedesMacros(
+        'import { t } from "@palamedes/core/macro"; export const message=()=>t`Greeting`;',
+        sourcePath,
+      ).compiledIds;
+      const key = registry.register(sourcePath, ids);
+      const first = await registry.load?.("de");
+      writeFileSync(
+        path.join(rootDir, "locales", "de.po"),
+        'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "After"\n',
+      );
+      await vi.waitFor(async () =>
+        expect(Object.values((await registry.load?.("de")) ?? {})).toEqual(["After"]),
+      );
+      expect(await registry.load?.("de")).not.toBe(first);
+      const response = registry.serve(
+        new Request(`https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`),
+      );
+      expect(response?.status).toBe(200);
+      expect(await response?.text()).toContain("After");
+      expect(registry.register(sourcePath, ids)).toBe(key);
+    } finally {
+      registry.close?.();
+    }
+  });
+
+  it("watches creation of initially missing nested catalog directories", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-nested-watch-"));
+    tempDirectories.push(rootDir);
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/nested/messages.po\n    include: [app]\n",
+    );
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir, watch: true });
+    try {
+      const generation = registry.generation?.();
+      await expect(registry.load?.("de")).rejects.toThrow(/catalog|file|os error 2/iu);
+      for (const locale of ["en", "de"]) {
+        const directory = path.join(rootDir, "locales", locale, "nested");
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(
+          path.join(directory, "messages.po"),
+          'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Created"\n',
+        );
+      }
+      await vi.waitFor(() => expect(registry.generation?.()).not.toBe(generation));
+      expect(Object.values((await registry.load?.("de")) ?? {})).toEqual(["Created"]);
+    } finally {
+      registry.close?.();
+    }
+  });
+
+  it("keeps warm server catalog loads O(1) until explicit invalidation", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-server-catalog-warm-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello"\n',
+    );
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const first = await registry.load?.("de");
+    const generation = registry.generation?.();
+
+    for (let index = 0; index < 100; index += 1) {
+      expect(await registry.load?.("de")).toBe(first);
+    }
+
+    expect(registry.generation?.()).toBe(generation);
+
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
+    );
+    expect(await registry.load?.("de")).toBe(first);
+    for (let index = 0; index < 100; index += 1)
+      registry.register(path.join(rootDir, "app", "warm.tsx"), ["greeting"]);
+    expect(registry.generation?.()).toBe(generation);
+    expect(await registry.load?.("de")).toBe(first);
+
+    registry.invalidate();
+    expect(await registry.load?.("de")).not.toBe(first);
   });
 
   it("honors browser-specific include and exclude filters", () => {
