@@ -66,7 +66,7 @@ let localCatalogRegistry: WeakSet<object> | undefined;
 /** Marks generated strings as constants; function entries are executable messages. */
 export function defineCompiledCatalog<TMessages extends Record<string, CatalogMessage>>(
   messages: TMessages,
-): TMessages & CompiledCatalogBrand {
+): Readonly<TMessages> & CompiledCatalogBrand {
   const snapshot: Record<string, CatalogMessage> = Object.create(null);
   for (const id of Object.keys(messages)) {
     const value = messages[id];

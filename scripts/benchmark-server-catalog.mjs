@@ -51,6 +51,11 @@ const mixedLocaleMs = performance.now() - mixedStart;
 
 let sharedRequestLoadEnumerations = 0;
 const originalEntries = Object.entries;
+const originalKeys = Object.keys;
+Object.keys = (...args) => {
+  sharedRequestLoadEnumerations += 1;
+  return originalKeys(...args);
+};
 Object.entries = (...args) => {
   sharedRequestLoadEnumerations += 1;
   return originalEntries(...args);
@@ -66,6 +71,7 @@ try {
   });
 } finally {
   Object.entries = originalEntries;
+  Object.keys = originalKeys;
 }
 
 let baselineRequestMessageEntries = 0;
