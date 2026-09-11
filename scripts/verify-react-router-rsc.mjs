@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import { chromium } from "@playwright/test";
 
@@ -207,6 +208,78 @@ try {
       );
     } finally {
       await lazyFailureContext.close();
+    }
+
+    for (const locale of ["en", "de"]) {
+      for (const failure of ["network", "evaluation"]) {
+        const context = await browser.newContext();
+        try {
+          await context.addCookies([{ name: "locale", value: locale, url: baseUrl }]);
+          let injected = false;
+          let failedUrl;
+          await context.route("**/*", async (route) => {
+            const request = route.request();
+            if (request.resourceType() === "document") {
+              const response = await route.fetch();
+              const body = await response.text();
+              const hashes = [...body.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/giu)].map(
+                (match) => `'sha256-${createHash("sha256").update(match[1]).digest("base64")}'`,
+              );
+              await route.fulfill({
+                response,
+                body,
+                headers: {
+                  ...response.headers(),
+                  "content-security-policy": `default-src 'self'; script-src 'self' ${hashes.join(" ")}; object-src 'none'; base-uri 'self'`,
+                },
+              });
+              return;
+            }
+            if (!request.url().includes("/palamedes-m-")) return route.continue();
+            if (!request.url().includes(`.${locale}-`)) {
+              throw new Error(`Inactive locale catalog requested: ${request.url()}`);
+            }
+            failedUrl ??= request.url();
+            if (request.url() !== failedUrl) return route.continue();
+            injected = true;
+            if (failure === "network") return route.abort("failed");
+            const response = await route.fetch();
+            const source = await response.text();
+            if (!source.includes("export const messages=(")) {
+              throw new Error(`Catalog source did not expose a messages export: ${request.url()}`);
+            }
+            await route.fulfill({
+              response,
+              body: source.replace(
+                "export const messages=(",
+                'export const messages=(()=>{throw new Error("INJECTED_CATALOG_FAILURE")})(',
+              ),
+            });
+          });
+          const page = await context.newPage();
+          await page.goto(baseUrl);
+          await page.locator('main[role="alert"]').waitFor({ state: "visible", timeout: 10_000 });
+          if (!injected) throw new Error(`${locale} ${failure} did not reach a catalog module`);
+          const errorText = await page.locator('main[role="alert"]').innerText();
+          if (
+            !errorText.includes("Reload page") ||
+            /INJECTED|MissingCompiled|palamedes-m-/u.test(errorText)
+          ) {
+            throw new Error(`${locale} ${failure} exposed internal catalog failure text`);
+          }
+          await page
+            .locator('main[role="alert"]')
+            .getByText("Reload page", { exact: true })
+            .click();
+          await page.waitForLoadState("networkidle");
+          if ((await page.locator('main[role="alert"]').count()) !== 0) {
+            throw new Error(`${locale} ${failure} did not recover after the user reload action`);
+          }
+          console.log(`${locale} ${failure}: native catalog failure recovered under hash CSP`);
+        } finally {
+          await context.close();
+        }
+      }
     }
   } finally {
     await browser.close();
