@@ -173,9 +173,11 @@ from an arbitrary client-supplied header. The adapter's `nonce` applies only
 to its own import map and readiness/bootstrap delivery tags. Solid's
 `HydrationScript` and `renderToStream` own framework hydration scripts; pass
 the host request nonce to those Solid APIs as well when the document uses a
-nonce-based CSP. Avoid
-importing `.po` files, the parser, or a catalog virtual module in application
-code; author messages with `@palamedes/solid/macro` and
+nonce-based CSP. Avoid putting `integrity`, `crossorigin`, or `referrerpolicy` on the Solid client
+entry: the adapter rejects those entries because its dynamic import gate cannot
+preserve their fetch semantics. Keep such entries outside this delivery path.
+Also avoid importing `.po` files, the parser, or a catalog virtual module in
+application code; author messages with `@palamedes/solid/macro` and
 `@palamedes/core/macro` so the compiler emits compiled-only runtime calls.
 
 ## Related Docs

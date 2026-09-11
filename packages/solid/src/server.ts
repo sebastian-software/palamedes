@@ -88,14 +88,22 @@ function createSolidBootstrapGateTransform(options: {
 
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
-      tail += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
-      flushSafePrefix(this, false);
-      callback();
+      try {
+        tail += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+        flushSafePrefix(this, false);
+        callback();
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
     },
     flush(callback: TransformCallback) {
-      tail += decoder.end();
-      flushSafePrefix(this, true);
-      callback();
+      try {
+        tail += decoder.end();
+        flushSafePrefix(this, true);
+        callback();
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+      }
     },
   });
 
@@ -120,6 +128,14 @@ function createSolidBootstrapGateTransform(options: {
             options.trustedOrigins,
           )
         ) {
+          const unsupportedAttributes = ["integrity", "crossorigin", "referrerpolicy"].filter(
+            (attribute) => readTagAttribute(openingTag, attribute) !== undefined,
+          );
+          if (unsupportedAttributes.length > 0) {
+            throw new Error(
+              `Cannot defer Solid entry ${moduleSource} with unsupported fetch attributes: ${unsupportedAttributes.join(", ")}.`,
+            );
+          }
           const source = JSON.stringify(moduleSource);
           const nonceValue = options.nonce ?? readCspNonce(script);
           const nonce = nonceValue ? ` nonce="${escapeAttribute(nonceValue)}"` : "";
@@ -221,7 +237,10 @@ function findTagEnd(value: string): number {
   return value.length - 1;
 }
 
-function readTagAttribute(tag: string, name: "nonce" | "src" | "type"): string | undefined {
+function readTagAttribute(
+  tag: string,
+  name: "nonce" | "src" | "type" | "integrity" | "crossorigin" | "referrerpolicy",
+): string | undefined {
   let index = tag.indexOf("<script") + "<script".length;
   while (index >= "<script".length && index < tag.length) {
     while (/\s/u.test(tag[index] ?? "")) index += 1;
@@ -231,6 +250,7 @@ function readTagAttribute(tag: string, name: "nonce" | "src" | "type"): string |
     const attributeName = tag.slice(nameStart, index).toLowerCase();
     while (/\s/u.test(tag[index] ?? "")) index += 1;
     if (tag[index] !== "=") {
+      if (attributeName === name) return "";
       while (index < tag.length && !/[\s>]/u.test(tag[index] ?? "")) index += 1;
       continue;
     }
