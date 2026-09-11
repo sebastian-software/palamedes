@@ -40,7 +40,7 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "pnpm build && pnpm --filter @palamedes/runtime build && vitest run --globals src/index.test.ts && node ./scripts/packed-consumer.test.mjs",
+    "test": "pnpm build && pnpm --filter @palamedes/runtime build && vitest run --globals src/index.test.ts src/server.test.ts && node ./scripts/packed-consumer.test.mjs",
     "stub": "unbuild --stub"
   },
   "dependencies": {

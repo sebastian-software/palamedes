@@ -25,12 +25,14 @@ document response with the server-only entry point:
 ```ts
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 
-middlewareFns: [() =>
-  createWakuCatalogDeliveryMiddleware({
-    clientDirectory: "dist/public",
-    resolveLocale: (request) => resolveApplicationLocale(request),
-    development: process.env.NODE_ENV !== "production",
-  })
+middlewareFns: [
+  () =>
+    createWakuCatalogDeliveryMiddleware({
+      clientDirectory: "dist/public",
+      resolveLocale: (request) => resolveApplicationLocale(request),
+      development: process.env.NODE_ENV !== "production",
+      nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
+    }),
 ];
 ```
 
@@ -38,7 +40,12 @@ The middleware transforms HTML document streams after Waku renders them. RSC
 and action responses pass through unchanged. If an active fragment cannot be
 loaded before hydration, it presents a catalog-free reload/home document and
 does not expose internal module diagnostics. The middleware accepts no locale
-policy; `resolveLocale` remains the host application's responsibility.
+policy; `resolveLocale` remains the host application's responsibility. When a
+`nonce` is provided, it is applied to Waku's inline bootstrap and Flight
+scripts as well as Palamedes' generated scripts; configure the host CSP to
+allow that nonce and the application's same-origin module assets. Lazy client
+component failures after hydration remain ordinary React error-boundary
+failures, so the host can provide its normal recovery UI.
 
 ## Waku handler interceptor
 

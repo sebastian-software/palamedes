@@ -83,6 +83,13 @@ msgstr "Währung"
 msgid "Date"
 msgstr "Datum"
 
+#~ #@ obsolete-since: 2026-09-11
+#~ #: examples/waku-cookie/src/components/LazyCatalogPanel.tsx
+#~ msgid "Details are temporarily unavailable. Reload the page to try again."
+#~ msgstr ""
+#~ "Details sind vorübergehend nicht verfügbar. Laden Sie die Seite neu, um es "
+#~ "erneut zu versuchen."
+
 #: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "each"
 msgstr "pro Stück"
@@ -90,6 +97,10 @@ msgstr "pro Stück"
 #: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "Fewer tickets"
 msgstr "Weniger Tickets"
+
+#: examples/waku-cookie/src/components/LazyCatalogDetails.tsx
+msgid "Lazy catalog detail loaded."
+msgstr "Lazy-Katalogdetail geladen."
 
 #: examples/waku-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
@@ -138,6 +149,11 @@ msgstr "Server-Action bestätigte Sprache {locale}."
 #: examples/waku-cookie/src/pages/index.tsx
 msgid "server locale"
 msgstr "Server-Sprache"
+
+#~ #@ obsolete-since: 2026-09-11
+#~ #: examples/waku-cookie/src/components/LazyCatalogPanel.tsx#LazyCatalogPanel
+#~ msgid "Show lazy catalog details"
+#~ msgstr "Lazy-Katalogdetails anzeigen"
 
 #: examples/waku-cookie/src/lib/server-action-helpers.server.ts#synchronousServerActionMessage
 msgid "Synchronous server-action helper confirmed locale."
