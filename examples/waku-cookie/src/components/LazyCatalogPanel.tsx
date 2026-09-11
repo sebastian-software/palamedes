@@ -5,17 +5,20 @@ import { Component, lazy, Suspense, useState, type ReactNode } from "react";
 const LazyCatalogDetails = lazy(() => import("./LazyCatalogDetails"));
 
 class LazyLoadErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state: { error: Error | null } = { error: null };
+  public override state: { error: Error | null } = { error: null };
 
-  static getDerivedStateFromError(error: Error) {
+  public static getDerivedStateFromError(error: Error) {
     return { error };
   }
 
-  render() {
+  public override render() {
     if (this.state.error) {
       return (
         <p data-testid="lazy-catalog-error" role="alert">
-          Details are temporarily unavailable. Reload the page to try again.
+          Details are temporarily unavailable.{" "}
+          <button type="button" onClick={() => window.location.reload()}>
+            Reload page
+          </button>
         </p>
       );
     }

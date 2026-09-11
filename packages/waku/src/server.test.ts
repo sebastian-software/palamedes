@@ -40,7 +40,7 @@ async function transformHtml(input: string, splitAt: number[], nonce?: string): 
     resolveLocale: () => "en",
     ...(nonce ? { nonce } : {}),
   });
-  await middleware(context, async () => undefined);
+  await middleware(context, async () => {});
   return context.res.text();
 }
 
@@ -67,6 +67,32 @@ throw err;
     expect(output).toContain("suffix");
   });
 
+  it("rewrites the retry guard even when it streams long before the entry", async () => {
+    const input = `prefix 😀 if (!canRetry) {\nreturn;\n} ${" ".repeat(1000)} import("/assets/index-abc.js") suffix`;
+    const bytes = Buffer.byteLength(input);
+    const output = await transformHtml(
+      input,
+      Array.from({ length: bytes - 1 }, (_, index) => index + 1),
+    );
+    expect(output).not.toContain("if (!canRetry)");
+    expect(output).toContain('if (globalThis[Symbol.for("palamedes.document-catalogs-ready")]');
+    expect(output).toContain('.then(() => import("/assets/index-abc.js"))');
+    expect(output).toContain("prefix 😀");
+  });
+
+  it("keeps long streamed script attributes intact and distinguishes data-nonce", async () => {
+    const input = `<script data-nonce="untrusted" data-label="${"x".repeat(1000)}">console.log("你好")</script>`;
+    const bytes = Buffer.byteLength(input);
+    const output = await transformHtml(
+      input,
+      Array.from({ length: bytes - 1 }, (_, index) => index + 1),
+      "trusted",
+    );
+    expect(output).toContain(' nonce="trusted">');
+    expect(output).toContain(`data-label="${"x".repeat(1000)}"`);
+    expect(output).toContain('console.log("你好")');
+  });
+
   it("keeps development Waku startup usable when the readiness promise is absent", async () => {
     const input = 'import("/assets/index-dev.js").catch((err) => { throw err; });';
     const middleware = createWakuCatalogDeliveryMiddleware({
@@ -85,7 +111,7 @@ throw err;
       req: { raw: new Request("https://example.test/") },
       res: new Response(body, { headers: { "content-type": "text/html" } }),
     } as Parameters<ReturnType<typeof createWakuCatalogDeliveryMiddleware>>[0];
-    await middleware(context, async () => undefined);
+    await middleware(context, async () => {});
 
     const output = await context.res.text();
     expect(output).toContain("globalThis[Symbol.for");

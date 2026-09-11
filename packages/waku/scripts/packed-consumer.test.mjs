@@ -1,29 +1,19 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { packWorkspaceDependencies } from "../../../scripts/pack-workspace-dependencies.mjs";
+
 const packageDir = path.resolve(import.meta.dirname, "..");
-const repoRoot = path.resolve(packageDir, "../..");
-const runtimeDir = path.join(repoRoot, "packages", "runtime");
 const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-waku-packed-"));
 
 try {
   const archiveDir = path.join(fixtureRoot, "archives");
   mkdirSync(archiveDir);
-  const coreArchive = packPackage(path.join(repoRoot, "packages", "core"), archiveDir);
-  const runtimeArchive = packPackage(runtimeDir, archiveDir);
-  const wakuArchive = packPackage(packageDir, archiveDir);
+  const overrides = packWorkspaceDependencies(packageDir, archiveDir);
   const consumerRoot = path.join(fixtureRoot, "consumer");
   mkdirSync(consumerRoot);
   writeFileSync(
@@ -34,9 +24,7 @@ try {
         private: true,
         type: "module",
         dependencies: {
-          "@palamedes/core": `file:${coreArchive}`,
-          "@palamedes/runtime": `file:${runtimeArchive}`,
-          "@palamedes/waku": `file:${wakuArchive}`,
+          "@palamedes/waku": overrides["@palamedes/waku"],
           waku: "1.0.0-rc.0",
         },
       },
@@ -44,10 +32,7 @@ try {
       2,
     )}\n`,
   );
-  writeFileSync(
-    path.join(consumerRoot, "pnpm-workspace.yaml"),
-    `overrides:\n  "@palamedes/core": "file:${coreArchive}"\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
-  );
+  writeFileSync(path.join(consumerRoot, "pnpm-workspace.yaml"), JSON.stringify({ overrides }));
   runPackageManager(consumerRoot, ["install", "--ignore-scripts"]);
 
   const installedWaku = path.join(consumerRoot, "node_modules", "@palamedes", "waku");
@@ -64,6 +49,20 @@ try {
       readFileSync(path.join(consumerRoot, "node_modules", "waku", "package.json"), "utf8"),
     ).version,
     "1.0.0-rc.0",
+  );
+
+  assert.deepEqual(manifest.exports["./server"], {
+    types: "./dist/server.d.ts",
+    import: "./dist/server.mjs",
+  });
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      'const adapter = await import("@palamedes/waku/server"); if(typeof adapter.createWakuCatalogDeliveryMiddleware!=="function") process.exit(1)',
+    ],
+    { cwd: consumerRoot, stdio: "pipe" },
   );
 
   // Waku's router entry executes under its Vite React Server Components runtime,
@@ -83,16 +82,6 @@ try {
   );
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true });
-}
-
-function packPackage(directory, archiveDir) {
-  const existingArchives = new Set(readdirSync(archiveDir));
-  runPackageManager(directory, ["pack", "--pack-destination", archiveDir]);
-  const archives = readdirSync(archiveDir)
-    .filter((entry) => entry.endsWith(".tgz") && !existingArchives.has(entry))
-    .map((entry) => path.join(archiveDir, entry));
-  assert.equal(archives.length, 1, `Expected one packed archive for ${directory}`);
-  return archives[0];
 }
 
 function runPackageManager(cwd, args) {

@@ -1,5 +1,3 @@
-import { createI18n } from "@palamedes/core/compiled";
-import { setClientI18n } from "@palamedes/runtime";
 import { defineLocaleControls } from "@palamedes/core/locale";
 
 export const LOCALES = ["en", "de", "es"] as const;
@@ -21,21 +19,8 @@ export const LOCALE_LABELS = locales.labels;
 export const isLocale = locales.isLocale;
 export const normalizeLocale = locales.normalizeLocale;
 
-const clientI18n = createI18n();
-
 export function getLocaleLabel(locale: Locale) {
   return locales.label(locale);
-}
-
-export function initializeClientI18n(locale: Locale) {
-  clientI18n.activate(locale);
-
-  if (typeof window !== "undefined") {
-    document.documentElement.lang = locale;
-    setClientI18n(clientI18n);
-  }
-
-  return clientI18n;
 }
 
 // The host label is authoritative for the server, not for the client: a host
@@ -43,16 +28,6 @@ export function initializeClientI18n(locale: Locale) {
 // fall back to Accept-Language, which client code cannot read. Re-deriving the
 // locale from `window.location` would therefore diverge from the rendered
 // document, so the page injects the resolved server locale instead.
-if (typeof window !== "undefined") {
-  const locale = document.documentElement.lang;
-  if (!locales.isLocale(locale)) {
-    throw new Error(
-      `Expected a supported server locale in document.lang, received ${JSON.stringify(locale)}`,
-    );
-  }
-
-  initializeClientI18n(locale);
-}
 
 export function createBanner(headers: Record<string, string | undefined>, locale: Locale) {
   return locales.suggest({

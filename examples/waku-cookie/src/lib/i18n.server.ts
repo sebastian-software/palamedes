@@ -1,19 +1,12 @@
-import { createI18n } from "@palamedes/core/compiled";
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 import { createServerI18nScope } from "@palamedes/runtime/server";
-import { loadServerCatalog } from "virtual:palamedes/server-catalogs";
 import { locales, type Locale } from "./i18n";
 
-export const serverI18nScope = createServerI18nScope<ReturnType<typeof createI18n>>();
+export const serverI18nScope =
+  createServerI18nScope<Awaited<ReturnType<typeof createViteServerI18n>>>();
 
-export async function createServerI18n(locale: Locale) {
-  const i18n = createI18n();
-  i18n.load(locale, await loadServerCatalog(locale));
-  i18n.activate(locale);
-  return i18n;
-}
-
-export async function activateServerI18n(locale: Locale) {
-  return serverI18nScope.activate(await createServerI18n(locale));
+export function createServerI18n(locale: Locale) {
+  return createViteServerI18n({ locale });
 }
 
 export async function createRequestI18n(request: Request) {

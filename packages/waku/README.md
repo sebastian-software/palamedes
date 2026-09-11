@@ -14,8 +14,9 @@ Use `import`; CommonJS `require()` is deliberately unsupported.
 ## Compiled catalog delivery
 
 Keep catalog delivery in the server entry and leave locale selection in the
-application. The Vite plugin exposes `virtual:palamedes/server-catalogs`; its
-`loadServerCatalog(locale)` loader imports only the requested compiled catalog.
+application. Use `createViteServerI18n({ locale })` from
+`@palamedes/vite-plugin/server` to create a fresh instance backed by the shared,
+lazily loaded compiled server catalog.
 Do not import `.po` modules from browser-facing files or serialize catalog
 functions through RSC.
 
