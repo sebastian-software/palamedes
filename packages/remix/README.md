@@ -103,9 +103,35 @@ bootstrap catalog, and browser runtime always agree.
 
 ## Browser Catalog Assets
 
-Configure `catalogAssets` with the compiler config and a locale-to-`.po`
-resolver. Render `renderClientCatalog(locale)` into the document head and send
-matching `/assets/__palamedes/catalog/:locale.js` requests to
+Configure one adapter-owned catalog registry from the same `palamedes.yaml`
+that owns the message catalogs. Pass it to both the browser loader and
+`catalogAssets`; this derives selected IDs from each transformed module, so a
+lazy module requests only its active-locale fragment. Route registry requests
+before the regular Remix asset server. No application catalog map or loader
+route is required:
+
+```ts
+import {
+  createPalamedesRemixAssetLoader,
+  createPalamedesRemixCatalogAssetRegistry,
+  PALAMEDES_REMIX_ASSET_PACKAGES,
+} from "@palamedes/remix";
+
+const catalogAssets = createPalamedesRemixCatalogAssetRegistry({ cwd: import.meta.dirname });
+const assetServer = createAssetServer({
+  basePath: "/assets",
+  allowFiles: ["app/**/public/**"],
+  allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
+  scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets })] },
+});
+// In the request listener, before assetServer.fetch(request):
+const fragment = catalogAssets.serve(request);
+if (fragment) return fragment;
+```
+
+Pass the same `catalogAssets` to `createRemixI18nServer`, render
+`renderClientCatalog(locale)` into the document head, and send matching
+`/assets/__palamedes/catalog/:locale.js` requests to
 `serveClientCatalogAsset(request)` before the normal Remix asset server. The
 browser entry loads the executable module before importing translated code:
 
@@ -117,10 +143,13 @@ if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset l
 await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
 ```
 
-Only the active locale module is requested. The module exports the locale,
-content digest, and branded compiled functions; no catalog functions cross
-HTML or JSON. Missing assets, locale mismatches, and invalid compiled modules
-fail before translated browser modules execute.
+Only the active locale module and selected executable fragments are requested.
+Each module exports the locale, content digest, and branded compiled functions;
+no catalog functions cross HTML or JSON. Missing assets, locale mismatches,
+module evaluation errors, and invalid compiled modules fail before translated
+browser modules execute. A failed lazy fragment can be retried after the
+network or asset server recovers; registry generations change their URL when a
+module's selected IDs change.
 
 ## Legacy Browser Catalog Bootstrap
 

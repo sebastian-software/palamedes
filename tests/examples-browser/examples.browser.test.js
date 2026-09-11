@@ -289,7 +289,8 @@ test("matrix example browser contract", async () => {
     expect(initialHtml).toContain("Palamedes está activo en el navegador");
     expect(initialHtml).toContain("Abre la ");
     expect(initialHtml).toContain("guía del cliente de Remix");
-    expect(initialHtml).toContain('id="palamedes-i18n-bootstrap"');
+    expect(initialHtml).toContain("/assets/__palamedes/catalog/es.js");
+    expect(initialHtml).not.toContain('id="palamedes-i18n-bootstrap"');
     expect(initialHtml).toContain('src="/assets/app/public/client.tsx"');
     expect(initialHtml).not.toContain('data-testid="client-ready"');
   }
@@ -351,7 +352,7 @@ test("matrix example browser contract", async () => {
     await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("de");
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
-    await waitForClientReady(page);
+    await expectSettledDocumentLocale(page, "de");
     if (example.id === "remix-cookie") {
       await expectRemixClientProof(page, "de", 1);
       await page.getByTestId("client-increment").click();

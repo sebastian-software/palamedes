@@ -1,10 +1,11 @@
 import {
+  defineCompiledCatalog,
   isCompiledCatalog,
   type CatalogMessages,
   type CompiledCatalogMessages,
   type PalamedesI18n,
 } from "@palamedes/core";
-import { isServerEnvironment, setClientI18n } from "@palamedes/runtime";
+import { isServerEnvironment, loadRegisteredMessages, setClientI18n } from "@palamedes/runtime";
 
 export const REMIX_I18N_BOOTSTRAP_ID = "palamedes-i18n-bootstrap";
 
@@ -205,16 +206,19 @@ export async function initializeRemixClientI18nAsync<
   }
 
   const module = validateCatalogModule<TLocale>(loaded);
-  return initializeRemixClientI18n({
+  const initialized = initializeRemixClientI18n({
     ...options,
     bootstrap: module,
   });
+  await loadRegisteredMessages(initialized, module.locale);
+  return initialized;
 }
 
 function validateCatalogModule<TLocale extends string>(
   value: unknown,
 ): RemixClientCatalogModule<TLocale> {
-  const candidate = isPlainObject(value) && isPlainObject(value.default) ? value.default : value;
+  const candidate =
+    isPlainObject(value) && isPlainObject(value.default) ? { ...value, ...value.default } : value;
   if (!isPlainObject(candidate)) {
     throw new TypeError("Palamedes Remix executable catalog asset must export an object.");
   }
@@ -224,7 +228,16 @@ function validateCatalogModule<TLocale extends string>(
   if (typeof candidate.catalogVersion !== "string" || candidate.catalogVersion.length === 0) {
     throw new TypeError("Palamedes Remix executable catalog asset has no catalogVersion export.");
   }
-  if (!isCompiledCatalog(candidate.messages)) {
+  const fragmentRegistry =
+    (isPlainObject(value) && value.fragmentRegistry === true) ||
+    candidate.fragmentRegistry === true;
+  const messages =
+    fragmentRegistry &&
+    isPlainObject(candidate.messages) &&
+    Object.keys(candidate.messages).length === 0
+      ? defineCompiledCatalog({})
+      : candidate.messages;
+  if (!isCompiledCatalog(messages)) {
     throw new TypeError(
       `Palamedes Remix executable catalog asset for locale "${candidate.locale}" does not contain a compiled catalog.`,
     );
@@ -232,7 +245,7 @@ function validateCatalogModule<TLocale extends string>(
   return {
     locale: candidate.locale as TLocale,
     catalogVersion: candidate.catalogVersion,
-    messages: candidate.messages,
+    messages,
   };
 }
 

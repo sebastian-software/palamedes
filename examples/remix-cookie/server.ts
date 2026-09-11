@@ -5,7 +5,7 @@ import { createAssetServer } from "remix/assets";
 import { createRequestListener } from "remix/node-fetch-server";
 
 import { router } from "./app/router.ts";
-import { remixI18n } from "./app/i18n.ts";
+import { catalogAssetRegistry, remixI18n } from "./app/i18n.ts";
 
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 4060;
 const assetServer = createAssetServer({
@@ -20,13 +20,15 @@ const assetServer = createAssetServer({
   allowFiles: ["app/**/public/**"],
   allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
-  scripts: { loaders: [createPalamedesRemixAssetLoader()] },
+  scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets: catalogAssetRegistry })] },
 });
 
 const server = http.createServer(
   createRequestListener(async (request) => {
     try {
       if (new URL(request.url).pathname.startsWith("/assets/")) {
+        const fragment = catalogAssetRegistry.serve(request);
+        if (fragment) return fragment;
         const catalog = remixI18n.serveClientCatalogAsset(request);
         if (catalog) return catalog;
         return (await assetServer.fetch(request)) ?? new Response("Not Found", { status: 404 });

@@ -1,5 +1,5 @@
 import { createI18n, defineCompiledCatalog } from "@palamedes/core";
-import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
+import { getI18n, registerMessageLoaderGroup, resetI18nRuntime } from "@palamedes/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -71,6 +71,38 @@ describe("Remix client i18n bootstrap", () => {
         loadCatalog: async () => ({ locale: "en", catalogVersion: "v1", messages: {} }),
       }),
     ).rejects.toThrow(/executable catalog asset.*compiled catalog/u);
+  });
+
+  it("retries a failed lazy catalog sidecar after its network error recovers", async () => {
+    vi.stubGlobal("window", {});
+    let attempts = 0;
+    registerMessageLoaderGroup("remix-recovery", [
+      {
+        async de() {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new Error("temporary catalog network failure");
+          }
+          return defineCompiledCatalog({ greeting: "Hallo nach Recovery" });
+        },
+      },
+    ]);
+    const options = {
+      createI18n,
+      document: createBootstrapDocument("de", undefined),
+      catalog: {
+        locale: "de" as const,
+        catalogVersion: "de-v2",
+        messages: defineCompiledCatalog({}),
+      },
+    };
+
+    await expect(initializeRemixClientI18nAsync(options)).rejects.toThrow(
+      /temporary catalog network failure/u,
+    );
+    await expect(initializeRemixClientI18nAsync(options)).resolves.toBe(getI18n());
+    expect(getI18n()._("greeting")).toBe("Hallo nach Recovery");
+    expect(attempts).toBe(2);
   });
 
   it("rejects explicit bootstrap in a server environment before installation", () => {

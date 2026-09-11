@@ -219,7 +219,10 @@ a different param name. Cookie serialization is available through
 Further `createRemixI18nServer` options: `createI18n` (factory for the
 request-local instance), `cookieName` (default `"locale"`), and `cookieMaxAge`
 (default one year, in seconds). `catalogAssets` accepts the shared compiler
-configuration and a locale-to-`.po` resolver. The adapter exposes
+configuration and a locale-to-`.po` resolver. For browser graph splitting, pass
+one `createPalamedesRemixCatalogAssetRegistry()` result to both the browser
+asset loader and `catalogAssets`; the loader registers each module's actual
+compiled IDs, so no hand-maintained catalog map is needed. The adapter exposes
 `createClientCatalogAsset(locale)`, `renderClientCatalog(locale)`, and
 `serveClientCatalogAsset(request)` for executable ESM delivery. `catalogVersion`
 overrides the default deterministic content digest with a non-empty string or a
@@ -235,7 +238,9 @@ under `middleware()` reach the current i18n instance. It also exposes
 ## Client Catalog Assets
 
 Configure `catalogAssets` once on the server. It compiles the requested locale
-to an executable ESM module and keeps compiled functions out of HTML and JSON:
+to an executable ESM module and keeps compiled functions out of HTML and JSON.
+With a shared registry, route `catalogAssets.serve(request)` before the normal
+asset server so selected module fragments are available:
 
 ```ts
 const remixI18n = createRemixI18nServer({
@@ -265,10 +270,12 @@ await import("./translated-app.js");
 ```
 
 The async initializer validates the module, exact `<html lang>` match, version,
-and compiled catalog before translated browser modules run. `loadCatalog` and
-`catalog` are available for CSP-aware hosts and deterministic tests. The active
-locale is the only catalog requested by the browser; locale changes require a
-full document navigation.
+and compiled catalog before translated browser modules run. Lazy graph
+fragments are awaited before their translated module evaluates. `loadCatalog`
+and `catalog` are available for CSP-aware hosts and deterministic tests. The
+active locale is the only catalog requested by the browser; locale changes
+require a full document navigation. Failed fragment imports are removed from
+the runtime cache and can be retried after recovery.
 
 ## Legacy Client Document Bootstrap
 

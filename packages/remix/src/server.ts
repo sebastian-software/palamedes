@@ -18,6 +18,7 @@ import { AcceptLanguage } from "remix/headers";
 import { createContextKey, type Middleware, type RequestContext } from "remix/router";
 
 import { REMIX_I18N_BOOTSTRAP_ID, type RemixI18nBootstrap } from "./client";
+import type { PalamedesRemixCatalogAssetRegistry } from "./index";
 
 export type RemixI18nResolver<T extends I18nInstance = I18nInstance> = (
   request: Request,
@@ -73,9 +74,10 @@ export type RemixI18nServerOptions<
    * through `serveClientCatalogAsset()`; no catalog functions cross JSON.
    */
   catalogAssets?: {
-    config: CatalogArtifactConfig;
-    resolvePath: (locale: TLocale) => string;
+    config?: CatalogArtifactConfig;
+    resolvePath?: (locale: TLocale) => string;
     basePath?: string;
+    registry?: PalamedesRemixCatalogAssetRegistry;
   };
   createI18n?: () => T;
   routeParam?: string;
@@ -205,27 +207,36 @@ export function createRemixI18nServer<
       );
     }
 
-    const resourcePath = assetOptions.resolvePath(locale);
-    const result = compileCatalogModule(assetOptions.config, resourcePath, {
-      locale,
-      pseudoLocale: assetOptions.config.pseudoLocale,
-      missingFailureHint:
-        "You see this error because executable Remix catalog asset compilation failed on a missing translation.",
-      compileFailureHint:
-        "These errors fail loading because executable Remix catalog asset compilation was configured as fatal.",
-      diagnosticsWarningHint:
-        "Inspect the generated Remix catalog asset diagnostics before deploying this locale.",
-    });
-    result.warnings.forEach((warning) => console.warn(warning));
+    if (!assetOptions.registry && (!assetOptions.config || !assetOptions.resolvePath)) {
+      throw new Error(
+        "Palamedes Remix executable catalog assets require catalogAssets.config and catalogAssets.resolvePath, or a shared catalogAssets.registry.",
+      );
+    }
+    const resourcePath = assetOptions.resolvePath?.(locale);
+    const result = assetOptions.registry
+      ? undefined
+      : compileCatalogModule(assetOptions.config!, resourcePath!, {
+          locale,
+          pseudoLocale: assetOptions.config!.pseudoLocale,
+          missingFailureHint:
+            "You see this error because executable Remix catalog asset compilation failed on a missing translation.",
+          compileFailureHint:
+            "These errors fail loading because executable Remix catalog asset compilation was configured as fatal.",
+          diagnosticsWarningHint:
+            "Inspect the generated Remix catalog asset diagnostics before deploying this locale.",
+        });
+    result?.warnings.forEach((warning) => console.warn(warning));
     const catalogVersion = resolveCatalogAssetVersion(
       locale,
-      result.code,
+      result?.code ?? "fragment-registry",
       options.catalogVersion,
-      typeof options.catalogVersion === "function"
-        ? compileCatalogArtifact(assetOptions.config, resourcePath).messages
+      !assetOptions.registry && typeof options.catalogVersion === "function"
+        ? compileCatalogArtifact(assetOptions.config!, resourcePath!).messages
         : undefined,
     );
-    const source = `${result.code}export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`;
+    const source = assetOptions.registry
+      ? `export const messages={};export default { messages };export const fragmentRegistry=true;export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`
+      : `${result?.code ?? ""}export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`;
     const asset = Object.freeze({ locale, catalogVersion, source });
     clientCatalogAssetCache.set(locale, asset);
     return asset;

@@ -14,9 +14,11 @@ import { pathToFileURL } from "node:url";
 import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { transformPalamedesMacros } from "@palamedes/transform";
 
 import {
   createPalamedesRemixAssetLoader,
+  createPalamedesRemixCatalogAssetRegistry,
   PALAMEDES_REMIX_ASSET_PACKAGES,
   PALEMEDES_REMIX_ASSET_PACKAGES,
 } from "./index";
@@ -350,6 +352,99 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(String(loaded.source)).toContain('import { Trans } from "@palamedes/remix/compiled"');
     expect(String(loaded.source)).toContain('jsxs(Trans, { id: "');
     expect(String(loaded.source)).not.toContain("@palamedes/remix/macro");
+  });
+
+  it("registers a selected executable sidecar from the module's compiled IDs", () => {
+    const registry = {
+      register: vi.fn().mockReturnValue("fragment-key"),
+      sidecarUrl: vi.fn().mockReturnValue("/assets/__palamedes/catalog-fragments/fragment-key.js"),
+      serve: vi.fn(),
+      invalidate: vi.fn(),
+    };
+    const loader = createPalamedesRemixAssetLoader({ catalogAssets: registry });
+    const loaded = loader(
+      pathToFileURL("/repo/app/public/fragment.ts").href,
+      assetLoadContext,
+      () => ({
+        format: "module",
+        source:
+          'import { t } from "@palamedes/core/macro"; export function text() { return t`Fragment`; }',
+      }),
+    );
+
+    expect(registry.register).toHaveBeenCalledWith(
+      "/repo/app/public/fragment.ts",
+      expect.arrayContaining([expect.any(String)]),
+    );
+    expect(String(loaded.source)).toContain('__palamedesRegisterMessageLoaderGroup("fragment-key"');
+    expect(String(loaded.source)).toContain(
+      'new URL("/assets/__palamedes/catalog-fragments/fragment-key.js?fragment=1&locale="',
+    );
+  });
+
+  it("serves locale fragments selected by a module and invalidates stale generations", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-fragments-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.ts]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo"\n\nmsgid "Other"\nmsgstr "Andere"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello"\n\nmsgid "Other"\nmsgstr "Other"\n',
+    );
+    const sourcePath = path.join(rootDir, "app", "routes", "fragment.ts");
+    mkdirSync(path.dirname(sourcePath), { recursive: true });
+    writeFileSync(sourcePath, "export const fragment = true;\n");
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const compiledIds = transformPalamedesMacros(
+      'import { t } from "@palamedes/core/macro"; export function text() { return t`Greeting`; }',
+      sourcePath,
+    ).compiledIds;
+    const firstKey = registry.register(sourcePath, compiledIds);
+    const sidecar = registry.serve(
+      new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
+    );
+    expect(sidecar?.status).toBe(200);
+    const sidecarSource = await sidecar?.text();
+    expect(sidecarSource).toContain("registerMessageLoaderGroup");
+    expect(sidecarSource).toContain("document.documentElement.lang");
+    expect(sidecarSource).not.toContain("Hallo");
+
+    const fragment = registry.serve(
+      new Request(
+        `https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js?fragment=1&locale=de`,
+      ),
+    );
+    const fragmentSource = await fragment?.text();
+    expect(fragment?.status).toBe(200);
+    expect(fragmentSource).toContain("Hallo");
+    expect(fragmentSource).not.toContain("Andere");
+    expect(fragmentSource).not.toContain("msgid");
+
+    const secondKey = registry.register(sourcePath, ["stale-generation-proof"]);
+    expect(secondKey).not.toBe(firstKey);
+    expect(
+      registry.serve(
+        new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
+      )?.status,
+    ).toBe(404);
+    expect(
+      registry.serve(
+        new Request(`https://example.test/assets/__palamedes/catalog-fragments/${secondKey}.js`),
+      )?.status,
+    ).toBe(200);
   });
 
   it("honors browser-specific include and exclude filters", () => {
