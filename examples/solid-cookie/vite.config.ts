@@ -11,7 +11,11 @@ export default defineConfig({
       extensions: [".jsx", ".tsx"],
       serverFunctions: true,
       ssr: true,
-      start: { middleware: "./src/middleware.ts" },
+      start: {
+        middleware: "./src/middleware.ts",
+        entryServer: "./src/entry-server.tsx",
+        entryClient: "./src/entry-client.tsx",
+      },
     }),
     fileRoutes(),
     nitro(),

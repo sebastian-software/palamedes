@@ -116,24 +116,27 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).not.toContain('<script nonce="solid-test" data-nonce="wrong"');
   });
 
-  it("nonces recognized Solid hydration bootstrap scripts without touching foreign inline code", async () => {
+  it("does not infer trust from inline script content", async () => {
     const output = await transformDocument(
-      "<html><head><script>window._$HY ||= { events: [] };</script><script>globalThis.foreign = true;</script></head></html>",
+      "<html><head><script>/* window._$HY */ evil();</script><script>globalThis.foreign = true;</script></head></html>",
       "solid-test",
     );
 
-    expect(output).toContain('<script nonce="solid-test">window._$HY ||= { events: [] };</script>');
+    expect(output).toContain("<script>/* window._$HY */ evil();</script>");
     expect(output).toContain("<script>globalThis.foreign = true;</script>");
   });
 
   it("leaves foreign module and third-party scripts unchanged", async () => {
     const html =
-      '<html><head><script type="module" src="/assets/application.js"></script><script data-type="module" data-src="/assets/virtual_solid-ssr-entry-client-abc123.js"></script><script src="https://cdn.example.test/foreign.js"></script></head><body></body></html>';
+      '<html><head><script type="module" src="/assets/application.js"></script><script data-type="module" data-src="/assets/virtual_solid-ssr-entry-client-abc123.js"></script><script data-title=\'src="/assets/entry-client-evil.js" type="module" nonce="fake"\'></script><script src="https://cdn.example.test/foreign.js"></script></head><body></body></html>';
     const output = await transformDocument(html, "solid-test");
 
     expect(output).toContain('<script type="module" src="/assets/application.js"></script>');
     expect(output).toContain(
       '<script data-type="module" data-src="/assets/virtual_solid-ssr-entry-client-abc123.js"></script>',
+    );
+    expect(output).toContain(
+      '<script data-title=\'src="/assets/entry-client-evil.js" type="module" nonce="fake"\'></script>',
     );
     expect(output).toContain('<script src="https://cdn.example.test/foreign.js"></script>');
     expect(output).not.toContain('nonce="solid-test" src="/assets/application.js"');
@@ -175,6 +178,28 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     );
 
     expect(output).toContain(`<script type="module" src="${source}"></script>`);
+  });
+
+  it("does not trust a foreign authored entry with a matching path", async () => {
+    const source = "https://foreign.example.test/app/assets/entry-client-abc123.js";
+    const output = await transformDocument(
+      `<html><head><script type="module" src="${source}"></script></head><body></body></html>`,
+      "solid-test",
+    );
+
+    expect(output).toContain(`<script type="module" src="${source}"></script>`);
+    expect(output).not.toContain(`import("${source}")`);
+  });
+
+  it("gates a same-origin authored client entry", async () => {
+    const source = "https://example.test/app/assets/entry-client-abc123.js";
+    const output = await transformDocument(
+      `<html><head><script type="module" src="${source}"></script></head><body></body></html>`,
+      "solid-test",
+    );
+
+    expect(output).toContain(`import("${source}")`);
+    expect(output).not.toContain(`src="${source}"`);
   });
 
   it("recognizes the development virtual Solid entry", async () => {
