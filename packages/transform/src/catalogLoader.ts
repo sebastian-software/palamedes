@@ -65,12 +65,6 @@ export function createCatalogLoaderResult(
    */
   const locale = result.resolvedLocaleChain?.[0] ?? options.locale;
 
-  if (locale !== pseudoLocale && result.missing.length > 0 && failOnMissing) {
-    throw new Error(
-      appendHint(createMissingErrorMessage(locale, result.missing), missingFailureHint),
-    );
-  }
-
   if (result.diagnostics.length > 0) {
     const errorDiagnostics = result.diagnostics.filter(
       (diagnostic) => diagnostic.severity === "error",
@@ -89,6 +83,12 @@ export function createCatalogLoaderResult(
 
     warnings.push(
       appendHint(createDiagnosticMessage(locale, result.diagnostics), diagnosticsWarningHint),
+    );
+  }
+
+  if (locale !== pseudoLocale && result.missing.length > 0 && failOnMissing) {
+    throw new Error(
+      appendHint(createMissingErrorMessage(locale, result.missing), missingFailureHint),
     );
   }
 

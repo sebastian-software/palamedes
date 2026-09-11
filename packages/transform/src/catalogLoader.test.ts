@@ -203,6 +203,31 @@ describe("catalog loader helpers", () => {
     ).toThrow(/Failed to compile catalog for locale de/);
   });
 
+  it("reports invalid fallback diagnostics before a missing translation failure", () => {
+    const result: CatalogCompileArtifactResult = {
+      ...baseResult,
+      missing: [{ sourceKey: { message: "Broken {name" } }],
+      diagnostics: [
+        {
+          severity: "error",
+          code: "compile.invalid_icu_message",
+          message: "Expected ',' at line 1, column 13",
+          sourceKey: { message: "Broken {name" },
+          locale: "en",
+        },
+      ],
+    };
+
+    expect(() =>
+      createCatalogLoaderResult(result, {
+        locale: "de",
+        failOnMissing: true,
+        failOnCompileError: false,
+        missingFailureHint: "missing hint",
+      }),
+    ).toThrow(/compile\.invalid_icu_message[\s\S]*Locale: en[\s\S]*failOnCompileError/);
+  });
+
   it("omits compile failure guidance when warning diagnostics do not fail the build", () => {
     const result: CatalogCompileArtifactResult = {
       ...baseResult,
