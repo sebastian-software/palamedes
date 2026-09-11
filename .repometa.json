@@ -2,5 +2,8 @@
   "standards": 13,
   "visibility": "oss",
   "since": 2025,
-  "platform": "github"
+  "platform": "github",
+  "readme": {
+    "owner": "mdtheme"
+  }
 }

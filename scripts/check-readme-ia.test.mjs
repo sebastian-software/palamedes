@@ -130,19 +130,18 @@ ${"### \\`_Not code_\\`"}
   assert.throws(check(`${escapedBackticks}\n[Source emphasis](#_not-code_)\n`), /missing anchor/u);
 });
 
-test("requires the generated family block above the branding footer", () => {
-  const start = "<!-- ferramenta-family:start -->";
-  const end = "<!-- ferramenta-family:end -->";
-  const blockStart = readme.indexOf(start);
-  const blockEnd = readme.indexOf(end) + end.length;
-  const block = readme.slice(blockStart, blockEnd);
-  const without = readme.slice(0, blockStart) + readme.slice(blockEnd);
-
-  assert.throws(check(without), /expected exactly one <!-- ferramenta-family:start -->/u);
-  assert.throws(check(`${readme}\n${start}\n${end}\n`), /expected exactly one/u);
-  assert.throws(check(`${without.trimEnd()}\n\n${block}\n`), /must sit above the branding footer/u);
+test("requires native frame order and rejects legacy markers", () => {
+  assert.throws(check(readme.replace("More from Ferramenta", "Related tools")), /expected outer/u);
+  assert.throws(
+    check(`${readme}\n<!-- ferramenta-family:start -->\n`),
+    /legacy generated markers/u,
+  );
+  assert.throws(check(readme.replace("logo-software.svg", "other.svg")), /expected outer/u);
 });
 
-test("keeps the family section last so new prose lands above it", () => {
-  assert.throws(check(`${readme}\n## Afterword\n\nOne more thing.\n`), /must be the last section/u);
+test("keeps project prose above the family footer", () => {
+  assert.throws(
+    check(`${readme}\n## Afterword\n\nOne more thing.\n`),
+    /project sections must precede/u,
+  );
 });

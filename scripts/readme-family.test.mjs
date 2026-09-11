@@ -10,11 +10,10 @@ import { familyReadmeTargets, generatorSpecifier } from "./readme-family.mjs";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const targets = familyReadmeTargets(root);
 
-test("covers the repository README and every published non-platform package", () => {
-  const expected = [
-    "README.md",
-    ...javascriptWorkspacePackages(root).map(({ directory }) => `${directory}/README.md`),
-  ];
+test("covers every published non-platform package", () => {
+  const expected = javascriptWorkspacePackages(root).map(
+    ({ directory }) => `${directory}/README.md`,
+  );
   assert.deepEqual(
     targets.map(({ file }) => file).sort(),
     expected.sort(),
@@ -22,9 +21,9 @@ test("covers the repository README and every published non-platform package", ()
   );
 });
 
-test("asks for the table variant on GitHub and the plain variant on npm", () => {
+test("keeps npm READMEs separate from the native project README", () => {
   const variants = new Map(targets.map(({ file, variant }) => [file, variant]));
-  assert.equal(variants.get("README.md"), "github");
+  assert.equal(variants.has("README.md"), false);
   for (const [file, variant] of variants) {
     if (file !== "README.md") assert.equal(variant, "registry", `${file} must render for npm`);
   }

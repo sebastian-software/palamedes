@@ -16,3 +16,6 @@ examples/tanstack-*/src/routeTree.gen.ts
 docs/example-screenshots/
 benchmarks/*/results/
 site/homepage-revamp-mocks/
+
+# Native mdtheme compares complete output; edit README.md.src and regenerate.
+/README.md

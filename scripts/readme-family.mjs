@@ -33,7 +33,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
  * this SHA and run `pnpm readme:family`; the block is generated, so the diff
  * shows exactly what moved.
  */
-const GENERATOR_COMMIT = "f6de99cd094d0fabbf0be23a9c0b5c074ff89976";
+const GENERATOR_COMMIT = "05fadd21d86b69bb15179ef4461bef6b3b531f88";
 const GENERATOR = `github:sebastian-software/ferramenta#${GENERATOR_COMMIT}&path:/packages/family`;
 const TOOL = "palamedes";
 
@@ -55,13 +55,10 @@ const useShell = process.platform === "win32";
  * the release pipeline's own name for "the packages people install".
  */
 export function familyReadmeTargets(base = root) {
-  return [
-    { file: "README.md", variant: "github" },
-    ...javascriptWorkspacePackages(base).map((workspacePackage) => ({
-      file: `${workspacePackage.directory.split(path.sep).join("/")}/README.md`,
-      variant: "registry",
-    })),
-  ];
+  return javascriptWorkspacePackages(base).map((workspacePackage) => ({
+    file: `${workspacePackage.directory.split(path.sep).join("/")}/README.md`,
+    variant: "registry",
+  }));
 }
 
 export const generatorSpecifier = GENERATOR;

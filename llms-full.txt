@@ -558,6 +558,7 @@ ADRs:
 - `/adr/026-editorial-visual-brand-system.md`
 - `/adr/027-privacy-bounded-cli-update-check.md`
 - `/adr/028-effective-flow-project-setup.md`
+- `/adr/029-readme-theme-composition.md`
 
 ## Development commands
 
