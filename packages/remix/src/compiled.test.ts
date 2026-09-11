@@ -113,30 +113,19 @@ describe("@palamedes/remix compiled rich-message runtime", () => {
     await expect(renderToString(second)).resolves.toBe('<em class="second">two</em>');
   });
 
-  it("uses the same readable fallback behavior for missing and malformed messages", async () => {
-    const malformed: CompiledMessage = (values, runtime) => runtime.pattern("Hallo {name", values);
+  it("propagates missing and invalid messages to host rendering", async () => {
+    const malformed: CompiledMessage = () => {
+      throw new Error("Invalid compiled message");
+    };
     const i18n = createI18n({ locale: "de" });
     i18n.load("de", defineCompiledCatalog({ malformed }));
     setClientI18n(i18n);
-
-    expect(
-      await renderToString(
-        createElement(Trans, {
-          id: "missing",
-          message: "Hello {name}",
-          values: { name: "Ada" },
-        }),
-      ),
-    ).toBe("Hello {name}");
-    expect(
-      await renderToString(
-        createElement(Trans, {
-          id: "malformed",
-          message: "Readable fallback",
-          values: { name: "Ada" },
-        }),
-      ),
-    ).toBe("Readable fallback");
+    await expect(
+      renderToString(createElement(Trans, { id: "missing", message: "Source {name}" })),
+    ).rejects.toThrow(/required compiled message/);
+    await expect(
+      renderToString(createElement(Trans, { id: "malformed", message: "Source" })),
+    ).rejects.toThrow("Invalid compiled message");
   });
 
   it("exposes Remix-native macro component types", () => {

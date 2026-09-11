@@ -13,3 +13,9 @@ const CompiledTrans = createTrans(() => getI18n<PalamedesI18n>());
 export function Trans(props: TransProps): Element {
   return CompiledTrans(props);
 }
+
+export {
+  buildLocaleSwitchItems,
+  type BuildLocaleSwitchItemsOptions,
+  type LocaleSwitchItem,
+} from "@palamedes/core/locale";

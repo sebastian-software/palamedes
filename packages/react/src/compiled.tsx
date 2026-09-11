@@ -8,3 +8,9 @@ import { createTrans } from "./transShared";
 export { Fragment, type TransProps } from "./transShared";
 
 export const Trans = createTrans(() => getI18n<PalamedesI18n>());
+
+export {
+  buildLocaleSwitchItems,
+  type BuildLocaleSwitchItemsOptions,
+  type LocaleSwitchItem,
+} from "@palamedes/core/locale";

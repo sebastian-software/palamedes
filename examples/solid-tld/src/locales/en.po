@@ -6,89 +6,150 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+
+#~ #@ obsolete-since: 2026-09-11
+#~ msgid "{value, plural, one {# ticket} other {# tickets}}"
+#~ msgstr "{value, plural, one {# ticket} other {# tickets}}"
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "Add to cart"
 msgstr "Add to cart"
 
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "Attendees"
 msgstr "Attendees"
 
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "Availability"
 msgstr "Availability"
 
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
 msgid "Behind the scenes"
 msgstr "Behind the scenes"
 
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "Berlin, Germany"
 msgstr "Berlin, Germany"
 
+#: examples/solid-tld/src/routes/index.tsx#HomePageContent
 msgid "Book your seat at Frontend Stage 2026"
 msgstr "Book your seat at Frontend Stage 2026"
 
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "Conference pass"
 msgstr "Conference pass"
 
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
 msgid "Currency"
 msgstr "Currency"
 
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "Date"
 msgstr "Date"
 
-msgid "Fewer tickets"
-msgstr "Fewer tickets"
-
-msgid "Locale"
-msgstr "Locale"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Localized for this document with Palamedes"
-
-msgid "More tickets"
-msgstr "More tickets"
-
-msgid "Number"
-msgstr "Number"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Refresh server result"
-
-msgid "Rendered with Solid"
-msgstr "Rendered with Solid"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server query confirmed locale {locale}."
-msgstr "Server query confirmed locale {locale}."
-
-msgid "Switch to the recommended locale"
-msgstr "Switch to the recommended locale"
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
-
-msgid "Total"
-msgstr "Total"
-
-msgid "Venue"
-msgstr "Venue"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Welcome back, {attendeeName}."
-
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "each"
 msgstr "each"
 
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+#: examples/solid-tld/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Locale"
+
+#: examples/solid-tld/src/routes/index.tsx#HomePageContent
+msgid "Localized for this document with Palamedes"
+msgstr "Localized for this document with Palamedes"
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "More tickets"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Number"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
 msgid "one switch, every format"
 msgstr "one switch, every format"
 
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+#: examples/solid-tld/src/routes/index.tsx#HomePageContent
+msgid "Rendered with Solid"
+msgstr "Rendered with Solid"
+
+#: examples/solid-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/solid-tld/src/routes/index.tsx#HomePageContent
 msgid "server locale"
 msgstr "server locale"
 
-msgid "{value, plural, one {# ticket} other {# tickets}}"
-msgstr "{value, plural, one {# ticket} other {# tickets}}"
+#: examples/solid-tld/src/lib/server.ts#getLocalizedServerStatus
+msgid "Server query confirmed locale {locale}."
+msgstr "Server query confirmed locale {locale}."
 
-msgid "{seats, plural, one {# seat left} other {# seats left}}"
-msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+#: examples/solid-tld/src/components/SuggestionBanner.tsx#SuggestionBanner
+msgid "Switch to the recommended locale"
+msgstr "Switch to the recommended locale"
+
+#: examples/solid-tld/src/routes/index.tsx#HomePageContent
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/solid-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Venue"
+
+#: examples/solid-tld/src/routes/index.tsx#HomePageContent
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."

@@ -206,12 +206,12 @@ describe("formatMessagePattern", () => {
     expect(resolved.nodes).toStrictEqual([{ type: "text", value: "O" }]);
   });
 
-  it("renders Date values as ISO strings and degrades invalid Dates", () => {
+  it("renders Date values as ISO strings and rejects invalid Dates", () => {
     const when = new Date(Date.UTC(2026, 6, 24, 2, 0, 0));
 
     expect(formatMessagePattern("At {when}", { when })).toBe(`At ${when.toISOString()}`);
-    expect(formatMessagePattern("At {when}", { when: new Date("garbage") })).toBe(
-      "At Invalid Date",
+    expect(() => formatMessagePattern("At {when}", { when: new Date("garbage") })).toThrow(
+      RangeError,
     );
   });
 

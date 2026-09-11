@@ -54,11 +54,12 @@ const result = transformPalamedesMacros(
 console.log(result.code);
 ```
 
-The transform strips authored source messages from generated runtime calls and
-`Trans` props by default. Set `keepSourceFallbacks: true` when the generated
-code must render readable source text without a loaded catalog. The legacy
-inverse option `stripMessageField` remains available for compatibility but is
-deprecated.
+`keepSourceFallbacks` retains its legacy option name and defaults to `false`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: false` for compact output without authored source text.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
 
 ## Key Exports
 
@@ -83,12 +84,10 @@ The root package also re-exports catalog-loader helpers from
 - `CatalogLoaderResult`
 - `MissingCatalogMessage`
 
-`renderCatalogModule()` emits one `defineCompiledCatalog()` map. Constant
-messages are strings; dynamic messages are renderer-independent functions with
-module-hoisted choice branches. Invalid or unsupported patterns fail catalog
-compilation instead of becoming runtime parser calls. The helper delegates to
-the same native Ferrocat-backed generator used by the first-party loaders; it
-does not maintain a second ICU parser or generator.
+`renderCatalogModule()` emits one `defineCompiledCatalog()` map. Constants
+are strings and dynamic messages are host-independent functions with hoisted
+choice branches. Invalid or unsupported ICU fails compilation. The helper
+delegates to the native generator; no runtime parser fallback is emitted.
 
 ## Supported Macro Shapes
 

@@ -84,25 +84,16 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 
 ## Implementation status
 
-The accepted failure contract above targets Palamedes v2. The published 1.x
-behavior remains in force until the coordinated major release:
-
-Low-level transforms generate compact runtime calls without embedding the
-authored source message by default. First-party host adapters override that
-low-level default and preserve source fallbacks in both development and
-production, so deploy skew and partial catalogs remain readable. Set
+Core package roots and compiled aliases now reject missing compiled entries.
+Source metadata is diagnostic information only, and telemetry cannot suppress
+lookup or execution failures. Low-level transforms generate compact runtime
+calls without embedding the authored source message by default. First-party
+host adapters retain diagnostic source metadata by default. Set
 `keepSourceFallbacks: false` for compact, hash-only output when bundle size or
-embedding authored source text is a concern.
+embedding authored source text is a concern. This legacy option name no longer
+implies a runtime fallback mode.
 
-This describes existing 1.x behavior, not an exception to the v2 decision.
-Migration of these defaults and options is tracked in
-[#1206](https://github.com/sebastian-software/palamedes/issues/1206) and the host
-delivery slices under [#1204](https://github.com/sebastian-software/palamedes/issues/1204).
-
-Current Core lookup still returns source metadata or the internal key on a
-missing entry. Next currently catches some production fragment failures and
-continues, and first-party plugin defaults retain source fallback text. These
-behaviors must be migrated to the accepted failure contract. A rejected module
-import alone is not proof of usable error handling: adapters must verify initial
-loading, hydration, and navigation against their host's actual error boundary
-or document-level failure path.
+Transparent host delivery and initial/hydration/navigation error recovery are
+tracked in the dependent integration slices of #1204. An import rejection by
+itself does not establish a usable host error boundary. The coordinated v2
+release remains held until those paths and migration proofs are complete.

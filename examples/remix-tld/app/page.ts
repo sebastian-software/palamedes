@@ -13,6 +13,7 @@ export type RenderHomePageOptions = {
   localeLabel: string;
   strategyLabel?: string;
   switchLinks?: LocaleSwitchLink[];
+  clientCatalog?: string;
 };
 
 export function renderHomePage({
@@ -21,6 +22,7 @@ export function renderHomePage({
   localeLabel,
   strategyLabel = "cookie",
   switchLinks,
+  clientCatalog,
 }: RenderHomePageOptions): string {
   const seatCount = 3;
   const title = t`Remix v3 is rendering ${locale ?? "en"} with Palamedes`;
@@ -31,6 +33,7 @@ export function renderHomePage({
   return `<!doctype html>
 <html lang="${escapeHtml(currentLocale)}">
   <head>
+    ${clientCatalog ?? ""}
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>

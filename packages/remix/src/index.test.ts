@@ -94,7 +94,7 @@ describe("createPalamedesRemixLoadHook", () => {
       const transformed = String(loaded.source);
       expect(transformed).toContain('import { getI18n } from "@palamedes/runtime"');
       expect(transformed).toContain("getI18n()._(");
-      expect(transformed).toContain("Hello ");
+      expect(transformed).not.toContain("Hello ");
       expect(transformed).not.toContain(oldMap);
       expect(transformed).toMatch(
         /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u,
@@ -127,7 +127,7 @@ describe("createPalamedesRemixLoadHook", () => {
     },
   );
 
-  it("preserves source fallbacks in production unless explicitly disabled", () => {
+  it("keeps source fallbacks opt-in in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     const source = [
       'import { t } from "@palamedes/core/macro"',
@@ -148,7 +148,7 @@ describe("createPalamedesRemixLoadHook", () => {
       () => ({ format: "module", source }),
     );
 
-    expect(String(preserved.source)).toContain('message: "Production fallback"');
+    expect(String(preserved.source)).not.toContain('message: "Production fallback"');
     expect(String(stripped.source)).not.toContain('message: "Production fallback"');
   });
 

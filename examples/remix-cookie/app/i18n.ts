@@ -1,8 +1,8 @@
 import path from "node:path";
 
-import type { CatalogMessages } from "@palamedes/core";
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
-import { compileCatalogArtifact } from "@palamedes/core-node";
+import { createPalamedesRemixCatalogAssetRegistry } from "@palamedes/remix";
 import { createRemixI18nServer } from "@palamedes/remix/server";
 
 import { messages as deMessages } from "./locales/de.po";
@@ -28,47 +28,31 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels;
 export const normalizeLocale = locales.normalizeLocale;
 
-const CATALOGS: Record<Locale, CatalogMessages> = {
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
 };
 
-const CLIENT_CATALOGS = new Map<Locale, CatalogMessages>();
 const EXAMPLE_ROOT = path.resolve(import.meta.dirname, "..");
+
+export const catalogAssetRegistry = createPalamedesRemixCatalogAssetRegistry({
+  cwd: EXAMPLE_ROOT,
+});
 
 export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale);
 }
 
-export function loadMessages(locale: Locale): CatalogMessages {
+export function loadMessages(locale: Locale): CompiledCatalogMessages {
   return CATALOGS[locale];
-}
-
-export function loadClientMessages(locale: Locale): CatalogMessages {
-  const cached = CLIENT_CATALOGS.get(locale);
-  if (cached) {
-    return cached;
-  }
-
-  const messages = compileCatalogArtifact(
-    {
-      rootDir: EXAMPLE_ROOT,
-      locales: [...LOCALES],
-      sourceLocale: DEFAULT_LOCALE,
-      catalogs: [{ path: "app/locales/{locale}", include: ["app"] }],
-    },
-    path.join(EXAMPLE_ROOT, "app", "locales", `${locale}.po`),
-  ).messages;
-  CLIENT_CATALOGS.set(locale, messages);
-  return messages;
 }
 
 export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "cookie",
   loadMessages,
-  loadClientMessages,
+  catalogAssets: { registry: catalogAssetRegistry },
   cookieName: LOCALE_COOKIE,
 });
 

@@ -6,89 +6,146 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "In den Warenkorb"
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr ""
 
-msgid "Attendees"
-msgstr "Teilnehmer"
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr ""
 
-msgid "Availability"
-msgstr "Verfügbarkeit"
-
-msgid "Behind the scenes"
-msgstr "Hinter den Kulissen"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Deutschland"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Konferenzpass"
-
-msgid "Currency"
-msgstr "Währung"
-
-msgid "Date"
-msgstr "Datum"
-
-msgid "Fewer tickets"
-msgstr "Weniger Tickets"
-
-msgid "Locale"
-msgstr "Sprache"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Für dieses Dokument mit Palamedes lokalisiert"
-
-msgid "More tickets"
-msgstr "Mehr Tickets"
-
-msgid "Number"
-msgstr "Zahl"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Serverergebnis aktualisieren"
-
-msgid "Rendered with Waku"
-msgstr "Gerendert mit Waku"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server action confirmed locale {currentLocale}."
-msgstr "Server-Action bestätigte Sprache {currentLocale}."
-
-msgid "Switch to the recommended locale"
-msgstr "Zur empfohlenen Sprache wechseln"
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten deine Tickets."
-
-msgid "Total"
-msgstr "Gesamt"
-
-msgid "Venue"
-msgstr "Ort"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Willkommen zurück, {attendeeName}."
-
-msgid "each"
-msgstr "pro Stück"
-
-msgid "one switch, every format"
-msgstr "ein Klick, alle Formate"
-
-msgid "server locale"
-msgstr "Server-Sprache"
-
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
 
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr ""
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr ""
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr ""
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "In den Warenkorb"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Teilnehmer"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+#: examples/waku-tld/src/pages/index.tsx
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Währung"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Datum"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "pro Stück"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+#: examples/waku-tld/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Sprache"
+
+#: examples/waku-tld/src/pages/index.tsx
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Zahl"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+#: examples/waku-tld/src/pages/index.tsx
+msgid "Rendered with Waku"
+msgstr "Gerendert mit Waku"
+
+#: examples/waku-tld/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/waku-tld/src/pages/index.tsx#runProbe
+msgid "Server action confirmed locale {currentLocale}."
+msgstr "Server-Action bestätigte Sprache {currentLocale}."
+
+#: examples/waku-tld/src/pages/index.tsx
+msgid "server locale"
+msgstr "Server-Sprache"
+
+#: examples/waku-tld/src/components/SuggestionBanner.tsx#SuggestionBanner
+msgid "Switch to the recommended locale"
+msgstr "Zur empfohlenen Sprache wechseln"
+
+#: examples/waku-tld/src/pages/index.tsx
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten "
+"deine Tickets."
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Gesamt"
+
+#: examples/waku-tld/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Ort"
+
+#: examples/waku-tld/src/pages/index.tsx
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."

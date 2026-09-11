@@ -6,86 +6,143 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "Add to cart"
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
 
-msgid "Attendees"
-msgstr "Attendees"
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
 
-msgid "Availability"
-msgstr "Availability"
-
-msgid "Behind the scenes"
-msgstr "Behind the scenes"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Germany"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Book your seat at Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Conference pass"
-
-msgid "Currency"
-msgstr "Currency"
-
-msgid "Date"
-msgstr "Date"
-
-msgid "Fewer tickets"
-msgstr "Fewer tickets"
-
-msgid "Locale"
-msgstr "Locale"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Localized for this document with Palamedes"
-
-msgid "More tickets"
-msgstr "More tickets"
-
-msgid "Number"
-msgstr "Number"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Refresh server result"
-
-msgid "Rendered with Solid"
-msgstr "Rendered with Solid"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server query confirmed locale {locale}."
-msgstr "Server query confirmed locale {locale}."
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
-
-msgid "Total"
-msgstr "Total"
-
-msgid "Venue"
-msgstr "Venue"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Welcome back, {attendeeName}."
-
-msgid "each"
-msgstr "each"
-
-msgid "one switch, every format"
-msgstr "one switch, every format"
-
-msgid "server locale"
-msgstr "server locale"
-
+#: examples/solid-cookie/src/components/TicketPanel.tsx#QuantityLabel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: examples/solid-cookie/src/components/ClientReady.tsx#ClientReady
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Add to cart"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Attendees"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Availability"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Conference pass"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Currency"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "each"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+#: examples/solid-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Locale"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Localized for this document with Palamedes"
+msgstr "Localized for this document with Palamedes"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "More tickets"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Number"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "one switch, every format"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Rendered with Solid"
+msgstr "Rendered with Solid"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "server locale"
+msgstr "server locale"
+
+#: examples/solid-cookie/src/lib/server.ts#getLocalizedServerStatus
+msgid "Server query confirmed locale {locale}."
+msgstr "Server query confirmed locale {locale}."
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Venue"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."

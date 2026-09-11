@@ -461,12 +461,14 @@ See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
 
 ## Framework guidance
 
-Vite, Next, and Remix keep authored source fallbacks in production by default
-so missing catalogs and deploy skew remain readable. Set
-`keepSourceFallbacks: false` to opt into smaller hash-only output. The
-parser-free `@palamedes/core/compiled` runtime returns retained ICU source
-patterns literally; use the `@palamedes/core` root with `onMissing` when the
-fallback itself must parse and interpolate.
+Package roots and existing `compiled` aliases use one parser-free v2 runtime.
+Missing compiled entries throw `MissingCompiledMessageError`; execution failures
+also propagate to host error handling. `onMissing`/`onError` are observers, not
+fallback handlers. `keepSourceFallbacks` is a legacy option name that retains
+diagnostic source metadata only; it cannot restore source rendering. Missing
+translations instead use the compiler's fallback chain. Set
+`keepSourceFallbacks: false` for compact diagnostic metadata when embedding
+authored source text is undesirable. See `/docs/migration-v2.md`.
 
 ### Vite
 

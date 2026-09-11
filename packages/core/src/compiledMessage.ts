@@ -22,7 +22,6 @@ export type CompiledMessageBranch = <TResult>(
 export type CompiledMessageBranches = Record<string, CompiledMessageBranch>;
 
 export type CompiledMessageRuntime<TResult> = {
-  pattern: (pattern: string, values: MessageValues) => TResult;
   join: (...parts: Array<string | TResult>) => TResult;
   value: (values: MessageValues, name: string) => TResult;
   number: (values: MessageValues, name: string, style?: string) => TResult;
@@ -73,10 +72,10 @@ export function defineCompiledCatalog<TMessages extends Record<string, CatalogMe
   return messages as TMessages & CompiledCatalogBrand;
 }
 
-export function isCompiledCatalog(
-  messages: LoadableCatalogMessages,
-): messages is CompiledCatalogMessages {
+export function isCompiledCatalog(messages: unknown): messages is CompiledCatalogMessages {
   return (
+    typeof messages === "object" &&
+    messages !== null &&
     (messages as LoadableCatalogMessages & Record<symbol, boolean | undefined>)[
       COMPILED_CATALOG_SYMBOL
     ] === true
@@ -84,7 +83,6 @@ export function isCompiledCatalog(
 }
 
 export type ExecutableMessageRenderer<TResult> = {
-  pattern: (pattern: string, values: MessageValues) => TResult;
   join: (...parts: Array<string | TResult>) => TResult;
   value: (value: unknown) => TResult;
   number: (value: unknown, style?: string) => TResult;
@@ -103,24 +101,24 @@ export function createCompiledMessageRuntime<TResult>(
   const runtime: CompiledMessageRuntime<TResult> = {
     ...renderer,
     value(values, name) {
-      return renderer.value(values[name]);
+      return renderer.value(requireValue(values, name));
     },
     number(values, name, style) {
-      return renderer.number(values[name], style);
+      return renderer.number(requireValue(values, name), style);
     },
     date(values, name, style) {
-      return renderer.date(values[name], style);
+      return renderer.date(requireValue(values, name), style);
     },
     time(values, name, style) {
-      return renderer.time(values[name], style);
+      return renderer.time(requireValue(values, name), style);
     },
     select(values, name, branches, pluralValue) {
-      const value = values[name];
+      const value = requireValue(values, name);
       const exact = value == null ? undefined : getBranch(branches, String(value));
       return runBranch(exact ?? getBranch(branches, "other"), values, runtime, pluralValue);
     },
     plural(values, name, offset, kind, branches) {
-      const numericValue = requireChoiceNumericValue(name, kind, values[name]);
+      const numericValue = requireChoiceNumericValue(name, kind, requireValue(values, name));
       const operand = numericValue - offset;
       const exact = getBranch(branches, `=${numericValue}`);
       if (exact !== undefined) {
@@ -138,22 +136,11 @@ export function createCompiledMessageRuntime<TResult>(
   return runtime;
 }
 
-export type PatternFormatter = (
-  pattern: string,
-  values: MessageValues,
-  locale: string,
-  timeZone?: string,
-) => string;
-
 export function createStringMessageRuntime(
   locale: string,
-  formatPattern: PatternFormatter,
   timeZone?: string,
 ): CompiledMessageRuntime<string> {
   return createCompiledMessageRuntime(locale, {
-    pattern(pattern, values) {
-      return formatPattern(pattern, values, locale, timeZone);
-    },
     join(...parts) {
       return parts.join("");
     },
@@ -179,10 +166,6 @@ export function createStringMessageRuntime(
   });
 }
 
-export function compiledMessageSource(message: CompiledMessage): string {
-  return message<SourceFragment>({}, SOURCE_RUNTIME).source;
-}
-
 function getBranch(
   branches: CompiledMessageBranches,
   key: string,
@@ -196,89 +179,12 @@ function runBranch<TResult>(
   runtime: CompiledMessageRuntime<TResult>,
   pluralValue?: number,
 ): TResult {
-  return branch === undefined ? runtime.join() : branch<TResult>(values, runtime, pluralValue);
+  if (branch === undefined) throw new Error("Compiled choice has no matching or other branch.");
+  return branch<TResult>(values, runtime, pluralValue);
 }
 
-type SourceFragment = { source: string };
-
-function source(fragment: string): SourceFragment {
-  return { source: fragment };
-}
-
-const SOURCE_RUNTIME: CompiledMessageRuntime<SourceFragment> = {
-  pattern(pattern) {
-    return source(pattern);
-  },
-  join(...parts) {
-    return source(
-      parts
-        .map((part) => (typeof part === "string" ? escapeMessageText(part) : part.source))
-        .join(""),
-    );
-  },
-  value(_values, name) {
-    return source(`{${name}}`);
-  },
-  number(_values, name, style) {
-    return source(renderFormattedSource(name, "number", style));
-  },
-  date(_values, name, style) {
-    return source(renderFormattedSource(name, "date", style));
-  },
-  time(_values, name, style) {
-    return source(renderFormattedSource(name, "time", style));
-  },
-  select(values, name, branches, pluralValue) {
-    return renderChoiceSource(values, name, "select", 0, branches, pluralValue);
-  },
-  plural(values, name, offset, kind, branches) {
-    return renderChoiceSource(values, name, kind, offset, branches, 0);
-  },
-  pound() {
-    return source("#");
-  },
-  literal(value) {
-    return source(`'${value.replaceAll("'", "''")}'`);
-  },
-  tag(name, children) {
-    return source(
-      children.source.length === 0 ? `<${name}/>` : `<${name}>${children.source}</${name}>`,
-    );
-  },
-};
-
-function renderFormattedSource(name: string, format: string, style: string | undefined): string {
-  return `{${name}, ${format}${style === undefined ? "" : `, ${style}`}}`;
-}
-
-function renderChoiceSource(
-  values: MessageValues,
-  name: string,
-  kind: "plural" | "select" | "selectordinal",
-  offset: number,
-  branches: CompiledMessageBranches,
-  pluralValue?: number,
-): SourceFragment {
-  const options = Object.entries(branches)
-    .map(
-      ([selector, branch]) =>
-        `${selector} {${branch<SourceFragment>(values, SOURCE_RUNTIME, pluralValue).source}}`,
-    )
-    .join(" ");
-  const offsetSource = offset === 0 ? "" : ` offset:${offset}`;
-  return source(`{${name}, ${kind},${offsetSource} ${options}}`);
-}
-
-function escapeMessageText(value: string): string {
-  let escaped = "";
-  for (const character of value) {
-    if (character === "'") {
-      escaped += "''";
-    } else if (character === "{" || character === "}") {
-      escaped += `'${character}'`;
-    } else {
-      escaped += character;
-    }
-  }
-  return escaped;
+function requireValue(values: MessageValues, name: string): unknown {
+  if (!Object.hasOwn(values, name))
+    throw new Error(`Missing compiled message value ${JSON.stringify(name)}.`);
+  return values[name];
 }

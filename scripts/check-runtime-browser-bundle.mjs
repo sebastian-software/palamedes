@@ -8,15 +8,13 @@ const parserSentinel = "[palamedes:icu-parser]";
 
 assert.notEqual(assetNames.length, 0, "Build the Vite MDX example before checking its bundle");
 
-const compatibilityEntry = await readFile(
-  new URL("../packages/core/dist/index.mjs", import.meta.url),
+// Positive control is test-only source; no public runtime may contain the parser.
+const parserSource = await readFile(
+  new URL("../packages/core/src/messageFormat.ts", import.meta.url),
   "utf8",
 );
-assert.equal(
-  compatibilityEntry.includes(parserSentinel),
-  true,
-  "The Core compatibility entry must contain the ICU parser sentinel",
-);
+assert.ok(parserSource.includes(parserSentinel), "Parser sentinel positive control is missing");
+await import("./check-public-runtime.mjs");
 
 let rawBytes = 0;
 let gzipBytes = 0;

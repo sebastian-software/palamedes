@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { createI18n } from "../packages/core/dist/index.mjs";
+import { createI18n, defineCompiledCatalog } from "../packages/core/dist/compiled.mjs";
 import { getI18n, resetI18nRuntime } from "../packages/runtime/dist/index.mjs";
 import { createServerI18nScope } from "../packages/runtime/dist/server.mjs";
 
 const CATALOGS = {
-  en: { "Welcome to Palamedes": "Welcome to Palamedes" },
-  de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
+  en: defineCompiledCatalog({ "Welcome to Palamedes": "Welcome to Palamedes" }),
+  de: defineCompiledCatalog({ "Welcome to Palamedes": "Willkommen bei Palamedes" }),
 };
 
 function createRequestI18n(locale) {

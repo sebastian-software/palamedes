@@ -6,6 +6,16 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr ""
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr ""
+
 #: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
@@ -14,6 +24,18 @@ msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
 #: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr ""
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr ""
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr ""
 
 #: examples/waku-cookie/src/components/ClientReady.tsx#ClientReady
 #: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel

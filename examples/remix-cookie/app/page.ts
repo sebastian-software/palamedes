@@ -11,7 +11,7 @@ export type RenderHomePageOptions = {
   banner?: string | null;
   locale: string | undefined;
   localeLabel: string;
-  clientBootstrap?: string;
+  clientCatalog?: string;
   clientProof?: string;
   strategyLabel?: string;
   switchLinks?: LocaleSwitchLink[];
@@ -21,7 +21,7 @@ export function renderHomePage({
   banner,
   locale,
   localeLabel,
-  clientBootstrap,
+  clientCatalog,
   clientProof,
   strategyLabel = "cookie",
   switchLinks,
@@ -60,7 +60,7 @@ export function renderHomePage({
       <p>Active locale: <strong data-testid="server-locale-value">${escapeHtml(localeLabel)}</strong></p>
       ${clientProof ? `<div data-remix-client-proof>${clientProof}</div>` : ""}
     </main>
-    ${clientBootstrap ?? ""}
+    ${clientCatalog ?? ""}
     ${clientProof ? '<script type="module" src="/assets/app/public/client.tsx"></script>' : ""}
   </body>
 </html>`;

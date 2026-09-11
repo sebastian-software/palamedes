@@ -34,14 +34,18 @@ In backend servers, the cleanest way to do that is `AsyncLocalStorage`.
 ## Canonical Node Pattern
 
 ```ts
-import { createI18n, type CatalogMessages } from "@palamedes/core";
+import {
+  createI18n,
+  defineCompiledCatalog,
+  type CompiledCatalogMessages,
+} from "@palamedes/core/compiled";
 import { createServerI18nScope } from "@palamedes/runtime/server";
 
 type Locale = "en" | "de";
 
-const CATALOGS: Record<Locale, CatalogMessages> = {
-  en: { "Welcome to Palamedes": "Welcome to Palamedes" },
-  de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
+  en: defineCompiledCatalog({ "Welcome to Palamedes": "Welcome to Palamedes" }),
+  de: defineCompiledCatalog({ "Welcome to Palamedes": "Willkommen bei Palamedes" }),
 };
 
 const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
@@ -76,7 +80,11 @@ and explicit while still running on Node.js.
 
 ```ts
 import { Hono } from "hono";
-import { createI18n, type CatalogMessages } from "@palamedes/core";
+import {
+  createI18n,
+  defineCompiledCatalog,
+  type CompiledCatalogMessages,
+} from "@palamedes/core/compiled";
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n } from "@palamedes/runtime";
 import { createServerI18nScope } from "@palamedes/runtime/server";
@@ -87,9 +95,9 @@ const localeControls = defineLocaleControls({
   locales: ["en", "de"],
   defaultLocale: "en",
 });
-const CATALOGS: Record<Locale, CatalogMessages> = {
-  en: { "Welcome to Palamedes": "Welcome to Palamedes" },
-  de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
+  en: defineCompiledCatalog({ "Welcome to Palamedes": "Welcome to Palamedes" }),
+  de: defineCompiledCatalog({ "Welcome to Palamedes": "Willkommen bei Palamedes" }),
 };
 const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 
@@ -117,7 +125,11 @@ This same pattern also works when the locale comes from:
 
 ```ts
 import express from "express";
-import { createI18n, type CatalogMessages } from "@palamedes/core";
+import {
+  createI18n,
+  defineCompiledCatalog,
+  type CompiledCatalogMessages,
+} from "@palamedes/core/compiled";
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n } from "@palamedes/runtime";
 import { createServerI18nScope } from "@palamedes/runtime/server";
@@ -128,9 +140,9 @@ const localeControls = defineLocaleControls({
   locales: ["en", "de"],
   defaultLocale: "en",
 });
-const CATALOGS: Record<Locale, CatalogMessages> = {
-  en: { "Welcome to Palamedes": "Welcome to Palamedes" },
-  de: { "Welcome to Palamedes": "Willkommen bei Palamedes" },
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
+  en: defineCompiledCatalog({ "Welcome to Palamedes": "Welcome to Palamedes" }),
+  de: defineCompiledCatalog({ "Welcome to Palamedes": "Willkommen bei Palamedes" }),
 };
 const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>();
 

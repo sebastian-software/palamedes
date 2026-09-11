@@ -1,8 +1,10 @@
 import { createI18n } from "@palamedes/core";
-import { initializeRemixClientI18n } from "@palamedes/remix/client";
+import { initializeRemixClientI18nAsync } from "@palamedes/remix/client";
 import { createRoot } from "remix/ui";
 
-initializeRemixClientI18n({ createI18n });
+const catalogLink = document.querySelector<HTMLLinkElement>("link[data-palamedes-catalog-locale]");
+if (!catalogLink) throw new Error("Palamedes Remix catalog preload is missing from the document.");
+await initializeRemixClientI18nAsync({ createI18n, catalogUrl: catalogLink.href });
 
 const { ClientProof } = await import("./interactive.tsx");
 const container = document.querySelector<HTMLElement>("[data-remix-client-proof]");

@@ -108,11 +108,12 @@ palamedes({
 });
 ```
 
-`keepSourceFallbacks` defaults to `true`, including `vite build`, so a missing
-catalog chunk renders readable source text instead of a compiled hash. Set it
-to `false` to opt into smaller output when source text must not ship. The
-parser-free runtime returns an ICU source fallback literally; use
-`@palamedes/core` if a fallback itself must interpolate values.
+`keepSourceFallbacks` retains its legacy option name and defaults to `true`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: false` for compact output without authored source text.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
 
 `cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
 sets the directory the config search starts from, and `skipValidation` loads

@@ -86,26 +86,76 @@ is therefore never expected to hot-swap only an already running browser module.
 
 This integration is tested against `remix@3.0.0-rc.1`:
 
-| Area                   | Status                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| Server macros          | `t`, `plural`, `select`, and `selectOrdinal` through the Node register hook            |
-| Browser macros         | The same ordinary macros through `createPalamedesRemixAssetLoader()`                   |
-| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules         |
-| Client catalog         | Serializable ICU strings embedded in the inert document bootstrap; no browser `.po`    |
-| HMR and source maps    | Authored TS/TSX mappings plus Remix watch/HMR invalidation for browser source modules  |
-| Remix UI Frames        | Server-rendered document and direct frame requests retain independent request scope    |
-| Locale switching       | Cookie, route, subdomain, and TLD through intentional full-document navigation         |
-| Public hosting         | Repository example and CI browser proof are ready; a public live deployment is pending |
+| Area                   | Status                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| Server macros          | `t`, `plural`, `select`, and `selectOrdinal` through the Node register hook               |
+| Browser macros         | The same ordinary macros through `createPalamedesRemixAssetLoader()`                      |
+| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules            |
+| Client catalog         | Adapter-owned executable ESM asset selected by locale; no function-bearing JSON transport |
+| HMR and source maps    | Authored TS/TSX mappings plus Remix watch/HMR invalidation for browser source modules     |
+| Remix UI Frames        | Server-rendered document and direct frame requests retain independent request scope       |
+| Locale switching       | Cookie, route, subdomain, and TLD through intentional full-document navigation            |
+| Public hosting         | Repository example and CI browser proof are ready; a public live deployment is pending    |
 
 Reactive in-document locale replacement is intentionally not supported. A
 locale change must create a new document so SSR markup, `<html lang>`, the
 bootstrap catalog, and browser runtime always agree.
 
-## Browser Catalog Bootstrap
+## Browser Catalog Assets
 
-Deliver the server-selected locale and its serializable ICU string catalog in
-the document, then initialize Palamedes before importing or rendering translated
-browser modules:
+Configure one adapter-owned catalog registry from the same `palamedes.yaml`
+that owns the message catalogs. Pass it to both the browser loader and
+`catalogAssets`; this derives selected IDs from each transformed module, so a
+lazy module requests only its active-locale fragment. Route registry requests
+before the regular Remix asset server. No application catalog map or loader
+route is required:
+
+```ts
+import {
+  createPalamedesRemixAssetLoader,
+  createPalamedesRemixCatalogAssetRegistry,
+  PALAMEDES_REMIX_ASSET_PACKAGES,
+} from "@palamedes/remix";
+
+const catalogAssets = createPalamedesRemixCatalogAssetRegistry({ cwd: import.meta.dirname });
+const assetServer = createAssetServer({
+  basePath: "/assets",
+  allowFiles: ["app/**/public/**"],
+  allowPackages: [...PALAMEDES_REMIX_ASSET_PACKAGES],
+  scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets })] },
+});
+// In the request listener, before assetServer.fetch(request):
+const fragment = catalogAssets.serve(request);
+if (fragment) return fragment;
+```
+
+Pass the same `catalogAssets` to `createRemixI18nServer`, render
+`renderClientCatalog(locale)` into the document head, and send matching
+`/assets/__palamedes/catalog/:locale.js` requests to
+`serveClientCatalogAsset(request)` before the normal Remix asset server. The
+browser entry loads the executable module before importing translated code:
+
+```ts
+import { initializeRemixClientI18nAsync } from "@palamedes/remix/client";
+
+const link = document.querySelector("link[data-palamedes-catalog-locale]");
+if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset link");
+await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
+```
+
+Only the active locale module and selected executable fragments are requested.
+Each module exports the locale, content digest, and branded compiled functions;
+no catalog functions cross HTML or JSON. Missing assets, locale mismatches,
+module evaluation errors, and invalid compiled modules fail before translated
+browser modules execute. A failed lazy fragment can be retried after the
+network or asset server recovers; registry generations change their URL when a
+module's selected IDs change.
+
+## Legacy Browser Catalog Bootstrap
+
+The old JSON bootstrap is an inert migration boundary. It cannot initialize the
+parser-free runtime; deliver the generated executable catalog through the Remix
+asset pipeline tracked in #1214 before importing translated browser modules:
 
 ```ts
 // Server setup
@@ -114,7 +164,7 @@ export const remixI18n = createRemixI18nServer({
   strategy: "cookie",
   loadMessages, // May be an executable server catalog.
   loadClientMessages(locale) {
-    return browserCatalogs[locale]; // Serializable Record<string, string>.
+    return browserCatalogs[locale]; // Legacy string data for migration diagnostics.
   },
 });
 
@@ -122,9 +172,10 @@ export const remixI18n = createRemixI18nServer({
 const catalog = remixI18n.renderClientBootstrap(locale);
 ```
 
-Place `catalog` inside the rendered `<body>` before the external browser entry.
-It is an inert `<template id="palamedes-i18n-bootstrap">`, not executable
-inline script. In the browser entry:
+The legacy `catalog` is an inert `<template id="palamedes-i18n-bootstrap">`, not
+an executable inline script. `initializeRemixClientI18n()` rejects it with an
+explicit #1214 asset-pipeline diagnostic. In the browser entry, initialize the
+executable generated catalog before importing translated modules:
 
 ```ts
 import { createI18n } from "@palamedes/core";
@@ -134,16 +185,15 @@ initializeRemixClientI18n({ createI18n });
 await import("./translated-app.js");
 ```
 
-The server payload uses ICU strings deliberately. Produce them at build or
-server startup with `compileCatalogArtifact(...).messages` from
-`@palamedes/core-node`; do not serialize executable `.po` module exports.
-`initializeRemixClientI18n()` runs only in a browser environment. It uses the
-parser-capable `@palamedes/core` runtime, validates the payload and exact
-`<html lang>` match, installs the catalog, and only then exposes it to
-transformed browser code. Render `<html lang={locale}>`; if the attribute is
-missing, initialization reports that it cannot verify the document locale.
-Missing, malformed, executable, or locale-mismatched payloads fail with an
-actionable error instead of mixing locales silently.
+The legacy server payload contains inert ICU strings and cannot initialize the
+parser-free runtime. `initializeRemixClientI18n()` runs only in a browser
+environment, requires an executable generated catalog asset, validates the
+payload and exact `<html lang>` match, installs the catalog, and only then
+exposes it to transformed browser code. Render `<html lang={locale}>`; if the
+attribute is missing, initialization reports that it cannot verify the document
+locale. Missing, malformed, inert, executable, or locale-mismatched payloads
+fail with an actionable error instead of mixing locales silently. The host
+asset-pipeline migration is tracked in #1214.
 
 Locale changes require a full document navigation. A new request resolves the
 cookie, route, host, or language header again and emits a matching document and
@@ -239,12 +289,13 @@ In practice:
   runtime calls against compiled catalogs — the same code shape the build-time
   integrations (`@palamedes/vite-plugin`, `@palamedes/next-plugin`) produce.
 
-The register hook preserves source-message fallbacks in both development and
-production, so deploy skew renders readable source text rather than a compiled
-hash. Create a custom hook with
-`createPalamedesRemixLoadHook({ keepSourceFallbacks: false })` to opt into
-smaller hash-only output when source text must not ship. Parser-free runtimes
-leave retained ICU fallbacks raw; use `@palamedes/core` when they must format.
+`keepSourceFallbacks` retains its legacy option name and defaults to `false`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: true` when deployment skew makes authored source text
+useful for diagnostics.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
 
 Loaded Palamedes configuration is cached between catalog imports, but each hit
 validates the config file's content digest. Catalog modules also register the
@@ -286,10 +337,10 @@ the same request-local i18n instance. Fetch metadata on that response, including
 `url`, `type`, and `redirected`, is preserved while the body is wrapped.
 
 `createRemixI18nServer()` also exposes `createClientBootstrap(locale)` and
-`renderClientBootstrap(locale)`. Pass `loadClientMessages` when the server's
-`loadMessages` returns executable compiled catalogs; otherwise the existing
-serializable catalog is reused. `catalogVersion` accepts a non-empty string or
-a function of `{ locale, messages }` and defaults to a deterministic digest.
+`renderClientBootstrap(locale)`. Those helpers remain available for validating
+legacy transport migrations; they do not turn raw ICU strings into executable
+messages. `catalogVersion` accepts a non-empty string or a function of
+`{ locale, messages }` and defaults to a deterministic digest.
 
 ## Prerelease Tracking
 

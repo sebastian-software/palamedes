@@ -1,5 +1,11 @@
-import type { CatalogMessages, PalamedesI18n } from "@palamedes/core";
-import { isServerEnvironment, setClientI18n } from "@palamedes/runtime";
+import {
+  defineCompiledCatalog,
+  isCompiledCatalog,
+  type CatalogMessages,
+  type CompiledCatalogMessages,
+  type PalamedesI18n,
+} from "@palamedes/core";
+import { isServerEnvironment, loadRegisteredMessages, setClientI18n } from "@palamedes/runtime";
 
 export const REMIX_I18N_BOOTSTRAP_ID = "palamedes-i18n-bootstrap";
 
@@ -11,7 +17,7 @@ const initializedDocuments = new WeakMap<
 export type RemixI18nBootstrap<TLocale extends string = string> = {
   locale: TLocale;
   catalogVersion: string;
-  messages: CatalogMessages;
+  messages: CatalogMessages | CompiledCatalogMessages;
 };
 
 export type RemixI18nBootstrapDocument = {
@@ -36,6 +42,21 @@ export type InitializeRemixClientI18nOptions<
 > = ReadRemixI18nBootstrapOptions & {
   createI18n: () => T;
   bootstrap?: unknown;
+};
+
+export type RemixClientCatalogModule<TLocale extends string = string> = {
+  locale: TLocale;
+  catalogVersion: string;
+  messages: CompiledCatalogMessages;
+};
+
+export type InitializeRemixClientI18nAsyncOptions<
+  TLocale extends string,
+  T extends PalamedesI18n,
+> = Omit<InitializeRemixClientI18nOptions<TLocale, T>, "bootstrap"> & {
+  catalogUrl?: string;
+  loadCatalog?: () => Promise<unknown>;
+  catalog?: unknown;
 };
 
 /**
@@ -127,6 +148,12 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
     return initialized.i18n as T;
   }
 
+  if (!isCompiledCatalog(bootstrap.messages)) {
+    throw new TypeError(
+      `Palamedes Remix client bootstrap for locale "${bootstrap.locale}" contains an inert serialized ICU catalog. The parser-free runtime requires an executable compiled catalog asset; migrate this host to the Remix asset pipeline described by issue #1214.`,
+    );
+  }
+
   let i18n: T;
   try {
     i18n = options.createI18n();
@@ -134,7 +161,7 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
     i18n.activate(bootstrap.locale);
   } catch (error) {
     throw new Error(
-      `Palamedes Remix client bootstrap could not install catalog "${bootstrap.catalogVersion}" for locale "${bootstrap.locale}". Use the parser-capable @palamedes/core createI18n() with serialized ICU string catalogs.`,
+      `Palamedes Remix client bootstrap could not install compiled catalog "${bootstrap.catalogVersion}" for locale "${bootstrap.locale}". Verify the executable catalog asset and its generated runtime.`,
       { cause: error },
     );
   }
@@ -150,6 +177,78 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
   return installed;
 }
 
+/** Load and install an adapter-owned executable catalog ESM asset. */
+export async function initializeRemixClientI18nAsync<
+  TLocale extends string,
+  T extends PalamedesI18n,
+>(options: InitializeRemixClientI18nAsyncOptions<TLocale, T>): Promise<T> {
+  if (isServerEnvironment()) {
+    throw new Error("Palamedes Remix client catalog assets can only run in a browser environment.");
+  }
+
+  let loaded: unknown;
+  try {
+    if (options.catalog !== undefined) {
+      loaded = options.catalog;
+    } else if (options.loadCatalog) {
+      loaded = await options.loadCatalog();
+    } else if (options.catalogUrl) {
+      loaded = await import(/* @vite-ignore */ options.catalogUrl);
+    } else {
+      throw new TypeError(
+        "Provide catalogUrl, loadCatalog, or catalog from remixI18n.renderClientCatalog(locale).",
+      );
+    }
+  } catch (error) {
+    throw new Error("Palamedes Remix executable catalog asset could not be loaded.", {
+      cause: error,
+    });
+  }
+
+  const module = validateCatalogModule<TLocale>(loaded);
+  const initialized = initializeRemixClientI18n({
+    ...options,
+    bootstrap: module,
+  });
+  await loadRegisteredMessages(initialized, module.locale);
+  return initialized;
+}
+
+function validateCatalogModule<TLocale extends string>(
+  value: unknown,
+): RemixClientCatalogModule<TLocale> {
+  const candidate =
+    isPlainObject(value) && isPlainObject(value.default) ? { ...value, ...value.default } : value;
+  if (!isPlainObject(candidate)) {
+    throw new TypeError("Palamedes Remix executable catalog asset must export an object.");
+  }
+  if (typeof candidate.locale !== "string" || candidate.locale.length === 0) {
+    throw new TypeError("Palamedes Remix executable catalog asset has no locale export.");
+  }
+  if (typeof candidate.catalogVersion !== "string" || candidate.catalogVersion.length === 0) {
+    throw new TypeError("Palamedes Remix executable catalog asset has no catalogVersion export.");
+  }
+  const fragmentRegistry =
+    (isPlainObject(value) && value.fragmentRegistry === true) ||
+    candidate.fragmentRegistry === true;
+  const messages =
+    fragmentRegistry &&
+    isPlainObject(candidate.messages) &&
+    Object.keys(candidate.messages).length === 0
+      ? defineCompiledCatalog({})
+      : candidate.messages;
+  if (!isCompiledCatalog(messages)) {
+    throw new TypeError(
+      `Palamedes Remix executable catalog asset for locale "${candidate.locale}" does not contain a compiled catalog.`,
+    );
+  }
+  return {
+    locale: candidate.locale as TLocale,
+    catalogVersion: candidate.catalogVersion,
+    messages,
+  };
+}
+
 function validateBootstrap<TLocale extends string>(value: unknown): RemixI18nBootstrap<TLocale> {
   if (!isPlainObject(value)) {
     throw invalidBootstrap("expected an object");
@@ -163,6 +262,14 @@ function validateBootstrap<TLocale extends string>(value: unknown): RemixI18nBoo
   }
   if (!isPlainObject(value.messages)) {
     throw invalidBootstrap('"messages" must be an object containing ICU strings');
+  }
+
+  if (isCompiledCatalog(value.messages)) {
+    return {
+      locale: value.locale as TLocale,
+      catalogVersion: value.catalogVersion,
+      messages: value.messages,
+    };
   }
 
   const messages: CatalogMessages = Object.create(null) as CatalogMessages;

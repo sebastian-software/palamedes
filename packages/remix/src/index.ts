@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import type { registerHooks } from "node:module";
@@ -7,10 +9,16 @@ import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source
 import {
   digestConfig,
   getConfigDependencies,
+  catalogMatchesSource,
+  catalogResourcePath,
   loadPalamedesConfigSync,
   type LoadedPalamedesConfig,
 } from "@palamedes/config";
-import { compileCatalogModule } from "@palamedes/core-node";
+import {
+  compileCatalogArtifactSelected,
+  compileCatalogModule,
+  renderCatalogModule,
+} from "@palamedes/core-node";
 import {
   resolveMacroRuntimeModule,
   transformPalamedesMacros,
@@ -37,10 +45,10 @@ export type PalamedesRemixRegisterOptions = {
   runtimeModule?: string;
 
   /**
-   * Preserve authored source messages as runtime fallbacks.
-   * Defaults to `true` in every environment. Set to `false` for compact,
-   * hash-only output when bundle size or embedding authored source text is a
-   * concern.
+   * Preserve authored source messages as diagnostic metadata only.
+   * Defaults to `false` in every environment. Set to `true` for diagnostic
+   * metadata when deployment skew makes authored source text useful.
+   * V2 runtime misses throw; this metadata never provides replacement output.
    */
   keepSourceFallbacks?: boolean;
 
@@ -68,7 +76,23 @@ export type PalamedesRemixRegisterOptions = {
 export type PalamedesRemixAssetLoaderOptions = Pick<
   PalamedesRemixRegisterOptions,
   "include" | "exclude" | "runtimeModule" | "keepSourceFallbacks"
->;
+> & {
+  /** Optional graph-split registry for executable locale fragments. */
+  catalogAssets?: PalamedesRemixCatalogAssetRegistry;
+};
+
+export type PalamedesRemixCatalogAssetRegistry = {
+  register(sourcePath: string, compiledIds: readonly string[]): string;
+  sidecarUrl(key: string): string;
+  serve(request: Request): Response | undefined;
+  invalidate(sourcePath?: string): void;
+};
+
+export type CreatePalamedesRemixCatalogAssetRegistryOptions = {
+  configPath?: string;
+  cwd?: string;
+  basePath?: string;
+};
 
 type RegisterHooksOptions = Parameters<typeof registerHooks>[0];
 
@@ -84,6 +108,209 @@ export const PALAMEDES_REMIX_ASSET_PACKAGES = [
 
 /** @deprecated Use PALAMEDES_REMIX_ASSET_PACKAGES. */
 export const PALEMEDES_REMIX_ASSET_PACKAGES = PALAMEDES_REMIX_ASSET_PACKAGES;
+
+export function createPalamedesRemixCatalogAssetRegistry(
+  options: CreatePalamedesRemixCatalogAssetRegistryOptions = {},
+): PalamedesRemixCatalogAssetRegistry {
+  let config = loadPalamedesConfigSync(options);
+  let configDigest = digestConfig(config);
+  let catalogGenerationDigest = catalogDigest(config);
+  const basePath = options.basePath ?? "/assets";
+  const entries = new Map<string, { sourcePath: string; compiledIds: string[] }>();
+  const keysBySource = new Map<string, string>();
+
+  const refreshConfig = (): void => {
+    const nextConfig = loadPalamedesConfigSync(options);
+    const nextDigest = digestConfig(nextConfig);
+    if (nextDigest === configDigest) {
+      return;
+    }
+    config = nextConfig;
+    configDigest = nextDigest;
+    catalogGenerationDigest = catalogDigest(config);
+    entries.clear();
+    keysBySource.clear();
+  };
+
+  const refreshCatalogGeneration = (): void => {
+    const nextDigest = catalogDigest(config);
+    if (nextDigest === catalogGenerationDigest) {
+      return;
+    }
+    catalogGenerationDigest = nextDigest;
+    entries.clear();
+    keysBySource.clear();
+  };
+
+  const register = (sourcePath: string, compiledIds: readonly string[]): string => {
+    refreshConfig();
+    refreshCatalogGeneration();
+    const normalizedIds = [...new Set(compiledIds)].sort();
+    const key = createCatalogKey(sourcePath, normalizedIds, configDigest, catalogGenerationDigest);
+    const previousKey = keysBySource.get(sourcePath);
+    if (previousKey && previousKey !== key) {
+      entries.delete(previousKey);
+    }
+    keysBySource.set(sourcePath, key);
+    entries.set(key, { sourcePath, compiledIds: normalizedIds });
+    return key;
+  };
+
+  return {
+    register,
+
+    sidecarUrl(key) {
+      return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/${key}.js`;
+    },
+
+    serve(request) {
+      refreshConfig();
+      refreshCatalogGeneration();
+      const url = new URL(request.url);
+      const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/`;
+      if (!url.pathname.startsWith(prefix) || !url.pathname.endsWith(".js")) {
+        return;
+      }
+
+      const key = url.pathname.slice(prefix.length, -3);
+      const entry = entries.get(key);
+      if (!entry) {
+        return new Response(`Unknown Palamedes catalog fragment "${key}".`, { status: 404 });
+      }
+      const locale = url.searchParams.get("locale");
+      if (!url.searchParams.has("fragment")) {
+        const fragmentUrl = `${thisSidecarUrl(basePath, key)}fragment=1&locale=`;
+        const source =
+          `import{defineCompiledCatalog as __define}from"@palamedes/core/compiled";` +
+          `import{getI18n as __getI18n,loadRegisteredMessages as __load,registerMessageLoaderGroup as __register}from"@palamedes/runtime";` +
+          `const __locale=document.documentElement.lang;` +
+          `__register(${JSON.stringify(key)},[{[__locale]:async()=>` +
+          `__define((await import(${JSON.stringify(fragmentUrl)}+encodeURIComponent(__locale))).messages)}]);` +
+          `let __active;try{__active=__getI18n()}catch(__error){` +
+          `if(!(__error instanceof Error&&__error.message.includes("No active client i18n instance")))throw __error}` +
+          `if(__active)await __load(__active,__locale);`;
+        return new Response(source, {
+          headers: {
+            "cache-control": "no-cache",
+            "content-type": "application/javascript; charset=utf-8",
+          },
+        });
+      }
+      if (!locale || !config.locales.includes(locale)) {
+        return new Response("Palamedes catalog fragments require a supported locale.", {
+          status: 400,
+        });
+      }
+
+      try {
+        const catalogs = config.catalogs.filter((candidate) =>
+          catalogMatchesSource(config, candidate, entry.sourcePath),
+        );
+        if (catalogs.length === 0) {
+          return new Response(
+            `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`,
+            { status: 500 },
+          );
+        }
+        const result = compileCatalogArtifactSelected(
+          {
+            rootDir: config.rootDir,
+            locales: config.locales,
+            sourceLocale: config.sourceLocale,
+            fallbackLocales: config.fallbackLocales,
+            pseudoLocale: config.pseudoLocale,
+            catalogs,
+          },
+          catalogResourcePath(config, catalogs[0], locale),
+          entry.compiledIds,
+        );
+        const source = `${stripCatalogBranding(renderCatalogModule(result.messages))}export const locale=${JSON.stringify(locale)};`;
+        const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
+        if (request.headers.get("if-none-match") === etag) {
+          return new Response(null, { status: 304, headers: { etag } });
+        }
+        return new Response(source, {
+          headers: {
+            "cache-control": "no-cache",
+            "content-type": "application/javascript; charset=utf-8",
+            etag,
+          },
+        });
+      } catch (error) {
+        return new Response(
+          `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${error instanceof Error ? error.message : String(error)}`,
+          { status: 500 },
+        );
+      }
+    },
+
+    invalidate(sourcePath) {
+      if (sourcePath === undefined) {
+        entries.clear();
+        keysBySource.clear();
+      } else {
+        const key = keysBySource.get(sourcePath);
+        if (key) {
+          entries.delete(key);
+          keysBySource.delete(sourcePath);
+        }
+      }
+    },
+  };
+}
+
+function thisSidecarUrl(basePath: string, key: string): string {
+  return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/${key}.js?`;
+}
+
+function createCatalogKey(
+  sourcePath: string,
+  compiledIds: readonly string[],
+  configDigest: string,
+  catalogGenerationDigest: string,
+): string {
+  return createHash("sha256")
+    .update(path.resolve(sourcePath))
+    .update("\0")
+    .update(JSON.stringify(compiledIds))
+    .update("\0")
+    .update(configDigest)
+    .update("\0")
+    .update(catalogGenerationDigest)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+function catalogDigest(config: LoadedPalamedesConfig): string {
+  const digest = createHash("sha256");
+  for (const catalog of config.catalogs) {
+    for (const locale of config.locales) {
+      const resource = catalogResourcePath(config, catalog, locale);
+      digest.update(resource);
+      digest.update("\0");
+      try {
+        digest.update(readFileSync(resource));
+      } catch (error) {
+        if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT")
+          throw error;
+        digest.update("missing");
+      }
+      digest.update("\0");
+    }
+  }
+  return digest.digest("hex");
+}
+
+/** Keep fragments free of a bare package import; the importing browser module
+ * brands generated functions through its rewritten core asset URL. */
+function stripCatalogBranding(source: string): string {
+  return source
+    .replace(/^import\{defineCompiledCatalog as [^}]+\}from"@palamedes\/core\/compiled";/u, "")
+    .replace(
+      /export const messages=__palamedesDefineCompiledCatalog\((.*)\);export default \{ messages \};/su,
+      "export const messages=$1;export default { messages };",
+    );
+}
 
 // The Node loader must exclude CommonJS .cjs/.cts: macro lowering injects ESM
 // imports. Bundler integrations can safely use the wider shared default.
@@ -152,7 +379,33 @@ export function createPalamedesRemixAssetLoader(
       return loaded;
     }
 
-    return transformLoadedModule(url, loaded, transformOptions, false);
+    let macroResult: ReturnType<typeof transformPalamedesMacros> | undefined;
+    const transformed = transformLoadedModule(url, loaded, transformOptions, false, (result) => {
+      macroResult = result;
+    });
+    if (!options.catalogAssets || transformed.source == null || !macroResult) {
+      return transformed;
+    }
+
+    if (!macroResult.hasChanged || macroResult.compiledIds.length === 0) {
+      return transformed;
+    }
+    const key = options.catalogAssets.register(fileURLToPath(url), macroResult.compiledIds);
+    const sidecar = options.catalogAssets.sidecarUrl(key);
+    const sidecarImport = `${sidecar}?fragment=1&locale=`;
+    const catalogPrelude =
+      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
+      `import{getI18n as __palamedesGetI18n,loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup}from"@palamedes/runtime";\n` +
+      `const __palamedesLocale=document.documentElement.lang;` +
+      `const __palamedesMessages=__palamedesDefineCompiledCatalog((await import(new URL(${JSON.stringify(sidecarImport)}+encodeURIComponent(__palamedesLocale),document.baseURI))).messages);` +
+      `__palamedesRegisterMessageLoaderGroup(${JSON.stringify(key)},[{[__palamedesLocale]:async()=>__palamedesMessages}]);` +
+      `let __palamedesActive;try{__palamedesActive=__palamedesGetI18n()}catch(__palamedesError){` +
+      `if(!(__palamedesError instanceof Error&&__palamedesError.message.includes("No active client i18n instance")))throw __palamedesError}` +
+      `if(__palamedesActive)await __palamedesLoadRegisteredMessages(__palamedesActive,__palamedesLocale);\n`;
+    return {
+      ...transformed,
+      source: `${catalogPrelude}${stringifySource(transformed.source)}\n`,
+    };
   };
 }
 
@@ -165,7 +418,7 @@ function resolveMacroTransformOptions(
     runtimeModule: resolveMacroRuntimeModule(options.runtimeModule),
     // Keep misses readable across production deploy skew by default. Hosts that
     // must not embed authored text can choose the compact, hash-only behavior.
-    keepSourceFallbacks: options.keepSourceFallbacks ?? true,
+    keepSourceFallbacks: options.keepSourceFallbacks ?? false,
     stripNonEssentialProps: process.env.NODE_ENV === "production",
   };
 }
@@ -175,6 +428,7 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
   loaded: Loaded,
   options: ResolvedMacroTransformOptions,
   composeIncomingSourceMap: boolean,
+  onResult?: (result: ReturnType<typeof transformPalamedesMacros>) => void,
 ): Loaded {
   const filePath = fileURLToPath(url);
   const source = stringifySource(loaded.source);
@@ -195,6 +449,8 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
       cause: error,
     });
   }
+
+  onResult?.(result);
 
   if (!result.hasChanged) {
     return loaded;

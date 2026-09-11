@@ -151,16 +151,10 @@ reload is the supported fallback. The development invalidation regression runs
 under Turbopack. Webpack's top-level-await client build is covered in
 production, but does not claim an equivalent HMR contract.
 
-Each production fragment import is attempted once. If one rejects, Palamedes
-logs the failure with the module path and locale, skips only that fragment, and
-continues hydrating the client graph (including any other fragments that did
-load). It deliberately avoids an immediate, unbacked-off retry: deterministic
-CDN, ad-blocker, and stale-deploy failures are unlikely to improve in the same
-turn, while a retry can add a request without restoring the graph. Development
-remains fail-fast so catalog wiring failures stay visible while editing.
-Production retains readable source text by default when a skipped fragment has
-no loaded translation. Set `keepSourceFallbacks: false` when the smaller
-hash-only output is required because authored source text cannot ship.
+V2 runtime misses propagate as errors even when a fragment failed earlier.
+Transparent Next delivery and usable initial/navigation error handling are
+completed in the Next integration slice (#1208); source metadata is never a
+recovery path. Error views must remain usable without the failed catalog.
 
 `messageSplitting` currently supports PO catalogs and defaults to `false` for
 compatibility. Keep using `createClientCatalogBoundary()` from
@@ -313,13 +307,14 @@ module.exports = withPalamedes(
 );
 ```
 
-`keepSourceFallbacks` defaults to `true` in both development and production,
-so a missing catalog fragment renders readable source text rather than a
-compiled hash. Set it to `false` to opt into smaller output or prevent source
-text from shipping. The parser-free runtime leaves ICU source fallbacks raw;
-`failOnCompileError` is deprecated in v2 and invalid or unsupported ICU always
-fails compilation, including when the option is `false`.
-use `@palamedes/core` when such a fallback must interpolate values.
+`keepSourceFallbacks` retains its legacy option name and defaults to `true`
+here. It only controls diagnostic source metadata in generated calls. Set
+`keepSourceFallbacks: false` for compact output without authored source text.
+V2 package roots and `compiled` aliases both throw on missing compiled entries;
+retained metadata never supplies replacement message output. Valid translation
+fallbacks are resolved and compiled at build time.
+`failOnCompileError` is deprecated: invalid or unsupported ICU always fails
+compilation, including when this legacy option is `false`.
 
 `include` and `exclude` select which sources are macro-transformed, and apply
 under both bundlers: webpack uses them as the loader's `test`/`exclude`, and

@@ -28,56 +28,24 @@ const i18n = createI18n();
 setClientI18n(i18n);
 ```
 
-## Runtime Fallback Hooks
+## Compiled Runtime and Errors
 
-`createI18n` starts with `DEFAULT_LOCALE` (`"en"`) and accepts an optional
-`locale` override plus hooks for production telemetry. The initial locale is
-active immediately, including before its catalog is loaded. Missing active-locale
-catalog entries still render the source message, but `onMissing` lets apps count
-them. Malformed runtime patterns fall back to the source message instead of
-throwing through the component tree, and `onError` receives the parse/format
-failure.
+The package root and `@palamedes/core/compiled` share one parser-free runtime.
+Load generated `CompiledCatalogMessages` before executing messages. Plain ICU
+maps are build-time inputs and are rejected by `load()`; compiled constant
+strings remain valid. Standard framework integrations own loading.
 
-```ts
-const i18n = createI18n({
-  onMissing({ id, locale }) {
-    reportMetric("palamedes.missing", { id, locale });
-  },
-  onError({ id, locale, error }) {
-    captureException(error, { tags: { id, locale } });
-  },
-});
-```
+`createI18n({ locale, timeZone, onMissing, onError })` starts with `locale`
+(default `"en"`). Use the same IANA `timeZone` on server and client. Date-only
+ISO strings preserve their civil calendar date; other date values are instants.
 
-Pass `locale` when the instance should start in another locale:
+A missing compiled entry throws `MissingCompiledMessageError`; formatter failures
+also propagate to ordinary host error handling. Hooks observe these failures
+and cannot suppress them. Source metadata is diagnostic information, never a
+replacement message. Valid translation fallbacks are compiled at build time.
 
-```ts
-const i18n = createI18n({ locale: "de" });
-```
-
-For server-rendered applications, set `timeZone` to the same IANA identifier on
-the server and client. ICU `{when, date}` and `{when, time}` arguments then use
-that zone instead of the host process or browser zone, preventing hydration
-output from drifting across environments.
-
-```ts
-const i18n = createI18n({ locale: "en-US", timeZone: "Europe/Berlin" });
-```
-
-Date objects, timestamps, and ISO strings with a time represent instants and are
-rendered in `timeZone`. Date-only ISO strings such as `"2026-06-12"` represent
-civil calendar dates, so their year, month, and day stay the same in every
-configured zone. Invalid or empty zone identifiers throw a `RangeError` while
-creating the instance.
-
-Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these
-hooks to observe runtime-loaded catalogs or fast-moving translation changes.
-`getMessage(id, metadata)` uses the same missing-catalog lookup path as `_()`,
-so `onMissing` also fires when callers ask for a raw pattern by id and the
-active catalog does not contain that id. Since the initial locale is active
-immediately, this includes lookups before the first `load()` or `activate()`
-call. Apps that use source messages for the default locale without loading its
-catalog should account for those events in their telemetry policy.
+See the [v2 migration guide](https://github.com/sebastian-software/palamedes/blob/main/docs/migration-v2.md)
+for removed parser APIs and direct-component replacements.
 
 For authoring imports, use:
 
@@ -210,44 +178,9 @@ and nothing is auto-escaped there. The JSX `message` attribute
 (`<Trans message="Hello {name}" />`) is that same raw-ICU surface, while
 `<Trans>` children are authored text and are escaped.
 
-The rules matter when a translator edits a `.po` file by hand, when a catalog
-comes back from a TMS, or when a pattern is passed straight to
-`formatMessagePattern()`. Palamedes implements ICU apostrophe quoting in its
-lenient form:
-
-- `''` is always a literal apostrophe — `Ada''s` renders `Ada's`.
-- A single `'` opens a quoted literal **only** before `{`, `}`, or (inside a
-  plural or selectordinal branch, where `#` is syntax) `#`. Text up to the
-  closing `'` is literal.
-- Everywhere else `'` is just an apostrophe, so `don't` and `l'été` render
-  unchanged instead of swallowing the rest of the sentence.
-- An unterminated quote auto-closes at the end of the pattern instead of
-  throwing.
-
-`'{'` is therefore how a message emits a literal brace:
-
-```ts
-i18n._("Write '{'name'}' to insert the user name", {});
-// -> "Write {name} to insert the user name"
-```
-
-Quoted text is exposed as `MessageLiteralNode` in `getMessageNodes()`, so
-custom renderers must handle that node type alongside `text`.
-
-### Plural Offset
-
-`plural` and `selectordinal` support ICU `offset:N` for "and N others"
-sentences:
-
-```ts
-i18n._("{count, plural, offset:1 =0 {nobody else} one {# other} other {# others}}", { count: 3 });
-// -> "2 others"
-```
-
-Exact `=N` keys match the raw value; plural categories select on
-`value - offset`, and `#` renders `value - offset`. The macro spelling is
-`plural(count, { offset: 1, … })`, and the React/Solid components take
-`offset={1}`; all three compile to the ICU form above.
+ICU quoting and plural offsets are resolved during compilation. Use authored
+macros, then run extraction and the normal framework build. Compiled renderers
+execute literal and branch instructions without constructing parsed-node trees.
 
 <!-- ferramenta-family:start -->
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { defineCompiledCatalog } from "@palamedes/core/compiled";
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import { createRouter } from "remix/router";
@@ -153,9 +154,11 @@ describe("createRemixI18nServer", () => {
   });
 
   it("resolves request locale and caches catalog messages by locale", async () => {
-    const loadMessages = vi.fn((locale: "en" | "de" | "es") => ({
-      greeting: `${locale}:Hallo`,
-    }));
+    const loadMessages = vi.fn((locale: "en" | "de" | "es") =>
+      defineCompiledCatalog({
+        greeting: `${locale}:Hallo`,
+      }),
+    );
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
@@ -194,7 +197,7 @@ describe("createRemixI18nServer", () => {
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: (locale) => ({ greeting: `hello:${locale}` }),
+      loadMessages: (locale) => defineCompiledCatalog({ greeting: `hello:${locale}` }),
     });
 
     await remixI18n.run(
@@ -217,7 +220,7 @@ describe("createRemixI18nServer", () => {
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: (locale) => ({ greeting: `hello:${locale}` }),
+      loadMessages: (locale) => defineCompiledCatalog({ greeting: `hello:${locale}` }),
     });
     const router = createRouter({ middleware: [remixI18n.middleware()] });
 
@@ -242,7 +245,7 @@ describe("createRemixI18nServer", () => {
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: (locale) => ({ greeting: `server:${locale}` }),
+      loadMessages: (locale) => defineCompiledCatalog({ greeting: `server:${locale}` }),
       loadClientMessages,
     });
 
@@ -266,12 +269,12 @@ describe("createRemixI18nServer", () => {
     const first = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: () => ({ second: "Two", first: "One" }),
+      loadMessages: () => defineCompiledCatalog({ second: "Two", first: "One" }),
     }).createClientBootstrap("en");
     const second = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: () => ({ first: "One", second: "Two" }),
+      loadMessages: () => defineCompiledCatalog({ first: "One", second: "Two" }),
     }).createClientBootstrap("en");
 
     expect(first.catalogVersion).toBe(second.catalogVersion);
@@ -281,7 +284,8 @@ describe("createRemixI18nServer", () => {
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: () => ({ dangerous: "</template><script>alert(1)</script>&" }),
+      loadMessages: () =>
+        defineCompiledCatalog({ dangerous: "</template><script>alert(1)</script>&" }),
       catalogVersion: "release-42",
     });
 
@@ -300,19 +304,74 @@ describe("createRemixI18nServer", () => {
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: () => ({ greeting: () => "Hello" }) as unknown as Record<string, string>,
+      loadMessages: () =>
+        defineCompiledCatalog({
+          greeting<TResult>() {
+            throw new Error("not executable");
+          },
+        }),
     });
 
     expect(() => remixI18n.createClientBootstrap("en")).toThrow(
-      /non-string message "greeting".*loadClientMessages.*compileCatalogArtifact/u,
+      /non-string message "greeting".*#1214 asset pipeline/u,
     );
+  });
+
+  it("serves only the requested locale as an executable catalog module", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-catalog-"));
+    const localePath = path.join(root, "de.po");
+    writeFileSync(
+      path.join(root, "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hello"\n',
+    );
+    writeFileSync(localePath, 'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hallo"\n');
+    try {
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({ greeting: "Hallo" }),
+        catalogAssets: {
+          config: {
+            rootDir: root,
+            locales: ["en", "de", "es"],
+            sourceLocale: "en",
+            catalogs: [{ path: "{locale}", include: ["."] }],
+          },
+          resolvePath: () => localePath,
+        },
+      });
+
+      const asset = remixI18n.createClientCatalogAsset("de");
+      expect(asset.source).toContain("defineCompiledCatalog");
+      expect(asset.source).toContain('export const locale="de"');
+      expect(asset.source).not.toContain("msgid");
+      expect(remixI18n.renderClientCatalog("de")).toContain("/assets/__palamedes/catalog/de.js");
+      const response = remixI18n.serveClientCatalogAsset(
+        new Request("https://example.test/assets/__palamedes/catalog/de.js"),
+      );
+      expect(response?.status).toBe(200);
+      expect(response?.headers.get("content-type")).toContain("javascript");
+      const cached = remixI18n.serveClientCatalogAsset(
+        new Request("https://example.test/assets/__palamedes/catalog/de.js", {
+          headers: { "if-none-match": response?.headers.get("etag") ?? "" },
+        }),
+      );
+      expect(cached?.status).toBe(304);
+      expect(
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
+        )?.status,
+      ).toBe(404);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it("uses a new document payload after cookie-driven locale navigation", async () => {
     const remixI18n = createRemixI18nServer({
       locales,
       strategy: "cookie",
-      loadMessages: (locale) => ({ greeting: `greeting:${locale}` }),
+      loadMessages: (locale) => defineCompiledCatalog({ greeting: `greeting:${locale}` }),
     });
 
     const localeFor = (cookie: string) =>
@@ -325,3 +384,6 @@ describe("createRemixI18nServer", () => {
     await expect(localeFor("locale=es")).resolves.toBe("es");
   });
 });
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";

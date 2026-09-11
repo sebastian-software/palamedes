@@ -6,6 +6,17 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "{count, number}"
+msgstr "{count, number}"
+
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
@@ -14,6 +25,18 @@ msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
 
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid ""

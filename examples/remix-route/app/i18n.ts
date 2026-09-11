@@ -1,5 +1,6 @@
-import type { CatalogMessages } from "@palamedes/core";
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
+import { createPalamedesRemixCatalogAssetRegistry } from "@palamedes/remix";
 import { createRemixI18nServer } from "@palamedes/remix/server";
 import { messages as deMessages } from "./locales/de.po";
 import { messages as enMessages } from "./locales/en.po";
@@ -25,7 +26,12 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels;
 export const normalizeLocale = locales.normalizeLocale;
 
-const CATALOGS: Record<Locale, CatalogMessages> = {
+const EXAMPLE_ROOT = path.resolve(import.meta.dirname, "..");
+export const catalogAssetRegistry = createPalamedesRemixCatalogAssetRegistry({
+  cwd: EXAMPLE_ROOT,
+});
+
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
@@ -35,7 +41,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale);
 }
 
-export function loadMessages(locale: Locale): CatalogMessages {
+export function loadMessages(locale: Locale): CompiledCatalogMessages {
   return CATALOGS[locale];
 }
 
@@ -43,6 +49,7 @@ export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "route",
   loadMessages,
+  catalogAssets: { registry: catalogAssetRegistry },
   routeParam: "locale",
 });
 
@@ -85,3 +92,4 @@ export function resolveLocaleRedirect(
   const allowedRedirect = getRouteSwitchLinks(request).find((item) => item.locale === locale)?.href;
   return typeof redirect === "string" && redirect === allowedRedirect ? redirect : fallback;
 }
+import path from "node:path";
