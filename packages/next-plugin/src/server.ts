@@ -1,6 +1,8 @@
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external.js";
 import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/server";
 import type { I18nInstance } from "@palamedes/runtime";
+import { createI18n, type CreateI18nOptions, type PalamedesI18n } from "@palamedes/core";
+import { loadServerCatalog } from "@palamedes/next-plugin/server-catalogs";
 
 const NEXT_RENDER_REQUEST_KEY_PROVIDER = Symbol.for(
   "palamedes.nextPlugin.renderRequestKeyProvider",
@@ -25,3 +27,16 @@ export function createNextServerI18nScope<
 }
 
 export type { ServerI18nScope };
+
+let automaticScope: ServerI18nScope<PalamedesI18n> | undefined;
+
+/** Load the active locale once per server generation and create isolated request state. */
+export async function createNextServerI18n(
+  options: CreateI18nOptions & { locale: string },
+): Promise<PalamedesI18n> {
+  const messages = await loadServerCatalog(options.locale);
+  const i18n = createI18n(options);
+  i18n.load(options.locale, messages);
+  (automaticScope ??= createNextServerI18nScope<PalamedesI18n>()).activate(i18n);
+  return i18n;
+}

@@ -66,7 +66,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
   );
 }
 
-function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailureMode) {
+function clientMessageBootstrap(config, sourcePath, compiledIds) {
   const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds);
   if (!importsByCatalog) {
     return null;
@@ -81,89 +81,28 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
       .join(", ");
     return `{ ${loaders} }`;
   });
-  const supportedLocales = config.locales.map((locale) => JSON.stringify(locale)).join(", ");
   const modulePath = normalizePath(
     path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
   );
   const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`;
-  const fragmentFailurePrefix = JSON.stringify(
-    `Palamedes client graph message splitting failed to load a catalog fragment for ${modulePath} (`,
-  );
-  const fragmentFailureSuffix = JSON.stringify("). Continuing without that fragment.");
-
-  const imports =
-    `const ${identifier}_modules = await Promise.all([\n` +
-    `  import("@palamedes/core/compiled"),\n` +
-    `  import("@palamedes/runtime"),\n` +
-    `]);\n` +
-    `let ${identifier}_existingI18n;\n` +
-    `try {\n` +
-    `  ${identifier}_existingI18n = ${identifier}_modules[1].getI18n();\n` +
-    `} catch {\n` +
-    `  // No client i18n has been installed yet.\n` +
-    `}\n` +
-    `const ${identifier}_locale = ${identifier}_existingI18n?.locale ?? document.documentElement.lang;\n`;
-  // Fragments are imported in parallel but registered in loader-group order, so
-  // two catalogs carrying the same message id resolve to the same winner in
-  // both failure modes. Degrading isolates a failure; it does not reorder.
-  const reportFragmentFailure =
-    `const ${identifier}_reportFragmentFailure = (error) => {\n` +
-    `  try {\n` +
-    `    console.error(\n` +
-    `      ${fragmentFailurePrefix},\n` +
-    `      ${identifier}_locale,\n` +
-    `      ${fragmentFailureSuffix},\n` +
-    `      error,\n` +
-    `    );\n` +
-    `  } catch {\n` +
-    `    // Logging must not prevent the client graph from hydrating.\n` +
-    `  }\n` +
-    `};\n`;
-  const fragmentImports =
-    fragmentFailureMode === "degrade"
-      ? `${reportFragmentFailure}const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
-        `  try {\n` +
-        `    return await load();\n` +
-        `  } catch (error) {\n` +
-        `    ${identifier}_reportFragmentFailure(error);\n` +
-        `    return null;\n` +
-        `  }\n` +
-        `}));\n`
-      : `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));\n`;
-
-  const fragmentRegistration =
-    fragmentFailureMode === "degrade"
-      ? `for (const fragment of ${identifier}_fragments) {\n` +
-        `  if (fragment === null) continue;\n` +
-        `  try {\n` +
-        `    ${identifier}_i18n.load(${identifier}_locale, fragment.messages);\n` +
-        `  } catch (error) {\n` +
-        `    ${identifier}_reportFragmentFailure(error);\n` +
-        `  }\n` +
-        `}\n`
-      : `for (const fragment of ${identifier}_fragments) {\n` +
-        `  const { messages } = fragment;\n` +
-        `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
-        `}\n`;
-
-  const initialize = `const ${identifier}_i18n = ${identifier}_existingI18n ?? ${identifier}_modules[1].initializeClientI18n(
-  ${identifier}_locale,
-  ${identifier}_modules[0].createI18n,
-);
-`;
-  const unsupportedLocale = `new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`)`;
-  const unsupportedLocaleHandling =
-    fragmentFailureMode === "degrade"
-      ? `try {\n  console.error(${unsupportedLocale});\n} catch {\n  // Logging must not prevent the client graph from hydrating.\n}\n`
-      : `throw ${unsupportedLocale};\n`;
-
   return `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
-${imports}
-const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => loaders[${identifier}_locale]);
+const ${identifier}_modules = await Promise.all([
+  import("@palamedes/core/compiled"),
+  import("@palamedes/runtime"),
+]);
+const ${identifier}_locale = document.documentElement.lang;
+const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => Object.hasOwn(loaders, ${identifier}_locale) ? loaders[${identifier}_locale] : undefined);
 if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {
-  ${unsupportedLocaleHandling}}
-else {
-${initialize}${fragmentImports}${fragmentRegistration}}
+  throw new Error("The document locale has no configured compiled catalog.");
+}
+const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));
+const ${identifier}_i18n = ${identifier}_modules[1].initializeClientI18n(
+  ${identifier}_locale,
+  () => ${identifier}_modules[0].createI18n({ timeZone: document.documentElement.dataset.palamedesTimeZone }),
+);
+for (const { messages } of ${identifier}_fragments) {
+  ${identifier}_i18n.load(${identifier}_locale, messages);
+}
 `;
 }
 
@@ -520,12 +459,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
           result.compiledIds,
           clearsServerRegistration,
         )
-      : clientMessageBootstrap(
-          config,
-          this.resourcePath,
-          result.compiledIds,
-          options.clientFragmentFailureMode === "degrade" ? "degrade" : "throw",
-        );
+      : clientMessageBootstrap(config, this.resourcePath, result.compiledIds);
     let code = result.code;
     let sourceMap = result.map ?? inputSourceMap ?? null;
     if (registration) {

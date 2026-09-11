@@ -44,7 +44,7 @@ function conditionList(rule: RuleItem): unknown[] {
 
 describe("withPalamedes turbopack config", () => {
   it("matches ESM and CommonJS TypeScript and JavaScript extensions with the shared default", () => {
-    const rule = getRules(withPalamedes())["*"] as RuleItem;
+    const rule = (getRules(withPalamedes())["*"] as RuleItem[])[0]!;
     const include = (
       conditionList(rule).find(
         (condition) => typeof condition === "object" && condition !== null && "path" in condition,
@@ -114,7 +114,7 @@ describe("withPalamedes turbopack config", () => {
     process.argv = ["node", "server.js", "start", "preview"];
 
     const config = withPalamedes();
-    const transformRule = getRules(config)["*"] as RuleItem;
+    const transformRule = (getRules(config)["*"] as RuleItem[])[0]!;
     const poRule = getRules(config)["*.po"] as RuleItem;
 
     expect(transformRule.loaders?.[0]?.options).toMatchObject({ cwd: nextExampleRoot });
@@ -174,7 +174,7 @@ describe("withPalamedes turbopack config", () => {
         workspaceRoot,
       },
     );
-    const transformRule = getRules(config)["*"] as RuleItem;
+    const transformRule = (getRules(config)["*"] as RuleItem[])[0]!;
     const poRule = getRules(config)["*.po"] as RuleItem;
     const expectedConfigPath = path.join(projectRoot, "config", "palamedes.yaml");
 
@@ -192,14 +192,14 @@ describe("withPalamedes turbopack config", () => {
   it("uses the hook-free macro runtime", () => {
     const config = withPalamedes();
 
-    const rule = getRules(config)["*"] as RuleItem;
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
     expect(rule.loaders?.[0]?.options).toMatchObject({ runtimeModule: "@palamedes/runtime" });
   });
 
   it("lets an explicit runtime module override the default", () => {
     const config = withPalamedes({}, { runtimeModule: "@acme/custom-runtime" });
 
-    const rule = getRules(config)["*"] as RuleItem;
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
     expect(rule.loaders?.[0]?.options).toMatchObject({
       runtimeModule: "@acme/custom-runtime",
     });
@@ -214,7 +214,7 @@ describe("withPalamedes turbopack config", () => {
       vi.stubEnv("NODE_ENV", mode);
       const config = withPalamedes();
 
-      const rule = getRules(config)["*"] as RuleItem;
+      const rule = (getRules(config)["*"] as RuleItem[])[0]!;
       expect(rule.loaders?.[0]?.options).toMatchObject({
         keepSourceFallbacks: expectedFallbacks,
         stripNonEssentialProps: expectedMetadataStrip,
@@ -226,7 +226,7 @@ describe("withPalamedes turbopack config", () => {
     vi.stubEnv("NODE_ENV", "production");
     const config = withPalamedes({}, { keepSourceFallbacks: false });
 
-    const rule = getRules(config)["*"] as RuleItem;
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
     expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: false });
   });
 
@@ -235,7 +235,7 @@ describe("withPalamedes turbopack config", () => {
     const exclude = /[/\\]vendored[/\\]/;
     const config = withPalamedes({}, { include, exclude });
 
-    const rule = getRules(config)["*"] as RuleItem;
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
     const conditions = conditionList(rule);
 
     expect(conditions).toContainEqual({ path: include });
@@ -244,7 +244,7 @@ describe("withPalamedes turbopack config", () => {
 
   it("matches all macro packages in the content pre-filter", () => {
     const config = withPalamedes();
-    const rule = getRules(config)["*"] as RuleItem;
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
     const content = (
       conditionList(rule).find(
         (condition) =>
@@ -305,14 +305,12 @@ describe("withPalamedes turbopack config", () => {
 
   it.each([
     ["development", "throw"],
-    ["production", "degrade"],
+    ["production", "throw"],
   ] as const)(
     "enables graph-split client bootstrapping with %s fragment failures set to %s in the Turbopack browser graph",
     (mode, clientFragmentFailureMode) => {
       vi.stubEnv("NODE_ENV", mode);
-      const configuredRules = getRules(withPalamedes({}, { messageSplitting: true }))[
-        "*"
-      ] as RuleItem[];
+      const configuredRules = getRules(withPalamedes())["*"] as RuleItem[];
       const browserRule = configuredRules.find((candidate) =>
         conditionList(candidate).includes("browser"),
       );
@@ -384,7 +382,7 @@ describe("withPalamedes turbopack config", () => {
     });
 
     const starRule = getRules(config)["*"] as RuleItem[];
-    expect(starRule).toHaveLength(2);
+    expect(starRule).toHaveLength(3);
     // The shorthand run keeps its order and becomes one equivalent rule config.
     expect(starRule[0]).toStrictEqual({
       loaders: ["user-loader-a", { loader: "user-loader-b", options: { flag: true } }],
@@ -403,7 +401,7 @@ describe("withPalamedes turbopack config", () => {
     });
 
     const starRule = getRules(config)["*"] as RuleItem[];
-    expect(starRule).toHaveLength(3);
+    expect(starRule).toHaveLength(4);
     expect(starRule[0]).toBe(ruleConfig);
     expect(starRule[1]).toStrictEqual({ loaders: ["trailing-loader"] });
     expect(starRule[2]?.loaders?.[0]?.loader).toContain("palamedes-loader");
@@ -547,7 +545,7 @@ describe("withPalamedes webpack config", () => {
 
   it.each([
     ["development", "throw"],
-    ["production", "degrade"],
+    ["production", "throw"],
   ] as const)(
     "enables graph-split client bootstrapping with %s fragment failures set to %s in the webpack client compiler",
     (mode, clientFragmentFailureMode) => {

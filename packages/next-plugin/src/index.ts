@@ -194,13 +194,13 @@ export type WithPalamedesOptions = {
    * browser module loads only its own compiled fragment for the document
    * locale before evaluating its body or resolving to importers.
    *
-   * @default false
+   * @deprecated Catalog delivery is automatic in v2. Remove this option.
    */
   messageSplitting?: boolean;
 };
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
-  if (!enabled) return;
+  if (enabled === false) return;
 
   const candidates = ["src", ""].flatMap((directory) =>
     SERVER_FUNCTION_ENTRY_EXTENSIONS.map((extension) =>
@@ -210,6 +210,7 @@ function resolveServerFunctionInitializer(enabled: boolean | undefined, projectR
   const matches = candidates.filter((candidate) => existsSync(candidate));
 
   if (matches.length === 0) {
+    if (enabled === undefined) return;
     throw new Error(
       "Palamedes Server Function instrumentation requires a palamedes.server module in the project root or src directory. Export initializeServerFunctionI18n from that module.",
     );
@@ -445,9 +446,15 @@ export function withPalamedes(
     cwd: explicitCwd,
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
-    messageSplitting = false,
+    messageSplitting: legacyMessageSplitting,
   } = options;
 
+  if (legacyMessageSplitting === false) {
+    throw new Error(
+      "Palamedes v2 delivers compiled catalogs automatically. Remove messageSplitting: false.",
+    );
+  }
+  const messageSplitting = true;
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Production catalog chunks can lag code during a deploy or be loaded
   // independently when message splitting is enabled. Preserve source text by
@@ -479,6 +486,8 @@ export function withPalamedes(
   // Resolve loader paths
   const oxcLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-loader");
   const poLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-po-loader");
+  const serverCatalogLoaderPath =
+    require.resolve("@palamedes/next-plugin/palamedes-server-catalogs-loader");
   const poLoaderOptions = {
     failOnMissing,
     ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
@@ -493,10 +502,7 @@ export function withPalamedes(
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
     ...(serverFunctions ? { serverFunctions } : {}),
   };
-  // A missing production chunk must not make the entire client entry module
-  // unevaluable. Development stays fail-fast so broken catalog wiring is
-  // surfaced immediately instead of being hidden behind source fallbacks.
-  const clientFragmentFailureMode = process.env.NODE_ENV === "production" ? "degrade" : "throw";
+  const clientFragmentFailureMode = "throw";
 
   const rules: TurbopackRules = { ...baseConfig.turbopack?.rules };
 
@@ -550,6 +556,16 @@ export function withPalamedes(
       loaders: [{ loader: oxcLoaderPath, options: transformLoaderOptions }],
     });
   }
+
+  appendTurbopackRule(rules, "server-catalogs.{mjs,cjs}", {
+    loaders: [
+      {
+        loader: serverCatalogLoaderPath,
+        options: { cwd: projectRoot, configPath: resolvedConfigPath },
+      },
+    ],
+    as: "*.js",
+  });
 
   // Compile local .po files
   if (enablePoLoader) {
@@ -640,6 +656,19 @@ export function withPalamedes(
           };
         }
       }
+
+      config.module.rules.push({
+        test: /[/\\]next-plugin[/\\]dist[/\\]server-catalogs\.(?:mjs|cjs)$/u,
+        use: [
+          {
+            loader: serverCatalogLoaderPath,
+            options: {
+              cwd: webpackProjectRoot,
+              ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
+            },
+          },
+        ],
+      });
 
       // Add the OXC transform loader for JS/TS files
       config.module.rules.push({

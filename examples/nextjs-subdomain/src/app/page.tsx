@@ -1,6 +1,5 @@
 import { t } from "@palamedes/core/macro";
 import { EVENT } from "@palamedes/example-ui";
-import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary";
 import { ClientReady } from "@/components/ClientReady";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { ProofPanel } from "@/components/ProofPanel";
@@ -44,50 +43,48 @@ export default async function SubdomainHome() {
   const localeLabel = getLocaleLabel(locale);
 
   return runWithServerI18n(i18n, () => (
-    <ClientLocaleBoundary locale={locale}>
-      <main className="page-shell">
-        {banner ? (
-          <SuggestionBanner
-            ctaLabel={translateSwitchToRecommended()}
-            currentLocale={locale}
-            description={banner.description}
-            recommendedLocale={banner.recommendedLocale}
-            recommendedUrl={banner.recommendedUrl}
-          />
-        ) : null}
+    <main className="page-shell">
+      {banner ? (
+        <SuggestionBanner
+          ctaLabel={translateSwitchToRecommended()}
+          currentLocale={locale}
+          description={banner.description}
+          recommendedLocale={banner.recommendedLocale}
+          recommendedUrl={banner.recommendedUrl}
+        />
+      ) : null}
 
-        <header className="topbar">
-          <div className="brand">
-            <b>Frontend Stage</b>
-            <span className="brand-meta">Berlin · 2026</span>
-          </div>
-          <LocaleSwitcher host={host} locale={locale} />
-        </header>
-
-        <section className="hero">
-          <p className="eyebrow">
-            <span className="dot" aria-hidden="true" />
-            {translateEyebrow()}
-          </p>
-          <h1>{translateHeadline()}</h1>
-          <p className="greet">{translateGreeting(EVENT.attendeeName)}</p>
-          <p className="lede">{translateLede()}</p>
-        </section>
-
-        <div className="grid">
-          <TicketPanel locale={locale} />
-          <ProofPanel locale={locale} />
+      <header className="topbar">
+        <div className="brand">
+          <b>Frontend Stage</b>
+          <span className="brand-meta">Berlin · 2026</span>
         </div>
+        <LocaleSwitcher host={host} locale={locale} />
+      </header>
 
-        <footer className="foot">
-          <span className="foot-badge">Palamedes</span>
-          {translateRenderedWith()}
-          {" · "}
-          {translateServerLocale()} <strong data-testid="server-locale-value">{localeLabel}</strong>
-        </footer>
+      <section className="hero">
+        <p className="eyebrow">
+          <span className="dot" aria-hidden="true" />
+          {translateEyebrow()}
+        </p>
+        <h1>{translateHeadline()}</h1>
+        <p className="greet">{translateGreeting(EVENT.attendeeName)}</p>
+        <p className="lede">{translateLede()}</p>
+      </section>
 
-        <ClientReady />
-      </main>
-    </ClientLocaleBoundary>
+      <div className="grid">
+        <TicketPanel locale={locale} />
+        <ProofPanel locale={locale} />
+      </div>
+
+      <footer className="foot">
+        <span className="foot-badge">Palamedes</span>
+        {translateRenderedWith()}
+        {" · "}
+        {translateServerLocale()} <strong data-testid="server-locale-value">{localeLabel}</strong>
+      </footer>
+
+      <ClientReady />
+    </main>
   ));
 }

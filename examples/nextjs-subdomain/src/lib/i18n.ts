@@ -1,5 +1,3 @@
-import { createI18n } from "@palamedes/core";
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 import { defineLocaleControls } from "@palamedes/core/locale";
 
 export const LOCALES = ["en", "de", "es"] as const;
@@ -18,18 +16,6 @@ export const locales = defineLocaleControls<Locale>({
 });
 
 export const LOCALE_LABELS = locales.labels;
-
-/**
- * Load messages for a locale (used on both server and client)
- */
-export async function loadMessages(locale: Locale): Promise<CompiledCatalogMessages> {
-  const { messages } = await import(`../locales/${locale}.po`);
-  return messages;
-}
-
-export function createExampleI18n() {
-  return createI18n();
-}
 
 export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale);
