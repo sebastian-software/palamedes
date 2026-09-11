@@ -83,7 +83,7 @@ describe("TanStack server catalog adapter", () => {
       });
       const response = await deliver(
         new Response(
-          "<html><head></head><body><script>window.__frameworkReady=true</script></body></html>",
+          '<html><head></head><body><script>window.__frameworkReady=true</script><script type="module" async src="/assets/index-abc.js"></script></body></html>',
           {
             headers: {
               "content-type": "text/html; charset=utf-8",
@@ -99,6 +99,10 @@ describe("TanStack server catalog adapter", () => {
       const html = await (response as Response).text();
       expect(html).toContain('<script type="importmap" nonce="request-nonce">');
       expect(html).toContain('<script nonce="request-nonce">window.__frameworkReady=true</script>');
+      expect(html).toMatch(
+        /<script nonce="request-nonce" type="module" async>globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\.then\(\(\) => import\("\/assets\/index-abc\.js"\)\)\.catch\(\(\) => \{\}\);<\/script>/u,
+      );
+      expect(html).not.toContain('src="/assets/index-abc.js"');
       expect(html).toContain("palamedes.document-catalogs-ready-promise");
       expect((response as Response).headers.get("content-length")).toBeNull();
     } finally {

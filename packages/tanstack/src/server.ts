@@ -82,6 +82,11 @@ export function createTanStackCatalogResponseDelivery(
         Transform.toWeb(createScriptNonceTransform(nonce)) as unknown as ReadableWritablePair,
       );
     }
+    body = body.pipeThrough(
+      Transform.toWeb(
+        createTanStackBootstrapGateTransform({ development: options.development === true }),
+      ) as unknown as ReadableWritablePair,
+    );
     const headers = new Headers(response.headers);
     // The transformed stream may be longer than the framework's original
     // response. A stale length causes truncated HTML in Node adapters.
@@ -165,6 +170,67 @@ function createScriptNonceTransform(nonce: string): Transform {
       callback(null, flushMarkup(true));
     },
   });
+}
+
+const TANSTACK_ENTRY_PATTERN =
+  /<script\b[^>]*\bsrc=(['"])(\/assets\/index-[^'"]+\.js)\1[^>]*><\/script>/iu;
+const TANSTACK_GATE_TAIL_SIZE = 192;
+const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
+
+/**
+ * TanStack Start emits its browser entry as a module script rather than an
+ * inline bootstrap. Gate that exact entry on the delivery probe's shared
+ * promise so a rejected catalog cannot be followed by framework hydration
+ * over the host's catalog error document.
+ */
+function createTanStackBootstrapGateTransform(options: { development: boolean }): Transform {
+  const decoder = new StringDecoder("utf8");
+  let tail = "";
+
+  return new Transform({
+    transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
+      tail += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
+      flushSafePrefix(this, false);
+      callback();
+    },
+    flush(callback) {
+      tail += decoder.end();
+      flushSafePrefix(this, true);
+      callback();
+    },
+  });
+
+  function flushSafePrefix(stream: Transform, flush: boolean) {
+    while (true) {
+      const match = TANSTACK_ENTRY_PATTERN.exec(tail);
+      if (match) {
+        const end = match.index + match[0].length;
+        if (!flush && end > tail.length - TANSTACK_GATE_TAIL_SIZE) return;
+        stream.push(
+          tail.slice(0, match.index) + gateTanStackEntry(match[0], match[2], options.development),
+        );
+        tail = tail.slice(end);
+        continue;
+      }
+      if (flush) {
+        if (tail) stream.push(tail);
+        tail = "";
+      } else if (tail.length > TANSTACK_GATE_TAIL_SIZE) {
+        const safeEnd = tail.length - TANSTACK_GATE_TAIL_SIZE;
+        stream.push(tail.slice(0, safeEnd));
+        tail = tail.slice(safeEnd);
+      }
+      return;
+    }
+  }
+}
+
+function gateTanStackEntry(tag: string, source: string, development: boolean): string {
+  const openingTag = tag.slice(0, tag.indexOf(">") + 1).replace(/\s+src=(['"])[^'"]+\1/iu, "");
+  const importExpression = development
+    ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)})) : import(${JSON.stringify(source)}))`
+    : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)}))`;
+  return `${openingTag}${importExpression}.catch(() => {});</script>`;
 }
 
 function findScriptOpen(lower: string, from: number): number {
