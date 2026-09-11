@@ -61,6 +61,7 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
   {
     packageDirectory: "packages/remix",
     docs: "docs/api/remix.md",
+    compiledOnlyDefault: true,
   },
 ];
 
@@ -200,7 +201,7 @@ function assertDeclarationTargetsArePacked(packages) {
 function assertSourceFallbackDefaultDocumentation() {
   const problems = [];
 
-  for (const { packageDirectory, docs } of SOURCE_FALLBACK_DOC_TARGETS) {
+  for (const { packageDirectory, docs, compiledOnlyDefault } of SOURCE_FALLBACK_DOC_TARGETS) {
     const declarationFiles = ["index.d.ts", "index.d.mts", "index.d.cts"].map((file) =>
       path.join(root, packageDirectory, "dist", file),
     );
@@ -224,7 +225,10 @@ function assertSourceFallbackDefaultDocumentation() {
         continue;
       }
       const optionDocs = text.slice(docStart, docEnd);
-      if (!SOURCE_FALLBACK_TSDOC_PATTERN.test(optionDocs)) {
+      const pattern = compiledOnlyDefault
+        ? /Defaults to `false` in every environment[\s\S]*Set to `true`[\s\S]*diagnostic/u
+        : SOURCE_FALLBACK_TSDOC_PATTERN;
+      if (!pattern.test(optionDocs)) {
         problems.push(
           `${path.relative(root, file)} does not document the all-environments default and compact/source-exposure opt-out.`,
         );
@@ -232,10 +236,11 @@ function assertSourceFallbackDefaultDocumentation() {
     }
 
     const docsText = readFileSync(path.join(root, docs), "utf8");
-    if (!docsText.includes("- `keepSourceFallbacks`: `true`")) {
-      problems.push(`${docs} does not document the default as true.`);
+    const expectedDefault = compiledOnlyDefault ? "false" : "true";
+    if (!docsText.includes(`- \`keepSourceFallbacks\`: \`${expectedDefault}\``)) {
+      problems.push(`${docs} does not document the default as ${expectedDefault}.`);
     }
-    if (!docsText.includes("`keepSourceFallbacks: false`")) {
+    if (!compiledOnlyDefault && !docsText.includes("`keepSourceFallbacks: false`")) {
       problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`);
     }
   }

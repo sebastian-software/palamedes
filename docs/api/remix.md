@@ -83,7 +83,7 @@ Defaults:
 - `include`: `/\.(tsx?|jsx?|mjs|mts)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `true`
+- `keepSourceFallbacks`: `false`
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
 - `failOnMissing`: `false` — missing translations warn instead of failing
@@ -104,12 +104,10 @@ passing them through a bundler. ESM-typed `.mts` files use the Remix default.
 Macro calls use the plain, framework-neutral getter; locale changes require
 document navigation.
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `true`
-here. It only controls diagnostic source metadata in generated calls. Set
-`keepSourceFallbacks: false` for compact output without authored source text.
-V2 package roots and `compiled` aliases both throw on missing compiled entries;
-retained metadata never supplies replacement message output. Valid translation
-fallbacks are resolved and compiled at build time.
+`keepSourceFallbacks` retains its legacy option name and defaults to `false`
+in every environment. Set `keepSourceFallbacks: true` to retain authored text
+as diagnostic metadata. Missing compiled messages always throw; metadata never
+supplies replacement output.
 
 `.po` imports are claimed by the hook before Node's default loader runs. They
 compile through the same catalog module path used by the Vite/Next integrations

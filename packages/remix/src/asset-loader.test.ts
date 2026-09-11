@@ -122,6 +122,59 @@ describe("createPalamedesRemixAssetLoader", () => {
     );
   });
 
+  it("does not execute a lazy module body when its catalog fragment rejects", async () => {
+    const loader = createPalamedesRemixAssetLoader({
+      catalogAssets: {
+        register: () => "fragment-key",
+        sidecarUrl: () => "/assets/__palamedes/catalog-fragments/fragment-key.js",
+        serve() {},
+        invalidate() {},
+      },
+    });
+    const loaded = loader(
+      pathToFileURL("/repo/app/public/rejected.ts").href,
+      assetLoadContext,
+      () => ({
+        format: "module",
+        source: [
+          'import { t } from "@palamedes/core/macro";',
+          "globalThis.__palamedesRejectedModuleBody = (globalThis.__palamedesRejectedModuleBody ?? 0) + 1;",
+          "export function message() { return t`Hello`; }",
+        ].join("\n"),
+      }),
+    );
+    const source = String(loaded.source)
+      .replace(
+        /^import\{defineCompiledCatalog as __palamedesDefineCompiledCatalog\}from"@palamedes\/core\/compiled";/u,
+        "const __palamedesDefineCompiledCatalog=(value)=>value;\n",
+      )
+      .replace(
+        /import\{getI18n as __palamedesGetI18n,loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup\}from"@palamedes\/runtime";\n/u,
+        'const __palamedesGetI18n=()=>{throw new Error("No active client i18n instance")};const __palamedesLoadRegisteredMessages=async()=>{};const __palamedesRegisterMessageLoaderGroup=()=>{};\n',
+      )
+      .replace(/^import\s+(?:\{[^;]+\}|[^;]+)\s+from\s+["'][^"']+["'];\s*\n?/gmu, "");
+    const rejectedUrl = `data:text/javascript,${encodeURIComponent('throw new Error("fragment failed")')}`;
+    const executable = source.replace(
+      /new URL\(.+?,document\.baseURI\)/u,
+      JSON.stringify(rejectedUrl),
+    );
+    const testGlobal = globalThis as typeof globalThis & {
+      __palamedesRejectedModuleBody?: number;
+    };
+    testGlobal.__palamedesRejectedModuleBody = 0;
+    const globalRecord = globalThis as unknown as Record<string, unknown>;
+    globalRecord.document = {
+      baseURI: "https://example.test/",
+      documentElement: { lang: "de" },
+    } as unknown as Document;
+    await expect(import(`data:text/javascript,${encodeURIComponent(executable)}`)).rejects.toThrow(
+      "fragment failed",
+    );
+    expect(testGlobal.__palamedesRejectedModuleBody).toBe(0);
+    delete testGlobal.__palamedesRejectedModuleBody;
+    delete globalRecord.document;
+  });
+
   it("preserves the original transform error when an incoming source map is malformed", () => {
     const loader = createPalamedesRemixAssetLoader();
     const url = pathToFileURL("/repo/app/public/broken-map.ts").href;

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import type { registerHooks } from "node:module";
@@ -279,21 +281,6 @@ function createCatalogKey(
     .slice(0, 16);
 }
 
-function configDependencies(config: LoadedPalamedesConfig): string[] {
-  return Array.isArray(config.configDependencies) ? config.configDependencies : [config.configPath];
-}
-
-function digestConfig(config: LoadedPalamedesConfig): string {
-  const digest = createHash("sha256");
-  for (const dependency of [...configDependencies(config)].sort()) {
-    digest.update(dependency);
-    digest.update("\0");
-    digest.update(readFileSync(dependency));
-    digest.update("\0");
-  }
-  return digest.digest("hex");
-}
-
 function catalogDigest(config: LoadedPalamedesConfig): string {
   const digest = createHash("sha256");
   for (const catalog of config.catalogs) {
@@ -303,7 +290,9 @@ function catalogDigest(config: LoadedPalamedesConfig): string {
       digest.update("\0");
       try {
         digest.update(readFileSync(resource));
-      } catch {
+      } catch (error) {
+        if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT")
+          throw error;
         digest.update("missing");
       }
       digest.update("\0");
@@ -408,8 +397,8 @@ export function createPalamedesRemixAssetLoader(
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
       `import{getI18n as __palamedesGetI18n,loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup}from"@palamedes/runtime";\n` +
       `const __palamedesLocale=document.documentElement.lang;` +
-      `__palamedesRegisterMessageLoaderGroup(${JSON.stringify(key)},[{[__palamedesLocale]:async()=>` +
-      `__palamedesDefineCompiledCatalog((await import(new URL(${JSON.stringify(sidecarImport)}+encodeURIComponent(__palamedesLocale),document.baseURI))).messages)}]);` +
+      `const __palamedesMessages=__palamedesDefineCompiledCatalog((await import(new URL(${JSON.stringify(sidecarImport)}+encodeURIComponent(__palamedesLocale),document.baseURI))).messages);` +
+      `__palamedesRegisterMessageLoaderGroup(${JSON.stringify(key)},[{[__palamedesLocale]:async()=>__palamedesMessages}]);` +
       `let __palamedesActive;try{__palamedesActive=__palamedesGetI18n()}catch(__palamedesError){` +
       `if(!(__palamedesError instanceof Error&&__palamedesError.message.includes("No active client i18n instance")))throw __palamedesError}` +
       `if(__palamedesActive)await __palamedesLoadRegisteredMessages(__palamedesActive,__palamedesLocale);\n`;
