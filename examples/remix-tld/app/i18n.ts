@@ -1,12 +1,8 @@
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
+import path from "node:path";
+
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
 import { createPalamedesRemixCatalogAssetRegistry } from "@palamedes/remix";
 import { createRemixI18nServer } from "@palamedes/remix/server";
-import { messages as deMessages } from "./locales/de.po";
-import { messages as enMessages } from "./locales/en.po";
-import { messages as esMessages } from "./locales/es.po";
-import { messages as frMessages } from "./locales/fr.po";
-
 export const LOCALES = ["en", "de", "es", "fr"] as const;
 export const DEFAULT_LOCALE = "en";
 export const LOCALE_COOKIE = "locale";
@@ -32,25 +28,13 @@ export const catalogAssetRegistry = createPalamedesRemixCatalogAssetRegistry({
   cwd: EXAMPLE_ROOT,
 });
 
-const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
-  en: enMessages,
-  de: deMessages,
-  es: esMessages,
-  fr: frMessages,
-};
-
 export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale);
-}
-
-export function loadMessages(locale: Locale): CompiledCatalogMessages {
-  return CATALOGS[locale];
 }
 
 export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "tld",
-  loadMessages,
   catalogAssets: { registry: catalogAssetRegistry },
 });
 
@@ -89,4 +73,3 @@ export function resolveLocaleRedirect(
   const allowedRedirect = getTldSwitchLinks(request).find((item) => item.locale === locale)?.href;
   return typeof redirect === "string" && redirect === allowedRedirect ? redirect : fallback;
 }
-import path from "node:path";

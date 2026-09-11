@@ -208,6 +208,13 @@ by locale at module scope, and preserves that request-local instance while a
 returned `Response.body` is streamed. Wrapping the body also preserves the
 response's `url`, `type`, and `redirected` fetch metadata.
 
+When the shared `catalogAssets.registry` is provided, `loadMessages` is
+optional. `run()` then loads the complete executable catalog for the resolved
+active locale on first demand, shares concurrent loads, and drops them when
+the config or catalog generation changes. This mode keeps `.po` imports and
+locale-to-catalog maps inside the adapter. The synchronous `createI18n(locale)`
+compatibility method still requires a synchronous `loadMessages` implementation.
+
 Supported strategies are `cookie`, `route`, `subdomain`, and `tld`. Route
 strategy reads `context.params.locale` by default; when that param is absent,
 it falls back to the request URL's first path segment. Pass `routeParam` to use

@@ -143,6 +143,26 @@ if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset l
 await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
 ```
 
+The shared registry can also be the server catalog loader. Omit the old
+application `loadMessages` function and let `run()` await the executable
+catalog for the resolved active locale:
+
+```ts
+const catalogAssets = createPalamedesRemixCatalogAssetRegistry({ cwd: import.meta.dirname });
+const remixI18n = createRemixI18nServer({
+  locales,
+  strategy: "cookie",
+  catalogAssets: { registry: catalogAssets },
+});
+```
+
+Server loads are lazy, shared by concurrent requests for the same locale, and
+discarded when the config or catalog generation changes. `createI18n(locale)`
+remains a synchronous compatibility API and therefore requires an explicit
+synchronous `loadMessages`; request handlers should use `run()` with a shared
+registry. Applications do not import `.po` files or maintain locale-to-catalog
+maps in this mode.
+
 Only the active locale module and selected executable fragments are requested.
 Each module exports the locale, content digest, and branded compiled functions;
 no catalog functions cross HTML or JSON. Missing assets, locale mismatches,

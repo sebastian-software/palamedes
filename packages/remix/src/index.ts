@@ -15,6 +15,11 @@ import {
   type LoadedPalamedesConfig,
 } from "@palamedes/config";
 import {
+  defineCompiledCatalog,
+  isCompiledCatalog,
+  type CompiledCatalogMessages,
+} from "@palamedes/core/compiled";
+import {
   compileCatalogArtifactSelected,
   compileCatalogModule,
   renderCatalogModule,
@@ -83,6 +88,10 @@ export type PalamedesRemixAssetLoaderOptions = Pick<
 
 export type PalamedesRemixCatalogAssetRegistry = {
   register(sourcePath: string, compiledIds: readonly string[]): string;
+  /** Load the complete executable catalog for one active server locale. */
+  load?(locale: string): Promise<CompiledCatalogMessages>;
+  /** Return the current config/catalog generation for HTTP cache keys. */
+  generation?(): string;
   sidecarUrl(key: string): string;
   serve(request: Request): Response | undefined;
   invalidate(sourcePath?: string): void;
@@ -118,6 +127,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
   const basePath = options.basePath ?? "/assets";
   const entries = new Map<string, { sourcePath: string; compiledIds: string[] }>();
   const keysBySource = new Map<string, string>();
+  const catalogLoads = new Map<string, Promise<CompiledCatalogMessages>>();
 
   const refreshConfig = (): void => {
     const nextConfig = loadPalamedesConfigSync(options);
@@ -130,6 +140,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = catalogDigest(config);
     entries.clear();
     keysBySource.clear();
+    catalogLoads.clear();
   };
 
   const refreshCatalogGeneration = (): void => {
@@ -140,6 +151,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = nextDigest;
     entries.clear();
     keysBySource.clear();
+    catalogLoads.clear();
   };
 
   const register = (sourcePath: string, compiledIds: readonly string[]): string => {
@@ -158,6 +170,56 @@ export function createPalamedesRemixCatalogAssetRegistry(
 
   return {
     register,
+
+    load(locale) {
+      refreshConfig();
+      refreshCatalogGeneration();
+      if (!config.locales.includes(locale)) {
+        return Promise.reject(new Error(`Unsupported Palamedes catalog locale "${locale}".`));
+      }
+      const cached = catalogLoads.get(locale);
+      if (cached) {
+        return cached;
+      }
+
+      const load = Promise.resolve()
+        .then(() => {
+          const catalogs = config.catalogs;
+          if (catalogs.length === 0) {
+            throw new Error("Palamedes config does not define a catalog for server loading.");
+          }
+          const result = compileCatalogModule(
+            toCatalogArtifactConfig(config),
+            catalogResourcePath(config, catalogs[0], locale),
+            {
+              locale,
+              pseudoLocale: config.pseudoLocale,
+              missingFailureHint:
+                "You see this error because executable Remix server catalog compilation failed on a missing translation.",
+              compileFailureHint:
+                "These errors fail loading because executable Remix server catalog compilation was configured as fatal.",
+              diagnosticsWarningHint:
+                "Inspect the generated Remix server catalog diagnostics before deploying this locale.",
+            },
+          );
+          result.warnings.forEach((warning) => console.warn(warning));
+          return evaluateCompiledCatalogModule(result.code);
+        })
+        .catch((error) => {
+          if (catalogLoads.get(locale) === load) {
+            catalogLoads.delete(locale);
+          }
+          throw error;
+        });
+      catalogLoads.set(locale, load);
+      return load;
+    },
+
+    generation() {
+      refreshConfig();
+      refreshCatalogGeneration();
+      return `${configDigest}:${catalogGenerationDigest}`;
+    },
 
     sidecarUrl(key) {
       return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/${key}.js`;
@@ -248,6 +310,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
       if (sourcePath === undefined) {
         entries.clear();
         keysBySource.clear();
+        catalogLoads.clear();
       } else {
         const key = keysBySource.get(sourcePath);
         if (key) {
@@ -299,6 +362,42 @@ function catalogDigest(config: LoadedPalamedesConfig): string {
     }
   }
   return digest.digest("hex");
+}
+
+function toCatalogArtifactConfig(config: LoadedPalamedesConfig) {
+  return {
+    rootDir: config.rootDir,
+    locales: config.locales,
+    sourceLocale: config.sourceLocale,
+    fallbackLocales: config.fallbackLocales,
+    pseudoLocale: config.pseudoLocale,
+    catalogs: config.catalogs,
+  };
+}
+
+/** Evaluate native-generated module code on the server without accepting authored ICU text. */
+function evaluateCompiledCatalogModule(source: string): CompiledCatalogMessages {
+  const body = source
+    .replace(
+      /^import\{defineCompiledCatalog as __palamedesDefineCompiledCatalog\}from"@palamedes\/core\/compiled";/u,
+      "",
+    )
+    .replace(/export const messages=/u, "return ")
+    .replace(/;export default \{ messages \};$/u, ";");
+  const evaluate = new Function("__palamedesDefineCompiledCatalog", body) as (
+    define: typeof defineCompiledCatalog,
+  ) => CompiledCatalogMessages;
+  const messages = evaluate(defineCompiledCatalog);
+  if (!isCompiledCatalogObject(messages)) {
+    throw new TypeError(
+      "Palamedes generated server catalog did not produce an executable catalog.",
+    );
+  }
+  return messages;
+}
+
+function isCompiledCatalogObject(value: unknown): value is CompiledCatalogMessages {
+  return isCompiledCatalog(value);
 }
 
 /** Keep fragments free of a bare package import; the importing browser module

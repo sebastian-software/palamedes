@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineCompiledCatalog } from "@palamedes/core/compiled";
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
+import { transformPalamedesMacros } from "@palamedes/transform";
 import { createRouter } from "remix/router";
 
+import { createPalamedesRemixCatalogAssetRegistry } from "./index";
 import { createRemixI18nRequestScope, createRemixI18nServer } from "./server";
 
 function createTestI18n(locale: string): I18nInstance {
@@ -191,6 +193,93 @@ describe("createRemixI18nServer", () => {
     );
 
     expect(loadMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads a registry catalog asynchronously once for concurrent requests", async () => {
+    const load = vi.fn(async (locale: string) =>
+      defineCompiledCatalog({ greeting: `registry:${locale}` }),
+    );
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      catalogAssets: {
+        registry: {
+          load,
+          register: () => "test",
+          sidecarUrl: () => "/test.js",
+          serve: () => undefined,
+          invalidate: () => undefined,
+        },
+      },
+    });
+
+    const responses = await Promise.all(
+      ["de", "de"].map((locale) =>
+        remixI18n.run(
+          new Request("https://example.test/", { headers: { cookie: `locale=${locale}` } }),
+          ({ i18n }) => i18n._("greeting"),
+        ),
+      ),
+    );
+
+    expect(responses).toStrictEqual(["registry:de", "registry:de"]);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads the shared server catalog after a catalog generation changes", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-server-generation-"));
+    const localesRoot = path.join(root, "locales");
+    mkdirSync(localesRoot, { recursive: true });
+    mkdirSync(path.join(root, "app"), { recursive: true });
+    writeFileSync(
+      path.join(root, "app", "route.tsx"),
+      'import { t } from "@palamedes/core/macro"; export function route() { return t`Greeting`; }\n',
+    );
+    const greetingId = transformPalamedesMacros(
+      'import { t } from "@palamedes/core/macro"; export function route() { return t`Greeting`; }\n',
+      path.join(root, "app", "route.tsx"),
+    ).compiledIds[0];
+    writeFileSync(
+      path.join(root, "palamedes.yaml"),
+      [
+        "locales: [en, de, es]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    for (const [locale, message] of [
+      ["en", "Hello"],
+      ["de", "Hallo"],
+      ["es", "Hola"],
+    ]) {
+      writeFileSync(
+        path.join(localesRoot, `${locale}.po`),
+        `msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "${message}"\n`,
+      );
+    }
+    try {
+      const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: root });
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        catalogAssets: { registry },
+      });
+      const request = new Request("https://example.test/", {
+        headers: { cookie: "locale=de" },
+      });
+      await expect(remixI18n.run(request, ({ i18n }) => i18n._(greetingId))).resolves.toBe("Hallo");
+      writeFileSync(
+        path.join(localesRoot, "de.po"),
+        'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
+      );
+      await expect(remixI18n.run(request, ({ i18n }) => i18n._(greetingId))).resolves.toBe(
+        "Guten Tag",
+      );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it("returns the scoped context source without a router context", async () => {
@@ -384,6 +473,6 @@ describe("createRemixI18nServer", () => {
     await expect(localeFor("locale=es")).resolves.toBe("es");
   });
 });
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";

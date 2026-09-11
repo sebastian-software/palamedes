@@ -63,7 +63,8 @@ export type RemixI18nServerOptions<
 > = {
   locales: LocaleControls<TLocale>;
   strategy: RemixLocaleStrategy;
-  loadMessages: (locale: TLocale) => CompiledCatalogMessages;
+  /** Synchronous or asynchronous executable catalog loader. Omit when using a registry. */
+  loadMessages?: (locale: TLocale) => CompiledCatalogMessages | Promise<CompiledCatalogMessages>;
   /** Legacy inert ICU strings for migration diagnostics; #1214 replaces this with executable assets. */
   loadClientMessages?: (locale: TLocale) => CatalogMessages;
   /** Override the deterministic content hash used for client catalog versions. */
@@ -112,6 +113,10 @@ export type RemixClientCatalogAsset<TLocale extends string = string> = {
   source: string;
 };
 
+type CachedRemixClientCatalogAsset<TLocale extends string> = RemixClientCatalogAsset<TLocale> & {
+  registryGeneration?: string;
+};
+
 export const remixI18nContext: RemixContextKey<RemixI18nContextValue<string, I18nInstance>> =
   createContextKey<RemixI18nContextValue<string, I18nInstance>>();
 
@@ -145,28 +150,98 @@ export function createRemixI18nServer<
 >(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
   const scope = createServerI18nScope<T>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
+  const catalogLoads = new Map<TLocale, Promise<CompiledCatalogMessages>>();
   const clientBootstrapCache = new Map<TLocale, RemixI18nBootstrap<TLocale>>();
-  const clientCatalogAssetCache = new Map<TLocale, RemixClientCatalogAsset<TLocale>>();
+  const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
   const createI18nInstance = options.createI18n ?? (() => createI18n() as unknown as T);
   const cookieName = options.cookieName ?? "locale";
   const cookieMaxAge = options.cookieMaxAge ?? 60 * 60 * 24 * 365;
+  let serverRegistryGeneration = options.catalogAssets?.registry?.generation?.();
 
-  const getMessages = (locale: TLocale): CompiledCatalogMessages => {
+  if (!options.loadMessages && !options.catalogAssets?.registry?.load) {
+    throw new Error(
+      "Palamedes Remix requires loadMessages or catalogAssets.registry for server catalog loading.",
+    );
+  }
+
+  const refreshRegistryGeneration = (): void => {
+    const next = options.catalogAssets?.registry?.generation?.();
+    if (next === undefined || next === serverRegistryGeneration) {
+      serverRegistryGeneration = next;
+      return;
+    }
+    serverRegistryGeneration = next;
+    catalogCache.clear();
+    catalogLoads.clear();
+    clientBootstrapCache.clear();
+    clientCatalogAssetCache.clear();
+  };
+
+  const getMessagesSync = (locale: TLocale): CompiledCatalogMessages => {
+    refreshRegistryGeneration();
     const cached = catalogCache.get(locale);
     if (cached) {
       return cached;
     }
 
+    if (!options.loadMessages) {
+      throw new Error(
+        "Palamedes Remix synchronous createI18n requires loadMessages. Use run(), which awaits the registry catalog, for adapter-owned async loading.",
+      );
+    }
     const messages = options.loadMessages(locale);
+    if (isPromiseLike(messages)) {
+      throw new Error(
+        "Palamedes Remix synchronous createI18n cannot await an asynchronous catalog. Use run() or provide a synchronous loadMessages implementation.",
+      );
+    }
     catalogCache.set(locale, messages);
     return messages;
   };
 
-  const createScopedContext = (input: Request | RemixLocaleResolutionInput) => {
+  const getMessages = async (locale: TLocale): Promise<CompiledCatalogMessages> => {
+    refreshRegistryGeneration();
+    const cached = catalogCache.get(locale);
+    if (cached) {
+      return cached;
+    }
+    const inFlight = catalogLoads.get(locale);
+    if (inFlight) {
+      return await inFlight;
+    }
+
+    const load = Promise.resolve()
+      .then(() => {
+        if (options.loadMessages) {
+          return options.loadMessages(locale);
+        }
+        const load = options.catalogAssets?.registry?.load;
+        if (load) {
+          return load(locale);
+        }
+        throw new Error(
+          "Palamedes Remix requires loadMessages or catalogAssets.registry for server catalog loading.",
+        );
+      })
+      .then((messages) => {
+        catalogCache.set(locale, messages);
+        return messages;
+      })
+      .catch((error) => {
+        if (catalogLoads.get(locale) === load) {
+          catalogLoads.delete(locale);
+        }
+        throw error;
+      });
+    catalogLoads.set(locale, load);
+    return await load;
+  };
+
+  const createScopedContext = async (input: Request | RemixLocaleResolutionInput) => {
     const resolved = resolveLocaleFromInput(input, options);
     const i18n = createI18nInstance();
-    i18n.load(resolved.locale, getMessages(resolved.locale));
+    i18n.load(resolved.locale, await getMessages(resolved.locale));
     i18n.activate(resolved.locale);
 
     const context = {
@@ -179,6 +254,7 @@ export function createRemixI18nServer<
   };
 
   const createClientBootstrap = (locale: TLocale): RemixI18nBootstrap<TLocale> => {
+    refreshRegistryGeneration();
     const cached = clientBootstrapCache.get(locale);
     if (cached) {
       return cached;
@@ -186,7 +262,7 @@ export function createRemixI18nServer<
 
     const messages = validateClientMessages(
       locale,
-      options.loadClientMessages ? options.loadClientMessages(locale) : getMessages(locale),
+      options.loadClientMessages ? options.loadClientMessages(locale) : getMessagesSync(locale),
     );
     const catalogVersion = resolveCatalogVersion(locale, messages, options.catalogVersion);
     const bootstrap = Object.freeze({ locale, catalogVersion, messages });
@@ -195,8 +271,10 @@ export function createRemixI18nServer<
   };
 
   const createClientCatalogAsset = (locale: TLocale): RemixClientCatalogAsset<TLocale> => {
+    refreshRegistryGeneration();
+    const registryGeneration = options.catalogAssets?.registry?.generation?.();
     const cached = clientCatalogAssetCache.get(locale);
-    if (cached) {
+    if (cached && cached.registryGeneration === registryGeneration) {
       return cached;
     }
 
@@ -228,7 +306,7 @@ export function createRemixI18nServer<
     result?.warnings.forEach((warning) => console.warn(warning));
     const catalogVersion = resolveCatalogAssetVersion(
       locale,
-      result?.code ?? "fragment-registry",
+      result?.code ?? `fragment-registry:${registryGeneration ?? ""}`,
       options.catalogVersion,
       !assetOptions.registry && typeof options.catalogVersion === "function"
         ? compileCatalogArtifact(assetOptions.config!, resourcePath!).messages
@@ -237,7 +315,7 @@ export function createRemixI18nServer<
     const source = assetOptions.registry
       ? `export const messages={};export default { messages };export const fragmentRegistry=true;export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`
       : `${result?.code ?? ""}export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`;
-    const asset = Object.freeze({ locale, catalogVersion, source });
+    const asset = Object.freeze({ locale, catalogVersion, source, registryGeneration });
     clientCatalogAssetCache.set(locale, asset);
     return asset;
   };
@@ -289,7 +367,7 @@ export function createRemixI18nServer<
     input: RemixI18nRunInput,
     callback: (context: RemixI18nContextValue<TLocale, T>) => Result | Promise<Result>,
   ): Promise<Result> {
-    const context = createScopedContext(input);
+    const context = await createScopedContext(input);
     return await scope.run(context.i18n, async () =>
       bindScopedResult(await callback(context), context.i18n, scope),
     );
@@ -302,7 +380,7 @@ export function createRemixI18nServer<
 
     createI18n(locale) {
       const i18n = createI18nInstance();
-      i18n.load(locale, getMessages(locale));
+      i18n.load(locale, getMessagesSync(locale));
       i18n.activate(locale);
       return i18n;
     },
@@ -442,6 +520,10 @@ function isPlainMessageObject(value: unknown): value is Record<string, unknown> 
 
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof value === "object" && value !== null && "then" in value;
 }
 
 function normalizeInput(input: RemixI18nRunInput): RemixLocaleResolutionInput {

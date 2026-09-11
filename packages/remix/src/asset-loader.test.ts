@@ -14,6 +14,7 @@ import { pathToFileURL } from "node:url";
 import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { isCompiledCatalog } from "@palamedes/core/compiled";
 import { transformPalamedesMacros } from "@palamedes/transform";
 
 import {
@@ -514,6 +515,47 @@ describe("createPalamedesRemixAssetLoader", () => {
         new Request(`https://example.test/assets/__palamedes/catalog-fragments/${secondKey}.js`),
       )?.status,
     ).toBe(200);
+  });
+
+  it("loads one executable server catalog lazily and shares it across concurrent requests", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-server-catalog-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello {name}"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo {name}"\n',
+    );
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const [first, second] = await Promise.all([registry.load?.("de"), registry.load?.("de")]);
+    expect(first).toBeDefined();
+    expect(first).toBe(second);
+    expect(isCompiledCatalog(first)).toBe(true);
+    expect(Object.values(first ?? {})).toEqual([expect.any(Function)]);
+
+    const generationBefore = registry.generation?.();
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag {name}"\n',
+    );
+    const next = await registry.load?.("de");
+    expect(registry.generation?.()).not.toBe(generationBefore);
+    expect(next).not.toBe(first);
+    expect(Object.values(next ?? {})).toEqual([expect.any(Function)]);
   });
 
   it("honors browser-specific include and exclude filters", () => {
