@@ -6,6 +6,17 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr ""
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "{count, number}"
+msgstr ""
+
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
@@ -14,6 +25,18 @@ msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr ""
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr ""
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr ""
 
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid ""
@@ -82,7 +105,9 @@ msgstr "Menos entradas"
 
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid "Live numbers for the current ticket sale, rendered on their own route."
-msgstr "Cifras en directo de la venta de entradas actual, renderizadas en su propia ruta."
+msgstr ""
+"Cifras en directo de la venta de entradas actual, renderizadas en su propia "
+"ruta."
 
 #: examples/react-router-cookie/app/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"

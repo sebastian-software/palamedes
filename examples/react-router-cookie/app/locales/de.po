@@ -6,6 +6,17 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr ""
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "{count, number}"
+msgstr ""
+
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
@@ -15,13 +26,25 @@ msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
 
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr ""
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr ""
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr ""
+
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid ""
 "{workshops, plural, one {# workshop still has open seats} other {# workshops "
 "still have open seats}}"
 msgstr ""
-"{workshops, plural, one {# Workshop hat noch freie Plätze} other {# Workshops "
-"haben noch freie Plätze}}"
+"{workshops, plural, one {# Workshop hat noch freie Plätze} other {# Workshops"
+" haben noch freie Plätze}}"
 
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "Add to cart"
@@ -82,7 +105,8 @@ msgstr "Weniger Tickets"
 
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid "Live numbers for the current ticket sale, rendered on their own route."
-msgstr "Live-Zahlen zum laufenden Ticketverkauf, gerendert auf einer eigenen Route."
+msgstr ""
+"Live-Zahlen zum laufenden Ticketverkauf, gerendert auf einer eigenen Route."
 
 #: examples/react-router-cookie/app/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"

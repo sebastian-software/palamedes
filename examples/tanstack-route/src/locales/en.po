@@ -6,89 +6,146 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "Add to cart"
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
 
-msgid "Attendees"
-msgstr "Attendees"
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
 
-msgid "Availability"
-msgstr "Availability"
-
-msgid "Behind the scenes"
-msgstr "Behind the scenes"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Germany"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Book your seat at Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Conference pass"
-
-msgid "Currency"
-msgstr "Currency"
-
-msgid "Date"
-msgstr "Date"
-
-msgid "Fewer tickets"
-msgstr "Fewer tickets"
-
-msgid "Locale"
-msgstr "Locale"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Localized for this document with Palamedes"
-
-msgid "More tickets"
-msgstr "More tickets"
-
-msgid "Number"
-msgstr "Number"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Refresh server result"
-
-msgid "Rendered with TanStack Start"
-msgstr "Rendered with TanStack Start"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server function confirmed locale {locale}."
-msgstr "Server function confirmed locale {locale}."
-
-msgid "Switch to the recommended locale"
-msgstr "Switch to the recommended locale"
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
-
-msgid "Total"
-msgstr "Total"
-
-msgid "Venue"
-msgstr "Venue"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Welcome back, {attendeeName}."
-
-msgid "each"
-msgstr "each"
-
-msgid "one switch, every format"
-msgstr "one switch, every format"
-
-msgid "server locale"
-msgstr "server locale"
-
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Add to cart"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Attendees"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Availability"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+#: examples/tanstack-route/src/components/RouteLocalePage.tsx#RouteLocalePage
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Conference pass"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Currency"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "each"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+#: examples/tanstack-route/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Locale"
+
+#: examples/tanstack-route/src/components/RouteLocalePage.tsx#RouteLocalePage
+msgid "Localized for this document with Palamedes"
+msgstr "Localized for this document with Palamedes"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "More tickets"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Number"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "one switch, every format"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+#: examples/tanstack-route/src/components/RouteLocalePage.tsx#RouteLocalePage
+msgid "Rendered with TanStack Start"
+msgstr "Rendered with TanStack Start"
+
+#: examples/tanstack-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/tanstack-route/src/lib/server-functions.ts#getLocalizedServerStatus
+msgid "Server function confirmed locale {locale}."
+msgstr "Server function confirmed locale {locale}."
+
+#: examples/tanstack-route/src/components/RouteLocalePage.tsx#RouteLocalePage
+msgid "server locale"
+msgstr "server locale"
+
+#: examples/tanstack-route/src/components/SuggestionBanner.tsx#SuggestionBanner
+msgid "Switch to the recommended locale"
+msgstr "Switch to the recommended locale"
+
+#: examples/tanstack-route/src/components/RouteLocalePage.tsx#RouteLocalePage
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/tanstack-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Venue"
+
+#: examples/tanstack-route/src/components/RouteLocalePage.tsx#RouteLocalePage
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."

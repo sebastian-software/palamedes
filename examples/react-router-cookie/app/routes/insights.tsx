@@ -1,6 +1,5 @@
 import { Link, redirect } from "react-router";
-import { plural } from "@palamedes/core/macro";
-import { Trans as Fmt } from "@palamedes/react";
+import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";
 import { EVENT } from "@palamedes/example-ui";
 import type { Route } from "./+types/insights";
@@ -82,7 +81,7 @@ export default function Insights({ loaderData }: Route.ComponentProps) {
             <Trans>Registered attendees</Trans>
           </p>
           <p className="fact-value">
-            <Fmt message="{count, number}" values={{ count: EVENT.attendeeCount }} />
+            {t({ message: "{count, number}" }, { count: EVENT.attendeeCount })}
           </p>
         </div>
 
@@ -91,7 +90,7 @@ export default function Insights({ loaderData }: Route.ComponentProps) {
             <Trans>Talks scheduled</Trans>
           </p>
           <p className="fact-value">
-            <Fmt message="{count, number}" values={{ count: TALKS_SCHEDULED }} />
+            {t({ message: "{count, number}" }, { count: TALKS_SCHEDULED })}
           </p>
         </div>
 
@@ -100,7 +99,7 @@ export default function Insights({ loaderData }: Route.ComponentProps) {
             <Trans>Countries represented</Trans>
           </p>
           <p className="fact-value">
-            <Fmt message="{count, number}" values={{ count: COUNTRIES_REPRESENTED }} />
+            {t({ message: "{count, number}" }, { count: COUNTRIES_REPRESENTED })}
           </p>
         </div>
 

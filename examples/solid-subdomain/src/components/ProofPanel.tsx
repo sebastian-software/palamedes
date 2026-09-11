@@ -1,7 +1,6 @@
 import { createEffect, createSignal } from "solid-js";
 import { isServer } from "@solidjs/web";
-import { plural } from "@palamedes/core/macro";
-import { Trans as Fmt } from "@palamedes/solid";
+import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/solid/macro";
 import { EVENT } from "@palamedes/example-ui";
 import type { Locale } from "../lib/i18n";
@@ -69,10 +68,7 @@ export function ProofPanel(props: ProofPanelProps) {
             <Trans>Currency</Trans>
           </span>
           <span class="feat-out">
-            <Fmt
-              message="{amount, number, ::currency/EUR}"
-              values={{ amount: EVENT.ticketPrice }}
-            />
+            {t({ message: "{amount, number, ::currency/EUR}" }, { amount: EVENT.ticketPrice })}
           </span>
         </div>
         <code>{`{amount, number, ::currency/EUR}`}</code>
@@ -84,7 +80,7 @@ export function ProofPanel(props: ProofPanelProps) {
             <Trans>Number</Trans>
           </span>
           <span class="feat-out">
-            <Fmt message="{count, number}" values={{ count: EVENT.attendeeCount }} />
+            {t({ message: "{count, number}" }, { count: EVENT.attendeeCount })}
           </span>
         </div>
         <code>{`{count, number}`}</code>
@@ -95,9 +91,7 @@ export function ProofPanel(props: ProofPanelProps) {
           <span class="feat-name">
             <Trans>Date</Trans>
           </span>
-          <span class="feat-out is-text">
-            <Fmt message="{when, date, medium}" values={{ when }} />
-          </span>
+          <span class="feat-out is-text">{t({ message: "{when, date, medium}" }, { when })}</span>
         </div>
         <code>{`{when, date, medium}`}</code>
       </div>

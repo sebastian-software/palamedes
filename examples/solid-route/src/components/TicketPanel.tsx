@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js";
 import { plural, t } from "@palamedes/core/macro";
-import { Trans as Fmt } from "@palamedes/solid";
 import { Trans } from "@palamedes/solid/macro";
 import { EVENT } from "@palamedes/example-ui";
 import type { Locale } from "../lib/i18n";
@@ -30,10 +29,8 @@ export function TicketPanel(_props: TicketPanelProps) {
             <Trans>Date</Trans>
           </p>
           <p class="fact-value">
-            <Fmt message="{when, date, full}" values={{ when }} />
-            <small>
-              <Fmt message="{when, time, short}" values={{ when }} />
-            </small>
+            {t({ message: "{when, date, full}" }, { when })}
+            <small>{t({ message: "{when, time, short}" }, { when })}</small>
           </p>
         </div>
 
@@ -54,7 +51,7 @@ export function TicketPanel(_props: TicketPanelProps) {
             <Trans>Attendees</Trans>
           </p>
           <p class="fact-value">
-            <Fmt message="{count, number}" values={{ count: EVENT.attendeeCount }} />
+            {t({ message: "{count, number}" }, { count: EVENT.attendeeCount })}
           </p>
         </div>
 
@@ -76,10 +73,7 @@ export function TicketPanel(_props: TicketPanelProps) {
           <span class="qty-label">
             <b>{plural(quantity(), { one: "# ticket", other: "# tickets" })}</b>
             {" · "}
-            <Fmt
-              message="{amount, number, ::currency/EUR}"
-              values={{ amount: EVENT.ticketPrice }}
-            />{" "}
+            {t({ message: "{amount, number, ::currency/EUR}" }, { amount: EVENT.ticketPrice })}{" "}
             <Trans>each</Trans>
           </span>
           <div class="stepper">
@@ -106,7 +100,7 @@ export function TicketPanel(_props: TicketPanelProps) {
             <Trans>Total</Trans>
           </span>
           <span class="total-value">
-            <Fmt message="{amount, number, ::currency/EUR}" values={{ amount: total() }} />
+            {t({ message: "{amount, number, ::currency/EUR}" }, { amount: total() })}
           </span>
         </div>
 

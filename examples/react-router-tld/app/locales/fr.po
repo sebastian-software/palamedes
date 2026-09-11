@@ -6,89 +6,146 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "Ajouter au panier"
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr ""
 
-msgid "Attendees"
-msgstr "Participants"
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr ""
 
-msgid "Availability"
-msgstr "Disponibilité"
-
-msgid "Behind the scenes"
-msgstr "Dans les coulisses"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Allemagne"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Réservez votre place à Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Pass conférence"
-
-msgid "Currency"
-msgstr "Devise"
-
-msgid "Date"
-msgstr "Date"
-
-msgid "Fewer tickets"
-msgstr "Moins de billets"
-
-msgid "Locale"
-msgstr "Langue"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Localisé pour ce document avec Palamedes"
-
-msgid "More tickets"
-msgstr "Plus de billets"
-
-msgid "Number"
-msgstr "Nombre"
-
-msgid "Plural"
-msgstr "Pluriel"
-
-msgid "Refresh server result"
-msgstr "Actualiser le résultat du serveur"
-
-msgid "Rendered with React Router"
-msgstr "Rendu avec React Router"
-
-msgid "Server"
-msgstr "Serveur"
-
-msgid "Server action confirmed locale {locale}."
-msgstr "L'action serveur a confirmé la langue {locale}."
-
-msgid "Switch to the recommended locale"
-msgstr "Passer à la langue recommandée"
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Trois jours de conférences sur l'art de créer pour le web. Choisissez vos billets ci-dessous."
-
-msgid "Total"
-msgstr "Total"
-
-msgid "Venue"
-msgstr "Lieu"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Bon retour, {attendeeName}."
-
-msgid "each"
-msgstr "l'unité"
-
-msgid "one switch, every format"
-msgstr "un seul commutateur, tous les formats"
-
-msgid "server locale"
-msgstr "langue du serveur"
-
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# billet} other {# billets}}"
 
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# place restante} other {# places restantes}}"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr ""
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr ""
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr ""
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Ajouter au panier"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Participants"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Disponibilité"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Dans les coulisses"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Allemagne"
+
+#: examples/react-router-tld/app/routes/home.tsx
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Réservez votre place à Frontend Stage 2026"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Pass conférence"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Devise"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "l'unité"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Moins de billets"
+
+#: examples/react-router-tld/app/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Langue"
+
+#: examples/react-router-tld/app/routes/home.tsx
+msgid "Localized for this document with Palamedes"
+msgstr "Localisé pour ce document avec Palamedes"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Plus de billets"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Nombre"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "un seul commutateur, tous les formats"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Pluriel"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Actualiser le résultat du serveur"
+
+#: examples/react-router-tld/app/routes/home.tsx
+msgid "Rendered with React Router"
+msgstr "Rendu avec React Router"
+
+#: examples/react-router-tld/app/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Serveur"
+
+#: examples/react-router-tld/app/routes/home.tsx#action
+msgid "Server action confirmed locale {locale}."
+msgstr "L'action serveur a confirmé la langue {locale}."
+
+#: examples/react-router-tld/app/routes/home.tsx
+msgid "server locale"
+msgstr "langue du serveur"
+
+#: examples/react-router-tld/app/components/SuggestionBanner.tsx#SuggestionBanner
+msgid "Switch to the recommended locale"
+msgstr "Passer à la langue recommandée"
+
+#: examples/react-router-tld/app/routes/home.tsx
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Trois jours de conférences sur l'art de créer pour le web. Choisissez vos "
+"billets ci-dessous."
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/react-router-tld/app/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Lieu"
+
+#: examples/react-router-tld/app/routes/home.tsx
+msgid "Welcome back, {attendeeName}."
+msgstr "Bon retour, {attendeeName}."

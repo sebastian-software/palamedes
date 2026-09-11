@@ -6,89 +6,150 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr ""
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr ""
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr ""
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#~ #@ obsolete-since: 2026-09-11
+#~ msgid "{value, plural, one {# ticket} other {# tickets}}"
+#~ msgstr "{value, plural, one {# Ticket} other {# Tickets}}"
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr ""
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr ""
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr ""
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Add to cart"
 msgstr "In den Warenkorb"
 
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Attendees"
 msgstr "Teilnehmer"
 
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Availability"
 msgstr "Verfügbarkeit"
 
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
 msgid "Behind the scenes"
 msgstr "Hinter den Kulissen"
 
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Berlin, Germany"
 msgstr "Berlin, Deutschland"
 
+#: examples/solid-route/src/routes/[locale].tsx#RoutePageContent
 msgid "Book your seat at Frontend Stage 2026"
 msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
 
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Conference pass"
 msgstr "Konferenzpass"
 
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
 msgid "Currency"
 msgstr "Währung"
 
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Date"
 msgstr "Datum"
 
-msgid "Fewer tickets"
-msgstr "Weniger Tickets"
-
-msgid "Locale"
-msgstr "Sprache"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Für dieses Dokument mit Palamedes lokalisiert"
-
-msgid "More tickets"
-msgstr "Mehr Tickets"
-
-msgid "Number"
-msgstr "Zahl"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Serverergebnis aktualisieren"
-
-msgid "Rendered with Solid"
-msgstr "Gerendert mit Solid"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server query confirmed locale {locale}."
-msgstr "Server-Query bestätigte Sprache {locale}."
-
-msgid "Switch to the recommended locale"
-msgstr "Zur empfohlenen Sprache wechseln"
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten deine Tickets."
-
-msgid "Total"
-msgstr "Gesamt"
-
-msgid "Venue"
-msgstr "Ort"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Willkommen zurück, {attendeeName}."
-
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "each"
 msgstr "pro Stück"
 
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+#: examples/solid-route/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Sprache"
+
+#: examples/solid-route/src/routes/[locale].tsx#RoutePageContent
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Zahl"
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
 msgid "one switch, every format"
 msgstr "ein Klick, alle Formate"
 
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+#: examples/solid-route/src/routes/[locale].tsx#RoutePageContent
+msgid "Rendered with Solid"
+msgstr "Gerendert mit Solid"
+
+#: examples/solid-route/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/solid-route/src/routes/[locale].tsx#RoutePageContent
 msgid "server locale"
 msgstr "Server-Sprache"
 
-msgid "{value, plural, one {# ticket} other {# tickets}}"
-msgstr "{value, plural, one {# Ticket} other {# Tickets}}"
+#: examples/solid-route/src/lib/server.ts#getLocalizedServerStatus
+msgid "Server query confirmed locale {locale}."
+msgstr "Server-Query bestätigte Sprache {locale}."
 
-msgid "{seats, plural, one {# seat left} other {# seats left}}"
-msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+#: examples/solid-route/src/components/SuggestionBanner.tsx#SuggestionBanner
+msgid "Switch to the recommended locale"
+msgstr "Zur empfohlenen Sprache wechseln"
+
+#: examples/solid-route/src/routes/[locale].tsx#RoutePageContent
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten "
+"deine Tickets."
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Gesamt"
+
+#: examples/solid-route/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Ort"
+
+#: examples/solid-route/src/routes/[locale].tsx#RoutePageContent
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."
