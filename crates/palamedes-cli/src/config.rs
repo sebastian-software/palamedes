@@ -237,15 +237,95 @@ fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), Co
             return invalid(
                 path,
                 &format!(
-                    "Unknown key \"{key}\". Palamedes data configs use kebab-case: \"{kebab}\"."
+                    "unknown key \"{key}\". Palamedes data configs use kebab-case: \"{kebab}\"."
                 ),
             );
         }
     }
-    if let Some(key) = unknown_top_level_keys(value).into_iter().next() {
-        return invalid(path, &format!("Unknown key \"{key}\"."));
-    }
+    check_object_keys(map, path, "", DATA_CONFIG_KEYS, true)?;
     check_nested_keys(value, path)
+}
+
+const DATA_CONFIG_KEYS: &[&str] = &[
+    "locales",
+    "source-locale",
+    "source_locale",
+    "fallback-locales",
+    "fallback_locales",
+    "pseudo-locale",
+    "pseudo_locale",
+    "source-reference-root",
+    "source_reference_root",
+    "reference-scopes",
+    "reference_scopes",
+    "extract-threads",
+    "extract_threads",
+    "extract-cache",
+    "extract_cache",
+    "mdx",
+    "lint",
+    "catalogs",
+    "plugins",
+];
+
+fn check_object_keys(
+    object: &serde_json::Map<String, serde_json::Value>,
+    path: &Path,
+    field_path: &str,
+    known_keys: &[&str],
+    allow_data_metadata: bool,
+) -> Result<(), ConfigError> {
+    if let Some(key) = object.keys().find(|key| {
+        !known_keys.contains(&key.as_str()) && (!allow_data_metadata || !is_data_metadata_key(key))
+    }) {
+        let suggestion = suggest_known_key(key, known_keys)
+            .map(|suggestion| format!(" Did you mean \"{suggestion}\"?"))
+            .unwrap_or_default();
+        return invalid(
+            path,
+            &format!("unknown key \"{field_path}{key}\".{suggestion}"),
+        );
+    }
+    Ok(())
+}
+
+fn suggest_known_key<'a>(key: &str, known_keys: &'a [&str]) -> Option<&'a str> {
+    let max_distance = std::cmp::max(1, key.chars().count() / 3);
+    let mut best_match = None;
+    let mut best_distance = usize::MAX;
+
+    for known_key in known_keys {
+        let distance = levenshtein_distance(key, known_key);
+        if distance < best_distance {
+            best_match = Some(*known_key);
+            best_distance = distance;
+        }
+    }
+
+    (best_distance <= max_distance)
+        .then_some(best_match)
+        .flatten()
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    let right: Vec<char> = right.chars().collect();
+    let mut previous: Vec<usize> = (0..=right.len()).collect();
+
+    for (left_index, left_char) in left.chars().enumerate() {
+        let mut current = vec![left_index + 1];
+        for (right_index, right_char) in right.iter().enumerate() {
+            current.push(std::cmp::min(
+                current[right_index] + 1,
+                std::cmp::min(
+                    previous[right_index + 1] + 1,
+                    previous[right_index] + usize::from(left_char != *right_char),
+                ),
+            ));
+        }
+        previous = current;
+    }
+
+    previous[right.len()]
 }
 
 fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), ConfigError> {
@@ -273,6 +353,19 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
         "keep_source_fallbacks",
     ];
     const CATALOG_KEYS: &[&str] = &["path", "format", "po", "include", "exclude"];
+    const LINT_KEYS: &[&str] = &["rules"];
+    const LINT_RULE_KEYS: &[&str] = &[
+        "placeholder-only",
+        "empty-component-only",
+        "prefer-trans-in-jsx",
+    ];
+    const LINT_RULE_CAMEL_CASE_KEYS: &[(&str, &str)] = &[
+        ("placeholderOnly", "placeholder-only"),
+        ("emptyComponentOnly", "empty-component-only"),
+        ("preferTransInJsx", "prefer-trans-in-jsx"),
+    ];
+    const PO_CAMEL_CASE_KEYS: &[(&str, &str)] = &[("lineBreaks", "line-breaks")];
+    const PO_KEYS: &[&str] = &["line-breaks", "line_breaks"];
 
     if let Some(mdx) = value.get("mdx").and_then(serde_json::Value::as_object) {
         for (camel, kebab) in MDX_CAMEL_CASE_KEYS {
@@ -280,13 +373,28 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
                 return invalid(
                     path,
                     &format!(
-                        "Unknown key \"mdx.{camel}\". Palamedes data configs use kebab-case: \"mdx.{kebab}\"."
+                        "unknown key \"mdx.{camel}\". Palamedes data configs use kebab-case: \"mdx.{kebab}\"."
                     ),
                 );
             }
         }
-        if let Some(key) = mdx.keys().find(|key| !MDX_KEYS.contains(&key.as_str())) {
-            return invalid(path, &format!("Unknown key \"mdx.{key}\"."));
+        check_object_keys(mdx, path, "mdx.", MDX_KEYS, false)?;
+    }
+
+    if let Some(lint) = value.get("lint").and_then(serde_json::Value::as_object) {
+        check_object_keys(lint, path, "lint.", LINT_KEYS, false)?;
+        if let Some(rules) = lint.get("rules").and_then(serde_json::Value::as_object) {
+            for (camel, kebab) in LINT_RULE_CAMEL_CASE_KEYS {
+                if rules.contains_key(*camel) {
+                    return invalid(
+                        path,
+                        &format!(
+                            "unknown key \"lint.rules.{camel}\". Palamedes data configs use kebab-case: \"lint.rules.{kebab}\"."
+                        ),
+                    );
+                }
+            }
+            check_object_keys(rules, path, "lint.rules.", LINT_RULE_KEYS, false)?;
         }
     }
 
@@ -295,11 +403,20 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
             let Some(catalog) = catalog.as_object() else {
                 continue;
             };
-            if let Some(key) = catalog
-                .keys()
-                .find(|key| !CATALOG_KEYS.contains(&key.as_str()))
-            {
-                return invalid(path, &format!("Unknown key \"catalogs[{index}].{key}\"."));
+            let field_path = format!("catalogs[{index}].");
+            check_object_keys(catalog, path, &field_path, CATALOG_KEYS, false)?;
+            if let Some(po) = catalog.get("po").and_then(serde_json::Value::as_object) {
+                for (camel, kebab) in PO_CAMEL_CASE_KEYS {
+                    if po.contains_key(*camel) {
+                        return invalid(
+                            path,
+                            &format!(
+                                "unknown key \"catalogs[{index}].po.{camel}\". Palamedes data configs use kebab-case: \"catalogs[{index}].po.{kebab}\"."
+                            ),
+                        );
+                    }
+                }
+                check_object_keys(po, path, &format!("catalogs[{index}].po."), PO_KEYS, false)?;
             }
         }
     }
@@ -332,35 +449,14 @@ fn camel_case_key_hint(key: &str) -> Option<&'static str> {
 /// Every key that is read anywhere — including `extract-threads` and
 /// `extract-cache` — must be listed, or documented options fail as if they were
 /// typos. `$schema`, `x-*`, and `.*` are intentionally ignored metadata.
+#[cfg(test)]
 fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
-    const KNOWN_KEYS: &[&str] = &[
-        "locales",
-        "source-locale",
-        "source_locale",
-        "fallback-locales",
-        "fallback_locales",
-        "pseudo-locale",
-        "pseudo_locale",
-        "source-reference-root",
-        "source_reference_root",
-        "reference-scopes",
-        "reference_scopes",
-        "extract-threads",
-        "extract_threads",
-        "extract-cache",
-        "extract_cache",
-        "mdx",
-        "lint",
-        "catalogs",
-        "plugins",
-    ];
-
     let Some(map) = value.as_object() else {
         return Vec::new();
     };
 
     map.keys()
-        .filter(|key| !KNOWN_KEYS.contains(&key.as_str()) && !is_data_metadata_key(key))
+        .filter(|key| !DATA_CONFIG_KEYS.contains(&key.as_str()) && !is_data_metadata_key(key))
         .cloned()
         .collect()
 }
@@ -1425,12 +1521,52 @@ catalogs:
 "#,
                 "catalogs[0].includes",
             ),
+            (
+                "unknown-po-key",
+                r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+    po:
+      line-break: off
+"#,
+                "catalogs[0].po.line-break",
+            ),
+            (
+                "unknown-lint-rule",
+                r#"
+locales: [en]
+source-locale: en
+lint:
+  rules:
+    placeholder-onyl: error
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+                "lint.rules.placeholder-onyl",
+            ),
         ] {
             let app = temp_dir(name);
             fs::write(app.join(CONFIG_FILENAME), config).expect("write config");
 
             let error = load_config(&app, None).expect_err("unknown nested key must be rejected");
-            assert!(error.to_string().contains(expected), "got: {error}");
+            let message = error.to_string();
+            assert!(message.contains(expected), "got: {message}");
+            if name == "unknown-po-key" {
+                assert!(
+                    message.contains("Did you mean \"line-breaks\"?"),
+                    "got: {message}"
+                );
+            }
+            if name == "unknown-lint-rule" {
+                assert!(
+                    message.contains("Did you mean \"placeholder-only\"?"),
+                    "got: {message}"
+                );
+            }
         }
     }
 
@@ -1500,7 +1636,7 @@ catalogs:
         .expect("write config");
 
         let error = load_config(&app, None).expect_err("unknown key must be rejected");
-        assert!(error.to_string().contains("Unknown key \"mystery\""));
+        assert!(error.to_string().contains("unknown key \"mystery\""));
     }
 
     #[test]
