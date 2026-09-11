@@ -50,12 +50,6 @@ export default async function CookiePage() {
   return (
     <>
       <title>Frontend Stage · Palamedes + Waku</title>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `window.__PALAMEDES_LOCALE__=${JSON.stringify(locale)};`,
-        }}
-      />
-
       <header className="topbar">
         <div className="brand">
           <b>Frontend Stage</b>

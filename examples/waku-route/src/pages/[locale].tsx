@@ -8,13 +8,7 @@ import { LocaleSwitcher } from "../components/LocaleSwitcher";
 import { ProofPanel } from "../components/ProofPanel";
 import { SuggestionBanner } from "../components/SuggestionBanner";
 import { TicketPanel } from "../components/TicketPanel";
-import {
-  activateServerI18n,
-  createBanner,
-  getLocaleLabel,
-  normalizeLocale,
-  type Locale,
-} from "../lib/i18n";
+import { createBanner, getLocaleLabel, normalizeLocale, type Locale } from "../lib/i18n";
 
 type ProbeResult = {
   handledAt: string;
@@ -29,12 +23,8 @@ export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
   const localeLabel = getLocaleLabel(currentLocale);
   const banner = createBanner(headers, currentLocale);
 
-  activateServerI18n(currentLocale);
-
   async function runProbe(): Promise<ProbeResult> {
     "use server";
-
-    activateServerI18n(currentLocale);
 
     return {
       handledAt: new Date().toISOString(),

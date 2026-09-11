@@ -1,9 +1,9 @@
 import { createI18n } from "@palamedes/core/compiled";
 import { createServerI18nScope } from "@palamedes/runtime/server";
 import { loadServerCatalog } from "virtual:palamedes/server-catalogs";
-import { locales, type Locale } from "./i18n";
+import { createI18n as createExampleI18n, type Locale } from "./i18n";
 
-export const serverI18nScope = createServerI18nScope<ReturnType<typeof createI18n>>();
+export const serverI18nScope = createServerI18nScope<ReturnType<typeof createExampleI18n>>();
 
 export async function createServerI18n(locale: Locale) {
   const i18n = createI18n();
@@ -14,14 +14,4 @@ export async function createServerI18n(locale: Locale) {
 
 export async function activateServerI18n(locale: Locale) {
   return serverI18nScope.activate(await createServerI18n(locale));
-}
-
-export async function createRequestI18n(request: Request) {
-  const { locale } = locales.resolve({
-    strategy: "cookie",
-    acceptLanguageHeader: request.headers.get("accept-language"),
-    cookieHeader: request.headers.get("cookie"),
-  });
-
-  return createServerI18n(locale);
 }

@@ -1,11 +1,12 @@
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
-import { createServerI18nScope } from "@palamedes/runtime/server";
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 import {
   markServerI18nTestBarrierReached,
   waitForServerI18nTestBarrier,
 } from "@palamedes/runtime/server/test";
-import { createServerI18n, locales } from "./lib/i18n";
+import { locales } from "./lib/i18n";
+import { createServerI18n, serverI18nScope } from "./lib/i18n.server";
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
 // matches them. Globbing from `/src` and stripping the leading `/src/` yields
@@ -19,10 +20,19 @@ const modules = Object.fromEntries(
   ]),
 );
 
-const serverI18nScope = createServerI18nScope<ReturnType<typeof createServerI18n>>();
-
 export default adapter(fsRouter(modules), {
   middlewareFns: [
+    () =>
+      createWakuCatalogDeliveryMiddleware({
+        clientDirectory: "dist/public",
+        development: process.env.NODE_ENV !== "production",
+        resolveLocale: (request) =>
+          locales.resolve({
+            strategy: "tld",
+            acceptLanguageHeader: request.headers.get("accept-language"),
+            requestHost: request.headers.get("host"),
+          }).locale,
+      }),
     () => async (context, next) => {
       const request = context.req.raw;
       const { locale } = locales.resolve({
@@ -30,7 +40,7 @@ export default adapter(fsRouter(modules), {
         acceptLanguageHeader: request.headers.get("accept-language"),
         requestHost: request.headers.get("host"),
       });
-      return serverI18nScope.run(createServerI18n(locale), async () => {
+      return serverI18nScope.run(await createServerI18n(locale), async () => {
         await waitForServerI18nTestBarrier(request);
         markServerI18nTestBarrierReached(request, context.res.headers);
         return next();

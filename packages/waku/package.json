@@ -29,6 +29,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.mjs"
     }
   },
   "publishConfig": {
@@ -40,7 +44,9 @@
     "stub": "unbuild --stub"
   },
   "dependencies": {
-    "@palamedes/runtime": "workspace:^"
+    "@palamedes/runtime": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^",
+    "hono": "^4.13.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
