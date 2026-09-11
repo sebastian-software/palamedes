@@ -11,7 +11,7 @@ export type SolidCatalogDeliveryOptions = {
   development?: boolean;
   /** Optional catalog-free host UI for initial fragment failures. */
   errorHtml?: string;
-  /** CSP nonce for generated and Solid inline bootstrap scripts. */
+  /** CSP nonce for Palamedes-generated import maps and bootstrap scripts. */
   nonce?: string | ((request: Request) => string | undefined);
 };
 
@@ -64,7 +64,6 @@ export function createSolidCatalogDeliveryMiddleware(
           createSolidBootstrapGateTransform({
             allowMissingPromise: options.development === true,
             nonce,
-            trustedChunkKeys: binding ? Object.keys(binding.chunkImports) : [],
             trustedOrigins: binding ? trustedOriginsForBinding(binding.imports, request.url) : [],
           }),
         ) as unknown as TransformStream<Uint8Array>,
@@ -82,7 +81,6 @@ export function createSolidCatalogDeliveryMiddleware(
 function createSolidBootstrapGateTransform(options: {
   allowMissingPromise: boolean;
   nonce?: string;
-  trustedChunkKeys: readonly string[];
   trustedOrigins: readonly string[];
 }): Transform {
   const decoder = new StringDecoder("utf8");
@@ -118,7 +116,6 @@ function createSolidBootstrapGateTransform(options: {
           moduleSource &&
           isTrustedSolidEntrySource(
             moduleSource,
-            options.trustedChunkKeys,
             options.allowMissingPromise,
             options.trustedOrigins,
           )
@@ -161,7 +158,6 @@ function createSolidBootstrapGateTransform(options: {
 
 function isTrustedSolidEntrySource(
   source: string,
-  trustedChunkKeys: readonly string[],
   allowDevelopmentEntry: boolean,
   trustedOrigins: readonly string[],
 ): boolean {
@@ -252,17 +248,6 @@ function readTagAttribute(tag: string, name: "nonce" | "src" | "type"): string |
     if (quote && tag[index] === quote) index += 1;
   }
   return undefined;
-}
-
-function assetKey(href: string): string {
-  let pathname = href;
-  try {
-    pathname = new URL(href, "https://palamedes.invalid").pathname;
-  } catch {
-    // Preserve malformed but useful Vite URLs for the manifest lookup below.
-  }
-  const assets = pathname.indexOf("assets/");
-  return (assets !== -1 ? pathname.slice(assets) : pathname).replace(/^\/+/, "");
 }
 
 function readCspNonce(script: string): string | undefined {
