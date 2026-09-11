@@ -58,6 +58,7 @@ async function main() {
   const server = startCommand({
     args: ["dev", "--host", "127.0.0.1", "--port", String(port), "--config", configPath],
     cwd: example,
+    env: { CHOKIDAR_USEPOLLING: "true" },
   });
   let browser;
   try {

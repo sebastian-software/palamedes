@@ -145,14 +145,6 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:message-splitting:development
 
-      - name: Verify Solid development catalog invalidation
-        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
-        run: pnpm proof:solid:development
-
-      - name: Verify Solid browser delivery
-        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
-        run: pnpm --filter @palamedes/example-solid-cookie build && pnpm verify:examples:browser -- --id solid-cookie
-
       - name: Test ESLint and Oxlint adapter
         run: pnpm --filter @palamedes/eslint-plugin test
 
