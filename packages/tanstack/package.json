@@ -29,6 +29,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.mjs"
     }
   },
   "publishConfig": {
@@ -36,11 +40,13 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts && node --test scripts/package.test.mjs",
+    "test": "vitest run --globals src/index.test.ts src/server.test.ts && node --test scripts/package.test.mjs",
     "stub": "unbuild --stub"
   },
   "dependencies": {
-    "@palamedes/runtime": "workspace:^"
+    "@palamedes/core": "workspace:^",
+    "@palamedes/runtime": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^"
   },
   "devDependencies": {
     "@tanstack/react-start": "1.168.49",

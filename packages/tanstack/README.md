@@ -1,6 +1,6 @@
 # @palamedes/tanstack
 
-Request-scoped i18n middleware for TanStack Start server functions.
+Request-scoped i18n middleware for TanStack Start server functions and SSR.
 
 ## Installation
 
@@ -14,19 +14,17 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 ## Global server-function middleware
 
 Create the middleware once and register it in `src/start.ts`. The resolver gets
-the original request, so it can read headers and cookies to negotiate a locale
-and load its catalog. It must return a fresh activated i18n instance for each
-request.
+the original request, so it can read headers and cookies to negotiate a locale.
+The adapter loads the generated catalog, creates a fresh instance for each
+request, and binds the active catalog to SSR documents through the Vite delivery
+seam.
 
 ```ts
 import { createIsomorphicFn, createStart } from "@tanstack/react-start";
-import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack";
+import { createTanStackServerI18nRequestMiddleware } from "@palamedes/tanstack";
 
 const palamedesI18n = createIsomorphicFn().server(() =>
-  createTanStackI18nRequestMiddleware(async (request) => {
-    const { createRequestI18n } = await import("./i18n.server");
-    return await createRequestI18n(request);
-  }),
+  createTanStackServerI18nRequestMiddleware((request) => resolveLocaleFromRequest(request)),
 )();
 
 export const startInstance = createStart(() => ({
@@ -34,14 +32,21 @@ export const startInstance = createStart(() => ({
 }));
 ```
 
-Because Start includes `src/start.ts` in its client graph, put a resolver that
-loads server-only catalogs inside `createIsomorphicFn().server()`. Start
-removes that branch from the client build.
+Because Start includes `src/start.ts` in its client graph, put this middleware
+inside `createIsomorphicFn().server()`. Start removes the server branch from the
+client build. `@palamedes/vite-plugin` provides the
+`virtual:palamedes/server-catalogs` module used by the adapter. It dynamically
+loads the configured catalogs and shares each prepared locale catalog in the
+server process. The application supplies locale policy only; it does not import
+catalog files, maintain loader maps, or modify document HTML.
 
-This request middleware filters itself to Start's `serverFn` handler type. It
-does not activate i18n for page rendering or server routes. It starts before
-Start decodes and invokes a server function, and keeps the request-local scope
-active until its awaited `next()` completes.
+The request middleware runs for both page rendering and server functions. It
+starts before Start decodes and invokes the server function, and keeps the
+request-local scope active until its awaited `next()` completes. In production,
+HTML responses receive the active locale import map and catalog readiness probe
+before route modules execute. The default client directory is `dist/client`;
+pass `{ catalogDelivery: false }` only for a host that owns an equivalent
+transport.
 
 If the resolver fails, the server function does not run and the middleware
 throws an error beginning `Palamedes TanStack i18n initialization failed`, with
@@ -49,29 +54,20 @@ the original cause attached.
 
 ## SSR page rendering
 
-TanStack Start invokes request middleware only for server functions. Scope SSR
-in the server entry separately, using the same request-to-i18n resolver:
+The request middleware also owns SSR, so the server entry only needs to call the
+Start handler:
 
 ```ts
 import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
-import { createServerI18nScope } from "@palamedes/runtime/server";
-import { createServerI18nFromRequest } from "./lib/i18n.server";
 
 const handler = createStartHandler(defaultStreamHandler);
-const ssrI18nScope = createServerI18nScope();
 
 export default {
   async fetch(request: Request, options?: never) {
-    return await ssrI18nScope.run(await createServerI18nFromRequest(request), () =>
-      handler(request, options),
-    );
+    return await handler(request, options);
   },
 };
 ```
-
-When this entry scope and the request middleware are both registered, the
-nested initialization is intentional: the outer scope handles SSR, while the
-middleware starts a fresh scope before Start decodes a server function.
 
 ## Per-function middleware
 
