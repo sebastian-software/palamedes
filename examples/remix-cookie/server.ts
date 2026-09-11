@@ -56,6 +56,7 @@ function shutdown() {
 
   shuttingDown = true;
   server.close(async () => {
+    catalogAssetRegistry.close?.();
     await assetServer.close();
     process.exit(0);
   });

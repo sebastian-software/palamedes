@@ -11,8 +11,8 @@ msgid ""
 "{audience, select, developer {Built for developers} other {Built for "
 "everyone}}"
 msgstr ""
-"{audience, select, developer {Creado para desarrolladores} other {Creado "
-"para todos}}"
+"{audience, select, developer {Creado para desarrolladores} other {Creado para "
+"todos}}"
 
 #: examples/remix-cookie/app/public/interactive.tsx#ClientProof
 msgid "{count, plural, one {# browser message} other {# browser messages}}"
@@ -41,6 +41,10 @@ msgstr "Palamedes está activo en el navegador"
 #: examples/remix-cookie/app/page.ts#renderHomePage
 msgid "Remix v3 is rendering {locale} with Palamedes"
 msgstr "Remix v3 renderiza {locale} con Palamedes"
+
+#: examples/remix-cookie/app/public/lazy-message.ts#lazyMessage
+msgid "This message arrived after the page was ready"
+msgstr "Este mensaje llegó después de que la página estuviera lista"
 
 #: examples/remix-cookie/app/frame-page.tsx#renderFrameContent
 #: examples/remix-cookie/app/page.ts#renderHomePage
