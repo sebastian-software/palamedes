@@ -198,7 +198,7 @@ function validateManifest(value: unknown, manifestPath: string): ReactRouterCata
       `Palamedes React Router delivery manifest ${manifestPath} has invalid importMaps.`,
     );
   }
-  const chunkImports = record.chunkImports ?? {};
+  const chunkImports = record.chunkImports === undefined ? {} : record.chunkImports;
   if (!isArrayRecord(chunkImports)) {
     throw new TypeError(
       `Palamedes React Router delivery manifest ${manifestPath} has invalid chunkImports.`,
@@ -215,6 +215,7 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return (
     value !== null &&
     typeof value === "object" &&
+    !Array.isArray(value) &&
     Object.values(value).every((item) => typeof item === "string")
   );
 }
@@ -223,6 +224,7 @@ function isArrayRecord(value: unknown): value is Record<string, readonly string[
   return (
     value !== null &&
     typeof value === "object" &&
+    !Array.isArray(value) &&
     Object.values(value).every(
       (item) => Array.isArray(item) && item.every((entry) => typeof entry === "string"),
     )
@@ -230,7 +232,7 @@ function isArrayRecord(value: unknown): value is Record<string, readonly string[
 }
 
 function isMissingFile(error: unknown): boolean {
-  return error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 function escapeAttribute(value: string): string {

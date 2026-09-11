@@ -71,6 +71,23 @@ describe("React Router catalog delivery", () => {
     ).toBeNull();
   });
 
+  it.each([
+    ["importMaps", { locales: ["en"], importMaps: null, chunkImports: {} }],
+    ["chunkImports", { locales: ["en"], importMaps: {}, chunkImports: null }],
+    ["importMaps array", { locales: ["en"], importMaps: [], chunkImports: {} }],
+    ["chunkImports array", { locales: ["en"], importMaps: {}, chunkImports: [] }],
+  ])("rejects a malformed %s manifest field", async (_field, value) => {
+    const clientDirectory = await createFixture();
+    await writeFile(
+      path.join(clientDirectory, "palamedes-split-manifest.json"),
+      JSON.stringify(value),
+    );
+
+    expect(() =>
+      createReactRouterCatalogDelivery({ clientDirectory }).getLocaleBinding("en"),
+    ).toThrow(/invalid (?:importMaps|chunkImports)/u);
+  });
+
   it("injects a nonce-bearing import map and active chunk preloads for non-root bases", async () => {
     const clientDirectory = await createFixture();
     const delivery = createReactRouterCatalogDelivery({ clientDirectory });
