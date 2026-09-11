@@ -2,9 +2,7 @@ import { realpath } from "node:fs/promises";
 import path from "node:path";
 
 import type { TranslationPatchRequest } from "./generated/palamedes-node-types";
-
-const mutationTails = new Map<string, Promise<void>>();
-let mutationAdmissionTail = Promise.resolve();
+import { getCoreNodeProcessState } from "./processGlobalState";
 
 export function translationPatchTargetPaths(request: TranslationPatchRequest): string[] {
   return request.patches.flatMap((patch) => {
@@ -68,9 +66,12 @@ export async function serializeCatalogMutation<TResult>(
     return operation();
   }
 
+  const state = getCoreNodeProcessState();
+  const { mutationTails, mutationAdmissionTail: currentAdmissionTail } = state;
+
   // Reserve keys in call order even though realpath resolution is async.
   // Independent mutations only wait for this reservation, not for the work.
-  const admission = mutationAdmissionTail.then(async () => {
+  const admission = currentAdmissionTail.then(async () => {
     const reservedKeys = [
       ...new Set(await Promise.all(requestedPaths.map(canonicalMutationPath))),
     ].sort();
@@ -89,10 +90,11 @@ export async function serializeCatalogMutation<TResult>(
 
     return { keys: reservedKeys, result: reservedResult, tail: reservedTail };
   });
-  mutationAdmissionTail = admission.then(
+  const nextAdmissionTail = admission.then(
     () => {},
     () => {},
   );
+  state.mutationAdmissionTail = nextAdmissionTail;
 
   const { keys, result, tail } = await admission;
 

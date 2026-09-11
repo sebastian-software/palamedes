@@ -2,7 +2,8 @@ use super::{
     CatalogArtifactConfig, CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest,
     CatalogArtifactSelectedRequest, CatalogCompilationCache, CatalogConfig, PalamedesCatalogFormat,
     compile_catalog_artifact, compile_catalog_artifact_selected,
-    compile_catalog_artifact_selected_cached, resolve_catalog_file_path,
+    compile_catalog_artifact_selected_cached,
+    compile_catalog_artifact_selected_cached_without_waiting, resolve_catalog_file_path,
 };
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
@@ -10,6 +11,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -951,6 +953,143 @@ fn selected_catalog_cache_keeps_identical_builds_coalesced_under_capacity_pressu
             index_builds: 2,
         }
     );
+}
+
+#[test]
+fn selected_catalog_cache_sync_race_builds_without_waiting_for_async_owner() {
+    let fixture = create_fixture_dir("selected-catalog-cache-sync-race");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    let cache = Arc::new(CatalogCompilationCache::new(8));
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let first_build = Arc::new(AtomicBool::new(true));
+    let first_build_for_hook = Arc::clone(&first_build);
+    let release_rx_for_hook = Arc::clone(&release_rx);
+    cache.set_before_build_hook(Arc::new(move |locale| {
+        if locale == "de"
+            && first_build_for_hook
+                .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        {
+            started_tx.send(()).expect("report async build start");
+            release_rx_for_hook
+                .lock()
+                .expect("release lock")
+                .recv()
+                .expect("release async build");
+        }
+    }));
+
+    let async_cache = Arc::clone(&cache);
+    let async_fixture = fixture.clone();
+    let async_locale_dir = locale_dir.clone();
+    let async_thread = thread::spawn(move || {
+        compile_catalog_artifact_selected_cached(
+            &async_cache,
+            &selected_request(&async_fixture, &async_locale_dir, "Hello"),
+        )
+    });
+    started_rx.recv().expect("async build started");
+
+    let sync_cache = Arc::clone(&cache);
+    let sync_fixture = fixture;
+    let sync_locale_dir = locale_dir;
+    let (sync_result_tx, sync_result_rx) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let result = compile_catalog_artifact_selected_cached_without_waiting(
+            &sync_cache,
+            &selected_request(&sync_fixture, &sync_locale_dir, "Hello"),
+        );
+        sync_result_tx.send(result).expect("report sync result");
+    });
+
+    let sync_result = sync_result_rx
+        .recv_timeout(Duration::from_millis(500))
+        .expect("sync selected compile must not wait for async cache owner")
+        .expect("sync selected compile");
+    assert_eq!(sync_result.messages.len(), 1);
+    release_tx.send(()).expect("release async build");
+    async_thread
+        .join()
+        .expect("async join")
+        .expect("async selected compile");
+    assert_eq!(cache.ready_len(), 1);
+}
+
+#[test]
+fn selected_catalog_cache_sync_race_does_not_hide_async_failure() {
+    let fixture = create_fixture_dir("selected-catalog-cache-sync-failure-race");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    fs::write(locale_dir.join("de.po"), "not a catalog").expect("write malformed catalog");
+    let cache = Arc::new(CatalogCompilationCache::new(8));
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let first_build = Arc::new(AtomicBool::new(true));
+    let first_build_for_hook = Arc::clone(&first_build);
+    let release_rx_for_hook = Arc::clone(&release_rx);
+    cache.set_before_build_hook(Arc::new(move |locale| {
+        if locale == "de"
+            && first_build_for_hook
+                .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        {
+            started_tx.send(()).expect("report async build start");
+            release_rx_for_hook
+                .lock()
+                .expect("release lock")
+                .recv()
+                .expect("release async build");
+        }
+    }));
+
+    let async_cache = Arc::clone(&cache);
+    let async_fixture = fixture.clone();
+    let async_locale_dir = locale_dir.clone();
+    let async_thread = thread::spawn(move || {
+        compile_catalog_artifact_selected_cached(
+            &async_cache,
+            &selected_request(&async_fixture, &async_locale_dir, "Hello"),
+        )
+    });
+    started_rx.recv().expect("async build started");
+
+    let sync_cache = Arc::clone(&cache);
+    let sync_fixture = fixture.clone();
+    let sync_locale_dir = locale_dir.clone();
+    let (sync_result_tx, sync_result_rx) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let result = compile_catalog_artifact_selected_cached_without_waiting(
+            &sync_cache,
+            &selected_request(&sync_fixture, &sync_locale_dir, "Hello"),
+        );
+        sync_result_tx.send(result).expect("report sync result");
+    });
+
+    assert!(
+        sync_result_rx
+            .recv_timeout(Duration::from_millis(500))
+            .expect("sync selected compile must not wait for async owner")
+            .is_err(),
+        "the independent sync build must expose the malformed catalog"
+    );
+    release_tx.send(()).expect("release async build");
+    assert!(
+        async_thread.join().expect("async join").is_err(),
+        "the async owner must retain its catalog failure"
+    );
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    compile_catalog_artifact_selected_cached(
+        &cache,
+        &selected_request(&fixture, &locale_dir, "Hello"),
+    )
+    .expect("a failed in-flight build must not poison retries");
 }
 
 #[test]
