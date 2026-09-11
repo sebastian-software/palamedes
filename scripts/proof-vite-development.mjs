@@ -68,8 +68,72 @@ try {
   await page.waitForTimeout(500);
   await page.reload();
   await page.getByText("Katalog aktualisiert", { exact: true }).first().waitFor();
+
+  const catalogUrl = /palamedes:messages\/[^/]+\/de(?:\?|$)/u;
+  const runFailureCase = async ({ phase, evaluation }) => {
+    const failurePage = await context.newPage();
+    let armed = phase === "initial";
+    await failurePage.route("**/*", async (route) => {
+      const url = decodeURIComponent(route.request().url());
+      if (phase === "lazy" && /\/app\/routes\/insights\.tsx(?:\?|$)/u.test(url)) {
+        const response = await route.fetch();
+        const body = await response.text();
+        await route.fulfill({
+          response,
+          body: `${body}\nglobalThis.__palamedesRouteSideEffect = true;`,
+        });
+        return;
+      }
+      if (armed && catalogUrl.test(url)) {
+        armed = false;
+        if (evaluation) {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/javascript",
+            body: 'throw new Error("injected catalog evaluation failure");',
+          });
+        } else {
+          await route.abort("failed");
+        }
+        return;
+      }
+      await route.continue();
+    });
+
+    if (phase === "initial") {
+      await failurePage.goto(origin, { waitUntil: "domcontentloaded" });
+    } else {
+      await failurePage.goto(origin);
+      await failurePage.getByTestId("client-ready").waitFor({ state: "attached" });
+      armed = true;
+      await failurePage.getByTestId("insights-link").click();
+    }
+    await failurePage.getByRole("alert").first().waitFor();
+    assert.match(
+      await failurePage.getByRole("alert").first().innerText(),
+      /temporarily unavailable|reload the page/i,
+    );
+    if (phase === "lazy") {
+      assert.equal(
+        await failurePage.evaluate(() => globalThis.__palamedesRouteSideEffect ?? false),
+        false,
+      );
+    }
+
+    await failurePage.unroute("**/*");
+    await failurePage.reload();
+    await failurePage.getByText("Frontend Stage", { exact: true }).waitFor();
+    assert.equal(await failurePage.getByRole("alert").count(), 0);
+    await failurePage.close();
+  };
+
+  await runFailureCase({ phase: "initial", evaluation: false });
+  await runFailureCase({ phase: "initial", evaluation: true });
+  await runFailureCase({ phase: "lazy", evaluation: false });
+  await runFailureCase({ phase: "lazy", evaluation: true });
+
   console.log(
-    "Vite development: active-only initial/lazy delivery and live catalog invalidation passed with a production build present",
+    "Vite development: active-only initial/lazy delivery, live invalidation, and initial/lazy network/evaluation recovery passed with a production build present",
   );
 } finally {
   writeFileSync(catalogPath, original);

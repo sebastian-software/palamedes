@@ -139,13 +139,28 @@ describe("React Router catalog delivery", () => {
     expect(result).not.toContain("�");
   });
 
-  it("does not invent a catalog boundary when development has no manifest", async () => {
+  it("installs a catalog-independent development failure probe without a manifest", async () => {
     const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-dev-"));
     fixtureDirectories.push(clientDirectory);
     const delivery = createReactRouterCatalogDelivery({ clientDirectory, development: true });
     const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("en"));
-    await expect(collect(transform, "<html><head></head><body>dev</body></html>")).resolves.toBe(
-      "<html><head></head><body>dev</body></html>",
+    const html = await collect(
+      transform,
+      '<html><head></head><body><script type="module" src="/entry.client.tsx"></script>dev</body></html>',
+    );
+    expect(html).toContain("showPalamedesDevCatalogError");
+    expect(html).toContain("unhandledrejection");
+    expect(html).toContain("vite:preloadError");
+    expect(html).toContain("import(url)");
+  });
+
+  it("leaves a production document unchanged when no manifest binding exists", async () => {
+    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-prod-"));
+    fixtureDirectories.push(clientDirectory);
+    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const transform = delivery.createDocumentTransform(null);
+    await expect(collect(transform, "<html><head></head><body>prod</body></html>")).resolves.toBe(
+      "<html><head></head><body>prod</body></html>",
     );
   });
 });

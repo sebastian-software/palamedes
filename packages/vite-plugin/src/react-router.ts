@@ -128,11 +128,13 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
     binding: ReactRouterCatalogBinding | null,
     transformOptions: ReactRouterDocumentTransformOptions = {},
   ): Transform {
-    if (!binding) return new PassThrough();
+    if (!binding && !options.development) return new PassThrough();
     const nonce = transformOptions.nonce
       ? ` nonce="${escapeAttribute(transformOptions.nonce)}"`
       : "";
-    const importMap = `<script type="importmap"${nonce}>${escapeScriptData(binding.importMapJson)}</script>`;
+    const importMap = binding
+      ? `<script type="importmap"${nonce}>${escapeScriptData(binding.importMapJson)}</script>`
+      : "";
     const decoder = new StringDecoder("utf8");
     let buffered = "";
     let injected = false;
@@ -152,14 +154,16 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
         injected = true;
         const head = buffered.slice(0, headEnd);
         const tail = buffered.slice(headEnd);
-        const preloads = modulePreloads(head, binding);
         const errorHtml =
           transformOptions.errorHtml ??
           '<main role="alert" data-palamedes-catalog-error><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="">Reload page</a> <a href="/">Go home</a></main>';
+        const preloads = binding ? modulePreloads(head, binding) : [];
         // React Router imports initial routes before executing entry.client.
         // This independent module observes the same dependency promises and can
         // show ordinary host error markup even when that entry never executes.
-        const probe = `<script${nonce}>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]=Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)));globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(()=>{globalThis[Symbol.for("palamedes.document-catalogs-ready")]=true}).catch(async()=>{if(!document.body)await new Promise(resolve=>document.addEventListener("DOMContentLoaded",resolve,{once:true}));const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));});</script>`;
+        const probe = binding
+          ? `<script${nonce}>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]=Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)));globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(()=>{globalThis[Symbol.for("palamedes.document-catalogs-ready")]=true}).catch(async()=>{if(!document.body)await new Promise(resolve=>document.addEventListener("DOMContentLoaded",resolve,{once:true}));const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));});</script>`
+          : `<script${nonce}>const showPalamedesDevCatalogError=()=>{const render=()=>{if(globalThis[Symbol.for("palamedes.dev-catalog-error-rendered")])return;if(!document.body){document.addEventListener("DOMContentLoaded",render,{once:true});return;}globalThis[Symbol.for("palamedes.dev-catalog-error-rendered")]=true;const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));};render();};const handlePalamedesDevCatalogError=()=>{if(globalThis.__reactRouterContext)globalThis.__reactRouterContext.isSpaMode=true;showPalamedesDevCatalogError();};globalThis.addEventListener("error",event=>{if(event.error||event.filename)showPalamedesDevCatalogError();});globalThis.addEventListener("unhandledrejection",event=>{event.preventDefault();showPalamedesDevCatalogError();});globalThis.addEventListener("vite:preloadError",event=>{event.preventDefault();handlePalamedesDevCatalogError();});globalThis.addEventListener("palamedes:catalogError",handlePalamedesDevCatalogError);globalThis.addEventListener("DOMContentLoaded",()=>{const entries=[...document.querySelectorAll('script[type="module"][src]')].map(script=>script.src);Promise.all(entries.map(url=>import(url))).catch(showPalamedesDevCatalogError);},{once:true});</script>`;
         const links = preloads
           .map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`)
           .join("");

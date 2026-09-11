@@ -894,7 +894,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return {
             code: `${
               initialize
-            }const loaders={${loaders}};\nconst fragment=await loaders[locale]();\ni18n.load(locale, fragment.messages);\n`,
+            }const loaders={${loaders}};\nconst fragment=await loaders[locale]().catch(error=>{const failure=new Error("Palamedes catalog dependency failed",{cause:error});if(typeof globalThis.dispatchEvent==="function")globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError",{detail:failure}));throw failure;});\ni18n.load(locale, fragment.messages);\n`,
             map: null,
             moduleSideEffects: true,
           };
