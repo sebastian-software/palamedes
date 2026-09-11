@@ -47,8 +47,8 @@ This build-time translation fallback is distinct from failure to deliver a
 compiled fragment at runtime. Failed delivery and unexpected missing compiled
 entries must reach host error handling rather than render substitute source
 text or internal keys, as specified in ADR-004. Concrete adapter integration
-and recovery mechanics are tracked in the
-[runtime and delivery plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
+and recovery mechanics are described in [ADR-008](008-framework-adapter-architecture.md)
+and the [v2 migration guide](../docs/migration-v2.md).
 
 Message functions receive the lookup values and a small renderer interface.
 They call named operations such as `value`, `number`, `plural`, `tag`, and
@@ -121,9 +121,14 @@ without needing a runtime parser.
 
 ## Implementation status
 
-The compiled representation is implemented. Catalog module compilation now
-rejects invalid or unsupported messages instead of generating a lazy-parser
-fallback; package-root parser removal, some raw-ICU examples, and Remix client
-delivery remain migration work, not exceptions to the decision.
-Exact API migration and host delivery-error integration remain implementation work in the
-[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
+The compiled representation and its first-party host integrations are
+implemented. Catalog module compilation rejects invalid or unsupported
+messages instead of generating a lazy-parser fallback, and Core, React,
+Solid, Next, Vite, and Remix use the same executable catalog contract. The
+request-scope integrations use the same generated representation through their
+adapter-owned delivery paths.
+
+The [catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md)
+records the parser-free artifact, browser delivery, and server reuse checks.
+The migration rules and exact replacements are maintained in the
+[v2 migration guide](../docs/migration-v2.md).

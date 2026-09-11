@@ -105,13 +105,11 @@ one immutable compiled catalog per generation, and gives each request its own
 runtime state. Catalog delivery failures propagate to the host's ordinary,
 catalog-independent error path.
 
-This status describes the target implemented by the current v2 slices; it does
-not close #1215. The aggregate release gate still has to prove every supported
-example's initial and lazy failure recovery, parser-free published artifacts,
-server reuse and memory behavior, and release-policy hold. Low-level explicit
-compiled-catalog APIs remain available for custom integrations, while the
-standard host workflow does not require application catalog maps, boundaries,
-or import-map/manifest HTML plumbing. The
-[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md)
-and the host verification jobs remain the source of truth for outstanding
-evidence.
+The implementation evidence for the host matrix, browser and server failure
+paths, parser-free artifacts, and catalog reuse is collected in the
+[catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md).
+Publication and release-policy checks remain governed by that evidence and the
+repository release gates; they do not introduce a second adapter contract.
+Low-level explicit compiled-catalog APIs remain available for custom
+integrations, while the standard host workflow does not require application
+catalog maps, boundaries, or import-map/manifest HTML plumbing.
