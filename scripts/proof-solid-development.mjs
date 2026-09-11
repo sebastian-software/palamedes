@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -34,6 +35,98 @@ function waitForHost(url, child) {
     };
     poll();
   });
+}
+
+function catalogLocale(url) {
+  return decodeURIComponent(new URL(url).pathname).match(
+    /palamedes:messages\/[^/]+\/(en|de|es)$/u,
+  )?.[1];
+}
+
+async function verifyFailure(browser, locale, phase, failure) {
+  const context = await browser.newContext();
+  await context.addCookies([{ name: "locale", value: locale, url: origin }]);
+  let armed = phase === "initial";
+  let injected = 0;
+  const requested = [];
+  await context.route("**/*", async (route) => {
+    const requestedLocale = catalogLocale(route.request().url());
+    if (!requestedLocale) return route.continue();
+    requested.push(route.request().url());
+    assert.equal(requestedLocale, locale, "inactive Solid development catalog requested");
+    if (armed && failure === "network") {
+      injected += 1;
+      return route.abort("failed");
+    }
+    const response = await route.fetch();
+    assert(response.ok(), "generated Solid development catalog was not available");
+    const source = await response.text();
+    const headers = { ...response.headers(), "cache-control": "no-store" };
+    delete headers.etag;
+    delete headers["last-modified"];
+    delete headers["content-length"];
+    if (!armed) return route.fulfill({ response, headers, body: source });
+    injected += 1;
+    // Preserve the generated exports so the failure happens during native
+    // module evaluation, rather than linking a deliberately incomplete module.
+    return route.fulfill({
+      response,
+      headers,
+      body: `${source}\nthrow new Error("SOLID_DEV_CATALOG_EVALUATION");\n`,
+    });
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(origin, { waitUntil: "domcontentloaded" });
+    if (phase === "lazy") {
+      await page.getByTestId("client-ready").waitFor({ state: "attached" });
+      assert.equal(await page.locator("html").getAttribute("data-solid-lazy-body"), null);
+      const initialRequests = new Set(requested);
+      armed = true;
+      await page.getByRole("button", { name: "Show lazy catalog details" }).click();
+      await page
+        .locator(
+          "[data-testid=lazy-catalog-error], [data-palamedes-catalog-error], main.error-state",
+        )
+        .first()
+        .waitFor();
+      assert(
+        requested.some((url) => !initialRequests.has(url)),
+        "lazy interaction requested no new catalog dependency",
+      );
+    } else {
+      await page.locator("[data-palamedes-catalog-error], main.error-state").first().waitFor();
+      assert.equal(await page.getByTestId("client-ready").count(), 0);
+    }
+    assert(injected > 0, `${locale} ${phase} ${failure} did not inject a dependency failure`);
+    assert.equal(await page.getByTestId("lazy-catalog-details").count(), 0);
+    assert.equal(await page.locator("html").getAttribute("data-solid-lazy-body"), null);
+    const errorView = page
+      .locator("[data-testid=lazy-catalog-error], [data-palamedes-catalog-error], main.error-state")
+      .first();
+    assert.match(await errorView.innerText(), /Reload/u);
+    assert.doesNotMatch(
+      await page.locator("body").innerText(),
+      /SOLID_DEV_CATALOG|MissingCompiled|palamedes:messages|\{[^}]*plural/u,
+    );
+    armed = false;
+    // Exercise the real recovery control. Programmatic reload would hide a
+    // broken link or a stale router intercepting this catalog-free document.
+    await errorView
+      .getByRole("link", { name: /^Reload(?: page)?$/u })
+      .or(errorView.getByRole("button", { name: /^Reload(?: page)?$/u }))
+      .click();
+    await page.getByTestId("client-ready").waitFor({ state: "attached" });
+    assert.equal(await page.locator("html").getAttribute("lang"), locale);
+    await page.getByRole("button", { name: "Show lazy catalog details" }).click();
+    await page.getByTestId("lazy-catalog-details").waitFor();
+    assert.equal(await page.locator("html").getAttribute("data-solid-lazy-body"), "executed");
+    console.log(
+      `Solid development ${locale} ${phase} ${failure}: dependency rejection, generic UI and reload recovery passed`,
+    );
+  } finally {
+    await context.close();
+  }
 }
 
 async function main() {
@@ -110,6 +203,15 @@ async function main() {
     console.log(
       "Solid development: active-only catalogs, real PO invalidation, and post-mount lazy delivery passed",
     );
+    await context.close();
+    await writeFile(catalogPath, originalCatalog);
+    for (const locale of ["en", "de"]) {
+      for (const phase of ["initial", "lazy"]) {
+        for (const failure of ["network", "evaluation"]) {
+          await verifyFailure(browser, locale, phase, failure);
+        }
+      }
+    }
   } finally {
     await writeFile(catalogPath, originalCatalog);
     await browser?.close();
