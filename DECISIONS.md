@@ -61,6 +61,8 @@ Then read the remaining cross-cutting decisions:
 27. [ADR-027: Privacy-Bounded CLI Update Check With Deployment-Gated Rollout](./adr/027-privacy-bounded-cli-update-check.md)
 28. [ADR-028: Effective Flow Project Setup](./adr/028-effective-flow-project-setup.md)
 
+29. [ADR-029: README Theme Composition](./adr/029-readme-theme-composition.md)
+
 ## ADR Policy
 
 Each ADR should explain:

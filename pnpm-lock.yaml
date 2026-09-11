@@ -36,8 +36,8 @@ importers:
         specifier: ^1.62.1
         version: 1.62.1
       '@sebastian-software/standards':
-        specifier: 0.10.0
-        version: 0.10.0
+        specifier: 0.11.0
+        version: 0.11.0
       '@typescript/typescript6':
         specifier: ^6.0.2
         version: 6.0.2
@@ -1846,9 +1846,6 @@ importers:
         specifier: workspace:^
         version: link:../vite-plugin
     devDependencies:
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.13.3
       '@solidjs/vite-plugin':
         specifier: 3.0.0-next.37
         version: 3.0.0-next.37(@solidjs/web@2.0.0-rc.3(solid-js@2.0.0-rc.3))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.3)(supports-color@10.2.2)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
@@ -1858,6 +1855,9 @@ importers:
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
       solid-js:
         specifier: 2.0.0-rc.3
         version: 2.0.0-rc.3
@@ -2007,8 +2007,8 @@ importers:
         specifier: 4.2.0
         version: 4.2.0(a25ad14b22ef80161cd9c0f46be2e7ba)
       ferramenta-family:
-        specifier: github:sebastian-software/ferramenta#f6de99cd094d0fabbf0be23a9c0b5c074ff89976&path:/packages/family
-        version: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/f6de99cd094d0fabbf0be23a9c0b5c074ff89976#path:/packages/family(react@19.2.8)
+        specifier: github:sebastian-software/ferramenta#05fadd21d86b69bb15179ef4461bef6b3b531f88&path:/packages/family
+        version: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88#path:/packages/family(react@19.2.8)
       isbot:
         specifier: ^5.2.2
         version: 5.2.2
@@ -5510,8 +5510,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sebastian-software/standards@0.10.0':
-    resolution: {integrity: sha512-7b79pfy7oMkIpQAWYZENzi7yJP4VOI6vIgairtx0L0YJ99lbOFI2P94TPeBUSUFwjZvF39yIWmUeORZDrNdmVw==}
+  '@sebastian-software/standards@0.11.0':
+    resolution: {integrity: sha512-wkK+xegmhv7gxVP5Z9/rlJzjG2IPUoGC7ATQQaVRw/ccxh7NWSrt2FcthphG8mn9I4tbyaAlgZkq/+kXHr8prg==}
     engines: {node: '>=24.0.0'}
     hasBin: true
 
@@ -8141,9 +8141,9 @@ packages:
       picomatch:
         optional: true
 
-  ferramenta-family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/f6de99cd094d0fabbf0be23a9c0b5c074ff89976#path:/packages/family:
-    resolution: {gitHosted: true, integrity: sha512-HbEaEFYUi/CTvGiQnrHvuKXoTrPrXoM/+C7yWNAdc6wCdpT2OBji5OFfDAabr7XhEFcI5pQooLWC5RePLaHD7Q==, path: /packages/family, tarball: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/f6de99cd094d0fabbf0be23a9c0b5c074ff89976}
-    version: 0.1.0
+  ferramenta-family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88#path:/packages/family:
+    resolution: {gitHosted: true, path: /packages/family, tarball: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88}
+    version: 1.0.2
     hasBin: true
     peerDependencies:
       react: '>=19.0.0 <20.0.0'
@@ -14699,7 +14699,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
 
-  '@sebastian-software/standards@0.10.0': {}
+  '@sebastian-software/standards@0.11.0': {}
 
   '@sec-ant/readable-stream@0.4.1': {}
 
@@ -17716,7 +17716,7 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
-  ferramenta-family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/f6de99cd094d0fabbf0be23a9c0b5c074ff89976#path:/packages/family(react@19.2.8):
+  ferramenta-family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88#path:/packages/family(react@19.2.8):
     dependencies:
       react: 19.2.8
 

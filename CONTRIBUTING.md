@@ -186,7 +186,7 @@ check:llms`. The check ties the maintained context contract to the CLI docs,
 published package manifests, and exported Node API names; the site build copies
 the checked files to `palamedes.dev`.
 
-### The Ferramenta family block
+#More from Ferramenta block
 
 Palamedes is one of the [Ferramenta](https://ferramenta.dev) tools, and the
 family section at the bottom of the repository README — plus the two-line
@@ -254,3 +254,20 @@ versions follow conventional commits again. Run `pnpm check:release-set` and
 
 Do not edit generated changelog entries by hand unless the release automation
 requires a specific correction.
+
+### Shared registry theme presentation
+
+The pinned Ferramenta generator supplies the compact family icon,
+“More from Ferramenta”, and visible descriptions for related tools. The current
+project is omitted from those links. Registry READMEs retain plain Markdown
+with descriptions; repository READMEs include the small icon.
+Keep theme branding subordinate to the project content. Regenerate through
+the existing family command after updating the pin, then run its check mode.
+
+The shared [living decision](https://github.com/sebastian-software/ferramenta/blob/main/docs/adr/0004-successor-copy-register.md)
+owns the family wording and hierarchy; the
+[composition decision](https://github.com/sebastian-software/ferramenta/blob/main/docs/adr/0001-decentralized-homepages-with-shared-family-package.md)
+owns membership and current-project exclusion.
+
+For the generated project README, see [README themes](docs/readme-theme.md).
+Edit `README.md.src`, then run `mise run readme:write`.
