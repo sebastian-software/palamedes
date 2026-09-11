@@ -83,6 +83,10 @@ msgstr "pro Stück"
 msgid "Fewer tickets"
 msgstr "Weniger Tickets"
 
+#: examples/solid-cookie/src/components/LazyCatalogDetails.tsx
+msgid "Lazy catalog detail loaded."
+msgstr ""
+
 #: examples/solid-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Sprache"

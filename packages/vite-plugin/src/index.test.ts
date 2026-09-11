@@ -106,6 +106,55 @@ beforeEach(() => {
 });
 
 describe("palamedes vite plugin", () => {
+  it("generates a server-only lazy catalog virtual module", async () => {
+    const plugin = palamedes().find((candidate) => candidate.name === "palamedes:server-catalogs");
+    const hooks = plugin as any;
+    expect(hooks?.resolveId?.("virtual:palamedes/server-catalogs")).toBe(
+      "\0palamedes:server-catalogs",
+    );
+
+    const addWatchFile = vi.fn();
+    const error = vi.fn((message: unknown) => {
+      throw new Error(String(message));
+    });
+    const load = hooks?.load as (
+      this: any,
+      id: string,
+      options?: { ssr?: boolean },
+    ) => Promise<any>;
+    if (typeof load !== "function") {
+      throw new TypeError("Expected server catalog virtual module load hook");
+    }
+
+    const result = await load.call(
+      {
+        environment: { config: { consumer: "server" } },
+        addWatchFile,
+        error,
+      } as never,
+      "\0palamedes:server-catalogs",
+      { ssr: true },
+    );
+
+    expect(result.code).toContain('import("/repo/src/locales/en.po")');
+    expect(result.code).toContain('import("/repo/src/locales/de.po")');
+    expect(result.code).toContain("createServerCatalogStore");
+    expect(result.code).toContain("Unsupported catalog locale");
+    expect(result.code).not.toContain('import "');
+    expect(addWatchFile).toHaveBeenCalled();
+    await expect(
+      load.call(
+        {
+          environment: { config: { consumer: "client" } },
+          addWatchFile,
+          error,
+        } as never,
+        "\0palamedes:server-catalogs",
+        { ssr: false },
+      ),
+    ).rejects.toThrow("server-only");
+  });
+
   it("hashes generated route facade output instead of a fixed marker", () => {
     const routePlugin = palamedes().find(
       (plugin) => plugin.name === "palamedes:react-router-route-boundaries",

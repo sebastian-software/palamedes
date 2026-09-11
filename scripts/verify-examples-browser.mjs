@@ -161,6 +161,10 @@ async function main() {
       await runDeliveryProof("proof-vite-development.mjs");
     }
     if (example.id === "vite-mdx") await runDeliveryProof("proof-vite-html-delivery.mjs");
+    if (example.id === "solid-cookie") {
+      await runDeliveryProof("verify-solid-catalog-delivery.mjs");
+      await runDeliveryProof("proof-solid-development.mjs");
+    }
   }
 
   const wakuIds = ["waku-cookie", "waku-route", "waku-subdomain", "waku-tld"];

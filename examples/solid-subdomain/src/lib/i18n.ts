@@ -1,10 +1,4 @@
-import { createI18n } from "@palamedes/core";
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
-import { setClientI18n } from "@palamedes/runtime";
 import { defineLocaleControls } from "@palamedes/core/locale";
-import { messages as deMessages } from "../locales/de.po";
-import { messages as enMessages } from "../locales/en.po";
-import { messages as esMessages } from "../locales/es.po";
 
 export const LOCALES = ["en", "de", "es"] as const;
 export const DEFAULT_LOCALE = "en";
@@ -26,28 +20,6 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels;
 export const normalizeLocale = locales.normalizeLocale;
 
-export const localeMessages: Record<Locale, CompiledCatalogMessages> = {
-  en: enMessages,
-  de: deMessages,
-  es: esMessages,
-};
-
-const clientI18n = createI18n();
-
-export function createExampleI18n() {
-  return createI18n();
-}
-
 export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale);
-}
-
-export function initializeClientI18n(locale: Locale) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  clientI18n.load(locale, localeMessages[locale]);
-  clientI18n.activate(locale);
-  setClientI18n(clientI18n);
 }
