@@ -1,6 +1,6 @@
 import type { ParentProps } from "solid-js";
 import { getRequestEvent, HydrationScript } from "@solidjs/web";
-import { initializeClientI18n, locales, type Locale } from "./lib/i18n";
+import { locales, type Locale } from "./lib/i18n";
 import { resolveHostLocale } from "./lib/server";
 
 function resolveDocumentLocale(): Locale {
@@ -19,7 +19,6 @@ function resolveDocumentLocale(): Locale {
 
 export default function Document(props: ParentProps) {
   const locale = resolveDocumentLocale();
-  initializeClientI18n(locale);
 
   return (
     <html lang={locale}>

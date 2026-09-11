@@ -154,9 +154,11 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
         injected = true;
         const head = buffered.slice(0, headEnd);
         const tail = buffered.slice(headEnd);
+        // A recovery link must start a new document and module graph, even
+        // when a mounted client router still owns delegated click handling.
         const errorHtml =
           transformOptions.errorHtml ??
-          '<main role="alert" data-palamedes-catalog-error><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="">Reload page</a> <a href="/">Go home</a></main>';
+          '<main role="alert" data-palamedes-catalog-error><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="" target="_self">Reload page</a> <a href="/" target="_self">Go home</a></main>';
         const preloads = binding ? modulePreloads(head, binding) : [];
         // React Router imports initial routes before executing entry.client.
         // This independent module observes the same dependency promises and can
