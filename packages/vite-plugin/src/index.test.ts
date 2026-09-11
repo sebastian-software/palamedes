@@ -134,6 +134,16 @@ describe("palamedes vite plugin", () => {
     );
   });
 
+  it("compiles FCL files through the same native catalog loader", async () => {
+    await runPoTransform({}, {}, "/repo/src/locales/de.fcl");
+
+    expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
+      "/repo/src/locales/de.fcl",
+      expect.objectContaining({ locale: "de", failOnMissing: false }),
+    );
+  });
+
   it("propagates strict compile failures when the removed opt-out is false", async () => {
     mocks.compileCatalogModule.mockRejectedValue(
       new Error("failOnCompileError no longer changes this behavior"),
@@ -1370,6 +1380,7 @@ function runMacroTransform(
 async function runPoTransform(
   context: Record<string, unknown> = {},
   options: Parameters<typeof palamedes>[0] = {},
+  sourceId = "/repo/src/locales/de.po",
 ) {
   const plugins = palamedes(options);
   const poLoader = plugins.find((plugin) => plugin.name === "palamedes:po-loader");
@@ -1385,7 +1396,7 @@ async function runPoTransform(
       ...context,
     } as any,
     "",
-    "/repo/src/locales/de.po",
+    sourceId,
   );
 }
 

@@ -36,7 +36,7 @@ import {
   type PalamedesFramework,
 } from "@palamedes/transform";
 
-const PO_FILE_REGEX = /(\.po|\?palamedes)$/;
+const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
@@ -1082,7 +1082,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cfg = await getConfigLazy();
         addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
         const cleanId = stripQuery(id);
-        const locale = path.basename(cleanId, ".po");
+        const locale = path.basename(cleanId, path.extname(cleanId));
         const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,
