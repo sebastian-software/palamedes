@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-12
+**Revised:** 2026-09-11
 
 ## Context
 
@@ -34,10 +35,18 @@ Currency formatting intentionally requires the `::currency/ISO` skeleton form;
 bare `currency/ISO` is treated as outside the runtime formatter subset.
 
 Palamedes treats unsupported formatter kinds such as `list`, `duration`, `ago`,
-and `name` as errors because the runtime parser does not render those formatter
-kinds. Unsupported styles on supported formatter kinds are warnings because the
-runtime currently falls back to the default `Intl` formatter for that argument
-type.
+and `name`, and unsupported styles on otherwise supported formatter kinds, as
+fatal compilation errors. The compiled-only runtime contract in ADR-022 and
+ADR-023 requires messages to have their supported meaning established before
+execution. Substituting default `Intl` options for an unsupported style does not
+fulfill that contract.
+
+Invalid ICU and unsupported constructs fail compilation in development and
+production. Host adapters must surface diagnostics identifying the affected
+catalog, locale, and source message; they cannot turn these errors into warnings
+through an opt-out such as `failOnCompileError: false`. Diagnostic collection
+for authoring and audit tools can still return structured findings without
+producing an executable catalog.
 
 Generic ICU formatter support analysis lives in Ferrocat. Palamedes supplies
 only the runtime-specific policy and maps Ferrocat diagnostics back to compiled
@@ -55,11 +64,11 @@ Rejected because identifying ICU formatter references is generic MessageFormat
 analysis. Keeping that analysis in Ferrocat preserves the catalog boundary from
 ADR-006 and avoids a second local ICU walker.
 
-### 2. Treat unsupported styles as errors
+### 2. Warn about unsupported styles and substitute default formatting
 
-Rejected for now because the runtime still renders supported formatter kinds by
-falling back to default `Intl` options. A warning reflects current behavior and
-lets teams decide whether unsupported style fallback is acceptable.
+Rejected because it silently changes the authored formatting intent. Earlier
+revisions accepted this behavior; the September 2026 compiled-only contract
+requires unsupported ICU to fail compilation instead.
 
 ### 3. Expand the runtime to full ICU skeleton support first
 
@@ -77,3 +86,10 @@ contract explicit and reviewable in catalog artifacts.
   translations.
 - Future runtime formatter expansion should update this ADR, the Core runtime
   docs, and the Palamedes runtime policy together.
+
+## Implementation status
+
+The supported formatter subset and diagnostics exist. Unsupported-style
+warnings, optional host error gates, and generated lazy-parser fallbacks still
+require migration to mandatory compilation failure. The accepted policy does
+not imply that those implementation changes have shipped.

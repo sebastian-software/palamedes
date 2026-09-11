@@ -4,6 +4,15 @@
 **Date:** 2026-08-01
 **Owner:** Palamedes maintainers
 
+**Current planning (2026-09-11):** Remaining work and accepted runtime/delivery
+decisions are being consolidated in the
+[unified runtime and delivery plan](2026-09-11-compiled-runtime-and-catalog-delivery.md).
+The exploration below contains historical assumptions and spike results; use
+the living ADRs and that plan for current policy. In particular, runtime ICU
+parsing and continuing with missing catalog fragments are no longer target
+behaviors. Retained technical findings will be reconciled into the active plan
+before this historical working document is retired.
+
 ## Summary
 
 Palamedes applications code-split their functionality, but not their messages.

@@ -1,7 +1,8 @@
-# ADR-023: Generated Production Runtime Is Parser-Free
+# ADR-023: Public Application Runtime Is Parser-Free
 
 **Status:** Accepted
 **Date:** 2026-08-02
+**Revised:** 2026-09-11
 
 ## Context
 
@@ -10,13 +11,19 @@ functions. Generated applications still imported the public package roots,
 however, so the lazy parser for hand-written catalogs remained reachable from
 the production module graph even when no generated message used it.
 
-The parser is valuable compatibility code, but it should not be part of the
-standard browser cost for applications that compile their catalogs and macros.
+Separate compiled entrypoints initially avoided that browser cost while keeping
+runtime parsing at package roots. Palamedes now adopts one public application
+runtime model: messages are compiled before execution on both server and client.
+The compatibility path is migration work rather than a permanent product mode.
 
 ## Decision
 
-Palamedes exposes explicit `compiled` entrypoints for the generated production
-path:
+All public application runtime entrypoints must be parser-free, on server and
+client, in development and production. ICU parsing remains available to
+authoring, validation, and compilation tooling; it is not an application runtime
+capability. This contract also applies to first-party examples and adapters.
+
+The existing parser-free implementation is exposed through:
 
 - `@palamedes/core/compiled`
 - `@palamedes/react/compiled`
@@ -27,61 +34,82 @@ Macro transforms and generated MDX modules import `Trans` from the matching
 framework `compiled` entrypoint. These entrypoints depend only on the compiled
 message engine and Intl formatters; they do not import the ICU parser.
 
-The package roots remain the compatibility entrypoints. They continue to
-support hand-written ICU string catalogs, `parseMessagePattern()`, and direct
-`getMessageNodes()` access. Custom transform or MDX module overrides remain
-honored and therefore own their chosen runtime boundary.
+Package roots must converge on this same contract. Their current support for
+uncompiled ICU catalogs, `parseMessagePattern()`, `parsePattern()`, and runtime
+parsing through `getMessageNodes()` must be removed or moved to an appropriate
+tooling boundary. Existing `compiled` subpaths should remain compatible aliases
+to the same parser-free implementation; they are not a separate runtime mode.
+Framework adapters select runtime imports automatically, so normal application
+authors need not choose between runtime entrypoints. Exact legacy API
+replacements are tracked in the
+[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
+This contract ships as Palamedes v2 with migration guidance and without a
+permanent legacy runtime mode. The published 1.x compatibility contract is not
+retroactively changed by this accepted target.
+Custom transform or MDX module overrides do not create a first-party guarantee
+of support for runtime ICU parsing.
 
 Within each framework, the package root and `compiled` entrypoint share one
-framework-specific message renderer. That shared renderer imports only
-`@palamedes/core/compiled`; the package root injects its parser as a
-compatibility fallback, while the compiled entrypoint does not. Full Core
-instances additionally expose an optional parse-only `parsePattern()`
-capability, which treats its argument as raw ICU rather than looking it up as a
-catalog key. Parser-free Core instances omit the capability.
+framework-specific message renderer. The renderer executes compiled messages
+without a parser injection or a parse-only runtime capability.
 
 React and Solid retain separate renderers because their result types, element
 cloning, wrapper-component behavior, and reactivity contracts differ. The
 boundary is shared across entrypoints within a framework, not across
 frameworks.
 
-The parser-free Core factory rejects an unbranded string catalog when it is
-loaded. A generated lazy fallback caused by invalid or unsupported ICU reports
-the error through `onError` and returns the raw fallback. Normal generated
-messages never use this path.
+The existing parser-free Core factory rejects an unbranded string catalog when
+it is loaded. Generated invalid or unsupported ICU must not delegate to a
+runtime parser: invalid or unsupported ICU fails compilation in development and
+production, as specified in ADR-022. Missing translations use the compiled
+fallback locale or source message by default, with optional `failOnMissing`
+enforcement. Runtime delivery failures and unexpected missing compiled entries
+reach host error handling under ADR-004; raw source patterns and internal keys
+must not become replacement message output.
+
+Complete compiled catalogs and compiled fragments are both valid runtime
+inputs. Parser removal does not require graph splitting or prohibit complete
+active-locale catalogs on either server or client.
 
 ## Alternatives Considered
 
 ### 1. Rely only on tree-shaking at the package root
 
 Rejected because the compatibility factory closes over the parser and keeps it
-reachable. A separate leaf entrypoint makes the dependency boundary explicit
-and verifiable across bundlers.
+reachable. All application entrypoints must exclude the parser structurally;
+the dependency boundary must be verifiable across bundlers.
 
-### 2. Remove the parser from the package root
+### 2. Keep the parser at package roots as an optional compatibility mode
 
-Rejected because it would break hand-written and runtime-loaded ICU catalogs.
-The compatibility behavior remains useful when applications deliberately opt
-out of build-time compilation.
+Rejected because the second execution model is outside the supported product
+workflow and makes the runtime boundary depend on import choices. Earlier
+revisions chose compatibility here. Reversing that choice requires an explicit
+migration, delivered through the coordinated v2 release and migration guide.
 
 ### 3. Publish a separate runtime package
 
 Rejected because the ABI belongs to Core and the framework adapters already
-have stable package identities. Subpath exports express the distinction without
-adding another package or version boundary.
+have stable package identities. Their roots and compatible subpath aliases can
+expose one compiled implementation without another package or version boundary.
 
 ## Consequences
 
-- Generated production builds do not ship the ICU parser by default.
-- Hand-written ICU catalogs must import `createI18n` from `@palamedes/core`.
-- Applications using generated catalogs can import `createI18n` and catalog
-  types from `@palamedes/core/compiled` to keep the parser unreachable.
-- Directly authored `Trans` imports may continue using package roots; generated
-  transforms select the compiled entry automatically.
+- The supported application runtime does not ship or execute an ICU parser,
+  regardless of host or package-root versus subpath imports.
+- Existing package-root consumers and raw-ICU component examples require
+  migration to compiled messages.
+- Remix's serialized ICU client catalogs must be replaced with delivery of
+  compiled messages. The concrete host integration remains to be designed.
 - Root and compiled entrypoints no longer maintain parallel copies of their
   framework's message walker and runtime adapter.
-- Raw fallback patterns cannot collide with an equal catalog key on current
-  full Core instances because parsing no longer re-enters catalog lookup.
 - `pnpm benchmark:runtime-browser` builds the real Vite MDX example, verifies a
   stable parser sentinel against the compatibility entry, rejects that sentinel
   in browser assets, and reports raw, gzip, and Brotli JavaScript sizes.
+  This existing proof must evolve to cover the unified runtime contract.
+
+## Implementation status
+
+The `compiled` entrypoints already provide the parser-free path. Package-root
+compatibility, parser-dependent examples, Remix delivery, and legacy generated
+fallbacks have not yet been migrated. This ADR records the accepted target,
+not a claim that those implementation changes have shipped.

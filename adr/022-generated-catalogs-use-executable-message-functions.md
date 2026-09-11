@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-01
-**Revised:** 2026-08-11
+**Revised:** 2026-09-11
 
 ## Context
 
@@ -13,8 +13,10 @@ an AST interpreter in the browser hot path.
 
 Palamedes needs one generated representation that handles plain strings,
 variables, formatters, plurals, selects, and rich-text tags across the Core,
-React, and Solid renderers. Hand-written string catalogs must remain supported
-without requiring a build step.
+React, and Solid renderers. Palamedes' supported application model is message
+authoring through macros and supported extraction, translation in source
+catalogs, and compilation before execution. Runtime interpretation of
+uncompiled ICU catalogs is not a separate supported application model.
 
 ## Decision
 
@@ -22,8 +24,31 @@ Generated catalog modules export one branded message map:
 
 - constant messages are string values
 - dynamic messages are executable functions
-- invalid or unsupported messages are functions that delegate to the existing
-  lazy string parser, preserving diagnostics and fallback behavior
+
+This representation is the public runtime contract on both server and client.
+ICU parsing belongs to authoring, validation, and compilation, not application
+message rendering. Generated code must not defer unsupported or invalid ICU
+to a runtime parser. Invalid ICU and ICU constructs outside the supported
+compiler/runtime subset are fatal compilation errors in both development and
+production, for source messages and translations alike. Diagnostics identify
+the affected catalog, locale, and source message. No adapter option may downgrade
+these failures to successful compilation or emit a lazy-parser substitute.
+
+A missing translation is not an invalid message. By default, compilation
+resolves it through the configured fallback locale chain and ultimately the
+source message, then compiles that result using the same message representation.
+Variables, plurals, and rich text retain their compiled semantics without a
+runtime parser. The missing target-locale translation remains observable in
+diagnostics; `failOnMissing` may enforce translation completeness even when a
+valid fallback exists. Invalid or unsupported fallback messages still fail
+compilation under the rule above.
+
+This build-time translation fallback is distinct from failure to deliver a
+compiled fragment at runtime. Failed delivery and unexpected missing compiled
+entries must reach host error handling rather than render substitute source
+text or internal keys, as specified in ADR-004. Concrete adapter integration
+and recovery mechanics are tracked in the
+[runtime and delivery plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
 
 Message functions receive the lookup values and a small renderer interface.
 They call named operations such as `value`, `number`, `plural`, `tag`, and
@@ -35,10 +60,11 @@ Core, React, and Solid provide renderer implementations for their result types.
 The same function therefore produces a string, React nodes, or Solid nodes.
 Generated modules contain no parallel string/AST maps.
 
-The catalog brand distinguishes generated constant strings from hand-written
-ICU strings. An unbranded string catalog retains bounded lazy parsing. A copied
-catalog loses the constant-string brand but remains correct; dynamic function
-entries are still executable.
+The catalog brand identifies generated catalog maps, including their constant
+strings. Constant strings in a compiled catalog are already compiled literal
+messages; they are not ICU patterns to interpret at runtime. Applications must
+preserve the generated catalog contract when loading complete catalogs or
+fragments. Uncompiled ICU maps are not an alternative runtime input.
 
 Ferrocat remains the Rust-side ICU parser. The Rust core lowers its AST into a
 host-neutral message program, and the Node host boundary renders safe JavaScript
@@ -66,21 +92,23 @@ constant messages structured data.
 Rejected because it would duplicate compiler semantics across Core, React, and
 Solid. The renderer parameter keeps one compiler output portable across hosts.
 
-### 4. Remove support for hand-written string catalogs
+### 4. Retain runtime support for uncompiled ICU catalogs
 
-Rejected because small applications and runtime-loaded catalogs still benefit
-from the existing lazy parser. Generated catalogs take the optimized path;
-manual catalogs remain a supported fallback path.
+Rejected because it adds a second execution model outside Palamedes' intended
+extraction, translation, and compilation workflow. Earlier revisions retained
+this compatibility path; the September 2026 decision replaces that policy for
+both server and client. Small applications can load a complete compiled catalog
+without needing a runtime parser.
 
 ## Consequences
 
-- Generated dynamic messages execute directly without browser ICU parsing or
+- Generated dynamic messages execute directly without server or client ICU parsing or
   AST traversal.
 - Generated catalog values are `string | CompiledMessage`; consumers must not
   assume every generated value is JSON-serializable.
-- Public `getMessageNodes()` remains available by parsing a reconstructed
-  pattern on explicit calls, but first-party rendering neither parses ICU nor
-  allocates nodes for compiled messages.
+- Runtime parser and parsed-node inspection APIs must be audited and migrated
+  out of the public application runtime contract. Build-time tooling may still
+  parse ICU and inspect its representation.
 - The compiler owns safe JavaScript expression generation, including escaped
   literals, computed object keys, nested choices, and plural-pound semantics.
 - Custom integrations loading generated modules must declare
@@ -88,5 +116,15 @@ manual catalogs remain a supported fallback path.
   `defineCompiledCatalog()` from its `compiled` entrypoint.
 - Runtime and bundle benchmarks must cover both payload size and first-render
   execution before the representation is considered stable.
-- ADR-023 defines the parser-free package boundary used by generated production
-  code while retaining package-root compatibility for hand-written catalogs.
+- ADR-023 applies the parser-free contract to the complete public application
+  runtime, including package-root imports.
+
+## Implementation status
+
+The compiled representation is implemented. Removal of the former runtime
+compatibility model is not yet complete: package roots still expose parser
+capabilities, generated invalid-message fallbacks can still request parsing,
+some examples use raw ICU at runtime, and Remix client delivery uses serialized
+ICU catalogs. These are migration work, not exceptions to the decision.
+Exact API migration and host delivery-error integration remain implementation work in the
+[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
