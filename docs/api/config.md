@@ -98,3 +98,23 @@ Synchronous variant of `loadPalamedesConfig` with the same options, return
 shape, and file support (including legacy `palamedes.config.ts`/`.js`). Use it
 in hosts that cannot await, such as synchronous loader hooks — the Remix
 register hook loads its config this way.
+
+## Shared dependency and digest helpers
+
+`getConfigDependencies(config)` returns the loaded configuration's dependency
+paths. For callers that only provide `configPath`, it falls back to that one
+file. Native path spellings are preserved, including Windows paths.
+
+`digestConfig(config)` synchronously hashes the sorted dependency paths and
+file contents with SHA-256. NUL separators distinguish paths from contents.
+Next and Remix use the shared digest for invalidation, while Vite uses the same
+dependency helper for watching. Unreadable dependency files throw so the host
+can invalidate its cached configuration and reload it.
+
+```ts
+import { digestConfig, getConfigDependencies, loadPalamedesConfig } from "@palamedes/config";
+
+const config = await loadPalamedesConfig();
+const watchedFiles = getConfigDependencies(config);
+const version = digestConfig(config);
+```

@@ -1,12 +1,15 @@
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import type { registerHooks } from "node:module";
 import type { ModuleLoader } from "remix/assets";
 import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source-map-js";
 
-import { loadPalamedesConfigSync, type LoadedPalamedesConfig } from "@palamedes/config";
+import {
+  digestConfig,
+  getConfigDependencies,
+  loadPalamedesConfigSync,
+  type LoadedPalamedesConfig,
+} from "@palamedes/config";
 import { compileCatalogModule } from "@palamedes/core-node";
 import {
   resolveMacroRuntimeModule,
@@ -295,27 +298,12 @@ function cacheConfig(
   }
 }
 
-function configDependencies(config: LoadedPalamedesConfig): string[] {
-  return Array.isArray(config.configDependencies) ? config.configDependencies : [config.configPath];
-}
-
-function digestConfig(config: LoadedPalamedesConfig): string {
-  const digest = createHash("sha256");
-  for (const dependency of [...configDependencies(config)].sort()) {
-    digest.update(dependency);
-    digest.update("\0");
-    digest.update(readFileSync(dependency));
-    digest.update("\0");
-  }
-  return digest.digest("hex");
-}
-
 function isConfigWatchUrl(url: string): boolean {
   return url.startsWith("file:") && new URL(url).searchParams.has(CONFIG_WATCH_QUERY_PARAM);
 }
 
 function prependConfigWatchImports(code: string, config: LoadedPalamedesConfig): string {
-  const imports = configDependencies(config).map((dependency) => {
+  const imports = getConfigDependencies(config).map((dependency) => {
     const configUrl = pathToFileURL(dependency);
     configUrl.searchParams.set(CONFIG_WATCH_QUERY_PARAM, "");
     return `import ${JSON.stringify(configUrl.href)}`;

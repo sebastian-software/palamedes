@@ -1,7 +1,6 @@
 "use strict";
 
-const { createHash } = require("node:crypto");
-const { readFileSync } = require("node:fs");
+const { digestConfig: sharedDigestConfig } = require("@palamedes/config");
 
 const configCache = new Map();
 
@@ -40,7 +39,7 @@ function getCachedConfig(cacheKey) {
   }
 
   try {
-    return digestConfig(cached.config) === cached.digest ? cached.config : null;
+    return sharedDigestConfig(cached.config) === cached.digest ? cached.config : null;
   } catch {
     // Config moved, changed, or is not readable; reload it below.
     return null;
@@ -51,25 +50,11 @@ function cacheConfig(cacheKey, config) {
   try {
     configCache.set(cacheKey, {
       config,
-      digest: digestConfig(config),
+      digest: sharedDigestConfig(config),
     });
   } catch {
     // Tests and virtual configs may not have a readable config file.
   }
-}
-
-function digestConfig(config) {
-  const dependencies = Array.isArray(config.configDependencies)
-    ? config.configDependencies
-    : [config.configPath];
-  const digest = createHash("sha256");
-  for (const dependency of [...dependencies].sort()) {
-    digest.update(dependency);
-    digest.update("\0");
-    digest.update(readFileSync(dependency));
-    digest.update("\0");
-  }
-  return digest.digest("hex");
 }
 
 function clearConfigCache() {
