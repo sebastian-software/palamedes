@@ -289,9 +289,10 @@ In practice:
   runtime calls against compiled catalogs — the same code shape the build-time
   integrations (`@palamedes/vite-plugin`, `@palamedes/next-plugin`) produce.
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `true`
+`keepSourceFallbacks` retains its legacy option name and defaults to `false`
 here. It only controls diagnostic source metadata in generated calls. Set
-`keepSourceFallbacks: false` for compact output without authored source text.
+`keepSourceFallbacks: true` when deployment skew makes authored source text
+useful for diagnostics.
 V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.

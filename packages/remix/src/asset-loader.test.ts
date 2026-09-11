@@ -245,7 +245,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       minify: true,
       sourceMaps: "external",
       watch: false,
-      scripts: { loaders: [createPalamedesRemixAssetLoader()] },
+      scripts: { loaders: [createPalamedesRemixAssetLoader({ keepSourceFallbacks: true })] },
     });
 
     try {
@@ -273,7 +273,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     ].join("\n");
     const secondSource = firstSource.replace("First browser message", "Second browser message");
     const fixture = createAssetFixture("watched.ts", firstSource);
-    const transform = createPalamedesRemixAssetLoader();
+    const transform = createPalamedesRemixAssetLoader({ keepSourceFallbacks: true });
     let loaderCalls = 0;
     const countingLoader: ModuleLoader = (url, context, nextLoad) => {
       loaderCalls += 1;
@@ -368,7 +368,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       () => ({
         format: "module",
         source:
-          'import { t } from "@palamedes/core/macro"; export function text() { return t`Fragment`; }',
+          'import { t } from "@palamedes/core/macro"; globalThis.__fragmentSideEffect = true; export function text() { return t`Fragment`; }',
       }),
     );
 
@@ -379,6 +379,9 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(String(loaded.source)).toContain('__palamedesRegisterMessageLoaderGroup("fragment-key"');
     expect(String(loaded.source)).toContain(
       'new URL("/assets/__palamedes/catalog-fragments/fragment-key.js?fragment=1&locale="',
+    );
+    expect(String(loaded.source).indexOf("__palamedesRegisterMessageLoaderGroup")).toBeLessThan(
+      String(loaded.source).indexOf("globalThis.__fragmentSideEffect"),
     );
   });
 
@@ -396,8 +399,9 @@ describe("createPalamedesRemixAssetLoader", () => {
         "    include: [app/**/*.ts]",
       ].join("\n"),
     );
+    const deCatalogPath = path.join(rootDir, "app", "locales", "de.po");
     writeFileSync(
-      path.join(rootDir, "app", "locales", "de.po"),
+      deCatalogPath,
       'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo"\n\nmsgid "Other"\nmsgstr "Andere"\n',
     );
     writeFileSync(
@@ -432,6 +436,18 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(fragmentSource).toContain("Hallo");
     expect(fragmentSource).not.toContain("Andere");
     expect(fragmentSource).not.toContain("msgid");
+
+    writeFileSync(
+      deCatalogPath,
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo aktualisiert"\n\nmsgid "Other"\nmsgstr "Andere"\n',
+    );
+    const catalogChangedKey = registry.register(sourcePath, compiledIds);
+    expect(catalogChangedKey).not.toBe(firstKey);
+    expect(
+      registry.serve(
+        new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
+      )?.status,
+    ).toBe(404);
 
     const secondKey = registry.register(sourcePath, ["stale-generation-proof"]);
     expect(secondKey).not.toBe(firstKey);
