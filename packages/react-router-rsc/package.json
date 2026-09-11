@@ -17,12 +17,18 @@
     "dist/"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/client.mjs"
+  ],
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.mjs"
     }
   },
   "publishConfig": {
@@ -34,7 +40,8 @@
     "stub": "unbuild --stub"
   },
   "dependencies": {
-    "@palamedes/runtime": "workspace:^"
+    "@palamedes/runtime": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^"
   },
   "devDependencies": {
     "@react-router/dev": "8.3.1",
