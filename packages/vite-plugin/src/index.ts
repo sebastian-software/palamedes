@@ -119,6 +119,13 @@ function routeFacadeSource(relative: string, exports: readonly string[]): string
   return `/*palamedes-route-facade:${ROUTE_FACADE_VERSION}*/let route,failure;try{route=await import(${JSON.stringify(relative)})}catch(error){if(!globalThis[Symbol.for("palamedes.document-catalogs-ready")])throw error;failure=error}\n${renderedExports}`;
 }
 
+function routeAssetSource(code: string): string {
+  // The original chunk is moved to a content-addressed asset without its
+  // Rollup chunk map. Do not leave a sourceMappingURL pointing at the old
+  // facade filename.
+  return code.replace(/\r?\n?\/\/[#@]\s*sourceMappingURL=.*$/u, "");
+}
+
 function createRouteFacade(chunk: RouteFacadeChunk): {
   assetFileName: string;
   assetSource: string;
@@ -128,7 +135,7 @@ function createRouteFacade(chunk: RouteFacadeChunk): {
   const assetFileName = `${path.posix.dirname(chunk.fileName)}/palamedes-route-${hash}.js`;
   const relative = `./${path.posix.basename(assetFileName)}`;
   const facadeSource = routeFacadeSource(relative, chunk.exports);
-  return { assetFileName, assetSource: chunk.code, facadeSource };
+  return { assetFileName, assetSource: routeAssetSource(chunk.code), facadeSource };
 }
 
 function isServerEnvironment(context: unknown, ssr = false, legacyBuildSsr = false): boolean {

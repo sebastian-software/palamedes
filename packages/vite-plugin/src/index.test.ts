@@ -127,6 +127,31 @@ describe("palamedes vite plugin", () => {
     );
   });
 
+  it("removes stale source map references from moved route assets", () => {
+    const routePlugin = palamedes().find(
+      (plugin) => plugin.name === "palamedes:react-router-route-boundaries",
+    );
+    if (!routePlugin?.generateBundle) throw new Error("Route facade plugin is missing.");
+    const emitFile = vi.fn();
+    const bundle = {
+      "assets/home.js": {
+        type: "chunk" as const,
+        facadeModuleId: "/repo/routes/home.tsx?__react-router-build-client-route",
+        code: "export default function Home() {}\n//# sourceMappingURL=home.js.map",
+        fileName: "assets/home.js",
+        exports: ["default"],
+      },
+    };
+    const generateBundle =
+      typeof routePlugin.generateBundle === "function"
+        ? routePlugin.generateBundle
+        : routePlugin.generateBundle.handler;
+    generateBundle.call({ emitFile } as never, {} as never, bundle as never, false);
+    expect(emitFile).toHaveBeenCalledWith(
+      expect.objectContaining({ source: expect.not.stringContaining("sourceMappingURL") }),
+    );
+  });
+
   it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
     "transforms %s with the shared bundler default",
     (file) => {
