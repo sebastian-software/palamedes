@@ -12,6 +12,9 @@ function LazyDetailsBoundary(): Element {
     () => (
       <p data-testid="lazy-catalog-error" role="alert">
         Details are temporarily unavailable. Reload the page to try again.
+        <button type="button" onClick={() => window.location.reload()}>
+          Reload page
+        </button>
       </p>
     ),
   ) as unknown as Element;

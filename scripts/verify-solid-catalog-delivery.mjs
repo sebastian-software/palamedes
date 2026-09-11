@@ -124,7 +124,8 @@ async function initialFailure(locale, mode) {
   }
 
   fail = false;
-  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("link", { name: "Reload page", exact: true }).click();
+  await page.getByTestId("client-ready").waitFor({ state: "attached" });
   result.recovered = (await page.locator('[data-testid="client-ready"]').count()) === 1;
   if (!result.recovered) throw new Error(`reload recovery failed: ${JSON.stringify(result)}`);
   await browser.close();
@@ -136,6 +137,7 @@ async function normalAndLazyFailure(locale, mode) {
   const context = await browser.newContext({ extraHTTPHeaders: localeHeaders(locale) });
   const page = await context.newPage();
   const initialCatalogRequests = [];
+  let fail = true;
   let navigations = 0;
   page.on("request", (request) => {
     if (request.url().includes("/assets/palamedes-m-")) initialCatalogRequests.push(request.url());
@@ -145,16 +147,23 @@ async function normalAndLazyFailure(locale, mode) {
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   assertActiveLocale(initialCatalogRequests, locale);
-  if ((await page.locator('[data-testid="lazy-catalog-details"]').count()) !== 0) {
+  if ((await page.locator("html").getAttribute("data-solid-lazy-body")) !== null) {
     throw new Error(`lazy catalog body was evaluated before navigation for ${locale}`);
   }
   const before = navigations;
+  const initialCount = initialCatalogRequests.length;
   await page.route("**/assets/palamedes-m-*.js", async (route) => {
+    if (!fail) return route.continue();
     if (mode === "abort") return route.abort();
     return catalogFailureBody(route, "palamedes-solid-lazy-evaluation");
   });
   await page.getByRole("button", { name: "Show lazy catalog details" }).click();
   await page.locator('[data-testid="lazy-catalog-error"]').waitFor();
+  assertActiveLocale(initialCatalogRequests, locale);
+  if (initialCatalogRequests.length <= initialCount)
+    throw new Error("No new lazy fragment requested");
+  if ((await page.locator("html").getAttribute("data-solid-lazy-body")) !== null)
+    throw new Error("Rejected catalog dependency allowed lazy module evaluation");
   const result = {
     errorBoundary: (await page.locator('[data-testid="lazy-catalog-error"]').count()) === 1,
     locale,
@@ -166,6 +175,14 @@ async function normalAndLazyFailure(locale, mode) {
   if (!result.errorBoundary || result.reloads !== 0 || result.rawDiagnostic) {
     throw new Error(`lazy failure proof failed: ${JSON.stringify(result)}`);
   }
+  fail = false;
+  await page.getByRole("button", { name: "Reload page", exact: true }).click();
+  await page.getByTestId("client-ready").waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Show lazy catalog details" }).click();
+  await page.getByTestId("lazy-catalog-details").waitFor();
+  if ((await page.locator("html").getAttribute("data-solid-lazy-body")) !== "executed")
+    throw new Error("Recovered lazy module did not evaluate");
+  result.recovered = true;
   await browser.close();
   console.log("lazy:", result);
 }
@@ -192,13 +209,22 @@ async function csp() {
       clientReady: (await page.locator('[data-testid="client-ready"]').count()) === 1,
       lazyLoaded: (await page.locator('[data-testid="lazy-catalog-details"]').count()) === 1,
       locale,
-      errors,
+      errors: [...errors],
     };
-    await browser.close();
     if (!result.clientReady || !result.lazyLoaded || result.errors.length > 0) {
+      await browser.close();
       throw new Error(`CSP proof failed: ${JSON.stringify(result)}`);
     }
-    console.log("csp:", result);
+    const unauthorizedRan = await page.evaluate(() => {
+      const script = document.createElement("script");
+      script.textContent = "globalThis.__solidUnauthorizedInline = true";
+      document.head.appendChild(script);
+      return globalThis.__solidUnauthorizedInline === true;
+    });
+    await browser.close();
+    if (unauthorizedRan)
+      throw new Error("The host CSP did not block an unauthorized inline script");
+    console.log("csp:", { ...result, unauthorizedInlineBlocked: true });
   }
 }
 
