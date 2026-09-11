@@ -23,7 +23,7 @@ function fixtureDirectory(): string {
   return directory;
 }
 
-async function transformDocument(html: string, nonce?: string): Promise<string> {
+async function transformDocument(html: string, nonce?: string, chunkSize = 3): Promise<string> {
   const middleware = createSolidCatalogDeliveryMiddleware({
     clientDirectory: fixtureDirectory(),
     nonce,
@@ -35,8 +35,9 @@ async function transformDocument(html: string, nonce?: string): Promise<string> 
       new Response(
         new ReadableStream({
           start(controller) {
-            for (const chunk of html.match(/.{1,3}/gu) ?? []) {
-              controller.enqueue(new TextEncoder().encode(chunk));
+            const bytes = new TextEncoder().encode(html);
+            for (let index = 0; index < bytes.length; index += chunkSize) {
+              controller.enqueue(bytes.slice(index, index + chunkSize));
             }
             controller.close();
           },
@@ -80,5 +81,32 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).toContain('const ready = "😀";');
     expect(output).toContain('import("/assets/entry.js")');
     expect(output).not.toContain('src="/assets/entry.js"');
+  });
+
+  it("keeps long tags, Unicode boundaries, and the real nonce attribute intact", async () => {
+    const attributes = "x".repeat(1_200);
+    const html = `<html lang="de"><head><script data-nonce="not-a-csp-nonce" nonce = "existing">${"x".repeat(800)}😀</script><script data-padding="${attributes}">const marker = "😀";</script><script type = "module" src = "/assets/entry.js"></script></head><body></body></html>`;
+    const output = await transformDocument(html, "solid-test", 1);
+
+    expect(output).toContain('<html lang="de">');
+    expect(output).toContain('data-nonce="not-a-csp-nonce" nonce = "existing"');
+    expect(output).toContain(attributes);
+    expect(output).toContain("😀");
+    expect(output).toContain('import("/assets/entry.js")');
+    expect(output).not.toContain('src = "/assets/entry.js"');
+    expect(output).not.toContain("�");
+  });
+
+  it("does not treat data-nonce as CSP authorization and accepts nonce whitespace", async () => {
+    const output = await transformDocument(
+      '<html><head><script data-nonce="wrong">const first = 1;</script><script nonce = "right">const second = 2;</script></head></html>',
+      "solid-test",
+    );
+
+    expect(output).toContain(
+      '<script nonce="solid-test" data-nonce="wrong">const first = 1;</script>',
+    );
+    expect(output).toContain('<script nonce = "right">const second = 2;</script>');
+    expect(output).toContain('<script nonce="solid-test" data-nonce="wrong"');
   });
 });

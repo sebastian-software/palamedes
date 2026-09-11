@@ -99,7 +99,7 @@ function createSolidBootstrapGateTransform(options: {
         if (!flush && end > tail.length - TAIL_SIZE) break;
         const script = match[0];
         const moduleSource = script.match(
-          /\btype=["']module["'][^>]*\bsrc=["']([^"']+)["']|\bsrc=["']([^"']+)["'][^>]*\btype=["']module["']/iu,
+          /\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']([^"']+)["']|\bsrc\s*=\s*["']([^"']+)["'][^>]*\btype\s*=\s*["']module["']/iu,
         );
         let replacement = script;
         if (moduleSource) {
@@ -109,7 +109,7 @@ function createSolidBootstrapGateTransform(options: {
             ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
             : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
           replacement = `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; });</script>`;
-        } else if (options.nonce && !/\bnonce=["']/iu.test(script)) {
+        } else if (options.nonce && !/<script\b[^>]*\snonce\s*=\s*["']/iu.test(script)) {
           replacement = script.replace(
             /^<script\b/iu,
             `<script nonce="${escapeAttribute(options.nonce)}"`,
@@ -123,20 +123,50 @@ function createSolidBootstrapGateTransform(options: {
         if (tail) stream.push(tail);
         tail = "";
       } else {
-        const scriptStart = tail.lastIndexOf("<script");
+        const scriptStart = lastScriptStart(tail);
         const safeEnd = tail.length - TAIL_SIZE;
         if (safeEnd <= 0) return;
-        if (scriptStart >= safeEnd) {
+        // Keep every possible script block intact. A block can be much longer
+        // than TAIL_SIZE (for example Solid's inline hydration payload), and
+        // flushing at safeEnd would make the second half impossible to parse.
+        if (scriptStart >= 0) {
           stream.push(tail.slice(0, scriptStart));
           tail = tail.slice(scriptStart);
         } else {
-          stream.push(tail.slice(0, safeEnd));
-          tail = tail.slice(safeEnd);
+          const cut = safeTextCut(tail, safeEnd);
+          stream.push(tail.slice(0, cut));
+          tail = tail.slice(cut);
         }
       }
       return;
     }
   }
+}
+
+function lastScriptStart(value: string): number {
+  const matches = [...value.matchAll(/<script\b/giu)];
+  if (matches.length > 0) return matches.at(-1)?.index ?? -1;
+
+  // Retain a partial opener split over two byte chunks. The normal tail
+  // retention keeps this small suffix until the next chunk arrives.
+  const lower = value.toLowerCase();
+  const opener = "<script";
+  for (let size = opener.length - 1; size > 0; size -= 1) {
+    if (lower.endsWith(opener.slice(0, size))) return value.length - size;
+  }
+  return -1;
+}
+
+function safeTextCut(value: string, desired: number): number {
+  let cut = desired;
+  if (cut > 0 && cut < value.length) {
+    const previous = value.charCodeAt(cut - 1);
+    const next = value.charCodeAt(cut);
+    if (previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+      cut -= 1;
+    }
+  }
+  return cut;
 }
 
 function escapeAttribute(value: string): string {
