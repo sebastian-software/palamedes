@@ -11,6 +11,11 @@ export type WakuCatalogDeliveryOptions = {
   development?: boolean;
   /** Optional trusted catalog-free host UI for failed delivery. */
   errorHtml?: string;
+  /**
+   * CSP nonce for the generated import map and failure probe. A function may
+   * derive the nonce from the current request when it is request-scoped.
+   */
+  nonce?: string | ((request: Request) => string | undefined);
 };
 
 /**
@@ -32,11 +37,14 @@ export function createWakuCatalogDeliveryMiddleware(
     }
 
     const binding = delivery.getLocaleBinding(options.resolveLocale(context.req.raw));
+    const nonce =
+      typeof options.nonce === "function" ? options.nonce(context.req.raw) : options.nonce;
     const body = response.body
       .pipeThrough(
         Transform.toWeb(
           delivery.createDocumentTransform(binding, {
             ...(options.errorHtml ? { errorHtml: options.errorHtml } : {}),
+            ...(nonce ? { nonce } : {}),
           }),
         ),
       )
