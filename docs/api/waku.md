@@ -15,6 +15,51 @@ still need the standard Vite transformation and catalog-loading setup.
 `@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
 unsupported.
 
+## Compiled catalog delivery
+
+Keep the server catalog loader and the browser catalog delivery in the server
+entry. The Vite plugin emits immutable native catalog modules for the active
+locale and a shared server catalog store; it does not require importing `.po`
+files from an RSC or browser module.
+
+```ts
+// src/lib/i18n.server.ts
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+
+export function createRequestI18n(locale: string) {
+  return createViteServerI18n({ locale });
+}
+```
+
+For document responses, install the Waku middleware after Waku has rendered the
+response. It injects only the active locale's generated catalog modules and
+gates Waku's client entry on their evaluation. `resolveLocale` remains the
+application's host, path, cookie, or header policy; the middleware does not
+maintain a second locale map.
+
+```ts
+// src/waku.server.ts
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+
+middlewareFns: [
+  () =>
+    createWakuCatalogDeliveryMiddleware({
+      clientDirectory: "dist/public",
+      resolveLocale: (request) => resolveApplicationLocale(request),
+      development: process.env.NODE_ENV !== "production",
+      nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
+    }),
+];
+```
+
+`clientDirectory` points at the Vite client build containing
+`palamedes-split-manifest.json`. If an active fragment cannot be fetched or
+evaluated, the middleware renders its catalog-free reload document and keeps
+the diagnostic out of the response. Set `errorHtml` to provide a trusted host
+recovery document. For a strict CSP, pass the request-scoped `nonce` and allow
+that nonce plus same-origin module assets in the host policy. RSC and action
+responses pass through unchanged.
+
 ## Interceptor registration
 
 When using Waku's `fsRouter()`, add a default export below

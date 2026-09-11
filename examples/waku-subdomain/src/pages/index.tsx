@@ -7,13 +7,7 @@ import { LocaleSwitcher } from "../components/LocaleSwitcher";
 import { ProofPanel } from "../components/ProofPanel";
 import { SuggestionBanner } from "../components/SuggestionBanner";
 import { TicketPanel } from "../components/TicketPanel";
-import {
-  activateServerI18n,
-  createBanner,
-  getLocaleLabel,
-  locales,
-  type Locale,
-} from "../lib/i18n";
+import { createBanner, getLocaleLabel, locales, type Locale } from "../lib/i18n";
 
 type ProbeResult = {
   handledAt: string;
@@ -38,12 +32,8 @@ export default async function IndexPage() {
   const localeLabel = getLocaleLabel(currentLocale);
   const banner = createBanner(headers, currentLocale);
 
-  activateServerI18n(currentLocale);
-
   async function runProbe(): Promise<ProbeResult> {
     "use server";
-
-    activateServerI18n(currentLocale);
 
     return {
       handledAt: new Date().toISOString(),
@@ -56,12 +46,6 @@ export default async function IndexPage() {
   return (
     <>
       <title>Frontend Stage · Palamedes + Waku · Subdomain</title>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `window.__PALAMEDES_LOCALE__=${JSON.stringify(currentLocale)};`,
-        }}
-      />
-
       {banner ? (
         <SuggestionBanner
           currentLocale={currentLocale}

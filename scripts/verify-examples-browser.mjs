@@ -158,6 +158,12 @@ async function main() {
     }
     if (example.id === "vite-mdx") await runDeliveryProof("proof-vite-html-delivery.mjs");
   }
+
+  const wakuIds = ["waku-cookie", "waku-route", "waku-subdomain", "waku-tld"];
+  if (wakuIds.every((id) => plan.some(({ example }) => example.id === id))) {
+    await runDeliveryProof("proof-waku-catalog-delivery.mjs");
+    await runDeliveryProof("proof-waku-development.mjs");
+  }
 }
 
 main().catch((error) => {

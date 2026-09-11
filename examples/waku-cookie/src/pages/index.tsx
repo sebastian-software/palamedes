@@ -4,6 +4,7 @@ import { EVENT } from "@palamedes/example-ui";
 import { unstable_getHeaders } from "waku/router/server";
 import { ClientReady } from "../components/ClientReady";
 import { LocaleSwitcher } from "../components/LocaleSwitcher";
+import { LazyCatalogPanel } from "../components/LazyCatalogPanel";
 import { ProofPanel } from "../components/ProofPanel";
 import { TicketPanel } from "../components/TicketPanel";
 import { getLocaleLabel, resolveCookieLocale, type Locale } from "../lib/i18n";
@@ -50,12 +51,6 @@ export default async function CookiePage() {
   return (
     <>
       <title>Frontend Stage · Palamedes + Waku</title>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `window.__PALAMEDES_LOCALE__=${JSON.stringify(locale)};`,
-        }}
-      />
-
       <header className="topbar">
         <div className="brand">
           <b>Frontend Stage</b>
@@ -84,6 +79,7 @@ export default async function CookiePage() {
         <TicketPanel />
         <ProofPanel runProbe={runProbe} />
       </div>
+      <LazyCatalogPanel />
 
       <footer className="foot">
         <span className="foot-badge">Palamedes</span>

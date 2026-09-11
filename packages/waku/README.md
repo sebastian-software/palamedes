@@ -11,6 +11,43 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 `@palamedes/waku` is ESM-only, matching Waku's React Server Component runtime.
 Use `import`; CommonJS `require()` is deliberately unsupported.
 
+## Compiled catalog delivery
+
+Keep catalog delivery in the server entry and leave locale selection in the
+application. Use `createViteServerI18n({ locale })` from
+`@palamedes/vite-plugin/server` to create a fresh instance backed by the shared,
+lazily loaded compiled server catalog.
+Do not import `.po` modules from browser-facing files or serialize catalog
+functions through RSC.
+
+For production builds, connect the generated active-locale import map to Waku's
+document response with the server-only entry point:
+
+```ts
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+
+middlewareFns: [
+  () =>
+    createWakuCatalogDeliveryMiddleware({
+      clientDirectory: "dist/public",
+      resolveLocale: (request) => resolveApplicationLocale(request),
+      development: process.env.NODE_ENV !== "production",
+      nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
+    }),
+];
+```
+
+The middleware transforms HTML document streams after Waku renders them. RSC
+and action responses pass through unchanged. If an active fragment cannot be
+loaded before hydration, it presents a catalog-free reload/home document and
+does not expose internal module diagnostics. The middleware accepts no locale
+policy; `resolveLocale` remains the host application's responsibility. When a
+`nonce` is provided, it is applied to Waku's inline bootstrap and Flight
+scripts as well as Palamedes' generated scripts; configure the host CSP to
+allow that nonce and the application's same-origin module assets. Lazy client
+component failures after hydration remain ordinary React error-boundary
+failures, so the host can provide its normal recovery UI.
+
 ## Waku handler interceptor
 
 Create one interceptor under `src/pages/_interceptors/`. `fsRouter()` discovers this
