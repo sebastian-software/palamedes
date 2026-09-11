@@ -9,12 +9,12 @@ msgstr ""
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{amount, number, ::currency/EUR}"
-msgstr ""
+msgstr "{amount, number, ::currency/EUR}"
 
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{count, number}"
-msgstr ""
+msgstr "{count, number}"
 
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
@@ -27,15 +27,15 @@ msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
 
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{when, date, full}"
-msgstr ""
+msgstr "{when, date, full}"
 
 #: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
 msgid "{when, date, medium}"
-msgstr ""
+msgstr "{when, date, medium}"
 
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{when, time, short}"
-msgstr ""
+msgstr "{when, time, short}"
 
 #: examples/tanstack-cookie/src/components/ClientReady.tsx#ClientReady
 #: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel

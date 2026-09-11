@@ -167,9 +167,17 @@ export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeli
         const links = preloads
           .map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`)
           .join("");
+        // The SSR framework may echo Vite's bare catalog preload hints before
+        // the locale import map exists. They resolve as `/#pmds/...` and make
+        // the browser request HTML as a JavaScript module. Replace them with
+        // the locale-bound asset preloads generated above.
+        const sanitizedHead = head.replace(
+          /<link\b[^>]*\brel=["']modulepreload["'][^>]*\bhref=["'][^"']*#pmds\/[^"]+["'][^>]*>\s*/giu,
+          "",
+        );
         callback(
           null,
-          `${head.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`,
+          `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`,
         );
         buffered = "";
       },

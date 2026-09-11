@@ -59,6 +59,10 @@ test("the packed package exposes a loadable ESM entry and no CommonJS entry", (c
     types: "./dist/index.d.ts",
     import: "./dist/index.mjs",
   });
+  assert.deepEqual(packedManifest.exports["./server"], {
+    types: "./dist/server.d.ts",
+    import: "./dist/server.mjs",
+  });
   assert.equal(packedManifest.main, undefined);
   assert.equal(packedManifest.module, undefined);
   assert.equal(
@@ -71,6 +75,13 @@ test("the packed package exposes a loadable ESM entry and no CommonJS entry", (c
     "@palamedes",
     "runtime",
     path.join(repositoryRoot, "packages", "runtime"),
+  );
+  linkPackage(consumerRoot, "@palamedes", "core", path.join(repositoryRoot, "packages", "core"));
+  linkPackage(
+    consumerRoot,
+    "@palamedes",
+    "vite-plugin",
+    path.join(repositoryRoot, "packages", "vite-plugin"),
   );
   linkPackage(
     consumerRoot,

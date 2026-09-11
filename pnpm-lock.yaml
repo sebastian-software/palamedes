@@ -1846,9 +1846,15 @@ importers:
 
   packages/tanstack:
     dependencies:
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../core
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@palamedes/vite-plugin':
+        specifier: workspace:^
+        version: link:../vite-plugin
     devDependencies:
       '@tanstack/react-start':
         specifier: 1.168.49
