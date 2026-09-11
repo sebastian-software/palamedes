@@ -17,14 +17,20 @@ export function ProofPanel({ locale }: ProofPanelProps) {
 
   function refresh() {
     startTransition(async () => {
-      const result = await getLocalizedServerStatus({ data: { locale } });
+      const result = await getLocalizedServerStatus({
+        data: { locale },
+        headers: { "x-palamedes-locale": locale },
+      });
       setMessage(result.message);
     });
   }
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await getLocalizedServerStatus({ data: { locale } });
+      const result = await getLocalizedServerStatus({
+        data: { locale },
+        headers: { "x-palamedes-locale": locale },
+      });
       setMessage(result.message);
     });
   }, [locale]);

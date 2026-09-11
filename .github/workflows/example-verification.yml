@@ -15,6 +15,9 @@ on:
       - "scripts/example-time-zone-contract.test.mjs"
       - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
+      - "scripts/verify-browser-artifacts.mjs"
+      - "scripts/proof-*.mjs"
+      - "scripts/verify-*-catalog-delivery.mjs"
       - "scripts/check-example-matrix.mjs"
       - "tests/examples-browser/**"
       - "tsconfig*.json"
@@ -36,6 +39,9 @@ on:
       - "scripts/example-time-zone-contract.test.mjs"
       - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
+      - "scripts/verify-browser-artifacts.mjs"
+      - "scripts/proof-*.mjs"
+      - "scripts/verify-*-catalog-delivery.mjs"
       - "scripts/check-example-matrix.mjs"
       - "tests/examples-browser/**"
       - "tsconfig*.json"
@@ -46,7 +52,7 @@ on:
   workflow_dispatch:
     inputs:
       run_browser:
-        description: Run the scheduled Playwright browser layer as well as smoke verification
+        description: Run Playwright browser proofs in addition to smoke verification
         required: true
         default: false
         type: boolean
@@ -90,21 +96,23 @@ jobs:
         run: pnpm verify:examples:smoke
 
       - name: Install Playwright Chromium
-        if: github.event_name == 'schedule' || inputs.run_browser
+        if: github.event_name != 'workflow_dispatch' || inputs.run_browser
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Browser-test 22 browser-capable examples
-        if: github.event_name == 'schedule' || inputs.run_browser
+        if: github.event_name != 'workflow_dispatch' || inputs.run_browser
         env:
           PALAMEDES_BROWSER_RETRY: ${{ github.event_name == 'schedule' && '1' || '0' }}
           PALAMEDES_SCREENSHOT_DIR: artifacts/example-screenshots
         run: pnpm verify:examples:browser -- --capture-screenshots
 
       - name: Upload browser diagnostics
-        if: ${{ always() && (github.event_name == 'schedule' || inputs.run_browser) }}
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.run_browser) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: example-browser-diagnostics-${{ github.run_id }}
-          path: artifacts/example-screenshots
+          path: |
+            artifacts/example-screenshots
+            coverage/catalog-delivery
           if-no-files-found: warn
           retention-days: 7

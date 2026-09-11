@@ -10,10 +10,64 @@ applications do not change until an interceptor is registered.
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
 
-The adapter supports `waku@^1.0.0-rc.0` and Node.js 22.22 or newer. Macros
-still need the standard Vite transformation and catalog-loading setup.
+The adapter supports `waku@^1.0.0-rc.0` and Node.js 22.22 or newer. Register the Palamedes Vite plugin for macro transformation and generated catalog
+delivery; application-owned catalog imports or loader maps are unnecessary.
 `@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
 unsupported.
+
+## Compiled catalog delivery
+
+Keep the server catalog loader and the browser catalog delivery in the server
+entry. The Vite plugin emits immutable native catalog modules for the active
+locale and a shared server catalog store; it does not require importing `.po`
+files from an RSC or browser module.
+
+```ts
+// src/lib/i18n.server.ts
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { locales } from "./i18n";
+
+export function createRequestI18n(request: Request) {
+  const { locale } = locales.resolve({
+    strategy: "cookie",
+    acceptLanguageHeader: request.headers.get("accept-language"),
+    cookieHeader: request.headers.get("cookie"),
+  });
+  return createViteServerI18n({ locale });
+}
+```
+
+For document responses, install the Waku middleware after Waku has rendered the
+response. It injects only the active locale's generated catalog modules and
+gates Waku's client entry on their evaluation. `resolveLocale` remains the
+application's host, path, cookie, or header policy; the middleware does not
+maintain a second locale map.
+
+```ts
+// src/waku.server.ts
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+
+middlewareFns: [
+  () =>
+    createWakuCatalogDeliveryMiddleware({
+      clientDirectory: "dist/public",
+      resolveLocale: (request) => resolveApplicationLocale(request),
+      development: process.env.NODE_ENV !== "production",
+      nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
+    }),
+];
+```
+
+`clientDirectory` points at the Vite client build containing
+`palamedes-split-manifest.json`. If an active fragment cannot be fetched or
+evaluated, the middleware renders its catalog-free reload document and keeps
+the diagnostic out of the response. Set `errorHtml` to provide a trusted host
+recovery document. The `nonce` option applies only to Palamedes-generated
+import-map and readiness scripts. Set Waku's framework nonce with
+`unstable_setNonce` from `waku/router/server` in a request interceptor before
+rendering. Existing framework nonces are preserved; application and external
+scripts are never automatically authorized. Allow the nonce and permitted
+module origins in the host CSP. RSC and action responses pass through unchanged.
 
 ## Interceptor registration
 
@@ -24,7 +78,7 @@ the interceptor.
 ```ts
 // src/pages/_interceptors/palamedes.server.ts
 import { createWakuI18nInterceptor } from "@palamedes/waku";
-import { createRequestI18n } from "../lib/i18n.server";
+import { createRequestI18n } from "../../lib/i18n.server";
 
 export default createWakuI18nInterceptor(async (request) => {
   return await createRequestI18n(request);
@@ -32,8 +86,9 @@ export default createWakuI18nInterceptor(async (request) => {
 ```
 
 The resolver receives Waku's original Fetch `Request`, including headers and
-cookies. It owns locale negotiation, catalog loading, and creation of a fresh
-i18n instance; Palamedes owns activation and cleanup. If it fails, the action
+cookies. It resolves the application locale and delegates catalog loading and
+instance creation to `createViteServerI18n`; the interceptor owns activation
+and cleanup. If it fails, the action
 body does not run and the server throws an error beginning `Palamedes Waku i18n
 initialization failed` with the original cause attached.
 

@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 
@@ -102,5 +105,43 @@ describe("createReactRouterRscI18nRequestScope", () => {
     );
 
     expect(dispatched).toBe(false);
+  });
+
+  it("delivers the active locale import map before RSC module preloads", async () => {
+    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-rsc-delivery-"));
+    try {
+      await writeFile(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        JSON.stringify({
+          locales: ["de"],
+          importMaps: { de: "palamedes-importmap.de.json" },
+          chunkImports: {},
+        }),
+      );
+      await writeFile(
+        path.join(clientDirectory, "palamedes-importmap.de.json"),
+        JSON.stringify({ imports: { "#pmds/home": "/assets/home.de.js" } }),
+      );
+
+      const scope = createReactRouterRscI18nRequestScope(() => createTestI18n("de"), {
+        catalogDelivery: { clientDirectory, nonce: () => "nonce&value" },
+      });
+      const response = await scope.run(
+        new Request("https://example.test/"),
+        () =>
+          new Response(
+            '<html><head><link rel="modulepreload" href="/assets/home.js"></head><body>app</body></html>',
+            { headers: { "content-type": "text/html; charset=utf-8" } },
+          ),
+      );
+
+      const html = await (response as Response).text();
+      expect(html).toContain('type="importmap"');
+      expect(html).toContain('nonce="nonce&amp;value"');
+      expect(html).toContain('<link rel="modulepreload"');
+      expect(html).toContain("#pmds/home");
+    } finally {
+      await rm(clientDirectory, { recursive: true, force: true });
+    }
   });
 });

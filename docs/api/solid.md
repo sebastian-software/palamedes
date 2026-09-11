@@ -13,14 +13,8 @@
 ## Exports
 
 - `Trans`
-- `Plural`
-- `Select`
-- `SelectOrdinal`
 - `buildLocaleSwitchItems(options)`
 - `TransProps`
-- `PluralProps`
-- `SelectProps`
-- `SelectOrdinalProps`
 - `BuildLocaleSwitchItemsOptions`
 - `LocaleSwitchItem`
 
@@ -35,16 +29,18 @@ components:
 - `Select`
 - `SelectOrdinal`
 
-The transform rewrites `Trans` to `@palamedes/solid/compiled`. That subpath
-exports the compiled-message `Trans` adapter without importing Core's ICU
-parser. The package root remains the full runtime-component compatibility
-surface.
+The transform rewrites `Trans` to `@palamedes/solid/compiled`. In v2, the
+package root and the `/compiled` alias resolve to the same parser-free compiled
+runtime. The alias remains useful for explicit macro targets; it is not a parser-
+enabled compatibility mode. Hand-written components that still depend on raw
+ICU parsing must migrate to compiled messages.
 
-## Runtime Components
+## Runtime component
 
-Runtime components read the active i18n instance through the plain
-`@palamedes/runtime` getter. They do not install signal dependencies for locale
-changes; changing locale requires a document navigation.
+The package root exports the parser-free runtime `Trans` component. It reads the
+active i18n instance through the plain `@palamedes/runtime` getter and does not
+install signal dependencies for locale changes; changing locale requires a
+document navigation.
 
 ```tsx
 import { Trans } from "@palamedes/solid";
@@ -53,20 +49,26 @@ import { Trans } from "@palamedes/solid";
 
 For source authoring, prefer macro imports from `@palamedes/solid/macro`.
 
-## Choice Components
+## Choice macros
 
-`Plural`, `Select`, and `SelectOrdinal` take the branch text as props: plural
-categories (`zero`, `one`, `two`, `few`, `many`, `other`) and exact matches
-spelled `_0`, `_1`, … because a JSX attribute cannot start with `=`. Exact
-matches are normalized to ICU `=N`, mirroring the macro transform. `other` is
-required.
+`Plural`, `Select`, and `SelectOrdinal` are compile-time components. Import
+them from `@palamedes/solid/macro`; they are transformed into the parser-free
+runtime before the application runs. The package root does not export choice
+components or a runtime parser for hand-written choice trees.
+
+Choice macros take branch text as props: plural categories (`zero`, `one`,
+`two`, `few`, `many`, `other`) and exact matches spelled `_0`, `_1`, … because
+a JSX attribute cannot start with `=`. Exact matches are normalized to ICU
+`=N`, mirroring the macro transform. `other` is required.
 
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern, for "and N others" sentences where the number shown is
 smaller than the number counted:
 
 ```tsx
-<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />
+import { Plural } from "@palamedes/solid/macro";
+
+<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />;
 ```
 
 - exact `_N` / `=N` keys match the **raw** value, before the offset is

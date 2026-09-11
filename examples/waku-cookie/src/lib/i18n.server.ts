@@ -1,4 +1,13 @@
-import { createServerI18n, locales } from "./i18n";
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createServerI18nScope } from "@palamedes/runtime/server";
+import { locales, type Locale } from "./i18n";
+
+export const serverI18nScope =
+  createServerI18nScope<Awaited<ReturnType<typeof createViteServerI18n>>>();
+
+export function createServerI18n(locale: Locale) {
+  return createViteServerI18n({ locale });
+}
 
 export async function createRequestI18n(request: Request) {
   const { locale } = locales.resolve({
@@ -7,5 +16,5 @@ export async function createRequestI18n(request: Request) {
     cookieHeader: request.headers.get("cookie"),
   });
 
-  return await createServerI18n(locale);
+  return createServerI18n(locale);
 }

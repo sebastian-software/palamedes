@@ -1,16 +1,33 @@
-import { createServerI18nScope } from "@palamedes/runtime/server";
-import { createExampleI18n, localeMessages, type Locale } from "./i18n";
+import { locales, normalizeLocale } from "./i18n";
+import type { Locale } from "./i18n";
 
-export const serverI18nScope = createServerI18nScope<ReturnType<typeof createExampleI18n>>();
+export function resolveLocaleFromRequest(request: Request): Locale {
+  const requestUrl = new URL(request.url);
+  const direct = localeFromPathname(requestUrl.pathname);
+  if (direct) return direct;
 
-export function createServerI18n(locale: Locale) {
-  const i18n = createExampleI18n();
+  const explicitHeader = request.headers.get("x-palamedes-locale");
+  if (explicitHeader && locales.isLocale(explicitHeader)) {
+    return normalizeLocale(explicitHeader);
+  }
 
-  i18n.load(locale, localeMessages[locale]);
-  i18n.activate(locale);
-  return i18n;
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      if (refererUrl.origin === requestUrl.origin) {
+        const inherited = localeFromPathname(refererUrl.pathname);
+        if (inherited) return inherited;
+      }
+    } catch {
+      // Invalid or cross-origin referers do not establish a locale policy.
+    }
+  }
+
+  return "en";
 }
 
-export function activateServerI18n(locale: Locale) {
-  return serverI18nScope.activate(createServerI18n(locale));
+function localeFromPathname(pathname: string): Locale | undefined {
+  const segment = pathname.split("/").filter(Boolean)[0];
+  return segment && locales.isLocale(segment) ? normalizeLocale(segment) : undefined;
 }

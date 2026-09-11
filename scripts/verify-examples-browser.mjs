@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { verifyBrowserArtifacts } from "./verify-browser-artifacts.mjs";
 import http from "node:http";
 import path from "node:path";
 import { parseExampleArgs, planBrowserRun, ROOT } from "./example-matrix.mjs";
@@ -108,6 +109,7 @@ async function waitForServer(port, pathToCheck = "/") {
 }
 
 async function verifyExample(example, options) {
+  await verifyBrowserArtifacts(example);
   await ensurePortFree(example.port);
   const child = startCommand({
     args: example.start,
@@ -124,6 +126,20 @@ async function verifyExample(example, options) {
   }
 }
 
+function runDeliveryProof(script) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(ROOT, "scripts", script)], {
+      cwd: ROOT,
+      env: process.env,
+      stdio: "inherit",
+    });
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${script} failed with exit code ${code}`)),
+    );
+  });
+}
+
 async function main() {
   const browserOptions = parseBrowserArgs(process.argv);
   const filters = parseExampleArgs(process.argv);
@@ -136,6 +152,25 @@ async function main() {
   for (const { example, options } of plan) {
     console.log(`\n[verify:browser] ${example.id} on port ${example.port}`);
     await verifyExample(example, options);
+    if (example.id === "tanstack-cookie") {
+      await runDeliveryProof("proof-tanstack-catalog-errors.mjs");
+      await runDeliveryProof("proof-tanstack-development.mjs");
+    }
+    if (example.id === "react-router-cookie") {
+      await runDeliveryProof("proof-vite-fragment-errors.mjs");
+      await runDeliveryProof("proof-vite-development.mjs");
+    }
+    if (example.id === "vite-mdx") await runDeliveryProof("proof-vite-html-delivery.mjs");
+    if (example.id === "solid-cookie") {
+      await runDeliveryProof("verify-solid-catalog-delivery.mjs");
+      await runDeliveryProof("proof-solid-development.mjs");
+    }
+  }
+
+  const wakuIds = ["waku-cookie", "waku-route", "waku-subdomain", "waku-tld"];
+  if (wakuIds.every((id) => plan.some(({ example }) => example.id === id))) {
+    await runDeliveryProof("proof-waku-catalog-delivery.mjs");
+    await runDeliveryProof("proof-waku-development.mjs");
   }
 }
 

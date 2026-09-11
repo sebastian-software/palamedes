@@ -1,12 +1,4 @@
-import {
-  isRouteErrorResponse,
-  Links,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
-  useRouteLoaderData,
-} from "react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
 
 import type { Route } from "./+types/root";
 import { DEFAULT_LOCALE, resolveLocaleFromRequest } from "~/lib/i18n";
@@ -54,29 +46,15 @@ export default function App() {
   return <Outlet />;
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
-  let stack: string | undefined;
-
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404 ? "The requested page could not be found." : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
-  }
-
+export function ErrorBoundary(_props: Route.ErrorBoundaryProps) {
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
-          <code>{stack}</code>
-        </pre>
-      )}
+    <main className="pt-16 p-4 container mx-auto" role="alert">
+      <h1>This page is temporarily unavailable.</h1>
+      <p>Reload the page to try again.</p>
+      <button type="button" onClick={() => window.location.reload()}>
+        Reload page
+      </button>{" "}
+      <a href="/">Go home</a>
     </main>
   );
 }

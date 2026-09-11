@@ -1,6 +1,8 @@
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
 import { markServerI18nTestBarrierReached } from "@palamedes/runtime/server/test";
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+import { resolveCookieLocale } from "./lib/i18n";
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
 // matches them. Globbing from `/src` and stripping the leading `/src/` yields
@@ -16,6 +18,16 @@ const modules = Object.fromEntries(
 
 export default adapter(fsRouter(modules), {
   middlewareFns: [
+    () =>
+      createWakuCatalogDeliveryMiddleware({
+        clientDirectory: "dist/public",
+        development: process.env.NODE_ENV !== "production",
+        resolveLocale: (request) =>
+          resolveCookieLocale({
+            "accept-language": request.headers.get("accept-language") ?? undefined,
+            cookie: request.headers.get("cookie") ?? undefined,
+          }).locale,
+      }),
     () => async (context, next) => {
       const request = context.req.raw;
       const result = await next();

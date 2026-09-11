@@ -116,38 +116,19 @@ catalogs:
     include: [src]
 ```
 
-Register runtime:
+Standard Vite delivery:
 
-```ts
-// src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { setClientI18n } from "@palamedes/runtime"
+The adapter owns the parser-free client runtime and derives compiled catalog
+dependencies from the evaluated module graph. Do not create an app-owned
+`i18n` module, add a `.po` declaration, import locale catalogs, or call
+`load()`/`activate()` from application code. It awaits the active locale's
+compiled fragment before translated code runs. Set the document's `lang` before
+its module entry; locale selection remains host policy.
 
-const i18n = createI18n({ timeZone: "Europe/Berlin" })
-setClientI18n(i18n)
-
-export { i18n }
-```
-
-Generated `.po` catalogs use the parser-free `/compiled` entrypoint and its
-`CompiledCatalogMessages` type. Use the package root only when runtime ICU
-strings are intentional; see `/docs/api/core.md`.
-
-For SSR and hydrated client components, configure the same IANA `timeZone` on
-every `createI18n()` path. ICU `date` and `time` formatting otherwise uses the
-host process or browser zone. Invalid or empty zone identifiers throw
-`RangeError` at instance creation. Timestamp strings should include `Z` or an
-explicit offset so both hosts parse the same instant; date-only ISO strings use
-JavaScript's UTC parsing semantics before formatting in the configured zone.
-
-```ts
-// src/po.d.ts
-declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-
-  export const messages: CompiledCatalogMessages
-}
-```
+Package roots and `compiled` aliases share one parser-free v2 runtime. Raw ICU
+strings are build-time inputs; application-owned catalog maps and serialized ICU
+transport are not part of standard framework delivery. See
+`/docs/api/vite-plugin.md` for the explicit custom-integration import hook.
 
 Write translated code:
 
@@ -167,22 +148,14 @@ pnpm exec pmds extract
 pnpm exec pmds audit
 ```
 
-Load `.po` messages:
+Set the active locale before the entry runs, then start the adapter:
 
-```tsx
-// src/main.tsx
-import React from "react"
-import ReactDOM from "react-dom/client"
-import { i18n } from "./i18n"
-import { App } from "./App"
-import { messages as enMessages } from "./locales/en.po"
-import { messages as deMessages } from "./locales/de.po"
+```html
+<html lang="de"></html>
+```
 
-i18n.load("en", enMessages)
-i18n.load("de", deMessages)
-i18n.activate("de")
-
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />)
+```bash
+pnpm dev
 ```
 
 ## Minimal Vite + Solid setup
@@ -468,7 +441,10 @@ fallback handlers. `keepSourceFallbacks` is a legacy option name that retains
 diagnostic source metadata only; it cannot restore source rendering. Missing
 translations instead use the compiler's fallback chain. Set
 `keepSourceFallbacks: false` for compact diagnostic metadata when embedding
-authored source text is undesirable. See `/docs/migration-v2.md`.
+authored source text is undesirable. Standard adapters provide adapter-owned
+active-locale compiled delivery, shared server catalog storage and ordinary host error UI;
+applications do not serialize raw ICU or maintain catalog maps. See
+`/docs/migration-v2.md`.
 
 ### Vite
 
@@ -487,7 +463,19 @@ idempotent.
 
 ### Remix v3
 
-Use `@palamedes/remix`. Register it after `remix/node-tsx`. Share one `createPalamedesRemixCatalogAssetRegistry()` between the browser asset loader and `createRemixI18nServer({ catalogAssets: { registry } })`. Server locale catalogs load lazily and are shared immutably. Render `renderClientCatalog(locale)` and `renderClientEntry(entryUrl)`; serve both registry and server catalog handlers before the Remix asset server. The adapter owns readiness, selected executable browser fragments and ordinary error-page recovery. Apps own locale selection and optional untranslated error markup. Inert ICU bootstrap payloads are rejected. Locale changes reload the document; only the active locale is requested. Use registry.invalidate() or a process restart on catalog/config edits. Node.js >=24.3 and remix@3.0.0-rc.1 are the verified host. See /docs/api/remix.md.
+Use `@palamedes/remix`. Register it after `remix/node-tsx`. Share one
+`createPalamedesRemixCatalogAssetRegistry()` between the browser asset loader
+and `createRemixI18nServer({ catalogAssets: { registry } })`. Server locale
+catalogs load lazily and are shared immutably. Render `renderClientCatalog(locale)`
+and `renderClientEntry(entryUrl)`; serve registry and server catalog handlers
+before the Remix asset server. The adapter owns readiness, selected executable
+browser fragments and ordinary error-page recovery. Apps own locale selection
+and optional untranslated error markup. Inert ICU bootstrap payloads are rejected.
+Locale changes reload the document; only the active locale is requested.
+Development watches catalog/config inputs; custom runners can use `watch: true`
+or `registry.invalidate()`. Node.js >=24.3 and remix@3.0.0-rc.1 are the verified
+host. See /docs/api/remix.md.
+
 
 ### React Router RSC
 

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
 import { t } from "@palamedes/core/macro";
-import { activateServerI18n } from "./i18n.server";
+import { getI18n } from "@palamedes/runtime";
 import { getLocaleLabel, locales, normalizeLocale } from "./i18n";
 
 export const resolveRootRedirect = createServerFn({ method: "GET" }).handler(async () => {
@@ -19,8 +19,6 @@ export const loadHomePageData = createServerFn({ method: "GET" })
   }))
   .handler(async ({ data }) => {
     const locale = data.locale;
-    activateServerI18n(locale);
-
     return {
       banner: locales.suggest({
         acceptLanguageHeader: getRequestHeader("accept-language"),
@@ -39,10 +37,8 @@ export const getLocalizedServerStatus = createServerFn({ method: "GET" })
   .validator((data: { locale?: string } | undefined) => ({
     locale: normalizeLocale(data?.locale),
   }))
-  .handler(async ({ data }) => {
-    const locale = data.locale;
-    activateServerI18n(locale);
-
+  .handler(async () => {
+    const locale = normalizeLocale(getI18n().locale);
     return {
       locale,
       localeLabel: getLocaleLabel(locale),

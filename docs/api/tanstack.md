@@ -1,8 +1,9 @@
 # `@palamedes/tanstack`
 
 `@palamedes/tanstack` activates a fresh request-local i18n instance around
-TanStack Start `createServerFn()` invocations. It is opt-in: existing TanStack
-Start applications do not change unless they install and register middleware.
+TanStack Start page requests and `createServerFn()` invocations. It is opt-in: existing
+TanStack Start applications do not change unless they install and register the
+middleware.
 
 ## Installation
 
@@ -11,24 +12,21 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 ```
 
 The adapter supports `@tanstack/react-start@^1.168.38` and Node.js 22.22 or
-newer. Palamedes macros still need the standard Vite transformation and catalog
-loading setup. `@palamedes/tanstack` is ESM-only: use ESM imports, not
+newer. Register the Palamedes Vite plugin for macro transformation and generated
+catalog delivery; application-owned catalog imports or loader maps are unnecessary. `@palamedes/tanstack` is ESM-only: use ESM imports, not
 `require("@palamedes/tanstack")`.
 
 ## Recommended: global request middleware
 
-Register the helper once in `src/start.ts`. It filters itself to Start's
-`serverFn` request type, so it does not affect SSR or server routes.
+Register the helper once in `src/start.ts`. It covers page rendering and
+Start's `serverFn` requests.
 
 ```ts
 import { createIsomorphicFn, createStart } from "@tanstack/react-start";
-import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack";
+import { createTanStackServerI18nRequestMiddleware } from "@palamedes/tanstack";
 
 const palamedesI18n = createIsomorphicFn().server(() =>
-  createTanStackI18nRequestMiddleware(async (request) => {
-    const { createRequestI18n } = await import("./i18n.server");
-    return await createRequestI18n(request);
-  }),
+  createTanStackServerI18nRequestMiddleware((request) => resolveLocaleFromRequest(request)),
 )();
 
 export const startInstance = createStart(() => ({
@@ -36,46 +34,59 @@ export const startInstance = createStart(() => ({
 }));
 ```
 
-`src/start.ts` participates in Start's client graph. Keep a resolver that
-imports server-only catalog code inside `createIsomorphicFn().server()`, as in
-this example; Start removes that branch from the client build.
+`src/start.ts` participates in Start's client graph. Keep this middleware inside
+`createIsomorphicFn().server()`, as in this example; Start removes that branch
+from the client build. The Vite plugin provides the generated
+`virtual:palamedes/server-catalogs` module. It owns catalog imports, the shared
+immutable server store, and production document delivery; the application
+supplies locale policy only.
 
 The resolver receives the original Fetch `Request`, including headers and
-cookies. It owns locale negotiation, catalog loading, and creation of a fresh
-i18n instance; Palamedes owns activation and cleanup. An initializer failure
-stops the server function and throws an error beginning `Palamedes TanStack
-i18n initialization failed`, with the original cause attached.
+cookies, and owns locale negotiation only. The adapter loads the configured
+compiled catalog for that locale and creates the fresh i18n instance;
+applications do not import catalogs or maintain loader maps. An initializer
+failure stops the server function and throws an error beginning `Palamedes
+TanStack i18n initialization failed`, with the original cause attached.
 
-Start invokes this boundary before decoding and invoking a server function. The
-scope stays active through awaited `next()`, including validation, handler work,
-and synchronous, asynchronous, or cross-module helpers that call translated
-code.
+Start invokes this boundary before page rendering and before decoding a server
+function. The scope stays active through awaited `next()`, including validation,
+handler work, and synchronous, asynchronous, or cross-module helpers that call
+translated code. Production HTML receives the active locale import map and
+readiness probe before route modules execute; the default client directory is
+`dist/client`.
+
+## CSP and route-local server functions
+
+When the host uses a nonce-based CSP, pass the request nonce to TanStack
+Router's native `ssr.nonce` option and pass the same value to the adapter's
+`catalogDelivery.nonce` option. The router owns its framework scripts; the
+adapter owns its generated import map and catalog-readiness scripts. Keeping
+one request nonce for both preserves CSP coverage without authoring inline
+scripts in the application.
+
+For a route-locale application, a `createServerFn()` request targets the
+server-function endpoint rather than the page URL. Do not derive its locale
+from `Referer`: a `no-referrer` policy removes that signal, and it is not an
+authoritative locale source. Send the selected route locale in an explicit
+request header (for example, `x-palamedes-locale`) and have the application
+locale resolver validate that header against its own locale controls. The
+header carries policy only; catalog loading remains adapter-owned.
 
 ## SSR page rendering
 
-TanStack Start does not run request middleware for page SSR or server routes.
-Wrap the server entry with a request-local scope using the same resolver:
+The request middleware owns SSR, so the server entry only calls Start's handler:
 
 ```ts
 import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
-import { createServerI18nScope } from "@palamedes/runtime/server";
-import { createServerI18nFromRequest } from "./lib/i18n.server";
 
 const handler = createStartHandler(defaultStreamHandler);
-const ssrI18nScope = createServerI18nScope();
 
 export default {
   async fetch(request: Request, options?: never) {
-    return await ssrI18nScope.run(await createServerI18nFromRequest(request), () =>
-      handler(request, options),
-    );
+    return await handler(request, options);
   },
 };
 ```
-
-The outer entry scope supplies SSR. If you also register the global request
-middleware, its fresh nested scope for server functions is intentional: it
-starts before Start decodes the function request.
 
 ## Composable server-function middleware
 

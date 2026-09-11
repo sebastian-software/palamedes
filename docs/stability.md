@@ -100,9 +100,9 @@ adoption:
 
 ## Deprecation Policy
 
-### Planned Palamedes v2 transition
+### Palamedes v2 transition
 
-The accepted v2 plan unifies application runtimes around compiled messages on
+The v2 implementation unifies application runtimes around compiled messages on
 server and client and makes framework catalog loading transparent. It removes
 the legacy runtime ICU parser mode and changes compilation and runtime failure
 behavior. These are coordinated major-release changes, not compatible 1.x
@@ -112,8 +112,9 @@ V2 must include migration guidance for removed APIs and options, adapter setup,
 and error handling. Existing `compiled` import paths may remain as aliases to
 the unified implementation without preserving the old parser mode. There is
 no permanently supported legacy mode within v2 and no committed release date.
-See the [active v2 plan](plans/2026-09-11-compiled-runtime-and-catalog-delivery.md)
-and the living ADRs for the accepted target and outstanding implementation.
+See the [v2 migration guide](migration-v2.md), the living ADRs, and the
+[catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md)
+for the implementation contract and verification record.
 
 ### General policy
 

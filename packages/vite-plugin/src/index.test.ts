@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -105,6 +106,156 @@ beforeEach(() => {
 });
 
 describe("palamedes vite plugin", () => {
+  it("generates a server-only lazy catalog virtual module", async () => {
+    const plugin = palamedes().find((candidate) => candidate.name === "palamedes:server-catalogs");
+    const hooks = plugin as any;
+    expect(hooks?.resolveId?.("virtual:palamedes/server-catalogs")).toBe(
+      "\0palamedes:server-catalogs",
+    );
+
+    const addWatchFile = vi.fn();
+    const error = vi.fn((message: unknown) => {
+      throw new Error(String(message));
+    });
+    const load = hooks?.load as (
+      this: any,
+      id: string,
+      options?: { ssr?: boolean },
+    ) => Promise<any>;
+    if (typeof load !== "function") {
+      throw new TypeError("Expected server catalog virtual module load hook");
+    }
+
+    const result = await load.call(
+      {
+        environment: { config: { consumer: "server" } },
+        addWatchFile,
+        error,
+      } as never,
+      "\0palamedes:server-catalogs",
+      { ssr: true },
+    );
+
+    expect(result.code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/en.po").replaceAll("\\", "/"))})`,
+    );
+    expect(result.code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/de.po").replaceAll("\\", "/"))})`,
+    );
+    expect(result.code).toContain("createServerCatalogStore");
+    expect(result.code).toContain("Unsupported catalog locale");
+    expect(result.code).not.toContain('import "');
+    expect(addWatchFile).toHaveBeenCalled();
+    await expect(
+      load.call(
+        {
+          environment: { config: { consumer: "client" } },
+          addWatchFile,
+          error,
+        } as never,
+        "\0palamedes:server-catalogs",
+        { ssr: false },
+      ),
+    ).rejects.toThrow("server-only");
+  });
+
+  it("hashes generated route facade output instead of a fixed marker", () => {
+    const routePlugin = palamedes().find(
+      (plugin) => plugin.name === "palamedes:react-router-route-boundaries",
+    );
+    if (!routePlugin?.augmentChunkHash) throw new Error("Route facade plugin is missing.");
+    const route = {
+      facadeModuleId: "/repo/routes/home.tsx?__react-router-build-client-route",
+      code: "export default function Home() {}",
+      fileName: "assets/home.js",
+      exports: ["default"],
+    };
+    const withNamedExport = { ...route, exports: ["default", "meta"] };
+    const augmentChunkHash =
+      typeof routePlugin.augmentChunkHash === "function"
+        ? routePlugin.augmentChunkHash
+        : routePlugin.augmentChunkHash.handler;
+    expect(augmentChunkHash.call({} as never, route as never)).not.toBe(
+      augmentChunkHash.call({} as never, withNamedExport as never),
+    );
+  });
+
+  it("removes stale source map references from moved route assets", () => {
+    const routePlugin = palamedes().find(
+      (plugin) => plugin.name === "palamedes:react-router-route-boundaries",
+    );
+    if (!routePlugin?.generateBundle) throw new Error("Route facade plugin is missing.");
+    const emitFile = vi.fn();
+    const bundle = {
+      "assets/home.js": {
+        type: "chunk" as const,
+        facadeModuleId: "/repo/routes/home.tsx?__react-router-build-client-route",
+        code: "export default function Home() {}\n//# sourceMappingURL=home.js.map",
+        fileName: "assets/home.js",
+        exports: ["default"],
+      },
+    };
+    const generateBundle =
+      typeof routePlugin.generateBundle === "function"
+        ? routePlugin.generateBundle
+        : routePlugin.generateBundle.handler;
+    generateBundle.call({ emitFile } as never, {} as never, bundle as never, false);
+    expect(emitFile).toHaveBeenCalledWith(
+      expect.objectContaining({ source: expect.not.stringContaining("sourceMappingURL") }),
+    );
+  });
+
+  it("generates a server-only lazy catalog store for configured locales", async () => {
+    const addWatchFile = vi.fn();
+    const serverCatalogs = palamedes().find(
+      (plugin) => plugin.name === "palamedes:server-catalogs",
+    );
+    if (typeof serverCatalogs?.load !== "function") {
+      throw new TypeError("Expected server catalog virtual module hook");
+    }
+
+    const result = await serverCatalogs.load.call(
+      {
+        addWatchFile,
+        environment: { name: "ssr", config: { consumer: "server" } },
+      } as never,
+      "\0palamedes:server-catalogs",
+      { ssr: true } as never,
+    );
+
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).toContain('import { createServerCatalogStore } from "@palamedes/runtime/server";');
+    expect(code).toContain('"en": () => Promise.all([');
+    expect(code).toContain('"de": () => Promise.all([');
+    expect(code).toContain('"pseudo": () => Promise.all([');
+    expect(code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/en.po").replaceAll("\\", "/"))})`,
+    );
+    expect(code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
+  });
+
+  it("rejects the server catalog virtual module in browser environments", async () => {
+    const serverCatalogs = palamedes().find(
+      (plugin) => plugin.name === "palamedes:server-catalogs",
+    );
+    if (typeof serverCatalogs?.load !== "function") {
+      throw new TypeError("Expected server catalog virtual module hook");
+    }
+    const error = vi.fn((message: string) => {
+      throw new Error(message);
+    });
+
+    await expect(
+      serverCatalogs.load.call(
+        { error, environment: { name: "client", config: { consumer: "client" } } } as never,
+        "\0palamedes:server-catalogs",
+        { ssr: false } as never,
+      ),
+    ).rejects.toThrow("virtual:palamedes/server-catalogs is server-only");
+    expect(error).toHaveBeenCalledOnce();
+  });
+
   it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
     "transforms %s with the shared bundler default",
     (file) => {
@@ -132,6 +283,40 @@ describe("palamedes vite plugin", () => {
       }),
     );
   });
+
+  it("compiles FCL files through the same native catalog loader", async () => {
+    await runPoTransform({}, {}, "/repo/src/locales/de.fcl");
+
+    expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
+      "/repo/src/locales/de.fcl",
+      expect.objectContaining({ locale: "de", failOnMissing: false }),
+    );
+  });
+
+  it.each([
+    ["locales/{locale}/messages.fcl", "/repo/locales/de/messages.fcl", "fcl"],
+    ["messages-{locale}.po", "/repo/messages-de.po", undefined],
+  ])(
+    "derives the configured locale from a nonstandard catalog path",
+    async (pattern, id, format) => {
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: "/repo/palamedes.yaml",
+        rootDir: "/repo",
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [{ path: pattern, include: ["src/**/*"], ...(format ? { format } : {}) }],
+      });
+
+      await runPoTransform({}, {}, id);
+
+      expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
+        expect.anything(),
+        id,
+        expect.objectContaining({ locale: "de" }),
+      );
+    },
+  );
 
   it("propagates strict compile failures when the removed opt-out is false", async () => {
     mocks.compileCatalogModule.mockRejectedValue(
@@ -180,7 +365,9 @@ describe("palamedes vite plugin", () => {
       );
 
       expect(result).toStrictEqual({
-        code: "export default function MDXContent() { return <p>Translated</p> }",
+        code: expect.stringContaining(
+          "export default function MDXContent() { return <p>Translated</p> }",
+        ),
         map: expect.objectContaining({ mappings: "AAAA" }),
         ...(framework === "react" ? { moduleType: "jsx" } : {}),
       });
@@ -362,7 +549,7 @@ describe("palamedes vite plugin", () => {
     expect(invalidated).toStrictEqual([module]);
   });
 
-  it("runs macro lowering on compiled MDX when authored macro imports remain", () => {
+  it("runs macro lowering on compiled MDX when authored macro imports remain", async () => {
     mocks.transformPalamedesMacros.mockReturnValue({
       code: "export default function Guide() { return translated }",
       hasChanged: true,
@@ -377,7 +564,11 @@ describe("palamedes vite plugin", () => {
     const code =
       'import { Trans } from "@palamedes/react/macro"\nexport default <Trans>Hello</Trans>';
 
-    const result = transform.call({ error: vi.fn() } as any, code, "/repo/src/guide.mdx");
+    const result = await transform.call(
+      { error: vi.fn(), addWatchFile() {} } as any,
+      code,
+      "/repo/src/guide.mdx",
+    );
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       code,
@@ -415,8 +606,8 @@ describe("palamedes vite plugin", () => {
   });
 
   it.each([
-    ["build", true, true],
-    ["serve", true, false],
+    ["build", false, true],
+    ["serve", false, false],
   ] as const)(
     "sets runtime fallback metadata for Vite %s",
     (command, expectedFallbacks, expectedMetadataStrip) => {
@@ -449,7 +640,7 @@ describe("palamedes vite plugin", () => {
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ keepSourceFallbacks: true }),
+      expect.objectContaining({ keepSourceFallbacks: false }),
     );
   });
 
@@ -476,7 +667,7 @@ describe("palamedes vite plugin", () => {
   });
 });
 
-describe("experimental graph splitting", () => {
+describe("automatic graph splitting", () => {
   it("reloads sidecars after config edits without the MDX or PO plugins", async () => {
     mocks.transformPalamedesMacros.mockReturnValue({
       code: "transformed",
@@ -775,28 +966,49 @@ describe("experimental graph splitting", () => {
     expect(result?.code).toBe("transformed");
   });
 
-  it("does not append sidecar imports when the flag is off", async () => {
+  it("appends sidecar imports with default options", async () => {
     const result = (await runMacroTransform({}, undefined, ["id-a"])) as { code?: string } | null;
 
-    expect(result?.code).toBe("transformed");
+    expect(result?.code).toContain('import "virtual:palamedes-messages/');
   });
 
-  it("aggregates branded per-locale modules into one registration, including pseudo", async () => {
+  it("awaits only the active development fragment before evaluating the source body", async () => {
     const { load, key } = await runSidecarLoad(["id-a"]);
     const result = await load(`\0palamedes:messages/${key}`);
-
-    // The pseudo locale is a configured locale like any other here: the native
-    // selected compile resolves its catalog through the fallback chain and
-    // pseudolocalizes the result.
-    expect(result?.code).toBe(
-      `import { messages as m0 } from "virtual:palamedes-messages/${key}/en";\n` +
-        `import { messages as m1 } from "virtual:palamedes-messages/${key}/de";\n` +
-        `import { messages as m2 } from "virtual:palamedes-messages/${key}/pseudo";\n` +
-        `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 }, "${key}");\n`,
+    const code = result!
+      .code!.replace(/^import .*;\n/gm, "")
+      .replaceAll("import(", "loadFragment(");
+    const events: string[] = [];
+    const run = runInNewContext(
+      `(document, initializeClientI18n, createI18n, loadFragment, events) => (async()=>{${code};events.push("body")})()`,
     );
-    expect(result?.moduleSideEffects).toBe(true);
-    // Message compilation happens in the per-locale modules, not the aggregator.
+    const document = { documentElement: { lang: "de", dataset: {} } };
+    const i18n = { load: (locale: string) => events.push(`loaded:${locale}`) };
+    const loadFragment = vi.fn(async (url: string) => {
+      events.push(url);
+      return { messages: {} };
+    });
+    await run(
+      document,
+      () => i18n,
+      () => i18n,
+      loadFragment,
+      events,
+    );
+    expect(events).toEqual([`virtual:palamedes-messages/${key}/de`, "loaded:de", "body"]);
+    events.length = 0;
+    await expect(
+      run(
+        document,
+        () => i18n,
+        () => i18n,
+        async () => {
+          throw new Error("dependency failed");
+        },
+        events,
+      ),
+    ).rejects.toThrow("dependency failed");
+    expect(events).toEqual([]);
     expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
   });
 
@@ -928,33 +1140,23 @@ describe("experimental graph splitting", () => {
     );
   }
 
-  it("binds client aggregators to bare specifiers under import-map binding", async () => {
-    const { load, key } = await runSidecarLoad(
-      ["id-a"],
-      {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
-    );
+  it("binds production fragments to the document locale before module evaluation", async () => {
+    const { load, key } = await runSidecarLoad(["id-a"], {}, { command: "build" });
     const result = await load(`\0palamedes:messages/${key}`, { ssr: false });
-
-    expect(result?.code).toBe(
-      `import { locale as l, messages as m } from "#pmds/${key}";\n` +
-        `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
-        `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ [l]: defineCompiledCatalog(m) }, "${key}");\n`,
-    );
+    expect(result?.code).toContain(`from "#pmds/${key}"`);
+    expect(result?.code).toContain("document.documentElement.lang");
+    expect(result?.code).toContain("if (l !== locale) throw");
+    expect(result?.code).toContain("i18n.load(locale, defineCompiledCatalog(m))");
   });
 
-  it("keeps SSR aggregators on the embedded form under import-map binding", async () => {
-    const { load, key } = await runSidecarLoad(
-      ["id-a"],
-      {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
-    );
-    const result = await load(`\0palamedes:messages/${key}`, { ssr: true });
-
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`);
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/de`);
-    expect(result?.code).not.toContain("#pmds/");
+  it("leaves server catalogs to the lazy shared server store", async () => {
+    const { load, key } = await runSidecarLoad(["id-a"], {}, { command: "build" });
+    expect(await load(`\0palamedes:messages/${key}`, { ssr: true })).toEqual({
+      code: "export {};",
+      map: null,
+      moduleSideEffects: false,
+    });
+    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
   });
 
   it("keeps dev-server aggregators on the embedded form under import-map binding", async () => {
@@ -969,20 +1171,16 @@ describe("experimental graph splitting", () => {
     expect(result?.code).not.toContain("#pmds/");
   });
 
-  it("externalizes bare message specifiers under import-map binding", async () => {
-    const { sidecarPlugin } = await runSidecarLoad(
-      ["id-a"],
-      {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
-    );
-    const configResult = sidecarPlugin.config.call({} as never);
-    const external = configResult?.build?.rollupOptions?.external as (id: string) => boolean;
-
-    expect(external("#pmds/abc123")).toBe(true);
-    expect(external("react")).toBe(false);
-
-    const { sidecarPlugin: embeddedPlugin } = await runSidecarLoad(["id-a"]);
-    expect(embeddedPlugin.config.call({} as never)).toBeUndefined();
+  it("externalizes generated specifiers without modifying host external filters", async () => {
+    const { sidecarPlugin } = await runSidecarLoad(["id-a"]);
+    const resolve = sidecarPlugin.resolveId;
+    if (typeof resolve !== "function") throw new Error("Missing resolver hook");
+    expect(resolve.call({} as never, "#pmds/abc123", undefined, {} as never)).toEqual({
+      id: "#pmds/abc123",
+      external: true,
+    });
+    expect(resolve.call({} as never, "react", undefined, {} as never)).toBeUndefined();
+    expect(sidecarPlugin.config).toBeUndefined();
   });
 
   it("emits per-locale message assets, import maps, and the manifest", async () => {
@@ -1356,6 +1554,7 @@ function runMacroTransform(
 async function runPoTransform(
   context: Record<string, unknown> = {},
   options: Parameters<typeof palamedes>[0] = {},
+  sourceId = "/repo/src/locales/de.po",
 ) {
   const plugins = palamedes(options);
   const poLoader = plugins.find((plugin) => plugin.name === "palamedes:po-loader");
@@ -1371,7 +1570,7 @@ async function runPoTransform(
       ...context,
     } as any,
     "",
-    "/repo/src/locales/de.po",
+    sourceId,
   );
 }
 

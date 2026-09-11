@@ -294,22 +294,13 @@ catalogs:
     include: [src]
 ```
 
-```ts
-// src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled";
-import { setClientI18n } from "@palamedes/runtime";
+The standard Vite adapter owns the parser-free runtime and derives the
+compiled active-locale dependency before translated code runs. Do not add an
+app-owned `i18n` module, direct locale imports, or catalog loader map. Set the
+selected locale on the document before the entry, for example:
 
-const i18n = createI18n();
-setClientI18n(i18n);
-```
-
-```ts
-// src/po.d.ts
-declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
-
-  export const messages: CompiledCatalogMessages;
-}
+```html
+<html lang="de"></html>
 ```
 
 ```bash

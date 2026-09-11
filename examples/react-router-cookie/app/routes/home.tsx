@@ -8,7 +8,7 @@ import { LocaleSwitcher } from "~/components/LocaleSwitcher";
 import { ProofPanel } from "~/components/ProofPanel";
 import { TicketPanel } from "~/components/TicketPanel";
 import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n";
-import { activateServerI18n } from "~/lib/i18n.server";
+import { serverI18n } from "~/lib/i18n.server";
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -21,40 +21,41 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const resolved = resolveLocaleFromRequest(request);
-  activateServerI18n(resolved.locale);
+  return serverI18n.run(request, async () => {
+    const resolved = resolveLocaleFromRequest(request);
 
-  return {
-    locale: resolved.locale,
-    localeLabel: getLocaleLabel(resolved.locale),
-    source: resolved.source,
-  };
+    return {
+      locale: resolved.locale,
+      localeLabel: getLocaleLabel(resolved.locale),
+      source: resolved.source,
+    };
+  });
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const intent = formData.get("intent");
-  const resolved = resolveLocaleFromRequest(request);
+  return serverI18n.run(request, async () => {
+    const formData = await request.formData();
+    const intent = formData.get("intent");
+    const resolved = resolveLocaleFromRequest(request);
 
-  if (intent === "set-locale") {
-    const locale = String(formData.get("locale") ?? resolved.locale);
-    return redirect("/", {
-      headers: {
-        "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
+    if (intent === "set-locale") {
+      const locale = String(formData.get("locale") ?? resolved.locale);
+      return redirect("/", {
+        headers: {
+          "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
+        },
+      });
+    }
+
+    return {
+      proof: {
+        handledAt: new Date().toISOString(),
+        locale: resolved.locale,
+        localeLabel: getLocaleLabel(resolved.locale),
+        message: t`Server action confirmed locale ${resolved.locale}.`,
       },
-    });
-  }
-
-  activateServerI18n(resolved.locale);
-
-  return {
-    proof: {
-      handledAt: new Date().toISOString(),
-      locale: resolved.locale,
-      localeLabel: getLocaleLabel(resolved.locale),
-      message: t`Server action confirmed locale ${resolved.locale}.`,
-    },
-  };
+    };
+  });
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {

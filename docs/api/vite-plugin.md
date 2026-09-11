@@ -3,9 +3,12 @@
 `@palamedes/vite-plugin` transforms Palamedes macro imports, compiles `.mdx`
 modules, and compiles `.po` imports inside Vite builds.
 
-Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
-`.po` import loader. See [Catalog formats](../catalog-formats.md) for the
-storage/import boundary.
+Catalog storage can be PO or FCL in `palamedes.yaml`. The standard framework
+flow derives compiled active-locale dependencies from the evaluated module
+graph and does not require application-owned catalog imports or locale maps.
+The low-level `.po` import hook remains available for explicit custom
+integrations; it is not the standard delivery path. See [Catalog
+formats](../catalog-formats.md) for the storage/import boundary.
 
 ## Exports
 
@@ -44,9 +47,9 @@ Defaults:
   downgrades invalid or unsupported ICU to a warning.
 - `framework`: `"react"`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `true`
+- `keepSourceFallbacks`: `false`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
-- `experimentalGraphSplitting`: `false`
+- `experimentalGraphSplitting`: deprecated; delivery is automatic and `false` is rejected
 
 `framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set
@@ -56,26 +59,23 @@ Macro and generated MDX runtime lookups always use the plain, hook-free getter.
 Locale changes require document navigation. `runtimeModule` is an advanced
 override for only the macro transform's module path.
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `true`
-here. It only controls diagnostic source metadata in generated calls. Set
-`keepSourceFallbacks: false` for compact output without authored source text.
-V2 package roots and `compiled` aliases both throw on missing compiled entries;
-retained metadata never supplies replacement message output. Valid translation
-fallbacks are resolved and compiled at build time.
+`keepSourceFallbacks` defaults to `false` in every environment. Set
+`keepSourceFallbacks: true` to retain authored text for diagnostics. Missing
+compiled messages throw; source metadata never supplies replacement output.
+Valid translation fallbacks are compiled by the native compiler.
 
 Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
 `mdx.runtimeModule` on the plugin when integrating a custom runtime.
 
-`experimentalGraphSplitting` emits generated message sidecars per transformed
-source module. The default `"embed"` form carries every locale in each sidecar;
-the experimental `"import-map"` form emits locale-specific assets and requires
-the server to inject the active locale's import map before browser modules
-load. The `"import-map"` form also requires Vite's resolved `base` to be
-root-relative, such as `"/app/"`, or an absolute URL. Relative bases resolve
-import-map entries against each document URL and are rejected; set Vite's base
-to `"/"` or an absolute deployment path/URL, or use `localeBinding: "embed"`.
-Both modes require `setClientI18n()` rather than eager application-owned PO
-imports, and locale changes require document navigation.
+Compiled delivery follows the evaluated module graph automatically. Development
+awaits the active locale's generated fragment before running its source module.
+Production emits locale-bound import maps and separate executable fragments.
+Set the document's `lang` before its module entry runs; the adapter initializes
+the client instance. Locale changes require document navigation.
+
+Vite's resolved `base` must be root-relative, such as `/app/`, or an absolute
+URL. Relative bases are rejected because nested document URLs would resolve
+catalog URLs differently.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target
 locale in each catalog whose `include` patterns cover that MDX file. This
@@ -101,3 +101,29 @@ because the generated JSX module type needs Rolldown; plain Rollup-based Vite 7
 and older projects can set `mdx: false` while keeping macros and catalog loading.
 See [MDX
 messages](../mdx.md) for authoring and configuration.
+
+## Server and document delivery
+
+`@palamedes/vite-plugin/server` exports
+`createViteServerI18n({ locale, timeZone?, ...options })`. It awaits the shared,
+immutable complete catalog for the active locale and returns fresh request
+state. Host request middleware keeps that state in its request scope across
+SSR, loaders and actions. Applications do not construct catalog import maps.
+
+`@palamedes/vite-plugin/delivery` exports `createViteCatalogDelivery({
+clientDirectory, development?, manifestName? })`. Framework adapters call
+`getLocaleBinding(locale)` and pipe HTML through
+`createDocumentTransform(binding, { nonce?, errorHtml? })`. `errorHtml` is trusted,
+catalog-independent host markup; the default view provides Reload and Home.
+Import maps precede all modulepreloads. Catalog-only manifest changes refresh
+without restarting the host. Missing production assets fail closed.
+
+React Router's initial route imports run before its client entry. The document
+transport observes their catalog dependencies independently. Lazy route facades
+forward failures into the host's normal ErrorBoundary instead of React Router's
+automatic reload. Error UI must be independent of message catalogs.
+
+Static HTML applications receive a generated module entry that installs the
+active locale's import map and awaits application dependencies. An optional
+`<template data-palamedes-error>` supplies the host's error view. Existing module
+script nonces propagate to the generated entry and import map.

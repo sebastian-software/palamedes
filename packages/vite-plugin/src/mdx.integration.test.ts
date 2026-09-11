@@ -104,10 +104,10 @@ async function createFixture(options: { config?: boolean; missingTranslation?: b
       path.join(root, "palamedes.yaml"),
       options.missingTranslation
         ? "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [.]\n"
-        : "locales: [en]\nsource-locale: en\ncatalogs: []\n",
+        : "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [.]\n",
     );
   }
-  if (options.missingTranslation) {
+  if (options.config !== false) {
     const locales = path.join(root, "locales");
     await mkdir(locales, { recursive: true });
     await writeFile(

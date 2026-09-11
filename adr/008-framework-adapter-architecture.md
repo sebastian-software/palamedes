@@ -97,9 +97,19 @@ Rejected because it would reintroduce duplicated catalog and transform logic out
 
 ## Implementation status
 
-Next's graph-split client bootstrap already removes application-owned catalog
-loading on its opt-in path. Vite import-map delivery still includes manual
-manifest and HTML integration in example code, and other examples/adapters
-retain manual or serialized catalog paths. The
-[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md)
-tracks convergence on the transparent loading contract.
+The v2 host slices now share the transparent adapter contract: Vite delivery,
+Next graph-split delivery, Remix executable assets, and the request-scope
+integrations use generated compiled catalogs and adapter-owned dependency
+wiring. Shared server catalog storage loads the active locale lazily, prepares
+one immutable compiled catalog per generation, and gives each request its own
+runtime state. Catalog delivery failures propagate to the host's ordinary,
+catalog-independent error path.
+
+The implementation evidence for the host matrix, browser and server failure
+paths, parser-free artifacts, and catalog reuse is collected in the
+[catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md).
+Publication and release-policy checks remain governed by that evidence and the
+repository release gates; they do not introduce a second adapter contract.
+Low-level explicit compiled-catalog APIs remain available for custom
+integrations, while the standard host workflow does not require application
+catalog maps, boundaries, or import-map/manifest HTML plumbing.

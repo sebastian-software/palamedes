@@ -7,7 +7,8 @@ import { LocaleSwitcher } from "~/components/LocaleSwitcher";
 import { ProofPanel } from "~/components/ProofPanel";
 import { SuggestionBanner } from "~/components/SuggestionBanner";
 import { TicketPanel } from "~/components/TicketPanel";
-import { activateServerI18n, getLocaleLabel, getRouteBanner, normalizeLocale } from "~/lib/i18n";
+import { getLocaleLabel, getRouteBanner, normalizeLocale } from "~/lib/i18n";
+import { runServerI18n } from "~/lib/i18n.server";
 
 export function meta({ params }: Route.MetaArgs) {
   return [
@@ -21,27 +22,23 @@ export function meta({ params }: Route.MetaArgs) {
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const locale = normalizeLocale(params.locale);
-  activateServerI18n(locale);
-
-  return {
+  return runServerI18n(locale, () => ({
     banner: getRouteBanner(request, locale),
     locale,
     localeLabel: getLocaleLabel(locale),
-  };
+  }));
 }
 
 export async function action({ params }: Route.ActionArgs) {
   const locale = normalizeLocale(params.locale);
-  activateServerI18n(locale);
-
-  return {
+  return runServerI18n(locale, () => ({
     proof: {
       handledAt: new Date().toISOString(),
       locale,
       localeLabel: getLocaleLabel(locale),
       message: t`Server action confirmed locale ${locale}.`,
     },
-  };
+  }));
 }
 
 export default function LocaleHome({ loaderData }: Route.ComponentProps) {

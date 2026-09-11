@@ -6,15 +6,9 @@ points, and headless locale-switch helpers.
 ## Exports
 
 - `Trans`
-- `Plural`
-- `Select`
-- `SelectOrdinal`
 - `buildLocaleSwitchItems(options)`
 - `Fragment`
 - `TransProps`
-- `PluralProps`
-- `SelectProps`
-- `SelectOrdinalProps`
 - `BuildLocaleSwitchItemsOptions`
 - `LocaleSwitchItem`
 
@@ -36,10 +30,12 @@ components:
 - `Select`
 - `SelectOrdinal`
 
-The transform rewrites `Trans` to `@palamedes/react/compiled`. That subpath
-exports the compiled-message `Trans` adapter (including the `react-server`
-condition) without importing Core's ICU parser. The package root remains the
-full runtime-component compatibility surface.
+The transform rewrites `Trans` to `@palamedes/react/compiled`. In v2, the
+package root and the `/compiled` alias resolve to the same parser-free compiled
+runtime (including the `react-server` condition). The alias remains useful for
+explicit macro targets; it is not a parser-enabled compatibility mode. Hand-
+written components that still depend on raw ICU parsing must migrate to compiled
+messages.
 
 ## Runtime Components
 
@@ -55,20 +51,26 @@ import { Trans } from "@palamedes/react";
 For authoring source strings, prefer macro imports from
 `@palamedes/react/macro` so the build can extract and transform messages.
 
-## Choice Components
+## Choice macros
 
-`Plural`, `Select`, and `SelectOrdinal` take the branch text as props: plural
-categories (`zero`, `one`, `two`, `few`, `many`, `other`) and exact matches
-spelled `_0`, `_1`, … because a JSX attribute cannot start with `=`. Exact
-matches are normalized to ICU `=N`, mirroring the macro transform. `other` is
-required.
+`Plural`, `Select`, and `SelectOrdinal` are compile-time components. Import
+them from `@palamedes/react/macro`; they are transformed into the parser-free
+runtime before the application runs. The package root does not export choice
+components or a runtime parser for hand-written choice trees.
+
+Choice macros take branch text as props: plural categories (`zero`, `one`,
+`two`, `few`, `many`, `other`) and exact matches spelled `_0`, `_1`, … because
+a JSX attribute cannot start with `=`. Exact matches are normalized to ICU
+`=N`, mirroring the macro transform. `other` is required.
 
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern. Use it for "and N others" sentences where the number shown
 is smaller than the number counted:
 
 ```tsx
-<Plural value={attendees} offset={1} _0="nobody else" one="# other" other="# others" />
+import { Plural } from "@palamedes/react/macro";
+
+<Plural value={attendees} offset={1} _0="nobody else" one="# other" other="# others" />;
 ```
 
 - exact `_N` / `=N` keys match the **raw** value, before the offset is
@@ -96,15 +98,16 @@ const items = buildLocaleSwitchItems({
 });
 ```
 
-Initialize the client i18n before hydration when translated client components
-render in the initial HTML. Prefer `createClientCatalogBoundary()` for compiled
-catalog chunks; it owns the loading boundary and initializes the getter before
-translated descendants hydrate.
+Supported host adapters initialize the client runtime and deliver compiled
+active-locale dependencies automatically. `createClientCatalogBoundary()` is a
+low-level custom React escape hatch for a host that owns an equivalent transport;
+it is not required for the standard Vite or Next integration and should not be
+used to add an application catalog loader map.
 
 ## Client Catalog Boundaries
 
-For the recommended document-reload model, create a boundary once in a
-`"use client"` module:
+For a custom React host that owns document reloads and compiled asset delivery,
+create a boundary once in a `"use client"` module:
 
 ```tsx
 import { createI18n } from "@palamedes/core/compiled";
@@ -124,7 +127,7 @@ export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
 ```
 
 The optional `createI18n` factory is used for both server rendering and client
-hydration. Give the server's application-owned factory the same options,
+hydration. Give the custom host's server factory the same options,
 especially `timeZone`, whenever translated markup includes ICU dates or times.
 
 The active locale starts loading when the browser module evaluates. The

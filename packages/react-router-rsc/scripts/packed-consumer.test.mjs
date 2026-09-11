@@ -1,29 +1,19 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { packWorkspaceDependencies } from "../../../scripts/pack-workspace-dependencies.mjs";
+
 const packageDir = path.resolve(import.meta.dirname, "..");
-const repoRoot = path.resolve(packageDir, "../..");
-const runtimeDir = path.join(repoRoot, "packages", "runtime");
 const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-react-router-rsc-packed-"));
 
 try {
   const archiveDir = path.join(fixtureRoot, "archives");
   mkdirSync(archiveDir);
-  const coreArchive = packPackage(path.join(repoRoot, "packages", "core"), archiveDir);
-  const runtimeArchive = packPackage(runtimeDir, archiveDir);
-  const reactRouterRscArchive = packPackage(packageDir, archiveDir);
+  const overrides = packWorkspaceDependencies(packageDir, archiveDir);
   const consumerRoot = path.join(fixtureRoot, "consumer");
   mkdirSync(consumerRoot);
   writeFileSync(
@@ -33,20 +23,13 @@ try {
         name: "react-router-rsc-packed-consumer",
         private: true,
         type: "module",
-        dependencies: {
-          "@palamedes/core": `file:${coreArchive}`,
-          "@palamedes/runtime": `file:${runtimeArchive}`,
-          "@palamedes/react-router-rsc": `file:${reactRouterRscArchive}`,
-        },
+        dependencies: { "@palamedes/react-router-rsc": overrides["@palamedes/react-router-rsc"] },
       },
       null,
       2,
     )}\n`,
   );
-  writeFileSync(
-    path.join(consumerRoot, "pnpm-workspace.yaml"),
-    `overrides:\n  "@palamedes/core": "file:${coreArchive}"\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`,
-  );
+  writeFileSync(path.join(consumerRoot, "pnpm-workspace.yaml"), JSON.stringify({ overrides }));
   runPackageManager(consumerRoot, ["install", "--ignore-scripts"]);
 
   const installedPackage = path.join(
@@ -60,6 +43,11 @@ try {
     types: "./dist/index.d.ts",
     import: "./dist/index.mjs",
   });
+  assert.deepEqual(manifest.exports["./client"], {
+    types: "./dist/client.d.ts",
+    import: "./dist/client.mjs",
+  });
+  assert.deepEqual(manifest.sideEffects, ["./dist/client.mjs"]);
   assert.equal(Object.hasOwn(manifest, "main"), false);
   assert.equal(Object.hasOwn(manifest, "module"), false);
   assert.equal(existsSync(path.join(installedPackage, "dist", "index.cjs")), false);
@@ -83,16 +71,6 @@ try {
   );
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true });
-}
-
-function packPackage(directory, archiveDir) {
-  const existingArchives = new Set(readdirSync(archiveDir));
-  runPackageManager(directory, ["pack", "--pack-destination", archiveDir]);
-  const archives = readdirSync(archiveDir)
-    .filter((entry) => entry.endsWith(".tgz") && !existingArchives.has(entry))
-    .map((entry) => path.join(archiveDir, entry));
-  assert.equal(archives.length, 1, `Expected one packed archive for ${directory}`);
-  return archives[0];
 }
 
 function runPackageManager(cwd, args) {

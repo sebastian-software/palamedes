@@ -1,11 +1,12 @@
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
-import { createServerI18nScope } from "@palamedes/runtime/server";
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 import {
   markServerI18nTestBarrierReached,
   waitForServerI18nTestBarrier,
 } from "@palamedes/runtime/server/test";
-import { createServerI18n, normalizeLocale } from "./lib/i18n";
+import { normalizeLocale } from "./lib/i18n";
+import { createServerI18n, serverI18nScope } from "./lib/i18n.server";
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
 // matches them. Globbing from `/src` and stripping the leading `/src/` yields
@@ -19,13 +20,18 @@ const modules = Object.fromEntries(
   ]),
 );
 
-const serverI18nScope = createServerI18nScope<ReturnType<typeof createServerI18n>>();
-
 export default adapter(fsRouter(modules), {
   middlewareFns: [
+    () =>
+      createWakuCatalogDeliveryMiddleware({
+        clientDirectory: "dist/public",
+        development: process.env.NODE_ENV !== "production",
+        resolveLocale: (request) =>
+          normalizeLocale(new URL(request.url).pathname.split("/").filter(Boolean)[0]),
+      }),
     () => async (context, next) => {
       const segment = new URL(context.req.raw.url).pathname.split("/").filter(Boolean)[0];
-      return serverI18nScope.run(createServerI18n(normalizeLocale(segment)), async () => {
+      return serverI18nScope.run(await createServerI18n(normalizeLocale(segment)), async () => {
         await waitForServerI18nTestBarrier(context.req.raw);
         markServerI18nTestBarrierReached(context.req.raw, context.res.headers);
         return next();

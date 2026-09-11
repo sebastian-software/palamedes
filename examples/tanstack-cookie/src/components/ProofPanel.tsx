@@ -1,9 +1,47 @@
-import { useEffect, useState, useTransition } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";
 import { EVENT } from "@palamedes/example-ui";
 import type { Locale } from "../lib/i18n";
 import { getLocalizedServerStatus } from "../lib/server-functions";
+
+const LazyFeature = lazy(() => import("./LazyFeature"));
+
+class LazyFeatureBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  public state = { error: null as Error | null };
+
+  public static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  public render() {
+    if (this.state.error) {
+      return (
+        <main role="alert" data-testid="lazy-feature-error">
+          <h4>Unable to load this feature.</h4>
+          <p>Reload the page to try again.</p>
+          <button
+            className="cta"
+            data-testid="lazy-feature-reload"
+            onClick={() => window.location.reload()}
+            type="button"
+          >
+            Reload page
+          </button>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 type ProofPanelProps = {
   locale: Locale;
@@ -13,6 +51,7 @@ export function ProofPanel({ locale }: ProofPanelProps) {
   const when = new Date(EVENT.startsAt);
   const seats = EVENT.seatsLeft;
   const [messages, setMessages] = useState<Record<string, string> | null>(null);
+  const [showLazyFeature, setShowLazyFeature] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function refresh() {
@@ -47,6 +86,29 @@ export function ProofPanel({ locale }: ProofPanelProps) {
           </span>
         </div>
         <code>{`plural(seats, { one: "# seat left", other: "# seats left" })`}</code>
+      </div>
+
+      <div className="feat">
+        <div className="feat-row">
+          <span className="feat-name">
+            <Trans>Lazy feature</Trans>
+          </span>
+          <button
+            className="cta"
+            data-testid="lazy-feature-trigger"
+            onClick={() => setShowLazyFeature(true)}
+            type="button"
+          >
+            <Trans>Open lazy feature</Trans>
+          </button>
+        </div>
+        {showLazyFeature ? (
+          <LazyFeatureBoundary>
+            <Suspense fallback={<span data-testid="lazy-feature-loading">…</span>}>
+              <LazyFeature />
+            </Suspense>
+          </LazyFeatureBoundary>
+        ) : null}
       </div>
 
       <div className="feat">

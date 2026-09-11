@@ -56,6 +56,7 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
   {
     packageDirectory: "packages/vite-plugin",
     docs: "docs/api/vite-plugin.md",
+    compiledOnlyDefault: true,
   },
   {
     packageDirectory: "packages/next-plugin",
@@ -69,16 +70,12 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
   },
 ];
 
-const SOURCE_FALLBACK_TSDOC_PATTERN =
-  /Defaults to `true` in every environment\.[\s\S]*Set to `false` for compact,[\s\S]*bundle size or embedding authored source text/u;
-
 const SOURCE_FALLBACK_POLICY_TARGETS = [
   {
     file: "adr/004-internal-compiled-lookup-keys.md",
     snippets: [
-      "Low-level transforms generate compact runtime calls without embedding the authored source message by default.",
-      "First-party host adapters retain diagnostic source metadata by default.",
-      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+      "Low-level transforms and v2 first-party host adapters generate compact runtime calls without embedding the authored source message by default.",
+      "Set `keepSourceFallbacks: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.",
     ],
   },
   {
@@ -92,9 +89,8 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
   {
     file: "crates/palamedes/src/transform/mod.rs",
     snippets: [
-      "The native transform itself strips source fallbacks by default (`None` resolves to `false`).",
-      "First-party host adapters set this to `true` in every environment unless explicitly configured with `keepSourceFallbacks: false`",
-      "for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+      "The native transform and v2 first-party host adapters strip source fallbacks by default (`None` resolves to `false`).",
+      "`keepSourceFallbacks: true` only to retain authored source text as diagnostic metadata; it never supplies replacement runtime output.",
     ],
   },
 ];
@@ -229,9 +225,8 @@ function assertSourceFallbackDefaultDocumentation() {
         continue;
       }
       const optionDocs = text.slice(docStart, docEnd);
-      const pattern = compiledOnlyDefault
-        ? /Defaults to `false` in every environment[\s\S]*Set to `true`[\s\S]*diagnostic/u
-        : SOURCE_FALLBACK_TSDOC_PATTERN;
+      const pattern =
+        /Defaults to `false` in every environment[\s\S]*Set to `true`[\s\S]*diagnostic/u;
       if (!pattern.test(optionDocs)) {
         problems.push(
           `${path.relative(root, file)} does not document the all-environments default and compact/source-exposure opt-out.`,

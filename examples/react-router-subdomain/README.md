@@ -1,7 +1,7 @@
 # React Router Subdomain Example
 
 This example verifies Palamedes with React Router framework mode, SSR, route
-actions, `.po` imports through `@palamedes/vite-plugin`, and a subdomain-derived
+actions, adapter-owned compiled catalog delivery through `@palamedes/vite-plugin`, and a subdomain-derived
 locale.
 
 ## Commands

@@ -80,11 +80,14 @@ catalogs:
     include: [src]
 ```
 
-Transformed code expects `getI18n()` from `@palamedes/runtime`, so register the active client i18n instance before translated code executes.
+Set the document’s `lang` before its module entry runs. Generated dependencies initialize the client instance and await only the active locale’s compiled fragments before translated code executes. Locale changes use document navigation.
 
-Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Vite
-loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
-future adapter release explicitly documents `.fcl` imports.
+Catalog storage can be PO or FCL in `palamedes.yaml`. Standard framework
+delivery derives the compiled active-locale dependencies automatically, so app
+code does not need direct catalog imports or locale maps. For explicit custom
+integrations, the current low-level import hook accepts `.po` modules; FCL
+storage is compiled and delivered through the adapter rather than imported by
+application code.
 
 ## Options
 
@@ -108,12 +111,10 @@ palamedes({
 });
 ```
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `true`
-here. It only controls diagnostic source metadata in generated calls. Set
-`keepSourceFallbacks: false` for compact output without authored source text.
-V2 package roots and `compiled` aliases both throw on missing compiled entries;
-retained metadata never supplies replacement message output. Valid translation
-fallbacks are resolved and compiled at build time.
+`keepSourceFallbacks` defaults to `false` in every environment. Set
+`keepSourceFallbacks: true` to retain authored text for diagnostics. Missing
+compiled messages throw; source metadata never supplies replacement output.
+Valid translation fallbacks are compiled by the native compiler.
 
 `cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
 sets the directory the config search starts from, and `skipValidation` loads
@@ -144,11 +145,16 @@ Rolldown pipeline recognizes the generated module type. Plain Rollup-based Vite
 compile MDX for Solid with `solid({ extensions: [".mdx"] })`. React parsing is
 configured automatically, while Solid requires that explicit extension setting.
 
-When using `experimentalGraphSplitting: { localeBinding: "import-map" }`, Vite's
-resolved `base` must be root-relative, such as `"/app/"`, or an absolute URL.
-Relative bases are rejected because import-map entries would resolve against
-each document URL; set `base: "/"` or an absolute deployment path/URL, or use
-the default `localeBinding: "embed"` form.
+Compiled graph delivery is automatic in development and production. No
+experimental flag, application PO map, or manual client initialization is
+needed. Vite's resolved `base` must be root-relative (for example `/app/`) or
+an absolute URL.
+
+SSR adapters use `@palamedes/vite-plugin/server` to create request state from
+the shared lazy active-locale catalog, and `@palamedes/vite-plugin/delivery`
+to bind import maps before modulepreloads and modules execute. The React Router
+compatibility export remains at `@palamedes/vite-plugin/react-router`.
+Static Vite HTML entries receive the same locale binding automatically.
 
 The package peer range remains broad because macros and catalog loading work on
 supported Vite releases independently of the React MDX compiler.

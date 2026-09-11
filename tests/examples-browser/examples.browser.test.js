@@ -4,7 +4,10 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { afterEach, expect, test } from "vitest";
 
+import { observeBrowserArtifacts } from "../../scripts/verify-browser-artifacts.mjs";
+
 let browser;
+let verifyObservedArtifacts;
 
 function resolveChromiumExecutable() {
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
@@ -112,8 +115,13 @@ async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorL
 }
 
 afterEach(async () => {
-  await browser?.close();
-  browser = undefined;
+  try {
+    await verifyObservedArtifacts?.();
+  } finally {
+    verifyObservedArtifacts = undefined;
+    await browser?.close();
+    browser = undefined;
+  }
 });
 
 // React recovers from a hydration mismatch instead of throwing, so it only
@@ -234,6 +242,18 @@ async function captureScreenshot(page, example, state) {
   });
 }
 
+async function rejectModuleEvaluation(route, message) {
+  const response = await route.fetch();
+  const headers = { ...response.headers(), "cache-control": "no-store" };
+  delete headers.etag;
+  delete headers["last-modified"];
+  await route.fulfill({
+    response,
+    headers,
+    body: `${await response.text()}\nthrow new Error(${JSON.stringify(message)});`,
+  });
+}
+
 test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
   const example = activeExample();
   if (example.id !== "remix-cookie") {
@@ -269,11 +289,7 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
       return;
     }
     if (failure === "entry-evaluation") {
-      await route.fulfill({
-        body: 'throw new Error("injected Remix entry evaluation failure");',
-        contentType: "application/javascript",
-        status: 200,
-      });
+      await rejectModuleEvaluation(route, "injected Remix entry evaluation failure");
       return;
     }
     await route.continue();
@@ -284,11 +300,7 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
       return;
     }
     if (failure === "fragment-evaluation") {
-      await route.fulfill({
-        body: 'throw new Error("injected Remix catalog fragment evaluation failure");',
-        contentType: "application/javascript",
-        status: 200,
-      });
+      await rejectModuleEvaluation(route, "injected Remix catalog fragment evaluation failure");
       return;
     }
     await route.continue();
@@ -359,10 +371,7 @@ test("Remix lazy catalog failures recover in all document locales under CSP", as
         fragments.push(route.request().url());
         if (!fail) return route.continue();
         if (mode === "network") return route.abort("failed");
-        await route.fulfill({
-          contentType: "application/javascript",
-          body: 'throw new Error("injected catalog evaluation failure")',
-        });
+        await rejectModuleEvaluation(route, "injected catalog evaluation failure");
       });
       await page.goto(example.baseUrl, { waitUntil: "domcontentloaded" });
       await waitForClientReady(page);
@@ -426,6 +435,8 @@ test("matrix example browser contract", async () => {
     browserLocale: example.strategy === "cookie" ? "es-ES" : "en-US",
     navigatorLocale: example.strategy === "cookie" ? "en-US" : undefined,
   });
+  verifyObservedArtifacts = observeBrowserArtifacts(page, example);
+
   const pageErrors = [];
   const hydrationErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -434,6 +445,28 @@ test("matrix example browser contract", async () => {
       hydrationErrors.push(message.text());
     }
   });
+
+  if (example.id === "tanstack-route") {
+    // Server-function URLs have no locale path. Exercise the documented
+    // validated header policy when the document deliberately suppresses the
+    // browser Referer header.
+    await page.route("**/*", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      if (
+        route.request().resourceType() !== "document" ||
+        requestUrl.hostname !== "127.0.0.1" ||
+        requestUrl.pathname !== "/de"
+      ) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), "referrer-policy": "no-referrer" },
+      });
+    });
+  }
 
   const initialUrl =
     example.strategy === "route"
@@ -463,6 +496,7 @@ test("matrix example browser contract", async () => {
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
       .toContain("Palamedes MDX handbook");
 
+    await verifyObservedArtifacts.checkpoint();
     await page.getByTestId("page-link-extraction").click();
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
@@ -498,6 +532,7 @@ test("matrix example browser contract", async () => {
       .toBe("Añadir al carrito");
   }
   await expectRemixClientProof(page, "es", 1);
+  await verifyObservedArtifacts.checkpoint();
   if (example.id === "remix-cookie") {
     await page.getByTestId("client-increment").click();
     await expectRemixClientProof(page, "es", 2);
@@ -648,6 +683,13 @@ test("matrix example browser contract", async () => {
   await expect
     .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
     .toContain("de");
+  if (example.id === "tanstack-route") {
+    await expect
+      .poll(
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "",
+      )
+      .toBe("Serverfunktion bestätigte Sprache de.");
+  }
   await expectSettledDocumentLocale(page, "de");
   expectNoRuntimeErrors(pageErrors, hydrationErrors);
   await captureScreenshot(page, example, "interactive");

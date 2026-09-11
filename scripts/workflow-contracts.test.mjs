@@ -319,6 +319,22 @@ describe("workflow contracts", () => {
     expect(verifyMuslNative).toContain("execFileSync('./bin/pmds', ['version']");
   });
 
+  it("runs the browser contract on pull requests and main changes", async () => {
+    const workflow = await readRepositoryFile(".github/workflows/example-verification.yml");
+    for (const step of [
+      "Install Playwright Chromium",
+      "Browser-test 22 browser-capable examples",
+    ]) {
+      const start = workflow.indexOf(`- name: ${step}`);
+      expect(start).toBeGreaterThan(-1);
+      const end = workflow.indexOf("\n      - name:", start + 1);
+      const block = workflow.slice(start, end === -1 ? undefined : end);
+      expect(block).toContain("if: github.event_name != 'workflow_dispatch' || inputs.run_browser");
+    }
+    expect(workflow).toContain('"scripts/proof-*.mjs"');
+    expect(workflow).toContain('"scripts/verify-browser-artifacts.mjs"');
+  });
+
   it("caches Rust example builds and retries only scheduled browser verification", async () => {
     const [exampleVerification, browserConfig] = await Promise.all([
       readRepositoryFile(".github/workflows/example-verification.yml"),

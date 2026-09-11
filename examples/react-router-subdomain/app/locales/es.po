@@ -9,12 +9,12 @@ msgstr ""
 #: examples/react-router-subdomain/app/components/ProofPanel.tsx#ProofPanel
 #: examples/react-router-subdomain/app/components/TicketPanel.tsx#TicketPanel
 msgid "{amount, number, ::currency/EUR}"
-msgstr ""
+msgstr "{amount, number, ::currency/EUR}"
 
 #: examples/react-router-subdomain/app/components/ProofPanel.tsx#ProofPanel
 #: examples/react-router-subdomain/app/components/TicketPanel.tsx#TicketPanel
 msgid "{count, number}"
-msgstr ""
+msgstr "{count, number}"
 
 #: examples/react-router-subdomain/app/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
@@ -27,15 +27,15 @@ msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
 
 #: examples/react-router-subdomain/app/components/TicketPanel.tsx#TicketPanel
 msgid "{when, date, full}"
-msgstr ""
+msgstr "{when, date, full}"
 
 #: examples/react-router-subdomain/app/components/ProofPanel.tsx#ProofPanel
 msgid "{when, date, medium}"
-msgstr ""
+msgstr "{when, date, medium}"
 
 #: examples/react-router-subdomain/app/components/TicketPanel.tsx#TicketPanel
 msgid "{when, time, short}"
-msgstr ""
+msgstr "{when, time, short}"
 
 #: examples/react-router-subdomain/app/components/TicketPanel.tsx#TicketPanel
 msgid "Add to cart"

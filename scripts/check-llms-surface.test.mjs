@@ -32,23 +32,19 @@ test("accepts the checked-in public surface", () => {
   assert.doesNotThrow(() => checkLlmsSurface({ read }));
 });
 
-test("rejects a quickstart that uses the parser-carrying runtime for generated catalogs", () => {
+test("rejects a quickstart that omits adapter-owned catalog delivery", () => {
   expectRejected(
     "llms.txt",
-    (text) =>
-      text.replace(
-        'import { createI18n } from "@palamedes/core/compiled"',
-        'import { createI18n } from "@palamedes/core"',
-      ),
-    /llms\.txt quickstart runtime is missing required surface/,
+    (text) => text.replace("app-owned", "project-owned"),
+    /llms\.txt quickstart adapter-owned delivery guidance/,
   );
 });
 
-test("rejects a quickstart that loses the compiled .po module type", () => {
+test("rejects a quickstart that reintroduces a parser-carrying runtime", () => {
   expectRejected(
     "docs/first-working-translation.md",
-    (text) => text.replace("CompiledCatalogMessages", "CatalogMessages"),
-    /docs\/first-working-translation\.md quickstart \.po declaration/,
+    (text) => `${text}\nimport { createI18n } from "@palamedes/core"`,
+    /docs\/first-working-translation\.md quickstart must not advertise the parser-carrying runtime/,
   );
 });
 

@@ -27,6 +27,7 @@ The existing parser-free implementation is exposed through:
 
 - `@palamedes/core/compiled`
 - `@palamedes/react/compiled`
+- `@palamedes/remix/compiled`
 - `@palamedes/solid/compiled`
 
 Generated catalog modules import their ABI from `@palamedes/core/compiled`.
@@ -34,15 +35,13 @@ Macro transforms and generated MDX modules import `Trans` from the matching
 framework `compiled` entrypoint. These entrypoints depend only on the compiled
 message engine and Intl formatters; they do not import the ICU parser.
 
-Package roots must converge on this same contract. Their current support for
-uncompiled ICU catalogs, `parseMessagePattern()`, `parsePattern()`, and runtime
-parsing through `getMessageNodes()` must be removed or moved to an appropriate
-tooling boundary. Existing `compiled` subpaths should remain compatible aliases
-to the same parser-free implementation; they are not a separate runtime mode.
-Framework adapters select runtime imports automatically, so normal application
-authors need not choose between runtime entrypoints. Exact legacy API
-replacements are tracked in the
-[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
+Package roots and existing `compiled` subpaths now resolve to the same
+parser-free contract. `parseMessagePattern()`, `parsePattern()`, and runtime
+parsing through `getMessageNodes()` belong to authoring and inspection tooling,
+not the public application runtime. Framework adapters select runtime imports
+automatically, so normal application authors need not choose between runtime
+entrypoints. Exact legacy API replacements are documented in the
+[v2 migration guide](../docs/migration-v2.md).
 This contract ships as Palamedes v2 with migration guidance and without a
 permanent legacy runtime mode. The published 1.x compatibility contract is not
 retroactively changed by this accepted target.
@@ -98,24 +97,30 @@ expose one compiled implementation without another package or version boundary.
   regardless of host or package-root versus subpath imports.
 - Existing package-root consumers and raw-ICU component examples require
   migration to compiled messages.
-- Remix's serialized ICU client catalogs must be replaced with delivery of
-  compiled messages. The concrete host integration remains to be designed.
+- Host integrations must deliver compiled messages through adapter-owned
+  assets or module dependencies. Serialized ICU maps are a migration boundary,
+  not a supported application transport.
 - Root and compiled entrypoints no longer maintain parallel copies of their
   framework's message walker and runtime adapter.
-- `pnpm benchmark:runtime-browser` builds the real Vite MDX example, verifies a
-  stable parser sentinel against the compatibility entry, rejects that sentinel
-  in browser assets, and reports raw, gzip, and Brotli JavaScript sizes.
-  This existing proof must evolve to cover the unified runtime contract.
+- Browser and published-runtime checks verify that generated application assets
+  are parser-free. The bundle check's parser source fixture is a private
+  positive control for that assertion; it is not an application compatibility
+  entry or a runtime transport. Aggregate host evidence is recorded in the
+  [catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md).
 
 ## Implementation status
 
-The current v2 migration has converged the Core, React, Solid, Next and Vite
-application roots on the parser-free compiled runtime, with public ESM/CJS
-checks guarding the absence of parser exports and browser parser code. Remix
-server catalogs are now required to be generated `CompiledCatalogMessages`, and
-the old inert serialized ICU bootstrap is rejected with an explicit #1214
-asset-pipeline diagnostic. Remix executable browser delivery, active-locale
-asset selection and lazy host integration remain open work in #1214; shared
-server catalog loading remains coordinated with #1207. This ADR records the
-implemented runtime boundary and the remaining host migration work, not a claim
-that the complete Remix delivery slice has shipped.
+The current v2 implementation has converged the Core, React, Solid, Next, Vite,
+Remix, TanStack, Waku, and React Router RSC paths on the parser-free compiled
+runtime. Public ESM/CJS checks guard the absence of parser exports and browser
+parser code. Server adapters load complete active-locale catalogs through
+shared immutable storage, while browser adapters await the active locale's
+executable dependencies before translated modules run. Catalog and formatter
+failures propagate to ordinary host error handling; they are never converted
+to source-text output.
+
+Serialized ICU bootstraps and raw ICU maps are rejected at the v2 runtime
+boundary. The parser marker used by the bundle checker is a test-only positive
+control, not a compatibility sentinel shipped in an application artifact.
+The [catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md)
+is the canonical record of the aggregate host checks.

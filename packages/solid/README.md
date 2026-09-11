@@ -6,8 +6,9 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-0f172a.svg)](https://github.com/sebastian-software/palamedes#license)
 
 Use this package when your Solid app wants translated JSX that feels native to
-Solid: `Trans`, `Plural`, `Select`, and `SelectOrdinal`, plus a small headless
-helper layer for locale-aware UI.
+Solid: the parser-free `Trans` runtime component, compile-time `Plural`,
+`Select`, and `SelectOrdinal` macros, plus a small headless helper layer for
+locale-aware UI.
 
 Palamedes keeps the runtime model provider-free. Transformed code resolves the
 active i18n instance through `getI18n()` from
@@ -55,30 +56,45 @@ export function Footer() {
 ```
 
 When the Palamedes transform runs, macro imports are rewritten to runtime
-imports from `@palamedes/solid/compiled`, which excludes the ICU parser. Rich
-JSX children are transformed to numeric component slots in the message, for
-example `<0>Palamedes</0>`, while the Solid wrapper is passed separately.
-Direct imports from `@palamedes/solid` remain the runtime surface for
-hand-written component patterns. Rich component slots use Solid 2
+imports from `@palamedes/solid/compiled`. In v2, the package root and the
+`/compiled` alias share the same parser-free compiled runtime; the alias is an
+explicit macro target, not a parser-enabled mode. Rich JSX children are
+transformed to numeric component slots in the message, for example
+`<0>Palamedes</0>`, while the Solid wrapper is passed separately. Hand-written
+components that depend on raw ICU parsing must migrate to compiled messages. Rich component slots use Solid 2
 `FlowComponent<{}, Element>` functions and receive their nested content through
 `props.children`.
 
-## Runtime Components
+## Runtime and macro entry points
 
-Besides the macro entry point, the package's main entry exports the runtime
-components `Trans`, `Plural`, `Select`, and `SelectOrdinal`. These are what
-macro-transformed JSX renders through, and all of them resolve messages through
-the active i18n instance. The choice components accept plural categories
-(`zero` … `other`), exact matches written as `_0`/`_1`/… (normalized to ICU
-`=N`, mirroring the macro transform), and `offset`; invalid option props and
-option text with unbalanced braces are rejected with a descriptive error
-instead of silently misrendering.
+The package root exports the parser-free runtime `Trans` and the headless
+locale-switch helpers. Macro-transformed JSX renders through that runtime and
+reads the active i18n instance.
+
+`Plural`, `Select`, and `SelectOrdinal` are compile-time components. Import
+them from `@palamedes/solid/macro`; the transform lowers them to the parser-free
+runtime before the application runs. The package root does not export choice
+components or a runtime parser for hand-written choice trees:
+
+```tsx
+import { Plural } from "@palamedes/solid/macro";
+
+export function AttendeeCount(props: { count: () => number }) {
+  return <Plural value={props.count()} one="# attendee" other="# attendees" />;
+}
+```
+
+Choice macros accept plural categories (`zero` … `other`), exact matches
+written as `_0`/`_1`/… (normalized to ICU `=N`), and `offset`. Invalid option
+props and option text with unbalanced braces are rejected during compilation.
 
 `offset` maps to ICU `offset:N` and covers "and N others" sentences, where the
 number shown is smaller than the number counted:
 
 ```tsx
-<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />
+import { Plural } from "@palamedes/solid/macro";
+
+<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />;
 ```
 
 Exact `_N` keys match the raw value; plural categories select on
@@ -123,6 +139,46 @@ function LocaleToolbar(props: { locale: "en" | "de" }) {
 
 Locale links deliberately navigate the document. Components and macros read the
 plain runtime getter and do not subscribe to in-document locale replacement.
+
+## SSR and split catalogs
+
+For SSR applications, configure the Vite plugin with compiled graph delivery
+and install `createSolidCatalogDeliveryMiddleware` before the framework's
+HTML middleware. It injects the active-locale import map, waits for the
+initial catalog fragments before importing the Solid client entry, and leaves
+the host's ordinary error UI responsible for lazy route failures:
+
+```ts
+import path from "node:path";
+import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+
+const catalogDelivery = createSolidCatalogDeliveryMiddleware({
+  clientDirectory: path.resolve(process.cwd(), ".output/public"),
+  resolveLocale: (request) => resolveLocale(request),
+  nonce: (request) => serverRequestContext(request).cspNonce,
+});
+
+const i18n = await createViteServerI18n({ locale });
+return serverI18nScope.run(i18n, () => next());
+```
+
+`createViteServerI18n` owns the lazy server catalog store and keeps request
+state isolated while sharing compiled catalog content between requests. The
+delivery middleware's default initial error document contains only a reload
+and home link; pass trusted `errorHtml` when the host needs a different
+catalog-free document. Here `serverRequestContext` represents the host's
+request-scoped context containing a server-generated nonce; do not derive it
+from an arbitrary client-supplied header. The adapter's `nonce` applies only
+to its own import map and readiness/bootstrap delivery tags. Solid's
+`HydrationScript` and `renderToStream` own framework hydration scripts; pass
+the host request nonce to those Solid APIs as well when the document uses a
+nonce-based CSP. Avoid putting `integrity`, `crossorigin`, or `referrerpolicy` on the Solid client
+entry: the adapter rejects those entries because its dynamic import gate cannot
+preserve their fetch semantics. Keep such entries outside this delivery path.
+Also avoid importing `.po` files, the parser, or a catalog virtual module in
+application code; author messages with `@palamedes/solid/macro` and
+`@palamedes/core/macro` so the compiler emits compiled-only runtime calls.
 
 ## Related Docs
 

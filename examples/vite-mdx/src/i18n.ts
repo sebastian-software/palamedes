@@ -1,18 +1,6 @@
-import { createI18n } from "@palamedes/core/compiled";
-import { setClientI18n } from "@palamedes/runtime";
-
 export const LOCALES = ["en", "de"] as const;
 export type Locale = (typeof LOCALES)[number];
 
-export const i18n = createI18n();
-
 export function resolveDocumentLocale(): Locale {
-  const locale = new URLSearchParams(window.location.search).get("locale");
-  return locale === "de" ? "de" : "en";
-}
-
-export function initializeDocumentLocale(locale: Locale) {
-  i18n.activate(locale);
-  setClientI18n(i18n);
-  document.documentElement.lang = locale;
+  return document.documentElement.lang === "de" ? "de" : "en";
 }

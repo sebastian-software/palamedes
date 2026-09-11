@@ -42,20 +42,34 @@ subscriptions for in-document instance replacement.
 
 Rich JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the React component is passed separately.
-The transform imports `Trans` from `@palamedes/react/compiled`, which excludes
-the ICU parser. Direct imports from `@palamedes/react` remain the compatibility
-surface for hand-written runtime component patterns.
+The transform imports `Trans` from `@palamedes/react/compiled`. In v2, the
+package root and the `/compiled` alias share the same parser-free compiled
+runtime; the alias is an explicit macro target, not a parser-enabled mode.
+Hand-written components that depend on raw ICU parsing must migrate to compiled
+messages.
 
-## Runtime Components
+## Runtime and macro entry points
 
-Besides the macro entry point, the package's main entry exports the runtime
-components `Trans`, `Plural`, `Select`, and `SelectOrdinal` (plus the
-`TransProps` type). These are what macro-transformed JSX renders through, and
-all of them resolve messages through the active i18n instance. The choice
-components accept plural categories (`zero` … `other`), exact matches written
-as `_0`/`_1`/… (normalized to ICU `=N`, mirroring the macro transform), and
-`offset`; invalid option props and option text with unbalanced braces are
-rejected with a descriptive error instead of silently misrendering.
+The package root exports the parser-free runtime `Trans`, React's `Fragment`,
+and the headless locale-switch helpers. Macro-transformed JSX renders through
+that runtime and reads the active i18n instance.
+
+`Plural`, `Select`, and `SelectOrdinal` are compile-time components. Import
+them from `@palamedes/react/macro`; the transform lowers them to the parser-free
+runtime before the application runs. The package root does not export choice
+components or a runtime parser for hand-written choice trees:
+
+```tsx
+import { Plural } from "@palamedes/react/macro";
+
+export function AttendeeCount({ count }: { count: number }) {
+  return <Plural value={count} one="# attendee" other="# attendees" />;
+}
+```
+
+Choice macros accept plural categories (`zero` … `other`), exact matches
+written as `_0`/`_1`/… (normalized to ICU `=N`), and `offset`. Invalid option
+props and option text with unbalanced braces are rejected during compilation.
 
 The package also re-exports React's `Fragment`: the macro transform emits
 fragment-wrapped output and resolves `Fragment` from this package so
@@ -99,9 +113,11 @@ function LocaleToolbar({ locale }: { locale: "en" | "de" }) {
 
 ## Render-Safe Client Catalogs
 
-Next.js App Router applications can keep generated catalogs in per-locale
-chunks while giving translated Client Components the right catalog on their
-first hydration render. Define the boundary once in a `"use client"` module:
+For a custom React host that owns per-locale compiled assets, the client
+boundary can give translated Client Components the right catalog on their first
+hydration render. The standard Next adapter owns this delivery automatically;
+use the boundary only when the host intentionally supplies an equivalent
+transport. Define it once in a `"use client"` module:
 
 ```tsx
 "use client";

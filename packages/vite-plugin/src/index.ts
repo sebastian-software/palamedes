@@ -36,10 +36,12 @@ import {
   type PalamedesFramework,
 } from "@palamedes/transform";
 
-const PO_FILE_REGEX = /(\.po|\?palamedes)$/;
+const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
+const VIRTUAL_SERVER_CATALOGS = "virtual:palamedes/server-catalogs";
+const RESOLVED_SERVER_CATALOGS = "\0palamedes:server-catalogs";
 const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/";
 const BARE_MESSAGES_PREFIX = "#pmds/";
 const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json";
@@ -93,6 +95,49 @@ type EnvironmentAwarePluginContext = {
   };
 };
 
+const ROUTE_FACADE_VERSION = "v2";
+
+type RouteFacadeChunk = {
+  code: string;
+  fileName: string;
+  exports: readonly string[];
+};
+
+function routeFacadeSource(relative: string, exports: readonly string[]): string {
+  const renderedExports = exports
+    .map((name, index) => {
+      const value = `__export${index}`;
+      const failedExport =
+        name === "default"
+          ? "function(){throw failure}"
+          : name === "meta" || name === "links"
+            ? "()=>[]"
+            : "undefined";
+      return `const ${value}=failure?${failedExport}:route[${JSON.stringify(name)}];export{${value} as ${name}};`;
+    })
+    .join("\n");
+  return `/*palamedes-route-facade:${ROUTE_FACADE_VERSION}*/let route,failure;try{route=await import(${JSON.stringify(relative)})}catch(error){if(!globalThis[Symbol.for("palamedes.document-catalogs-ready")])throw error;failure=error}\n${renderedExports}`;
+}
+
+function routeAssetSource(code: string): string {
+  // The original chunk is moved to a content-addressed asset without its
+  // Rollup chunk map. Do not leave a sourceMappingURL pointing at the old
+  // facade filename.
+  return code.replace(/\r?\n?\/\/[#@]\s*sourceMappingURL=.*$/u, "");
+}
+
+function createRouteFacade(chunk: RouteFacadeChunk): {
+  assetFileName: string;
+  assetSource: string;
+  facadeSource: string;
+} {
+  const hash = createHash("sha256").update(chunk.code).digest("hex").slice(0, 12);
+  const assetFileName = `${path.posix.dirname(chunk.fileName)}/palamedes-route-${hash}.js`;
+  const relative = `./${path.posix.basename(assetFileName)}`;
+  const facadeSource = routeFacadeSource(relative, chunk.exports);
+  return { assetFileName, assetSource: routeAssetSource(chunk.code), facadeSource };
+}
+
 function isServerEnvironment(context: unknown, ssr = false, legacyBuildSsr = false): boolean {
   const environment = (context as EnvironmentAwarePluginContext).environment;
   // Vite <=5 has no environment context, so use the root build.ssr flag only
@@ -118,6 +163,18 @@ function assertImportMapBase(base: string): void {
 
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id;
+}
+
+function catalogLocaleForResource(config: LoadedPalamedesConfig, resourcePath: string): string {
+  const canonicalResourcePath = canonicalPath(resourcePath);
+  return (
+    config.locales.find((locale) =>
+      config.catalogs.some(
+        (catalog) =>
+          canonicalPath(catalogResourcePath(config, catalog, locale)) === canonicalResourcePath,
+      ),
+    ) ?? path.basename(resourcePath, path.extname(resourcePath))
+  );
 }
 
 function canonicalPath(value: string): string {
@@ -250,9 +307,8 @@ export type PalamedesPluginOptions = {
 
   /**
    * Preserve authored source messages as diagnostic metadata only.
-   * Defaults to `true` in every environment. Set to `false` for compact,
-   * hash-only output when bundle size or embedding authored source text is a
-   * concern.
+   * Defaults to `false` in every environment. Set to `true` to retain
+   * authored source text for diagnostics.
    * V2 runtime misses throw; this metadata never provides replacement output.
    */
   keepSourceFallbacks?: boolean;
@@ -264,29 +320,8 @@ export type PalamedesPluginOptions = {
   mdx?: PalamedesMdxConfig | false;
 
   /**
-   * EXPERIMENTAL: emit one generated message sidecar module per transformed
-   * source file, containing only the compiled messages that file references,
-   * and append a static import of it to the transformed output. Messages then
-   * travel through the bundler's module graph with the code that uses them,
-   * so route-level code splitting splits messages without any route
-   * configuration. Requires the application to install its client instance
-   * with `setClientI18n` instead of importing `.po` catalogs eagerly.
-   *
-   * The object form selects how the locale dimension binds:
-   *
-   * - `localeBinding: "embed"` (default) — every sidecar embeds all locales;
-   *   simplest, works everywhere, ships `locales ×` the route's messages.
-   * - `localeBinding: "import-map"` — production client builds import each
-   *   sidecar through a bare `#pmds/<key>` specifier and the build emits one
-   *   dependency-free message asset per (sidecar × locale) plus one import
-   *   map per locale and a `palamedes-split-manifest.json`. The server must
-   *   inject the active locale's import map into the HTML before any module
-   *   loads; the browser then downloads only the active locale's messages,
-   *   and translation-only deploys change message assets and import maps
-   *   while code chunks keep their hashes. Locale switching requires a
-   *   document navigation. Dev servers and SSR builds keep the embedded
-   *   form.
-   * @default false
+   * @deprecated Compiled graph delivery is automatic in every environment.
+   * Legacy enabled forms use active-locale delivery. `false` is rejected.
    */
   experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
 };
@@ -305,15 +340,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     runtimeModule,
     keepSourceFallbacks,
     mdx: mdxOverride,
-    experimentalGraphSplitting = false,
+    experimentalGraphSplitting,
     ...configLoaderOptions
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
-  const graphSplitting = experimentalGraphSplitting !== false;
-  const importMapBinding =
-    typeof experimentalGraphSplitting === "object" &&
-    experimentalGraphSplitting.localeBinding === "import-map";
-  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true;
+  if (experimentalGraphSplitting === false) {
+    throw new Error(
+      "Palamedes v2 delivers compiled catalogs automatically. Remove experimentalGraphSplitting: false.",
+    );
+  }
+  const graphSplitting = true;
+  const importMapBinding = true;
+  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false;
   let stripNonEssentialProps = true;
   let isBuildCommand = false;
   let resolvedBase = "/";
@@ -669,7 +707,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       // message in first-party output by default so that case remains readable
       // instead of exposing the opaque compiled id. Consumers that cannot ship
       // source text can opt out explicitly.
-      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true;
+      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false;
       stripNonEssentialProps = env.command === "build";
       isBuildCommand = env.command === "build";
       const ids = new Set(PALAMEDES_MACRO_PACKAGES);
@@ -763,10 +801,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         catalogMatchesSource(cfg, catalog, entry.sourceId),
       );
       if (catalogs.length === 0) {
-        context.warn(
-          `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`,
+        throw new Error(
+          `Palamedes message source ${entry.sourceId} is not included in a configured catalog.`,
         );
-        return null;
       }
 
       const selected: Record<string, string> = {};
@@ -796,24 +833,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     plugins.push({
       name: "palamedes:message-sidecars",
 
-      config() {
-        if (!importMapBinding) {
-          return;
-        }
-        // Bare #pmds/ specifiers stay external in client builds; the emitted
-        // per-locale import map resolves them in the browser. SSR aggregators
-        // never emit these specifiers, so the external filter cannot match
-        // there.
-        return {
-          build: {
-            rollupOptions: {
-              external: (id: string) => id.startsWith(BARE_MESSAGES_PREFIX),
-            },
-          },
-        };
-      },
-
       resolveId(id) {
+        if (id.startsWith(BARE_MESSAGES_PREFIX)) return { id, external: true };
         if (id.startsWith(VIRTUAL_MESSAGES_PREFIX)) {
           return `${RESOLVED_MESSAGES_PREFIX}${id.slice(VIRTUAL_MESSAGES_PREFIX.length)}`;
         }
@@ -851,39 +872,39 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (locale === undefined) {
           const ssr = isServerEnvironment(this, loadOptions?.ssr === true);
 
-          if (importMapBinding && isBuildCommand && !ssr) {
-            // Import-map binding: the client aggregator imports one
-            // locale-neutral bare specifier. The per-locale import map decides
-            // which emitted message asset answers it, so only the active
-            // locale downloads, and the asset name's hash never appears in
-            // this module or its importers. The asset ships unbranded
-            // (dependency-free); branding happens on receive.
+          if (ssr) return { code: "export {};", map: null, moduleSideEffects: false };
+
+          const initialize =
+            `import { createI18n } from "@palamedes/core";\n` +
+            `import { initializeClientI18n } from "@palamedes/runtime";\n` +
+            `const locale = document.documentElement.lang;\n` +
+            `if (!${JSON.stringify(locales)}.includes(locale)) throw new Error("Unsupported document catalog locale.");\n` +
+            `const i18n = initializeClientI18n(locale, () => createI18n({ locale, timeZone: document.documentElement.dataset.palamedesTimeZone }));\n`;
+          if (isBuildCommand) {
             const boundCode =
               `import { locale as l, messages as m } from "${BARE_MESSAGES_PREFIX}${key}";\n` +
-              `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
-              `import { registerMessages } from "@palamedes/runtime";\n` +
-              `registerMessages({ [l]: defineCompiledCatalog(m) }, ${JSON.stringify(key)});\n`;
+              `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n${
+                initialize
+              }if (l !== locale) throw new Error("Compiled catalog locale does not match the document.");\n` +
+              `i18n.load(locale, defineCompiledCatalog(m));\n`;
             return { code: boundCode, map: null, moduleSideEffects: true };
           }
 
-          // Embedded binding: import each branded per-locale module and
-          // register it under the sidecar key, so a dev-server SSR
-          // re-evaluation after a catalog edit replaces this registration
-          // instead of buffering another copy alongside the stale one.
-          const imports = locales
+          // Development still loads only the active locale; every locale is a
+          // genuine generated-module dependency watched by the Vite server.
+          const loaders = locales
             .map(
-              (localeName, index) =>
-                `import { messages as m${index} } from "${VIRTUAL_MESSAGES_PREFIX}${key}/${localeName}";`,
+              (name) =>
+                `${JSON.stringify(name)}: () => import(${JSON.stringify(`${VIRTUAL_MESSAGES_PREFIX}${key}/${name}`)})`,
             )
-            .join("\n");
-          const registration = locales
-            .map((localeName, index) => `${JSON.stringify(localeName)}: m${index}`)
-            .join(", ");
-          const code =
-            `${imports}\n` +
-            `import { registerMessages } from "@palamedes/runtime";\n` +
-            `registerMessages({ ${registration} }, ${JSON.stringify(key)});\n`;
-          return { code, map: null, moduleSideEffects: true };
+            .join(",");
+          return {
+            code: `${
+              initialize
+            }const loaders={${loaders}};\nconst fragment=await loaders[locale]().catch(error=>{const failure=new Error("Palamedes catalog dependency failed",{cause:error});if(typeof globalThis.dispatchEvent==="function")globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError",{detail:failure}));throw failure;});\ni18n.load(locale, fragment.messages);\n`,
+            map: null,
+            moduleSideEffects: true,
+          };
         }
 
         if (!locales.includes(locale)) {
@@ -980,7 +1001,127 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     });
   }
 
+  // React Router reloads the old document when importing a lazy route rejects.
+  // A generated facade keeps that import valid and throws from the route's
+  // normal render boundary instead, so its catalog-independent error UI runs.
+  plugins.push({
+    name: "palamedes:react-router-route-boundaries",
+    augmentChunkHash(chunk) {
+      if (!chunk.facadeModuleId?.includes("?__react-router-build-client-route")) return;
+      return (
+        createHash("sha256")
+          // Rollup calls augmentChunkHash before rendered code exists. Hash the
+          // complete generated template with a stable route-asset placeholder;
+          // this couples facade-generator changes and export-shape changes to
+          // the entry filename instead of relying on a fixed marker.
+          .update(routeFacadeSource("./palamedes-route-[content-hash].js", chunk.exports))
+          .digest("hex")
+      );
+    },
+    generateBundle(_options, bundle) {
+      for (const chunk of Object.values(bundle)) {
+        if (
+          chunk.type !== "chunk" ||
+          !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
+        )
+          continue;
+        const facade = createRouteFacade(chunk);
+        this.emitFile({
+          type: "asset",
+          fileName: facade.assetFileName,
+          source: facade.assetSource,
+        });
+        chunk.code = facade.facadeSource;
+        chunk.map = null;
+      }
+    },
+  });
+
+  // Static HTML applications have no SSR host to bind an import map. Delay
+  // their module entry until the document's locale policy selected a map.
+  plugins.push({
+    name: "palamedes:html-delivery",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      const manifestAsset = bundle[SPLIT_MANIFEST_NAME];
+      if (!manifestAsset || manifestAsset.type !== "asset") return;
+      const manifest = JSON.parse(String(manifestAsset.source)) as {
+        importMaps: Record<string, string>;
+      };
+      const maps = Object.fromEntries(
+        Object.entries(manifest.importMaps).map(([locale, file]) => {
+          const asset = bundle[file];
+          if (!asset || asset.type !== "asset")
+            throw new Error("Missing generated locale import map.");
+          return [locale, JSON.parse(String(asset.source))];
+        }),
+      );
+      for (const output of Object.values(bundle)) {
+        if (output.type !== "asset" || !output.fileName.endsWith(".html")) continue;
+        const entries: string[] = [];
+        let nonceAttribute = "";
+        let html = String(output.source).replace(
+          /<script\b[^>]*type=["']module["'][^>]*>[\s\S]*?<\/script>/giu,
+          (script) => {
+            const src = script.match(/\bsrc=["']([^"']+)["']/iu)?.[1];
+            if (!src) return script;
+            nonceAttribute ||= script.match(/\bnonce=["'][^"']*["']/iu)?.[0] ?? "";
+            entries.push(src);
+            return "";
+          },
+        );
+        if (!entries.length) continue;
+        html = html.replace(/<link\b[^>]*rel=["']modulepreload["'][^>]*>/giu, "");
+        const code = `const maps=${JSON.stringify(maps)};try{const locale=document.documentElement.lang;if(!Object.hasOwn(maps,locale))throw new Error("Unsupported document catalog locale.");const map=document.createElement("script");map.type="importmap";map.nonce=document.querySelector("script[data-palamedes-entry]")?.nonce||"";map.textContent=JSON.stringify(maps[locale]);document.head.append(map);await Promise.all(${JSON.stringify(entries)}.map(url=>import(url)))}catch(error){const template=document.querySelector("template[data-palamedes-error]");if(template){document.body.replaceChildren(template.content.cloneNode(true));}else{document.body.innerHTML='<main role="alert"><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="" target="_self">Reload page</a> <a href="/" target="_self">Go home</a></main>';}}`;
+        const hash = createHash("sha256").update(code).digest("hex").slice(0, 12);
+        const fileName = `assets/palamedes-entry-${hash}.js`;
+        this.emitFile({ type: "asset", fileName, source: code });
+        output.source = html.replace(
+          "</body>",
+          `<script type="module" data-palamedes-entry ${nonceAttribute} src="${resolvedBase}${fileName}"></script></body>`,
+        );
+      }
+    },
+  });
+
   // Plugin 4: PO file loader
+  plugins.push({
+    name: "palamedes:server-catalogs",
+    resolveId(id) {
+      return id === VIRTUAL_SERVER_CATALOGS ? RESOLVED_SERVER_CATALOGS : undefined;
+    },
+    async load(id, loadOptions) {
+      if (id !== RESOLVED_SERVER_CATALOGS) return null;
+      if (!isServerEnvironment(this, loadOptions?.ssr === true, legacyBuildSsr)) {
+        this.error(
+          "virtual:palamedes/server-catalogs is server-only and cannot be loaded in a browser build.",
+        );
+      }
+      const cfg = await getConfigLazy();
+      addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
+      const loaders = Object.fromEntries(
+        cfg.locales.map((locale) => {
+          const imports = cfg.catalogs.map((catalog) => catalogResourcePath(cfg, catalog, locale));
+          const expressions = imports.map(
+            (resourcePath) =>
+              `import(${JSON.stringify(resourcePath.replaceAll("\\", "/"))}).then((module) => module.messages)`,
+          );
+          return [
+            locale,
+            `() => Promise.all([${expressions.join(",")}]).then((catalogs) => catalogs.flat())`,
+          ];
+        }),
+      );
+      const loaderCode = Object.entries(loaders)
+        .map(([locale, expression]) => `${JSON.stringify(locale)}: ${expression}`)
+        .join(",");
+      return {
+        code: `import { createServerCatalogStore } from "@palamedes/runtime/server";\nconst loaders={${loaderCode}};\nconst store=createServerCatalogStore({load:({locale})=>{if(!Object.hasOwn(loaders,locale)) throw new Error("Unsupported catalog locale"); return loaders[locale]();}});\nexport const loadServerCatalog=(locale)=>store.load(locale);`,
+        map: null,
+      };
+    },
+  });
+
   if (enablePoLoader) {
     plugins.push({
       name: "palamedes:po-loader",
@@ -993,7 +1134,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cfg = await getConfigLazy();
         addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
         const cleanId = stripQuery(id);
-        const locale = path.basename(cleanId, ".po");
+        const locale = catalogLocaleForResource(cfg, cleanId);
         const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,

@@ -27,7 +27,7 @@ export const loadHomePageData = query(async () => {
 
   const event = getRequestEvent();
   const { acceptLanguageHeader, locale, requestHost } = resolveHostLocale(event?.request);
-  activateServerI18n(locale);
+  await activateServerI18n(locale);
 
   return {
     banner: locales.suggest({
@@ -48,7 +48,7 @@ export const getLocalizedServerStatus = query(async () => {
   "use server";
 
   const { locale } = resolveHostLocale(getRequestEvent()?.request);
-  activateServerI18n(locale);
+  await activateServerI18n(locale);
 
   return {
     locale,

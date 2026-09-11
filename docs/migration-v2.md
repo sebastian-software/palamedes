@@ -4,8 +4,10 @@ V2 uses compiled messages on server and client, including development. The
 package roots and existing `compiled` subpaths share one implementation. This
 is a coordinated major transition; publication remains held while the host
 integration slices and final release verification are completed under #1204.
-This guide covers the runtime changes in #1206; host-specific delivery migration
-will be completed with their integration slices before release readiness.
+This guide covers the runtime changes in #1206 and the shared migration rules
+used by the host slices. Publication remains held until #1215's aggregate
+verification proves every supported host's delivery, failure recovery,
+published-artifact and release-policy contract.
 
 ## Compile catalogs before loading
 
@@ -30,6 +32,43 @@ Generate that module through the existing catalog compiler, CLI or framework
 plugin. `defineCompiledCatalog()` marks compiled constants/functions; it does
 not compile an ICU string map. The standard framework path delegates loading
 to its adapter, while locale selection remains application policy.
+
+## Let the adapter own catalog delivery
+
+The standard framework path is compiled-only from development through
+production. Application modules author messages with macros; the host adapter
+derives their dependencies, initializes the active locale, and loads the
+generated executable catalog before translated code runs. Applications do not
+maintain locale-to-catalog maps, serialized ICU payloads, catalog-specific
+error boundaries, or import-map/manifest HTML plumbing for this path.
+
+Server adapters use the shared server catalog store: the active locale is
+compiled lazily, concurrent requests share one immutable catalog generation,
+and request-local i18n state remains isolated. A catalog or formatter failure
+propagates to the host's ordinary error handling; it must not be converted to
+partially localized success or source-text output. Browser adapters request
+only the active document locale and propagate initial and lazy dependency
+failures to a catalog-independent error view with the host's recovery action.
+Locale changes navigate to a new document so the server selection, `<html
+lang>`, and executable browser catalog remain aligned.
+
+Low-level custom integrations may load an explicitly generated
+`CompiledCatalogMessages` module. That escape hatch is separate from the
+standard host workflow and does not permit marking raw ICU maps with
+`defineCompiledCatalog()`.
+
+| Host                                   | Standard v2 migration                                                                                        | Delivery contract                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Vite + React/Solid                     | Keep macro authoring; remove application catalog maps and legacy runtime imports.                            | Adapter-owned active-locale dependencies and ordinary host error handling.                                           |
+| Next.js                                | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the legacy false option is rejected. Request server catalogs are shared and immutable. |
+| Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                 |
+| TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                       |
+
+Host-specific guides may expose lower-level hooks for custom servers, but the
+checked standard examples are the evidence for the transparent path. Do not
+claim a host migration is complete until its initial and lazy failure proof,
+locale selection, recovery behavior, and published parser-free artifact check
+pass.
 
 ## Author rich text and choices with macros
 

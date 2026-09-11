@@ -382,9 +382,6 @@ function assertMatches(text, expression, expectedCount, label) {
 }
 
 function verifyCanonicalQuickstart(read) {
-  const compiledRuntime = 'import { createI18n } from "@palamedes/core/compiled"';
-  const compiledMessages =
-    'import type { CompiledCatalogMessages } from "@palamedes/core/compiled"';
   const documentSurfaces = [
     "README.md",
     "docs/first-working-translation.md",
@@ -395,18 +392,11 @@ function verifyCanonicalQuickstart(read) {
 
   for (const file of documentSurfaces) {
     const text = read(file);
-    assertContains(text, compiledRuntime, `${file} quickstart runtime`);
-    assertContains(text, compiledMessages, `${file} quickstart .po declaration`);
+    assertContains(text, "app-owned", `${file} quickstart adapter-owned delivery guidance`);
   }
 
   const siteSteps = read("site/app/data/steps.ts");
-  assertContains(siteSteps, compiledMessages, "site quickstart .po declaration");
-  assertMatches(
-    siteSteps,
-    /import \{ createI18n \} from "@palamedes\/core\/compiled"/gu,
-    2,
-    "site quickstart compiled runtime imports",
-  );
+  assertContains(siteSteps, "app-owned", "site quickstart adapter-owned delivery guidance");
 
   assertContains(
     siteSteps,
@@ -419,9 +409,7 @@ function verifyCanonicalQuickstart(read) {
     ["site/app/data/steps.ts", siteSteps],
   ]) {
     if (text.includes('import { createI18n } from "@palamedes/core"')) {
-      throw new Error(
-        `${file} quickstart must use @palamedes/core/compiled for generated .po catalogs`,
-      );
+      throw new Error(`${file} quickstart must not advertise the parser-carrying runtime`);
     }
   }
 }
