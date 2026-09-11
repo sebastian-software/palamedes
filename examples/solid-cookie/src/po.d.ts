@@ -7,3 +7,9 @@ declare module "*.po" {
 
   export default catalog;
 }
+
+declare module "virtual:solid-manifest" {
+  const manifest: import("@solidjs/web").AssetManifest;
+
+  export default manifest;
+}

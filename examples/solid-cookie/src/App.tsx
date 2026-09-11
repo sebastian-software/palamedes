@@ -8,7 +8,7 @@ import "@palamedes/example-ui/styles.css";
 
 const Router = createRouter({ routes: fileRoutes(pageRoutes) });
 
-export default function App() {
+export default function App(): Element {
   return createErrorBoundary(
     () => <Router>{(props) => <Loading>{props.children}</Loading>}</Router>,
     () => (
@@ -20,5 +20,5 @@ export default function App() {
         </button>
       </main>
     ),
-  );
+  ) as unknown as Element;
 }

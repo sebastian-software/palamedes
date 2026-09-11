@@ -28,7 +28,8 @@ const SOLID_PRODUCTION_ENTRY_PATTERN =
   /(?:^|\/)virtual[_-]solid-ssr-entry-client(?:-[^/?#]+)?\.(?:c|m)?js(?:[?#].*)?$/iu;
 const SOLID_DEVELOPMENT_ENTRY_PATTERN =
   /(?:^|\/)(?:__x00__)?virtual:solid-ssr-entry-client\.(?:c|m)?tsx?(?:[?#].*)?$/iu;
-const SOLID_AUTHORED_ENTRY_PATTERN = /(?:^|\/)entry-client\.(?:c|m)?(?:jsx?|tsx?)(?:[?#].*)?$/iu;
+const SOLID_AUTHORED_ENTRY_PATTERN =
+  /(?:^|\/)entry-client(?:-[^/?#]+)?\.(?:c|m)?(?:jsx?|tsx?)(?:[?#].*)?$/iu;
 
 /**
  * Connects Vite's active-locale import-map delivery to Solid's Fetch
@@ -128,12 +129,7 @@ function createSolidBootstrapGateTransform(options: {
           const importExpression = options.allowMissingPromise
             ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
             : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
-          replacement = `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; });</script>`;
-        } else if (options.nonce && !readCspNonce(script) && isSolidFrameworkScript(script)) {
-          replacement = script.replace(
-            /^<script\b/iu,
-            `<script nonce="${escapeAttribute(options.nonce)}"`,
-          );
+          replacement = `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError", { detail: error })); });</script>`;
         }
         stream.push(tail.slice(0, match.index) + replacement);
         tail = tail.slice(end);
@@ -180,12 +176,11 @@ function isTrustedSolidEntrySource(
       SOLID_DEVELOPMENT_ENTRY_PATTERN.test(source) || SOLID_AUTHORED_ENTRY_PATTERN.test(source)
     );
   }
-  const key = assetKey(source);
   const origin = isAbsolute ? urlOrigin(source) : undefined;
+  const originAllowed = !isAbsolute || (origin !== undefined && trustedOrigins.includes(origin));
   return (
-    (SOLID_PRODUCTION_ENTRY_PATTERN.test(source) &&
-      (!isAbsolute || (origin !== undefined && trustedOrigins.includes(origin)))) ||
-    (trustedChunkKeys.includes(key) && SOLID_AUTHORED_ENTRY_PATTERN.test(source))
+    originAllowed &&
+    (SOLID_PRODUCTION_ENTRY_PATTERN.test(source) || SOLID_AUTHORED_ENTRY_PATTERN.test(source))
   );
 }
 
@@ -231,8 +226,32 @@ function findTagEnd(value: string): number {
 }
 
 function readTagAttribute(tag: string, name: "nonce" | "src" | "type"): string | undefined {
-  const match = tag.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "iu"));
-  return match?.[1] ?? match?.[2];
+  let index = tag.indexOf("<script") + "<script".length;
+  while (index >= "<script".length && index < tag.length) {
+    while (/\s/u.test(tag[index] ?? "")) index += 1;
+    if (tag[index] === ">" || index >= tag.length) break;
+    const nameStart = index;
+    while (index < tag.length && !/[\s=/>]/u.test(tag[index] ?? "")) index += 1;
+    const attributeName = tag.slice(nameStart, index).toLowerCase();
+    while (/\s/u.test(tag[index] ?? "")) index += 1;
+    if (tag[index] !== "=") {
+      while (index < tag.length && !/[\s>]/u.test(tag[index] ?? "")) index += 1;
+      continue;
+    }
+    index += 1;
+    while (/\s/u.test(tag[index] ?? "")) index += 1;
+    const quote = tag[index] === '"' || tag[index] === "'" ? tag[index] : undefined;
+    if (quote) index += 1;
+    const valueStart = index;
+    if (quote) {
+      while (index < tag.length && tag[index] !== quote) index += 1;
+    } else {
+      while (index < tag.length && !/[\s>]/u.test(tag[index] ?? "")) index += 1;
+    }
+    if (attributeName === name) return tag.slice(valueStart, index);
+    if (quote && tag[index] === quote) index += 1;
+  }
+  return undefined;
 }
 
 function assetKey(href: string): string {
@@ -248,14 +267,6 @@ function assetKey(href: string): string {
 
 function readCspNonce(script: string): string | undefined {
   return readTagAttribute(script.slice(0, findTagEnd(script) + 1), "nonce");
-}
-
-function isSolidFrameworkScript(script: string): boolean {
-  const openingEnd = findTagEnd(script);
-  const body = script.slice(openingEnd + 1, -"</script>".length);
-  return /window\._\$HY\b|self\.\$R\b|_\$HY\.(?:r|f|d|h|v|fe)\b|\$R\[\d+\]|function\s+\$df[a-z]/iu.test(
-    body,
-  );
 }
 
 function lastScriptStart(value: string): number {
