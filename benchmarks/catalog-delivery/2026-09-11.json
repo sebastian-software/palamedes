@@ -1,0 +1,887 @@
+{
+  "schema": "palamedes.catalog-delivery.v1",
+  "generatedAt": "2026-09-11T18:37:01.416Z",
+  "sourceRevision": "9695c58c115a3f797cc701a350bc801fda5734c6",
+  "measurements": {
+    "networkFiles": 23,
+    "artifactFiles": 22,
+    "expectedNetworkFiles": 23,
+    "expectedArtifactFiles": 22,
+    "complete": true
+  },
+  "limits": {
+    "responseBytes": "decoded JavaScript response bodies with successful JavaScript Content-Type responses; repeated URL responses count",
+    "artifactBytes": "decoded emitted .js/.mjs/.cjs files and independent per-file gzipSync estimates",
+    "excluded": [
+      "wire transfer bytes, Content-Length, Brotli, headers, HTML, inline scripts, RSC/Flight, CSS, images, and fonts",
+      "source maps and files outside .js/.mjs/.cjs",
+      "deduplicated transfer size, before/after comparisons, rankings, and cross-example totals"
+    ],
+    "nextCatalogBytes": "null where Next catalog code cannot be attributed separately from hashed bundles"
+  },
+  "examples": [
+    {
+      "example": "nextjs-cookie",
+      "network": {
+        "example": "nextjs-cookie",
+        "initial": {
+          "responses": 13,
+          "uniqueModuleUrls": 13,
+          "decodedBytes": 486944,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 26,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 973859,
+        "catalogBytes": null,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "nextjs-cookie",
+        "files": 33,
+        "decodedBytes": 661014,
+        "gzipBytes": 210278,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "nextjs-route",
+      "network": {
+        "example": "nextjs-route",
+        "initial": {
+          "responses": 13,
+          "uniqueModuleUrls": 13,
+          "decodedBytes": 487334,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 52,
+        "uniqueModuleUrls": 32,
+        "decodedBytes": 1949400,
+        "catalogBytes": null,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "nextjs-route",
+        "files": 26,
+        "decodedBytes": 634289,
+        "gzipBytes": 196336,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "nextjs-subdomain",
+      "network": {
+        "example": "nextjs-subdomain",
+        "initial": {
+          "responses": 13,
+          "uniqueModuleUrls": 13,
+          "decodedBytes": 486966,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 26,
+        "uniqueModuleUrls": 26,
+        "decodedBytes": 973963,
+        "catalogBytes": null,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "nextjs-subdomain",
+        "files": 24,
+        "decodedBytes": 618830,
+        "gzipBytes": 192023,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "nextjs-tld",
+      "network": {
+        "example": "nextjs-tld",
+        "initial": {
+          "responses": 13,
+          "uniqueModuleUrls": 13,
+          "decodedBytes": 487354,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 26,
+        "uniqueModuleUrls": 26,
+        "decodedBytes": 974740,
+        "catalogBytes": null,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "nextjs-tld",
+        "files": 27,
+        "decodedBytes": 621306,
+        "gzipBytes": 193544,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-cookie",
+      "network": {
+        "example": "react-router-cookie",
+        "initial": {
+          "responses": 12,
+          "uniqueModuleUrls": 12,
+          "decodedBytes": 345818,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 24,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 691606,
+        "catalogBytes": 5148,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-cookie",
+        "files": 26,
+        "decodedBytes": 357742,
+        "gzipBytes": 118806,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-route",
+      "network": {
+        "example": "react-router-route",
+        "initial": {
+          "responses": 13,
+          "uniqueModuleUrls": 13,
+          "decodedBytes": 346940,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 52,
+        "uniqueModuleUrls": 36,
+        "decodedBytes": 1387880,
+        "catalogBytes": 10324,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-route",
+        "files": 26,
+        "decodedBytes": 353952,
+        "gzipBytes": 117606,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-rsc-cookie",
+      "network": {
+        "example": "react-router-rsc-cookie",
+        "initial": {
+          "responses": 11,
+          "uniqueModuleUrls": 11,
+          "decodedBytes": 331291,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 13,
+        "uniqueModuleUrls": 13,
+        "decodedBytes": 332026,
+        "catalogBytes": 259,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-rsc-cookie",
+        "files": 21,
+        "decodedBytes": 333195,
+        "gzipBytes": 107668,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-subdomain",
+      "network": {
+        "example": "react-router-subdomain",
+        "initial": {
+          "responses": 12,
+          "uniqueModuleUrls": 12,
+          "decodedBytes": 346745,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 24,
+        "uniqueModuleUrls": 24,
+        "decodedBytes": 693550,
+        "catalogBytes": 5162,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-subdomain",
+        "files": 23,
+        "decodedBytes": 352884,
+        "gzipBytes": 116049,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-tld",
+      "network": {
+        "example": "react-router-tld",
+        "initial": {
+          "responses": 12,
+          "uniqueModuleUrls": 12,
+          "decodedBytes": 346789,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 24,
+        "uniqueModuleUrls": 24,
+        "decodedBytes": 693638,
+        "catalogBytes": 5162,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-tld",
+        "files": 28,
+        "decodedBytes": 355641,
+        "gzipBytes": 117757,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "remix-cookie",
+      "network": {
+        "example": "remix-cookie",
+        "initial": {
+          "responses": 54,
+          "uniqueModuleUrls": 54,
+          "decodedBytes": 281407,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 57,
+        "uniqueModuleUrls": 56,
+        "decodedBytes": 282516,
+        "catalogBytes": 1949,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": null
+    },
+    {
+      "example": "solid-cookie",
+      "network": {
+        "example": "solid-cookie",
+        "initial": {
+          "responses": 10,
+          "uniqueModuleUrls": 10,
+          "decodedBytes": 119258,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 20,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 238480,
+        "catalogBytes": 5314,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "solid-cookie",
+        "files": 28,
+        "decodedBytes": 150190,
+        "gzipBytes": 57411,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "solid-route",
+      "network": {
+        "example": "solid-route",
+        "initial": {
+          "responses": 10,
+          "uniqueModuleUrls": 10,
+          "decodedBytes": 118886,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 40,
+        "uniqueModuleUrls": 32,
+        "decodedBytes": 475666,
+        "catalogBytes": 10498,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "solid-route",
+        "files": 25,
+        "decodedBytes": 149257,
+        "gzipBytes": 56320,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "solid-subdomain",
+      "network": {
+        "example": "solid-subdomain",
+        "initial": {
+          "responses": 9,
+          "uniqueModuleUrls": 9,
+          "decodedBytes": 118396,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 18,
+        "uniqueModuleUrls": 18,
+        "decodedBytes": 236853,
+        "catalogBytes": 5249,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "solid-subdomain",
+        "files": 23,
+        "decodedBytes": 148484,
+        "gzipBytes": 55165,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "solid-tld",
+      "network": {
+        "example": "solid-tld",
+        "initial": {
+          "responses": 9,
+          "uniqueModuleUrls": 9,
+          "decodedBytes": 118439,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 18,
+        "uniqueModuleUrls": 18,
+        "decodedBytes": 236939,
+        "catalogBytes": 5249,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "solid-tld",
+        "files": 29,
+        "decodedBytes": 151287,
+        "gzipBytes": 56999,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "tanstack-cookie",
+      "network": {
+        "example": "tanstack-cookie",
+        "initial": {
+          "responses": 7,
+          "uniqueModuleUrls": 7,
+          "decodedBytes": 348677,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 12,
+        "uniqueModuleUrls": 12,
+        "decodedBytes": 351237,
+        "catalogBytes": 5151,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "tanstack-cookie",
+        "files": 21,
+        "decodedBytes": 355010,
+        "gzipBytes": 116004,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "tanstack-route",
+      "network": {
+        "example": "tanstack-route",
+        "initial": {
+          "responses": 7,
+          "uniqueModuleUrls": 7,
+          "decodedBytes": 347770,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 28,
+        "uniqueModuleUrls": 24,
+        "decodedBytes": 1391196,
+        "catalogBytes": 9900,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "tanstack-route",
+        "files": 18,
+        "decodedBytes": 352836,
+        "gzipBytes": 114728,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "tanstack-subdomain",
+      "network": {
+        "example": "tanstack-subdomain",
+        "initial": {
+          "responses": 7,
+          "uniqueModuleUrls": 7,
+          "decodedBytes": 347393,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 14,
+        "uniqueModuleUrls": 14,
+        "decodedBytes": 694844,
+        "catalogBytes": 4950,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "tanstack-subdomain",
+        "files": 17,
+        "decodedBytes": 352421,
+        "gzipBytes": 114494,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "tanstack-tld",
+      "network": {
+        "example": "tanstack-tld",
+        "initial": {
+          "responses": 7,
+          "uniqueModuleUrls": 7,
+          "decodedBytes": 347443,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 14,
+        "uniqueModuleUrls": 14,
+        "decodedBytes": 694944,
+        "catalogBytes": 4950,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "tanstack-tld",
+        "files": 22,
+        "decodedBytes": 355071,
+        "gzipBytes": 116158,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "vite-mdx",
+      "network": {
+        "example": "vite-mdx",
+        "initial": {
+          "responses": 6,
+          "uniqueModuleUrls": 6,
+          "decodedBytes": 209370,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 9,
+        "uniqueModuleUrls": 9,
+        "decodedBytes": 212171,
+        "catalogBytes": 5365,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "vite-mdx",
+        "files": 9,
+        "decodedBytes": 212171,
+        "gzipBytes": 68510,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "waku-cookie",
+      "network": {
+        "example": "waku-cookie",
+        "initial": {
+          "responses": 8,
+          "uniqueModuleUrls": 8,
+          "decodedBytes": 268243,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 16,
+        "uniqueModuleUrls": 12,
+        "decodedBytes": 536453,
+        "catalogBytes": 4065,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "waku-cookie",
+        "files": 29,
+        "decodedBytes": 276061,
+        "gzipBytes": 91309,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "waku-route",
+      "network": {
+        "example": "waku-route",
+        "initial": {
+          "responses": 8,
+          "uniqueModuleUrls": 8,
+          "decodedBytes": 267105,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 32,
+        "uniqueModuleUrls": 24,
+        "decodedBytes": 1068484,
+        "catalogBytes": 8064,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "waku-route",
+        "files": 19,
+        "decodedBytes": 272906,
+        "gzipBytes": 89271,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "waku-subdomain",
+      "network": {
+        "example": "waku-subdomain",
+        "initial": {
+          "responses": 8,
+          "uniqueModuleUrls": 8,
+          "decodedBytes": 267131,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 16,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 534294,
+        "catalogBytes": 4032,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "waku-subdomain",
+        "files": 19,
+        "decodedBytes": 272932,
+        "gzipBytes": 89273,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "waku-tld",
+      "network": {
+        "example": "waku-tld",
+        "initial": {
+          "responses": 8,
+          "uniqueModuleUrls": 8,
+          "decodedBytes": 267182,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 16,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 534396,
+        "catalogBytes": 4032,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "waku-tld",
+        "files": 24,
+        "decodedBytes": 275695,
+        "gzipBytes": 90984,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    }
+  ],
+  "representativeHosts": [
+    {
+      "example": "nextjs-cookie",
+      "network": {
+        "example": "nextjs-cookie",
+        "initial": {
+          "responses": 13,
+          "uniqueModuleUrls": 13,
+          "decodedBytes": 486944,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 26,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 973859,
+        "catalogBytes": null,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "nextjs-cookie",
+        "files": 33,
+        "decodedBytes": 661014,
+        "gzipBytes": 210278,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-cookie",
+      "network": {
+        "example": "react-router-cookie",
+        "initial": {
+          "responses": 12,
+          "uniqueModuleUrls": 12,
+          "decodedBytes": 345818,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 24,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 691606,
+        "catalogBytes": 5148,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-cookie",
+        "files": 26,
+        "decodedBytes": 357742,
+        "gzipBytes": 118806,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "react-router-rsc-cookie",
+      "network": {
+        "example": "react-router-rsc-cookie",
+        "initial": {
+          "responses": 11,
+          "uniqueModuleUrls": 11,
+          "decodedBytes": 331291,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 13,
+        "uniqueModuleUrls": 13,
+        "decodedBytes": 332026,
+        "catalogBytes": 259,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "react-router-rsc-cookie",
+        "files": 21,
+        "decodedBytes": 333195,
+        "gzipBytes": 107668,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "remix-cookie",
+      "network": {
+        "example": "remix-cookie",
+        "initial": {
+          "responses": 54,
+          "uniqueModuleUrls": 54,
+          "decodedBytes": 281407,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 57,
+        "uniqueModuleUrls": 56,
+        "decodedBytes": 282516,
+        "catalogBytes": 1949,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": null
+    },
+    {
+      "example": "tanstack-cookie",
+      "network": {
+        "example": "tanstack-cookie",
+        "initial": {
+          "responses": 7,
+          "uniqueModuleUrls": 7,
+          "decodedBytes": 348677,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 12,
+        "uniqueModuleUrls": 12,
+        "decodedBytes": 351237,
+        "catalogBytes": 5151,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "tanstack-cookie",
+        "files": 21,
+        "decodedBytes": 355010,
+        "gzipBytes": 116004,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "vite-mdx",
+      "network": {
+        "example": "vite-mdx",
+        "initial": {
+          "responses": 6,
+          "uniqueModuleUrls": 6,
+          "decodedBytes": 209370,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 9,
+        "uniqueModuleUrls": 9,
+        "decodedBytes": 212171,
+        "catalogBytes": 5365,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "vite-mdx",
+        "files": 9,
+        "decodedBytes": 212171,
+        "gzipBytes": 68510,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "waku-cookie",
+      "network": {
+        "example": "waku-cookie",
+        "initial": {
+          "responses": 8,
+          "uniqueModuleUrls": 8,
+          "decodedBytes": 268243,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 16,
+        "uniqueModuleUrls": 12,
+        "decodedBytes": 536453,
+        "catalogBytes": 4065,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "waku-cookie",
+        "files": 29,
+        "decodedBytes": 276061,
+        "gzipBytes": 91309,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    },
+    {
+      "example": "solid-cookie",
+      "network": {
+        "example": "solid-cookie",
+        "initial": {
+          "responses": 10,
+          "uniqueModuleUrls": 10,
+          "decodedBytes": 119258,
+          "scope": "initial document ready, before test navigation or interaction"
+        },
+        "responses": 20,
+        "uniqueModuleUrls": 16,
+        "decodedBytes": 238480,
+        "catalogBytes": 5314,
+        "catalogBytesScope": "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
+        "scope": "observed host interaction and locale navigation; decoded response bodies"
+      },
+      "artifacts": {
+        "example": "solid-cookie",
+        "files": 28,
+        "decodedBytes": 150190,
+        "gzipBytes": 57411,
+        "scope": "complete emitted graph, all locales and lazy chunks"
+      }
+    }
+  ],
+  "serverCatalogBenchmark": {
+    "environment": {
+      "date": "2026-09-11",
+      "node": "24.15.0",
+      "platform": "darwin",
+      "architecture": "arm64",
+      "command": "node --expose-gc scripts/benchmark-server-catalog.mjs"
+    },
+    "fixture": {
+      "localeCount": 8,
+      "messageCount": 2000,
+      "requestCount": 2000
+    },
+    "coldCatalogLoadMs": 1.0914169999999999,
+    "firstRequestMs": 13.009375000000006,
+    "warmRequestMs": 67.444459,
+    "warmRequestMsPerRequest": 0.0337222295,
+    "mixedLocaleMs": 82.791334,
+    "sharedCatalog": {
+      "readyLocales": 8,
+      "inFlightLocales": 0,
+      "retainedFragments": 8,
+      "retainedMessages": 16000,
+      "catalogEnumerationsDuringRequestLoads": 0,
+      "retainedHeapDeltaBytes": 2886632
+    },
+    "perRequestMapBaseline": {
+      "requestMessageEntriesAllocated": 4000000,
+      "retainedHeapDeltaBytes": 199885984
+    },
+    "esmModuleRetention": {
+      "localesImported": 8,
+      "retainedHeapDeltaBytes": 4718880,
+      "messageCount": 2000,
+      "note": "ESM module caching may retain every used locale catalog for the process lifetime."
+    },
+    "concurrentColdMs": 5.415458999999828,
+    "workers": {
+      "processCount": 2,
+      "samples": [
+        {
+          "rssBytes": 69009408,
+          "heapUsedBytes": 7174344,
+          "stats": {
+            "readyLocales": 8,
+            "inFlightLocales": 0,
+            "retainedFragments": 8,
+            "retainedMessages": 16000
+          }
+        },
+        {
+          "rssBytes": 68616192,
+          "heapUsedBytes": 7174344,
+          "stats": {
+            "readyLocales": 8,
+            "inFlightLocales": 0,
+            "retainedFragments": 8,
+            "retainedMessages": 16000
+          }
+        }
+      ],
+      "note": "Each worker has its own module cache and shared catalog storage."
+    },
+    "messageSizeSweep": [
+      {
+        "messageCount": 100,
+        "coldCatalogLoadMs": 0.061707999999953245,
+        "warmRequestMs": 62.44225000000006,
+        "warmRequestMsPerRequest": 0.03122112500000003,
+        "retainedMessages": 100
+      },
+      {
+        "messageCount": 2000,
+        "coldCatalogLoadMs": 0.5792079999998805,
+        "warmRequestMs": 67.68491600000016,
+        "warmRequestMsPerRequest": 0.03384245800000008,
+        "retainedMessages": 2000
+      },
+      {
+        "messageCount": 10000,
+        "coldCatalogLoadMs": 3.7001249999998436,
+        "warmRequestMs": 66.41604200000029,
+        "warmRequestMsPerRequest": 0.03320802100000014,
+        "retainedMessages": 10000
+      }
+    ]
+  },
+  "environment": {
+    "date": "2026-09-11",
+    "node": "24.15.0",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "verification": {
+    "completeMatrixRevision": "62cca6dc356ccb4f708bc90887116ba9fdc1c039",
+    "solidFinalRecheckRevision": "9695c58c115a3f797cc701a350bc801fda5734c6",
+    "note": "The complete 25-example smoke, 22-host browser, and separate RSC checks passed. After the final Solid script-attribute hardening, all four Solid smoke/browser proofs were repeated successfully and their measurements replaced."
+  }
+}

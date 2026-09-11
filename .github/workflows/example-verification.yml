@@ -52,7 +52,7 @@ on:
   workflow_dispatch:
     inputs:
       run_browser:
-        description: Run the scheduled Playwright browser layer as well as smoke verification
+        description: Run Playwright browser proofs in addition to smoke verification
         required: true
         default: false
         type: boolean
