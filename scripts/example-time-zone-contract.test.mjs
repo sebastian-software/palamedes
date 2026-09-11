@@ -13,18 +13,23 @@ const EXAMPLE_RENDER_PROBE = `
   import { setClientI18n } from "@palamedes/runtime"
   import { createServerI18nScope } from "@palamedes/runtime/server"
   import { EVENT } from "@palamedes/example-ui"
-  import { createExampleI18n } from "./src/lib/i18n.ts"
+  import { createI18n, defineCompiledCatalog } from "@palamedes/core"
+  import { compileTestMessages } from "../../scripts/test-support/compiled-messages.mjs"
 
-  const i18n = createExampleI18n()
+  const i18n = createI18n({ locale: "en", timeZone: "Europe/Berlin" })
+  i18n.load("en", defineCompiledCatalog(compileTestMessages({
+    date: "{when, date, full}",
+    time: "{when, time, short}",
+  })))
   const when = new Date(EVENT.startsAt)
   const render = () =>
     renderToStaticMarkup(
       createElement(
         Fragment,
         null,
-        createElement(Trans, { message: "{when, date, full}", values: { when } }),
+        createElement(Trans, { id: "date", values: { when } }),
         " ",
-        createElement(Trans, { message: "{when, time, short}", values: { when } })
+        createElement(Trans, { id: "time", values: { when } })
       )
     )
   const serverOutput = createServerI18nScope().run(i18n, render)
@@ -51,7 +56,7 @@ function renderNextExample(hostTimeZone) {
 }
 
 describe("Next.js route example time-zone contract", () => {
-  it("renders the same instant and ICU markup across server/client host zones", () => {
+  it("renders native compiled date and time messages across server/client host zones", () => {
     const losAngeles = renderNextExample("America/Los_Angeles");
     const tokyo = renderNextExample("Asia/Tokyo");
     const instant = new Date("2026-09-18T17:30:00Z");
