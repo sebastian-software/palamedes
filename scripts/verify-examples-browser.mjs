@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { verifyBrowserArtifacts } from "./verify-browser-artifacts.mjs";
 import http from "node:http";
 import path from "node:path";
 import { parseExampleArgs, planBrowserRun, ROOT } from "./example-matrix.mjs";
@@ -108,6 +109,7 @@ async function waitForServer(port, pathToCheck = "/") {
 }
 
 async function verifyExample(example, options) {
+  await verifyBrowserArtifacts(example);
   await ensurePortFree(example.port);
   const child = startCommand({
     args: example.start,

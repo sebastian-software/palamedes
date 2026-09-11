@@ -4,7 +4,10 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { afterEach, expect, test } from "vitest";
 
+import { observeBrowserArtifacts } from "../../scripts/verify-browser-artifacts.mjs";
+
 let browser;
+let verifyObservedArtifacts;
 
 function resolveChromiumExecutable() {
   if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
@@ -112,8 +115,13 @@ async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorL
 }
 
 afterEach(async () => {
-  await browser?.close();
-  browser = undefined;
+  try {
+    await verifyObservedArtifacts?.();
+  } finally {
+    verifyObservedArtifacts = undefined;
+    await browser?.close();
+    browser = undefined;
+  }
 });
 
 // React recovers from a hydration mismatch instead of throwing, so it only
@@ -426,6 +434,8 @@ test("matrix example browser contract", async () => {
     browserLocale: example.strategy === "cookie" ? "es-ES" : "en-US",
     navigatorLocale: example.strategy === "cookie" ? "en-US" : undefined,
   });
+  verifyObservedArtifacts = observeBrowserArtifacts(page, example);
+
   const pageErrors = [];
   const hydrationErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));

@@ -10,7 +10,7 @@ const forbidden = [
   "getMessageNodes",
   "renderNodesToString",
 ];
-for (const name of ["core", "react", "solid", "runtime"]) {
+for (const name of ["core", "react", "solid", "runtime", "remix"]) {
   const directory = new URL(`../packages/${name}/dist/`, import.meta.url);
   for (const entry of await readdir(directory, { recursive: true })) {
     if (!/\.(mjs|cjs)$/.test(entry)) continue;

@@ -57,12 +57,12 @@ Low-level custom integrations may load an explicitly generated
 standard host workflow and does not permit marking raw ICU maps with
 `defineCompiledCatalog()`.
 
-| Host                                   | Standard v2 migration                                                                         | Delivery contract                                                                                    |
-| -------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Vite + React/Solid                     | Keep macro authoring; remove application catalog maps and legacy runtime imports.             | Adapter-owned active-locale dependencies and ordinary host error handling.                           |
-| Next.js                                | Enable the adapter's compiled client path; migrate server/client setup to generated catalogs. | Optional graph splitting remains adapter-owned; request server catalogs are shared and immutable.    |
-| Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.  | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI. |
-| TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.         | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.       |
+| Host                                   | Standard v2 migration                                                                                        | Delivery contract                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Vite + React/Solid                     | Keep macro authoring; remove application catalog maps and legacy runtime imports.                            | Adapter-owned active-locale dependencies and ordinary host error handling.                                           |
+| Next.js                                | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the legacy false option is rejected. Request server catalogs are shared and immutable. |
+| Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                 |
+| TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                       |
 
 Host-specific guides may expose lower-level hooks for custom servers, but the
 checked standard examples are the evidence for the transparent path. Do not
