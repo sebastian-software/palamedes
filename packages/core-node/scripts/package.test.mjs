@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -132,7 +133,9 @@ test("built ESM and CJS wrappers share process-wide coordination", async (contex
   processState.initialCatalogBuilds.delete(compileKey);
 
   const targetPath = path.join(fixtureRoot, "messages.po");
-  const mutationKey = path.join(realpathSync(fixtureRoot), "messages.po");
+  // Match the queue's native realpath resolution: on Windows the synchronous
+  // implementation can preserve a different spelling of a short temp path.
+  const mutationKey = path.join(await realpath(fixtureRoot), "messages.po");
   let releaseMutationGate;
   const mutationGate = new Promise((resolve) => {
     releaseMutationGate = resolve;
