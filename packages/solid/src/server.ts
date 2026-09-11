@@ -128,9 +128,9 @@ function createSolidBootstrapGateTransform(options: {
             options.trustedOrigins,
           )
         ) {
-          const unsupportedAttributes = ["integrity", "crossorigin", "referrerpolicy"].filter(
-            (attribute) => readTagAttribute(openingTag, attribute) !== undefined,
-          );
+          const unsupportedAttributes = (
+            ["integrity", "crossorigin", "referrerpolicy"] as const
+          ).filter((attribute) => readTagAttribute(openingTag, attribute) !== undefined);
           if (unsupportedAttributes.length > 0) {
             throw new Error(
               `Cannot defer Solid entry ${moduleSource} with unsupported fetch attributes: ${unsupportedAttributes.join(", ")}.`,
