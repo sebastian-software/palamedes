@@ -172,10 +172,9 @@ function createScriptNonceTransform(nonce: string): Transform {
   });
 }
 
-const TANSTACK_ENTRY_PATTERN =
-  /<script\b[^>]*\bsrc=(['"])(\/assets\/index-[^'"]+\.js)\1[^>]*><\/script>/iu;
-const TANSTACK_GATE_TAIL_SIZE = 192;
+const TANSTACK_ENTRY_PATTERN = /\bsrc=(['"])(\/assets\/index-[^'"]+\.js)\1/iu;
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
+const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 
 /**
  * TanStack Start emits its browser entry as a module script rather than an
@@ -185,52 +184,65 @@ const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-pro
  */
 function createTanStackBootstrapGateTransform(options: { development: boolean }): Transform {
   const decoder = new StringDecoder("utf8");
-  let tail = "";
+  let buffered = "";
 
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
-      tail += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
-      flushSafePrefix(this, false);
-      callback();
+      buffered += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
+      callback(null, flushMarkup(false));
     },
     flush(callback) {
-      tail += decoder.end();
-      flushSafePrefix(this, true);
-      callback();
+      buffered += decoder.end();
+      callback(null, flushMarkup(true));
     },
   });
 
-  function flushSafePrefix(stream: Transform, flush: boolean) {
-    while (true) {
-      const match = TANSTACK_ENTRY_PATTERN.exec(tail);
-      if (match) {
-        const end = match.index + match[0].length;
-        if (!flush && end > tail.length - TANSTACK_GATE_TAIL_SIZE) return;
-        stream.push(
-          tail.slice(0, match.index) + gateTanStackEntry(match[0], match[2], options.development),
-        );
-        tail = tail.slice(end);
-        continue;
+  function flushMarkup(final: boolean): string {
+    const lower = buffered.toLowerCase();
+    let cursor = 0;
+    let output = "";
+    while (cursor < buffered.length) {
+      const open = findScriptOpen(lower, cursor);
+      if (open === -1) {
+        const keep = final ? buffered.length : trailingPrefixLength(lower, cursor, "<script");
+        output += buffered.slice(cursor, keep);
+        cursor = keep;
+        break;
       }
-      if (flush) {
-        if (tail) stream.push(tail);
-        tail = "";
-      } else if (tail.length > TANSTACK_GATE_TAIL_SIZE) {
-        const safeEnd = tail.length - TANSTACK_GATE_TAIL_SIZE;
-        stream.push(tail.slice(0, safeEnd));
-        tail = tail.slice(safeEnd);
+      output += buffered.slice(cursor, open);
+      const openingEnd = findTagEnd(buffered, open);
+      if (openingEnd === -1) {
+        cursor = open;
+        break;
       }
-      return;
+      const close = lower.indexOf("</script", openingEnd + 1);
+      if (close === -1) {
+        cursor = open;
+        break;
+      }
+      const closingEnd = findTagEnd(buffered, close);
+      if (closingEnd === -1) {
+        cursor = open;
+        break;
+      }
+      const openingTag = buffered.slice(open, openingEnd + 1);
+      const source = openingTag.match(TANSTACK_ENTRY_PATTERN)?.[2];
+      output += source
+        ? gateTanStackEntry(openingTag, source, options.development)
+        : buffered.slice(open, closingEnd + 1);
+      cursor = closingEnd + 1;
     }
+    buffered = buffered.slice(cursor);
+    return output;
   }
 }
 
-function gateTanStackEntry(tag: string, source: string, development: boolean): string {
-  const openingTag = tag.slice(0, tag.indexOf(">") + 1).replace(/\s+src=(['"])[^'"]+\1/iu, "");
+function gateTanStackEntry(openingTag: string, source: string, development: boolean): string {
+  const withoutSource = openingTag.replace(/\s+src=(['"])[^'"]+\1/iu, "");
   const importExpression = development
     ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)})) : import(${JSON.stringify(source)}))`
     : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)}))`;
-  return `${openingTag}${importExpression}.catch(() => {});</script>`;
+  return `${withoutSource}${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}] || !globalThis[${CATALOG_READY_PROMISE}]) throw error; });</script>`;
 }
 
 function findScriptOpen(lower: string, from: number): number {

@@ -100,7 +100,7 @@ describe("TanStack server catalog adapter", () => {
       expect(html).toContain('<script type="importmap" nonce="request-nonce">');
       expect(html).toContain('<script nonce="request-nonce">window.__frameworkReady=true</script>');
       expect(html).toMatch(
-        /<script nonce="request-nonce" type="module" async>globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\.then\(\(\) => import\("\/assets\/index-abc\.js"\)\)\.catch\(\(\) => \{\}\);<\/script>/u,
+        /<script nonce="request-nonce" type="module" async>globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\.then\(\(\) => import\("\/assets\/index-abc\.js"\)\)\.catch\(\(error\) => \{ if \(globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready"\)\] \|\| !globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\) throw error; \}\);<\/script>/u,
       );
       expect(html).not.toContain('src="/assets/index-abc.js"');
       expect(html).toContain("palamedes.document-catalogs-ready-promise");
@@ -127,7 +127,7 @@ describe("TanStack server catalog adapter", () => {
         JSON.stringify({ imports: { "#pmds/greeting": "/assets/greeting.js" } }),
       );
 
-      const html = `<html><head></head><body><script data-long="${"x".repeat(256)}">const text="café 😀";</script><script data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script><script nonce = "existing-token">window.existing=true;</script></body></html>`;
+      const html = `<html><head></head><body><script data-long="${"x".repeat(256)}">const text="café 😀";</script><script data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script><script nonce = "existing-token">window.existing=true;</script><script data-src="keep-${"😀".repeat(40)}" data-long="${"x".repeat(1200)}" type="module" async src="/assets/index-long.js"></script></body></html>`;
       const bytes = new TextEncoder().encode(html);
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -154,6 +154,9 @@ describe("TanStack server catalog adapter", () => {
         `<script nonce="byte-stream-nonce" data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script>`,
       );
       expect(rendered).toContain(`<script nonce = "existing-token">window.existing=true;</script>`);
+      expect(rendered).toContain(
+        `<script nonce="byte-stream-nonce" data-src="keep-${"😀".repeat(40)}" data-long="${"x".repeat(1200)}" type="module" async>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/assets/index-long.js")).catch((error) => { if (globalThis[Symbol.for("palamedes.document-catalogs-ready")] || !globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]) throw error; });</script>`,
+      );
     } finally {
       rmSync(clientDirectory, { recursive: true, force: true });
     }
