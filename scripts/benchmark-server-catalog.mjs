@@ -2,7 +2,7 @@ import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 
-import { defineCompiledCatalog } from "../packages/core/dist/index.mjs";
+import { createI18n, defineCompiledCatalog } from "../packages/core/dist/index.mjs";
 
 const localeCount = Number(process.env.PALAMEDES_BENCH_LOCALES ?? 8);
 const messageCount = Number(process.env.PALAMEDES_BENCH_MESSAGES ?? 2000);
@@ -28,69 +28,89 @@ const store = createServerCatalogStore({
 
 const coldStart = performance.now();
 const coldSnapshot = await store.load("locale-0");
-const coldLoadMs = performance.now() - coldStart;
+const coldCatalogLoadMs = performance.now() - coldStart;
+
+const firstRequestStart = performance.now();
+createRequest(coldSnapshot, "locale-0", 0);
+const firstRequestMs = performance.now() - firstRequestStart;
 
 const warmStart = performance.now();
 for (let index = 0; index < requestCount; index += 1) {
-  await store.load("locale-0");
+  createRequest(coldSnapshot, "locale-0", index);
 }
 const warmRequestMs = performance.now() - warmStart;
 
 const mixedStart = performance.now();
 await Promise.all(
-  Array.from({ length: requestCount }, (_, index) => store.load(`locale-${index % localeCount}`)),
+  Array.from({ length: requestCount }, async (_, index) => {
+    const locale = `locale-${index % localeCount}`;
+    createRequest(await store.load(locale), locale, index);
+  }),
 );
 const mixedLocaleMs = performance.now() - mixedStart;
 
-const sharedHeap = measureRetainedHeap(() => {
-  const requests = [];
-  for (let index = 0; index < requestCount; index += 1) {
-    requests.push({
-      locale: "locale-0",
-      timeZone: index % 2 === 0 ? "UTC" : "Europe/Berlin",
-      catalog: coldSnapshot,
-    });
-  }
-  return requests;
-});
+let sharedRequestLoadEnumerations = 0;
+const originalEntries = Object.entries;
+Object.entries = (...args) => {
+  sharedRequestLoadEnumerations += 1;
+  return originalEntries(...args);
+};
+let sharedHeap;
+try {
+  sharedHeap = measureRetainedHeap(() => {
+    const requests = [];
+    for (let index = 0; index < requestCount; index += 1) {
+      requests.push(createRequest(coldSnapshot, "locale-0", index));
+    }
+    return requests;
+  });
+} finally {
+  Object.entries = originalEntries;
+}
+
+let baselineRequestMessageEntries = 0;
 const baselineHeap = measureRetainedHeap(() => {
   const requests = [];
   const source = catalogs.get("locale-0");
   for (let index = 0; index < requestCount; index += 1) {
-    requests.push({
-      locale: "locale-0",
-      timeZone: index % 2 === 0 ? "UTC" : "Europe/Berlin",
-      messages: { ...source },
-    });
+    const requestCatalog = defineCompiledCatalog({ ...source });
+    baselineRequestMessageEntries += Object.keys(requestCatalog).length;
+    requests.push(createRequest(requestCatalog, "locale-0", index));
   }
   return requests;
 });
 
 const moduleRetention = await measureModuleRetention();
+const concurrentColdMs = await measureConcurrentColdLoads();
 const workers = await measureWorkers();
 const messageSizeSweep = await measureMessageSizes();
 const stats = store.stats();
 const result = {
   fixture: { localeCount, messageCount, requestCount },
-  coldLoadMs,
+  coldCatalogLoadMs,
+  firstRequestMs,
   warmRequestMs,
+  warmRequestMsPerRequest: warmRequestMs / requestCount,
   mixedLocaleMs,
   sharedCatalog: {
     ...stats,
-    requestMessageEntriesAllocated: 0,
+    requestMessageEntriesAllocated: sharedRequestLoadEnumerations,
     retainedHeapDeltaBytes: sharedHeap.deltaBytes,
   },
   perRequestMapBaseline: {
-    requestMessageEntriesAllocated: requestCount * messageCount,
+    requestMessageEntriesAllocated: baselineRequestMessageEntries,
     retainedHeapDeltaBytes: baselineHeap.deltaBytes,
   },
   esmModuleRetention: moduleRetention,
+  concurrentColdMs,
   workers,
   messageSizeSweep,
 };
 
 if (result.sharedCatalog.requestMessageEntriesAllocated !== 0) {
-  throw new Error("The shared-catalog regression guard detected per-request message entries.");
+  throw new Error(
+    "The shared-catalog regression guard detected catalog enumeration during request loads.",
+  );
 }
 
 console.log(JSON.stringify(result, null, 2));
@@ -118,6 +138,15 @@ function createCatalogs(size = messageCount) {
   return catalogs;
 }
 
+function createRequest(catalog, locale, index) {
+  const i18n = createI18n({
+    locale,
+    timeZone: index % 2 === 0 ? "UTC" : "Europe/Berlin",
+  });
+  i18n.load(locale, catalog);
+  return { i18n, rendered: i18n._("message-0") };
+}
+
 function parseMessageSizes() {
   const configured = process.env.PALAMEDES_BENCH_MESSAGE_SIZES;
   const sizes = (configured ? configured.split(",") : [100, messageCount, messageCount * 5])
@@ -136,22 +165,37 @@ async function measureMessageSizes() {
         },
       });
       const coldStart = performance.now();
-      await sizeStore.load("locale-0");
-      const coldLoadMs = performance.now() - coldStart;
+      const snapshot = await sizeStore.load("locale-0");
+      const coldCatalogLoadMs = performance.now() - coldStart;
       const warmStart = performance.now();
       for (let index = 0; index < requestCount; index += 1) {
-        await sizeStore.load("locale-0");
+        createRequest(snapshot, "locale-0", index);
       }
       const warmRequestMs = performance.now() - warmStart;
       return {
         messageCount: size,
-        coldLoadMs,
+        coldCatalogLoadMs,
         warmRequestMs,
         warmRequestMsPerRequest: warmRequestMs / requestCount,
         retainedMessages: sizeStore.stats().retainedMessages,
       };
     }),
   );
+}
+
+async function measureConcurrentColdLoads() {
+  const coldStore = createServerCatalogStore({
+    async load({ locale }) {
+      return [catalogs.get(locale)];
+    },
+  });
+  const start = performance.now();
+  await Promise.all(
+    Array.from(catalogs.keys(), async (locale, index) => {
+      createRequest(await coldStore.load(locale), locale, index);
+    }),
+  );
+  return performance.now() - start;
 }
 
 function measureRetainedHeap(createRequests) {
@@ -170,14 +214,21 @@ async function measureModuleRetention() {
   collectGarbage();
   const before = process.memoryUsage().heapUsed;
   for (let index = 0; index < localeCount; index += 1) {
-    const source = `export const locale = ${JSON.stringify(`locale-${index}`)};`;
+    const catalog = Object.fromEntries(
+      Array.from({ length: messageCount }, (_, messageIndex) => [
+        `message-${messageIndex}`,
+        `Locale ${index} message ${messageIndex}`,
+      ]),
+    );
+    const source = `export const catalog = Object.freeze(${JSON.stringify(catalog)});`;
     await import(`data:text/javascript,${encodeURIComponent(source)}#locale=${index}`);
   }
   collectGarbage();
   return {
     localesImported: localeCount,
     retainedHeapDeltaBytes: process.memoryUsage().heapUsed - before,
-    note: "ESM module caching may retain every used locale for the process lifetime.",
+    messageCount,
+    note: "ESM module caching may retain every used locale catalog for the process lifetime.",
   };
 }
 

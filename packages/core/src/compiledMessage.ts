@@ -54,17 +54,14 @@ type CompiledCatalogBrand = {
   readonly [COMPILED_CATALOG_TYPE]: true;
 };
 
-export type CompiledCatalogMessages = Record<string, CatalogMessage> & CompiledCatalogBrand;
+export type CompiledCatalogMessages = Readonly<Record<string, CatalogMessage>> &
+  CompiledCatalogBrand;
 export type LoadableCatalogMessages = CatalogMessages | CompiledCatalogMessages;
 
 const COMPILED_CATALOG_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog");
 const COMPILED_CATALOG_REGISTRY_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog-registry/v2");
 
-const globalCatalogState = globalThis as typeof globalThis &
-  Record<symbol, WeakSet<object> | undefined>;
-const COMPILED_CATALOG_REGISTRY =
-  globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] ?? new WeakSet<object>();
-globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] = COMPILED_CATALOG_REGISTRY;
+let localCatalogRegistry: WeakSet<object> | undefined;
 
 /** Marks generated strings as constants; function entries are executable messages. */
 export function defineCompiledCatalog<TMessages extends Record<string, CatalogMessage>>(
@@ -85,19 +82,36 @@ export function defineCompiledCatalog<TMessages extends Record<string, CatalogMe
     writable: false,
   });
   Object.freeze(snapshot);
-  COMPILED_CATALOG_REGISTRY.add(snapshot);
-  return snapshot as TMessages & CompiledCatalogBrand;
+  getCatalogRegistryForWrite().add(snapshot);
+  return snapshot as Readonly<TMessages> & CompiledCatalogBrand;
 }
 
 export function isCompiledCatalog(messages: unknown): messages is CompiledCatalogMessages {
   return (
     typeof messages === "object" &&
     messages !== null &&
-    COMPILED_CATALOG_REGISTRY.has(messages) &&
+    getCatalogRegistryForRead()?.has(messages) === true &&
     (messages as LoadableCatalogMessages & Record<symbol, boolean | undefined>)[
       COMPILED_CATALOG_SYMBOL
     ] === true
   );
+}
+
+function getCatalogRegistryForWrite(): WeakSet<object> {
+  if (localCatalogRegistry) return localCatalogRegistry;
+  const globalCatalogState = globalThis as typeof globalThis &
+    Record<symbol, WeakSet<object> | undefined>;
+  localCatalogRegistry =
+    globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] ?? new WeakSet<object>();
+  globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] = localCatalogRegistry;
+  return localCatalogRegistry;
+}
+
+function getCatalogRegistryForRead(): WeakSet<object> | undefined {
+  if (localCatalogRegistry) return localCatalogRegistry;
+  const globalCatalogState = globalThis as typeof globalThis &
+    Record<symbol, WeakSet<object> | undefined>;
+  return globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL];
 }
 
 export type ExecutableMessageRenderer<TResult> = {
