@@ -160,6 +160,19 @@ pub fn compile_catalog_artifact_selected_cached(
     cache.compile_selected(request)
 }
 
+/// Compiles selected runtime IDs without waiting for another cache build.
+///
+/// A caller that cannot block its current thread, such as the synchronous
+/// Node export, uses this path when a matching async build is already in
+/// flight. It may repeat the heavy preparation work, but it never parks on
+/// the cache's worker completion Condvar.
+pub fn compile_catalog_artifact_selected_cached_without_waiting(
+    cache: &CatalogCompilationCache,
+    request: &CatalogArtifactSelectedRequest,
+) -> PalamedesResult<CatalogArtifactResult> {
+    cache.compile_selected_without_waiting(request)
+}
+
 pub(super) fn compile_selected_prepared(
     prepared: &PreparedCompilation,
     compiled_id_index: &CompiledCatalogIdIndex,

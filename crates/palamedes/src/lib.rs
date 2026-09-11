@@ -56,7 +56,7 @@ pub use catalog_artifact::{
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogCompilationCache,
     CatalogConfig, FallbackLocales, PalamedesCatalogFormat, compile_catalog_artifact,
     compile_catalog_artifact_selected, compile_catalog_artifact_selected_cached,
-    resolve_catalog_file_path,
+    compile_catalog_artifact_selected_cached_without_waiting, resolve_catalog_file_path,
 };
 pub use catalog_audit::{
     CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,

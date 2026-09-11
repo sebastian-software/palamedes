@@ -1,8 +1,6 @@
 import path from "node:path";
 
-type CatalogCompilationCompletion = { ok: true } | { ok: false };
-
-const initialCatalogBuilds = new Map<string, Promise<CatalogCompilationCompletion>>();
+import { getCoreNodeProcessState, type CatalogCompilationCompletion } from "./processGlobalState";
 
 /**
  * Keep same-key cache misses out of the native worker pool until the first
@@ -15,6 +13,7 @@ export async function coordinateInitialCatalogBuild<T>(
   key: string,
   operation: () => Promise<T>,
 ): Promise<T> {
+  const { initialCatalogBuilds } = getCoreNodeProcessState();
   const current = initialCatalogBuilds.get(key);
   if (current) {
     const currentCompletion = await current;

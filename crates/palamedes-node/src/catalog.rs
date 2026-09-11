@@ -2151,6 +2151,21 @@ fn compile_catalog_artifact_selected_impl(
     request: CatalogArtifactSelectedRequest,
 ) -> Result<CatalogArtifactResult> {
     let request = request.into();
+    // Keep the synchronous export independent from the async cache's in-flight
+    // Condvar. A sync caller racing a cold async build compiles independently
+    // rather than parking Node's main thread until the worker-pool build ends.
+    palamedes::compile_catalog_artifact_selected_cached_without_waiting(
+        selected_catalog_cache(),
+        &request,
+    )
+    .map(CatalogArtifactResult::from)
+    .map_err(to_napi_error)
+}
+
+fn compile_catalog_artifact_selected_cached_impl(
+    request: CatalogArtifactSelectedRequest,
+) -> Result<CatalogArtifactResult> {
+    let request = request.into();
     palamedes::compile_catalog_artifact_selected_cached(selected_catalog_cache(), &request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
@@ -2167,7 +2182,7 @@ pub fn compile_catalog_artifact_selected_async(
         BlockingTask::new(
             "compileCatalogArtifactSelectedAsync",
             request,
-            compile_catalog_artifact_selected_impl,
+            compile_catalog_artifact_selected_cached_impl,
         ),
         signal,
     )

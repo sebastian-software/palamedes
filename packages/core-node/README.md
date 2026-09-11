@@ -188,22 +188,20 @@ If that initial build fails, waiting callers retry one at a time so cancellation
 or a selected-ID compilation error from one caller does not reject another.
 Independent catalogs can still compile concurrently.
 
-This build coordination applies within one loaded JavaScript module instance.
-Loading both the CommonJS and ESM entry points, or loading multiple copies of
-the package, creates independent coordinators. The synchronous
-`compileCatalogArtifactSelected()` API also bypasses the JavaScript coordinator.
-If it races an in-flight native build for the same cache key, it can wait for
-that build and block the Node.js event loop. Event-loop-sensitive integrations
-should use the async API and avoid mixing package instances for concurrent
-same-key builds.
+This build coordination is process-wide. The CommonJS and ESM entry points,
+and multiple copies of the package, share one coordinator through a
+`globalThis` holder. The synchronous `compileCatalogArtifactSelected()` API
+uses ready native cache entries, but if a matching async build is in flight it
+compiles its request independently. This can duplicate cold-build work, but it
+never waits on an in-flight worker-pool build or parks the Node.js event loop.
+Event-loop-sensitive integrations should still use the async API for
+concurrent builds.
 
 Async catalog mutations targeting the same resolved file are also serialized
-within one loaded JavaScript module instance, including calls across
-`updateCatalogFileAsync` and `applyTranslationPatchesAsync`. Mutations of
-different files can still run concurrently. Loading both package formats or
-multiple package copies creates independent mutation queues. Separate module
-instances, separate Node.js processes, and concurrent synchronous mutations
-must coordinate access themselves.
+process-wide, including calls across the CommonJS and ESM entry points and
+across `updateCatalogFileAsync` and `applyTranslationPatchesAsync`. Mutations
+of different files can still run concurrently. Separate Node.js processes and
+concurrent synchronous mutations must coordinate access themselves.
 
 `renderCatalogModule(messages)` exposes that same canonical native generator
 for compatibility helpers and custom integrations that already have a compiled
