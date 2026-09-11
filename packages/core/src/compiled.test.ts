@@ -9,6 +9,26 @@ import {
 } from "./compiled";
 
 describe("parser-free compiled runtime", () => {
+  it("copies and freezes catalog input once without retaining its prototype or accessors", () => {
+    let greeting = "Hello";
+    let getterCalls = 0;
+    const source = {
+      get greeting() {
+        getterCalls += 1;
+        return greeting;
+      },
+    };
+
+    const catalog = defineCompiledCatalog(source);
+    greeting = "Changed after compilation";
+
+    expect(getterCalls).toBe(1);
+    expect(Object.isFrozen(source)).toBe(false);
+    expect(Object.getPrototypeOf(catalog)).toBeNull();
+    expect(catalog.greeting).toBe("Hello");
+    expect(Object.isFrozen(catalog)).toBe(true);
+  });
+
   it("refreshes the string renderer across locale round trips without changing its time zone", () => {
     const message: CompiledMessage = (args, runtime) =>
       runtime.join(runtime.number(args, "amount"), " / ", runtime.date(args, "date", "short"));

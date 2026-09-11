@@ -58,24 +58,44 @@ export type CompiledCatalogMessages = Record<string, CatalogMessage> & CompiledC
 export type LoadableCatalogMessages = CatalogMessages | CompiledCatalogMessages;
 
 const COMPILED_CATALOG_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog");
+const COMPILED_CATALOG_REGISTRY_SYMBOL = Symbol.for(
+  "@palamedes/core/compiled-catalog-registry/v2",
+);
+
+const globalCatalogState = globalThis as typeof globalThis &
+  Record<symbol, WeakSet<object> | undefined>;
+const COMPILED_CATALOG_REGISTRY =
+  globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] ?? new WeakSet<object>();
+globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL] = COMPILED_CATALOG_REGISTRY;
 
 /** Marks generated strings as constants; function entries are executable messages. */
 export function defineCompiledCatalog<TMessages extends Record<string, CatalogMessage>>(
   messages: TMessages,
 ): TMessages & CompiledCatalogBrand {
-  Object.defineProperty(messages, COMPILED_CATALOG_SYMBOL, {
+  const snapshot: Record<string, CatalogMessage> = Object.create(null);
+  for (const id of Object.keys(messages)) {
+    const value = messages[id];
+    if (typeof value !== "string" && typeof value !== "function") {
+      throw new TypeError(`Invalid compiled catalog entry ${JSON.stringify(id)}.`);
+    }
+    snapshot[id] = value;
+  }
+  Object.defineProperty(snapshot, COMPILED_CATALOG_SYMBOL, {
     configurable: false,
     enumerable: false,
     value: true,
     writable: false,
   });
-  return messages as TMessages & CompiledCatalogBrand;
+  Object.freeze(snapshot);
+  COMPILED_CATALOG_REGISTRY.add(snapshot);
+  return snapshot as TMessages & CompiledCatalogBrand;
 }
 
 export function isCompiledCatalog(messages: unknown): messages is CompiledCatalogMessages {
   return (
     typeof messages === "object" &&
     messages !== null &&
+    COMPILED_CATALOG_REGISTRY.has(messages) &&
     (messages as LoadableCatalogMessages & Record<symbol, boolean | undefined>)[
       COMPILED_CATALOG_SYMBOL
     ] === true

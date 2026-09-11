@@ -65,8 +65,7 @@ export function createServerCatalogStore<TLocale extends string = string>(option
     if (entry.inFlight) return entry.inFlight;
 
     const generation = entry.generation;
-    let attempt: Promise<CompiledCatalogMessages>;
-    attempt = Promise.resolve()
+    const attempt: Promise<CompiledCatalogMessages> = Promise.resolve()
       .then(() => options.load({ locale, generation }))
       .then((fragments) => {
         const prepared = prepareCatalog(fragments);

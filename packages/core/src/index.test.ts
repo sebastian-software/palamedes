@@ -119,11 +119,12 @@ describe("unified public compiled runtime", () => {
     expect(() =>
       i18n.load("en", { greeting: "Raw {name}" } as unknown as root.CompiledCatalogMessages),
     ).toThrow(/Compile ICU catalogs/);
-    const invalid = root.defineCompiledCatalog({
-      greeting: "Wrong",
-      broken: 42 as unknown as string,
-    });
-    expect(() => i18n.load("en", invalid)).toThrow(/Invalid compiled catalog entry/);
+    expect(() =>
+      root.defineCompiledCatalog({
+        greeting: "Wrong",
+        broken: 42 as unknown as string,
+      }),
+    ).toThrow(/Invalid compiled catalog entry/);
     expect(i18n._("greeting", { name: "Ada" })).toBe("Hello Ada");
   });
 

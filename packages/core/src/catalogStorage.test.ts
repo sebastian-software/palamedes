@@ -63,6 +63,20 @@ describe.each([
     expect(i18n._("greeting")).toBe("Replaced");
   });
 
+  it("does not enumerate catalog entries again for warmed loads", () => {
+    const i18n = create();
+    const catalog = defineCompiledCatalog({ greeting: "Hello" });
+    const ownKeys = vi.spyOn(Object, "keys");
+
+    for (let index = 0; index < 200; index += 1) {
+      i18n.load("en", catalog);
+    }
+
+    const enumerationCount = ownKeys.mock.calls.length;
+    ownKeys.mockRestore();
+    expect(enumerationCount).toBe(0);
+  });
+
   it("still passes compiled constants through the supplied host renderer", () => {
     const i18n = create();
     i18n.load("en", defineCompiledCatalog({ constant: "Hello", empty: "" }));

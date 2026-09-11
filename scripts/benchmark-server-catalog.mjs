@@ -7,6 +7,7 @@ import { defineCompiledCatalog } from "../packages/core/dist/index.mjs";
 const localeCount = Number(process.env.PALAMEDES_BENCH_LOCALES ?? 8);
 const messageCount = Number(process.env.PALAMEDES_BENCH_MESSAGES ?? 2000);
 const requestCount = Number(process.env.PALAMEDES_BENCH_REQUESTS ?? 2000);
+const messageSizes = parseMessageSizes();
 
 if (process.argv.includes("--worker")) {
   const report = await runWorker();
@@ -67,6 +68,7 @@ const baselineHeap = measureRetainedHeap(() => {
 
 const moduleRetention = await measureModuleRetention();
 const workers = await measureWorkers();
+const messageSizeSweep = await measureMessageSizes();
 const stats = store.stats();
 const result = {
   fixture: { localeCount, messageCount, requestCount },
@@ -84,6 +86,7 @@ const result = {
   },
   esmModuleRetention: moduleRetention,
   workers,
+  messageSizeSweep,
 };
 
 if (result.sharedCatalog.requestMessageEntriesAllocated !== 0) {
@@ -103,16 +106,52 @@ async function loadStore() {
   }
 }
 
-function createCatalogs() {
+function createCatalogs(size = messageCount) {
   const catalogs = new Map();
   for (let localeIndex = 0; localeIndex < localeCount; localeIndex += 1) {
     const messages = Object.create(null);
-    for (let messageIndex = 0; messageIndex < messageCount; messageIndex += 1) {
+    for (let messageIndex = 0; messageIndex < size; messageIndex += 1) {
       messages[`message-${messageIndex}`] = `Locale ${localeIndex} message ${messageIndex}`;
     }
     catalogs.set(`locale-${localeIndex}`, defineCompiledCatalog(messages));
   }
   return catalogs;
+}
+
+function parseMessageSizes() {
+  const configured = process.env.PALAMEDES_BENCH_MESSAGE_SIZES;
+  const sizes = (configured ? configured.split(",") : [100, messageCount, messageCount * 5])
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isSafeInteger(value) && value > 0);
+  return [...new Set(sizes)];
+}
+
+async function measureMessageSizes() {
+  return Promise.all(
+    messageSizes.map(async (size) => {
+      const catalogsForSize = createCatalogs(size);
+      const sizeStore = createServerCatalogStore({
+        async load({ locale }) {
+          return [catalogsForSize.get(locale)];
+        },
+      });
+      const coldStart = performance.now();
+      await sizeStore.load("locale-0");
+      const coldLoadMs = performance.now() - coldStart;
+      const warmStart = performance.now();
+      for (let index = 0; index < requestCount; index += 1) {
+        await sizeStore.load("locale-0");
+      }
+      const warmRequestMs = performance.now() - warmStart;
+      return {
+        messageCount: size,
+        coldLoadMs,
+        warmRequestMs,
+        warmRequestMsPerRequest: warmRequestMs / requestCount,
+        retainedMessages: sizeStore.stats().retainedMessages,
+      };
+    }),
+  );
 }
 
 function measureRetainedHeap(createRequests) {
