@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
+
+const reportDirectory = new URL("../coverage/catalog-delivery/", import.meta.url);
+async function record(kind, result) {
+  await mkdir(reportDirectory, { recursive: true });
+  await writeFile(
+    new URL(`${result.example}.${kind}.json`, reportDirectory),
+    `${JSON.stringify(result, null, 2)}\n`,
+  );
+  console.log(`[v2-${kind}] ${JSON.stringify(result)}`);
+}
 
 const forbidden = ["[palamedes:icu-parser]", "parseMessagePattern", "renderNodesToString"];
 export function assertParserFree(source, identity) {
@@ -40,9 +50,13 @@ export async function verifyBrowserArtifacts(example) {
     decodedBytes += source.byteLength;
     gzipBytes += gzipSync(source).byteLength;
   }
-  console.log(
-    `[v2-artifacts] ${JSON.stringify({ example: example.id, files: files.length, decodedBytes, gzipBytes, scope: "complete emitted graph, all locales and lazy chunks" })}`,
-  );
+  await record("artifacts", {
+    example: example.id,
+    files: files.length,
+    decodedBytes,
+    gzipBytes,
+    scope: "complete emitted graph, all locales and lazy chunks",
+  });
 }
 
 /** Count actual successful JS responses during the ordinary host browser proof. */
@@ -73,8 +87,13 @@ export function observeBrowserArtifacts(page, example) {
         catalogBytes += response.body.byteLength;
       modules.add(response.url);
     }
-    console.log(
-      `[v2-network] ${JSON.stringify({ example: example.id, responses: responses.length, uniqueModuleUrls: modules.size, decodedBytes, catalogBytes, scope: "observed host interaction and locale navigation; decoded response bodies" })}`,
-    );
+    await record("network", {
+      example: example.id,
+      responses: responses.length,
+      uniqueModuleUrls: modules.size,
+      decodedBytes,
+      catalogBytes,
+      scope: "observed host interaction and locale navigation; decoded response bodies",
+    });
   };
 }
