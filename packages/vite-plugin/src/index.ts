@@ -40,6 +40,8 @@ const PO_FILE_REGEX = /(\.po|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
+const VIRTUAL_SERVER_CATALOGS = "virtual:palamedes/server-catalogs";
+const RESOLVED_SERVER_CATALOGS = "\0palamedes:server-catalogs";
 const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/";
 const BARE_MESSAGES_PREFIX = "#pmds/";
 const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json";
@@ -981,6 +983,40 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   }
 
   // Plugin 4: PO file loader
+  plugins.push({
+    name: "palamedes:server-catalogs",
+    resolveId(id) {
+      return id === VIRTUAL_SERVER_CATALOGS ? RESOLVED_SERVER_CATALOGS : undefined;
+    },
+    async load(id, loadOptions) {
+      if (id !== RESOLVED_SERVER_CATALOGS) return null;
+      if (!isServerEnvironment(this, loadOptions?.ssr === true, legacyBuildSsr)) {
+        this.error("virtual:palamedes/server-catalogs is server-only and cannot be loaded in a browser build.");
+      }
+      const cfg = await getConfigLazy();
+      addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
+      const loaders = Object.fromEntries(
+        cfg.locales.map((locale) => {
+          const imports = cfg.catalogs.map((catalog) => catalogResourcePath(cfg, catalog, locale));
+          const expressions = imports.map(
+            (resourcePath) => `import(${JSON.stringify(resourcePath)}).then((module) => module.messages)`,
+          );
+          return [
+            locale,
+            `() => Promise.all([${expressions.join(",")}]).then((catalogs) => catalogs.flat())`,
+          ];
+        }),
+      );
+      const loaderCode = Object.entries(loaders)
+        .map(([locale, expression]) => `${JSON.stringify(locale)}: ${expression}`)
+        .join(",");
+      return {
+        code: `import { createServerCatalogStore } from "@palamedes/runtime/server";\nconst loaders={${loaderCode}};\nconst store=createServerCatalogStore({load:({locale})=>{if(!Object.hasOwn(loaders,locale)) throw new Error("Unsupported catalog locale"); return loaders[locale]();}});\nexport const loadServerCatalog=(locale)=>store.load(locale);`,
+        map: null,
+      };
+    },
+  });
+
   if (enablePoLoader) {
     plugins.push({
       name: "palamedes:po-loader",
