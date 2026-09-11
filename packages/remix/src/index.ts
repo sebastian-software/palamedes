@@ -295,13 +295,12 @@ export function createPalamedesRemixCatalogAssetRegistry(
     },
 
     invalidate(sourcePath) {
+      refreshCatalogState();
       if (sourcePath === undefined) {
-        refreshCatalogState();
         entries.clear();
         keysBySource.clear();
         serverCatalogStore.invalidate();
       } else {
-        refreshCatalogGeneration();
         const key = keysBySource.get(sourcePath);
         if (key) {
           entries.delete(key);
