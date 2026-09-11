@@ -123,7 +123,7 @@ describe("TanStack server catalog adapter", () => {
         JSON.stringify({ imports: { "#pmds/greeting": "/assets/greeting.js" } }),
       );
 
-      const html = `<html><head></head><body><script data-long="${"x".repeat(256)}">const text="café 😀";</script></body></html>`;
+      const html = `<html><head></head><body><script data-long="${"x".repeat(256)}">const text="café 😀";</script><script data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script><script nonce = "existing-token">window.existing=true;</script></body></html>`;
       const bytes = new TextEncoder().encode(html);
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -146,6 +146,10 @@ describe("TanStack server catalog adapter", () => {
       expect(rendered).toContain(
         `<script nonce="byte-stream-nonce" data-long="${"x".repeat(256)}">const text="café 😀";</script>`,
       );
+      expect(rendered).toContain(
+        `<script nonce="byte-stream-nonce" data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script>`,
+      );
+      expect(rendered).toContain(`<script nonce = "existing-token">window.existing=true;</script>`);
     } finally {
       rmSync(clientDirectory, { recursive: true, force: true });
     }

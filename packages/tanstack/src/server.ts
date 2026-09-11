@@ -104,30 +104,101 @@ export function createTanStackCatalogResponseDelivery(
 function createScriptNonceTransform(nonce: string): Transform {
   const decoder = new StringDecoder("utf8");
   let buffered = "";
+  let insideScript = false;
   const escaped = escapeAttribute(nonce);
+
+  const flushMarkup = (final: boolean): string => {
+    const lower = buffered.toLowerCase();
+    let cursor = 0;
+    let output = "";
+
+    while (cursor < buffered.length) {
+      if (insideScript) {
+        const close = lower.indexOf("</script", cursor);
+        if (close === -1) {
+          const keep = final ? buffered.length : trailingPrefixLength(lower, cursor, "</script");
+          output += buffered.slice(cursor, keep);
+          cursor = keep;
+          break;
+        }
+        output += buffered.slice(cursor, close);
+        insideScript = false;
+        cursor = close;
+        continue;
+      }
+
+      const open = findScriptOpen(lower, cursor);
+      if (open === -1) {
+        const keep = final ? buffered.length : trailingPrefixLength(lower, cursor, "<script");
+        output += buffered.slice(cursor, keep);
+        cursor = keep;
+        break;
+      }
+
+      output += buffered.slice(cursor, open);
+      const end = findTagEnd(buffered, open);
+      if (end === -1) {
+        cursor = open;
+        break;
+      }
+
+      let openingTag = buffered.slice(open, end + 1);
+      if (!/(?:[\s<])nonce\s*=/iu.test(openingTag)) {
+        openingTag = openingTag.replace(/^<script\b/iu, (match) => `${match} nonce="${escaped}"`);
+      }
+      output += openingTag;
+      insideScript = true;
+      cursor = end + 1;
+    }
+
+    buffered = buffered.slice(cursor);
+    return output;
+  };
+
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
       buffered += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
-      const end = buffered.lastIndexOf(">");
-      if (end === -1) {
-        callback();
-        return;
-      }
-      const complete = buffered.slice(0, end + 1);
-      buffered = buffered.slice(end + 1);
-      callback(
-        null,
-        complete.replace(/<script\b(?![^>]*\bnonce=)/giu, `<script nonce="${escaped}"`),
-      );
+      callback(null, flushMarkup(false));
     },
     flush(callback) {
       buffered += decoder.end();
-      callback(
-        null,
-        buffered.replace(/<script\b(?![^>]*\bnonce=)/giu, `<script nonce="${escaped}"`),
-      );
+      callback(null, flushMarkup(true));
     },
   });
+}
+
+function findScriptOpen(lower: string, from: number): number {
+  let index = lower.indexOf("<script", from);
+  while (index !== -1) {
+    const next = lower[index + "<script".length];
+    if (next === undefined || /[\s/>]/u.test(next)) return index;
+    index = lower.indexOf("<script", index + 1);
+  }
+  return -1;
+}
+
+function findTagEnd(value: string, from: number): number {
+  let quote = "";
+  for (let index = from; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) quote = "";
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function trailingPrefixLength(value: string, from: number, prefix: string): number {
+  const suffix = value.slice(from);
+  const max = Math.min(prefix.length, suffix.length);
+  for (let length = max; length > 0; length -= 1) {
+    if (suffix.endsWith(prefix.slice(0, length))) return value.length - length;
+  }
+  return value.length;
 }
 
 function escapeAttribute(value: string): string {

@@ -2,7 +2,11 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import type { I18nInstance } from "@palamedes/runtime";
 import { createScopedTanStackI18nRunner } from "./scope";
-import type { TanStackCatalogDeliveryOptions, TanStackServerI18nOptions } from "./server";
+import type {
+  createTanStackCatalogResponseDelivery,
+  TanStackCatalogDeliveryOptions,
+  TanStackServerI18nOptions,
+} from "./server";
 
 export type { TanStackCatalogDeliveryOptions, TanStackServerI18nOptions } from "./server";
 
@@ -60,12 +64,16 @@ export function createTanStackServerI18nRequestMiddleware(
   middlewareOptions: TanStackServerI18nRequestMiddlewareOptions = {},
 ) {
   const catalogDelivery = middlewareOptions.catalogDelivery;
-  const deliveryPromise =
-    catalogDelivery !== false
-      ? import("./server").then(({ createTanStackCatalogResponseDelivery }) =>
-          createTanStackCatalogResponseDelivery(catalogDelivery),
-        )
-      : undefined;
+  type CatalogDelivery = ReturnType<typeof createTanStackCatalogResponseDelivery>;
+  let deliveryPromise: Promise<CatalogDelivery> | undefined;
+
+  const getDelivery = () => {
+    if (catalogDelivery === false) return;
+    deliveryPromise ??= import("./server").then(({ createTanStackCatalogResponseDelivery }) =>
+      createTanStackCatalogResponseDelivery(catalogDelivery),
+    );
+    return deliveryPromise;
+  };
 
   return createMiddleware().server(async ({ handlerType, next, request }) => {
     let activeLocale: string | undefined;
@@ -81,7 +89,7 @@ export function createTanStackServerI18nRequestMiddleware(
     });
     const result = await runner.run(request, async () => {
       const nextResult = await next();
-      const delivery = deliveryPromise ? await deliveryPromise : undefined;
+      const delivery = await getDelivery();
       return handlerType === "router" && delivery && activeLocale
         ? await delivery(nextResult, activeLocale, request)
         : nextResult;
