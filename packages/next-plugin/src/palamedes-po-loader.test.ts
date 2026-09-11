@@ -92,8 +92,17 @@ describe("palamedes-po-loader.cjs", () => {
         locale: "de",
         pseudoLocale: "pseudo",
         failOnMissing: false,
-        failOnCompileError: false,
       }),
+    );
+  });
+
+  it("propagates strict compile failures when the removed opt-out is false", async () => {
+    compileCatalogModule.mockRejectedValue(
+      new Error("failOnCompileError no longer changes this behavior"),
+    );
+
+    await expect(runLoader({ failOnCompileError: false })).rejects.toThrow(
+      /failOnCompileError no longer changes this behavior/,
     );
   });
 

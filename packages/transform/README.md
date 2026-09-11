@@ -85,12 +85,10 @@ The root package also re-exports catalog-loader helpers from
 
 `renderCatalogModule()` emits one `defineCompiledCatalog()` map. Constant
 messages are strings; dynamic messages are renderer-independent functions with
-module-hoisted choice branches. Invalid patterns become functions that delegate
-to runtime pattern handling. The full Core entry preserves lazy-parser
-diagnostics and source fallback; the parser-free entry reports the unsupported
-pattern and returns its raw fallback. The helper delegates to the same native
-Ferrocat-backed generator used by the first-party loaders; it does not maintain
-a second ICU parser or generator.
+module-hoisted choice branches. Invalid or unsupported patterns fail catalog
+compilation instead of becoming runtime parser calls. The helper delegates to
+the same native Ferrocat-backed generator used by the first-party loaders; it
+does not maintain a second ICU parser or generator.
 
 ## Supported Macro Shapes
 

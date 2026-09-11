@@ -25,7 +25,7 @@ module.exports = function palamedesPoLoader() {
   const callback = this.async();
   const options = typeof this.getOptions === "function" ? this.getOptions() : {};
   const failOnMissing = options.failOnMissing === true;
-  const failOnCompileError = options.failOnCompileError === true;
+  const hasFailOnCompileError = Object.hasOwn(options, "failOnCompileError");
 
   (async () => {
     const cfg = await loadConfigCached(
@@ -46,13 +46,9 @@ module.exports = function palamedesPoLoader() {
       locale,
       pseudoLocale: cfg.pseudoLocale,
       failOnMissing,
-      failOnCompileError,
+      ...(hasFailOnCompileError ? { failOnCompileError: options.failOnCompileError } : {}),
       missingFailureHint:
         "You see this error because `failOnMissing=true` in Palamedes Next plugin configuration.",
-      compileFailureHint:
-        "These errors fail the build because `failOnCompileError=true` in the Palamedes Next plugin configuration.",
-      diagnosticsWarningHint:
-        "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Next plugin configuration.",
     };
     const selection = new URLSearchParams(this.resourceQuery ?? "").get(SELECTED_MESSAGES_QUERY);
     let result;

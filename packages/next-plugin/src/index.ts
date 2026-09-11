@@ -153,7 +153,8 @@ export type WithPalamedesOptions = {
 
   /**
    * If true, fail compilation on message compilation errors.
-   * @default false
+   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU;
+   * remove this option.
    */
   failOnCompileError?: boolean;
 
@@ -436,7 +437,7 @@ export function withPalamedes(
     enablePoLoader = true,
     configPath,
     failOnMissing = false,
-    failOnCompileError = false,
+    failOnCompileError,
     runtimeModule: explicitRuntimeModule,
     keepSourceFallbacks: explicitKeepSourceFallbacks,
     projectRoot: explicitProjectRoot,
@@ -479,7 +480,7 @@ export function withPalamedes(
   const poLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-po-loader");
   const poLoaderOptions = {
     failOnMissing,
-    failOnCompileError,
+    ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
     cwd: projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
   };
@@ -611,7 +612,7 @@ export function withPalamedes(
       };
       const webpackPoLoaderOptions = {
         failOnMissing,
-        failOnCompileError,
+        ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
         cwd: webpackProjectRoot,
         ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
       };

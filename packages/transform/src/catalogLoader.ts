@@ -29,6 +29,10 @@ export type CatalogLoaderOptions = {
   locale: string;
   pseudoLocale?: string;
   failOnMissing?: boolean;
+  /**
+   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU.
+   * Remove this option; it no longer changes compilation behavior.
+   */
   failOnCompileError?: boolean;
   missingFailureHint?: string;
   compileFailureHint?: string;
@@ -48,7 +52,7 @@ export function createCatalogLoaderResult(
   const {
     pseudoLocale,
     failOnMissing = false,
-    failOnCompileError = false,
+    failOnCompileError,
     missingFailureHint,
     compileFailureHint,
     diagnosticsWarningHint,
@@ -61,29 +65,35 @@ export function createCatalogLoaderResult(
    */
   const locale = result.resolvedLocaleChain?.[0] ?? options.locale;
 
+  if (result.diagnostics.length > 0) {
+    const errorDiagnostics = result.diagnostics.filter(
+      (diagnostic) => diagnostic.severity === "error",
+    );
+
+    if (errorDiagnostics.length > 0) {
+      let message = appendHint(
+        createCompileErrorMessage(locale, errorDiagnostics),
+        compileFailureHint,
+      );
+      if (failOnCompileError !== undefined) {
+        message = appendHint(message, FAIL_ON_COMPILE_ERROR_MIGRATION);
+      }
+      throw new Error(message);
+    }
+
+    warnings.push(
+      appendHint(createDiagnosticMessage(locale, result.diagnostics), diagnosticsWarningHint),
+    );
+  }
+
   if (locale !== pseudoLocale && result.missing.length > 0 && failOnMissing) {
     throw new Error(
       appendHint(createMissingErrorMessage(locale, result.missing), missingFailureHint),
     );
   }
 
-  if (result.diagnostics.length > 0) {
-    const errorDiagnostics = result.diagnostics.filter(
-      (diagnostic) => diagnostic.severity === "error",
-    );
-
-    if (failOnCompileError && errorDiagnostics.length > 0) {
-      throw new Error(
-        appendHint(createCompileErrorMessage(locale, errorDiagnostics), compileFailureHint),
-      );
-    }
-
-    warnings.push(
-      appendHint(
-        createDiagnosticMessage(locale, result.diagnostics),
-        failOnCompileError ? undefined : diagnosticsWarningHint,
-      ),
-    );
+  if (failOnCompileError !== undefined) {
+    warnings.push(FAIL_ON_COMPILE_ERROR_MIGRATION);
   }
 
   return {
@@ -128,6 +138,9 @@ function renderSourceKey(sourceKey: CatalogSourceKey): string {
     ? `${sourceKey.message} [context: ${sourceKey.context}]`
     : sourceKey.message;
 }
+
+const FAIL_ON_COMPILE_ERROR_MIGRATION =
+  "Palamedes v2 always rejects invalid or unsupported ICU during catalog compilation; failOnCompileError no longer changes this behavior. Remove the option from the host configuration.";
 
 function appendHint(message: string, hint: string | undefined): string {
   return hint ? `${message}\n\n${hint}` : message;

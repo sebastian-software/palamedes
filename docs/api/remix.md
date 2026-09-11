@@ -73,6 +73,7 @@ interface PalamedesRemixRegisterOptions {
   keepSourceFallbacks?: boolean;
   configPath?: string;
   failOnMissing?: boolean;
+  /** @deprecated Invalid and unsupported ICU is always fatal in v2. */
   failOnCompileError?: boolean;
 }
 ```
@@ -85,8 +86,11 @@ Defaults:
 - `keepSourceFallbacks`: `true`
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
-- `failOnMissing` / `failOnCompileError`: `false` — missing translations and
-  catalog diagnostics warn instead of failing `.po` compilation
+- `failOnMissing`: `false` — missing translations warn instead of failing
+  `.po` compilation
+- `failOnCompileError`: deprecated compatibility option. Invalid and
+  unsupported ICU always fails `.po` compilation; the option no longer
+  downgrades errors.
 
 The default intentionally excludes `.cjs` and `.cts` because the macro
 transform injects ESM imports. Pass a custom `include` only if your hook also

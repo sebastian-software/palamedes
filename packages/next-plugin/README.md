@@ -305,7 +305,6 @@ module.exports = withPalamedes(
     configPath: "./palamedes.yaml",
     projectRoot: undefined,
     failOnMissing: false,
-    failOnCompileError: false,
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
     serverFunctions: true,
@@ -318,6 +317,8 @@ module.exports = withPalamedes(
 so a missing catalog fragment renders readable source text rather than a
 compiled hash. Set it to `false` to opt into smaller output or prevent source
 text from shipping. The parser-free runtime leaves ICU source fallbacks raw;
+`failOnCompileError` is deprecated in v2 and invalid or unsupported ICU always
+fails compilation, including when the option is `false`.
 use `@palamedes/core` when such a fallback must interpolate values.
 
 `include` and `exclude` select which sources are macro-transformed, and apply
