@@ -35,6 +35,7 @@
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "verify:solid:catalog": "node ./scripts/verify-solid-catalog-delivery.mjs",
+    "proof:solid:development": "node ./scripts/proof-solid-development.mjs",
     "verify:react-router-rsc": "node ./scripts/verify-react-router-rsc.mjs",
     "verify:site-routes": "node ./scripts/verify-site-routes.mjs",
     "verify:site-a11y": "node ./scripts/verify-site-a11y.mjs",
