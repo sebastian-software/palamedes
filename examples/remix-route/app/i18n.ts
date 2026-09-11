@@ -1,5 +1,6 @@
 import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
+import { createPalamedesRemixCatalogAssetRegistry } from "@palamedes/remix";
 import { createRemixI18nServer } from "@palamedes/remix/server";
 import { messages as deMessages } from "./locales/de.po";
 import { messages as enMessages } from "./locales/en.po";
@@ -25,6 +26,11 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels;
 export const normalizeLocale = locales.normalizeLocale;
 
+const EXAMPLE_ROOT = path.resolve(import.meta.dirname, "..");
+export const catalogAssetRegistry = createPalamedesRemixCatalogAssetRegistry({
+  cwd: EXAMPLE_ROOT,
+});
+
 const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
@@ -43,16 +49,7 @@ export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "route",
   loadMessages,
-  catalogAssets: {
-    config: {
-      rootDir: path.resolve(import.meta.dirname, ".."),
-      locales: [...LOCALES],
-      sourceLocale: DEFAULT_LOCALE,
-      catalogs: [{ path: "app/locales/{locale}", include: ["app"] }],
-    },
-    resolvePath: (locale) =>
-      path.resolve(import.meta.dirname, "..", "app", "locales", `${locale}.po`),
-  },
+  catalogAssets: { registry: catalogAssetRegistry },
   routeParam: "locale",
 });
 

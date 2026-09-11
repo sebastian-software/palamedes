@@ -3,14 +3,16 @@ import * as http from "node:http";
 import { createRequestListener } from "remix/node-fetch-server";
 
 import { router } from "./app/router.ts";
-import { remixI18n } from "./app/i18n.ts";
+import { catalogAssetRegistry, remixI18n } from "./app/i18n.ts";
 
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 4060;
 
 const server = http.createServer(
   createRequestListener(async (request) => {
     try {
-      if (new URL(request.url).pathname.startsWith("/assets/__palamedes/catalog/")) {
+      if (new URL(request.url).pathname.startsWith("/assets/__palamedes/catalog")) {
+        const fragment = catalogAssetRegistry.serve(request);
+        if (fragment) return fragment;
         return (
           remixI18n.serveClientCatalogAsset(request) ?? new Response("Not Found", { status: 404 })
         );
