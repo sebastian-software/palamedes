@@ -156,7 +156,7 @@ import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
   clientDirectory: path.resolve(process.cwd(), ".output/public"),
   resolveLocale: (request) => resolveLocale(request),
-  nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
+  nonce: (request) => serverRequestContext(request).cspNonce,
 });
 
 const i18n = await createViteServerI18n({ locale });
@@ -167,10 +167,13 @@ return serverI18nScope.run(i18n, () => next());
 state isolated while sharing compiled catalog content between requests. The
 delivery middleware's default initial error document contains only a reload
 and home link; pass trusted `errorHtml` when the host needs a different
-catalog-free document. The adapter's `nonce` applies only to its own import
-map and readiness/bootstrap delivery tags. Solid's `HydrationScript` and
-`renderToStream` own framework hydration scripts; pass the host request nonce
-to those Solid APIs as well when the document uses a nonce-based CSP. Avoid
+catalog-free document. Here `serverRequestContext` represents the host's
+request-scoped context containing a server-generated nonce; do not derive it
+from an arbitrary client-supplied header. The adapter's `nonce` applies only
+to its own import map and readiness/bootstrap delivery tags. Solid's
+`HydrationScript` and `renderToStream` own framework hydration scripts; pass
+the host request nonce to those Solid APIs as well when the document uses a
+nonce-based CSP. Avoid
 importing `.po` files, the parser, or a catalog virtual module in application
 code; author messages with `@palamedes/solid/macro` and
 `@palamedes/core/macro` so the compiler emits compiled-only runtime calls.
