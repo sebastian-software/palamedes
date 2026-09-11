@@ -245,7 +245,7 @@ under `middleware()` reach the current i18n instance. It also exposes
 Create one `createPalamedesRemixCatalogAssetRegistry()` and pass it to both
 `createPalamedesRemixAssetLoader({ catalogAssets: registry })` and
 `createRemixI18nServer({ locales, strategy, catalogAssets: { registry } })`.
-The registry loads every configured server catalog lazily in declaration order.
+The registry loads every configured server catalog lazily in declaration order. Native output is written as ordinary ESM in a process-local temporary directory and imported by Node, without `eval`, `Function`, or `vm` execution. Identical output shares the same module URL; Node retains evaluated modules for the process lifetime, including superseded development generations.
 Concurrent requests share the immutable locale snapshot; each request receives
 its own locale, formatter settings, callbacks and overrides.
 
