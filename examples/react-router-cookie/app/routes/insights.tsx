@@ -1,5 +1,5 @@
 import { Link, redirect } from "react-router";
-import { t, plural } from "@palamedes/core/macro";
+import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";
 import { EVENT } from "@palamedes/example-ui";
 import type { Route } from "./+types/insights";
