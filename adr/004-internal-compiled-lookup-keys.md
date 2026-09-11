@@ -84,6 +84,21 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 
 ## Implementation status
 
+The accepted failure contract above targets Palamedes v2. The published 1.x
+behavior remains in force until the coordinated major release:
+
+Low-level transforms generate compact runtime calls without embedding the
+authored source message by default. First-party host adapters override that
+low-level default and preserve source fallbacks in both development and
+production, so deploy skew and partial catalogs remain readable. Set
+`keepSourceFallbacks: false` for compact, hash-only output when bundle size or
+embedding authored source text is a concern.
+
+This describes existing 1.x behavior, not an exception to the v2 decision.
+Migration of these defaults and options is tracked in
+[#1206](https://github.com/sebastian-software/palamedes/issues/1206) and the host
+delivery slices under [#1204](https://github.com/sebastian-software/palamedes/issues/1204).
+
 Current Core lookup still returns source metadata or the internal key on a
 missing entry. Next currently catches some production fragment failures and
 continues, and first-party plugin defaults retain source fallback text. These
