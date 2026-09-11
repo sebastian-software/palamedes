@@ -124,7 +124,7 @@ describe("createReactRouterRscI18nRequestScope", () => {
       );
 
       const scope = createReactRouterRscI18nRequestScope(() => createTestI18n("de"), {
-        catalogDelivery: { clientDirectory },
+        catalogDelivery: { clientDirectory, nonce: () => "nonce&value" },
       });
       const response = await scope.run(
         new Request("https://example.test/"),
@@ -137,6 +137,7 @@ describe("createReactRouterRscI18nRequestScope", () => {
 
       const html = await (response as Response).text();
       expect(html).toContain('type="importmap"');
+      expect(html).toContain('nonce="nonce&amp;value"');
       expect(html).toContain('<link rel="modulepreload"');
       expect(html).toContain("#pmds/home");
     } finally {

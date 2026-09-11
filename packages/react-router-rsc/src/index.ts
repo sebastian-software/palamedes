@@ -21,6 +21,8 @@ export type ReactRouterRscI18nRequestScope<T extends I18nInstance = I18nInstance
 export type ReactRouterRscCatalogDeliveryOptions = ViteCatalogDeliveryOptions & {
   /** Trusted catalog-independent markup rendered when a client catalog fails. */
   readonly errorHtml?: string;
+  /** CSP nonce for adapter-owned inline import-map/probe elements. */
+  readonly nonce?: string | ((request: Request) => string | undefined);
 };
 
 export type ReactRouterRscI18nRequestScopeOptions = {
@@ -54,7 +56,12 @@ export function createReactRouterRscI18nRequestScope<T extends I18nInstance = I1
       return runner.run(request, async () => {
         const result = await dispatch();
         return delivery
-          ? transformDocumentResponse(result, delivery, options.catalogDelivery?.errorHtml)
+          ? transformDocumentResponse(
+              result,
+              delivery,
+              options.catalogDelivery?.errorHtml,
+              resolveNonce(options.catalogDelivery?.nonce, request),
+            )
           : result;
       });
     },
@@ -62,10 +69,18 @@ export function createReactRouterRscI18nRequestScope<T extends I18nInstance = I1
   };
 }
 
+function resolveNonce(
+  nonce: ReactRouterRscCatalogDeliveryOptions["nonce"],
+  request: Request,
+): string | undefined {
+  return typeof nonce === "function" ? nonce(request) : nonce;
+}
+
 function transformDocumentResponse<Result>(
   result: Result,
   delivery: ReturnType<typeof createViteCatalogDelivery>,
   errorHtml?: string,
+  nonce?: string,
 ): Result {
   if (!(result instanceof Response) || !result.body) return result;
   if (!result.headers.get("content-type")?.toLowerCase().startsWith("text/html")) return result;
@@ -75,6 +90,7 @@ function transformDocumentResponse<Result>(
     Transform.toWeb(
       delivery.createDocumentTransform(binding, {
         ...(errorHtml ? { errorHtml } : {}),
+        ...(nonce ? { nonce } : {}),
       }),
     ),
   );
