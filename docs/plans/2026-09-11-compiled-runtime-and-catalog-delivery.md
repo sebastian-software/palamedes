@@ -1,6 +1,6 @@
 # Palamedes v2: unified compiled runtime and catalog delivery
 
-**Status:** Accepted plan; GitHub issues published; implementation pending
+**Status:** Implementation in progress; host integration and the #1215 release gate remain open
 **Date:** 2026-09-11
 
 ## Problem
@@ -144,9 +144,9 @@ included in the same milestone, retaining their original issue ownership and
 scope. They were integrated after reading the complete existing issues and
 comments; no replacement tickets were created.
 
-Reconcile the historical
-[splitting RFC](2026-08-01-code-splitting-localization-rfc.md) as delivery
-decisions are settled rather than treating its exploration as current policy.
+Treat the superseded code-splitting exploration as historical context only.
+The living policy is this plan together with ADR-008 and ADR-023; host slices
+must update those records when delivery decisions are settled.
 
 ## Existing backlog integration — 2026-09-11
 

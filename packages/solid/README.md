@@ -55,11 +55,12 @@ export function Footer() {
 ```
 
 When the Palamedes transform runs, macro imports are rewritten to runtime
-imports from `@palamedes/solid/compiled`, which excludes the ICU parser. Rich
-JSX children are transformed to numeric component slots in the message, for
-example `<0>Palamedes</0>`, while the Solid wrapper is passed separately.
-Direct imports from `@palamedes/solid` remain the runtime surface for
-hand-written component patterns. Rich component slots use Solid 2
+imports from `@palamedes/solid/compiled`. In v2, the package root and the
+`/compiled` alias share the same parser-free compiled runtime; the alias is an
+explicit macro target, not a parser-enabled mode. Rich JSX children are
+transformed to numeric component slots in the message, for example
+`<0>Palamedes</0>`, while the Solid wrapper is passed separately. Hand-written
+components that depend on raw ICU parsing must migrate to compiled messages. Rich component slots use Solid 2
 `FlowComponent<{}, Element>` functions and receive their nested content through
 `props.children`.
 

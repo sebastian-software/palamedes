@@ -21,13 +21,6 @@ export const STACKS: Array<{ id: StackId; label: string }> = [
   { id: "next", label: "Next.js" },
 ];
 
-const PO_DECLARATION = `// src/po.d.ts
-declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-
-  export const messages: CompiledCatalogMessages
-}`;
-
 export const PACKAGE_BOUNDARY_STEP: PackageBoundaryStep = {
   kind: "package-boundary",
   title: "Use the scoped packages",
@@ -54,17 +47,13 @@ catalogs:
     },
     {
       title: "Wire the plugin & runtime",
-      body: "The Vite plugin handles the macro transform and compiles .po catalogs; the runtime holds the active i18n instance.",
+      body: "The Vite adapter owns the parser-free runtime and derives the active locale's compiled catalog dependency before translated code runs.",
       code: `// vite.config.ts
 import { palamedes } from "@palamedes/vite-plugin"
 export default defineConfig({ plugins: [palamedes(), react()] })
 
-// src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { setClientI18n } from "@palamedes/runtime"
-
-export const i18n = createI18n()
-setClientI18n(i18n)`,
+// index.html
+<html lang="de"></html>`,
     },
     {
       title: "Write & extract",
@@ -83,20 +72,11 @@ msgid "Welcome to Palamedes"
 msgstr "Willkommen bei Palamedes"`,
     },
     {
-      title: "Load & see it render",
-      body: "Load the catalogs, activate a locale, and run the dev server — the page now renders “Willkommen bei Palamedes”. That is the full local loop: transform, extraction, catalog, runtime.",
+      title: "See it render",
+      body: "The adapter derives and loads the active locale's compiled fragment before translated code runs — the page now renders “Willkommen bei Palamedes”.",
       aside:
-        'TypeScript needs an ambient declaration for .po imports — add a src/po.d.ts with `declare module "*.po"` (see the troubleshooting guide).',
-      code: `// src/main.tsx
-import { i18n } from "./i18n"
-import { messages as enMessages } from "./locales/en.po"
-import { messages as deMessages } from "./locales/de.po"
-
-i18n.load("en", enMessages)
-i18n.load("de", deMessages)
-i18n.activate("de")
-
-$ pnpm dev`,
+        "No app-owned catalog map, locale import, or runtime loader is required in the standard flow.",
+      code: `$ pnpm dev`,
     },
   ],
   solid: [
@@ -119,18 +99,14 @@ catalogs:
     },
     {
       title: "Wire the plugin & runtime",
-      body: "The Vite plugin handles the macro transform and compiles .po catalogs; the runtime holds the active i18n instance.",
+      body: "The Vite adapter owns the parser-free runtime and derives the active locale's compiled catalog dependency before translated code runs.",
       code: `// vite.config.ts
 import { palamedes } from "@palamedes/vite-plugin"
 import solid from "@solidjs/vite-plugin"
 export default defineConfig({ plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })] })
 
-// src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled"
-import { setClientI18n } from "@palamedes/runtime"
-
-export const i18n = createI18n()
-setClientI18n(i18n)`,
+// index.html
+<html lang="de"></html>`,
     },
     {
       title: "Write & extract",
@@ -149,26 +125,11 @@ msgid "Welcome to Palamedes"
 msgstr "Willkommen bei Palamedes"`,
     },
     {
-      title: "Load & see it render",
-      body: "Load the catalogs, activate a locale, and run the dev server — the page now renders “Willkommen bei Palamedes”.",
+      title: "See it render",
+      body: "The adapter derives and loads the active locale's compiled fragment before translated code runs — the page now renders “Willkommen bei Palamedes”.",
       aside:
-        'TypeScript needs an ambient declaration for .po imports — add src/po.d.ts with `declare module "*.po"`.',
-      code: `${PO_DECLARATION}
-
-// src/main.tsx
-import { render } from "@solidjs/web"
-import { i18n } from "./i18n"
-import { App } from "./App"
-import { messages as enMessages } from "./locales/en.po"
-import { messages as deMessages } from "./locales/de.po"
-
-i18n.load("en", enMessages)
-i18n.load("de", deMessages)
-i18n.activate("de")
-
-render(() => <App />, document.getElementById("root")!)
-
-$ pnpm dev`,
+        "No app-owned catalog map, locale import, or runtime loader is required in the standard flow.",
+      code: `$ pnpm dev`,
     },
   ],
   next: [

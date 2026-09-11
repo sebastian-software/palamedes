@@ -12,4 +12,3 @@ Current state:
 
 - [2026-09-11 Unified compiled runtime and catalog delivery](2026-09-11-compiled-runtime-and-catalog-delivery.md)
 - [2026-09-11 Palamedes v2 implementation issues](2026-09-11-palamedes-v2-issues.md)
-- [2026-08-01 Code splitting for localized messages RFC](2026-08-01-code-splitting-localization-rfc.md)

@@ -42,9 +42,11 @@ subscriptions for in-document instance replacement.
 
 Rich JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the React component is passed separately.
-The transform imports `Trans` from `@palamedes/react/compiled`, which excludes
-the ICU parser. Direct imports from `@palamedes/react` remain the compatibility
-surface for hand-written runtime component patterns.
+The transform imports `Trans` from `@palamedes/react/compiled`. In v2, the
+package root and the `/compiled` alias share the same parser-free compiled
+runtime; the alias is an explicit macro target, not a parser-enabled mode.
+Hand-written components that depend on raw ICU parsing must migrate to compiled
+messages.
 
 ## Runtime Components
 

@@ -82,9 +82,12 @@ catalogs:
 
 Set the document’s `lang` before its module entry runs. Generated dependencies initialize the client instance and await only the active locale’s compiled fragments before translated code executes. Locale changes use document navigation.
 
-Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Vite
-loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
-future adapter release explicitly documents `.fcl` imports.
+Catalog storage can be PO or FCL in `palamedes.yaml`. Standard framework
+delivery derives the compiled active-locale dependencies automatically, so app
+code does not need direct catalog imports or locale maps. For explicit custom
+integrations, the current low-level import hook accepts `.po` modules; FCL
+storage is compiled and delivered through the adapter rather than imported by
+application code.
 
 ## Options
 

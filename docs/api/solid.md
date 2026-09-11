@@ -35,10 +35,11 @@ components:
 - `Select`
 - `SelectOrdinal`
 
-The transform rewrites `Trans` to `@palamedes/solid/compiled`. That subpath
-exports the compiled-message `Trans` adapter without importing Core's ICU
-parser. The package root remains the full runtime-component compatibility
-surface.
+The transform rewrites `Trans` to `@palamedes/solid/compiled`. In v2, the
+package root and the `/compiled` alias resolve to the same parser-free compiled
+runtime. The alias remains useful for explicit macro targets; it is not a parser-
+enabled compatibility mode. Hand-written components that still depend on raw
+ICU parsing must migrate to compiled messages.
 
 ## Runtime Components
 

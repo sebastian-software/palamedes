@@ -3,9 +3,12 @@
 `@palamedes/vite-plugin` transforms Palamedes macro imports, compiles `.mdx`
 modules, and compiles `.po` imports inside Vite builds.
 
-Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
-`.po` import loader. See [Catalog formats](../catalog-formats.md) for the
-storage/import boundary.
+Catalog storage can be PO or FCL in `palamedes.yaml`. The standard framework
+flow derives compiled active-locale dependencies from the evaluated module
+graph and does not require application-owned catalog imports or locale maps.
+The low-level `.po` import hook remains available for explicit custom
+integrations; it is not the standard delivery path. See [Catalog
+formats](../catalog-formats.md) for the storage/import boundary.
 
 ## Exports
 

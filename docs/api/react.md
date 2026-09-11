@@ -36,10 +36,12 @@ components:
 - `Select`
 - `SelectOrdinal`
 
-The transform rewrites `Trans` to `@palamedes/react/compiled`. That subpath
-exports the compiled-message `Trans` adapter (including the `react-server`
-condition) without importing Core's ICU parser. The package root remains the
-full runtime-component compatibility surface.
+The transform rewrites `Trans` to `@palamedes/react/compiled`. In v2, the
+package root and the `/compiled` alias resolve to the same parser-free compiled
+runtime (including the `react-server` condition). The alias remains useful for
+explicit macro targets; it is not a parser-enabled compatibility mode. Hand-
+written components that still depend on raw ICU parsing must migrate to compiled
+messages.
 
 ## Runtime Components
 

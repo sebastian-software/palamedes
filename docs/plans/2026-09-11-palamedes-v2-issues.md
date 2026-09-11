@@ -1,6 +1,6 @@
 # Palamedes v2 implementation issues
 
-**Status:** Published; implementation pending
+**Status:** Published; host implementation and the #1215 release gate remain open
 **Parent:** [Epic #1204](https://github.com/sebastian-software/palamedes/issues/1204)
 **Milestone:** [Palamedes v2](https://github.com/sebastian-software/palamedes/milestone/1)
 

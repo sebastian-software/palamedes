@@ -162,31 +162,17 @@ The [first working translation guide](./first-working-translation.md) is the bes
 
 ### 2. Migrate runtime wiring
 
-Make the active i18n instance available through `@palamedes/runtime`.
+For the standard Vite, Next, Remix, Solid, Waku, and React Router paths,
+remove app-owned runtime and catalog wiring. The adapter initializes the
+parser-free runtime, derives compiled dependencies from translated module use,
+and awaits the active locale before the module runs. Do not import locale
+catalogs, maintain a locale loader map, or call `load()`/`activate()` from the
+application. Locale selection and ordinary host error UI remain host policy.
 
-Client-side:
-
-```ts
-import { createI18n } from "@palamedes/core/compiled";
-import { setClientI18n } from "@palamedes/runtime";
-
-const i18n = createI18n();
-setClientI18n(i18n);
-```
-
-When the app loads generated `.po` catalogs, use the parser-free `/compiled`
-entrypoint and its loader type. Keep the package-root factory only for an
-intentional runtime-ICU compatibility path; see the
+For an explicit custom integration outside a supported adapter, use the
+parser-free `/compiled` API and executable `CompiledCatalogMessages` contract;
+raw ICU maps are not a runtime compatibility path. See the
 [`@palamedes/core` API reference](./api/core.md#exports).
-
-```ts
-// src/po.d.ts
-declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
-
-  export const messages: CompiledCatalogMessages;
-}
-```
 
 Server-side:
 

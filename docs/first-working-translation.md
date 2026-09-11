@@ -5,11 +5,11 @@ extract it, translate it, and see it render without changing the mental model.
 
 - one translated component
 - one extraction run
-- one `.po` import
-- one active runtime instance
+- one catalog configuration
+- one automatically delivered active-locale runtime
 
 It uses Vite plus React because that is the smallest copy-paste setup today.
-The same Vite plugin, runtime model, and `.po` flow now also work with Solid
+The same Vite plugin, runtime model, and catalog flow now also work with Solid
 through `@palamedes/solid`, `@solidjs/web`, and `@solidjs/vite-plugin`.
 
 For a Next.js 16 App Router application, use the separate
@@ -67,24 +67,24 @@ export default defineConfig({
 });
 ```
 
-## 4. Register the runtime
+## 4. Let the adapter initialize the runtime
 
-```ts
-// src/i18n.ts
-import { createI18n } from "@palamedes/core/compiled";
-import { setClientI18n } from "@palamedes/runtime";
+The standard Vite flow does not need an app-owned `i18n` module. Do not add
+`createI18n`, `setClientI18n`, `.po.d.ts`, locale imports, or `i18n.load()`
+calls. The plugin derives the translated module's catalog dependencies,
+initializes the parser-free runtime, and awaits the active locale's compiled
+fragment before the module runs.
 
-const i18n = createI18n();
-setClientI18n(i18n);
+For this static walkthrough, set the active locale in `index.html`:
 
-export { i18n };
+```html
+<html lang="de"></html>
 ```
 
-This guide uses the compatible parser-free `/compiled` entrypoint because the
-Vite loader turns generated `.po` catalogs into compiled messages. The package
-root and `/compiled` share the same parser-free v2 runtime; neither accepts raw
-ICU maps at application runtime. See the [`@palamedes/core` API
-reference](./api/core.md#exports).
+A host with locale negotiation must write the selected `lang` before its module
+entry runs. See the [`@palamedes/vite-plugin` API reference](./api/vite-plugin.md)
+for the explicit custom-integration escape hatch; application-owned catalog
+maps are not part of the standard flow.
 
 ## 5. Add one translated component
 
@@ -117,35 +117,6 @@ msgid "Welcome to Palamedes"
 msgstr "Willkommen bei Palamedes"
 ```
 
-## 8. Load `.po` messages
-
-TypeScript needs an ambient declaration for `.po` imports. Add it once:
-
-```ts
-// src/po.d.ts
-declare module "*.po" {
-  import type { CompiledCatalogMessages } from "@palamedes/core/compiled";
-
-  export const messages: CompiledCatalogMessages;
-}
-```
-
-```tsx
-// src/main.tsx
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { i18n } from "./i18n";
-import { App } from "./App";
-import { messages as enMessages } from "./locales/en.po";
-import { messages as deMessages } from "./locales/de.po";
-
-i18n.load("en", enMessages);
-i18n.load("de", deMessages);
-i18n.activate("de");
-
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
-```
-
 ## Expected Result
 
 After `pnpm dev`, the page should render:
@@ -159,8 +130,9 @@ That proves the full local loop is working:
 - macros transform correctly
 - extraction works
 - catalogs update correctly
-- `.po` imports compile
-- the runtime model is wired
+- the catalog is updated through extraction and the adapter derives its dependency
+- the active locale's compiled fragment is loaded before translated code runs
+- no app-owned catalog map or runtime loader is required
 
 From there, the same catalog flow can grow into CI audits, richer ICU
 diagnostics, and framework-specific app wiring without changing how messages
