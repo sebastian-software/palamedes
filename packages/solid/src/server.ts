@@ -64,6 +64,7 @@ export function createSolidCatalogDeliveryMiddleware(
             allowMissingPromise: options.development === true,
             nonce,
             trustedChunkKeys: binding ? Object.keys(binding.chunkImports) : [],
+            trustedOrigins: binding ? trustedOriginsForBinding(binding.imports, request.url) : [],
           }),
         ) as unknown as TransformStream<Uint8Array>,
       );
@@ -81,6 +82,7 @@ function createSolidBootstrapGateTransform(options: {
   allowMissingPromise: boolean;
   nonce?: string;
   trustedChunkKeys: readonly string[];
+  trustedOrigins: readonly string[];
 }): Transform {
   const decoder = new StringDecoder("utf8");
   let tail = "";
@@ -105,25 +107,33 @@ function createSolidBootstrapGateTransform(options: {
         const end = match.index + match[0].length;
         if (!flush && end > tail.length - TAIL_SIZE) break;
         const script = match[0];
-        const moduleSource = script.match(
-          /\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']([^"']+)["']|\bsrc\s*=\s*["']([^"']+)["'][^>]*\btype\s*=\s*["']module["']/iu,
-        );
+        const openingTag = script.slice(0, findTagEnd(script) + 1);
+        const moduleSource =
+          readTagAttribute(openingTag, "type")?.toLowerCase() === "module"
+            ? readTagAttribute(openingTag, "src")
+            : undefined;
         let replacement = script;
         if (
           moduleSource &&
           isTrustedSolidEntrySource(
-            moduleSource[1] ?? moduleSource[2],
+            moduleSource,
             options.trustedChunkKeys,
             options.allowMissingPromise,
+            options.trustedOrigins,
           )
         ) {
-          const source = JSON.stringify(moduleSource[1] ?? moduleSource[2]);
+          const source = JSON.stringify(moduleSource);
           const nonceValue = options.nonce ?? readCspNonce(script);
           const nonce = nonceValue ? ` nonce="${escapeAttribute(nonceValue)}"` : "";
           const importExpression = options.allowMissingPromise
             ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
             : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
           replacement = `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; });</script>`;
+        } else if (options.nonce && !readCspNonce(script) && isSolidFrameworkScript(script)) {
+          replacement = script.replace(
+            /^<script\b/iu,
+            `<script nonce="${escapeAttribute(options.nonce)}"`,
+          );
         }
         stream.push(tail.slice(0, match.index) + replacement);
         tail = tail.slice(end);
@@ -157,20 +167,72 @@ function isTrustedSolidEntrySource(
   source: string,
   trustedChunkKeys: readonly string[],
   allowDevelopmentEntry: boolean,
+  trustedOrigins: readonly string[],
 ): boolean {
-  // Solid's generated entries are same-origin URLs. Do not gate arbitrary
-  // application or third-party modules merely because they are module tags.
-  if (!source.startsWith("/") || source.startsWith("//")) return false;
+  // Solid's generated entries are same-origin URLs by default. Absolute
+  // custom bases are trusted only when Vite's generated catalog assets identify
+  // the configured origin as part of this application.
+  const isAbsolute = /^https?:\/\//iu.test(source);
+  if ((!source.startsWith("/") || source.startsWith("//")) && !isAbsolute) return false;
   if (allowDevelopmentEntry) {
+    if (!source.startsWith("/") || source.startsWith("//")) return false;
     return (
       SOLID_DEVELOPMENT_ENTRY_PATTERN.test(source) || SOLID_AUTHORED_ENTRY_PATTERN.test(source)
     );
   }
   const key = assetKey(source);
+  const origin = isAbsolute ? urlOrigin(source) : undefined;
   return (
-    SOLID_PRODUCTION_ENTRY_PATTERN.test(source) ||
+    (SOLID_PRODUCTION_ENTRY_PATTERN.test(source) &&
+      (!isAbsolute || (origin !== undefined && trustedOrigins.includes(origin)))) ||
     (trustedChunkKeys.includes(key) && SOLID_AUTHORED_ENTRY_PATTERN.test(source))
   );
+}
+
+function trustedOriginsForBinding(
+  imports: Readonly<Record<string, string>>,
+  requestUrl: string,
+): readonly string[] {
+  const origins = new Set<string>();
+  try {
+    origins.add(new URL(requestUrl).origin);
+  } catch {
+    // Request URLs are valid in the Fetch middleware; keep the fallback empty.
+  }
+  for (const asset of Object.values(imports)) {
+    const origin = urlOrigin(asset);
+    if (origin) origins.add(origin);
+  }
+  return [...origins];
+}
+
+function urlOrigin(value: string): string | undefined {
+  try {
+    const url = new URL(value, "https://palamedes.invalid");
+    return /^https?:$/iu.test(url.protocol) && value.includes("://") ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findTagEnd(value: string): number {
+  let quote: '"' | "'" | undefined;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) quote = undefined;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return value.length - 1;
+}
+
+function readTagAttribute(tag: string, name: "nonce" | "src" | "type"): string | undefined {
+  const match = tag.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "iu"));
+  return match?.[1] ?? match?.[2];
 }
 
 function assetKey(href: string): string {
@@ -185,7 +247,15 @@ function assetKey(href: string): string {
 }
 
 function readCspNonce(script: string): string | undefined {
-  return script.match(/\bnonce\s*=\s*["']([^"']*)["']/iu)?.[1];
+  return readTagAttribute(script.slice(0, findTagEnd(script) + 1), "nonce");
+}
+
+function isSolidFrameworkScript(script: string): boolean {
+  const openingEnd = findTagEnd(script);
+  const body = script.slice(openingEnd + 1, -"</script>".length);
+  return /window\._\$HY\b|self\.\$R\b|_\$HY\.(?:r|f|d|h|v|fe)\b|\$R\[\d+\]|function\s+\$df[a-z]/iu.test(
+    body,
+  );
 }
 
 function lastScriptStart(value: string): number {

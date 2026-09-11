@@ -8,7 +8,7 @@ import { createSolidCatalogDeliveryMiddleware } from "./server";
 
 const SOLID_CLIENT_ENTRY = "/assets/virtual_solid-ssr-entry-client-abc123.js";
 
-function fixtureDirectory(): string {
+function fixtureDirectory(catalogUrl = "/assets/catalog.en.js"): string {
   const directory = mkdtempSync(path.join(tmpdir(), "palamedes-solid-delivery-"));
   writeFileSync(
     path.join(directory, "palamedes-split-manifest.json"),
@@ -20,7 +20,7 @@ function fixtureDirectory(): string {
   );
   writeFileSync(
     path.join(directory, "palamedes-importmap.en.json"),
-    JSON.stringify({ imports: { "#pmds/catalog": "/assets/catalog.en.js" } }),
+    JSON.stringify({ imports: { "#pmds/catalog": catalogUrl } }),
   );
   return directory;
 }
@@ -30,9 +30,10 @@ async function transformDocument(
   nonce?: string,
   chunkSize = 3,
   development = false,
+  catalogUrl = "/assets/catalog.en.js",
 ): Promise<string> {
   const middleware = createSolidCatalogDeliveryMiddleware({
-    clientDirectory: fixtureDirectory(),
+    clientDirectory: fixtureDirectory(catalogUrl),
     development,
     nonce,
     resolveLocale: () => "en",
@@ -115,12 +116,25 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).not.toContain('<script nonce="solid-test" data-nonce="wrong"');
   });
 
+  it("nonces recognized Solid hydration bootstrap scripts without touching foreign inline code", async () => {
+    const output = await transformDocument(
+      "<html><head><script>window._$HY ||= { events: [] };</script><script>globalThis.foreign = true;</script></head></html>",
+      "solid-test",
+    );
+
+    expect(output).toContain('<script nonce="solid-test">window._$HY ||= { events: [] };</script>');
+    expect(output).toContain("<script>globalThis.foreign = true;</script>");
+  });
+
   it("leaves foreign module and third-party scripts unchanged", async () => {
     const html =
-      '<html><head><script type="module" src="/assets/application.js"></script><script src="https://cdn.example.test/foreign.js"></script></head><body></body></html>';
+      '<html><head><script type="module" src="/assets/application.js"></script><script data-type="module" data-src="/assets/virtual_solid-ssr-entry-client-abc123.js"></script><script src="https://cdn.example.test/foreign.js"></script></head><body></body></html>';
     const output = await transformDocument(html, "solid-test");
 
     expect(output).toContain('<script type="module" src="/assets/application.js"></script>');
+    expect(output).toContain(
+      '<script data-type="module" data-src="/assets/virtual_solid-ssr-entry-client-abc123.js"></script>',
+    );
     expect(output).toContain('<script src="https://cdn.example.test/foreign.js"></script>');
     expect(output).not.toContain('nonce="solid-test" src="/assets/application.js"');
   });
@@ -136,6 +150,31 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).not.toContain(
       'src="/custom/base/assets/virtual_solid-ssr-entry-client-abc123.js"',
     );
+  });
+
+  it("gates a generated Solid entry on a configured CDN base", async () => {
+    const source = "https://cdn.example.test/app/assets/virtual_solid-ssr-entry-client-abc123.js";
+    const output = await transformDocument(
+      `<html><head><script type="module" src="${source}"></script></head><body></body></html>`,
+      "solid-test",
+      3,
+      false,
+      "https://cdn.example.test/app/assets/catalog.en.js",
+    );
+
+    expect(output).toContain(`import("${source}")`);
+    expect(output).not.toContain(`src="${source}"`);
+  });
+
+  it("does not trust an unrelated CDN entry with the Solid filename", async () => {
+    const source =
+      "https://foreign.example.test/app/assets/virtual_solid-ssr-entry-client-abc123.js";
+    const output = await transformDocument(
+      `<html><head><script type="module" src="${source}"></script></head><body></body></html>`,
+      "solid-test",
+    );
+
+    expect(output).toContain(`<script type="module" src="${source}"></script>`);
   });
 
   it("recognizes the development virtual Solid entry", async () => {
