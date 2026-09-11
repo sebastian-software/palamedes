@@ -59,53 +59,11 @@
   ],
   "packages": {
     ".": {
-      "release-type": "simple",
+      "release-type": "rust",
       "release-as": "2.0.0",
-      "package-name": "palamedes",
       "component": "palamedes",
       "changelog-path": "CHANGELOG.md",
-      "version-file": ".release-please-version",
       "extra-files": [
-        {
-          "type": "toml",
-          "path": "crates/palamedes/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/palamedes-node/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/palamedes-cli/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/palamedes-plugin/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value==\"palamedes\")].version"
-        },
-        {
-          "type": "toml",
-          "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value==\"palamedes-node\")].version"
-        },
-        {
-          "type": "toml",
-          "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value==\"palamedes-cli\")].version"
-        },
-        {
-          "type": "toml",
-          "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value==\"palamedes-plugin\")].version"
-        },
         {
           "type": "json",
           "path": "packages/cli/package.json",
