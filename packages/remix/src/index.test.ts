@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source-map-js";
 
 import type * as CoreNode from "@palamedes/core-node";
+import type * as PalamedesConfigModule from "@palamedes/config";
 
 import { createPalamedesRemixLoadHook } from "./index";
 
@@ -15,7 +16,8 @@ const mocks = vi.hoisted(() => ({
   loadPalamedesConfigSync: vi.fn(),
 }));
 
-vi.mock("@palamedes/config", () => ({
+vi.mock("@palamedes/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof PalamedesConfigModule>()),
   loadPalamedesConfigSync: mocks.loadPalamedesConfigSync,
 }));
 

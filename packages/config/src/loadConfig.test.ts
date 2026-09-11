@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   catalogMatchesSource,
   catalogResourcePath,
+  digestConfig,
+  getConfigDependencies,
   loadPalamedesConfig,
   loadPalamedesConfigSync,
   resolveCatalogPath,
@@ -95,6 +97,45 @@ describe("loadPalamedesConfig", () => {
       await realpath(localesPath),
       await realpath(settingsPath),
     ]);
+  });
+
+  it("keeps dependency fallback and sorted digests stable across integrations", async () => {
+    const fixtureDir = await createTempDir();
+    const configPath = path.join(fixtureDir, "palamedes.yaml");
+    const dependencyPath = path.join(fixtureDir, "settings.ts");
+    await writeFile(configPath, "config\n");
+    await writeFile(dependencyPath, "dependency\n");
+
+    const withDependencies = { configPath, configDependencies: [dependencyPath, configPath] };
+    const sortedDependencies = { configPath, configDependencies: [configPath, dependencyPath] };
+
+    expect(getConfigDependencies({ configPath })).toStrictEqual([configPath]);
+    expect(digestConfig({ configPath })).toBe(
+      digestConfig({ configPath, configDependencies: [configPath] }),
+    );
+    expect(digestConfig(withDependencies)).toBe(digestConfig(sortedDependencies));
+  });
+
+  it.skipIf(process.platform !== "win32")(
+    "uses native Windows dependency paths for fallback digests",
+    async () => {
+      const fixtureDir = await createTempDir();
+      const configPath = path.join(fixtureDir, "palamedes.yaml");
+      await writeFile(configPath, "config\n");
+
+      expect(getConfigDependencies({ configPath })).toStrictEqual([configPath]);
+      expect(digestConfig({ configPath })).toBeTypeOf("string");
+    },
+  );
+
+  it("preserves Windows dependency path spellings for host integrations", () => {
+    const configPath = "C:\\workspace\\palamedes.yaml";
+    const dependencies = [configPath, "C:\\workspace\\config\\settings.ts"];
+
+    expect(getConfigDependencies({ configPath, configDependencies: dependencies })).toStrictEqual(
+      dependencies,
+    );
+    expect(getConfigDependencies({ configPath })).toStrictEqual([configPath]);
   });
 
   it("loads a palamedes.yaml file with native field names", async () => {
