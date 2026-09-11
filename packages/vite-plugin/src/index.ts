@@ -15,6 +15,7 @@ import {
   loadPalamedesConfig,
   catalogMatchesSource,
   catalogResourcePath,
+  getConfigDependencies,
   type PalamedesCatalogConfig,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
@@ -378,10 +379,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function isConfigChange(id: string): boolean {
     return configDependencies.has(canonicalPath(stripQuery(id)));
-  }
-
-  function getConfigDependencies(cfg: LoadedPalamedesConfig): string[] {
-    return Array.isArray(cfg.configDependencies) ? cfg.configDependencies : [cfg.configPath];
   }
 
   function addConfigWatchFiles(

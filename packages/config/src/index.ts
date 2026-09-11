@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { access } from "node:fs/promises";
@@ -104,6 +105,30 @@ export type LoadedPalamedesConfig = {
   sourceReferenceRoot: string;
   referenceScopes: boolean;
 } & Omit<PalamedesConfig, "sourceReferenceRoot" | "referenceScopes">;
+
+type ConfigDependencyInput = Pick<LoadedPalamedesConfig, "configPath" | "configDependencies">;
+
+/** Return the files whose contents define a loaded configuration. */
+export function getConfigDependencies(config: ConfigDependencyInput): string[] {
+  return Array.isArray(config.configDependencies) ? config.configDependencies : [config.configPath];
+}
+
+/**
+ * Hash a configuration's dependency paths and contents in a stable order.
+ *
+ * The path and content separators are part of the cache contract: keep them
+ * unchanged so framework integrations invalidate identically on every host.
+ */
+export function digestConfig(config: ConfigDependencyInput): string {
+  const digest = createHash("sha256");
+  for (const dependency of [...getConfigDependencies(config)].sort()) {
+    digest.update(dependency);
+    digest.update("\0");
+    digest.update(readFileSync(dependency));
+    digest.update("\0");
+  }
+  return digest.digest("hex");
+}
 
 export type LoadPalamedesConfigOptions = {
   cwd?: string;

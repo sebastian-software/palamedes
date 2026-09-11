@@ -27,6 +27,7 @@ vi.mock("@palamedes/config", async (importOriginal) => {
     resolveCatalogPath: actual.resolveCatalogPath,
     catalogMatchesSource: actual.catalogMatchesSource,
     catalogResourcePath: actual.catalogResourcePath,
+    getConfigDependencies: actual.getConfigDependencies,
   };
 });
 
