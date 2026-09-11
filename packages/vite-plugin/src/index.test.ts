@@ -180,7 +180,9 @@ describe("palamedes vite plugin", () => {
       );
 
       expect(result).toStrictEqual({
-        code: "export default function MDXContent() { return <p>Translated</p> }",
+        code: expect.stringContaining(
+          "export default function MDXContent() { return <p>Translated</p> }",
+        ),
         map: expect.objectContaining({ mappings: "AAAA" }),
         ...(framework === "react" ? { moduleType: "jsx" } : {}),
       });
@@ -362,7 +364,7 @@ describe("palamedes vite plugin", () => {
     expect(invalidated).toStrictEqual([module]);
   });
 
-  it("runs macro lowering on compiled MDX when authored macro imports remain", () => {
+  it("runs macro lowering on compiled MDX when authored macro imports remain", async () => {
     mocks.transformPalamedesMacros.mockReturnValue({
       code: "export default function Guide() { return translated }",
       hasChanged: true,
@@ -377,7 +379,11 @@ describe("palamedes vite plugin", () => {
     const code =
       'import { Trans } from "@palamedes/react/macro"\nexport default <Trans>Hello</Trans>';
 
-    const result = transform.call({ error: vi.fn() } as any, code, "/repo/src/guide.mdx");
+    const result = await transform.call(
+      { error: vi.fn(), addWatchFile() {} } as any,
+      code,
+      "/repo/src/guide.mdx",
+    );
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       code,
@@ -415,8 +421,8 @@ describe("palamedes vite plugin", () => {
   });
 
   it.each([
-    ["build", true, true],
-    ["serve", true, false],
+    ["build", false, true],
+    ["serve", false, false],
   ] as const)(
     "sets runtime fallback metadata for Vite %s",
     (command, expectedFallbacks, expectedMetadataStrip) => {
@@ -449,7 +455,7 @@ describe("palamedes vite plugin", () => {
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ keepSourceFallbacks: true }),
+      expect.objectContaining({ keepSourceFallbacks: false }),
     );
   });
 
@@ -476,7 +482,7 @@ describe("palamedes vite plugin", () => {
   });
 });
 
-describe("experimental graph splitting", () => {
+describe("automatic graph splitting", () => {
   it("reloads sidecars after config edits without the MDX or PO plugins", async () => {
     mocks.transformPalamedesMacros.mockReturnValue({
       code: "transformed",
@@ -775,28 +781,54 @@ describe("experimental graph splitting", () => {
     expect(result?.code).toBe("transformed");
   });
 
-  it("does not append sidecar imports when the flag is off", async () => {
+  it("appends sidecar imports with default options", async () => {
     const result = (await runMacroTransform({}, undefined, ["id-a"])) as { code?: string } | null;
 
-    expect(result?.code).toBe("transformed");
+    expect(result?.code).toContain('import "virtual:palamedes-messages/');
   });
 
-  it("aggregates branded per-locale modules into one registration, including pseudo", async () => {
+  it("awaits only the active development fragment before evaluating the source body", async () => {
     const { load, key } = await runSidecarLoad(["id-a"]);
     const result = await load(`\0palamedes:messages/${key}`);
-
-    // The pseudo locale is a configured locale like any other here: the native
-    // selected compile resolves its catalog through the fallback chain and
-    // pseudolocalizes the result.
-    expect(result?.code).toBe(
-      `import { messages as m0 } from "virtual:palamedes-messages/${key}/en";\n` +
-        `import { messages as m1 } from "virtual:palamedes-messages/${key}/de";\n` +
-        `import { messages as m2 } from "virtual:palamedes-messages/${key}/pseudo";\n` +
-        `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 }, "${key}");\n`,
+    const code = result!
+      .code!.replace(/^import .*;\n/gm, "")
+      .replaceAll("import(", "loadFragment(");
+    const events: string[] = [];
+    const run = new Function(
+      "document",
+      "initializeClientI18n",
+      "createI18n",
+      "loadFragment",
+      "events",
+      `return (async()=>{${code};events.push("body")})()`,
     );
-    expect(result?.moduleSideEffects).toBe(true);
-    // Message compilation happens in the per-locale modules, not the aggregator.
+    const document = { documentElement: { lang: "de", dataset: {} } };
+    const i18n = { load: (locale: string) => events.push(`loaded:${locale}`) };
+    const loadFragment = vi.fn(async (url: string) => {
+      events.push(url);
+      return { messages: {} };
+    });
+    await run(
+      document,
+      () => i18n,
+      () => i18n,
+      loadFragment,
+      events,
+    );
+    expect(events).toEqual([`virtual:palamedes-messages/${key}/de`, "loaded:de", "body"]);
+    events.length = 0;
+    await expect(
+      run(
+        document,
+        () => i18n,
+        () => i18n,
+        async () => {
+          throw new Error("dependency failed");
+        },
+        events,
+      ),
+    ).rejects.toThrow("dependency failed");
+    expect(events).toEqual([]);
     expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
   });
 
@@ -928,33 +960,23 @@ describe("experimental graph splitting", () => {
     );
   }
 
-  it("binds client aggregators to bare specifiers under import-map binding", async () => {
-    const { load, key } = await runSidecarLoad(
-      ["id-a"],
-      {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
-    );
+  it("binds production fragments to the document locale before module evaluation", async () => {
+    const { load, key } = await runSidecarLoad(["id-a"], {}, { command: "build" });
     const result = await load(`\0palamedes:messages/${key}`, { ssr: false });
-
-    expect(result?.code).toBe(
-      `import { locale as l, messages as m } from "#pmds/${key}";\n` +
-        `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
-        `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ [l]: defineCompiledCatalog(m) }, "${key}");\n`,
-    );
+    expect(result?.code).toContain(`from "#pmds/${key}"`);
+    expect(result?.code).toContain("document.documentElement.lang");
+    expect(result?.code).toContain("if (l !== locale) throw");
+    expect(result?.code).toContain("i18n.load(locale, defineCompiledCatalog(m))");
   });
 
-  it("keeps SSR aggregators on the embedded form under import-map binding", async () => {
-    const { load, key } = await runSidecarLoad(
-      ["id-a"],
-      {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
-    );
-    const result = await load(`\0palamedes:messages/${key}`, { ssr: true });
-
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`);
-    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/de`);
-    expect(result?.code).not.toContain("#pmds/");
+  it("leaves server catalogs to the lazy shared server store", async () => {
+    const { load, key } = await runSidecarLoad(["id-a"], {}, { command: "build" });
+    expect(await load(`\0palamedes:messages/${key}`, { ssr: true })).toEqual({
+      code: "export {};",
+      map: null,
+      moduleSideEffects: false,
+    });
+    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
   });
 
   it("keeps dev-server aggregators on the embedded form under import-map binding", async () => {
@@ -969,20 +991,12 @@ describe("experimental graph splitting", () => {
     expect(result?.code).not.toContain("#pmds/");
   });
 
-  it("externalizes bare message specifiers under import-map binding", async () => {
-    const { sidecarPlugin } = await runSidecarLoad(
-      ["id-a"],
-      {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
-    );
-    const configResult = sidecarPlugin.config.call({} as never);
-    const external = configResult?.build?.rollupOptions?.external as (id: string) => boolean;
-
-    expect(external("#pmds/abc123")).toBe(true);
-    expect(external("react")).toBe(false);
-
-    const { sidecarPlugin: embeddedPlugin } = await runSidecarLoad(["id-a"]);
-    expect(embeddedPlugin.config.call({} as never)).toBeUndefined();
+  it("externalizes generated specifiers without modifying host external filters", async () => {
+    const { sidecarPlugin } = await runSidecarLoad(["id-a"]);
+    const resolve = sidecarPlugin.resolveId as Function;
+    expect(resolve("#pmds/abc123")).toEqual({ id: "#pmds/abc123", external: true });
+    expect(resolve("react")).toBeUndefined();
+    expect(sidecarPlugin.config).toBeUndefined();
   });
 
   it("emits per-locale message assets, import maps, and the manifest", async () => {

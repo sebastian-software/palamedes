@@ -29,77 +29,16 @@ export type ReactRouterCatalogDeliveryOptions = {
 export type ReactRouterDocumentTransformOptions = {
   /** A CSP nonce for the inline import-map element. */
   readonly nonce?: string;
+  /** Trusted catalog-independent host error markup; omit for a generic reload/home view. */
+  readonly errorHtml?: string;
 };
-
-export type ReactRouterCatalogFailureStore = {
-  /** Install capture listeners before React Router starts hydrating. */
-  install(): void;
-  /** Return a failure captured before the host mounted, if any. */
-  get(): Error | undefined;
-  /** Subscribe the host error UI to later fragment failures. */
-  subscribe(listener: (error: Error) => void): () => void;
-  dispose(): void;
-};
-
-/**
- * Bridges browser import-map fragment failures into a host's normal error UI.
- * It deliberately filters to generated Palamedes assets, leaving unrelated
- * browser errors to the host. Install this before HydratedRouter mounts so a
- * failed modulepreload cannot disappear before the route tree exists.
- */
-export function createReactRouterCatalogFailureStore(): ReactRouterCatalogFailureStore {
-  let failure: Error | undefined;
-  const listeners = new Set<(error: Error) => void>();
-  const onError = (event: Event) => {
-    const target = event.target as HTMLLinkElement | HTMLScriptElement | null;
-    const source =
-      (target instanceof HTMLLinkElement ? target.href : target instanceof HTMLScriptElement ? target.src : "") ||
-      (event as ErrorEvent).filename ||
-      "";
-    if (!isCatalogAsset(source)) return;
-    capture(new Error(`Palamedes catalog fragment failed to load: ${source}`));
-  };
-  const onRejection = (event: PromiseRejectionEvent) => {
-    const reason = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
-    if (!isCatalogAsset(`${reason.message}\n${reason.stack ?? ""}`)) return;
-    capture(reason);
-  };
-
-  return {
-    install() {
-      globalThis.addEventListener("error", onError, true);
-      globalThis.addEventListener("unhandledrejection", onRejection);
-    },
-    get: () => failure,
-    subscribe(listener) {
-      listeners.add(listener);
-      if (failure) listener(failure);
-      return () => listeners.delete(listener);
-    },
-    dispose() {
-      globalThis.removeEventListener("error", onError, true);
-      globalThis.removeEventListener("unhandledrejection", onRejection);
-      listeners.clear();
-    },
-  };
-
-  function capture(error: Error) {
-    if (failure) return;
-    failure = error;
-    for (const listener of listeners) listener(error);
-  }
-}
-
-const MISSING_DEVELOPMENT_MANIFEST = Symbol("missing-development-manifest");
 
 /**
  * Owns the server half of Vite's locale-bound catalog delivery for React
  * Router. Applications select a locale; they do not read manifests or splice
  * import maps and preloads into the document themselves.
  */
-export function createReactRouterCatalogDelivery(
-  options: ReactRouterCatalogDeliveryOptions,
-): {
+export function createReactRouterCatalogDelivery(options: ReactRouterCatalogDeliveryOptions): {
   readManifest(): ReactRouterCatalogManifest | null;
   getLocaleBinding(locale: string): ReactRouterCatalogBinding | null;
   createDocumentTransform(
@@ -120,7 +59,7 @@ export function createReactRouterCatalogDelivery(
       stamp = `${stat.mtimeMs}:${stat.size}`;
     } catch (error) {
       if (options.development && isMissingFile(error)) {
-        manifest = MISSING_DEVELOPMENT_MANIFEST as unknown as null;
+        manifest = null;
         manifestStamp = undefined;
         return null;
       }
@@ -188,8 +127,10 @@ export function createReactRouterCatalogDelivery(
     transformOptions: ReactRouterDocumentTransformOptions = {},
   ): Transform {
     if (!binding) return new PassThrough();
-    const nonce = transformOptions.nonce ? ` nonce="${escapeAttribute(transformOptions.nonce)}"` : "";
-    const importMap = `<script type="importmap"${nonce}>${binding.importMapJson}</script>`;
+    const nonce = transformOptions.nonce
+      ? ` nonce="${escapeAttribute(transformOptions.nonce)}"`
+      : "";
+    const importMap = `<script type="importmap"${nonce}>${escapeScriptData(binding.importMapJson)}</script>`;
     let buffered = "";
     let injected = false;
     return new Transform({
@@ -208,8 +149,19 @@ export function createReactRouterCatalogDelivery(
         const head = buffered.slice(0, headEnd);
         const tail = buffered.slice(headEnd);
         const preloads = modulePreloads(head, binding);
-        const links = preloads.map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`).join("");
-        callback(null, `${head}${importMap}${links}${tail}`);
+        const errorHtml =
+          transformOptions.errorHtml ??
+          '<main role="alert" data-palamedes-catalog-error><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="">Reload page</a> <a href="/">Go home</a></main>';
+        // React Router imports initial routes before executing entry.client.
+        // This independent module observes the same dependency promises and can
+        // show ordinary host error markup even when that entry never executes.
+        const probe = preloads.length
+          ? `<script type="module"${nonce}>try{await Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)))}catch(error){const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));}</script>`
+          : "";
+        const links = preloads
+          .map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`)
+          .join("");
+        callback(null, `${head}${importMap}${probe}${links}${tail}`);
         buffered = "";
       },
       flush(callback) {
@@ -222,18 +174,29 @@ export function createReactRouterCatalogDelivery(
 
 function validateManifest(value: unknown, manifestPath: string): ReactRouterCatalogManifest {
   if (!value || typeof value !== "object") {
-    throw new TypeError(`Palamedes React Router delivery manifest ${manifestPath} must be an object.`);
+    throw new TypeError(
+      `Palamedes React Router delivery manifest ${manifestPath} must be an object.`,
+    );
   }
   const record = value as Record<string, unknown>;
-  if (!Array.isArray(record.locales) || !record.locales.every((locale) => typeof locale === "string")) {
-    throw new TypeError(`Palamedes React Router delivery manifest ${manifestPath} has invalid locales.`);
+  if (
+    !Array.isArray(record.locales) ||
+    !record.locales.every((locale) => typeof locale === "string")
+  ) {
+    throw new TypeError(
+      `Palamedes React Router delivery manifest ${manifestPath} has invalid locales.`,
+    );
   }
   if (!isStringRecord(record.importMaps)) {
-    throw new TypeError(`Palamedes React Router delivery manifest ${manifestPath} has invalid importMaps.`);
+    throw new TypeError(
+      `Palamedes React Router delivery manifest ${manifestPath} has invalid importMaps.`,
+    );
   }
   const chunkImports = record.chunkImports ?? {};
   if (!isArrayRecord(chunkImports)) {
-    throw new TypeError(`Palamedes React Router delivery manifest ${manifestPath} has invalid chunkImports.`);
+    throw new TypeError(
+      `Palamedes React Router delivery manifest ${manifestPath} has invalid chunkImports.`,
+    );
   }
   return {
     locales: record.locales,
@@ -268,10 +231,6 @@ function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
 
-function isCatalogAsset(value: string): boolean {
-  return /(?:^|[\\/])palamedes-m-[a-f0-9]+(?:[.-]|$)/iu.test(value);
-}
-
 function modulePreloads(head: string, binding: ReactRouterCatalogBinding): string[] {
   const preloads = new Set<string>();
   for (const match of head.matchAll(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/giu)) {
@@ -295,4 +254,11 @@ function assetKey(href: string): string {
   }
   const assets = pathname.indexOf("assets/");
   return (assets >= 0 ? pathname.slice(assets) : pathname).replace(/^\/+/, "");
+}
+
+function escapeScriptData(value: string): string {
+  return value
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 }

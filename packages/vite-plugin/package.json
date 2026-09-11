@@ -51,14 +51,24 @@
         "default": "./dist/react-router.cjs"
       }
     },
-    "./react-router-client": {
+    "./delivery": {
       "import": {
-        "types": "./dist/react-router-client.d.mts",
-        "default": "./dist/react-router-client.mjs"
+        "types": "./dist/delivery.d.mts",
+        "default": "./dist/delivery.mjs"
       },
       "require": {
-        "types": "./dist/react-router-client.d.cts",
-        "default": "./dist/react-router-client.cjs"
+        "types": "./dist/delivery.d.cts",
+        "default": "./dist/delivery.cjs"
+      }
+    },
+    "./server": {
+      "import": {
+        "types": "./dist/server.d.mts",
+        "default": "./dist/server.mjs"
+      },
+      "require": {
+        "types": "./dist/server.d.cts",
+        "default": "./dist/server.cjs"
       }
     }
   },
@@ -72,6 +82,7 @@
   },
   "dependencies": {
     "@palamedes/config": "workspace:^",
+    "@palamedes/core": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"

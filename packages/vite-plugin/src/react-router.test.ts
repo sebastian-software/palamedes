@@ -10,7 +10,9 @@ import { createReactRouterCatalogDelivery } from "./react-router";
 const fixtureDirectories: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(fixtureDirectories.splice(0).map((directory) => rm(directory, { recursive: true })));
+  await Promise.all(
+    fixtureDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
+  );
 });
 
 describe("React Router catalog delivery", () => {
@@ -30,9 +32,7 @@ describe("React Router catalog delivery", () => {
     const clientDirectory = await createFixture();
     const delivery = createReactRouterCatalogDelivery({ clientDirectory });
 
-    expect(delivery.getLocaleBinding("de")?.imports["#pmds/route"]).toBe(
-      "/app/assets/route.de.js",
-    );
+    expect(delivery.getLocaleBinding("de")?.imports["#pmds/route"]).toBe("/app/assets/route.de.js");
     await writeFile(
       path.join(clientDirectory, "palamedes-split-manifest.json"),
       JSON.stringify({
@@ -59,7 +59,9 @@ describe("React Router catalog delivery", () => {
       createReactRouterCatalogDelivery({ clientDirectory }).getLocaleBinding("en"),
     ).toThrow(/client manifest is required/);
     expect(
-      createReactRouterCatalogDelivery({ clientDirectory, development: true }).getLocaleBinding("en"),
+      createReactRouterCatalogDelivery({ clientDirectory, development: true }).getLocaleBinding(
+        "en",
+      ),
     ).toBeNull();
   });
 
