@@ -313,7 +313,7 @@ describe("createRemixI18nServer", () => {
     });
 
     expect(() => remixI18n.createClientBootstrap("en")).toThrow(
-      /non-string message "greeting".*loadClientMessages.*compileCatalogArtifact/u,
+      /non-string message "greeting".*#1214 asset pipeline/u,
     );
   });
 
