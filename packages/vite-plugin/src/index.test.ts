@@ -144,6 +144,30 @@ describe("palamedes vite plugin", () => {
     );
   });
 
+  it.each([
+    ["locales/{locale}/messages.fcl", "/repo/locales/de/messages.fcl", "fcl"],
+    ["messages-{locale}.po", "/repo/messages-de.po", undefined],
+  ])(
+    "derives the configured locale from a nonstandard catalog path",
+    async (pattern, id, format) => {
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: "/repo/palamedes.yaml",
+        rootDir: "/repo",
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [{ path: pattern, include: ["src/**/*"], ...(format ? { format } : {}) }],
+      });
+
+      await runPoTransform({}, {}, id);
+
+      expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
+        expect.anything(),
+        id,
+        expect.objectContaining({ locale: "de" }),
+      );
+    },
+  );
+
   it("propagates strict compile failures when the removed opt-out is false", async () => {
     mocks.compileCatalogModule.mockRejectedValue(
       new Error("failOnCompileError no longer changes this behavior"),

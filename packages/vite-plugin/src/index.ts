@@ -122,6 +122,18 @@ function stripQuery(id: string): string {
   return id.split("?")[0] ?? id;
 }
 
+function catalogLocaleForResource(config: LoadedPalamedesConfig, resourcePath: string): string {
+  const canonicalResourcePath = canonicalPath(resourcePath);
+  return (
+    config.locales.find((locale) =>
+      config.catalogs.some(
+        (catalog) =>
+          canonicalPath(catalogResourcePath(config, catalog, locale)) === canonicalResourcePath,
+      ),
+    ) ?? path.basename(resourcePath, path.extname(resourcePath))
+  );
+}
+
 function canonicalPath(value: string): string {
   const pathImplementation = isWindowsPath(value) ? path.win32 : path;
   try {
@@ -1082,7 +1094,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cfg = await getConfigLazy();
         addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
         const cleanId = stripQuery(id);
-        const locale = path.basename(cleanId, path.extname(cleanId));
+        const locale = catalogLocaleForResource(cfg, cleanId);
         const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,
