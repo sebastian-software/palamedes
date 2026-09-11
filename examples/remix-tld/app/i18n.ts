@@ -45,6 +45,16 @@ export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "tld",
   loadMessages,
+  catalogAssets: {
+    config: {
+      rootDir: path.resolve(import.meta.dirname, ".."),
+      locales: [...LOCALES],
+      sourceLocale: DEFAULT_LOCALE,
+      catalogs: [{ path: "app/locales/{locale}", include: ["app"] }],
+    },
+    resolvePath: (locale) =>
+      path.resolve(import.meta.dirname, "..", "app", "locales", `${locale}.po`),
+  },
 });
 
 export function resolveLocaleFromRequest(request: Request): ResolvedLocale {
@@ -82,3 +92,4 @@ export function resolveLocaleRedirect(
   const allowedRedirect = getTldSwitchLinks(request).find((item) => item.locale === locale)?.href;
   return typeof redirect === "string" && redirect === allowedRedirect ? redirect : fallback;
 }
+import path from "node:path";

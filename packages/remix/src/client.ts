@@ -43,6 +43,21 @@ export type InitializeRemixClientI18nOptions<
   bootstrap?: unknown;
 };
 
+export type RemixClientCatalogModule<TLocale extends string = string> = {
+  locale: TLocale;
+  catalogVersion: string;
+  messages: CompiledCatalogMessages;
+};
+
+export type InitializeRemixClientI18nAsyncOptions<
+  TLocale extends string,
+  T extends PalamedesI18n,
+> = Omit<InitializeRemixClientI18nOptions<TLocale, T>, "bootstrap"> & {
+  catalogUrl?: string;
+  loadCatalog?: () => Promise<unknown>;
+  catalog?: unknown;
+};
+
 /**
  * Read and validate the inert catalog payload emitted by the Remix server
  * integration. The payload contains no executable script and never imports a
@@ -159,6 +174,66 @@ export function initializeRemixClientI18n<TLocale extends string, T extends Pala
     });
   }
   return installed;
+}
+
+/** Load and install an adapter-owned executable catalog ESM asset. */
+export async function initializeRemixClientI18nAsync<
+  TLocale extends string,
+  T extends PalamedesI18n,
+>(options: InitializeRemixClientI18nAsyncOptions<TLocale, T>): Promise<T> {
+  if (isServerEnvironment()) {
+    throw new Error("Palamedes Remix client catalog assets can only run in a browser environment.");
+  }
+
+  let loaded: unknown;
+  try {
+    if (options.catalog !== undefined) {
+      loaded = options.catalog;
+    } else if (options.loadCatalog) {
+      loaded = await options.loadCatalog();
+    } else if (options.catalogUrl) {
+      loaded = await import(/* @vite-ignore */ options.catalogUrl);
+    } else {
+      throw new TypeError(
+        "Provide catalogUrl, loadCatalog, or catalog from remixI18n.renderClientCatalog(locale).",
+      );
+    }
+  } catch (error) {
+    throw new Error("Palamedes Remix executable catalog asset could not be loaded.", {
+      cause: error,
+    });
+  }
+
+  const module = validateCatalogModule<TLocale>(loaded);
+  return initializeRemixClientI18n({
+    ...options,
+    bootstrap: module,
+  });
+}
+
+function validateCatalogModule<TLocale extends string>(
+  value: unknown,
+): RemixClientCatalogModule<TLocale> {
+  const candidate = isPlainObject(value) && isPlainObject(value.default) ? value.default : value;
+  if (!isPlainObject(candidate)) {
+    throw new TypeError("Palamedes Remix executable catalog asset must export an object.");
+  }
+  if (typeof candidate.locale !== "string" || candidate.locale.length === 0) {
+    throw new TypeError("Palamedes Remix executable catalog asset has no locale export.");
+  }
+  if (typeof candidate.catalogVersion !== "string" || candidate.catalogVersion.length === 0) {
+    throw new TypeError("Palamedes Remix executable catalog asset has no catalogVersion export.");
+  }
+  if (!isCompiledCatalog(candidate.messages)) {
+    throw new TypeError(
+      `Palamedes Remix executable catalog asset for locale "${candidate.locale}" does not contain a compiled catalog.`,
+    );
+  }
+  return {
+    locale: candidate.locale as TLocale,
+    catalogVersion: candidate.catalogVersion,
+    messages: candidate.messages,
+  };
 }
 
 function validateBootstrap<TLocale extends string>(value: unknown): RemixI18nBootstrap<TLocale> {

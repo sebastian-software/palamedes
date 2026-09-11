@@ -7,6 +7,11 @@ import {
   type PalamedesI18n,
 } from "@palamedes/core";
 import type { LocaleControls, LocaleSource } from "@palamedes/core/locale";
+import {
+  compileCatalogArtifact,
+  compileCatalogModule,
+  type CatalogArtifactConfig,
+} from "@palamedes/core-node";
 import type { I18nInstance } from "@palamedes/runtime";
 import { createScopedI18nRunner, createServerI18nScope } from "@palamedes/runtime/server";
 import { AcceptLanguage } from "remix/headers";
@@ -62,6 +67,16 @@ export type RemixI18nServerOptions<
   loadClientMessages?: (locale: TLocale) => CatalogMessages;
   /** Override the deterministic content hash used for client catalog versions. */
   catalogVersion?: string | ((input: { locale: TLocale; messages: CatalogMessages }) => string);
+  /**
+   * Configuration for adapter-owned executable browser catalog assets. The
+   * adapter compiles the requested locale into an ESM module and serves it
+   * through `serveClientCatalogAsset()`; no catalog functions cross JSON.
+   */
+  catalogAssets?: {
+    config: CatalogArtifactConfig;
+    resolvePath: (locale: TLocale) => string;
+    basePath?: string;
+  };
   createI18n?: () => T;
   routeParam?: string;
   cookieName?: string;
@@ -83,7 +98,16 @@ export type RemixI18nServer<TLocale extends string, T extends PalamedesI18n = Pa
   get(context?: RequestContext<any, any>): RemixI18nContextValue<TLocale, T> | undefined;
   createClientBootstrap(locale: TLocale): RemixI18nBootstrap<TLocale>;
   renderClientBootstrap(locale: TLocale, options?: { elementId?: string }): string;
+  createClientCatalogAsset(locale: TLocale): RemixClientCatalogAsset<TLocale>;
+  renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
+  serveClientCatalogAsset(request: Request): Response | undefined;
   serializeLocaleCookie(locale: TLocale): string;
+};
+
+export type RemixClientCatalogAsset<TLocale extends string = string> = {
+  locale: TLocale;
+  catalogVersion: string;
+  source: string;
 };
 
 export const remixI18nContext: RemixContextKey<RemixI18nContextValue<string, I18nInstance>> =
@@ -120,6 +144,7 @@ export function createRemixI18nServer<
   const scope = createServerI18nScope<T>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
   const clientBootstrapCache = new Map<TLocale, RemixI18nBootstrap<TLocale>>();
+  const clientCatalogAssetCache = new Map<TLocale, RemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
   const createI18nInstance = options.createI18n ?? (() => createI18n() as unknown as T);
   const cookieName = options.cookieName ?? "locale";
@@ -165,6 +190,81 @@ export function createRemixI18nServer<
     const bootstrap = Object.freeze({ locale, catalogVersion, messages });
     clientBootstrapCache.set(locale, bootstrap);
     return bootstrap;
+  };
+
+  const createClientCatalogAsset = (locale: TLocale): RemixClientCatalogAsset<TLocale> => {
+    const cached = clientCatalogAssetCache.get(locale);
+    if (cached) {
+      return cached;
+    }
+
+    const assetOptions = options.catalogAssets;
+    if (!assetOptions) {
+      throw new Error(
+        "Palamedes Remix executable catalog assets require catalogAssets.config and catalogAssets.resolvePath.",
+      );
+    }
+
+    const resourcePath = assetOptions.resolvePath(locale);
+    const result = compileCatalogModule(assetOptions.config, resourcePath, {
+      locale,
+      pseudoLocale: assetOptions.config.pseudoLocale,
+      missingFailureHint:
+        "You see this error because executable Remix catalog asset compilation failed on a missing translation.",
+      compileFailureHint:
+        "These errors fail loading because executable Remix catalog asset compilation was configured as fatal.",
+      diagnosticsWarningHint:
+        "Inspect the generated Remix catalog asset diagnostics before deploying this locale.",
+    });
+    result.warnings.forEach((warning) => console.warn(warning));
+    const catalogVersion = resolveCatalogAssetVersion(
+      locale,
+      result.code,
+      options.catalogVersion,
+      typeof options.catalogVersion === "function"
+        ? compileCatalogArtifact(assetOptions.config, resourcePath).messages
+        : undefined,
+    );
+    const source = `${result.code}export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`;
+    const asset = Object.freeze({ locale, catalogVersion, source });
+    clientCatalogAssetCache.set(locale, asset);
+    return asset;
+  };
+
+  const renderClientCatalog = (locale: TLocale, renderOptions: { basePath?: string } = {}) => {
+    const basePath = renderOptions.basePath ?? options.catalogAssets?.basePath ?? "/assets";
+    const href = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog/${encodeURIComponent(locale)}.js`;
+    return `<link rel="modulepreload" href="${escapeHtmlAttribute(href)}" data-palamedes-catalog-locale="${escapeHtmlAttribute(locale)}" data-palamedes-catalog-version="${escapeHtmlAttribute(createClientCatalogAsset(locale).catalogVersion)}" />`;
+  };
+
+  const serveClientCatalogAsset = (request: Request): Response | undefined => {
+    const basePath = options.catalogAssets?.basePath ?? "/assets";
+    const pathname = new URL(request.url).pathname;
+    const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog/`;
+    if (!pathname.startsWith(prefix) || !pathname.endsWith(".js")) {
+      return undefined;
+    }
+    const encodedLocale = pathname.slice(prefix.length, -3);
+    const locale = decodeURIComponent(encodedLocale) as TLocale;
+    if (!options.locales.locales.includes(locale)) {
+      return new Response(`Unknown Palamedes locale "${locale}".`, { status: 404 });
+    }
+    try {
+      const asset = createClientCatalogAsset(locale);
+      return new Response(asset.source, {
+        headers: {
+          "cache-control": "no-cache",
+          "content-type": "application/javascript; charset=utf-8",
+          etag: `"${asset.catalogVersion}"`,
+          vary: "Accept-Encoding",
+        },
+      });
+    } catch (error) {
+      return new Response(
+        `Palamedes Remix executable catalog asset failed for locale "${locale}": ${error instanceof Error ? error.message : String(error)}`,
+        { status: 500 },
+      );
+    }
   };
 
   async function run<Result>(
@@ -221,6 +321,12 @@ export function createRemixI18nServer<
 
     createClientBootstrap,
 
+    createClientCatalogAsset,
+
+    renderClientCatalog,
+
+    serveClientCatalogAsset,
+
     renderClientBootstrap(locale, renderOptions = {}) {
       const elementId = renderOptions.elementId ?? REMIX_I18N_BOOTSTRAP_ID;
       return `<template id="${escapeHtmlAttribute(elementId)}">${serializeBootstrap(createClientBootstrap(locale))}</template>`;
@@ -267,6 +373,27 @@ function resolveCatalogVersion<TLocale extends string>(
     throw new TypeError("Palamedes Remix client catalog version must be a non-empty string.");
   }
   return resolved;
+}
+
+function resolveCatalogAssetVersion<TLocale extends string>(
+  locale: TLocale,
+  source: string,
+  version: RemixI18nServerOptions<TLocale>["catalogVersion"],
+  messages?: CatalogMessages,
+): string {
+  const resolved =
+    typeof version === "function"
+      ? version({ locale, messages: messages ?? Object.create(null) })
+      : version;
+  if (typeof resolved === "string" && resolved.length > 0) {
+    return resolved;
+  }
+  // Asset sources contain executable message functions, so hash the exact
+  // bytes delivered to the browser. This keeps cache invalidation stable
+  // without trying to serialize or inspect function values.
+  return createHash("sha256")
+    .update(JSON.stringify([locale, source]))
+    .digest("hex");
 }
 
 function hashCatalog(locale: string, messages: CatalogMessages): string {

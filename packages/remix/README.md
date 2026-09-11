@@ -86,22 +86,43 @@ is therefore never expected to hot-swap only an already running browser module.
 
 This integration is tested against `remix@3.0.0-rc.1`:
 
-| Area                   | Status                                                                                             |
-| ---------------------- | -------------------------------------------------------------------------------------------------- |
-| Server macros          | `t`, `plural`, `select`, and `selectOrdinal` through the Node register hook                        |
-| Browser macros         | The same ordinary macros through `createPalamedesRemixAssetLoader()`                               |
-| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules                     |
-| Client catalog         | Generated executable asset selected by the host; legacy inert ICU bootstrap rejected pending #1214 |
-| HMR and source maps    | Authored TS/TSX mappings plus Remix watch/HMR invalidation for browser source modules              |
-| Remix UI Frames        | Server-rendered document and direct frame requests retain independent request scope                |
-| Locale switching       | Cookie, route, subdomain, and TLD through intentional full-document navigation                     |
-| Public hosting         | Repository example and CI browser proof are ready; a public live deployment is pending             |
+| Area                   | Status                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| Server macros          | `t`, `plural`, `select`, and `selectOrdinal` through the Node register hook               |
+| Browser macros         | The same ordinary macros through `createPalamedesRemixAssetLoader()`                      |
+| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules            |
+| Client catalog         | Adapter-owned executable ESM asset selected by locale; no function-bearing JSON transport |
+| HMR and source maps    | Authored TS/TSX mappings plus Remix watch/HMR invalidation for browser source modules     |
+| Remix UI Frames        | Server-rendered document and direct frame requests retain independent request scope       |
+| Locale switching       | Cookie, route, subdomain, and TLD through intentional full-document navigation            |
+| Public hosting         | Repository example and CI browser proof are ready; a public live deployment is pending    |
 
 Reactive in-document locale replacement is intentionally not supported. A
 locale change must create a new document so SSR markup, `<html lang>`, the
 bootstrap catalog, and browser runtime always agree.
 
-## Browser Catalog Bootstrap
+## Browser Catalog Assets
+
+Configure `catalogAssets` with the compiler config and a locale-to-`.po`
+resolver. Render `renderClientCatalog(locale)` into the document head and send
+matching `/assets/__palamedes/catalog/:locale.js` requests to
+`serveClientCatalogAsset(request)` before the normal Remix asset server. The
+browser entry loads the executable module before importing translated code:
+
+```ts
+import { initializeRemixClientI18nAsync } from "@palamedes/remix/client";
+
+const link = document.querySelector("link[data-palamedes-catalog-locale]");
+if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset link");
+await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
+```
+
+Only the active locale module is requested. The module exports the locale,
+content digest, and branded compiled functions; no catalog functions cross
+HTML or JSON. Missing assets, locale mismatches, and invalid compiled modules
+fail before translated browser modules execute.
+
+## Legacy Browser Catalog Bootstrap
 
 The old JSON bootstrap is an inert migration boundary. It cannot initialize the
 parser-free runtime; deliver the generated executable catalog through the Remix

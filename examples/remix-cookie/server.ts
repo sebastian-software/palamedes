@@ -5,6 +5,7 @@ import { createAssetServer } from "remix/assets";
 import { createRequestListener } from "remix/node-fetch-server";
 
 import { router } from "./app/router.ts";
+import { remixI18n } from "./app/i18n.ts";
 
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 4060;
 const assetServer = createAssetServer({
@@ -26,6 +27,8 @@ const server = http.createServer(
   createRequestListener(async (request) => {
     try {
       if (new URL(request.url).pathname.startsWith("/assets/")) {
+        const catalog = remixI18n.serveClientCatalogAsset(request);
+        if (catalog) return catalog;
         return (await assetServer.fetch(request)) ?? new Response("Not Found", { status: 404 });
       }
       return await router.fetch(request);

@@ -3,6 +3,7 @@ import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  initializeRemixClientI18nAsync,
   initializeRemixClientI18n,
   readRemixI18nBootstrap,
   REMIX_I18N_BOOTSTRAP_ID,
@@ -42,6 +43,34 @@ describe("Remix client i18n bootstrap", () => {
     });
 
     expect(getI18n()._("greeting")).toBe("Hello");
+  });
+
+  it("loads an executable catalog module before browser modules execute", async () => {
+    vi.stubGlobal("window", {});
+
+    await initializeRemixClientI18nAsync({
+      createI18n,
+      document: createBootstrapDocument("de", undefined),
+      loadCatalog: async () => ({
+        locale: "de",
+        catalogVersion: "de-v2",
+        messages: defineCompiledCatalog({ greeting: "Hallo" }),
+      }),
+    });
+
+    expect(getI18n()._("greeting")).toBe("Hallo");
+  });
+
+  it("fails a missing executable catalog with an actionable asset diagnostic", async () => {
+    vi.stubGlobal("window", {});
+
+    await expect(
+      initializeRemixClientI18nAsync({
+        createI18n,
+        document: createBootstrapDocument("en", undefined),
+        loadCatalog: async () => ({ locale: "en", catalogVersion: "v1", messages: {} }),
+      }),
+    ).rejects.toThrow(/executable catalog asset.*compiled catalog/u);
   });
 
   it("rejects explicit bootstrap in a server environment before installation", () => {

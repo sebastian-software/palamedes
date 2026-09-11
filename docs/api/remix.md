@@ -218,10 +218,12 @@ a different param name. Cookie serialization is available through
 
 Further `createRemixI18nServer` options: `createI18n` (factory for the
 request-local instance), `cookieName` (default `"locale"`), and `cookieMaxAge`
-(default one year, in seconds). `loadClientMessages(locale)` is a legacy
-migration hook for inert string data; the parser-free client cannot execute its
-result. `catalogVersion` overrides the default deterministic content digest
-with a non-empty string or a function of `{ locale, messages }`.
+(default one year, in seconds). `catalogAssets` accepts the shared compiler
+configuration and a locale-to-`.po` resolver. The adapter exposes
+`createClientCatalogAsset(locale)`, `renderClientCatalog(locale)`, and
+`serveClientCatalogAsset(request)` for executable ESM delivery. `catalogVersion`
+overrides the default deterministic content digest with a non-empty string or a
+function of `{ locale, messages }`.
 
 Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
 object exposes `resolveLocale(input)` for standalone locale resolution,
@@ -230,7 +232,45 @@ read accessor for the active request scope, which is how handlers running
 under `middleware()` reach the current i18n instance. It also exposes
 `createClientBootstrap(locale)` and `renderClientBootstrap(locale, options?)`.
 
-## Client Document Bootstrap
+## Client Catalog Assets
+
+Configure `catalogAssets` once on the server. It compiles the requested locale
+to an executable ESM module and keeps compiled functions out of HTML and JSON:
+
+```ts
+const remixI18n = createRemixI18nServer({
+  locales,
+  strategy: "cookie",
+  loadMessages,
+  catalogAssets: {
+    config: { rootDir, locales: [...locales.locales], sourceLocale: "en", catalogs },
+    resolvePath: (locale) => path.join(rootDir, "app/locales", `${locale}.po`),
+  },
+});
+```
+
+Render `remixI18n.renderClientCatalog(locale)` in the document head and route
+`/assets/__palamedes/catalog/:locale.js` through
+`remixI18n.serveClientCatalogAsset(request)` before the regular Remix asset
+server. The generated module exports the active locale, a stable digest, and a
+branded compiled catalog.
+
+```ts
+import { initializeRemixClientI18nAsync } from "@palamedes/remix/client";
+
+const link = document.querySelector("link[data-palamedes-catalog-locale]");
+if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset link");
+await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
+await import("./translated-app.js");
+```
+
+The async initializer validates the module, exact `<html lang>` match, version,
+and compiled catalog before translated browser modules run. `loadCatalog` and
+`catalog` are available for CSP-aware hosts and deterministic tests. The active
+locale is the only catalog requested by the browser; locale changes require a
+full document navigation.
+
+## Legacy Client Document Bootstrap
 
 Render the payload while the server request scope is active, using exactly the
 locale already selected for the document:

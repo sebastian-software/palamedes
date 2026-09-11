@@ -22,7 +22,7 @@ export default createController(routes, {
         async ({ locale }) =>
           new Response(
             renderHomePage({
-              clientBootstrap: remixI18n.renderClientBootstrap(locale),
+              clientCatalog: remixI18n.renderClientCatalog(locale),
               clientProof: await renderToString(
                 createElement(ClientProof, { audience: "developer", count: 1 }),
               ),

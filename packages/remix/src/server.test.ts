@@ -317,6 +317,50 @@ describe("createRemixI18nServer", () => {
     );
   });
 
+  it("serves only the requested locale as an executable catalog module", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-catalog-"));
+    const localePath = path.join(root, "de.po");
+    writeFileSync(
+      path.join(root, "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hello"\n',
+    );
+    writeFileSync(localePath, 'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hallo"\n');
+    try {
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({ greeting: "Hallo" }),
+        catalogAssets: {
+          config: {
+            rootDir: root,
+            locales: ["en", "de", "es"],
+            sourceLocale: "en",
+            catalogs: [{ path: "{locale}", include: ["."] }],
+          },
+          resolvePath: () => localePath,
+        },
+      });
+
+      const asset = remixI18n.createClientCatalogAsset("de");
+      expect(asset.source).toContain("defineCompiledCatalog");
+      expect(asset.source).toContain('export const locale="de"');
+      expect(asset.source).not.toContain("msgid");
+      expect(remixI18n.renderClientCatalog("de")).toContain("/assets/__palamedes/catalog/de.js");
+      const response = remixI18n.serveClientCatalogAsset(
+        new Request("https://example.test/assets/__palamedes/catalog/de.js"),
+      );
+      expect(response?.status).toBe(200);
+      expect(response?.headers.get("content-type")).toContain("javascript");
+      expect(
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
+        )?.status,
+      ).toBe(404);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("uses a new document payload after cookie-driven locale navigation", async () => {
     const remixI18n = createRemixI18nServer({
       locales,
@@ -334,3 +378,6 @@ describe("createRemixI18nServer", () => {
     await expect(localeFor("locale=es")).resolves.toBe("es");
   });
 });
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";

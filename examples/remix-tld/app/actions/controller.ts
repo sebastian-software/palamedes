@@ -20,6 +20,7 @@ export default createController(routes, {
         ({ locale }) =>
           new Response(
             renderHomePage({
+              clientCatalog: remixI18n.renderClientCatalog(locale),
               banner: getTldBanner(context.request, locale),
               locale,
               localeLabel: getLocaleLabel(normalizeLocale(locale)),
