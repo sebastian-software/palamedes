@@ -242,6 +242,18 @@ async function captureScreenshot(page, example, state) {
   });
 }
 
+async function rejectModuleEvaluation(route, message) {
+  const response = await route.fetch();
+  const headers = { ...response.headers(), "cache-control": "no-store" };
+  delete headers.etag;
+  delete headers["last-modified"];
+  await route.fulfill({
+    response,
+    headers,
+    body: `${await response.text()}\nthrow new Error(${JSON.stringify(message)});`,
+  });
+}
+
 test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
   const example = activeExample();
   if (example.id !== "remix-cookie") {
@@ -277,11 +289,7 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
       return;
     }
     if (failure === "entry-evaluation") {
-      await route.fulfill({
-        body: 'throw new Error("injected Remix entry evaluation failure");',
-        contentType: "application/javascript",
-        status: 200,
-      });
+      await rejectModuleEvaluation(route, "injected Remix entry evaluation failure");
       return;
     }
     await route.continue();
@@ -292,11 +300,7 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
       return;
     }
     if (failure === "fragment-evaluation") {
-      await route.fulfill({
-        body: 'throw new Error("injected Remix catalog fragment evaluation failure");',
-        contentType: "application/javascript",
-        status: 200,
-      });
+      await rejectModuleEvaluation(route, "injected Remix catalog fragment evaluation failure");
       return;
     }
     await route.continue();
@@ -367,10 +371,7 @@ test("Remix lazy catalog failures recover in all document locales under CSP", as
         fragments.push(route.request().url());
         if (!fail) return route.continue();
         if (mode === "network") return route.abort("failed");
-        await route.fulfill({
-          contentType: "application/javascript",
-          body: 'throw new Error("injected catalog evaluation failure")',
-        });
+        await rejectModuleEvaluation(route, "injected catalog evaluation failure");
       });
       await page.goto(example.baseUrl, { waitUntil: "domcontentloaded" });
       await waitForClientReady(page);
