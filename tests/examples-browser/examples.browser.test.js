@@ -446,6 +446,28 @@ test("matrix example browser contract", async () => {
     }
   });
 
+  if (example.id === "tanstack-route") {
+    // Server-function URLs have no locale path. Exercise the documented
+    // validated header policy when the document deliberately suppresses the
+    // browser Referer header.
+    await page.route("**/*", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      if (
+        route.request().resourceType() !== "document" ||
+        requestUrl.hostname !== "127.0.0.1" ||
+        requestUrl.pathname !== "/de"
+      ) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), "referrer-policy": "no-referrer" },
+      });
+    });
+  }
+
   const initialUrl =
     example.strategy === "route"
       ? routeUrl(example.baseUrl)
@@ -661,6 +683,13 @@ test("matrix example browser contract", async () => {
   await expect
     .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
     .toContain("de");
+  if (example.id === "tanstack-route") {
+    await expect
+      .poll(
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "",
+      )
+      .toBe("Serverfunktion bestätigte Sprache de.");
+  }
   await expectSettledDocumentLocale(page, "de");
   expectNoRuntimeErrors(pageErrors, hydrationErrors);
   await captureScreenshot(page, example, "interactive");

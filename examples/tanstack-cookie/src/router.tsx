@@ -1,12 +1,27 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
+function DefaultErrorComponent() {
+  return (
+    <main role="alert">
+      <h1>This page is temporarily unavailable.</h1>
+      <p>Reload the page to try again.</p>
+      <button onClick={() => window.location.reload()} type="button">
+        Reload page
+      </button>
+    </main>
+  );
+}
+
 export function getRouter() {
+  const nonce = typeof process !== "undefined" ? process.env.PALAMEDES_CSP_NONCE : undefined;
   return createTanStackRouter({
     routeTree,
     scrollRestoration: true,
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
+    defaultErrorComponent: DefaultErrorComponent,
+    ...(nonce ? { ssr: { nonce } } : {}),
   });
 }
 

@@ -1,7 +1,6 @@
 import { createI18n, type CreateI18nOptions, type PalamedesI18n } from "@palamedes/core";
 import {
   createViteCatalogDelivery,
-  type ViteCatalogDeliveryOptions,
   type ViteDocumentTransformOptions,
 } from "@palamedes/vite-plugin/delivery";
 import path from "node:path";
@@ -15,7 +14,13 @@ export type TanStackServerI18nOptions = CreateI18nOptions & {
   readonly locale: string;
 };
 
-export type TanStackCatalogDeliveryOptions = ViteCatalogDeliveryOptions & {
+export type TanStackCatalogDeliveryOptions = {
+  /** Built client output; defaults to `dist/client` from the host process. */
+  readonly clientDirectory?: string;
+  /** Use development-generated active-locale dependencies before a client build exists. */
+  readonly development?: boolean;
+  /** Override the generated manifest filename for a custom Vite output. */
+  readonly manifestName?: string;
   /** Trusted catalog-independent markup rendered when a catalog fails. */
   readonly errorHtml?: string;
   /** Resolve a CSP nonce for each request. */
@@ -47,44 +52,46 @@ export async function createTanStackServerI18n(
  * can evaluate its route entry.
  */
 export function createTanStackCatalogResponseDelivery(
-  options: TanStackCatalogDeliveryOptions = {
-    // TanStack Start's Vite builder writes the browser graph to dist/client.
-    // Hosts can override this when they customize `build.outDir`.
-    clientDirectory: path.resolve(process.cwd(), "dist/client"),
-    development: process.env.NODE_ENV !== "production",
-  },
+  options: TanStackCatalogDeliveryOptions = {},
 ): (result: unknown, locale: string, request: Request) => Promise<unknown> {
-  const delivery = createViteCatalogDelivery(options);
+  const resolvedOptions = {
+    ...options,
+    // A caller commonly supplies only a request nonce. Keep the framework's
+    // default output location in that case instead of passing an undefined
+    // clientDirectory into the shared Vite delivery factory.
+    clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), "dist/client"),
+    development: options.development ?? process.env.NODE_ENV !== "production",
+  };
+  const delivery = createViteCatalogDelivery(resolvedOptions);
   return async (result, locale, request) => {
     const response = result instanceof Response ? result : getNestedResponse(result);
     if (!response || !response.body || !isHtmlResponse(response)) return result;
     const binding = delivery.getLocaleBinding(locale);
-    const nonce = options.nonce
-      ? typeof options.nonce === "function"
-        ? options.nonce(request)
-        : options.nonce
+    const nonce = resolvedOptions.nonce
+      ? typeof resolvedOptions.nonce === "function"
+        ? resolvedOptions.nonce(request)
+        : resolvedOptions.nonce
       : undefined;
-    if (!binding && !nonce) return result;
+    if (!binding && !nonce && resolvedOptions.development !== true) return result;
     const transformOptions: ViteDocumentTransformOptions = {
-      ...(options.errorHtml ? { errorHtml: options.errorHtml } : {}),
+      ...(resolvedOptions.errorHtml ? { errorHtml: resolvedOptions.errorHtml } : {}),
       ...(nonce ? { nonce } : {}),
     };
     let body = response.body;
-    if (binding) {
+    if (binding || resolvedOptions.development === true) {
       body = body.pipeThrough(
         Transform.toWeb(
           delivery.createDocumentTransform(binding, transformOptions),
         ) as unknown as ReadableWritablePair,
       );
     }
-    if (nonce) {
-      body = body.pipeThrough(
-        Transform.toWeb(createScriptNonceTransform(nonce)) as unknown as ReadableWritablePair,
-      );
-    }
     body = body.pipeThrough(
       Transform.toWeb(
-        createTanStackBootstrapGateTransform({ development: options.development === true }),
+        createTanStackBootstrapGateTransform({
+          development: resolvedOptions.development === true,
+          allowedOrigins: getAllowedScriptOrigins(binding, request.url),
+          baseOrigin: new URL(request.url).origin,
+        }),
       ) as unknown as ReadableWritablePair,
     );
     const headers = new Headers(response.headers);
@@ -101,78 +108,6 @@ export function createTanStackCatalogResponseDelivery(
   };
 }
 
-/**
- * Framework SSR streams can contain inline bootstrap scripts. When a host
- * supplies a nonce, carry it to those scripts as well as the adapter-owned
- * import map/readiness probe so `script-src 'self' 'nonce-…'` remains usable.
- */
-function createScriptNonceTransform(nonce: string): Transform {
-  const decoder = new StringDecoder("utf8");
-  let buffered = "";
-  let insideScript = false;
-  const escaped = escapeAttribute(nonce);
-
-  const flushMarkup = (final: boolean): string => {
-    const lower = buffered.toLowerCase();
-    let cursor = 0;
-    let output = "";
-
-    while (cursor < buffered.length) {
-      if (insideScript) {
-        const close = lower.indexOf("</script", cursor);
-        if (close === -1) {
-          const keep = final ? buffered.length : trailingPrefixLength(lower, cursor, "</script");
-          output += buffered.slice(cursor, keep);
-          cursor = keep;
-          break;
-        }
-        output += buffered.slice(cursor, close);
-        insideScript = false;
-        cursor = close;
-        continue;
-      }
-
-      const open = findScriptOpen(lower, cursor);
-      if (open === -1) {
-        const keep = final ? buffered.length : trailingPrefixLength(lower, cursor, "<script");
-        output += buffered.slice(cursor, keep);
-        cursor = keep;
-        break;
-      }
-
-      output += buffered.slice(cursor, open);
-      const end = findTagEnd(buffered, open);
-      if (end === -1) {
-        cursor = open;
-        break;
-      }
-
-      let openingTag = buffered.slice(open, end + 1);
-      if (!/(?:[\s<])nonce\s*=/iu.test(openingTag)) {
-        openingTag = openingTag.replace(/^<script\b/iu, (match) => `${match} nonce="${escaped}"`);
-      }
-      output += openingTag;
-      insideScript = true;
-      cursor = end + 1;
-    }
-
-    buffered = buffered.slice(cursor);
-    return output;
-  };
-
-  return new Transform({
-    transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
-      buffered += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
-      callback(null, flushMarkup(false));
-    },
-    flush(callback) {
-      buffered += decoder.end();
-      callback(null, flushMarkup(true));
-    },
-  });
-}
-
-const TANSTACK_ENTRY_PATTERN = /\ssrc=(['"])(\/assets\/index-[^'"]+\.js)\1/iu;
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 
@@ -182,7 +117,11 @@ const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
  * promise so a rejected catalog cannot be followed by framework hydration
  * over the host's catalog error document.
  */
-function createTanStackBootstrapGateTransform(options: { development: boolean }): Transform {
+function createTanStackBootstrapGateTransform(options: {
+  development: boolean;
+  allowedOrigins: ReadonlySet<string>;
+  baseOrigin: string;
+}): Transform {
   const decoder = new StringDecoder("utf8");
   let buffered = "";
 
@@ -226,9 +165,11 @@ function createTanStackBootstrapGateTransform(options: { development: boolean })
         break;
       }
       const openingTag = buffered.slice(open, openingEnd + 1);
-      const source = openingTag.match(TANSTACK_ENTRY_PATTERN)?.[2];
+      const candidate = readTagAttribute(openingTag, "src");
+      const source =
+        candidate && isTanStackEntryScript(openingTag, candidate, options) ? candidate : undefined;
       output += source
-        ? gateTanStackEntry(openingTag, source, options.development)
+        ? gateTanStackEntry(openingTag, source, options)
         : buffered.slice(open, closingEnd + 1);
       cursor = closingEnd + 1;
     }
@@ -237,12 +178,132 @@ function createTanStackBootstrapGateTransform(options: { development: boolean })
   }
 }
 
-function gateTanStackEntry(openingTag: string, source: string, development: boolean): string {
-  const withoutSource = openingTag.replace(/\s+src=(['"])[^'"]+\1/iu, "");
-  const importExpression = development
+function isTanStackEntryScript(
+  openingTag: string,
+  source: string,
+  options: { allowedOrigins: ReadonlySet<string>; baseOrigin: string },
+): boolean {
+  const type = readTagAttribute(openingTag, "type");
+  return (
+    type?.toLowerCase() === "module" &&
+    isAllowedScriptOrigin(source, options) &&
+    /(?:^|\/)assets\/index-[^/?#]+\.js(?:[?#].*)?$/iu.test(source)
+  );
+}
+
+function gateTanStackEntry(
+  openingTag: string,
+  source: string,
+  options: {
+    development: boolean;
+    allowedOrigins: ReadonlySet<string>;
+    baseOrigin: string;
+  },
+): string {
+  // Preserve the framework's original attributes, including its native CSP
+  // nonce. The adapter must never authorize a previously nonced-less script.
+  const trustedOpeningTag = removeTagAttribute(openingTag, "src");
+  const importExpression = options.development
     ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)})) : import(${JSON.stringify(source)}))`
     : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)}))`;
-  return `${withoutSource}${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}] || !globalThis[${CATALOG_READY_PROMISE}]) throw error; });</script>`;
+  return `${trustedOpeningTag}${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}] || !globalThis[${CATALOG_READY_PROMISE}]) throw error; });</script>`;
+}
+
+function getAllowedScriptOrigins(
+  binding: { imports: Readonly<Record<string, string>> } | null,
+  requestUrl: string,
+): ReadonlySet<string> {
+  const origins = new Set<string>([new URL(requestUrl).origin]);
+  if (!binding) return origins;
+  for (const asset of Object.values(binding.imports)) {
+    try {
+      origins.add(new URL(asset, requestUrl).origin);
+    } catch {
+      // Invalid generated URLs are rejected by the Vite delivery validator;
+      // do not let one malformed value weaken script-origin checks here.
+    }
+  }
+  return origins;
+}
+
+function isAllowedScriptOrigin(
+  source: string,
+  options: { allowedOrigins: ReadonlySet<string>; baseOrigin: string },
+): boolean {
+  try {
+    return options.allowedOrigins.has(new URL(source, options.baseOrigin).origin);
+  } catch {
+    return false;
+  }
+}
+
+/** Read one opening-tag attribute without treating quoted data as markup. */
+function readTagAttribute(tag: string, name: string): string | undefined {
+  let cursor = tag.indexOf("<") + 1;
+  while (cursor < tag.length && /[^\s/>]/u.test(tag[cursor] ?? "")) cursor += 1;
+  while (cursor < tag.length) {
+    while (cursor < tag.length && /[\s/]/u.test(tag[cursor] ?? "")) cursor += 1;
+    if (tag[cursor] === ">" || cursor >= tag.length) return undefined;
+    const nameStart = cursor;
+    while (cursor < tag.length && /[^\s=/>]/u.test(tag[cursor] ?? "")) cursor += 1;
+    const attributeName = tag.slice(nameStart, cursor).toLowerCase();
+    while (cursor < tag.length && /\s/u.test(tag[cursor] ?? "")) cursor += 1;
+    let value: string | undefined;
+    if (tag[cursor] === "=") {
+      cursor += 1;
+      while (cursor < tag.length && /\s/u.test(tag[cursor] ?? "")) cursor += 1;
+      const quote = tag[cursor];
+      if (quote === '"' || quote === "'") {
+        cursor += 1;
+        const valueStart = cursor;
+        while (cursor < tag.length && tag[cursor] !== quote) cursor += 1;
+        value = tag.slice(valueStart, cursor);
+        if (cursor < tag.length) cursor += 1;
+      } else {
+        const valueStart = cursor;
+        while (cursor < tag.length && /[^\s>]/u.test(tag[cursor] ?? "")) cursor += 1;
+        value = tag.slice(valueStart, cursor);
+      }
+    }
+    if (attributeName === name.toLowerCase()) return value ?? "";
+    while (cursor < tag.length && /\s/u.test(tag[cursor] ?? "")) cursor += 1;
+  }
+  return undefined;
+}
+
+function removeTagAttribute(tag: string, name: string): string {
+  const range = findTagAttribute(tag, name);
+  if (!range) return tag;
+  const start =
+    range.start > 0 && /\s/u.test(tag[range.start - 1] ?? "") ? range.start - 1 : range.start;
+  return `${tag.slice(0, start)}${tag.slice(range.end)}`;
+}
+
+function findTagAttribute(tag: string, name: string): { start: number; end: number } | undefined {
+  let cursor = tag.indexOf("<") + 1;
+  while (cursor < tag.length && /[^\s/>]/u.test(tag[cursor] ?? "")) cursor += 1;
+  while (cursor < tag.length) {
+    while (cursor < tag.length && /[\s/]/u.test(tag[cursor] ?? "")) cursor += 1;
+    if (tag[cursor] === ">" || cursor >= tag.length) return undefined;
+    const start = cursor;
+    while (cursor < tag.length && /[^\s=/>]/u.test(tag[cursor] ?? "")) cursor += 1;
+    const attributeName = tag.slice(start, cursor).toLowerCase();
+    while (cursor < tag.length && /\s/u.test(tag[cursor] ?? "")) cursor += 1;
+    if (tag[cursor] === "=") {
+      cursor += 1;
+      while (cursor < tag.length && /\s/u.test(tag[cursor] ?? "")) cursor += 1;
+      const quote = tag[cursor];
+      if (quote === '"' || quote === "'") {
+        cursor += 1;
+        while (cursor < tag.length && tag[cursor] !== quote) cursor += 1;
+        if (cursor < tag.length) cursor += 1;
+      } else {
+        while (cursor < tag.length && /[^\s>]/u.test(tag[cursor] ?? "")) cursor += 1;
+      }
+    }
+    if (attributeName === name.toLowerCase()) return { start, end: cursor };
+  }
+  return undefined;
 }
 
 function findScriptOpen(lower: string, from: number): number {
@@ -277,10 +338,6 @@ function trailingPrefixLength(value: string, from: number, prefix: string): numb
     if (suffix.endsWith(prefix.slice(0, length))) return value.length - length;
   }
   return value.length;
-}
-
-function escapeAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
 
 function isHtmlResponse(response: Response): boolean {

@@ -79,6 +79,7 @@ describe("TanStack server catalog adapter", () => {
       const { createTanStackCatalogResponseDelivery } = await import("./server");
       const deliver = createTanStackCatalogResponseDelivery({
         clientDirectory,
+        development: false,
         nonce: "request-nonce",
       });
       const response = await deliver(
@@ -98,9 +99,9 @@ describe("TanStack server catalog adapter", () => {
       expect(response).toBeInstanceOf(Response);
       const html = await (response as Response).text();
       expect(html).toContain('<script type="importmap" nonce="request-nonce">');
-      expect(html).toContain('<script nonce="request-nonce">window.__frameworkReady=true</script>');
+      expect(html).toContain("<script>window.__frameworkReady=true</script>");
       expect(html).toMatch(
-        /<script nonce="request-nonce" type="module" async>globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\.then\(\(\) => import\("\/assets\/index-abc\.js"\)\)\.catch\(\(error\) => \{ if \(globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready"\)\] \|\| !globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\) throw error; \}\);<\/script>/u,
+        /<script type="module" async>globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\.then\(\(\) => import\("\/assets\/index-abc\.js"\)\)\.catch\(\(error\) => \{ if \(globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready"\)\] \|\| !globalThis\[Symbol\.for\("palamedes\.document-catalogs-ready-promise"\)\]\) throw error; \}\);<\/script>/u,
       );
       expect(html).not.toContain('src="/assets/index-abc.js"');
       expect(html).toContain("palamedes.document-catalogs-ready-promise");
@@ -138,6 +139,7 @@ describe("TanStack server catalog adapter", () => {
       const { createTanStackCatalogResponseDelivery } = await import("./server");
       const deliver = createTanStackCatalogResponseDelivery({
         clientDirectory,
+        development: false,
         nonce: "byte-stream-nonce",
       });
       const response = (await deliver(
@@ -148,15 +150,139 @@ describe("TanStack server catalog adapter", () => {
 
       const rendered = await response.text();
       expect(rendered).toContain(
-        `<script nonce="byte-stream-nonce" data-long="${"x".repeat(256)}">const text="café 😀";</script>`,
+        `<script data-long="${"x".repeat(256)}">const text="café 😀";</script>`,
       );
       expect(rendered).toContain(
-        `<script nonce="byte-stream-nonce" data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script>`,
+        `<script data-nonce="framework-token">const nested="<script data-nonce='inside-text'>";</script>`,
       );
       expect(rendered).toContain(`<script nonce = "existing-token">window.existing=true;</script>`);
       expect(rendered).toContain(
-        `<script nonce="byte-stream-nonce" data-src="keep-${"😀".repeat(40)}" data-long="${"x".repeat(1200)}" type="module" async>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/assets/index-long.js")).catch((error) => { if (globalThis[Symbol.for("palamedes.document-catalogs-ready")] || !globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]) throw error; });</script>`,
+        `<script data-src="keep-${"😀".repeat(40)}" data-long="${"x".repeat(1200)}" type="module" async>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/assets/index-long.js")).catch((error) => { if (globalThis[Symbol.for("palamedes.document-catalogs-ready")] || !globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]) throw error; });</script>`,
       );
+    } finally {
+      rmSync(clientDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("gates Vite-base and CDN browser entries without trusting arbitrary scripts", async () => {
+    const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-entry-"));
+    try {
+      writeFileSync(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        JSON.stringify({
+          locales: ["en"],
+          importMaps: { en: "assets/palamedes-importmap.en.json" },
+          chunkImports: {},
+        }),
+      );
+      mkdirSync(path.join(clientDirectory, "assets"), { recursive: true });
+      writeFileSync(
+        path.join(clientDirectory, "assets/palamedes-importmap.en.json"),
+        JSON.stringify({
+          imports: { "#pmds/cdn": "https://cdn.example/app/assets/greeting.js" },
+        }),
+      );
+
+      const { createTanStackCatalogResponseDelivery } = await import("./server");
+      const deliver = createTanStackCatalogResponseDelivery({
+        clientDirectory,
+        development: false,
+        nonce: "entry-nonce",
+      });
+      const response = (await deliver(
+        new Response(
+          '<html><head></head><body><script type="module" src="/app/assets/index-base.js"></script><script type="module" src = "https://cdn.example/app/assets/index-cdn.js"></script><script type="module" src="https://evil.example/app/assets/index-foreign.js"></script><script data-type="module" src="/app/assets/index-data-type.js"></script><script data-title=" src=\'/app/assets/index-quoted.js\'" type="module"></script><script type="module" src="/app/assets/vendor.js"></script><script>window.untrusted=true</script></body></html>',
+          { headers: { "content-type": "text/html" } },
+        ),
+        "en",
+        new Request("https://example.test/app/en"),
+      )) as Response;
+      const html = await response.text();
+
+      expect(html).toContain(
+        '<script type="module">globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/app/assets/index-base.js"))',
+      );
+      expect(html).toContain(
+        `<script type="module">globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("https://cdn.example/app/assets/index-cdn.js"))`,
+      );
+      expect(html).toContain(
+        '<script type="module" src="https://evil.example/app/assets/index-foreign.js"></script>',
+      );
+      expect(html).toContain(
+        '<script data-type="module" src="/app/assets/index-data-type.js"></script>',
+      );
+      expect(html).toContain(
+        `<script data-title=" src='/app/assets/index-quoted.js'" type="module"></script>`,
+      );
+      expect(html).toContain('<script type="module" src="/app/assets/vendor.js"></script>');
+      expect(html).toContain("<script>window.untrusted=true</script>");
+      expect(html).not.toContain('src="/app/assets/index-base.js"');
+    } finally {
+      rmSync(clientDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves framework and authored scripts to the host CSP policy", async () => {
+    const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-nonce-"));
+    try {
+      writeFileSync(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        JSON.stringify({
+          locales: ["en"],
+          importMaps: { en: "assets/map.json" },
+          chunkImports: {},
+        }),
+      );
+      mkdirSync(path.join(clientDirectory, "assets"), { recursive: true });
+      writeFileSync(path.join(clientDirectory, "assets/map.json"), JSON.stringify({ imports: {} }));
+
+      const { createTanStackCatalogResponseDelivery } = await import("./server");
+      const deliver = createTanStackCatalogResponseDelivery({
+        clientDirectory,
+        development: false,
+        nonce: "request-nonce",
+      });
+      const response = (await deliver(
+        new Response(
+          '<html><head></head><body><script data-palamedes-entry type="module" src="/assets/adapter.js"></script><script src="https://cdn.example/third-party.js"></script><script>window.untrusted=true</script><script type="module" src="/assets/index-entry.js"></script></body></html>',
+          { headers: { "content-type": "text/html" } },
+        ),
+        "en",
+        new Request("https://example.test/"),
+      )) as Response;
+      const html = await response.text();
+
+      expect(html).toContain(
+        '<script data-palamedes-entry type="module" src="/assets/adapter.js"></script>',
+      );
+      expect(html).toContain('<script src="https://cdn.example/third-party.js"></script>');
+      expect(html).toContain("<script>window.untrusted=true</script>");
+      expect(html).toContain(
+        `<script type="module">globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/assets/index-entry.js"))`,
+      );
+      expect(html).not.toContain('src="/assets/index-entry.js"');
+    } finally {
+      rmSync(clientDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("installs the development failure transform without a manifest or nonce", async () => {
+    const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-dev-"));
+    try {
+      const { createTanStackCatalogResponseDelivery } = await import("./server");
+      const deliver = createTanStackCatalogResponseDelivery({
+        clientDirectory,
+        development: true,
+      });
+      const response = (await deliver(
+        new Response(
+          '<html><head></head><body><script type="module" src="/entry.client.tsx"></script></body></html>',
+          { headers: { "content-type": "text/html" } },
+        ),
+        "en",
+        new Request("https://example.test/"),
+      )) as Response;
+      expect(await response.text()).toContain("showPalamedesDevCatalogError");
     } finally {
       rmSync(clientDirectory, { recursive: true, force: true });
     }
