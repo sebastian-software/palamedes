@@ -3,6 +3,7 @@ import { createServer, request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { chromium } from "@playwright/test";
+import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const example = path.join(root, "examples/solid-cookie");
@@ -30,7 +31,7 @@ async function waitForHost(url, child) {
     if (child.exitCode !== null) throw new Error(`Solid host exited with ${child.exitCode}`);
     try {
       const response = await fetch(url);
-      if (response.status < 500) return;
+      if (response.status === 200) return;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -109,7 +110,7 @@ async function initialFailure(locale, mode) {
     if (mode === "abort") return route.abort();
     return catalogFailureBody(route, "palamedes-solid-catalog-evaluation");
   });
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await page.goto(cspUrl ?? baseUrl, { waitUntil: "domcontentloaded" });
   await page.locator("[data-palamedes-catalog-error]").waitFor();
   assertActiveLocale(requests, locale);
   const result = {
@@ -145,7 +146,7 @@ async function normalAndLazyFailure(locale, mode) {
   page.on("framenavigated", (frame) => {
     if (frame === page.mainFrame()) navigations += 1;
   });
-  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.goto(cspUrl ?? baseUrl, { waitUntil: "networkidle" });
   assertActiveLocale(initialCatalogRequests, locale);
   if ((await page.locator("html").getAttribute("data-solid-lazy-body")) !== null) {
     throw new Error(`lazy catalog body was evaluated before navigation for ${locale}`);
@@ -233,14 +234,15 @@ let cspProxy;
 try {
   if (ownsHost) {
     await run("pnpm", ["--filter", "@palamedes/example-solid-cookie", "build"]);
-    const hostBinary = path.join(example, "node_modules/.bin/vite");
-    host = spawn(hostBinary, ["preview", "--host", "127.0.0.1", "--port", String(hostPort)], {
+    await ensurePortFree(hostPort);
+    await ensurePortFree(cspPort);
+    host = startCommand({
+      args: ["exec", "vite", "preview", "--host", "127.0.0.1", "--port", String(hostPort)],
       cwd: example,
       env: {
         ...process.env,
         PALAMEDES_CSP_NONCE: process.env.PALAMEDES_CSP_NONCE ?? "palamedes-solid-csp",
       },
-      stdio: "inherit",
     });
     await waitForHost(baseUrl, host);
     cspProxy = await createCspProxy(baseUrl, cspPort);
@@ -260,8 +262,5 @@ try {
   await csp();
 } finally {
   if (cspProxy) await new Promise((resolve) => cspProxy.close(resolve));
-  if (host && host.exitCode === null) {
-    host.kill("SIGTERM");
-    await new Promise((resolve) => host.once("exit", resolve));
-  }
+  if (host) await stopCommand(host);
 }

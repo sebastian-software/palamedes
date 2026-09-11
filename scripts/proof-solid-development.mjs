@@ -76,7 +76,10 @@ async function main() {
     if ((await page.locator("html").getAttribute("data-solid-lazy-body")) !== null) {
       throw new Error("Solid lazy catalog body evaluated before the user action");
     }
-    const catalogRequests = () => requests.filter((url) => url.includes("palamedes:messages"));
+    const catalogRequests = () =>
+      requests.filter((url) =>
+        /palamedes:messages\/[^/]+\/[^/]+$/u.test(decodeURIComponent(new URL(url).pathname)),
+      );
     const assertActiveLocale = (urls, phase) => {
       if (urls.length === 0 || urls.some((url) => !new URL(url).pathname.endsWith("/de"))) {
         throw new Error(
@@ -92,12 +95,13 @@ async function main() {
     await navigation;
     await page.getByText("Katalog aktualisiert", { exact: true }).waitFor();
 
-    const beforeLazyCatalogRequests = catalogRequests();
+    await page.getByTestId("client-ready").waitFor({ state: "attached" });
+    const beforeLazyCatalogRequests = new Set(catalogRequests());
     await page.getByRole("button", { name: "Show lazy catalog details" }).click();
     await page.locator('[data-testid="lazy-catalog-details"]').waitFor();
     const afterLazyCatalogRequests = catalogRequests();
     assertActiveLocale(afterLazyCatalogRequests, "after lazy delivery");
-    if (afterLazyCatalogRequests.length <= beforeLazyCatalogRequests.length) {
+    if (!afterLazyCatalogRequests.some((url) => !beforeLazyCatalogRequests.has(url))) {
       throw new Error("Solid development did not request a new lazy catalog fragment");
     }
     if ((await page.locator("html").getAttribute("data-solid-lazy-body")) !== "executed") {
