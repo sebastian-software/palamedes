@@ -94,7 +94,9 @@ export function observeBrowserArtifacts(page, example) {
       responses: responses.length,
       uniqueModuleUrls: modules.size,
       decodedBytes,
-      catalogBytes,
+      catalogBytes: example.framework === "nextjs" ? null : catalogBytes,
+      catalogBytesScope:
+        "URL-identified catalog assets; Next bundled catalog bytes are not separately attributable",
       scope: "observed host interaction and locale navigation; decoded response bodies",
     });
   };

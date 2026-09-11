@@ -1,25 +1,18 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
+import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const cwd = `${root}/examples/react-router-cookie`;
 const origin = "http://127.0.0.1:4197";
 const catalogPath = `${cwd}/app/locales/de.po`;
 const original = readFileSync(catalogPath, "utf8");
-const server = spawn(
-  "pnpm",
-  ["exec", "react-router", "dev", "--host", "127.0.0.1", "--port", "4197"],
-  { cwd, stdio: ["ignore", "pipe", "pipe"] },
-);
-let output = "";
-server.stdout.on("data", (data) => {
-  output += data;
-});
-server.stderr.on("data", (data) => {
-  output += data;
+await ensurePortFree(4197);
+const server = startCommand({
+  args: ["exec", "react-router", "dev", "--host", "127.0.0.1", "--port", "4197"],
+  cwd,
 });
 let browser;
 try {
@@ -28,7 +21,7 @@ try {
     try {
       if ((await fetch(origin)).ok) break;
     } catch {}
-    assert(Date.now() < deadline, output);
+    assert(Date.now() < deadline, "React Router development host did not become ready");
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   browser = await chromium.launch();
@@ -87,10 +80,14 @@ try {
       if (armed && catalogUrl.test(url)) {
         armed = false;
         if (evaluation) {
+          const response = await route.fetch();
+          const headers = { ...response.headers(), "cache-control": "no-store" };
+          delete headers.etag;
+          delete headers["last-modified"];
           await route.fulfill({
-            status: 200,
-            contentType: "application/javascript",
-            body: 'throw new Error("injected catalog evaluation failure");',
+            response,
+            headers,
+            body: `${await response.text()}\nthrow new Error("injected catalog evaluation failure");`,
           });
         } else {
           await route.abort("failed");
@@ -120,11 +117,15 @@ try {
       );
     }
 
-    await failurePage.unroute("**/*");
+    // Keep interception installed while reloading so the injected response
+    // cannot become an HTTP-cache artifact when browser routing is disabled.
     await failurePage.reload();
     await failurePage.getByText("Frontend Stage", { exact: true }).waitFor();
     assert.equal(await failurePage.getByRole("alert").count(), 0);
     await failurePage.close();
+    console.log(
+      `Vite development ${phase} ${evaluation ? "evaluation" : "network"}: recovery passed`,
+    );
   };
 
   await runFailureCase({ phase: "initial", evaluation: false });
@@ -138,5 +139,6 @@ try {
 } finally {
   writeFileSync(catalogPath, original);
   await browser?.close();
-  server.kill("SIGTERM");
+  await stopCommand(server);
+  await ensurePortFree(4197);
 }

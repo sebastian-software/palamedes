@@ -152,8 +152,10 @@ async function main() {
   for (const { example, options } of plan) {
     console.log(`\n[verify:browser] ${example.id} on port ${example.port}`);
     await verifyExample(example, options);
-    if (example.id === "react-router-cookie")
+    if (example.id === "react-router-cookie") {
       await runDeliveryProof("proof-vite-fragment-errors.mjs");
+      await runDeliveryProof("proof-vite-development.mjs");
+    }
     if (example.id === "vite-mdx") await runDeliveryProof("proof-vite-html-delivery.mjs");
   }
 }
