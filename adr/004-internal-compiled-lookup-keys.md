@@ -52,9 +52,9 @@ partially localized result as success.
 
 Internal keys may appear in developer diagnostics, never as user-facing
 message output or raw error UI. Any retained source metadata is for diagnostics,
-not an alternate runtime rendering path. The precise diagnostic metadata and
-migration of `keepSourceFallbacks` remain to be resolved in the
-[active plan](../docs/plans/2026-09-11-compiled-runtime-and-catalog-delivery.md).
+not an alternate runtime rendering path. The legacy `keepSourceFallbacks`
+spelling is retained only as an explicit diagnostic-metadata opt-in; v2
+first-party adapters default to `false`.
 
 Source code, extraction, catalog updates, parsed catalog data, and user-facing diagnostics remain source-string-first.
 
@@ -86,12 +86,12 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 
 Core package roots and compiled aliases now reject missing compiled entries.
 Source metadata is diagnostic information only, and telemetry cannot suppress
-lookup or execution failures. Low-level transforms generate compact runtime
-calls without embedding the authored source message by default. First-party
-host adapters retain diagnostic source metadata by default. Set
-`keepSourceFallbacks: false` for compact, hash-only output when bundle size or
-embedding authored source text is a concern. This legacy option name no longer
-implies a runtime fallback mode.
+lookup or execution failures. Low-level transforms and v2 first-party host
+adapters generate compact runtime calls without embedding the authored source
+message by default. Set `keepSourceFallbacks: true` only when authored source
+text is needed as diagnostic metadata; `false` is the default and produces
+compact, hash-only output. This legacy option name never implies a runtime
+fallback mode.
 
 Transparent host delivery and initial/hydration/navigation error recovery are
 tracked in the dependent integration slices of #1204. An import rejection by

@@ -98,8 +98,9 @@ expose one compiled implementation without another package or version boundary.
   regardless of host or package-root versus subpath imports.
 - Existing package-root consumers and raw-ICU component examples require
   migration to compiled messages.
-- Remix's serialized ICU client catalogs must be replaced with delivery of
-  compiled messages. The concrete host integration remains to be designed.
+- Host integrations must deliver compiled messages through adapter-owned
+  assets or module dependencies. Serialized ICU maps are a migration boundary,
+  not a supported application transport.
 - Root and compiled entrypoints no longer maintain parallel copies of their
   framework's message walker and runtime adapter.
 - `pnpm benchmark:runtime-browser` builds the real Vite MDX example, verifies a
@@ -111,11 +112,15 @@ expose one compiled implementation without another package or version boundary.
 
 The current v2 migration has converged the Core, React, Solid, Next and Vite
 application roots on the parser-free compiled runtime, with public ESM/CJS
-checks guarding the absence of parser exports and browser parser code. Remix
-server catalogs are now required to be generated `CompiledCatalogMessages`, and
-the old inert serialized ICU bootstrap is rejected with an explicit #1214
-asset-pipeline diagnostic. Remix executable browser delivery, active-locale
-asset selection and lazy host integration remain open work in #1214; shared
-server catalog loading remains coordinated with #1207. This ADR records the
-implemented runtime boundary and the remaining host migration work, not a claim
-that the complete Remix delivery slice has shipped.
+checks guarding the absence of parser exports and browser parser code. The
+host slices use the same compiled-only boundary: server adapters load complete
+active-locale catalogs through shared immutable storage, while browser adapters
+await the active locale's executable dependencies before translated modules
+run. Catalog and formatter failures propagate to ordinary host error handling;
+they are never converted into source-text output.
+
+The old inert serialized ICU bootstrap remains available only as a validated
+migration diagnostic and is rejected by the parser-free client. This ADR does
+not claim that #1215's aggregate release gate is complete: host-specific
+initial/lazy browser proofs, published-artifact checks, memory evidence and
+release-policy verification remain required before the coordinated v2 release.

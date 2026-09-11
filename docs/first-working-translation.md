@@ -80,10 +80,11 @@ setClientI18n(i18n);
 export { i18n };
 ```
 
-This guide uses the parser-free `/compiled` entrypoint because the Vite loader
-turns generated `.po` catalogs into compiled messages. Use the package root only
-when you intentionally load runtime ICU strings; see the
-[`@palamedes/core` API reference](./api/core.md#exports).
+This guide uses the compatible parser-free `/compiled` entrypoint because the
+Vite loader turns generated `.po` catalogs into compiled messages. The package
+root and `/compiled` share the same parser-free v2 runtime; neither accepts raw
+ICU maps at application runtime. See the [`@palamedes/core` API
+reference](./api/core.md#exports).
 
 ## 5. Add one translated component
 
