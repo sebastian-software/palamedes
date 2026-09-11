@@ -68,7 +68,7 @@ throw err;
   });
 
   it("rewrites the retry guard even when it streams long before the entry", async () => {
-    const input = `prefix 😀 if (!canRetry) {\nreturn;\n} ${" ".repeat(1000)} import("/assets/index-abc.js") suffix`;
+    const input = `<script id="_R_">prefix 😀 if (!canRetry) {\nreturn;\n} ${" ".repeat(1000)} import("/assets/index-abc.js") suffix</script>`;
     const bytes = Buffer.byteLength(input);
     const output = await transformHtml(
       input,
@@ -94,7 +94,8 @@ throw err;
   });
 
   it("keeps development Waku startup usable when the readiness promise is absent", async () => {
-    const input = 'import("/assets/index-dev.js").catch((err) => { throw err; });';
+    const input =
+      '<script id="_R_">import("/assets/index-dev.js").catch((err) => { throw err; });</script>';
     const middleware = createWakuCatalogDeliveryMiddleware({
       clientDirectory: "dist/public",
       development: true,
@@ -147,5 +148,15 @@ throw err;
     const input =
       '<script src="https://untrusted.example/script.js"></script><script>window.untrusted=true</script>';
     expect(await transformHtml(input, [12, 65], "trusted")).toBe(input);
+  });
+  it("preserves application scripts and rendered text resembling the framework bootstrap", async () => {
+    const input = `<p>import("/assets/index-content.js")</p><script data-id="_R_">if (!canRetry) { return; } import("/assets/index-app.js")</script>`;
+    const bytes = Buffer.byteLength(input);
+    expect(
+      await transformHtml(
+        input,
+        Array.from({ length: bytes - 1 }, (_, index) => index + 1),
+      ),
+    ).toBe(input);
   });
 });

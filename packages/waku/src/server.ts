@@ -111,30 +111,52 @@ function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolea
   });
 
   function flushSafePrefix(stream: Transform, flush: boolean) {
-    let end = flush ? tail.length : Math.max(0, tail.length - TAIL_SIZE);
-    // A complete replacement can straddle the retained suffix. Keep that
-    // entire token, and never emit an untransformed retry guard before entry.
-    const patterns = [WAKU_ENTRY_PATTERN, /if \(!canRetry\) \{\s*return;\s*\}/u];
-    for (const pattern of patterns) {
-      for (const match of tail.matchAll(new RegExp(pattern.source, "gu"))) {
-        if (match.index < end && match.index + match[0].length > end) end = match.index;
+    while (tail) {
+      const open = /<script\b/iu.exec(tail);
+      if (!open) {
+        const safeEnd = flush
+          ? tail.length
+          : unicodeCut(tail, Math.max(0, tail.length - TAIL_SIZE));
+        if (safeEnd > 0) stream.push(tail.slice(0, safeEnd));
+        tail = tail.slice(safeEnd);
+        return;
       }
-    }
-    if (!flush) {
-      for (const prefix of ["import(", "if (!canRetry) {"]) {
-        const start = tail.lastIndexOf(prefix);
-        if (
-          start !== -1 &&
-          start < end &&
-          !patterns.some((pattern) => pattern.test(tail.slice(start)))
-        )
-          end = start;
+      const openingEnd = scriptTagEnd(tail, open.index);
+      const close = openingEnd < 0 ? null : /<\/script\s*>/iu.exec(tail.slice(openingEnd + 1));
+      if (openingEnd < 0 || !close) {
+        const safeEnd = flush ? tail.length : open.index;
+        if (safeEnd > 0) stream.push(tail.slice(0, safeEnd));
+        tail = tail.slice(safeEnd);
+        return;
       }
+      const end = openingEnd + 1 + close.index + close[0].length;
+      const openingTag = tail.slice(open.index, openingEnd + 1);
+      const script = tail.slice(open.index, end);
+      // Waku/React own this bootstrap. Do not rewrite imports or retry-like
+      // text in application scripts, rendered content, or Flight payloads.
+      const frameworkBootstrap =
+        /\sid\s*=\s*(["'])_R_\1/iu.test(openingTag) && !/\ssrc\s*=/iu.test(openingTag);
+      stream.push(
+        tail.slice(0, open.index) + (frameworkBootstrap ? gateWakuEntry(script) : script),
+      );
+      tail = tail.slice(end);
     }
-    end = unicodeCut(tail, end);
-    if (end > 0) stream.push(gateWakuEntry(tail.slice(0, end)));
-    tail = tail.slice(end);
   }
+}
+
+function scriptTagEnd(source: string, start: number): number {
+  let quote = "";
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote) quote = "";
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function unicodeCut(value: string, end: number): number {
