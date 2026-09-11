@@ -1710,6 +1710,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@palamedes/vite-plugin':
+        specifier: workspace:^
+        version: link:../vite-plugin
     devDependencies:
       '@react-router/dev':
         specifier: 8.3.1

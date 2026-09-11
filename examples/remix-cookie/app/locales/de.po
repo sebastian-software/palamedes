@@ -16,7 +16,8 @@ msgstr ""
 
 #: examples/remix-cookie/app/public/interactive.tsx#ClientProof
 msgid "{count, plural, one {# browser message} other {# browser messages}}"
-msgstr "{count, plural, one {# Browser-Nachricht} other {# Browser-Nachrichten}}"
+msgstr ""
+"{count, plural, one {# Browser-Nachricht} other {# Browser-Nachrichten}}"
 
 #: examples/remix-cookie/app/page.ts#renderHomePage
 msgid "{seatCount, plural, one {# seat left} other {# seats left}}"
@@ -38,6 +39,10 @@ msgstr "Palamedes ist im Browser aktiv"
 #: examples/remix-cookie/app/page.ts#renderHomePage
 msgid "Remix v3 is rendering {locale} with Palamedes"
 msgstr "Remix v3 rendert {locale} mit Palamedes"
+
+#: examples/remix-cookie/app/public/lazy-message.ts#lazyMessage
+msgid "This message arrived after the page was ready"
+msgstr "Diese Nachricht kam nach dem Laden der Seite an"
 
 #: examples/remix-cookie/app/frame-page.tsx#renderFrameContent
 #: examples/remix-cookie/app/page.ts#renderHomePage

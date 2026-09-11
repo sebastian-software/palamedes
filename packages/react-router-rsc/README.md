@@ -66,19 +66,43 @@ if (import.meta.hot) {
 }
 ```
 
-`createRequestI18n()` should load only the active locale before returning:
+Use the adapter-owned client bootstrap in `app/entry.client.tsx`; it waits for
+catalog delivery before loading React Router's standard RSC entry:
+
+```tsx
+import "@palamedes/react-router-rsc/client";
+```
+
+For a production Vite build, let the adapter deliver the active locale's
+generated import map to the document response. The adapter reads the generated
+manifest after RSC has resolved the request locale and leaves Server Function
+and RSC responses untouched:
+
+```tsx
+import path from "node:path";
+
+const palamedesI18n = createReactRouterRscI18nRequestScope(createRequestI18n, {
+  catalogDelivery: {
+    clientDirectory: path.resolve(import.meta.dirname, "../client"),
+    development: import.meta.env.DEV,
+  },
+});
+```
+
+The response transform is catalog independent on failure: its generated probe
+can replace the shell with a reload/home error view before the client entry
+executes. Applications do not need to read the split manifest or own an import
+map.
+
+`createRequestI18n()` should resolve only the active locale before returning;
+the generated server-catalog module performs the lazy load:
 
 ```ts
-import { createI18n } from "@palamedes/core";
-import { messages as de } from "./locales/de.po";
-import { messages as en } from "./locales/en.po";
+import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 
-export function createRequestI18n(request: Request) {
+export async function createRequestI18n(request: Request) {
   const locale = request.headers.get("cookie")?.includes("locale=de") ? "de" : "en";
-  const i18n = createI18n();
-  i18n.load(locale, locale === "de" ? de : en);
-  i18n.activate(locale);
-  return i18n;
+  return createViteServerI18n({ locale });
 }
 ```
 
