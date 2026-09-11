@@ -36,23 +36,24 @@ try {
   const requests = [];
   let page = await context.newPage();
   page.on("request", (request) => requests.push(decodeURIComponent(request.url())));
-  const catalogRequests = () =>
-    requests.filter((url) => /palamedes:messages\/[^/]+\/de(?:[/?#]|$)/u.test(url));
+  const allCatalogRequests = () =>
+    requests.filter((url) => /palamedes:messages\/[^/]+\/(?:en|de|es)(?:[/?#]|$)/u.test(url));
 
   await page.goto(origin, { waitUntil: "domcontentloaded" });
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 15_000 });
   assert.equal(await page.locator("html").getAttribute("lang"), "de");
   assert.equal(await page.locator('script[type="importmap"]').count(), 0);
   assert(
-    catalogRequests().length > 0,
+    allCatalogRequests().length > 0,
     `development did not request a locale catalog: ${JSON.stringify(requests)}`,
   );
-  const initial = new Set(catalogRequests());
+  assert(allCatalogRequests().every((url) => /\/de(?:[/?#]|$)/u.test(url)));
+  const initial = new Set(allCatalogRequests());
 
   await page.getByRole("button", { name: "Show lazy catalog details" }).click();
   await page.getByTestId("lazy-catalog-details").waitFor({ timeout: 15_000 });
   assert(
-    catalogRequests().some((url) => !initial.has(url)),
+    allCatalogRequests().some((url) => !initial.has(url)),
     "development lazy navigation did not request a new catalog fragment",
   );
 
