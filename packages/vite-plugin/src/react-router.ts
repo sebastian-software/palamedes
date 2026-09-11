@@ -213,7 +213,7 @@ function validateManifest(value: unknown, manifestPath: string): ReactRouterCata
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (
-    Boolean(value) &&
+    value !== null &&
     typeof value === "object" &&
     Object.values(value).every((item) => typeof item === "string")
   );
@@ -221,7 +221,7 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 
 function isArrayRecord(value: unknown): value is Record<string, readonly string[]> {
   return (
-    Boolean(value) &&
+    value !== null &&
     typeof value === "object" &&
     Object.values(value).every(
       (item) => Array.isArray(item) && item.every((entry) => typeof entry === "string"),
@@ -230,7 +230,7 @@ function isArrayRecord(value: unknown): value is Record<string, readonly string[
 }
 
 function isMissingFile(error: unknown): boolean {
-  return Boolean(error) && typeof error === "object" && "code" in error && error.code === "ENOENT";
+  return error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }
 
 function escapeAttribute(value: string): string {

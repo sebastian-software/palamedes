@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
-import { plural, t } from "@palamedes/core/macro";
+import { t, plural } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";
 import { EVENT } from "@palamedes/example-ui";
 import type { Locale } from "~/lib/i18n";

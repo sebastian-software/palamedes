@@ -30,9 +30,7 @@ export function TicketPanel({ locale: _locale }: TicketPanelProps) {
           </p>
           <p className="fact-value">
             {t({ message: "{when, date, full}" }, { when })}
-            <small>
-              {t({ message: "{when, time, short}" }, { when })}
-            </small>
+            <small>{t({ message: "{when, time, short}" }, { when })}</small>
           </p>
         </div>
 

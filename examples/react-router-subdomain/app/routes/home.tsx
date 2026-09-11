@@ -7,11 +7,7 @@ import { LocaleSwitcher } from "~/components/LocaleSwitcher";
 import { ProofPanel } from "~/components/ProofPanel";
 import { SuggestionBanner } from "~/components/SuggestionBanner";
 import { TicketPanel } from "~/components/TicketPanel";
-import {
-  DEFAULT_LOCALE,
-  getLocaleLabel,
-  resolveSubdomainLocale,
-} from "~/lib/i18n";
+import { DEFAULT_LOCALE, getLocaleLabel, resolveSubdomainLocale } from "~/lib/i18n";
 import { runServerI18n } from "~/lib/i18n.server";
 
 export function meta({ loaderData }: Route.MetaArgs) {

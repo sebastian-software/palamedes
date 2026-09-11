@@ -11,12 +11,7 @@ import {
   waitForServerI18nTestBarrier,
 } from "@palamedes/runtime/server/test";
 import { resolveLocaleFromRequest } from "~/lib/i18n";
-import {
-  catalogDelivery,
-  createServerI18n,
-  getLocaleBinding,
-  serverI18nScope,
-} from "~/lib/i18n.server";
+import { catalogDelivery, serverI18n } from "~/lib/i18n.server";
 
 export const streamTimeout = 5000;
 
@@ -32,7 +27,7 @@ export default function handleRequest(
   }
 
   const locale = resolveLocaleFromRequest(request).locale;
-  return serverI18nScope.run(createServerI18n(locale), async () => {
+  return serverI18n.run(request, async () => {
     await waitForServerI18nTestBarrier(request);
     markServerI18nTestBarrierReached(request, responseHeaders);
     return new Promise((resolve, reject) => {
@@ -59,7 +54,7 @@ export default function handleRequest(
             const stream = createReadableStreamFromReadable(body);
             responseHeaders.set("Content-Type", "text/html");
             const injector = catalogDelivery.createDocumentTransform(
-              getLocaleBinding(locale),
+              catalogDelivery.getLocaleBinding(locale),
             );
             injector.pipe(body);
             pipe(injector);

@@ -1,11 +1,4 @@
-import {
-  Links,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
-  useRouteLoaderData,
-} from "react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
 
 import type { Route } from "./+types/root";
 import { DEFAULT_LOCALE, resolveLocaleFromRequest } from "~/lib/i18n";
@@ -58,7 +51,9 @@ export function ErrorBoundary(_props: Route.ErrorBoundaryProps) {
     <main className="pt-16 p-4 container mx-auto" role="alert">
       <h1>This page is temporarily unavailable.</h1>
       <p>Reload the page to try again.</p>
-      <a href="">Reload page</a>{" "}
+      <button type="button" onClick={() => window.location.reload()}>
+        Reload page
+      </button>{" "}
       <a href="/">Go home</a>
     </main>
   );

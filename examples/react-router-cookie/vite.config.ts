@@ -3,10 +3,7 @@ import { palamedes } from "@palamedes/vite-plugin";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [
-    palamedes({ experimentalGraphSplitting: { localeBinding: "import-map" } }),
-    reactRouter(),
-  ],
+  plugins: [palamedes(), reactRouter()],
   resolve: {
     tsconfigPaths: true,
   },
