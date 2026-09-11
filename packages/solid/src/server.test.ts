@@ -84,7 +84,7 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
   });
 
   it("keeps long tags, Unicode boundaries, and the real nonce attribute intact", async () => {
-    const attributes = "x".repeat(1_200);
+    const attributes = "x".repeat(1200);
     const html = `<html lang="de"><head><script data-nonce="not-a-csp-nonce" nonce = "existing">${"x".repeat(800)}😀</script><script data-padding="${attributes}">const marker = "😀";</script><script type = "module" src = "/assets/entry.js"></script></head><body></body></html>`;
     const output = await transformDocument(html, "solid-test", 1);
 

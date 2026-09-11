@@ -162,7 +162,7 @@ function safeTextCut(value: string, desired: number): number {
   if (cut > 0 && cut < value.length) {
     const previous = value.charCodeAt(cut - 1);
     const next = value.charCodeAt(cut);
-    if (previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+    if (previous >= 0xd8_00 && previous <= 0xdb_ff && next >= 0xdc_00 && next <= 0xdf_ff) {
       cut -= 1;
     }
   }
