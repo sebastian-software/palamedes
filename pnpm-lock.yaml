@@ -36,8 +36,8 @@ importers:
         specifier: ^1.62.1
         version: 1.62.1
       '@sebastian-software/standards':
-        specifier: 0.11.0
-        version: 0.11.0
+        specifier: 0.11.1
+        version: 0.11.1
       '@typescript/typescript6':
         specifier: ^6.0.2
         version: 6.0.2
@@ -5510,8 +5510,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sebastian-software/standards@0.11.0':
-    resolution: {integrity: sha512-wkK+xegmhv7gxVP5Z9/rlJzjG2IPUoGC7ATQQaVRw/ccxh7NWSrt2FcthphG8mn9I4tbyaAlgZkq/+kXHr8prg==}
+  '@sebastian-software/standards@0.11.1':
+    resolution: {integrity: sha512-3WECKOYgD7bZ7fmePTjl4Lqxo4OasvCb9utGxMUVG1czMmXCMvagXgLcfFTWczKMeFkDL2Y7k4w99NKU/i9h3A==}
     engines: {node: '>=24.0.0'}
     hasBin: true
 
@@ -8142,7 +8142,7 @@ packages:
         optional: true
 
   ferramenta-family@https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88#path:/packages/family:
-    resolution: {gitHosted: true, path: /packages/family, tarball: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88}
+    resolution: {gitHosted: true, integrity: sha512-1Ij0WL5njIk37SfMKcSZvIIaTV97wgbWQ7JJSw3//KpWWQ3quGOkYYyNVv2zUh9436yq3zRhtyWL/Zy3EbgKLg==, path: /packages/family, tarball: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88}
     version: 1.0.2
     hasBin: true
     peerDependencies:
@@ -14699,7 +14699,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
 
-  '@sebastian-software/standards@0.11.0': {}
+  '@sebastian-software/standards@0.11.1': {}
 
   '@sec-ant/readable-stream@0.4.1': {}
 

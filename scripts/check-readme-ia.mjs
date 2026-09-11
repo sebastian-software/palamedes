@@ -203,9 +203,10 @@ function checkFamilyBlock(markdown) {
   const company = markdown.lastIndexOf("logo-software.svg");
   if (
     badge <= 0 ||
-    introduction <= badge ||
+    introduction <= 0 ||
+    badge <= content ||
     content <= introduction ||
-    family <= content ||
+    family <= badge ||
     company <= family
   ) {
     fail("expected outer Sebastian and inner Ferramenta frames around project content");

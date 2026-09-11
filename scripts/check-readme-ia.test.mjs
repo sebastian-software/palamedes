@@ -145,3 +145,10 @@ test("keeps project prose above the family footer", () => {
     /project sections must precede/u,
   );
 });
+
+test("keeps the company badge below the project title", () => {
+  const badge = readme.match(/\[!\[Powered by Sebastian Software\]\([^\n]+?\)\]\([^\n]+?\)/u)?.[0];
+  assert.ok(badge);
+  const moved = readme.replace(badge, "").replace("# Palamedes", `${badge}\n\n# Palamedes`);
+  assert.throws(check(moved), /expected outer/u);
+});
