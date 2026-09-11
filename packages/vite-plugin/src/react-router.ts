@@ -241,8 +241,14 @@ function escapeAttribute(value: string): string {
 
 function modulePreloads(head: string, binding: ReactRouterCatalogBinding): string[] {
   const preloads = new Set<string>();
-  for (const match of head.matchAll(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/giu)) {
-    const href = match[0].match(/\bhref=["']([^"']+)["']/iu)?.[1];
+  for (const match of head.matchAll(/<(?:link|script)\b[^>]*>/giu)) {
+    const tag = match[0];
+    const isModulePreload =
+      /\brel=["']modulepreload["']/iu.test(tag) ||
+      (/\btype=["']module["']/iu.test(tag) && /\bsrc=["'][^"']+["']/iu.test(tag));
+    if (!isModulePreload) continue;
+    const href =
+      tag.match(/\bhref=["']([^"']+)["']/iu)?.[1] ?? tag.match(/\bsrc=["']([^"']+)["']/iu)?.[1];
     if (!href) continue;
     const key = assetKey(href);
     for (const bare of binding.chunkImports[key] ?? []) {

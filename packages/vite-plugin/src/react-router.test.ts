@@ -106,6 +106,20 @@ describe("React Router catalog delivery", () => {
     expect(chunks.indexOf("importmap")).toBeLessThan(chunks.indexOf('rel="modulepreload"'));
   });
 
+  it("observes catalog dependencies of a module entry without modulepreload hints", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const binding = delivery.getLocaleBinding("de");
+    const transform = delivery.createDocumentTransform(binding);
+    const html = await collect(
+      transform,
+      '<html><head><script type="module" src="/app/assets/route.js"></script></head><body>app</body></html>',
+    );
+
+    expect(html).toContain('Promise.all(["/app/assets/route.de.js"].map(url=>import(url)))');
+    expect(html).toContain('<link rel="modulepreload" href="/app/assets/route.de.js">');
+  });
+
   it("preserves UTF-8 across streamed chunk boundaries", async () => {
     const delivery = createReactRouterCatalogDelivery({ clientDirectory: await createFixture() });
     const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
