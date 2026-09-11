@@ -1025,6 +1025,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/tanstack':
+        specifier: workspace:^
+        version: link:../../packages/tanstack
       '@tanstack/react-router':
         specifier: ^1.170.32
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1083,6 +1086,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/tanstack':
+        specifier: workspace:^
+        version: link:../../packages/tanstack
       '@tanstack/react-router':
         specifier: ^1.170.32
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1141,6 +1147,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/tanstack':
+        specifier: workspace:^
+        version: link:../../packages/tanstack
       '@tanstack/react-router':
         specifier: ^1.170.32
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
