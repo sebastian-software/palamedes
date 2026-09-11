@@ -1,8 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { publicWorkspacePackages } from "./release-packages.mjs";
+import { readReleasePolicy } from "./release-policy.mjs";
 
 const root = process.cwd();
+const releasePolicy = readReleasePolicy(root);
 const nativePackagePattern = /^@palamedes\/(?:core-node|cli)-.+/;
 const nativeWrapperPackageNames = new Set(["@palamedes/core-node", "@palamedes/cli"]);
 
@@ -146,6 +148,20 @@ function cargoLockVersion(packageName) {
 if (!rootReleaseConfig) {
   fail(`${rootReleasePath} is missing from .release-please-config.json`);
 } else {
+  const nextVersion = rootReleaseConfig["release-as"];
+  if (
+    nextVersion !== undefined &&
+    (!/^\d+\.\d+\.\d+$/.test(nextVersion) ||
+      Number(nextVersion.split(".")[0]) < releasePolicy.minimumMajor)
+  ) {
+    fail(`release-as must target major >= ${releasePolicy.minimumMajor}, found ${nextVersion}`);
+  }
+  if (Number(expectedVersion?.split(".")[0]) < releasePolicy.minimumMajor && !nextVersion) {
+    fail(
+      `the major transition requires an explicit release-as target >= ${releasePolicy.minimumMajor}`,
+    );
+  }
+
   if (rootReleaseConfig.component !== "palamedes") {
     fail(`root release component is ${rootReleaseConfig.component}, expected palamedes`);
   }

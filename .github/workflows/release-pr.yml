@@ -27,7 +27,12 @@ jobs:
         with:
           node-version: 24
 
+      - name: Read release policy
+        id: policy
+        run: node ./scripts/release-policy.mjs
+
       - name: Run release-please
+        if: steps.policy.outputs.publication_enabled == 'true'
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           config-file: .release-please-config.json

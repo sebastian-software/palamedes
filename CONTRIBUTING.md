@@ -236,5 +236,21 @@ when possible, for example:
 - `docs: add troubleshooting guide`
 - `ci: expand native build matrix`
 
+During the coordinated v2 implementation, `.release-policy.json` holds release
+creation and package/container publication, including forced publication. The
+next Release Please version is explicitly `2.0.0`; the current version files
+continue to describe the last release until its generated release PR lands.
+Implementation PRs can merge into `main` behind this hold. A Publish workflow
+dispatch with `dry_run` still builds and verifies artifacts without publishing.
+
+Complete #1215's migration and host verification, coordinate the corrected
+#1154 standards `rust-node-product` release layout, and obtain explicit release
+authorization before enabling `publicationEnabled` in a reviewed PR. The hold
+is independent of that layout migration; it does not replace it. Once enabled,
+publication still rejects versions below `minimumMajor` and prerelease versions.
+Remove the one-time `release-as` override after 2.0.0 is released so subsequent
+versions follow conventional commits again. Run `pnpm check:release-set` and
+`pnpm check:workflow-contracts` when changing this policy or its workflow wiring.
+
 Do not edit generated changelog entries by hand unless the release automation
 requires a specific correction.
