@@ -217,6 +217,7 @@ try {
           await context.addCookies([{ name: "locale", value: locale, url: baseUrl }]);
           let injected = false;
           let failedUrl;
+          let armed = true;
           await context.route("**/*", async (route) => {
             const request = route.request();
             if (request.resourceType() === "document") {
@@ -239,6 +240,7 @@ try {
             if (!request.url().includes(`.${locale}-`)) {
               throw new Error(`Inactive locale catalog requested: ${request.url()}`);
             }
+            if (!armed) return route.continue();
             failedUrl ??= request.url();
             if (request.url() !== failedUrl) return route.continue();
             injected = true;
@@ -267,6 +269,7 @@ try {
           ) {
             throw new Error(`${locale} ${failure} exposed internal catalog failure text`);
           }
+          armed = false;
           await page
             .locator('main[role="alert"]')
             .getByText("Reload page", { exact: true })
