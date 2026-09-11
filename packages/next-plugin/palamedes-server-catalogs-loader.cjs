@@ -1,5 +1,7 @@
 "use strict";
 
+const path = require("node:path");
+
 const {
   catalogResourcePath,
   getConfigDependencies,
@@ -22,7 +24,12 @@ module.exports = function palamedesServerCatalogsLoader() {
         );
       }
       const resourcePath = catalogResourcePath(config, catalog, locale);
-      return `import(${JSON.stringify(resourcePath)}).then(module => module.messages)`;
+      let specifier = path
+        .relative(path.dirname(this.resourcePath), resourcePath)
+        .split(path.sep)
+        .join("/");
+      if (!specifier.startsWith(".")) specifier = `./${specifier}`;
+      return `import(${JSON.stringify(specifier)}).then(module => module.messages)`;
     });
     return `${JSON.stringify(locale)}: () => Promise.all([${imports.join(",")}])`;
   });

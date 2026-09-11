@@ -166,9 +166,8 @@ export type WithPalamedesOptions = {
 
   /**
    * Preserve authored source messages as diagnostic metadata only.
-   * Defaults to `true` in every environment. Set to `false` for compact,
-   * hash-only output when bundle size or embedding authored source text is a
-   * concern.
+   * Defaults to `false` in every environment. Set to `true` to include
+   * authored source text in generated calls for diagnostics.
    * V2 runtime misses throw; this metadata never provides replacement output.
    */
   keepSourceFallbacks?: boolean;
@@ -185,7 +184,7 @@ export type WithPalamedesOptions = {
    * Server Function. Requires a `palamedes.server` entry module exporting
    * `initializeServerFunctionI18n`.
    *
-   * @default false
+   * Automatically enabled when the conventional entry exists.
    */
   serverFunctions?: boolean;
 
@@ -456,11 +455,8 @@ export function withPalamedes(
   }
   const messageSplitting = true;
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
-  // Production catalog chunks can lag code during a deploy or be loaded
-  // independently when message splitting is enabled. Preserve source text by
-  // default so a miss is readable rather than a compiled hash; applications
-  // with stricter source-text or bundle-size constraints can opt out.
-  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? true;
+  // Source metadata is optional diagnostics; compiled catalogs supply all message output.
+  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? false;
   const stripNonEssentialProps = process.env.NODE_ENV === "production";
   const projectRoot = resolveProjectRoot(
     { projectRoot: explicitProjectRoot, cwd: explicitCwd },
@@ -545,7 +541,6 @@ export function withPalamedes(
           loader: oxcLoaderPath,
           options: {
             ...transformLoaderOptions,
-            ...(serverFunctions ? { serverMessageSplitting: true } : {}),
           },
         },
       ],
@@ -561,7 +556,10 @@ export function withPalamedes(
     loaders: [
       {
         loader: serverCatalogLoaderPath,
-        options: { cwd: projectRoot, configPath: resolvedConfigPath },
+        options: {
+          cwd: projectRoot,
+          ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+        },
       },
     ],
     as: "*.js",
@@ -680,9 +678,6 @@ export function withPalamedes(
             loader: oxcLoaderPath,
             options: {
               ...webpackTransformLoaderOptions,
-              ...(webpackServerFunctions && context.isServer
-                ? { serverMessageSplitting: true }
-                : {}),
               ...(messageSplitting && !context.isServer
                 ? { clientMessageSplitting: true, clientFragmentFailureMode }
                 : {}),

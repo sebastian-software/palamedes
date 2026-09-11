@@ -404,8 +404,14 @@ function verifyCanonicalQuickstart(read) {
   assertMatches(
     siteSteps,
     /import \{ createI18n \} from "@palamedes\/core\/compiled"/gu,
-    4,
+    2,
     "site quickstart compiled runtime imports",
+  );
+
+  assertContains(
+    siteSteps,
+    'import { createNextServerI18n } from "@palamedes/next-plugin/server"',
+    "site Next quickstart adapter-owned catalog loading",
   );
 
   for (const [file, text] of [

@@ -44,13 +44,10 @@ test("Next.js first run keeps its executable server path and navigation in sync"
 
   for (const value of [
     'import { withPalamedes } from "@palamedes/next-plugin"',
-    'import { createNextServerI18nScope } from "@palamedes/next-plugin/server"',
-    'import { createI18n } from "@palamedes/core/compiled"',
-    'import type { CompiledCatalogMessages } from "@palamedes/core/compiled"',
-    "serverI18nScope.run(i18n, callback)",
+    'import { createNextServerI18n } from "@palamedes/next-plugin/server"',
+    'createNextServerI18n({ locale: "de" })',
     "pnpm exec pmds extract",
-    "messageSplitting: true",
-    "serverFunctions: true",
+    "automatically discovers",
   ]) {
     assertIncludes(guide, value);
   }
@@ -64,7 +61,7 @@ test("Next.js first run keeps its executable server path and navigation in sync"
     siteSteps,
     `// src/app/page.tsx
 import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"`,
+import { createActiveServerI18n } from "../lib/load-i18n.server"`,
   );
   assert.ok(
     !read(siteSteps).includes('from "@/lib/load-i18n.server"'),

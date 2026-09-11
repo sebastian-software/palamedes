@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 
 import { chromium } from "@playwright/test";
@@ -92,6 +93,29 @@ async function assertServerActionLocale(locale, expected) {
   }
 }
 
+async function browserContext(browser, options) {
+  const context = await browser.newContext(options);
+  // Enforce a production policy in the real browser. Hash Next's streamed
+  // inline bootstrap, but allow neither unsafe-inline nor unsafe-eval scripts.
+  await context.route("**/*", async (route) => {
+    if (route.request().resourceType() !== "document") return route.continue();
+    const response = await route.fetch();
+    const body = await response.text();
+    const hashes = [...body.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/giu)].map(
+      (match) => `'sha256-${createHash("sha256").update(match[1]).digest("base64")}'`,
+    );
+    await route.fulfill({
+      response,
+      body,
+      headers: {
+        ...response.headers(),
+        "content-security-policy": `default-src 'self'; script-src 'self' ${hashes.join(" ")}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'`,
+      },
+    });
+  });
+  return context;
+}
+
 async function assertClientGraphSplitting() {
   const executablePath = [
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
@@ -128,7 +152,7 @@ async function assertClientGraphSplitting() {
         ],
       },
     ]) {
-      const context = await browser.newContext({
+      const context = await browserContext(browser, {
         extraHTTPHeaders: { "accept-language": proof.locale },
         locale: proof.locale,
       });
@@ -245,7 +269,7 @@ async function assertLocaleSwitchThenClientNavigation() {
   const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
 
   try {
-    const context = await browser.newContext({
+    const context = await browserContext(browser, {
       extraHTTPHeaders: { "accept-language": "en" },
       locale: "en",
     });
@@ -336,6 +360,74 @@ async function assertLocaleSwitchThenClientNavigation() {
   }
 }
 
+async function assertFragmentFailures() {
+  const executablePath = [
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/google-chrome",
+  ].find((candidate) => candidate && existsSync(candidate));
+  const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
+  const chunkDirectory = new URL("../.next/static/chunks/", import.meta.url);
+  const chunks = readdirSync(chunkDirectory).filter((name) => name.endsWith(".js"));
+  try {
+    for (const phase of ["initial", "navigation"]) {
+      const sentinel =
+        phase === "initial" ? "In den Warenkorb" : "Erst nach Client-Navigation geladen";
+      const selected = chunks.filter((name) =>
+        readFileSync(new URL(name, chunkDirectory), "utf8").includes(sentinel),
+      );
+      assert(selected.length > 0, `No emitted native ${phase} fragment found`);
+      for (const failureMode of ["network", "evaluation"]) {
+        const context = await browserContext(browser, {
+          extraHTTPHeaders: { "accept-language": "de" },
+          locale: "de",
+        });
+        let failedRequests = 0;
+        await context.route("**/_next/static/**", async (route) => {
+          if (
+            !selected.some((name) => new URL(route.request().url()).pathname.endsWith(`/${name}`))
+          )
+            return route.continue();
+          failedRequests += 1;
+          if (failureMode === "network") return route.abort("failed");
+          const response = await route.fetch();
+          return route.fulfill({
+            response,
+            body: (await response.text()).replace(
+              JSON.stringify(sentinel),
+              '(()=>{throw new Error("PALAMEDES_PRIVATE_FRAGMENT_DIAGNOSTIC")})()',
+            ),
+          });
+        });
+        const page = await context.newPage();
+        await page.goto(baseUrl);
+        if (phase === "navigation") {
+          await page.getByTestId("client-ready").waitFor({ state: "attached" });
+          assert.equal(failedRequests, 0, "Lazy catalog was requested before navigation");
+          await page.getByTestId("open-lazy-client-probe").evaluate((button) => button.click());
+        }
+        await page.locator('main[role="alert"]').waitFor();
+        assert(failedRequests > 0, "Failure fixture did not reach an emitted catalog request");
+        const errorCopy = await page.locator('main[role="alert"]').innerText();
+        assert.match(errorCopy, /temporarily unavailable/u);
+        assert.doesNotMatch(errorCopy, /PALAMEDES_PRIVATE|palamedes-m-|XHAxica|Error:/u);
+        await context.unroute("**/_next/static/**");
+        await page.getByRole("button", { name: "Reload page" }).click();
+        if (phase === "navigation") await page.getByTestId("lazy-client-message").waitFor();
+        else await page.getByTestId("client-ready").waitFor({ state: "attached" });
+        assert.equal(await page.locator('main[role="alert"]').count(), 0);
+        console.log(
+          `Next ${phase} ${failureMode} failure reached ordinary error UI and document reload recovered under CSP`,
+        );
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 const server = spawn(process.execPath, [nextCli, "start", "--port", String(port)], {
   cwd: new URL("..", import.meta.url),
   env: { ...process.env, NODE_ENV: "production" },
@@ -365,6 +457,7 @@ try {
   );
   await assertClientGraphSplitting();
   await assertLocaleSwitchThenClientNavigation();
+  await assertFragmentFailures();
   console.log(
     "Next.js production scopes stayed request-local and client requests followed locale × route graphs after a document locale switch",
   );

@@ -26,10 +26,7 @@ const initialSource = (
   )
 ).join("\n");
 
-const inactiveCatalogSentinels = [
-  "Für dieses Dokument mit Palamedes lokalisiert",
-  "Localizado para este documento con Palamedes",
-];
+const inactiveCatalogSentinels = ["In den Warenkorb", "Añadir al carrito"];
 for (const sentinel of inactiveCatalogSentinels) {
   assert.equal(
     initialSource.includes(sentinel),

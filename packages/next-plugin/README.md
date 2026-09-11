@@ -19,7 +19,7 @@ and catalog problems show up while the app is still easy to fix.
 - Requires Next.js 16 (`peerDependencies: next ^16`); the emitted top-level
   `turbopack.rules` conditions and `outputFileTracingRoot` need the Next 16
   config surface
-- Uses Turbopack as the verified default path on Next.js 16.2
+- Uses Turbopack as the verified default path on Next.js 16.3.4
 - Graph-split client messages are verified under Turbopack and webpack
 - The shipped example proves server rendering, localized `"use server"`
   actions, hydration, and client navigation
@@ -55,76 +55,47 @@ catalogs:
     include: [src]
 ```
 
-Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure the active i18n instance is available on both the client and the server before translated code executes.
+`withPalamedes()` owns catalog delivery in development and production. The
+application supplies locale policy and ordinary Next error views. PO catalogs
+are compiled automatically; application catalog imports, loader maps, client
+catalog boundaries, and import-map HTML are unnecessary.
 
-For translated Client Components using PO catalogs, enable
-`messageSplitting: true`. Palamedes then owns the browser bootstrap: it loads
-only the document locale's fragments for Client Components and helpers that are
-actually present in the evaluated module graph. No application-owned catalog
-boundary, executable RSC payload, or inline script is required.
-
-Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Next
-loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
-future adapter release explicitly documents `.fcl` imports.
-
-For App Router Server Components on the Node runtime, use a server-only module
-with `@palamedes/next-plugin/server`. This follows the official RSC shape: keep
-server code behind `server-only`, memoize request work with React `cache()`, and
-bind direct macro calls to the complete Next render lifetime.
+For App Router Server Components on the Node runtime, use a server-only module:
 
 ```ts
 // src/lib/i18n.server.ts
 import "server-only";
-
 import { cache } from "react";
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
-import type { PalamedesI18n } from "@palamedes/core";
+import { createNextServerI18n } from "@palamedes/next-plugin/server";
 
-export const serverI18n = createNextServerI18nScope<PalamedesI18n>();
-
-const loadActiveServerI18n = cache(async () => {
+export const createActiveServerI18n = cache(async () => {
   const locale = await resolveLocaleFromCookiesOrHeaders();
-  const i18n = await loadI18n(locale);
-  return { i18n, locale };
+  return createNextServerI18n({ locale });
 });
-
-export async function createActiveServerI18n() {
-  const active = await loadActiveServerI18n();
-  serverI18n.activate(active.i18n);
-  return active;
-}
 ```
 
 ```tsx
 // app/page.tsx
 import { t } from "@palamedes/core/macro";
-import { createActiveServerI18n } from "@/lib/i18n.server";
-
-function DownstreamServerTitle() {
-  return <h1>{t`Welcome to Palamedes`}</h1>;
-}
+import { createActiveServerI18n } from "../lib/i18n.server";
 
 export default async function Page() {
-  const { locale } = await createActiveServerI18n();
-  return (
-    <>
-      <DownstreamServerTitle />
-      <TranslatedClientContent locale={locale} />
-    </>
-  );
+  await createActiveServerI18n();
+  return <h1>{t`Welcome to Palamedes`}</h1>;
 }
 ```
 
-Enable the client graph bootstrap once in the Next configuration:
+The adapter lazily imports the complete active server locale, prepares its
+immutable catalog once per module generation, and attaches shared content to a
+fresh request instance. `createNextServerI18n()` activates the scope for the
+complete Next render, including suspension and Client Component server render.
+`createNextServerI18nScope()` remains available for explicit scoped callbacks.
+Server catalog or imported-config changes create a new generation; requests
+already using earlier immutable content keep their view.
 
-```js
-module.exports = withPalamedes(
-  {},
-  {
-    messageSplitting: true,
-  },
-);
-```
+Set `<html lang={locale}>` from the same policy. To preserve a selected
+formatting time zone on the client, also set
+`data-palamedes-time-zone={timeZone}` on that element.
 
 Each message-bearing browser module gets statically enumerable imports for its
 selected PO subset. It awaits only the import matching
@@ -151,32 +122,20 @@ reload is the supported fallback. The development invalidation regression runs
 under Turbopack. Webpack's top-level-await client build is covered in
 production, but does not claim an equivalent HMR contract.
 
-V2 runtime misses propagate as errors even when a fragment failed earlier.
-Transparent Next delivery and usable initial/navigation error handling are
-completed in the Next integration slice (#1208); source metadata is never a
-recovery path. Error views must remain usable without the failed catalog.
+A failed required fragment prevents dependent module evaluation in every
+environment. Runtime misses also throw. Keep ordinary Next `error.tsx` and
+`global-error.tsx` views independent of catalogs and show generic copy. Offer a
+full document reload: rejected module imports may remain cached, so a boundary
+reset alone cannot guarantee recovery. Compiled translation fallbacks are
+resolved during the build and remain independent of delivery failures.
 
-`messageSplitting` currently supports PO catalogs and defaults to `false` for
-compatibility. Keep using `createClientCatalogBoundary()` from
-`@palamedes/react/client` when an app needs a complete active-locale catalog or
-a custom loading strategy. Parser-free split apps should author client messages
-with macros or compiled adapters; raw ICU strings passed to compatibility
-runtime components still require the full parser.
-
-Create one Next server scope at module level and activate a fresh i18n instance
-during request-local server initialization. Its lifetime is the complete App
-Router render, including the RSC pass, Client Component server prerender, and
-React suspension/resumption. Next render objects are held as weak request keys;
-there is no process-global "last request" instance to leak another locale.
-
-Do not call `setServerI18nGetter()` inside every Server Component render. Use
-`serverI18n.run(i18n, callback)` only for tightly scoped helper callbacks. Use
-the generic `createServerI18nScope()` from `@palamedes/runtime/server` for
-classic Node request handlers outside Next. Both server subpaths are Node-only,
-so keep them out of Client Components and Edge runtime code.
+`messageSplitting` is a deprecated compatibility option. Remove it; `false`
+is rejected because automatic delivery is the v2 contract. Only PO catalog
+imports are supported by this adapter. Keep server adapter imports behind
+`server-only`; they require Node and are not Edge runtime entry points.
 
 The Next render-lifetime adapter supports the package's declared Next 16 peer
-range and is verified against Next 16.2. It intentionally binds to Next's
+range and is verified against Next 16.3.4. It intentionally binds to Next's
 server render storage because public React async context does not span both
 App Router render passes. If a future Next 16 release removes that server
 storage module, the import fails during the application build instead of
@@ -193,29 +152,17 @@ the project root or `src` directory:
 
 ```ts
 // src/palamedes.server.ts
-import { createI18n } from "@palamedes/core/compiled";
-import { getLocale, serverI18nScope } from "./lib/i18n.server";
+import { createNextServerI18n } from "@palamedes/next-plugin/server";
+import { getLocale } from "./lib/i18n.server";
 
 export async function initializeServerFunctionI18n(): Promise<void> {
   const { locale } = await getLocale();
-  const i18n = createI18n();
-  i18n.activate(locale);
-  serverI18nScope.activate(i18n);
+  await createNextServerI18n({ locale });
 }
 ```
 
-Then opt into automatic initialization with a flag:
-
-```js
-const { withPalamedes } = require("@palamedes/next-plugin");
-
-module.exports = withPalamedes(
-  {},
-  {
-    serverFunctions: true,
-  },
-);
-```
+The plugin automatically discovers this entry. `serverFunctions: true` can
+require its presence explicitly; the default needs no feature flag.
 
 Palamedes instruments directive-visible async functions: direct exports and
 locally declared named exports in a module with a top-level `"use server"`
@@ -234,40 +181,12 @@ reference (including through nested wrappers). A wrapper that only receives an
 imported callback still has no local async body for Palamedes to instrument, so
 mark that callback's implementation explicitly.
 
-The initializer belongs to the application. It should resolve the request
-locale, create and activate a fresh request-local i18n instance, and be
-request-memoized or otherwise idempotent. It does not load a whole locale
-catalog: for each message-bearing server module, the transform registers one
-lazy import per locale containing only that module's compiled ids. Static ESM
-imports naturally bring along registrations from transitive helpers. After the
-application initializer activates its instance, Palamedes imports only the
-active locale's registered fragments and loads them into that instance.
-
-Registration must happen before the initializer runs to affect the current
-request. A module first reached through a dynamic import inside the action body
-registers its fragments too late for that invocation; those registrations are
-available to subsequent requests. Keep translating helpers in the static ESM
-dependency graph, or load their messages explicitly before translating during
-the first request.
-
-Generated locale imports are deduplicated across concurrent and later requests
-by the server module runtime. The request-local `load()` calls still merge each
-fragment into the fresh instance; they scale with the messages represented in
-the currently evaluated server graph rather than with the complete locale
-catalog. The plugin resolves exactly one `palamedes.server` module from the
-project root or `src` directory and keeps its absolute import address internal.
-
-Registration follows module evaluation, not a per-action bundler manifest. A
-long-lived server runtime can therefore retain registrations from more than one
-action graph, so a later action may load a superset of its own dependency
-closure. This affects the upper performance bound, not lookup correctness:
-Palamedes still imports only the active locale and only the selected ids from
-each registered source module. During webpack development, each generated
-server module releases its exact registration on HMR disposal, and a
-re-evaluated module atomically replaces all of its sidecars. Turbopack does not
-currently expose an equivalent server-module disposal hook to loader output;
-edits and catalog/config changes replace active registrations, but a module
-removed from the graph can remain registered until the dev server restarts.
+The initializer owns locale policy and calls `createNextServerI18n()` before
+any translated action code runs. It should be request-memoized or otherwise
+idempotent. Complete active-locale server catalogs also cover helpers reached
+through dynamic imports during the action; no application fragment registration
+or message-loading step is needed. Catalog content is reused across requests,
+while each request keeps its own i18n instance.
 
 Parameter defaults execute before the function body. Palamedes therefore
 rejects eager macros in Server Function parameter initializers, including
@@ -282,8 +201,7 @@ export async function save(message?: string) {
 ```
 
 Do not replace this guard with `??=` unless `null` should also select the
-fallback. Server Function instrumentation is opt-in and currently targets the
-Next.js integration.
+fallback. Server Function instrumentation targets the Next.js integration.
 
 ## Options
 
@@ -302,14 +220,12 @@ module.exports = withPalamedes(
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
     serverFunctions: true,
-    messageSplitting: true,
   },
 );
 ```
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `true`
-here. It only controls diagnostic source metadata in generated calls. Set
-`keepSourceFallbacks: false` for compact output without authored source text.
+`keepSourceFallbacks` retains its legacy option name and defaults to `false`.
+Set it to `true` only to include diagnostic source metadata in generated calls.
 V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.

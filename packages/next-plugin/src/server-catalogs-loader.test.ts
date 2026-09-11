@@ -37,6 +37,10 @@ it("generates lazy complete server catalogs in config order and watches imported
   const dependencies: string[] = [];
   const loader = require(loaderPath) as (this: object) => string;
   const code = loader.call({
+    resourcePath: path.join(
+      config.rootDir,
+      "node_modules/@palamedes/next-plugin/dist/server-catalogs.mjs",
+    ),
     getOptions: () => ({ cwd: "/project", configPath: config.configPath }),
     addDependency: (dependency: string) => dependencies.push(dependency),
   });
@@ -68,8 +72,8 @@ it("generates lazy complete server catalogs in config order and watches imported
   expect(imports).toEqual([]);
   const messages = await vm.runInContext('loadServerCatalog("de")', context);
   expect(imports.map((specifier) => specifier.replaceAll("\\", "/"))).toEqual([
-    path.join(config.rootDir, "messages/de.po").replaceAll("\\", "/"),
-    path.join(config.rootDir, "overrides/de.po").replaceAll("\\", "/"),
+    "../../../../messages/de.po",
+    "../../../../overrides/de.po",
   ]);
   expect(messages).toHaveLength(2);
   expect(() => vm.runInContext('loadServerCatalog("__proto__")', context)).toThrow("Unsupported");

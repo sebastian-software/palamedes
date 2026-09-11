@@ -206,8 +206,8 @@ describe("withPalamedes turbopack config", () => {
   });
 
   it.each([
-    ["development", true, false],
-    ["production", true, true],
+    ["development", false, false],
+    ["production", false, true],
   ] as const)(
     "sets runtime fallback metadata for the %s Turbopack mode",
     (mode, expectedFallbacks, expectedMetadataStrip) => {
@@ -222,12 +222,12 @@ describe("withPalamedes turbopack config", () => {
     },
   );
 
-  it("lets keepSourceFallbacks opt out of the Next default", () => {
+  it("lets diagnostic source metadata opt in explicitly", () => {
     vi.stubEnv("NODE_ENV", "production");
-    const config = withPalamedes({}, { keepSourceFallbacks: false });
+    const config = withPalamedes({}, { keepSourceFallbacks: true });
 
     const rule = (getRules(config)["*"] as RuleItem[])[0]!;
-    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: false });
+    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: true });
   });
 
   it("translates include/exclude options into the turbopack rule condition", () => {
@@ -284,7 +284,6 @@ describe("withPalamedes turbopack config", () => {
         initializerModule: serverInitializerModule,
         initializerExport: "initializeServerFunctionI18n",
       },
-      serverMessageSplitting: true,
     });
     expect(config.turbopack?.resolveAlias).toMatchObject({
       [serverEntryModule]: "./src/palamedes.server.ts",
@@ -496,7 +495,6 @@ describe("withPalamedes webpack config", () => {
         initializerModule: serverInitializerModule,
         initializerExport: "initializeServerFunctionI18n",
       },
-      serverMessageSplitting: true,
     });
     expect(poRule?.use?.[0]?.options).toMatchObject({
       configPath: path.join(appRoot, "config", "palamedes.yaml"),
@@ -529,7 +527,6 @@ describe("withPalamedes webpack config", () => {
         initializerModule: serverInitializerModule,
         initializerExport: "initializeServerFunctionI18n",
       },
-      serverMessageSplitting: true,
     });
   });
 
