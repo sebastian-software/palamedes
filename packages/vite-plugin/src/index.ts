@@ -1000,7 +1000,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   plugins.push({
     name: "palamedes:react-router-route-boundaries",
     augmentChunkHash(chunk) {
-      if (!chunk.facadeModuleId?.includes("?__react-router-build-client-route")) return undefined;
+      if (!chunk.facadeModuleId?.includes("?__react-router-build-client-route")) return;
       return (
         createHash("sha256")
           // Rollup calls augmentChunkHash before rendered code exists. Hash the
