@@ -51,7 +51,7 @@ function createCspProxy(targetUrl, port) {
         const headers = { ...upstreamResponse.headers };
         delete headers["content-length"];
         headers["content-security-policy"] =
-          `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'`;
+          `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'`;
         response.writeHead(upstreamResponse.statusCode ?? 502, headers);
         upstreamResponse.pipe(response);
       },
