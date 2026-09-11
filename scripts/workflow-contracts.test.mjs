@@ -30,6 +30,27 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
+  it("holds release creation and real publication while retaining a non-publishing dry run", async () => {
+    const [release, publish, container, detection] = await Promise.all([
+      readRepositoryFile(".github/workflows/release-pr.yml"),
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/workflows/publish-examples-container.yml"),
+      readRepositoryFile("scripts/determine-release.mjs"),
+    ]);
+    expect(release).toContain("run: node ./scripts/release-policy.mjs");
+    expect(release).toContain("if: steps.policy.outputs.publication_enabled == 'true'");
+    expect(publish).toContain(
+      "DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}",
+    );
+    expect(container).not.toContain("DRY_RUN:");
+    expect(detection).toContain("publicationAllowed(policy, version)");
+    for (const step of publish.split("- name:").slice(1)) {
+      if (/run:.*publish-package-if-needed|run:.*check-published-versions/.test(step)) {
+        expect(step).toContain("!inputs.dry_run");
+      }
+    }
+  });
+
   it("validates the enabled control's newline-terminated Rust cache files", () => {
     expect(() => assertEnabledCacheContents("1788773977\n", "2026-09\n")).not.toThrow();
     for (const timestamp of ["1788773977", "1788773977\n\n", "1788773977\r\n", "invalid\n", ""]) {

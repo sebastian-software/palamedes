@@ -56,7 +56,7 @@
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:published-types": "node ./scripts/check-published-types.mjs && pnpm check:core-api-reference",
     "check:core-api-reference": "node ./scripts/check-core-api-reference.mjs",
-    "check:release-set": "node ./scripts/check-release-set.mjs",
+    "check:release-set": "node ./scripts/check-release-set.mjs && node --test ./scripts/determine-release.test.mjs",
     "check:workflow-contracts": "vitest run scripts/workflow-contracts.test.mjs scripts/native-package-contracts.test.mjs scripts/release-verification.test.mjs",
     "check:workflow-pins": "node ./scripts/check-workflow-pins.mjs",
     "check-types": "pnpm check:native-types && pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",

@@ -1,0 +1,5 @@
+{
+  "minimumMajor": 2,
+  "publicationEnabled": false,
+  "reason": "Palamedes v2 implementation is in progress. Complete #1215 and obtain release authorization before enabling publication."
+}
