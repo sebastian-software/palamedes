@@ -170,14 +170,13 @@ describe("palamedes vite plugin", () => {
       { ssr: true } as never,
     );
 
-    expect(result?.code).toContain(
-      'import { createServerCatalogStore } from "@palamedes/runtime/server";',
-    );
-    expect(result?.code).toContain('"en": () => Promise.all([');
-    expect(result?.code).toContain('"de": () => Promise.all([');
-    expect(result?.code).toContain('"pseudo": () => Promise.all([');
-    expect(result?.code).toContain('import("/repo/src/locales/en.po")');
-    expect(result?.code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).toContain('import { createServerCatalogStore } from "@palamedes/runtime/server";');
+    expect(code).toContain('"en": () => Promise.all([');
+    expect(code).toContain('"de": () => Promise.all([');
+    expect(code).toContain('"pseudo": () => Promise.all([');
+    expect(code).toContain('import("/repo/src/locales/en.po")');
+    expect(code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
     expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
   });
 
