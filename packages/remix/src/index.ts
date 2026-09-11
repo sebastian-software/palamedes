@@ -343,14 +343,24 @@ function catalogDigest(config: LoadedPalamedesConfig): string {
       try {
         digest.update(readFileSync(resource));
       } catch (error) {
-        if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT")
+        if (!isMissingFileError(error)) {
           throw error;
+        }
         digest.update("missing");
       }
       digest.update("\0");
     }
   }
   return digest.digest("hex");
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 function toCatalogArtifactConfig(config: LoadedPalamedesConfig) {
