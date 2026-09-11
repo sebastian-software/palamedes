@@ -1,6 +1,6 @@
 [package]
 name = "palamedes-node"
-version = "1.25.0"
+version = "1.25.1"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
