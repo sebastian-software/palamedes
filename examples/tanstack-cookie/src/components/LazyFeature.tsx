@@ -1,5 +1,9 @@
 import { Trans } from "@palamedes/react/macro";
 
+if (typeof document !== "undefined") {
+  document.documentElement.dataset.tanstackLazyBody = "executed";
+}
+
 export default function LazyFeature() {
   return (
     <section data-testid="lazy-feature">

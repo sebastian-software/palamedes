@@ -51,9 +51,13 @@ try {
             };
             delete headers["content-length"];
             delete headers["content-encoding"];
+            const nonceBody = body.replace(/<script\b/giu, '<script nonce="tanstack-proof"');
             return route.fulfill({
               response,
-              body: body.replace(/<script\b/giu, '<script nonce="tanstack-proof"'),
+              body: nonceBody.replace(
+                "</body>",
+                '<script>document.documentElement.dataset.tanstackUnauthorizedInline = "executed";</script></body>',
+              ),
               headers,
             });
           }
@@ -80,6 +84,12 @@ try {
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message));
         await page.goto(origin, { waitUntil: "domcontentloaded" });
+        assert.equal(await page.locator("html").getAttribute("data-tanstack-lazy-body"), null);
+        assert.equal(
+          await page.locator("html").getAttribute("data-tanstack-unauthorized-inline"),
+          null,
+        );
+        assert.deepEqual(pageErrors, [], `${locale} ${phase} ${failure}: normal page boot failed`);
         if (phase === "lazy") {
           await page.getByTestId("client-ready").waitFor({ state: "attached" });
           assert.equal(await page.getByTestId("lazy-feature").count(), 0);
@@ -97,6 +107,7 @@ try {
         assert(injected, `${locale} ${phase} ${failure}: sidecar was not intercepted`);
         assert.match(await page.locator('main[role="alert"]').innerText(), /Reload page/u);
         assert.equal(await page.getByTestId("lazy-feature").count(), 0);
+        assert.equal(await page.locator("html").getAttribute("data-tanstack-lazy-body"), null);
         armed = false;
         await page.locator('main[role="alert"]').getByText("Reload page", { exact: true }).click();
         await page.waitForLoadState("networkidle");
@@ -106,6 +117,10 @@ try {
         if (phase === "lazy") {
           await page.getByTestId("lazy-feature-trigger").click();
           await page.getByTestId("lazy-feature").waitFor({ state: "visible" });
+          assert.equal(
+            await page.locator("html").getAttribute("data-tanstack-lazy-body"),
+            "executed",
+          );
           assert.match(
             await page.getByTestId("lazy-feature").innerText(),
             locale === "de" ? /Übersetzte Lazy-Funktion/u : /Lazy translated feature/u,
