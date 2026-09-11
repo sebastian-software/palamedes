@@ -1,9 +1,10 @@
-import { Script } from "node:vm";
 import { createHash } from "node:crypto";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { readFileSync, realpathSync, watch, type FSWatcher } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
-import type { registerHooks } from "node:module";
+import { createRequire, type registerHooks } from "node:module";
 import type { ModuleLoader } from "remix/assets";
 import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source-map-js";
 
@@ -15,11 +16,7 @@ import {
   loadPalamedesConfigSync,
   type LoadedPalamedesConfig,
 } from "@palamedes/config";
-import {
-  defineCompiledCatalog,
-  isCompiledCatalog,
-  type CompiledCatalogMessages,
-} from "@palamedes/core/compiled";
+import { isCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core/compiled";
 import {
   compileCatalogArtifactSelected,
   compileCatalogModule,
@@ -165,7 +162,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
             },
           );
           result.warnings.forEach((warning) => console.warn(warning));
-          return evaluateCompiledCatalogModule(result.code);
+          return await importCompiledCatalogModule(result.code);
         }),
       );
     },
@@ -472,19 +469,33 @@ function toCatalogArtifactConfig(config: LoadedPalamedesConfig) {
   };
 }
 
-/** Evaluate native-generated module code on the server without accepting authored ICU text. */
-function evaluateCompiledCatalogModule(source: string): CompiledCatalogMessages {
-  const body = source
-    .replace(
-      /^import\{defineCompiledCatalog as __palamedesDefineCompiledCatalog\}from"@palamedes\/core\/compiled";/u,
-      "",
-    )
-    .replace(/export const messages=/u, "return ")
-    .replace(/;export default \{ messages \};$/u, ";");
-  const evaluate = new Script(`(function(__palamedesDefineCompiledCatalog){${body}})`, {
-    filename: "palamedes-generated-server-catalog.js",
-  }).runInThisContext() as (define: typeof defineCompiledCatalog) => CompiledCatalogMessages;
-  const messages = evaluate(defineCompiledCatalog);
+// Emit native compiler output as ordinary ESM. Node owns module evaluation;
+// neither authored ICU nor generated function bodies pass through eval/vm.
+let serverModuleDirectory: Promise<string> | undefined;
+const serverModuleWrites = new Map<string, Promise<string>>();
+async function importCompiledCatalogModule(source: string): Promise<CompiledCatalogMessages> {
+  const code = source.replace(
+    'from"@palamedes/core/compiled"',
+    `from${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve("@palamedes/core/compiled")).href)}`,
+  );
+  const digest = createHash("sha256").update(code).digest("hex");
+  let moduleUrl = serverModuleWrites.get(digest);
+  if (!moduleUrl) {
+    serverModuleDirectory ??= mkdtemp(path.join(tmpdir(), "palamedes-remix-modules-")).catch(
+      (error: unknown) => {
+        serverModuleDirectory = undefined;
+        throw error;
+      },
+    );
+    moduleUrl = serverModuleDirectory.then(async (directory) => {
+      const filename = path.join(directory, `${digest}.mjs`);
+      await writeFile(filename, code, "utf8");
+      return pathToFileURL(filename).href;
+    });
+    serverModuleWrites.set(digest, moduleUrl);
+    void moduleUrl.catch(() => serverModuleWrites.delete(digest));
+  }
+  const { messages } = await import(/* @vite-ignore */ await moduleUrl);
   if (!isCompiledCatalogObject(messages)) {
     throw new TypeError(
       "Palamedes generated server catalog did not produce an executable catalog.",
