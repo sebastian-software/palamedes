@@ -61,6 +61,7 @@ export function renderHomePage({
       ${clientProof ? `<div data-remix-client-proof>${clientProof}</div>` : ""}
     </main>
     ${clientCatalog ?? ""}
+    ${clientProof ? '<script type="module" src="/assets/app/public/catalog-error.ts"></script>' : ""}
     ${clientProof ? '<script type="module" src="/assets/app/public/client.tsx"></script>' : ""}
   </body>
 </html>`;

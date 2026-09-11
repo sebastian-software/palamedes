@@ -234,6 +234,50 @@ async function captureScreenshot(page, example, state) {
   });
 }
 
+test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
+  const example = activeExample();
+  if (example.id !== "remix-cookie") {
+    return;
+  }
+
+  const page = await launchPage([]);
+  let failure = "network";
+  await page.route("**/assets/app/public/client.tsx", async (route) => {
+    if (failure === "network") {
+      await route.abort("failed");
+      return;
+    }
+    if (failure === "evaluation") {
+      await route.fulfill({
+        body: 'throw new Error("injected Remix entry evaluation failure");',
+        contentType: "application/javascript",
+        status: 200,
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("catalog-error")).toBeVisible();
+  await expect(page.getByTestId("catalog-error")).toContainText(
+    "Translations are temporarily unavailable",
+  );
+
+  failure = "ok";
+  await page.getByTestId("catalog-error-reload").click();
+  await waitForClientReady(page);
+
+  failure = "evaluation";
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("catalog-error")).toBeVisible();
+  await expect(page.getByTestId("catalog-error-reload")).toBeVisible();
+
+  failure = "ok";
+  await page.getByTestId("catalog-error-reload").click();
+  await waitForClientReady(page);
+});
+
 test("Waku initial HTML document uses the request locale", async () => {
   const example = activeExample();
   if (example.framework !== "waku") {
