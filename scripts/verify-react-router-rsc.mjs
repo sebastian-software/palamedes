@@ -1,8 +1,15 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { observeBrowserArtifacts, verifyBrowserArtifacts } from "./verify-browser-artifacts.mjs";
 
 import { chromium } from "@playwright/test";
 
+const example = {
+  id: "react-router-rsc-cookie",
+  framework: "react-router-rsc",
+  cwd: fileURLToPath(new URL("../examples/react-router-rsc-cookie/", import.meta.url)),
+};
 const port = 4071;
 const baseUrl = `http://127.0.0.1:${port}`;
 const TEST_BARRIER_HEADER = "x-palamedes-i18n-test-barrier";
@@ -88,6 +95,7 @@ function waitForServerFunctionBarrier(page, barrierId) {
 }
 
 await run("pnpm", ["--filter", "@palamedes/example-react-router-rsc-cookie", "build"]);
+await verifyBrowserArtifacts(example);
 
 const server = spawn("pnpm", ["--filter", "@palamedes/example-react-router-rsc-cookie", "start"], {
   env: { ...process.env, PALAMEDES_I18N_TEST_BARRIER: "1", PORT: String(port) },
@@ -106,10 +114,13 @@ try {
       enContext.addCookies([{ name: "locale", value: "en", url: baseUrl }]),
     ]);
     const [dePage, enPage] = await Promise.all([deContext.newPage(), enContext.newPage()]);
+    const verifyArtifacts = observeBrowserArtifacts(enPage, example);
     await Promise.all([dePage.goto(baseUrl), enPage.goto(baseUrl)]);
 
     await expectText(dePage, "server-rendered-message", "Server-Rendern bestätigte Sprache.");
     await expectText(enPage, "server-rendered-message", "Server render confirmed locale.");
+    await enPage.getByTestId("server-function-trigger").waitFor();
+    await verifyArtifacts.checkpoint();
     const barrierId = `react-router-rsc-server-function-${Date.now()}`;
     await Promise.all([
       addServerFunctionBarrier(dePage, barrierId),
@@ -160,6 +171,7 @@ try {
       expectText(dePage, "server-rendered-message", "Server-Rendern bestätigte Sprache."),
       expectText(enPage, "server-rendered-message", "Server render confirmed locale."),
     ]);
+    await verifyArtifacts();
     await Promise.all([deContext.close(), enContext.close()]);
 
     const initialFailureContext = await browser.newContext();
