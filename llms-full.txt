@@ -487,7 +487,7 @@ idempotent.
 
 ### Remix v3
 
-Use `@palamedes/remix`. Register it after `remix/node-tsx` for server modules, add `createPalamedesRemixAssetLoader()` to the browser asset server, render the server-selected ICU catalog with `renderClientBootstrap()`, and call `initializeRemixClientI18n()` before importing translated browser modules. Ordinary and rich Remix UI macros are supported on server and browser paths. Locale changes intentionally reload the document; browser `.po` imports and reactive same-document catalog replacement are not supported. The integration requires Node.js `>=24.3` and is pinned to `remix@3.0.0-rc.1` in the verified examples. See `/docs/api/remix.md`.
+Use `@palamedes/remix`. Register it after `remix/node-tsx`. Share one `createPalamedesRemixCatalogAssetRegistry()` between the browser asset loader and `createRemixI18nServer({ catalogAssets: { registry } })`. Server locale catalogs load lazily and are shared immutably. Render `renderClientCatalog(locale)` and `renderClientEntry(entryUrl)`; serve both registry and server catalog handlers before the Remix asset server. The adapter owns readiness, selected executable browser fragments and ordinary error-page recovery. Apps own locale selection and optional untranslated error markup. Inert ICU bootstrap payloads are rejected. Locale changes reload the document; only the active locale is requested. Use registry.invalidate() or a process restart on catalog/config edits. Node.js >=24.3 and remix@3.0.0-rc.1 are the verified host. See /docs/api/remix.md.
 
 ### React Router RSC
 

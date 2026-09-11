@@ -206,6 +206,25 @@ describe("createPalamedesRemixLoadHook", () => {
     ).toThrow(/failOnCompileError no longer changes this behavior/);
   });
 
+  it("loads configured FCL paths with the correct locale", () => {
+    mocks.loadPalamedesConfigSync.mockReturnValue({
+      rootDir: "/repo",
+      configPath: "/repo/palamedes.yaml",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages.fcl", format: "fcl", include: ["app"] }],
+    });
+    const load = createPalamedesRemixLoadHook();
+    const next = vi.fn();
+    load(pathToFileURL("/repo/locales/de/messages.fcl").href, loadContext, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
+      expect.anything(),
+      "/repo/locales/de/messages.fcl",
+      expect.objectContaining({ locale: "de" }),
+    );
+  });
+
   it("loads the config dependency as an empty module for node watch mode", () => {
     const load = createPalamedesRemixLoadHook();
     const nextLoad = vi.fn();
