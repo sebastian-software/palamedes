@@ -136,8 +136,12 @@ describe("palamedes vite plugin", () => {
       { ssr: true },
     );
 
-    expect(result.code).toContain('import("/repo/src/locales/en.po")');
-    expect(result.code).toContain('import("/repo/src/locales/de.po")');
+    expect(result.code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/en.po").replaceAll("\\", "/"))})`,
+    );
+    expect(result.code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/de.po").replaceAll("\\", "/"))})`,
+    );
     expect(result.code).toContain("createServerCatalogStore");
     expect(result.code).toContain("Unsupported catalog locale");
     expect(result.code).not.toContain('import "');
@@ -224,7 +228,9 @@ describe("palamedes vite plugin", () => {
     expect(code).toContain('"en": () => Promise.all([');
     expect(code).toContain('"de": () => Promise.all([');
     expect(code).toContain('"pseudo": () => Promise.all([');
-    expect(code).toContain('import("/repo/src/locales/en.po")');
+    expect(code).toContain(
+      `import(${JSON.stringify(path.resolve("/repo/src/locales/en.po").replaceAll("\\", "/"))})`,
+    );
     expect(code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
     expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml");
   });
