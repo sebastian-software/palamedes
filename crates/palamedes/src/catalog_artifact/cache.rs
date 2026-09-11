@@ -101,6 +101,21 @@ impl CatalogCompilationCache {
         &self,
         request: &CatalogArtifactSelectedRequest,
     ) -> PalamedesResult<super::types::CatalogArtifactResult> {
+        self.compile_selected_with_wait(request, true)
+    }
+
+    pub(super) fn compile_selected_without_waiting(
+        &self,
+        request: &CatalogArtifactSelectedRequest,
+    ) -> PalamedesResult<super::types::CatalogArtifactResult> {
+        self.compile_selected_with_wait(request, false)
+    }
+
+    fn compile_selected_with_wait(
+        &self,
+        request: &CatalogArtifactSelectedRequest,
+        wait_for_in_flight: bool,
+    ) -> PalamedesResult<super::types::CatalogArtifactResult> {
         let mut snapshot = Some(prepare_compilation_snapshot(
             &request.config,
             &request.resource_path,
@@ -131,6 +146,19 @@ impl CatalogCompilationCache {
                 }
                 drop(completion);
                 let compiled = result?;
+                return compile_selected_prepared(
+                    &compiled.prepared,
+                    &compiled.compiled_id_index,
+                    request,
+                );
+            }
+            if !wait_for_in_flight {
+                // A synchronous caller must never park the Node main thread
+                // on the async worker's Condvar. Build independently and
+                // leave the in-flight owner responsible for warming the
+                // shared cache when it completes.
+                self.before_build(&key.locale);
+                let compiled = self.build(snapshot.take().expect("snapshot"))?;
                 return compile_selected_prepared(
                     &compiled.prepared,
                     &compiled.compiled_id_index,
