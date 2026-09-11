@@ -3,6 +3,7 @@ import { getI18n, registerMessageLoaderGroup, resetI18nRuntime } from "@palamede
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  startRemixClient,
   initializeRemixClientI18nAsync,
   initializeRemixClientI18n,
   readRemixI18nBootstrap,
@@ -14,6 +15,28 @@ describe("Remix client i18n bootstrap", () => {
   afterEach(() => {
     resetI18nRuntime();
     vi.unstubAllGlobals();
+  });
+
+  it("renders a dependency failure once when both its event and startup reject", async () => {
+    const browser = new EventTarget();
+    const replaceChildren = vi.fn();
+    vi.stubGlobal("window", browser);
+    vi.stubGlobal("document", {
+      documentElement: { lang: "en" },
+      body: { replaceChildren },
+      querySelector: (selector: string) =>
+        selector.startsWith("link")
+          ? {
+              href: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="failure-idempotency",fragmentRegistry=true,messages={};')}`,
+            }
+          : null,
+      createElement: () => ({ innerHTML: "", content: { cloneNode: () => ({}) } }),
+    });
+    await startRemixClient(async () => {
+      browser.dispatchEvent(new Event("palamedes:catalog-error"));
+      throw new Error("entry failed");
+    });
+    expect(replaceChildren).toHaveBeenCalledTimes(1);
   });
 
   it("rejects inert document catalogs until the Remix asset pipeline is used", () => {

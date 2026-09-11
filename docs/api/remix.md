@@ -123,16 +123,21 @@ Install the Palamedes asset loader there so ordinary macros are transformed
 before Remix analyzes imports, HMR boundaries, and minification:
 
 ```ts
-import { createPalamedesRemixAssetLoader, PALAMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import {
+  createPalamedesRemixAssetLoader,
+  createPalamedesRemixCatalogAssetRegistry,
+  PALAMEDES_REMIX_ASSET_PACKAGES,
+} from "@palamedes/remix";
 import { createAssetServer } from "remix/assets";
 
+const registry = createPalamedesRemixCatalogAssetRegistry();
 export const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/routes.ts", "app/**/public/**"],
   allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: {
-    loaders: [createPalamedesRemixAssetLoader()],
+    loaders: [createPalamedesRemixAssetLoader({ catalogAssets: registry })],
   },
 });
 ```
@@ -155,10 +160,9 @@ alias for compatibility.
 loader. Transform failures identify the source module and retain the original
 error as their cause.
 
-The browser loader only transforms script source. It does not claim `.po`
-imports or load `palamedes.yaml`; server catalog compilation remains the job of
-`@palamedes/remix/register`. Use the document bootstrap below to deliver the
-selected catalog without a browser `.po` import.
+The browser loader transforms script source and registers its compiled message IDs
+with the shared catalog registry. Native compilation remains on the server;
+no `.po` file or ICU parser is sent to the browser.
 
 With source maps enabled, Remix composes the Palamedes transform map with its
 TS/JSX compilation map, later import rewrites, and production minification.
@@ -167,17 +171,17 @@ TypeScript/TSX positions. Remix's watcher invalidates edited macro-bearing
 browser modules and applies its normal HMR policy: accepted boundaries update
 in place and other changes reload the document, without restarting the server.
 
-PO and config files are not browser-asset dependencies because transformed
-modules contain message identities rather than active catalogs. Under
-`node --watch`, the server graph watches imported PO files and the injected
-config dependency; either edit restarts the process, clears catalog/bootstrap
-caches, and requires a full document reload. Custom development runners must
-provide the equivalent restart.
+The catalog registry watches PO/FCL and config inputs in development and clears
+compiled caches without changing registered module URLs. Warm requests do not
+scan these files. Other runners can enable `watch: true` or explicitly call
+`registry.invalidate()`. Reload the document after catalog changes to keep SSR
+and browser messages on the same generation. Direct catalog imports through the
+Node register hook follow the host's module-graph restart policy.
 
 ## Server Request Scope
 
 ```ts
-import { defineCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core/compiled";
+import { createPalamedesRemixCatalogAssetRegistry } from "@palamedes/remix";
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { createRemixI18nServer } from "@palamedes/remix/server";
 
@@ -187,17 +191,12 @@ const locales = defineLocaleControls({
   cookies: { locale: "locale" },
 });
 
-const catalogs: Record<"en" | "de", CompiledCatalogMessages> = {
-  en: defineCompiledCatalog({ greeting: "Hello" }),
-  de: defineCompiledCatalog({ greeting: "Hallo" }),
-};
+const registry = createPalamedesRemixCatalogAssetRegistry();
 
 export const remixI18n = createRemixI18nServer({
   locales,
   strategy: "cookie",
-  loadMessages(locale) {
-    return catalogs[locale];
-  },
+  catalogAssets: { registry },
 });
 ```
 
@@ -230,8 +229,9 @@ asset loader and `catalogAssets`; the loader registers each module's actual
 compiled IDs, so no hand-maintained catalog map is needed. The adapter exposes
 `createClientCatalogAsset(locale)`, `renderClientCatalog(locale)`, and
 `serveClientCatalogAsset(request)` for executable ESM delivery. `catalogVersion`
-overrides the default deterministic content digest with a non-empty string or a
-function of `{ locale, messages }`.
+overrides the default deterministic content digest with a deployment version string.
+Legacy message callbacks apply only to explicit `loadMessages` integrations;
+registry-backed catalogs reject them because browser assets do not carry raw messages.
 
 Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
 object exposes `resolveLocale(input)` for standalone locale resolution,
@@ -242,116 +242,69 @@ under `middleware()` reach the current i18n instance. It also exposes
 
 ## Client Catalog Assets
 
-Configure `catalogAssets` once on the server. It compiles the requested locale
-to an executable ESM module and keeps compiled functions out of HTML and JSON.
-With a shared registry, route `catalogAssets.serve(request)` before the normal
-asset server so selected module fragments are available:
+Create one `createPalamedesRemixCatalogAssetRegistry()` and pass it to both
+`createPalamedesRemixAssetLoader({ catalogAssets: registry })` and
+`createRemixI18nServer({ locales, strategy, catalogAssets: { registry } })`.
+The registry loads every configured server catalog lazily in declaration order.
+Concurrent requests share the immutable locale snapshot; each request receives
+its own locale, formatter settings, callbacks and overrides.
+
+Serve `registry.serve(request)` and `remixI18n.serveClientCatalogAsset(request)`
+before `assetServer.fetch(request)` under the asset namespace. Render the
+adapter's catalog link and application entry in the document:
 
 ```ts
-const remixI18n = createRemixI18nServer({
-  locales,
-  strategy: "cookie",
-  loadMessages,
-  catalogAssets: {
-    config: { rootDir, locales: [...locales.locales], sourceLocale: "en", catalogs },
-    resolvePath: (locale) => path.join(rootDir, "app/locales", `${locale}.po`),
-  },
-});
+const clientCatalog = remixI18n.renderClientCatalog(locale);
+const clientEntry = remixI18n.renderClientEntry("/assets/app/public/client.tsx");
 ```
 
-Render `remixI18n.renderClientCatalog(locale)` in the document head and route
-`/assets/__palamedes/catalog/:locale.js` through
-`remixI18n.serveClientCatalogAsset(request)` before the regular Remix asset
-server. The generated module exports the active locale, a stable digest, and a
-branded compiled catalog.
+`renderClientEntry()` returns an external module script. The adapter initializes
+the document locale, awaits its catalog and imports the application entry.
+Application code does not query catalog links, build loader maps or handle
+catalog readiness. The asset loader selects each module's actual message IDs
+and awaits the active locale's fragment before evaluating that module. Modules
+loaded after interaction request only their additional fragments.
 
-```ts
-import { initializeRemixClientI18nAsync } from "@palamedes/remix/client";
+Initial and lazy catalog network or evaluation failures reach a catalog-independent
+error page with Reload and Home actions. `renderClientEntry(entry, { errorHtml,
+nonce })` accepts trusted ordinary host error markup and an optional CSP nonce.
+A custom Reload button uses `data-palamedes-reload`. The external bootstrap
+works with `script-src 'self'`, without `unsafe-inline` or `unsafe-eval`.
+If custom Remix asset mounts relocate installed packages, set
+`catalogAssets.clientModuleUrl` to the served `@palamedes/remix/client` module;
+the default uses Remix's `/assets/npm` mount.
 
-const link = document.querySelector("link[data-palamedes-catalog-locale]");
-if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset link");
-await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
-await import("./translated-app.js");
-```
+The lower-level `initializeRemixClientI18nAsync()` and `startRemixClient()` are
+available for custom host integrations. Generated executable catalogs never
+cross JSON. Legacy `renderClientBootstrap()` and `readRemixI18nBootstrap()`
+remain migration diagnostics: inert ICU payloads are rejected by the runtime.
+Do not brand raw ICU maps with `defineCompiledCatalog()`; it validates native
+generated constants and functions and does not compile ICU.
 
-The async initializer validates the module, exact `<html lang>` match, version,
-and compiled catalog before translated browser modules run. Lazy graph
-fragments are awaited before their translated module evaluates. `loadCatalog`
-and `catalog` are available for CSP-aware hosts and deterministic tests. The
-active locale is the only catalog requested by the browser; locale changes
-require a full document navigation. Failed fragment imports are removed from
-the runtime cache and can be retried after recovery.
-
-## Legacy Client Document Bootstrap
-
-Render the payload while the server request scope is active, using exactly the
-locale already selected for the document:
-
-```ts
-const response = await remixI18n.run(context, ({ locale }) => {
-  const bootstrap = remixI18n.renderClientBootstrap(locale);
-  return new Response(
-    `<!doctype html><html lang="${locale}"><body>${bootstrap}<script type="module" src="/assets/app.js"></script></body></html>`,
-    { headers: { "content-type": "text/html; charset=utf-8" } },
-  );
-});
-```
-
-The exact raw-markup insertion API depends on the Remix UI renderer. The
-legacy helper returns an inert `<template id="palamedes-i18n-bootstrap">` whose
-JSON is escaped so catalog text cannot terminate the element. It contains
-`locale`, `catalogVersion`, and `messages`, but it cannot carry executable
-compiled functions. The parser-free client rejects this payload and reports the
-#1214 asset-pipeline migration requirement.
-
-Initialize before loading translated browser modules:
-
-```ts
-import { createI18n } from "@palamedes/core";
-import { initializeRemixClientI18n } from "@palamedes/remix/client";
-
-initializeRemixClientI18n({ createI18n });
-await import("./app.js");
-```
-
-`initializeRemixClientI18n()` runs only in a browser environment. It validates
-the complete payload, requires its locale to exactly match `<html lang>`,
-requires an executable branded catalog asset, activates the locale, and only
-then installs the runtime used by transformed calls. Render `<html
-lang={locale}>`; if the attribute is missing, initialization reports that it
-cannot verify the document locale.
-Invalid payloads and parser-free runtimes fail before installation. Advanced
-hosts can pass `bootstrap`, `document`, or `elementId` explicitly;
-`readRemixI18nBootstrap()` provides validation without creating the runtime.
-
-Do not pass raw ICU maps to the application runtime or mark them with
-`defineCompiledCatalog()`: that helper brands generated constants and does not
-compile ICU. Imported `.po` modules can contain executable compiled messages;
-the host must deliver those functions through the #1214 asset pipeline rather
-than JSON serialization.
-
-Locale selection is document-scoped. Cookie, route, subdomain, TLD, and
-`Accept-Language` changes must perform a full navigation, producing a new
-`<html lang>` and payload. The browser never requests `.po` files. The embedded
-catalog shares the HTML response's cache lifetime, so vary shared caches by the
-active locale inputs (`Vary: Cookie` or private caching for cookie-selected
-pages) and invalidate the document when `catalogVersion` changes. Server and
-client catalogs are cached per locale for the life of the server object;
-restart development watch processes after catalog/config changes.
+The browser requests only the document locale. Locale changes perform a full
+document navigation so `<html lang>` and the executable catalog agree. Vary
+HTML caching by the inputs used to choose the locale. Catalog generation is
+stable on warm server requests: no config or PO scan happens per request.
+`registry.invalidate()` refreshes config and catalogs explicitly and invalidates
+the shared store. Development and Node `--watch` processes watch these inputs
+automatically; `watch: true` enables this for another runner. Fragment URLs
+remain valid for cached transformed modules, while their ETags and content change.
+Reload affected documents to install a new generation. Close the registry with
+`registry.close()` when the host shuts down.
 
 ## Support Matrix
 
-| Area                   | Support contract                                                                                   |
-| ---------------------- | -------------------------------------------------------------------------------------------------- |
-| Server macros          | Ordinary macros transformed after `remix/node-tsx`                                                 |
-| Browser macros         | Ordinary macros transformed by the post-compile asset loader                                       |
-| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules                     |
-| Request scope          | Fetch requests and streamed responses through `createRemixI18nServer()`                            |
-| Client catalog         | Executable generated asset selected by the host; legacy inert ICU bootstrap rejected pending #1214 |
-| HMR and source maps    | Source edits invalidate through Remix; composed authored TS/TSX maps and diagnostics               |
-| Remix UI Frames        | Document render and direct frame reload retain their own request-local locale                      |
-| Locale strategies      | Cookie, route, subdomain, TLD, and `Accept-Language`; switching reloads the document               |
-| Public hosting         | Source example and CI proof available; public deployment not yet verified                          |
+| Area                   | Support contract                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| Server macros          | Ordinary macros transformed after `remix/node-tsx`                                              |
+| Browser macros         | Ordinary macros transformed by the post-compile asset loader                                    |
+| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules                  |
+| Request scope          | Fetch requests and streamed responses through `createRemixI18nServer()`                         |
+| Client catalog         | Adapter-owned executable fragments for the active document locale; inert ICU bootstrap rejected |
+| HMR and source maps    | Source edits invalidate through Remix; composed authored TS/TSX maps and diagnostics            |
+| Remix UI Frames        | Document render and direct frame reload retain their own request-local locale                   |
+| Locale strategies      | Cookie, route, subdomain, TLD, and `Accept-Language`; switching reloads the document            |
+| Public hosting         | Source example and CI proof available; public deployment not yet verified                       |
 
 Reactive same-document locale replacement, browser `.po` loading, and an Edge
 or Worker server runtime are non-goals for the current Node integration. The
@@ -402,14 +355,14 @@ The earlier Remix cookie example kept demo catalogs inline and wired i18n
 manually in the example controller. Move those pieces to the full-stack setup:
 
 1. Add `palamedes.yaml` and checked-in `.po` catalog files.
-2. Import catalog `messages` from `.po` files and load them through
-   `createRemixI18nServer({ loadMessages })`.
+2. Share a generated catalog asset registry between the browser asset loader
+   and `createRemixI18nServer({ catalogAssets: { registry } })`.
 3. Replace per-route manual locale activation with `remixI18n.run(context, ...)`
    or `remixI18n.middleware()`.
 4. Keep the Node command order as
    `node --import remix/node-tsx --import @palamedes/remix/register server.ts`.
-5. Install `createPalamedesRemixAssetLoader()` in the asset server, render the
-   inert client bootstrap, and initialize it before translated browser modules.
+5. Render `renderClientCatalog(locale)` and `renderClientEntry(entryUrl)`;
+   route the adapter asset handlers before the regular Remix asset server.
 
 ## Tested Remix Version
 

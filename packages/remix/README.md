@@ -2,6 +2,14 @@
 
 Remix v3 server and browser asset integration for Palamedes.
 
+Server catalogs load lazily and are shared across isolated requests. Browser
+modules await only their own active-locale fragments. Share a
+`createPalamedesRemixCatalogAssetRegistry()` between the asset loader and
+`createRemixI18nServer({ catalogAssets: { registry } })`, then render
+`renderClientCatalog(locale)` and `renderClientEntry(entryUrl)` in the document.
+The adapter owns startup and catalog failure recovery; applications choose the
+locale and may supply ordinary error markup. See [the Remix API guide](../../docs/api/remix.md#client-catalog-assets).
+
 ## Installation
 
 ```sh
@@ -10,8 +18,7 @@ pnpm add @palamedes/core @palamedes/core-node @palamedes/remix @palamedes/runtim
 
 `@palamedes/core` must be a direct runtime dependency because generated catalog
 modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
-`@palamedes/core-node` is needed when generating serializable browser catalogs
-with `compileCatalogArtifact()` as shown below.
+`@palamedes/core-node` performs native catalog compilation on the server.
 
 Use this package with Remix v3's default Node loader path. Register Remix's TSX
 loader first, then Palamedes:
@@ -32,15 +39,20 @@ For browser-delivered modules, install the post-compile asset loader and allow
 the generated runtime import:
 
 ```ts
-import { createPalamedesRemixAssetLoader, PALAMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
+import {
+  createPalamedesRemixAssetLoader,
+  createPalamedesRemixCatalogAssetRegistry,
+  PALAMEDES_REMIX_ASSET_PACKAGES,
+} from "@palamedes/remix";
 import { createAssetServer } from "remix/assets";
 
+const registry = createPalamedesRemixCatalogAssetRegistry();
 const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/routes.ts", "app/**/public/**"],
   allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
-  scripts: { loaders: [createPalamedesRemixAssetLoader()] },
+  scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets: registry })] },
 });
 ```
 
@@ -72,15 +84,13 @@ causes a full browser reload. Neither case requires a server-process restart.
 The loader is stateless and safe when Remix invokes it repeatedly for the same
 module.
 
-PO catalogs and `palamedes.yaml` are intentionally not dependencies of browser
-asset modules: browser transforms contain stable message IDs and source
-fallbacks, while the active catalog comes from the document bootstrap. The
-server register hook makes imported PO files and the config file dependencies
-of the Node module graph. With `node --watch`, changing either restarts the
-server, clears the per-locale server/bootstrap caches, and requires a full
-document reload so markup and browser messages change atomically. Custom
-development runners must provide the equivalent restart. A catalog/config edit
-is therefore never expected to hot-swap only an already running browser module.
+The catalog registry watches PO/FCL and configuration inputs in development,
+invalidates compiled server and browser caches, and keeps registered module URLs
+stable. Warm requests do not scan these inputs. Custom runners can enable
+`watch: true` or call `registry.invalidate()` explicitly. Reload the document
+after a catalog change so server markup and browser messages use one generation.
+Direct catalog imports through the Node register hook remain Node module-graph
+dependencies and follow the host's normal restart policy.
 
 ## Scope
 
@@ -132,16 +142,14 @@ if (fragment) return fragment;
 Pass the same `catalogAssets` to `createRemixI18nServer`, render
 `renderClientCatalog(locale)` into the document head, and send matching
 `/assets/__palamedes/catalog/:locale.js` requests to
-`serveClientCatalogAsset(request)` before the normal Remix asset server. The
-browser entry loads the executable module before importing translated code:
+`serveClientCatalogAsset(request)` before the normal Remix asset server. The adapter starts the application after its document catalog is ready:
 
 ```ts
-import { initializeRemixClientI18nAsync } from "@palamedes/remix/client";
-
-const link = document.querySelector("link[data-palamedes-catalog-locale]");
-if (!(link instanceof HTMLLinkElement)) throw new Error("Missing catalog asset link");
-await initializeRemixClientI18nAsync({ createI18n, catalogUrl: link.href });
+const entry = remixI18n.renderClientEntry("/assets/app/public/client.tsx");
 ```
+
+The returned external script also delivers ordinary catalog-independent error
+UI and Reload recovery. Applications do not query internal catalog links.
 
 The shared registry can also be the server catalog loader. Omit the old
 application `loadMessages` function and let `run()` await the executable
@@ -171,65 +179,21 @@ browser modules execute. A failed lazy fragment can be retried after the
 network or asset server recovers; registry generations change their URL when a
 module's selected IDs change.
 
-## Legacy Browser Catalog Bootstrap
+## Migration From Inert Catalogs
 
-The old JSON bootstrap is an inert migration boundary. It cannot initialize the
-parser-free runtime; deliver the generated executable catalog through the Remix
-asset pipeline tracked in #1214 before importing translated browser modules:
+The legacy JSON bootstrap cannot carry executable compiled functions and is
+rejected by the runtime. Remove application catalog maps, `loadClientMessages`
+and manual client initialization. Use the shared registry and
+`renderClientEntry()` described above. No ICU strings are serialized into HTML.
+Locale changes reload the document; vary its cache policy by locale inputs.
 
-```ts
-// Server setup
-export const remixI18n = createRemixI18nServer({
-  locales,
-  strategy: "cookie",
-  loadMessages, // May be an executable server catalog.
-  loadClientMessages(locale) {
-    return browserCatalogs[locale]; // Legacy string data for migration diagnostics.
-  },
-});
-
-// While rendering inside remixI18n.run(...)
-const catalog = remixI18n.renderClientBootstrap(locale);
-```
-
-The legacy `catalog` is an inert `<template id="palamedes-i18n-bootstrap">`, not
-an executable inline script. `initializeRemixClientI18n()` rejects it with an
-explicit #1214 asset-pipeline diagnostic. In the browser entry, initialize the
-executable generated catalog before importing translated modules:
-
-```ts
-import { createI18n } from "@palamedes/core";
-import { initializeRemixClientI18n } from "@palamedes/remix/client";
-
-initializeRemixClientI18n({ createI18n });
-await import("./translated-app.js");
-```
-
-The legacy server payload contains inert ICU strings and cannot initialize the
-parser-free runtime. `initializeRemixClientI18n()` runs only in a browser
-environment, requires an executable generated catalog asset, validates the
-payload and exact `<html lang>` match, installs the catalog, and only then
-exposes it to transformed browser code. Render `<html lang={locale}>`; if the
-attribute is missing, initialization reports that it cannot verify the document
-locale. Missing, malformed, inert, executable, or locale-mismatched payloads
-fail with an actionable error instead of mixing locales silently. The host
-asset-pipeline migration is tracked in #1214.
-
-Locale changes require a full document navigation. A new request resolves the
-cookie, route, host, or language header again and emits a matching document and
-catalog. There is no browser `.po` request and no separate catalog HTTP cache:
-the payload follows the document's cache policy. Vary shared document caches by
-the locale inputs they use (for cookie selection, use `Vary: Cookie` or a
-private response) and invalidate them when the returned `catalogVersion`
-changes. The default version is a stable SHA-256 content digest; a deployment
-version can be supplied with `catalogVersion`.
-
-Server and client catalogs are cached per locale for the life of the server
-instance. Development watch processes should restart when PO/config inputs
-change. The inert template works with a CSP that disallows inline scripts; keep
-the bootstrap entry in an allowed external module. Advanced renderers may pass
-an already parsed `bootstrap` object or custom `document`/`elementId` to the
-client initializer.
+Catalog/config inputs are watched in development and Node `--watch` processes.
+Custom runners can enable `watch: true` or call `registry.invalidate()`.
+Catalog edits preserve fragment URLs referenced by cached modules, update ETags
+and invalidate server snapshots. Reload the document to activate new contents.
+Use `registry.close()` during shutdown. Registry-backed catalog versions are
+content-derived; legacy message callbacks are rejected. A deployment version
+string remains available as an explicit override.
 
 ## Remix UI, Frames, and Rich Messages
 

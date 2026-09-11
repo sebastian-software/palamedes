@@ -83,6 +83,8 @@ export type RemixI18nServerOptions<
     resolvePath?: (locale: TLocale) => string;
     basePath?: string;
     registry?: PalamedesRemixCatalogAssetRegistry;
+    /** Override the client module URL when the Remix asset server uses custom mounts. */
+    clientModuleUrl?: string;
   };
   createI18n?: () => T;
   routeParam?: string;
@@ -107,6 +109,8 @@ export type RemixI18nServer<TLocale extends string, T extends PalamedesI18n = Pa
   renderClientBootstrap(locale: TLocale, options?: { elementId?: string }): string;
   createClientCatalogAsset(locale: TLocale): RemixClientCatalogAsset<TLocale>;
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
+  /** Render an external, CSP-compatible adapter bootstrap for the application entry. */
+  renderClientEntry(entryUrl: string, options?: { errorHtml?: string; nonce?: string }): string;
   serveClientCatalogAsset(request: Request): Response | undefined;
   serializeLocaleCookie(locale: TLocale): string;
 };
@@ -152,8 +156,14 @@ export function createRemixI18nServer<
   TLocale extends string,
   T extends PalamedesI18n = PalamedesI18n,
 >(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
+  if (options.catalogAssets?.registry && typeof options.catalogVersion === "function") {
+    throw new TypeError(
+      "Remix registry catalog versions are derived from executable content. Remove the legacy messages callback or provide a deployment version string.",
+    );
+  }
   const scope = createServerI18nScope<T>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
+  const clientEntries = new Map<string, string>();
   const clientBootstrapCache = new Map<TLocale, RemixI18nBootstrap<TLocale>>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
@@ -170,7 +180,7 @@ export function createRemixI18nServer<
 
   const registryLoad = options.catalogAssets?.registry?.load;
   const serverCatalogStore = createServerCatalogStore<TLocale>({
-    load: async ({ locale }) => {
+    async load({ locale }) {
       if (options.loadMessages) {
         return [await options.loadMessages(locale)];
       }
@@ -322,9 +332,36 @@ export function createRemixI18nServer<
     return `<link rel="modulepreload" href="${escapeHtmlAttribute(href)}" data-palamedes-catalog-locale="${escapeHtmlAttribute(locale)}" data-palamedes-catalog-version="${escapeHtmlAttribute(createClientCatalogAsset(locale).catalogVersion)}" />`;
   };
 
+  const renderClientEntry = (
+    entryUrl: string,
+    entryOptions: { errorHtml?: string; nonce?: string } = {},
+  ): string => {
+    const basePath = options.catalogAssets?.basePath ?? "/assets";
+    const clientUrl =
+      options.catalogAssets?.clientModuleUrl ??
+      `${basePath.replace(/\/$/u, "")}/npm/@palamedes/remix/dist/client.mjs`;
+    const source = `import{startRemixClient}from${JSON.stringify(clientUrl)};await startRemixClient(()=>import(${JSON.stringify(entryUrl)}),${JSON.stringify({ errorHtml: entryOptions.errorHtml })});`;
+    const key = createHash("sha256").update(source).digest("hex");
+    clientEntries.set(key, source);
+    const src = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/${key}.js`;
+    return `<script type="module" src="${escapeHtmlAttribute(src)}"${entryOptions.nonce ? ` nonce="${escapeHtmlAttribute(entryOptions.nonce)}"` : ""}></script>`;
+  };
+
   const serveClientCatalogAsset = (request: Request): Response | undefined => {
     const basePath = options.catalogAssets?.basePath ?? "/assets";
     const pathname = new URL(request.url).pathname;
+    const entryPrefix = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/`;
+    if (pathname.startsWith(entryPrefix) && pathname.endsWith(".js")) {
+      const source = clientEntries.get(pathname.slice(entryPrefix.length, -3));
+      return source === undefined
+        ? new Response("Unknown application entry.", { status: 404 })
+        : new Response(source, {
+            headers: {
+              "content-type": "application/javascript; charset=utf-8",
+              "cache-control": "no-cache",
+            },
+          });
+    }
     const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog/`;
     if (!pathname.startsWith(prefix) || !pathname.endsWith(".js")) {
       return undefined;
@@ -416,6 +453,8 @@ export function createRemixI18nServer<
     createClientCatalogAsset,
 
     renderClientCatalog,
+
+    renderClientEntry,
 
     serveClientCatalogAsset,
 

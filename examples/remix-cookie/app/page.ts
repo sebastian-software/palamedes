@@ -1,6 +1,6 @@
 import { plural, t } from "@palamedes/core/macro";
 
-import { LOCALES, LOCALE_LABELS, type Locale } from "./i18n.ts";
+import { LOCALES, LOCALE_LABELS, remixI18n, type Locale } from "./i18n.ts";
 
 export type LocaleSwitchLink = {
   href?: string;
@@ -61,8 +61,7 @@ export function renderHomePage({
       ${clientProof ? `<div data-remix-client-proof>${clientProof}</div>` : ""}
     </main>
     ${clientCatalog ?? ""}
-    ${clientProof ? '<script type="module" src="/assets/app/public/catalog-error.ts"></script>' : ""}
-    ${clientProof ? '<script type="module" src="/assets/app/public/client.tsx"></script>' : ""}
+    ${clientProof ? remixI18n.renderClientEntry("/assets/app/public/client.tsx") : ""}
   </body>
 </html>`;
 }

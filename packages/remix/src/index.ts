@@ -1,5 +1,6 @@
+import { Script } from "node:vm";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync, watch, type FSWatcher } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import type { registerHooks } from "node:module";
@@ -22,6 +23,7 @@ import {
 import {
   compileCatalogArtifactSelected,
   compileCatalogModule,
+  compileCatalogModuleAsync,
   renderCatalogModule,
 } from "@palamedes/core-node";
 import { createServerCatalogStore } from "@palamedes/runtime/server";
@@ -96,12 +98,16 @@ export type PalamedesRemixCatalogAssetRegistry = {
   sidecarUrl(key: string): string;
   serve(request: Request): Response | undefined;
   invalidate(sourcePath?: string): void;
+  /** Close development file watchers when the host shuts down. */
+  close?(): void;
 };
 
 export type CreatePalamedesRemixCatalogAssetRegistryOptions = {
   configPath?: string;
   cwd?: string;
   basePath?: string;
+  /** Watch catalog/config files; defaults to development and Node --watch processes. */
+  watch?: boolean;
 };
 
 type RegisterHooksOptions = Parameters<typeof registerHooks>[0];
@@ -126,30 +132,42 @@ export function createPalamedesRemixCatalogAssetRegistry(
   let configDigest = digestConfig(config);
   let catalogGenerationDigest = catalogDigest(config);
   const basePath = options.basePath ?? "/assets";
+  const watchers: FSWatcher[] = [];
+  const shouldWatch =
+    options.watch ??
+    (process.env.NODE_ENV === "development" || process.execArgv.includes("--watch"));
+  let refreshFailure: unknown;
+  let closed = false;
+  let refreshQueued = false;
+  const fragmentAssets = new Map<string, { source: string; etag: string }>();
   const entries = new Map<string, { sourcePath: string; compiledIds: string[] }>();
   const keysBySource = new Map<string, string>();
   const serverCatalogStore = createServerCatalogStore({
-    load: async ({ locale }) => {
+    async load({ locale }) {
       const catalogs = config.catalogs;
       if (catalogs.length === 0) {
         throw new Error("Palamedes config does not define a catalog for server loading.");
       }
-      const result = compileCatalogModule(
-        toCatalogArtifactConfig(config),
-        catalogResourcePath(config, catalogs[0], locale),
-        {
-          locale,
-          pseudoLocale: config.pseudoLocale,
-          missingFailureHint:
-            "You see this error because executable Remix server catalog compilation failed on a missing translation.",
-          compileFailureHint:
-            "These errors fail loading because executable Remix server catalog compilation was configured as fatal.",
-          diagnosticsWarningHint:
-            "Inspect the generated Remix server catalog diagnostics before deploying this locale.",
-        },
+      return await Promise.all(
+        catalogs.map(async (catalog) => {
+          const result = await compileCatalogModuleAsync(
+            toCatalogArtifactConfig(config),
+            catalogResourcePath(config, catalog, locale),
+            {
+              locale,
+              pseudoLocale: config.pseudoLocale,
+              missingFailureHint:
+                "You see this error because executable Remix server catalog compilation failed on a missing translation.",
+              compileFailureHint:
+                "These errors fail loading because executable Remix server catalog compilation was configured as fatal.",
+              diagnosticsWarningHint:
+                "Inspect the generated Remix server catalog diagnostics before deploying this locale.",
+            },
+          );
+          result.warnings.forEach((warning) => console.warn(warning));
+          return evaluateCompiledCatalogModule(result.code);
+        }),
       );
-      result.warnings.forEach((warning) => console.warn(warning));
-      return [evaluateCompiledCatalogModule(result.code)];
     },
   });
 
@@ -162,9 +180,8 @@ export function createPalamedesRemixCatalogAssetRegistry(
     config = nextConfig;
     configDigest = nextDigest;
     catalogGenerationDigest = catalogDigest(config);
-    entries.clear();
-    keysBySource.clear();
     serverCatalogStore.invalidate();
+    fragmentAssets.clear();
   };
 
   const refreshCatalogGeneration = (): void => {
@@ -173,22 +190,22 @@ export function createPalamedesRemixCatalogAssetRegistry(
       return;
     }
     catalogGenerationDigest = nextDigest;
-    entries.clear();
-    keysBySource.clear();
     serverCatalogStore.invalidate();
+    fragmentAssets.clear();
   };
 
   const register = (sourcePath: string, compiledIds: readonly string[]): string => {
-    refreshConfig();
-    refreshCatalogGeneration();
+    const source = canonicalSourcePath(sourcePath);
     const normalizedIds = [...new Set(compiledIds)].sort();
-    const key = createCatalogKey(sourcePath, normalizedIds, configDigest, catalogGenerationDigest);
-    const previousKey = keysBySource.get(sourcePath);
+    const key = createCatalogKey(source, normalizedIds);
+    const previousKey = keysBySource.get(source);
     if (previousKey && previousKey !== key) {
       entries.delete(previousKey);
+      for (const assetKey of fragmentAssets.keys())
+        if (assetKey.startsWith(`${previousKey}:`)) fragmentAssets.delete(assetKey);
     }
-    keysBySource.set(sourcePath, key);
-    entries.set(key, { sourcePath, compiledIds: normalizedIds });
+    keysBySource.set(source, key);
+    entries.set(key, { sourcePath: source, compiledIds: normalizedIds });
     return key;
   };
 
@@ -197,10 +214,67 @@ export function createPalamedesRemixCatalogAssetRegistry(
     refreshCatalogGeneration();
   };
 
+  const watchInputs = (): void => {
+    watchers.splice(0).forEach((watcher) => watcher.close());
+    if (!shouldWatch || closed) return;
+    const files = new Set(
+      [
+        ...getConfigDependencies(config),
+        ...config.catalogs.flatMap((catalog) =>
+          config.locales.map((locale) => catalogResourcePath(config, catalog, locale)),
+        ),
+      ].map((file) => path.resolve(file)),
+    );
+    const watched = new Set<string>();
+    const watchDirectory = (directory: string): void => {
+      if (watched.has(directory)) return;
+      try {
+        const watcher = watch(directory, { persistent: false }, (_event, filename) => {
+          if (filename) {
+            const changed = path.join(directory, filename.toString());
+            if (
+              ![...files].some(
+                (file) => file === changed || file.startsWith(`${changed}${path.sep}`),
+              )
+            )
+              return;
+          }
+          if (refreshQueued || closed) return;
+          refreshQueued = true;
+          queueMicrotask(() => {
+            refreshQueued = false;
+            if (closed) return;
+            try {
+              refreshCatalogState();
+              refreshFailure = undefined;
+              watchInputs();
+            } catch (error) {
+              refreshFailure = error;
+              serverCatalogStore.invalidate();
+            }
+          });
+        });
+        watcher.on("error", (error) => {
+          refreshFailure = error;
+          serverCatalogStore.invalidate();
+        });
+        watchers.push(watcher);
+        watched.add(directory);
+      } catch (error) {
+        if (!isMissingFileError(error) || path.dirname(directory) === directory) throw error;
+        watchDirectory(path.dirname(directory));
+      }
+    };
+    for (const directory of new Set([...files].map((file) => path.dirname(file))))
+      watchDirectory(directory);
+  };
+  watchInputs();
+
   return {
     register,
 
     load(locale) {
+      if (refreshFailure) return Promise.reject(refreshFailure);
       if (!config.locales.includes(locale)) {
         return Promise.reject(new Error(`Unsupported Palamedes catalog locale "${locale}".`));
       }
@@ -208,6 +282,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     },
 
     generation() {
+      if (refreshFailure) throw refreshFailure;
       return `${configDigest}:${catalogGenerationDigest}`;
     },
 
@@ -216,6 +291,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     },
 
     serve(request) {
+      if (refreshFailure) throw refreshFailure;
       const url = new URL(request.url);
       const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/`;
       if (!url.pathname.startsWith(prefix) || !url.pathname.endsWith(".js")) {
@@ -252,6 +328,10 @@ export function createPalamedesRemixCatalogAssetRegistry(
         });
       }
 
+      const cacheKey = `${key}:${locale}`;
+      const cached = fragmentAssets.get(cacheKey);
+      if (cached) return serveFragment(cached, request);
+
       try {
         const catalogs = config.catalogs.filter((candidate) =>
           catalogMatchesSource(config, candidate, entry.sourcePath),
@@ -262,30 +342,27 @@ export function createPalamedesRemixCatalogAssetRegistry(
             { status: 500 },
           );
         }
-        const result = compileCatalogArtifactSelected(
-          {
-            rootDir: config.rootDir,
-            locales: config.locales,
-            sourceLocale: config.sourceLocale,
-            fallbackLocales: config.fallbackLocales,
-            pseudoLocale: config.pseudoLocale,
-            catalogs,
-          },
-          catalogResourcePath(config, catalogs[0], locale),
-          entry.compiledIds,
-        );
-        const source = `${stripCatalogBranding(renderCatalogModule(result.messages))}export const locale=${JSON.stringify(locale)};`;
-        const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
-        if (request.headers.get("if-none-match") === etag) {
-          return new Response(null, { status: 304, headers: { etag } });
+        const messages = Object.create(null);
+        for (const catalog of catalogs) {
+          const result = compileCatalogArtifactSelected(
+            {
+              rootDir: config.rootDir,
+              locales: config.locales,
+              sourceLocale: config.sourceLocale,
+              fallbackLocales: config.fallbackLocales,
+              pseudoLocale: config.pseudoLocale,
+              catalogs: [catalog],
+            },
+            catalogResourcePath(config, catalog, locale),
+            entry.compiledIds,
+          );
+          Object.assign(messages, result.messages);
         }
-        return new Response(source, {
-          headers: {
-            "cache-control": "no-cache",
-            "content-type": "application/javascript; charset=utf-8",
-            etag,
-          },
-        });
+        const source = `${stripCatalogBranding(renderCatalogModule(messages))}export const locale=${JSON.stringify(locale)};`;
+        const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
+        const asset = { source, etag };
+        fragmentAssets.set(cacheKey, asset);
+        return serveFragment(asset, request);
       } catch (error) {
         return new Response(
           `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${error instanceof Error ? error.message : String(error)}`,
@@ -294,41 +371,62 @@ export function createPalamedesRemixCatalogAssetRegistry(
       }
     },
 
+    close() {
+      closed = true;
+      watchers.splice(0).forEach((watcher) => watcher.close());
+    },
+
     invalidate(sourcePath) {
       refreshCatalogState();
+      refreshFailure = undefined;
+      watchInputs();
       if (sourcePath === undefined) {
-        entries.clear();
-        keysBySource.clear();
         serverCatalogStore.invalidate();
+        fragmentAssets.clear();
       } else {
-        const key = keysBySource.get(sourcePath);
+        const source = canonicalSourcePath(sourcePath);
+        const key = keysBySource.get(source);
         if (key) {
           entries.delete(key);
-          keysBySource.delete(sourcePath);
+          keysBySource.delete(source);
         }
       }
     },
   };
 }
 
+function canonicalSourcePath(source: string): string {
+  try {
+    return realpathSync(source);
+  } catch {
+    try {
+      return path.join(realpathSync(path.dirname(source)), path.basename(source));
+    } catch {
+      return path.resolve(source);
+    }
+  }
+}
+
+function serveFragment(asset: { source: string; etag: string }, request: Request): Response {
+  const headers = {
+    "cache-control": "no-cache",
+    etag: asset.etag,
+    "content-type": "application/javascript; charset=utf-8",
+  };
+  return request.headers.get("if-none-match") === asset.etag
+    ? new Response(null, { status: 304, headers })
+    : new Response(asset.source, { headers });
+}
+
 function thisSidecarUrl(basePath: string, key: string): string {
   return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/${key}.js?`;
 }
 
-function createCatalogKey(
-  sourcePath: string,
-  compiledIds: readonly string[],
-  configDigest: string,
-  catalogGenerationDigest: string,
-): string {
+function createCatalogKey(sourcePath: string, compiledIds: readonly string[]): string {
   return createHash("sha256")
     .update(path.resolve(sourcePath))
     .update("\0")
     .update(JSON.stringify(compiledIds))
-    .update("\0")
-    .update(configDigest)
-    .update("\0")
-    .update(catalogGenerationDigest)
     .digest("hex")
     .slice(0, 16);
 }
@@ -383,9 +481,9 @@ function evaluateCompiledCatalogModule(source: string): CompiledCatalogMessages 
     )
     .replace(/export const messages=/u, "return ")
     .replace(/;export default \{ messages \};$/u, ";");
-  const evaluate = new Function("__palamedesDefineCompiledCatalog", body) as (
-    define: typeof defineCompiledCatalog,
-  ) => CompiledCatalogMessages;
+  const evaluate = new Script(`(function(__palamedesDefineCompiledCatalog){${body}})`, {
+    filename: "palamedes-generated-server-catalog.js",
+  }).runInThisContext() as (define: typeof defineCompiledCatalog) => CompiledCatalogMessages;
   const messages = evaluate(defineCompiledCatalog);
   if (!isCompiledCatalogObject(messages)) {
     throw new TypeError(
@@ -414,7 +512,7 @@ function stripCatalogBranding(source: string): string {
 // imports. Bundler integrations can safely use the wider shared default.
 const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs|mts)$/;
 const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/;
-const PO_FILE = /\.po$/;
+const PO_FILE = /\.(?:po|fcl)$/;
 const CONFIG_WATCH_QUERY_PARAM = "palamedes-config-watch";
 const INLINE_SOURCE_MAP_COMMENT =
   /(?:\r?\n)?(?:\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,([A-Za-z0-9+/=]+)|\/\*# sourceMappingURL=data:application\/json[^,\r\n]*;base64,([A-Za-z0-9+/=]+) \*\/)(?:\r?\n)?$/u;
@@ -495,7 +593,7 @@ export function createPalamedesRemixAssetLoader(
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
       `import{getI18n as __palamedesGetI18n,loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup}from"@palamedes/runtime";\n` +
       `const __palamedesLocale=document.documentElement.lang;` +
-      `const __palamedesMessages=__palamedesDefineCompiledCatalog((await import(new URL(${JSON.stringify(sidecarImport)}+encodeURIComponent(__palamedesLocale),document.baseURI))).messages);` +
+      `const __palamedesMessages=__palamedesDefineCompiledCatalog((await import(new URL(${JSON.stringify(sidecarImport)}+encodeURIComponent(__palamedesLocale),document.baseURI)).catch(__error=>{globalThis.dispatchEvent(new CustomEvent("palamedes:catalog-error",{detail:__error}));throw __error})).messages);` +
       `__palamedesRegisterMessageLoaderGroup(${JSON.stringify(key)},[{[__palamedesLocale]:async()=>__palamedesMessages}]);` +
       `let __palamedesActive;try{__palamedesActive=__palamedesGetI18n()}catch(__palamedesError){` +
       `if(!(__palamedesError instanceof Error&&__palamedesError.message.includes("No active client i18n instance")))throw __palamedesError}` +
@@ -582,7 +680,14 @@ function loadCatalogModule(
 ): LoadResult {
   const resourcePath = fileURLToPath(url);
   const config = getPalamedesConfigForCatalog(resourcePath, options.configPath, configCache);
-  const locale = path.basename(resourcePath, ".po");
+  const locale =
+    config.locales.find((candidate) =>
+      config.catalogs.some(
+        (catalog) =>
+          path.resolve(catalogResourcePath(config, catalog, candidate)) ===
+          path.resolve(resourcePath),
+      ),
+    ) ?? path.basename(resourcePath, path.extname(resourcePath));
   const result = compileCatalogModule(
     {
       rootDir: config.rootDir,

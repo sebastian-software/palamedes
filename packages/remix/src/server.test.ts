@@ -155,6 +155,25 @@ describe("createRemixI18nServer", () => {
     cookies: { locale: "locale" },
   });
 
+  it("rejects legacy message-version callbacks with executable registries", () => {
+    expect(() =>
+      createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        catalogVersion: ({ messages }) => JSON.stringify(messages),
+        catalogAssets: {
+          registry: {
+            load: async () => defineCompiledCatalog({}),
+            register: () => "test",
+            sidecarUrl: () => "/test",
+            serve() {},
+            invalidate() {},
+          },
+        },
+      }),
+    ).toThrow(/Remove the legacy messages callback/);
+  });
+
   it("resolves request locale and caches catalog messages by locale", async () => {
     const loadMessages = vi.fn((locale: "en" | "de" | "es") =>
       defineCompiledCatalog({
@@ -207,8 +226,8 @@ describe("createRemixI18nServer", () => {
           load,
           register: () => "test",
           sidecarUrl: () => "/test.js",
-          serve: () => undefined,
-          invalidate: () => undefined,
+          serve() {},
+          invalidate() {},
         },
       },
     });
