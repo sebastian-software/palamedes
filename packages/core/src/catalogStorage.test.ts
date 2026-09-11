@@ -45,7 +45,7 @@ describe.each([
     const i18n = create();
     const messages = defineCompiledCatalog({ greeting: "Hello", untouched: "Keep" });
     i18n.load("en", messages);
-    messages.greeting = "Mutated after loading";
+    expect(Object.isFrozen(messages)).toBe(true);
     expect(i18n._("greeting")).toBe("Hello");
 
     i18n.load("de", defineCompiledCatalog({ greeting: "Hallo" }));

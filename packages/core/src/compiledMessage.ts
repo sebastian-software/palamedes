@@ -58,9 +58,7 @@ export type CompiledCatalogMessages = Record<string, CatalogMessage> & CompiledC
 export type LoadableCatalogMessages = CatalogMessages | CompiledCatalogMessages;
 
 const COMPILED_CATALOG_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog");
-const COMPILED_CATALOG_REGISTRY_SYMBOL = Symbol.for(
-  "@palamedes/core/compiled-catalog-registry/v2",
-);
+const COMPILED_CATALOG_REGISTRY_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog-registry/v2");
 
 const globalCatalogState = globalThis as typeof globalThis &
   Record<symbol, WeakSet<object> | undefined>;

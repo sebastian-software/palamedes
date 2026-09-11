@@ -121,7 +121,7 @@ function createCatalogs(size = messageCount) {
 function parseMessageSizes() {
   const configured = process.env.PALAMEDES_BENCH_MESSAGE_SIZES;
   const sizes = (configured ? configured.split(",") : [100, messageCount, messageCount * 5])
-    .map((value) => Number(value.trim()))
+    .map((value) => Number(typeof value === "string" ? value.trim() : value))
     .filter((value) => Number.isSafeInteger(value) && value > 0);
   return [...new Set(sizes)];
 }
