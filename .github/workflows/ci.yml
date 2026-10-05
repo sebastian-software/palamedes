@@ -30,7 +30,7 @@ jobs:
           - os: ubuntu-24.04
             node: 22
             full: true
-          - os: macos-14
+          - os: macos-latest
             node: 24
             full: false
           - os: windows-2025
@@ -328,7 +328,7 @@ jobs:
           - os: windows-2025
             toolchain: stable
             lint: false
-          - os: macos-14
+          - os: macos-latest
             toolchain: stable
             lint: false
 
