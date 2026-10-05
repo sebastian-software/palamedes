@@ -178,7 +178,7 @@ describe("workflow contracts", () => {
       readRepositoryFile("packages/vite-plugin/package.json").then(JSON.parse),
     ]);
 
-    expect(ci).toContain("- os: macos-14");
+    expect(ci).toContain("- os: macos-latest");
     expect(ci).toContain("- os: windows-2025");
     expect(ci).toContain("- name: Test path-sensitive packages");
     expect(ci).toContain("if: ${{ !matrix.full }}");
@@ -222,7 +222,7 @@ describe("workflow contracts", () => {
     ]);
     const validateRust = job(ci, "validate-rust");
 
-    for (const os of ["ubuntu-24.04", "windows-2025", "macos-14"]) {
+    for (const os of ["ubuntu-24.04", "windows-2025", "macos-latest"]) {
       expect(validateRust).toContain(`- os: ${os}`);
     }
     expect(validateRust).toContain("run: cargo test --workspace --locked");
