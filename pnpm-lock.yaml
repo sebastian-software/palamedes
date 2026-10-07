@@ -36,8 +36,8 @@ importers:
         specifier: ^1.62.1
         version: 1.62.1
       '@sebastian-software/standards':
-        specifier: 0.11.1
-        version: 0.11.1
+        specifier: 0.12.0
+        version: 0.12.0
       '@typescript/typescript6':
         specifier: ^6.0.2
         version: 6.0.2
@@ -5510,8 +5510,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sebastian-software/standards@0.11.1':
-    resolution: {integrity: sha512-3WECKOYgD7bZ7fmePTjl4Lqxo4OasvCb9utGxMUVG1czMmXCMvagXgLcfFTWczKMeFkDL2Y7k4w99NKU/i9h3A==}
+  '@sebastian-software/standards@0.12.0':
+    resolution: {integrity: sha512-bRK4fYd7FuSNxBeRgOHr3fB0waTVOT+j7CnjVMzTUEXxkglHX8EkpCHdUnfcrkg3tB4MNfhiAx3+Uy1ln+PSWg==}
     engines: {node: '>=24.0.0'}
     hasBin: true
 
@@ -14699,7 +14699,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
 
-  '@sebastian-software/standards@0.11.1': {}
+  '@sebastian-software/standards@0.12.0': {}
 
   '@sec-ant/readable-stream@0.4.1': {}
 
