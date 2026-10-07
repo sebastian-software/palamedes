@@ -36,8 +36,8 @@ importers:
         specifier: ^1.62.1
         version: 1.62.1
       '@sebastian-software/standards':
-        specifier: 0.11.1
-        version: 0.11.1
+        specifier: 0.13.0
+        version: 0.13.0
       '@typescript/typescript6':
         specifier: ^6.0.2
         version: 6.0.2
@@ -3682,6 +3682,7 @@ packages:
   '@nkzw/fbtee-cli@4.0.0':
     resolution: {integrity: sha512-g2Au7IfSDQwrWgadZikEXeahbn90dNkzD74zeM6PE1GAnczUGCdzaGiqR3G+sF1qX824zlHOOFalnGeMaJrRTg==}
     engines: {node: '>=22.12.0'}
+    deprecated: 'Replaced in fbtee 5 by @nkzw/fbtee-compiler. Install fbtee@^5 and @nkzw/fbtee-compiler@^5 (devDependency), remove the old CLI/transform packages, and update installed fbtee plugins to v5. Replace imports from @nkzw/oxc-transform-fbtee with @nkzw/fbtee-compiler. Existing fbtee commands are unchanged. Upgrade instructions: https://github.com/nkzw-tech/fbtee/blob/main/README.md#migration-from-fbtee-4'
     hasBin: true
 
   '@nkzw/oxc-transform-fbtee-binding-darwin-arm64@4.0.0':
@@ -5510,8 +5511,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sebastian-software/standards@0.11.1':
-    resolution: {integrity: sha512-3WECKOYgD7bZ7fmePTjl4Lqxo4OasvCb9utGxMUVG1czMmXCMvagXgLcfFTWczKMeFkDL2Y7k4w99NKU/i9h3A==}
+  '@sebastian-software/standards@0.13.0':
+    resolution: {integrity: sha512-jBK0S1NeaKgBbrzfMP1CnSwIigILFPEbexHt7gldrZdiOGDLp6MRuNgkVLcQ4NFW4e0Ov0KsQOuLTNk0TGXKxg==}
     engines: {node: '>=24.0.0'}
     hasBin: true
 
@@ -14699,7 +14700,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
 
-  '@sebastian-software/standards@0.11.1': {}
+  '@sebastian-software/standards@0.13.0': {}
 
   '@sec-ant/readable-stream@0.4.1': {}
 
