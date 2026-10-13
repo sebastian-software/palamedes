@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { t } from "@palamedes/core/macro";
 import { EVENT } from "@palamedes/example-ui";
 import { ClientReady } from "@/components/ClientReady";
@@ -34,17 +35,17 @@ function translateServerLocale(): string {
 }
 
 export default async function Home() {
-  const { i18n, locale } = await createActiveServerI18n();
+  const { i18n, locale, source } = await createActiveServerI18n();
   const localeLabel = getLocaleLabel(locale);
 
   return runWithServerI18n(i18n, () => (
-    <main className="page-shell">
+    <main className="page-shell" data-server-render-id={randomUUID()}>
       <header className="topbar">
         <div className="brand">
           <b>Frontend Stage</b>
           <span className="brand-meta">Berlin · 2026</span>
         </div>
-        <LocaleSwitcher locale={locale} />
+        <LocaleSwitcher locale={locale} hasLocaleChoice={source === "cookie"} />
       </header>
 
       <section className="hero">
@@ -70,7 +71,7 @@ export default async function Home() {
       </footer>
 
       <ClientReady />
-      <ClientNavigationProbe />
+      <ClientNavigationProbe locale={locale} />
     </main>
   ));
 }

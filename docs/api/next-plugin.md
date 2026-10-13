@@ -115,6 +115,20 @@ not that function contains a macro itself. Recognition covers inline
 `"use server"` directives and async exports from top-level `"use server"`
 modules.
 
+Locale negotiation reads request state. Keep locale cookie writes and expiry
+renewal out of the initializer and ordinary Server Action POST handling in
+middleware/proxy. Writing the same cookie value still counts as a mutation in
+Next.js and can add a page render to the action response and invalidate
+prefetched routes. Persist explicit locale choices separately, skipping a write
+when the cookie already matches. A read-only action can resolve a missing or
+unsupported cookie through fallback without persisting it.
+
+Application data mutations own their revalidation or `router.refresh()` calls.
+Locale switches persist the choice and then navigate to a new document; a
+global layout revalidation is not needed solely for that document navigation.
+Cookie mutation can still cause Next to render the current page with the action
+result. See [Next.js cookie behavior](https://nextjs.org/docs/app/api-reference/functions/cookies).
+
 Eager macros in formal parameter initializers are rejected because parameter
 defaults execute before injected body statements. Move the fallback into the
 function body with `if (value === undefined)` when matching JavaScript's

@@ -119,6 +119,13 @@ Server Functions and Actions run in separate requests. Expose
 request locale there, and await `createNextServerI18n({ locale })`. The plugin
 automatically discovers and invokes this conventional entry before action code.
 
+Keep locale negotiation read-only in that initializer and in middleware/proxy
+handling Server Action POSTs. Re-setting even an unchanged locale cookie can
+make Next render the page again and invalidate prefetched routes. Persist a
+locale choice separately, skip unchanged writes, and navigate to a new document
+after a language change. Actions that change application data should request
+their own revalidation or `router.refresh()`.
+
 Keep ordinary `error.tsx` and `global-error.tsx` views independent of translated
 catalogs. A required fragment failure stops the dependent module and reaches
 Next error handling; a missing compiled entry throws. Offer a full document

@@ -189,6 +189,23 @@ through dynamic imports during the action; no application fragment registration
 or message-loading step is needed. Catalog content is reused across requests,
 while each request keeps its own i18n instance.
 
+Locale negotiation should only read cookies, headers, or route data. Do not
+write or renew a locale cookie in the initializer or on every Server Action
+POST in middleware/proxy. Next.js treats even a write of the same cookie value
+as a mutation: it can render the current page with the action result and
+invalidate prefetched routes. Persist a locale choice separately, and skip the
+write when the cookie already matches. Missing or unsupported cookie values
+can use the normal locale fallback without being persisted by a read-only
+action. If the application renews cookie expiry, keep that policy on ordinary
+page requests rather than every action.
+
+Actions that change server-rendered application data should explicitly use the
+appropriate Next revalidation API or `router.refresh()`. A locale change starts
+a new document after the choice is persisted; the cookie example does not add
+a global `revalidatePath("/", "layout")` before that navigation. Cookie mutation
+itself can still cause Next to render the current page in the action response.
+See [Next.js cookie behavior](https://nextjs.org/docs/app/api-reference/functions/cookies).
+
 Parameter defaults execute before the function body. Palamedes therefore
 rejects eager macros in Server Function parameter initializers, including
 nested destructuring defaults. Move such defaults into the body and preserve

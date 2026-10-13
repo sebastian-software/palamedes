@@ -310,9 +310,11 @@ async function assertLocaleSwitchThenClientNavigation() {
     await page.goto(baseUrl);
     await page.getByTestId("client-ready").waitFor({ state: "attached" });
 
+    const action = page.waitForResponse(isServerActionResponse);
     const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 });
     await page.getByTestId("locale-switch-de").click({ noWaitAfter: true });
-    await navigation;
+    const [, actionResponse] = await Promise.all([navigation, action]);
+    assert.match((await actionResponse.allHeaders())["set-cookie"] ?? "", /locale=de(?:;|$)/u);
     await page.getByTestId("client-ready").waitFor({ state: "attached" });
     await page.waitForLoadState("networkidle");
 
@@ -355,6 +357,161 @@ async function assertLocaleSwitchThenClientNavigation() {
       "locale switch followed by client navigation caused browser errors",
     );
     await context.close();
+  } finally {
+    await browser.close();
+  }
+}
+
+function isServerActionResponse(response) {
+  return (
+    response.request().method() === "POST" && Boolean(response.request().headers()["next-action"])
+  );
+}
+
+async function assertActionsPreserveRenderAndPrefetch() {
+  const executablePath = [
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/google-chrome",
+  ].find((candidate) => candidate && existsSync(candidate));
+  const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
+
+  try {
+    for (const cookieLocale of [undefined, "de", "unsupported"]) {
+      const context = await browser.newContext({
+        extraHTTPHeaders: { "accept-language": "de" },
+        locale: "de",
+      });
+      try {
+        if (cookieLocale !== undefined) {
+          await context.addCookies([{ name: "locale", value: cookieLocale, url: baseUrl }]);
+        }
+        const page = await context.newPage();
+        const actionResponses = [];
+        // Capture the real response before Chromium can discard its tiny Flight
+        // body. Requests still run through Next's action handler and initializer.
+        await page.route("**/*", async (route) => {
+          const request = route.request();
+          if (request.method() !== "POST" || !request.headers()["next-action"]) {
+            return route.fallback();
+          }
+          const response = await route.fetch();
+          const body = await response.text();
+          actionResponses.push({ status: response.status(), headers: response.headers(), body });
+          await route.fulfill({ response, body });
+        });
+        let prefetchRequests = 0;
+        page.on("request", (request) => {
+          if (
+            new URL(request.url()).pathname === "/lazy-client-probe" &&
+            request.headers()["next-router-prefetch"] === "1"
+          )
+            prefetchRequests += 1;
+        });
+        await page.goto(baseUrl);
+        await page.getByTestId("client-ready").waitFor({ state: "attached" });
+        await page.waitForLoadState("networkidle");
+        assert.match(await page.getByTestId("server-proof-message").textContent(), /de/u);
+        const renderId = await page.locator("main").getAttribute("data-server-render-id");
+        assert(renderId, "The home page must expose a server render identity");
+        assert.equal(
+          await page.getByTestId("locale-switch-de").isDisabled(),
+          cookieLocale === "de",
+        );
+
+        const prefetched = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === "/lazy-client-probe" &&
+            response.request().headers()["next-router-prefetch"] === "1",
+        );
+        await page.getByTestId("prefetch-lazy-client-probe").evaluate((button) => button.click());
+        assert.equal((await prefetched).status(), 200);
+        await page.waitForLoadState("networkidle");
+        const prefetchedRequestCount = prefetchRequests;
+
+        const checkAction = async (testId) => {
+          const responseCount = actionResponses.length;
+          const responsePromise = page.waitForResponse(isServerActionResponse);
+          await page.getByTestId(testId).evaluate((button) => button.click());
+          await responsePromise;
+          assert.equal(actionResponses.length, responseCount + 1);
+          const { status, headers: responseHeaders, body } = actionResponses[responseCount];
+          assert.equal(status, 200);
+          assert.equal(responseHeaders["set-cookie"], undefined, "Action rewrote a cookie");
+          assert.equal(
+            responseHeaders["x-action-revalidated"],
+            undefined,
+            "Action invalidated the router cache",
+          );
+          assert.equal(body.includes("data-server-render-id"), false, "Action returned the page");
+          await page.waitForLoadState("networkidle");
+          assert.equal(
+            await page.locator("main").getAttribute("data-server-render-id"),
+            renderId,
+            "Action replaced the server-rendered page",
+          );
+          assert.equal(
+            await page.getByTestId("prefetch-invalidated").textContent(),
+            "false",
+            "Action invalidated the prefetched route",
+          );
+        };
+
+        await checkAction("server-proof-trigger");
+        // A direct call still needs to be a no-op when the cookie already matches.
+        if (cookieLocale === "de") {
+          await checkAction("repeat-locale-choice");
+          assert.equal(await page.getByTestId("repeat-locale-result").textContent(), "true");
+        }
+
+        await page.getByTestId("open-lazy-client-probe").evaluate((button) => button.click());
+        await page.getByTestId("lazy-client-message").waitFor();
+        await page.waitForLoadState("networkidle");
+        assert.equal(prefetchRequests, prefetchedRequestCount, "The route was prefetched again");
+        assert.equal(
+          await page.getByTestId("lazy-client-message").textContent(),
+          "Erst nach Client-Navigation geladen",
+        );
+        assert.equal(
+          (await context.cookies()).find((cookie) => cookie.name === "locale")?.value,
+          cookieLocale,
+          "Locale negotiation persisted a cookie during a read-only request",
+        );
+        if (cookieLocale !== "de") {
+          // A fallback locale has not been chosen yet. Selecting that same
+          // displayed language must persist the first valid preference.
+          await page.goto(baseUrl);
+          await page.getByTestId("client-ready").waitFor({ state: "attached" });
+          await page.waitForLoadState("networkidle");
+          const responseCount = actionResponses.length;
+          const action = page.waitForResponse(isServerActionResponse);
+          const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded" });
+          await page.getByTestId("locale-switch-de").click({ noWaitAfter: true });
+          await Promise.all([navigation, action]);
+          assert(actionResponses.length > responseCount, "Locale choice did not reach Next");
+          assert.match(
+            actionResponses[responseCount].headers["set-cookie"] ?? "",
+            /locale=de(?:;|$)/u,
+          );
+          await page.getByTestId("client-ready").waitFor({ state: "attached" });
+          await page.waitForLoadState("networkidle");
+          assert.equal(await page.locator("html").getAttribute("lang"), "de");
+          assert.equal(await page.getByTestId("locale-switch-de").isDisabled(), true);
+          assert.equal(
+            (await context.cookies()).find((cookie) => cookie.name === "locale")?.value,
+            "de",
+          );
+        }
+      } finally {
+        // Finish real response captures before disposing their request context.
+        for (const page of context.pages()) await page.unrouteAll({ behavior: "wait" });
+        await context.close();
+      }
+    }
+    console.log(
+      "Next read-only and unchanged-locale actions preserved the page and prefetch cache",
+    );
   } finally {
     await browser.close();
   }
@@ -456,6 +613,7 @@ try {
     ),
   );
   await assertClientGraphSplitting();
+  await assertActionsPreserveRenderAndPrefetch();
   await assertLocaleSwitchThenClientNavigation();
   await assertFragmentFailures();
   console.log(
