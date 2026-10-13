@@ -30,6 +30,30 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
+  it("uses cargo-workspace releases and synchronizes npm versions on the release PR", async () => {
+    const [releaseConfig, releaseWorkflow] = await Promise.all([
+      readRepositoryFile(".release-please-config.json").then(JSON.parse),
+      readRepositoryFile(".github/workflows/release-pr.yml"),
+    ]);
+    const releaseJob = job(releaseWorkflow, "release-please", "__missing__");
+    const syncStep = releaseJob
+      .split("- name: Sync npm package versions on the release PR")[1]
+      .split("- name:")[0];
+
+    expect(releaseConfig.packages["."]["release-type"]).toBe("rust");
+    expect(releaseConfig.plugins).toContainEqual({ type: "cargo-workspace" });
+    expect(releaseConfig.packages["."]["extra-files"] ?? []).toEqual([]);
+    expect(releaseJob).toContain("id: release");
+    expect(releaseJob).toContain(
+      "token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}",
+    );
+    expect(syncStep).toContain("steps.release.outputs.prs_created == 'true'");
+    expect(syncStep).toContain("RELEASE_PLEASE_PR: ${{ steps.release.outputs.pr }}");
+    expect(syncStep).toContain("pullRequest?.head?.ref");
+    expect(syncStep).toContain("node ./scripts/sync-npm-package-versions.mjs");
+    expect(syncStep).toContain('git push origin "HEAD:$branch"');
+  });
+
   it("holds release creation and real publication while retaining a non-publishing dry run", async () => {
     const [release, publish, container, detection] = await Promise.all([
       readRepositoryFile(".github/workflows/release-pr.yml"),

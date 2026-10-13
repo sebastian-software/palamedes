@@ -27,6 +27,12 @@ const publishWorkflow = readText(".github/workflows/publish.yml");
 const rootReleasePath = ".";
 const rootReleaseConfig = releaseConfig.packages?.[rootReleasePath];
 const rootReleaseExtraFiles = rootReleaseConfig?.["extra-files"] ?? [];
+const rootReleaseExtraFilePaths = new Set(
+  rootReleaseExtraFiles
+    .map((file) => (typeof file === "string" ? file : file?.path))
+    .filter(Boolean)
+    .map((filePath) => filePath.replaceAll("\\", "/")),
+);
 
 const publicPackages = publicWorkspacePackages(root).map(({ directory, name, version }) => ({
   isNative: nativePackagePattern.test(name),
@@ -35,11 +41,6 @@ const publicPackages = publicWorkspacePackages(root).map(({ directory, name, ver
   version,
 }));
 
-const extraVersionFiles = new Set(
-  rootReleaseExtraFiles
-    .filter((file) => file?.type === "json" && file?.jsonpath === "$.version")
-    .map((file) => file.path),
-);
 // `--filter <name>` selects every workspace project with that name, and the
 // private workspace root shares its name with the published umbrella package.
 // A bare name filter there silently drags the whole workspace build into the
@@ -82,15 +83,6 @@ const nativeMatrixPackages = new Set(
 const rootCargoPath = "Cargo.toml";
 const expectedVersion = cargoManifestVersion(rootCargoPath);
 
-function hasExtraFile(expectedFile) {
-  return rootReleaseExtraFiles.some(
-    (file) =>
-      file?.type === expectedFile.type &&
-      file?.path === expectedFile.path &&
-      file?.jsonpath === expectedFile.jsonpath,
-  );
-}
-
 function cargoManifestVersion(file) {
   return readText(file).match(/^version = "([^"]+)"/m)?.[1];
 }
@@ -125,6 +117,10 @@ if (!rootReleaseConfig) {
 
   if (rootReleaseConfig["release-type"] !== "rust") {
     fail(`root release type is ${rootReleaseConfig["release-type"]}, expected rust`);
+  }
+
+  if (!releaseConfig.plugins?.some((plugin) => plugin.type === "cargo-workspace")) {
+    fail("root release config must enable the cargo-workspace plugin");
   }
 
   const rootCargo = readText(rootCargoPath);
@@ -166,8 +162,10 @@ for (const packageInfo of publicPackages) {
     fail(`${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`);
   }
 
-  if (!extraVersionFiles.has(path.join(packageInfo.path, "package.json"))) {
-    fail(`${packageInfo.name} is missing from the root release extra-files list`);
+  if (rootReleaseExtraFilePaths.has(`${packageInfo.path.replaceAll("\\", "/")}/package.json`)) {
+    fail(
+      `${packageInfo.name} must be synchronized by scripts/sync-npm-package-versions.mjs, not release extra-files`,
+    );
   }
 
   if (packageInfo.isNative) {

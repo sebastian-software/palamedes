@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -32,9 +33,37 @@ jobs:
         run: node ./scripts/release-policy.mjs
 
       - name: Run release-please
+        id: release
         if: steps.policy.outputs.publication_enabled == 'true'
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Sync npm package versions on the release PR
+        if: steps.policy.outputs.publication_enabled == 'true' && steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_PLEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          branch="$(node --input-type=module -e '
+            const pullRequest = JSON.parse(process.env.RELEASE_PLEASE_PR || "null");
+            const branch = pullRequest?.head?.ref;
+            if (typeof branch !== "string" || branch.length === 0) {
+              throw new Error("Release Please did not return a release PR branch.");
+            }
+            process.stdout.write(branch);
+          ')"
+          git fetch origin "$branch"
+          git checkout --force -B "$branch" "origin/$branch"
+          node ./scripts/sync-npm-package-versions.mjs
+          if git diff --quiet -- packages; then
+            echo "npm package versions are already synchronized"
+            exit 0
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- packages
+          git commit -m "build: sync npm package versions"
+          git push origin "HEAD:$branch"
