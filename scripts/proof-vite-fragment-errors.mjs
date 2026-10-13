@@ -45,6 +45,7 @@ try {
         let injected = false;
         let failedUrl;
         const catalogs = new Set();
+        let initialCatalogs = new Set();
         await context.route("**/*", async (route) => {
           const request = route.request();
           if (request.resourceType() === "document") {
@@ -68,7 +69,7 @@ try {
             request.url().includes(`.${locale}-`),
             `Inactive locale requested: ${request.url()}`,
           );
-          if (!armed) return route.continue();
+          if (!armed || initialCatalogs.has(request.url())) return route.continue();
           failedUrl ??= request.url();
           if (request.url() !== failedUrl) return route.continue();
           injected = true;
@@ -88,11 +89,21 @@ try {
         await page.goto(origin);
         if (phase === "navigation") {
           await page.getByTestId("client-ready").waitFor({ state: "attached" });
+          // Finish the automatic status query before faulting lazy-route dependencies.
+          await page.waitForFunction(() => {
+            const message = document.querySelector(
+              '[data-testid="server-proof-message"]',
+            )?.textContent;
+            return message && message.trim() !== "…";
+          });
+          await page.waitForLoadState("networkidle");
+          initialCatalogs = new Set(catalogs);
           const initialCount = catalogs.size;
           armed = true;
           await page.getByTestId("insights-link").click();
           await page.locator('main[role="alert"]').waitFor();
           assert(catalogs.size > initialCount, "Lazy navigation did not load a new catalog");
+          assert(!initialCatalogs.has(failedUrl), "Failure injection targeted an initial catalog");
         } else {
           await page.locator('main[role="alert"]').waitFor();
         }
