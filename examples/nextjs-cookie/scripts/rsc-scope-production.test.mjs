@@ -314,7 +314,8 @@ async function assertLocaleSwitchThenClientNavigation() {
     const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 });
     await page.getByTestId("locale-switch-de").click({ noWaitAfter: true });
     const [, actionResponse] = await Promise.all([navigation, action]);
-    assert.match((await actionResponse.allHeaders())["set-cookie"] ?? "", /locale=de(?:;|$)/u);
+    assert.equal(actionResponse.status(), 200);
+    assert.equal((await context.cookies()).find((cookie) => cookie.name === "locale")?.value, "de");
     await page.getByTestId("client-ready").waitFor({ state: "attached" });
     await page.waitForLoadState("networkidle");
 
