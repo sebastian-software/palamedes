@@ -158,6 +158,13 @@ Static Vite HTML entries receive the same locale binding automatically.
 
 The package peer range remains broad because macros and catalog loading work on
 supported Vite releases independently of the React MDX compiler.
+On Vite 6.3 and newer, the macro transform declares `id` and `code` hook filters
+so files without a Palamedes macro import are skipped before the JavaScript hook
+runs. The handler keeps the same `includes()` check as a fallback for Vite 4
+through 6.2, which support object-form hooks but ignore filter metadata. Vite 3
+continues to use the function-form hook because it does not support object-form
+hooks. The MDX hook also declares an `.mdx` ID filter and retains its handler
+checks for compatibility.
 See the [MDX guide](https://github.com/sebastian-software/palamedes/blob/main/docs/mdx.md).
 
 ## What This Package Handles

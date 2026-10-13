@@ -562,7 +562,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   // Plugin 2: Compile MDX before framework JSX transforms.
   if (mdxOverride !== false) {
-    plugins.push({
+    const mdxPlugin: Plugin = {
       name: "palamedes:mdx",
       enforce: "pre" as const,
 
@@ -681,11 +681,25 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         modules.forEach((module) => context.server.moduleGraph.invalidateModule(module));
         return modules;
       },
-    });
+    };
+
+    const mdxTransformHandler = mdxPlugin.transform;
+    if (typeof mdxTransformHandler === "function") {
+      mdxPlugin.transform =
+        VITE_MAJOR < 4
+          ? mdxTransformHandler
+          : {
+              filter: {
+                id: { include: MDX_FILE_REGEX, exclude },
+              },
+              handler: mdxTransformHandler,
+            };
+    }
+    plugins.push(mdxPlugin);
   }
 
   // Plugin 3: Transform macros
-  plugins.push({
+  const transformPlugin: Plugin = {
     name: "palamedes:transform",
     enforce: "pre" as const,
 
@@ -777,7 +791,31 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         this.error(transformErrorMessage(cleanId, error));
       }
     },
-  });
+  };
+
+  const transformHandler = transformPlugin.transform;
+  if (typeof transformHandler === "function") {
+    // Vite 3 requires function-form hooks. Vite 4 supports object hooks but
+    // ignores the filter metadata until Vite 6.3, so the handler keeps its
+    // existing ID and source checks as the compatibility fallback.
+    transformPlugin.transform =
+      VITE_MAJOR < 4
+        ? transformHandler
+        : {
+            filter: {
+              id: {
+                include: [
+                  ...(Array.isArray(include) ? include : [include]),
+                  ...(mdxOverride !== false ? [MDX_FILE_REGEX] : []),
+                ],
+                exclude,
+              },
+              code: [...PALAMEDES_MACRO_PACKAGES],
+            },
+            handler: transformHandler,
+          };
+  }
+  plugins.push(transformPlugin);
 
   // Plugin 4b: message sidecar modules for experimental graph splitting.
   // Per message-bearing source file, one per-locale module rendered by the

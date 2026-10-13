@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as PalamedesConfigModule from "@palamedes/config";
 import type * as PalamedesTransformModule from "@palamedes/transform";
+import type { Plugin } from "vite";
 
 const mocks = vi.hoisted(() => ({
   loadPalamedesConfig: vi.fn(),
@@ -54,6 +55,15 @@ vi.mock("@palamedes/transform", async (importOriginal) => {
 });
 
 import { palamedes } from "./index";
+
+function transformHandler(transform: Plugin["transform"]) {
+  if (typeof transform === "function") {
+    return transform;
+  }
+  if (transform && typeof transform === "object") {
+    return transform.handler;
+  }
+}
 
 // catalogResourcePath() resolves configured catalog paths. Keep the mocked
 // native boundary aligned with the host path convention so this suite covers
@@ -506,9 +516,9 @@ describe("palamedes vite plugin", () => {
   it("can disable first-class MDX compilation", () => {
     const plugins = palamedes({ mdx: false });
     expect(plugins.some((plugin) => plugin.name === "palamedes:mdx")).toBe(false);
-    const macroTransform = plugins.find(
-      (plugin) => plugin.name === "palamedes:transform",
-    )?.transform;
+    const macroTransform = transformHandler(
+      plugins.find((plugin) => plugin.name === "palamedes:transform")?.transform,
+    );
     if (typeof macroTransform !== "function") {
       throw new TypeError("Expected macro transform hook");
     }
@@ -523,7 +533,7 @@ describe("palamedes vite plugin", () => {
 
   it("invalidates compiled MDX modules when the Palamedes config changes", async () => {
     const mdxPlugin = palamedes().find((plugin) => plugin.name === "palamedes:mdx");
-    const transform = mdxPlugin?.transform;
+    const transform = transformHandler(mdxPlugin?.transform);
     const handleHotUpdate = mdxPlugin?.handleHotUpdate;
     if (typeof transform !== "function" || typeof handleHotUpdate !== "function") {
       throw new TypeError("Expected MDX transform and HMR hooks");
@@ -557,7 +567,7 @@ describe("palamedes vite plugin", () => {
       map: null,
     });
     const macroPlugin = palamedes().find((plugin) => plugin.name === "palamedes:transform");
-    const transform = macroPlugin?.transform;
+    const transform = transformHandler(macroPlugin?.transform);
     if (typeof transform !== "function") {
       throw new TypeError("Expected macro transform hook");
     }
@@ -706,7 +716,7 @@ describe("automatic graph splitting", () => {
     const transformPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
     const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
     const buildStart = transformPlugin?.buildStart;
-    const transform = transformPlugin?.transform;
+    const transform = transformHandler(transformPlugin?.transform);
     const watchChange = transformPlugin?.watchChange;
     const load = sidecarPlugin?.load;
     if (
@@ -1431,7 +1441,7 @@ async function runSidecarLoad(
   const plugins = palamedes(setup.pluginOptions ?? { experimentalGraphSplitting: true });
   const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
   const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
-  const transform = macroPlugin?.transform;
+  const transform = transformHandler(macroPlugin?.transform);
   const load = sidecarPlugin?.load;
   if (typeof transform !== "function" || typeof load !== "function") {
     throw new TypeError("Expected transform and sidecar load hooks");
@@ -1526,7 +1536,7 @@ function runMacroTransform(
     map: null,
   });
   const macroPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:transform");
-  const transform = macroPlugin?.transform;
+  const transform = transformHandler(macroPlugin?.transform);
 
   if (command && typeof macroPlugin?.config === "function") {
     macroPlugin.config.call(
@@ -1592,7 +1602,7 @@ async function runMdxTransform(
     }
   }
   const mdxPlugin = plugins.find((plugin) => plugin.name === "palamedes:mdx");
-  const transform = mdxPlugin?.transform;
+  const transform = transformHandler(mdxPlugin?.transform);
 
   if (typeof transform !== "function") {
     throw new TypeError("Expected palamedes:mdx transform hook");
