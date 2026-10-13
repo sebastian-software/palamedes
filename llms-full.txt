@@ -471,6 +471,16 @@ that mode requires exactly one `palamedes.server` module in the project root or
 and activate a fresh request-local instance and be request-memoized or
 idempotent.
 
+Keep locale negotiation read-only. Do not write or renew locale cookies in the
+Server Function initializer or on every Server Action POST in middleware/proxy;
+even an unchanged cookie write can render the page again and invalidate
+prefetched routes. Resolve missing or unsupported cookies through fallback
+without persisting them during a read-only action. Persist explicit locale
+choices separately and skip unchanged writes. Application data mutations own
+their revalidation or `router.refresh()` calls. Locale changes navigate to a new
+document after persistence; global layout revalidation is not needed solely
+for that navigation, though cookie mutation can still trigger an action render.
+
 ### Remix v3
 
 Use `@palamedes/remix`. Register it after `remix/node-tsx`. Share one

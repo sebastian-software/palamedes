@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { translateServerActionProof } from "./action-messages";
 import { getLocaleLabel, type Locale, LOCALES, LOCALE_COOKIE } from "./i18n";
@@ -13,13 +12,12 @@ export async function setLocaleAction(locale: Locale) {
   }
 
   const cookieStore = await cookies();
+  if (cookieStore.get(LOCALE_COOKIE)?.value === locale) return;
+
   cookieStore.set(LOCALE_COOKIE, locale, {
     path: "/",
     maxAge: 60 * 60 * 24 * 365, // 1 year
   });
-
-  // Revalidate all pages - they'll re-render with new locale
-  revalidatePath("/", "layout");
 }
 
 export async function getServerActionProof() {
