@@ -1,0 +1,32 @@
+[
+  {
+    "old": "checkout.cta",
+    "context": "checkout button",
+    "message": "Buy now"
+  },
+  {
+    "old": "offers.title",
+    "context": null,
+    "message": "Offers"
+  },
+  {
+    "old": "menu.open",
+    "context": "menu",
+    "message": "Open"
+  },
+  {
+    "old": "status.open",
+    "context": "status",
+    "message": "Open"
+  },
+  {
+    "old": "Hello {name}",
+    "context": null,
+    "message": "Hello {name}"
+  },
+  {
+    "old": "{count, plural, one {# offer} other {# offers}}",
+    "context": null,
+    "message": "{count, plural, one {# offer} other {# offers}}"
+  }
+]

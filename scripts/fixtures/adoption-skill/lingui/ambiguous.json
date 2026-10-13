@@ -1,0 +1,18 @@
+{
+  "source": [
+    {
+      "id": "left.label",
+      "message": "Open"
+    },
+    {
+      "id": "right.label",
+      "message": "Open"
+    }
+  ],
+  "translations": {
+    "de": {
+      "left.label": "Öffnen",
+      "right.label": "Offen"
+    }
+  }
+}

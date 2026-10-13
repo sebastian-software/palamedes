@@ -27,11 +27,12 @@ Wait if you need:
 ## Migration Checklist
 
 - [ ] Replace Lingui framework integration with `@palamedes/vite-plugin` or `@palamedes/next-plugin`
-- [ ] Add `@palamedes/runtime` and register the active i18n instance
+- [ ] Confirm the target version supports the compiled adapter contract
+- [ ] Let the adapter initialize `@palamedes/runtime` for the selected locale
 - [ ] Add `palamedes.yaml`
 - [ ] Rewrite Lingui macro imports to Palamedes macro imports
 - [ ] Switch extraction to `pnpm exec pmds extract`
-- [ ] Remove explicit authoring `id` usage
+- [ ] Map explicit IDs to source text and context in every locale before removing them
 - [ ] Verify `.po` loading and runtime translations
 - [ ] Verify one source locale and one non-source locale end to end
 - [ ] Remove older accessor-specific runtime paths
@@ -82,7 +83,11 @@ collaboration; it is not required for the migration or the local workflow.
 Before:
 
 ```ts
-// older context-specific runtime access path
+import { i18n } from "@lingui/core";
+
+function currentLocale() {
+  return i18n.locale;
+}
 ```
 
 After:
@@ -130,19 +135,21 @@ Before:
 After for Vite:
 
 ```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import { palamedes } from "@palamedes/vite-plugin";
 
 export default defineConfig({
-  plugins: [palamedes()],
+  plugins: [palamedes(), react()],
 });
 ```
 
 After for Next.js:
 
 ```js
-const { withPalamedes } = require("@palamedes/next-plugin");
+import { withPalamedes } from "@palamedes/next-plugin";
 
-module.exports = withPalamedes({});
+export default withPalamedes({});
 ```
 
 ## Recommended Migration Order
@@ -154,11 +161,20 @@ Do not start by cleaning every edge case in the codebase.
 Start by wiring:
 
 - one framework adapter
-- one runtime registration path
+- one adapter-owned runtime initialization path
 - one extraction run
 - one translated route or component
 
-The [first working translation guide](./first-working-translation.md) is the best way to establish that baseline.
+Use the [Vite/React first working translation guide](./first-working-translation.md)
+or the [Next.js first-run guide](./nextjs-first-run.md) for that baseline. An agent
+can use the [repository skill](./agent-skill.md) to inspect the app and follow the
+matching setup and migration workflow.
+
+These recipes describe the compiled v2 adapter contract. Check the installed
+package exports and matching release documentation before applying them. A
+repository manifest version or registry `latest` alone does not establish that
+the contract is available; use a compatible release or an explicitly supplied
+workspace/preview build. Preserve existing framework versions and locale policy.
 
 ### 2. Migrate runtime wiring
 
@@ -174,44 +190,30 @@ parser-free `/compiled` API and executable `CompiledCatalogMessages` contract;
 raw ICU maps are not a runtime compatibility path. See the
 [`@palamedes/core` API reference](./api/core.md#exports).
 
-Server-side:
-
-```ts
-import { setServerI18nGetter } from "@palamedes/runtime";
-
-setServerI18nGetter(() => getRequestScopedI18n());
-```
-
-For Next.js App Router Server Components on the Node runtime, prefer the
-Next render-lifetime helper:
+For Next.js 16 App Router Server Components on the Node runtime, use the
+adapter's factory:
 
 ```ts
 // src/lib/i18n.server.ts
 import "server-only";
-
 import { cache } from "react";
-import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
-import type { PalamedesI18n } from "@palamedes/core";
+import { createNextServerI18n } from "@palamedes/next-plugin/server";
+import { resolveLocale } from "./locale.server";
 
-export const serverI18n = createNextServerI18nScope<PalamedesI18n>();
-
-const loadActiveServerI18n = cache(async () => {
-  const locale = await resolveLocaleFromCookiesOrHeaders();
-  const i18n = await loadI18n(locale);
-  return { i18n, locale };
-});
-
-export async function createActiveServerI18n() {
-  const active = await loadActiveServerI18n();
-  serverI18n.activate(active.i18n);
-  return active;
-}
+export const createActiveServerI18n = cache(async () =>
+  createNextServerI18n({ locale: await resolveLocale() }),
+);
 ```
 
+`resolveLocale()` is the application's existing validated cookie, route,
+account, or header policy. It reads the request without writing a preference.
+The factory loads the compiled catalog and activates a fresh render-local
+instance; the application does not call `load()` or activate an extra scope.
+
 ```tsx
-// app/page.tsx
+// src/app/page.tsx
 import { t } from "@palamedes/core/macro";
-import { createActiveServerI18n } from "@/lib/i18n.server";
+import { createActiveServerI18n } from "../lib/i18n.server";
 
 function CheckoutTitle() {
   return <h1>{t`Checkout`}</h1>;
@@ -223,17 +225,23 @@ export default async function Page() {
 }
 ```
 
-This follows the official RSC model: server-only modules prevent accidental
-client imports, React `cache()` memoizes setup work within the current request,
-and the Next adapter keeps the active instance bound through the RSC and Client
-Component server-render passes, including suspension and resumption. Create one
-scope at module level, activate a fresh instance per request, and do not register
-a global server getter from every Server Component render.
+Initialize before translated helpers, metadata, or children run. Set document
+`lang` from the same policy before Client Component entry evaluation. Server
+Functions and Actions have separate request lifetimes: expose
+`initializeServerFunctionI18n()` in `src/palamedes.server.ts`, resolve the locale
+there, and await `createNextServerI18n({ locale })`. The plugin discovers this
+entry; a React render cache does not initialize an action request.
 
-For backend servers outside React frameworks, use the same runtime getter with
-request-local storage. The Hono/Express pattern is documented here:
+Do not write locale cookies during initialization, render, or read-only actions.
+An explicit preference change validates the locale and writes only when its
+saved cookie value differs. A fallback locale without a valid cookie is not a
+saved preference. Locale switches use full document navigation. Do not disable
+unrelated cache revalidation to compensate for unwanted cookie writes.
 
-- [Palamedes in backend servers](./backend-servers.md)
+Custom backend integrations have different ownership. Follow
+[Palamedes in backend servers](./backend-servers.md) for request-local storage
+and the low-level compiled API rather than adding that plumbing to a supported
+framework adapter.
 
 ### 3. Remove explicit IDs
 
@@ -245,7 +253,28 @@ Palamedes treats:
 - `context` as the disambiguator
 - `message + context` as the only public identity
 
-If your existing codebase still has explicit authoring IDs, remove them deliberately instead of expecting compatibility shims.
+Before changing catalog identities, save a recoverable source/catalog snapshot
+and inventory each old ID, context, source message, origin, and translation in
+every locale. Lingui PO formatter settings affect encoding: generated entries
+may already use source text in `msgid`, while explicit entries may use an ID
+with `js-lingui-explicit-id` annotations or as the formatter's default. Read the
+actual config and source-locale catalog; translated text is not a source message.
+
+Remap each explicit-ID entry to its verified source message and target context
+in every locale, preserving translations, translator comments, flags, and
+relevant metadata. Compare the migrated extraction identities, including named
+placeholders, with this mapping before accepting the change. Framework-generated
+annotations and source references can be regenerated; translation content must
+survive. The example above changes identity to `Buy now` plus `checkout button`,
+so its catalog entries must change with the source code.
+
+If two IDs collapse to one identity, compare all translations. Use meaningful
+contexts when the messages must remain distinct. Conflicting translations,
+unknown source text, dynamic ID consumers, and external TMS contracts require a
+migration decision; retain those entries until it is resolved. Do not silently
+merge them or run `--force-clean` to remove the evidence. Update deferred
+`msg`/`defineMessage` callers to invoke translation functions, rather than
+passing the new function to `i18n._`.
 
 ### 4. Switch extraction and catalogs
 
@@ -254,6 +283,14 @@ Run extraction through Palamedes:
 ```bash
 pnpm exec pmds extract
 ```
+
+Run extraction after identity remapping and source import changes. Compare the
+catalog diff with the snapshot and mapping, then extract again to verify
+stability. Build and render the source locale and a translated locale, including
+plural, interpolation, rich-text, and deferred-label cases. In Next.js, also
+check client hydration and actions when the app uses them. Remove unused Lingui
+runtime/config/dependencies only after the entire app and its CI/TMS paths have
+been checked.
 
 That moves catalogs onto the source-first path and aligns updates, audits, and
 ICU diagnostics with the current native core and `ferrocat`.
@@ -320,7 +357,8 @@ Cause:
 
 Fix:
 
-- move to source-string-first descriptors and use `context` when disambiguation is needed
+- map catalog identities to source text and `context`, then remove explicit IDs
+- replace deferred descriptors with translation functions and update their callers
 
 ## What Gets Better After The Move
 
@@ -334,6 +372,7 @@ familiar, but the stack under it gets easier to understand and easier to trust.
 
 ## Next Steps
 
+- [Set up or migrate with an agent skill](./agent-skill.md)
 - [First working translation in 5 minutes](./first-working-translation.md)
 - [Palamedes vs. Lingui](./comparison-with-lingui.md)
 - [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md)
