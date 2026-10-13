@@ -107,7 +107,7 @@
     "@palamedes/transform": "workspace:^"
   },
   "devDependencies": {
-    "next": "16.3.4",
+    "next": "16.3.8",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
