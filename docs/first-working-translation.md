@@ -146,3 +146,5 @@ are identified.
 - [Migration from Lingui](./migrate-from-lingui.md) for an adoption path from an existing catalog workflow
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md) for verified framework integrations
 - [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md) when you are evaluating the project
+
+For agent-assisted setup or a Lingui migration, use the [repository skill](./agent-skill.md).

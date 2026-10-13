@@ -50,6 +50,16 @@ When helping with Palamedes code:
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
 11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
 
+## Setup and migration skill
+
+The repository-owned `skills/palamedes/SKILL.md` routes agent-assisted setup and
+verification for Next.js 16 App Router on Node and Vite/React browser apps, plus
+Lingui-to-Palamedes migration. See [/docs/agent-skill.md](/docs/agent-skill.md).
+Its recipes require a target with the compiled v2 adapter contract; check
+installed capabilities and matching release docs rather than assuming registry
+`latest` supports the current repository. Preserve locale policy and map old
+IDs to source text plus context in every locale before extraction or removal.
+
 ## Package map
 
 Recommended app-facing packages:

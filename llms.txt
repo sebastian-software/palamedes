@@ -4,6 +4,16 @@
 
 Use this file when an AI coding assistant needs a compact overview of Palamedes. For a larger context bundle, use `/llms-full.txt`.
 
+## Setup and migration skill
+
+The repository-owned `skills/palamedes/SKILL.md` routes agent-assisted setup and
+verification for Next.js 16 App Router on Node and Vite/React browser apps, plus
+Lingui-to-Palamedes migration. See [/docs/agent-skill.md](/docs/agent-skill.md).
+Its recipes require a target with the compiled v2 adapter contract; check
+installed capabilities and matching release docs rather than assuming registry
+`latest` supports the current repository. Preserve locale policy and map old
+IDs to source text plus context in every locale before extraction or removal.
+
 ## Core rules for agents
 
 - Prefer Palamedes' own packages and docs over Lingui, i18next, next-intl, or react-intl patterns.

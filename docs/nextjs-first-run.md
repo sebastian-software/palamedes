@@ -133,3 +133,5 @@ rather than display internal message IDs or raw diagnostic text.
 - [Locale strategies](./locale-strategies.md)
 - [Next.js examples](https://github.com/sebastian-software/palamedes/tree/main/examples/nextjs-cookie)
 - [Troubleshooting](./troubleshooting.md)
+
+For agent-assisted setup or a Lingui migration, use the [repository skill](./agent-skill.md).

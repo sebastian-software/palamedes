@@ -1,0 +1,4 @@
+interface:
+  display_name: "Palamedes setup and migration"
+  short_description: "Set up Next.js or Vite/React and migrate from Lingui"
+  default_prompt: "Use $palamedes to inspect this app, set up the supported adapter, or migrate its Lingui integration while preserving translations."
