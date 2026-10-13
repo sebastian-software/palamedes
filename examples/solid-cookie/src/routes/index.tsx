@@ -24,7 +24,10 @@ function HomePageContent(props: { data: HomePageData }) {
           <b>Frontend Stage</b>
           <span class="brand-meta">Berlin · 2026</span>
         </div>
-        <LocaleSwitcher locale={props.data.locale} />
+        <LocaleSwitcher
+          locale={props.data.locale}
+          hasLocaleChoice={props.data.source === "cookie"}
+        />
       </header>
 
       <section class="hero">

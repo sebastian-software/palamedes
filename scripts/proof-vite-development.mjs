@@ -102,6 +102,8 @@ try {
     } else {
       await failurePage.goto(origin);
       await failurePage.getByTestId("client-ready").waitFor({ state: "attached" });
+      // Finish the status query before targeting lazy-route catalog requests.
+      await failurePage.waitForLoadState("networkidle");
       armed = true;
       await failurePage.getByTestId("insights-link").click();
     }

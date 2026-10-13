@@ -21,7 +21,7 @@ export function getLocaleLabel(locale: Locale) {
 export function resolveCookieLocale(headers: Record<string, string | undefined>) {
   return locales.resolve({
     strategy: "cookie",
-    acceptLanguageHeader: headers["accept-language"],
-    cookieHeader: headers.cookie,
+    acceptLanguageHeader: headers["accept-language"] ?? null,
+    cookieHeader: headers.cookie ?? null,
   });
 }

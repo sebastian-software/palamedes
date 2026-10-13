@@ -140,6 +140,132 @@ async function waitForClientReady(page) {
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 });
 }
 
+async function chooseCookieLocale(page, locale) {
+  const mutation = page.waitForRequest((request) => request.method() === "POST");
+  const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded" });
+  await page.getByTestId(`locale-switch-${locale}`).click({ noWaitAfter: true });
+  const [request] = await Promise.all([mutation, navigation]);
+  await waitForClientReady(page);
+  await page.waitForLoadState("networkidle");
+  expect(await page.locator("html").getAttribute("lang")).toBe(locale);
+  expect((await page.context().cookies()).find((cookie) => cookie.name === "locale")?.value).toBe(
+    locale,
+  );
+  return request;
+}
+
+test
+  .runIf(
+    [
+      "tanstack-cookie",
+      "solid-cookie",
+      "waku-cookie",
+      "react-router-cookie",
+      "remix-cookie",
+    ].includes(activeExample().id),
+  )
+  .each([undefined, "unsupported", "en"])(
+  "cookie preference writes are explicit and unchanged choices are inert (cookie=%s)",
+  async (cookieValue) => {
+    const example = activeExample();
+    const page = await launchPage();
+    const context = page.context();
+    if (cookieValue !== undefined) {
+      await context.addCookies([{ name: "locale", value: cookieValue, url: example.baseUrl }]);
+    }
+    const localeCookie = async () =>
+      (await context.cookies()).find((cookie) => cookie.name === "locale")?.value;
+    const document = await page.goto(example.baseUrl, { waitUntil: "domcontentloaded" });
+    expect(document?.status()).toBe(200);
+    expect((await document.allHeaders())["set-cookie"]).toBeUndefined();
+    await waitForClientReady(page);
+    await page.waitForLoadState("networkidle");
+    expect(await page.locator("html").getAttribute("lang")).toBe("en");
+    expect(await localeCookie()).toBe(cookieValue);
+    await page.evaluate(() => {
+      window.__palamedesLocaleContractDocument = "current";
+    });
+
+    if (example.id === "remix-cookie") {
+      const summary = await context.request.get(`${example.baseUrl}/frames/locale-summary`);
+      expect(summary.status()).toBe(200);
+      expect(summary.headers()["set-cookie"]).toBeUndefined();
+      expect(summary.headers()["x-palamedes-locale"]).toBe("en");
+    } else {
+      // Capture the actual wire headers before Chromium processes an RPC response.
+      const reads = [];
+      await page.route("**/*", async (route) => {
+        const request = route.request();
+        if (!["fetch", "xhr"].includes(request.resourceType())) return route.continue();
+        const response = await route.fetch();
+        reads.push({
+          method: request.method(),
+          path: new URL(request.url()).pathname,
+          headers: response.headers(),
+        });
+        await route.fulfill({ response });
+      });
+      const response = page.waitForResponse((result) =>
+        ["fetch", "xhr"].includes(result.request().resourceType()),
+      );
+      await page.getByTestId("server-proof-trigger").click();
+      expect((await response).ok()).toBe(true);
+      await page.waitForLoadState("networkidle");
+      await page.unrouteAll({ behavior: "wait" });
+      expect(reads.length).toBeGreaterThan(0);
+      for (const read of reads) expect(read.headers["set-cookie"]).toBeUndefined();
+      if (example.id === "react-router-cookie") {
+        expect(reads).toHaveLength(1);
+        expect(reads[0].method).toBe("GET");
+        expect(reads[0].path).toMatch(/^\/server-status(?:\.data)?$/u);
+      }
+    }
+    expect(await localeCookie()).toBe(cookieValue);
+    expect(await page.evaluate(() => window.__palamedesLocaleContractDocument)).toBe("current");
+
+    const activeChoice = page.getByTestId("locale-switch-en");
+    expect(await activeChoice.isDisabled()).toBe(cookieValue === "en");
+    if (cookieValue !== "en") {
+      await chooseCookieLocale(page, "en");
+      expect(await page.evaluate(() => window.__palamedesLocaleContractDocument)).toBeUndefined();
+    }
+    expect(await activeChoice.isDisabled()).toBe(true);
+    await page.evaluate(() => {
+      window.__palamedesLocaleContractDocument = "saved";
+    });
+    const redundantRequests = [];
+    const observeChoice = (request) => {
+      if (request.method() === "POST" || request.resourceType() === "document") {
+        redundantRequests.push(request.url());
+      }
+    };
+    page.on("request", observeChoice);
+    await activeChoice.evaluate((button) => button.click());
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    page.off("request", observeChoice);
+    expect(redundantRequests).toEqual([]);
+    expect(await page.evaluate(() => window.__palamedesLocaleContractDocument)).toBe("saved");
+
+    const mutation = await chooseCookieLocale(page, "de");
+    expect(await page.evaluate(() => window.__palamedesLocaleContractDocument)).toBeUndefined();
+    expect(await page.getByTestId("locale-switch-de").isDisabled()).toBe(true);
+
+    // Replay the real framework transport to exercise the server guard independently of the UI.
+    const headers = await mutation.allHeaders();
+    for (const name of ["cookie", "content-length", "host", "connection"]) delete headers[name];
+    const repeated = await context.request.fetch(mutation.url(), {
+      method: mutation.method(),
+      headers,
+      data: mutation.postDataBuffer(),
+      maxRedirects: 0,
+    });
+    expect(repeated.status()).toBeGreaterThanOrEqual(200);
+    expect(repeated.status()).toBeLessThan(400);
+    expect(repeated.headers()["set-cookie"]).toBeUndefined();
+    expect(await localeCookie()).toBe("de");
+  },
+);
+
 // The served document carries the locale, but hydration and any revalidation
 // that follows it can reassign `lang` from client state. A poll alone would
 // accept the served value and never see the later flip, so the attribute is

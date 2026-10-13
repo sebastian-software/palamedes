@@ -7,7 +7,7 @@ import { ClientReady } from "~/components/ClientReady";
 import { LocaleSwitcher } from "~/components/LocaleSwitcher";
 import { ProofPanel } from "~/components/ProofPanel";
 import { TicketPanel } from "~/components/TicketPanel";
-import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n";
+import { LOCALE_COOKIE, getLocaleLabel, locales, resolveLocaleFromRequest } from "~/lib/i18n";
 import { serverI18n } from "~/lib/i18n.server";
 
 export function meta(_args: Route.MetaArgs) {
@@ -39,7 +39,10 @@ export async function action({ request }: Route.ActionArgs) {
     const resolved = resolveLocaleFromRequest(request);
 
     if (intent === "set-locale") {
-      const locale = String(formData.get("locale") ?? resolved.locale);
+      const locale = locales.normalizeLocale(formData.get("locale") ?? resolved.locale);
+      if (resolved.source === "cookie" && resolved.locale === locale) {
+        return redirect("/");
+      }
       return redirect("/", {
         headers: {
           "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
@@ -47,19 +50,12 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
 
-    return {
-      proof: {
-        handledAt: new Date().toISOString(),
-        locale: resolved.locale,
-        localeLabel: getLocaleLabel(resolved.locale),
-        message: t`Server action confirmed locale ${resolved.locale}.`,
-      },
-    };
+    return null;
   });
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { locale, localeLabel } = loaderData;
+  const { locale, localeLabel, source } = loaderData;
 
   return (
     <main className="page-shell">
@@ -68,7 +64,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <b>Frontend Stage</b>
           <span className="brand-meta">Berlin · 2026</span>
         </div>
-        <LocaleSwitcher locale={locale} />
+        <LocaleSwitcher locale={locale} hasLocaleChoice={source === "cookie"} />
       </header>
 
       <section className="hero">
