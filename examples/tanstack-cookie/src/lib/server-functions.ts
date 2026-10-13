@@ -36,10 +36,13 @@ export const setLocaleCookie = createServerFn({ method: "POST" })
     locale: normalizeLocale(data?.locale),
   }))
   .handler(async ({ data }) => {
-    setCookie(LOCALE_COOKIE, data.locale, {
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-    });
+    const resolved = getResolvedLocale();
+    if (resolved.source !== "cookie" || resolved.locale !== data.locale) {
+      setCookie(LOCALE_COOKIE, data.locale, {
+        maxAge: 60 * 60 * 24 * 365,
+        path: "/",
+      });
+    }
 
     return {
       locale: data.locale,

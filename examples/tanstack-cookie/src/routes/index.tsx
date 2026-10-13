@@ -14,7 +14,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { locale, localeLabel } = Route.useLoaderData();
+  const { locale, localeLabel, source } = Route.useLoaderData();
   return (
     <main className="page-shell">
       <header className="topbar">
@@ -22,7 +22,7 @@ function Home() {
           <b>Frontend Stage</b>
           <span className="brand-meta">Berlin · 2026</span>
         </div>
-        <LocaleSwitcher locale={locale} />
+        <LocaleSwitcher locale={locale} hasLocaleChoice={source === "cookie"} />
       </header>
 
       <section className="hero">

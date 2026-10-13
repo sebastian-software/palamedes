@@ -6,9 +6,10 @@ import { LOCALES, LOCALE_LABELS } from "~/lib/i18n";
 
 type LocaleSwitcherProps = {
   locale: Locale;
+  hasLocaleChoice: boolean;
 };
 
-export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
+export function LocaleSwitcher({ locale, hasLocaleChoice }: LocaleSwitcherProps) {
   const navigation = useNavigation();
   const isPending = navigation.state !== "idle";
   const items = buildLocaleSwitchItems({
@@ -35,7 +36,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             key={item.locale}
             data-testid={item.testId}
             aria-pressed={item.active}
-            disabled={isPending}
+            disabled={isPending || (hasLocaleChoice && item.active)}
             name="locale"
             value={item.locale}
             type="submit"

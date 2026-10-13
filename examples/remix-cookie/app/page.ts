@@ -11,6 +11,7 @@ export type RenderHomePageOptions = {
   banner?: string | null;
   locale: string | undefined;
   localeLabel: string;
+  hasLocaleChoice?: boolean;
   clientCatalog?: string;
   clientProof?: string;
   strategyLabel?: string;
@@ -21,6 +22,7 @@ export function renderHomePage({
   banner,
   locale,
   localeLabel,
+  hasLocaleChoice = false,
   clientCatalog,
   clientProof,
   strategyLabel = "cookie",
@@ -53,7 +55,7 @@ export function renderHomePage({
       <p><code>@palamedes/remix</code></p>
       <p>Locale strategy: <strong>${escapeHtml(strategyLabel)}</strong></p>
       ${banner ? `<p role="status">${escapeHtml(banner)}</p>` : ""}
-      <nav aria-label="Locale">${renderLocaleSwitcher(currentLocale, switchLinks)}</nav>
+      <nav aria-label="Locale">${renderLocaleSwitcher(currentLocale, switchLinks, hasLocaleChoice)}</nav>
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(description)}</p>
       <p>${escapeHtml(seats)}</p>
@@ -73,6 +75,7 @@ function normalizePageLocale(locale: string | undefined): Locale {
 function renderLocaleSwitcher(
   currentLocale: Locale,
   switchLinks: LocaleSwitchLink[] | undefined,
+  hasLocaleChoice: boolean,
 ): string {
   const links: LocaleSwitchLink[] = switchLinks ?? LOCALES.map((locale) => ({ locale }));
   return links
@@ -86,7 +89,7 @@ function renderLocaleSwitcher(
       }
 
       return `<form action="/locale" method="post">
-        <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" name="locale" type="submit" value="${escapeHtml(locale)}">
+        <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" ${active && hasLocaleChoice ? "disabled" : ""} name="locale" type="submit" value="${escapeHtml(locale)}">
           ${escapeHtml(LOCALE_LABELS[locale])}
         </button>
       </form>`;

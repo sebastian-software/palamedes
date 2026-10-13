@@ -19,7 +19,7 @@ export default createController(routes, {
     home(context) {
       return remixI18n.run(
         context,
-        async ({ locale }) =>
+        async ({ locale, source }) =>
           new Response(
             renderHomePage({
               clientCatalog: remixI18n.renderClientCatalog(locale),
@@ -27,6 +27,7 @@ export default createController(routes, {
                 createElement(ClientProof, { audience: "developer", count: 1 }),
               ),
               locale,
+              hasLocaleChoice: source === "cookie",
               localeLabel: getLocaleLabel(normalizeLocale(locale)),
               strategyLabel: "cookie",
             }),
@@ -82,13 +83,14 @@ export default createController(routes, {
       const resolved = resolveLocaleFromRequest(context.request);
       const formData = await context.request.formData();
       const locale = normalizeLocale(formData.get("locale") ?? resolved.locale);
+      const headers = new Headers({ location: "/" });
+      if (resolved.source !== "cookie" || resolved.locale !== locale) {
+        headers.set("set-cookie", serializeLocaleCookie(locale));
+      }
 
       return new Response(null, {
         status: 303,
-        headers: {
-          location: "/",
-          "set-cookie": serializeLocaleCookie(locale),
-        },
+        headers,
       });
     },
   },

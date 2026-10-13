@@ -4,7 +4,13 @@ import { buildLocaleSwitchItems } from "@palamedes/react";
 import { Trans } from "@palamedes/react/macro";
 import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
 
-export const LocaleSwitcher = ({ locale }: { locale: Locale }) => {
+export const LocaleSwitcher = ({
+  locale,
+  hasLocaleChoice,
+}: {
+  locale: Locale;
+  hasLocaleChoice: boolean;
+}) => {
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
@@ -22,6 +28,7 @@ export const LocaleSwitcher = ({ locale }: { locale: Locale }) => {
             <button
               aria-pressed={item.active}
               data-testid={item.testId}
+              disabled={hasLocaleChoice && item.active}
               name="locale"
               type="submit"
               value={item.locale}

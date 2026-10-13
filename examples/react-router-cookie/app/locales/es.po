@@ -150,14 +150,19 @@ msgstr "Renderizado con React Router"
 msgid "Server"
 msgstr "Servidor"
 
-#: examples/react-router-cookie/app/routes/home.tsx#action
-msgid "Server action confirmed locale {locale}."
-msgstr "La acción de servidor confirmó el idioma {locale}."
+#~ #@ obsolete-since: 2026-10-13
+#~ #: examples/react-router-cookie/app/routes/server-status.ts#loader
+#~ msgid "Server action confirmed locale {locale}."
+#~ msgstr "La acción de servidor confirmó el idioma {locale}."
 
 #: examples/react-router-cookie/app/routes/home.tsx
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid "server locale"
 msgstr "idioma del servidor"
+
+#: examples/react-router-cookie/app/routes/server-status.ts#loader
+msgid "Server query confirmed locale {locale}."
+msgstr "La consulta de servidor confirmó el idioma {locale}."
 
 #: examples/react-router-cookie/app/routes/insights.tsx
 msgid "Talks scheduled"
