@@ -10,13 +10,32 @@ Cookie examples follow this rule set:
 
 - if no locale cookie is present, the server picks the best supported locale
   from `Accept-Language`
-- once the locale cookie exists, the cookie is authoritative
+- a supported locale cookie is authoritative; an unsupported value falls back
+  to `Accept-Language`, then the default locale
 - there is no recurring mismatch banner once the cookie strategy has an
   explicit cookie value
 - locale switches update the cookie and the next request renders with that
   locale
+- locale resolution and read-only handlers do not write or renew cookies
+- selecting an already stored locale does not submit another switch; the
+  mutation handler also skips `Set-Cookie` when the preference is unchanged
+- an initial explicit choice still persists the currently rendered locale when
+  the cookie is missing or unsupported
 
 This is the verified path for apps that do not encode locale in the URL.
+
+Use a GET resource loader for read-only React Router queries. A POST action
+triggers the framework's normal loader revalidation even when it writes no
+cookie. The cookie example's server status panel uses a GET resource route for
+this reason. Real mutations keep the framework's normal revalidation behavior.
+
+The shared browser contract checks missing, unsupported, and stored cookies in
+the TanStack Start, Solid, Waku, React Router, and Remix cookie examples. It
+checks read-only response headers, first-time persistence, unchanged selections,
+the server mutation guard, and document navigation after a real switch. Next.js
+and React Router RSC have focused production verifiers for their Server Function
+transports. Frameworks may refresh route data after a Server Function; the common
+contract requires read-only locale resolution without cookie mutation.
 
 ## Route Strategy
 

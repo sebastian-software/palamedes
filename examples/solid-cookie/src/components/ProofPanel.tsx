@@ -1,5 +1,6 @@
 import { createEffect, createSignal } from "solid-js";
 import { isServer } from "@solidjs/web";
+import { revalidate } from "@solidjs/router";
 import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/solid/macro";
 import { EVENT } from "@palamedes/example-ui";
@@ -19,6 +20,7 @@ export function ProofPanel(props: ProofPanelProps) {
   async function refresh() {
     setIsPending(true);
     try {
+      revalidate(getLocalizedServerStatus.key);
       const result = await getLocalizedServerStatus();
       setMessage(result.message);
     } finally {

@@ -36,9 +36,15 @@ export async function setLocaleCookie(locale: Locale) {
     throw new Error("setLocaleCookie requires a Solid request event");
   }
 
+  const nextLocale = locales.normalizeLocale(locale);
+  const resolved = resolveCookieLocale(event.request);
+  if (resolved.source === "cookie" && resolved.locale === nextLocale) {
+    return;
+  }
+
   event.response.headers.append(
     "set-cookie",
-    serializeCookie(LOCALE_COOKIE, locales.normalizeLocale(locale), {
+    serializeCookie(LOCALE_COOKIE, nextLocale, {
       maxAge: 60 * 60 * 24 * 365,
       path: "/",
       sameSite: "lax",

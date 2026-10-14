@@ -9,9 +9,10 @@ import { setLocaleAction } from "@/lib/actions";
 
 type LocaleSwitcherProps = {
   locale: Locale;
+  hasLocaleChoice: boolean;
 };
 
-export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
+export function LocaleSwitcher({ locale, hasLocaleChoice }: LocaleSwitcherProps) {
   const [isPending, startTransition] = useTransition();
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
@@ -20,6 +21,8 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   });
 
   function handleLocaleChange(nextLocale: Locale) {
+    if (nextLocale === locale && hasLocaleChoice) return;
+
     startTransition(async () => {
       await setLocaleAction(nextLocale);
       // Locale is document bootstrap state. Start a new document only after the
@@ -39,7 +42,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             key={item.locale}
             data-testid={item.testId}
             aria-pressed={item.active}
-            disabled={isPending}
+            disabled={isPending || (item.active && hasLocaleChoice)}
             onClick={() => handleLocaleChange(item.locale)}
             type="button"
           >

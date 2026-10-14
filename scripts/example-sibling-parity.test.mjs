@@ -95,8 +95,8 @@ const IDENTICAL_SIBLING_GROUPS = [
     "ClientReady.tsx",
   ],
   [
-    "react-router ProofPanel",
-    ["react-router-cookie", "react-router-route", "react-router-subdomain", "react-router-tld"],
+    "react-router ProofPanel non-cookie",
+    ["react-router-route", "react-router-subdomain", "react-router-tld"],
     "ProofPanel.tsx",
   ],
   [
@@ -116,6 +116,11 @@ const IDENTICAL_SIBLING_GROUPS = [
  * only when its strategy-specific behavior prevents sharing the sibling file.
  */
 const INTENDED_DIVERGENCES = [
+  [
+    "react-router-cookie",
+    "ProofPanel.tsx",
+    "Cookie reads status from a GET resource loader; URL strategies retain their route-bound action probes.",
+  ],
   [
     "nextjs-cookie",
     "ProofPanel.tsx",

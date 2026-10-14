@@ -1,0 +1,36 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Project-Id-Version: adoption fixture\n"
+"X-Generator: palamedes\n"
+
+# Keep this translator note.
+msgid "{count, plural, one {# offer} other {# offers}}"
+msgstr "{count, plural, one {# Angebot} other {# Angebote}}"
+
+# Keep this translator note.
+msgctxt "checkout button"
+msgid "Buy now"
+msgstr "Jetzt kaufen"
+
+# Keep this translator note.
+msgid "Hello {name}"
+msgstr "Hallo {name}"
+
+# Keep this translator note.
+msgid "Offers"
+msgstr "Angebote"
+
+# Keep this translator note.
+msgctxt "menu"
+msgid "Open"
+msgstr "Öffnen"
+
+# Keep this translator note.
+#, approved
+msgctxt "status"
+msgid "Open"
+msgstr "Offen"

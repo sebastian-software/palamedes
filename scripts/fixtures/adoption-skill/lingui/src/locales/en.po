@@ -1,0 +1,37 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: adoption fixture\n"
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+# Keep this translator note.
+#. js-lingui-explicit-id
+msgctxt "checkout button"
+msgid "checkout.cta"
+msgstr "Buy now"
+
+# Keep this translator note.
+#. js-lingui-explicit-id
+msgid "offers.title"
+msgstr "Offers"
+
+# Keep this translator note.
+#. js-lingui-explicit-id
+msgctxt "menu"
+msgid "menu.open"
+msgstr "Open"
+
+# Keep this translator note.
+#. js-lingui-explicit-id
+#, approved
+msgctxt "status"
+msgid "status.open"
+msgstr "Open"
+
+# Keep this translator note.
+msgid "Hello {name}"
+msgstr "Hello {name}"
+
+# Keep this translator note.
+msgid "{count, plural, one {# offer} other {# offers}}"
+msgstr "{count, plural, one {# offer} other {# offers}}"

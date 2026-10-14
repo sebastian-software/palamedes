@@ -26,7 +26,7 @@ type ProbeResult = {
 
 export default async function CookiePage() {
   const headers = unstable_getHeaders();
-  const { locale } = resolveCookieLocale(headers);
+  const { locale, source } = resolveCookieLocale(headers);
   const localeLabel = getLocaleLabel(locale);
 
   async function runProbe(
@@ -56,7 +56,7 @@ export default async function CookiePage() {
           <b>Frontend Stage</b>
           <span className="brand-meta">Berlin · 2026</span>
         </div>
-        <LocaleSwitcher locale={locale} />
+        <LocaleSwitcher locale={locale} hasLocaleChoice={source === "cookie"} />
       </header>
 
       <section className="hero">

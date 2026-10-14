@@ -6,6 +6,7 @@ import { setLocaleCookie } from "../lib/server";
 
 type LocaleSwitcherProps = {
   locale: Locale;
+  hasLocaleChoice: boolean;
 };
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
@@ -18,6 +19,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
     });
 
   function handleLocaleChange(nextLocale: Locale) {
+    if (props.hasLocaleChoice && nextLocale === props.locale) return;
     setIsPending(true);
     void setLocaleCookie(nextLocale).then(() => {
       window.location.assign("/");
@@ -35,7 +37,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
             <button
               data-testid={item.testId}
               aria-pressed={item.active ? "true" : "false"}
-              disabled={isPending()}
+              disabled={isPending() || (props.hasLocaleChoice && item.active)}
               onClick={() => handleLocaleChange(item.locale)}
               type="button"
             >

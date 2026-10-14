@@ -7,7 +7,8 @@
     "dev": "waku dev --port 4030",
     "build": "waku build",
     "start": "waku start --port 4030",
-    "extract": "pmds extract"
+    "extract": "pmds extract",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@palamedes/core": "workspace:^",
@@ -25,6 +26,7 @@
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",

@@ -58,6 +58,9 @@ async function expectMultiCookieLocale() {
     headers: { cookie: "session=production-proof; locale=de" },
   });
   const html = await response.text();
+  if (response.headers.has("set-cookie")) {
+    throw new Error("A read-only document request rewrote the locale cookie.");
+  }
   if (!response.ok || !html.includes("Server-Rendern bestätigte Sprache.")) {
     throw new Error("A production request with session and locale cookies did not render German.");
   }
@@ -68,22 +71,31 @@ async function expectMultiCookieLocale() {
   }
 }
 
-async function expectDefaultDocumentLocale() {
-  const response = await fetch(baseUrl, { headers: { "accept-language": "en" } });
+async function expectDefaultDocumentLocale(cookie) {
+  const response = await fetch(baseUrl, {
+    headers: { "accept-language": "en", ...(cookie ? { cookie } : {}) },
+  });
   const html = await response.text();
+  if (response.headers.has("set-cookie")) {
+    throw new Error("A fallback document request persisted a locale cookie.");
+  }
   if (!response.ok || !/<html[^>]*\slang="en"/u.test(html)) {
     throw new Error("An English document was served without a matching html lang attribute.");
   }
 }
 
 async function addServerFunctionBarrier(page, barrierId) {
+  const responses = [];
   await page.route("**/*", async (route) => {
     const request = route.request();
     if (request.method() !== "POST") return route.continue();
-    await route.continue({
+    const response = await route.fetch({
       headers: { ...request.headers(), [TEST_BARRIER_HEADER]: barrierId },
     });
+    responses.push(response);
+    await route.fulfill({ response });
   });
+  return responses;
 }
 
 function waitForServerFunctionBarrier(page, barrierId) {
@@ -92,6 +104,39 @@ function waitForServerFunctionBarrier(page, barrierId) {
       response.request().method() === "POST" &&
       response.headers()[TEST_BARRIER_REACHED_HEADER] === barrierId,
   );
+}
+
+async function expectFallbackServerFunction(browser, cookieValue) {
+  const context = await browser.newContext();
+  try {
+    if (cookieValue !== undefined) {
+      await context.addCookies([{ name: "locale", value: cookieValue, url: baseUrl }]);
+    }
+    const page = await context.newPage();
+    const responses = [];
+    await page.route("**/*", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      responses.push(response);
+      await route.fulfill({ response });
+    });
+    await page.goto(baseUrl);
+    const response = page.waitForResponse((result) => result.request().method() === "POST");
+    await page.getByTestId("server-function-trigger").click();
+    if (!(await response).ok()) throw new Error("A fallback Server Function request failed.");
+    await expectText(
+      page,
+      "server-function-direct",
+      "Direct Server Function macro confirmed locale.",
+    );
+    const stored = (await context.cookies()).find((cookie) => cookie.name === "locale")?.value;
+    if (stored !== cookieValue || responses.some((result) => result.headers()["set-cookie"])) {
+      throw new Error("A fallback Server Function persisted a locale cookie.");
+    }
+    await page.unrouteAll({ behavior: "wait" });
+  } finally {
+    await context.close();
+  }
 }
 
 await run("pnpm", ["--filter", "@palamedes/example-react-router-rsc-cookie", "build"]);
@@ -106,8 +151,11 @@ try {
   await waitForServer();
   await expectMultiCookieLocale();
   await expectDefaultDocumentLocale();
+  await expectDefaultDocumentLocale("locale=unsupported");
   const browser = await chromium.launch({ headless: true });
   try {
+    await expectFallbackServerFunction(browser, undefined);
+    await expectFallbackServerFunction(browser, "unsupported");
     const [deContext, enContext] = await Promise.all([browser.newContext(), browser.newContext()]);
     await Promise.all([
       deContext.addCookies([{ name: "locale", value: "de", url: baseUrl }]),
@@ -122,7 +170,7 @@ try {
     await enPage.getByTestId("server-function-trigger").waitFor();
     await verifyArtifacts.checkpoint();
     const barrierId = `react-router-rsc-server-function-${Date.now()}`;
-    await Promise.all([
+    const snapshots = await Promise.all([
       addServerFunctionBarrier(dePage, barrierId),
       addServerFunctionBarrier(enPage, barrierId),
     ]);
@@ -134,6 +182,18 @@ try {
     ]);
     if (!deResponse.ok() || !enResponse.ok()) {
       throw new Error("A rendezvoused React Router RSC Server Function request failed.");
+    }
+    for (const responses of snapshots) {
+      for (const response of responses) {
+        if (response.headers()["set-cookie"] !== undefined) {
+          throw new Error("A read-only Server Function rewrote a locale cookie.");
+        }
+      }
+    }
+    const cookieLocale = async (context) =>
+      (await context.cookies()).find((cookie) => cookie.name === "locale")?.value;
+    if ((await cookieLocale(deContext)) !== "de" || (await cookieLocale(enContext)) !== "en") {
+      throw new Error("A read-only Server Function changed the stored locale.");
     }
     await Promise.all([
       expectText(

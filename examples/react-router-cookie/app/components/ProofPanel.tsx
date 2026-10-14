@@ -22,10 +22,10 @@ export function ProofPanel({ locale }: ProofPanelProps) {
   const isPending = fetcher.state !== "idle";
   const message = fetcher.data?.proof?.message ?? null;
 
-  const submit = fetcher.submit;
+  const load = fetcher.load;
   const refreshRef = useRef<() => void>(() => {});
   refreshRef.current = () => {
-    submit({ intent: "probe" }, { method: "post" });
+    void load("/server-status");
   };
 
   function refresh() {
