@@ -95,6 +95,9 @@ export default function Home() {
       >
         <div className="space-y-8">
           <FeatureGrid cards={RUNTIME_BENEFITS} />
+          <ButtonLink variant="outline" href="/message-splitting">
+            Watch translation fragments load
+          </ButtonLink>
           <BenchmarkCommand />
           <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <ButtonLink variant="outline" href="/proof">

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import axe from "axe-core";
 import { startSiteStaticServer } from "./site-static-server.mjs";
+import { verifyFragmentDemo } from "../site/scripts/verify-fragment-demo.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 function portFromEnv(name, fallback) {
@@ -28,6 +29,7 @@ const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl;
 const paths = [
   "/",
   "/proof",
+  "/message-splitting",
   "/frameworks",
   "/architecture",
   "/get-started",
@@ -115,6 +117,8 @@ try {
 
     await context.close();
   }
+
+  await verifyFragmentDemo(browser, baseUrl);
 
   for (const width of [320, 390, 430]) {
     const context = await browser.newContext({ viewport: { width, height: 844 } });

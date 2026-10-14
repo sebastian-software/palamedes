@@ -1,0 +1,76 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+
+msgid "Your workspace at a glance"
+msgstr "Votre espace de travail en un coup d'œil"
+
+msgid "Welcome back, <0>Alex</0>. Here is what needs your attention."
+msgstr "Bon retour, <0>Alex</0>. Voici ce qui demande votre attention."
+
+msgid "Active projects"
+msgstr "Projets actifs"
+
+msgid "Team members"
+msgstr "Membres de l'équipe"
+
+msgid "{value, plural, one {# task is due today.} other {# tasks are due today.}}"
+msgstr "{value, plural, one {# tâche est à terminer aujourd'hui.} other {# tâches sont à terminer aujourd'hui.}}"
+
+msgid "Open Projects to review the work, or Billing to check your plan."
+msgstr "Ouvrez Projects pour consulter le travail, ou Billing pour vérifier votre abonnement."
+
+msgid "Projects in progress"
+msgstr "Projets en cours"
+
+msgid "Keep the next milestone in sight. Your team can pick up where you left off."
+msgstr "Gardez le prochain objectif en vue. Votre équipe peut reprendre là où vous en étiez."
+
+msgid "Website launch"
+msgstr "Lancement du site web"
+
+msgid "Ready for review"
+msgstr "Prêt pour révision"
+
+msgid "Customer research"
+msgstr "Étude des besoins clients"
+
+msgid "Interviews scheduled"
+msgstr "Entretiens planifiés"
+
+msgid "Design system"
+msgstr "Système de design"
+
+msgid "In progress"
+msgstr "En cours"
+
+msgid "Project updates stay with the project, so everyone has the same context."
+msgstr "Les mises à jour restent avec le projet pour que tout le monde dispose du même contexte."
+
+msgid "Your plan and billing"
+msgstr "Votre abonnement et votre facturation"
+
+msgid "Review the workspace plan before your next renewal."
+msgstr "Vérifiez l'abonnement de votre espace de travail avant le prochain renouvellement."
+
+msgid "Current plan"
+msgstr "Abonnement actuel"
+
+msgid "Team workspace"
+msgstr "Espace de travail d'équipe"
+
+msgid "Billing cycle"
+msgstr "Période de facturation"
+
+msgid "Monthly"
+msgstr "Mensuelle"
+
+msgid "Payment status"
+msgstr "État du paiement"
+
+msgid "Up to date"
+msgstr "À jour"
+
+msgid "Invoices and payment details are available to workspace administrators."
+msgstr "Les factures et les détails de paiement sont accessibles aux administrateurs de l'espace de travail."

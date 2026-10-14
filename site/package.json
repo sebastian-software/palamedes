@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
+    "@palamedes/core": "workspace:*",
+    "@palamedes/react": "workspace:*",
+    "@palamedes/runtime": "workspace:*",
     "@palamedes/site-ui": "workspace:*",
     "@react-router/node": "8.3.1",
     "ardo": "4.2.0",
@@ -23,6 +26,9 @@
     "react-router": "8.3.1"
   },
   "devDependencies": {
+    "@palamedes/config": "workspace:*",
+    "@palamedes/core-node": "workspace:*",
+    "@palamedes/vite-plugin": "workspace:*",
     "@react-router/dev": "8.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.0.0",

@@ -94,6 +94,14 @@ const PROGRESSIVE_OUTLINE_THRESHOLD = 5;
 
 buildTypedocPackages();
 
+// The live demo is a separate, real adapter build, also served by site dev.
+const demoBuild = spawnSync(process.execPath, [join(siteRoot, "scripts/build-fragment-demo.mjs")], {
+  cwd: siteRoot,
+  stdio: "inherit",
+});
+if (demoBuild.error) throw demoBuild.error;
+if (demoBuild.status !== 0) throw new Error("Fragment demo build failed");
+
 const generatedDirs = [
   join(routesRoot, "api-reference"),
   join(routesRoot, "decisions"),
@@ -148,13 +156,18 @@ console.log(
 function buildTypedocPackages() {
   const packages = typedocPackages();
   assertTypedocEntryPoints(packages);
-  const filters = packages.flatMap(({ packageDir }) => ["--filter", `./packages/${packageDir}`]);
+  const filters = [
+    "--filter",
+    "./packages/core-node-*",
+    ...packages.flatMap(({ packageDir }) => ["--filter", `./packages/${packageDir}`]),
+  ];
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
   console.log("prebuild-content: building TypeDoc workspace packages");
   const result = spawnSync(pnpm, ["--recursive", ...filters, "build"], {
     cwd: repoRoot,
     stdio: "inherit",
+    env: { ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? "2" },
   });
 
   if (result.error) {

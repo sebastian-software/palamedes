@@ -93,6 +93,7 @@ const ROUTE_EXPECTATIONS = [
   // The homepage is verified through its real structural and interaction
   // checks below. Its marketing headline is intentionally not a test contract.
   { path: "/" },
+  { path: "/message-splitting", h1: "Load the view. Load its messages." },
   { path: "/frameworks", h1: "Six server frameworks." },
   {
     path: "/frameworks/nextjs",

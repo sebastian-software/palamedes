@@ -18,6 +18,7 @@ const generatedAndBuildIgnores = {
     "**/target/**",
     "**/.react-router/**",
     "site/build/**",
+    "site/public/fragment-demo/**",
     "**/*.d.ts",
     "**/*.tsbuildinfo",
     "docs/example-screenshots/**",
