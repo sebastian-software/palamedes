@@ -1,4 +1,5 @@
 import { ButtonLink } from "@palamedes/site-ui";
+import { V2ReleaseNotice } from "~/components/V2ReleaseNotice";
 
 export function HomeHero() {
   return (
@@ -26,16 +27,17 @@ export function HomeHero() {
           </span>
         </h1>
         <p className="mx-auto mt-8 max-w-[48rem] text-[17px] leading-[1.7] text-ink/90 max-tight:text-[15px]">
-          Build i18n on one coherent TypeScript foundation: source-local messages, first-party
-          framework integrations, four proven locale architectures, repository-owned catalogs, and a
-          native toolchain that stays fast as the codebase grows.
+          Write readable messages with ready-made components. Connect your framework with a
+          first-party adapter. Compile translations ahead of time and keep catalog work fast with a
+          native toolchain. One i18n foundation, from your first component to a growing application.
         </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <ButtonLink href="/frameworks">Choose your framework</ButtonLink>
-          <ButtonLink variant="outline" href="/architecture">
-            Review the architecture
+          <ButtonLink href="/get-started#install">Start with your framework</ButtonLink>
+          <ButtonLink variant="outline" href="/docs/release-notes-v2">
+            Explore Palamedes 2.0
           </ButtonLink>
         </div>
+        <V2ReleaseNotice className="mx-auto mt-7 max-w-[42rem]" />
       </div>
     </section>
   );

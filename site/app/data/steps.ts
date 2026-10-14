@@ -49,10 +49,12 @@ catalogs:
       title: "Wire the plugin & runtime",
       body: "The Vite adapter owns the parser-free runtime and derives the active locale's compiled catalog dependency before translated code runs.",
       code: `// vite.config.ts
+import { defineConfig } from "vite"
+import react from "@vitejs/plugin-react"
 import { palamedes } from "@palamedes/vite-plugin"
 export default defineConfig({ plugins: [palamedes(), react()] })
 
-// index.html
+// index.html — keep your existing body and module script
 <html lang="de"></html>`,
     },
     {
@@ -101,11 +103,12 @@ catalogs:
       title: "Wire the plugin & runtime",
       body: "The Vite adapter owns the parser-free runtime and derives the active locale's compiled catalog dependency before translated code runs.",
       code: `// vite.config.ts
+import { defineConfig } from "vite"
 import { palamedes } from "@palamedes/vite-plugin"
 import solid from "@solidjs/vite-plugin"
 export default defineConfig({ plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })] })
 
-// index.html
+// index.html — keep your existing body and module script
 <html lang="de"></html>`,
     },
     {

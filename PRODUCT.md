@@ -40,6 +40,15 @@ durable scope and positioning decision, including its rationale and review
 triggers, lives in
 [ADR-001](adr/001-project-scope-and-positioning.md).
 
+Keep the headline **Clear. Complete. Fast. Pick three.** Explain its promises
+through concrete application work: Clear means readable macros and ready-made
+rich-message and choice components; Complete means first-party framework
+integration and checked locale architectures; Fast means macros compiled to
+message lookups, automatic browser fragments, shared server catalogs, and the
+native extraction/catalog workflow. Show those benefits before asking visitors
+to inspect the architecture. Keep extraction timings separate from browser
+delivery and server memory evidence.
+
 The public narrative follows one spine and does not assume a Lingui migration;
 the reader may be starting greenfield or from any established i18n stack:
 

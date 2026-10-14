@@ -47,7 +47,7 @@ const page: FrameworkLanding = {
     lede: "Waku begins with a Server Component tree, then introduces client boundaries only where interactivity is needed. Locale state must be available in both environments without shipping server machinery to the browser or rendering two languages during hydration.",
     points: [
       "Server Components need an active request-local catalog before translated JSX and macro calls execute.",
-      "Client Components need a browser runtime that starts with the server-selected locale and updates independently afterward.",
+      "Client Components must load compiled messages for the server-selected document locale before translated code runs.",
       "The build pipeline must transform messages for both Waku environments without changing the component architecture.",
     ],
   },
@@ -92,7 +92,7 @@ import { t } from "@palamedes/core/macro"
 export default async function LocalePage() {
   return <h1>{t\`Welcome to Palamedes\`}</h1>
 }`,
-    note: "The checked example resolves and activates the request locale before rendering this page, then initializes only the interactive client components with the same catalog.",
+    note: "The checked example resolves the request locale before this page renders. The adapter initializes interactive client modules and loads their active-locale fragments; the application supplies ordinary error UI. Locale changes navigate to a new document.",
   },
   strategies: {
     matrixSlug: "waku",
@@ -139,11 +139,11 @@ export default async function LocalePage() {
     },
     {
       q: "Do translated Waku pages become Client Components?",
-      a: "No. Server Components can render translated messages on the server. Only interactive islands that react to a client-side locale change need the React client runtime.",
+      a: "No. Server Components render translated messages on the server. Interactive islands use the adapter's browser delivery. A locale change navigates to a new document so server output and browser messages remain aligned.",
     },
     {
       q: "How does the locale cross the RSC boundary?",
-      a: "The server resolves and activates its request-local catalog. The client boundary is initialized with the same locale and messages before interactive translated components run.",
+      a: "The server resolves the locale and loads shared immutable catalog messages with isolated request state. The adapter loads that document locale's compiled fragments before interactive translated modules run.",
     },
     {
       q: "Is Waku support production-stable?",

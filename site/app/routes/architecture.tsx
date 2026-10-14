@@ -21,7 +21,7 @@ const MECHANISMS = [
   {
     number: "01",
     title: "Compiled, not interpreted",
-    body: "Generated catalogs compile into message functions. The production entrypoints keep the ICU parser out of that module graph while compatibility entrypoints retain deliberate support for authored string catalogs.",
+    body: "In v2, generated catalogs compile into message functions in development and production. Package roots and compiled subpaths use the same parser-free runtime. Invalid ICU fails compilation; missing compiled entries reach host error handling.",
     artifact: "Native catalog renderer",
     href: repoHref("crates/palamedes-node/src/catalog.rs"),
     adr: ["011", "022", "023"],
@@ -85,7 +85,7 @@ const MECHANISMS = [
   {
     number: "09",
     title: "Hosts converge on one runtime contract",
-    body: "Each request receives one getI18n-shaped runtime and one document locale. Server rendering, hydration, formatters, and React Router RSC stay inside that request scope instead of accumulating framework-specific semantics.",
+    body: "Servers load the active locale's complete compiled catalog lazily and share immutable messages across requests. Request-local locale and formatter state stays isolated. Browser adapters deliver the document locale's fragments along the module graph.",
     artifact: "Request-scope contract",
     href: decisionHref("025-react-router-rsc-entry-request-scope"),
     adr: ["005", "020", "025"],

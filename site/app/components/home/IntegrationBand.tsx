@@ -35,6 +35,7 @@ const FRONTEND_INTEGRATIONS: readonly Integration[] = [
     href: frameworkLandingHref("waku"),
     logo: "/framework-logos/waku.svg",
     logoClass: "h-5 w-auto max-w-[5rem] brightness-0",
+    note: "preview",
   },
   {
     name: "React Router",
@@ -145,10 +146,10 @@ export function IntegrationBand() {
             the same request-local runtime in Hono and Express.
           </p>
           <a
-            href="https://github.com/sebastian-software/palamedes/blob/main/site/framework-brand-usage.md"
+            href="/docs/stability"
             className="micro mt-4 inline-block text-[10px] tracking-label text-accent underline underline-offset-4"
           >
-            Brand-asset status →
+            Integration stability →
           </a>
         </div>
         <div>

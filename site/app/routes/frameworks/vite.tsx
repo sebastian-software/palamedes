@@ -1,6 +1,6 @@
 import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage";
 import type { FrameworkLanding } from "~/data/framework-landing";
-import { docsHref, NPM, repoHref } from "~/data/links";
+import { docsHref, repoHref } from "~/data/links";
 import { frameworkMeta } from "~/lib/meta";
 
 const page: FrameworkLanding = {
@@ -11,9 +11,9 @@ const page: FrameworkLanding = {
   metaDescription:
     "Add i18n to Vite with TypeScript macros, React or Solid runtime packages, PO catalogs, native transforms, extraction, and build-time diagnostics.",
   headline: "Vite i18n for React and Solid, in one plugin.",
-  lede: "Add Palamedes beside your renderer plugin and keep translation authoring inside TypeScript. The Vite adapter transforms macros, compiles imported PO catalogs, and reports catalog problems during development and production builds.",
+  lede: "Add Palamedes beside your renderer plugin and write messages inside TypeScript and JSX. The v2 adapter derives the active locale's compiled fragments before translated code runs, including lazy modules. You keep your existing routing and locale policy.",
   primary: {
-    label: "Use the 5-minute setup",
+    label: "Set up your first translation",
     href: docsHref("first-working-translation"),
   },
   secondary: {
@@ -60,8 +60,8 @@ const page: FrameworkLanding = {
         body: "Place palamedes() before the React plugin, or add it to Solid's Vite configuration with the Solid runtime module.",
       },
       {
-        title: "Choose a renderer, not a new model",
-        body: "@palamedes/react and @palamedes/solid expose renderer-specific macros and client helpers over the same catalog semantics.",
+        title: "Ready-made rich-message components",
+        body: "React and Solid expose Trans, Plural, Select, and SelectOrdinal macros over the same compiled message model. The adapter initializes browser delivery; applications do not maintain catalog maps or loading boundaries.",
       },
       {
         title: "Keep extraction out of the browser build",
@@ -162,8 +162,8 @@ export default defineConfig({
       href: docsHref("first-working-translation"),
     },
     secondary: {
-      label: "View @palamedes/vite-plugin",
-      href: NPM("@palamedes/vite-plugin"),
+      label: "Set up Vite/React with your agent",
+      href: docsHref("agent-skill"),
     },
   },
 };

@@ -61,7 +61,7 @@ const page: FrameworkLanding = {
       },
       {
         title: "Explicit server activation",
-        body: "A server function validates its locale input, activates a request-local i18n instance, and then uses the same t macro as application code.",
+        body: "The server request middleware resolves the locale and supplies isolated request state over shared immutable catalogs. Server functions then use the same t macro as application code.",
       },
       {
         title: "Router-native locale URLs",
@@ -85,14 +85,32 @@ export default {
   ],
 }
 
-// server-functions.ts
+// src/start.ts
+import { createIsomorphicFn, createStart } from "@tanstack/react-start"
+import { createTanStackServerI18nRequestMiddleware } from "@palamedes/tanstack"
+
+const i18nMiddleware = createIsomorphicFn().server(() =>
+  createTanStackServerI18nRequestMiddleware(async (request) => {
+    const { resolveLocaleFromRequest } = await import("./lib/i18n.server")
+    return resolveLocaleFromRequest(request)
+  }),
+)()!
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [i18nMiddleware],
+}))
+
+// src/lib/server-functions.ts
+import { createServerFn } from "@tanstack/react-start"
+import { t } from "@palamedes/core/macro"
+import { getI18n } from "@palamedes/runtime"
+
 export const getStatus = createServerFn({ method: "GET" })
-  .validator((data: { locale: Locale }) => data)
-  .handler(async ({ data }) => {
-    activateServerI18n(data.locale)
-    return t\`Server function confirmed locale \${data.locale}.\`
+  .handler(async () => {
+    const locale = getI18n().locale
+    return t\`Server function confirmed locale \${locale}.\`
   })`,
-    note: "The checked route example derives the locale from a typed route param, passes it into server functions, and initializes the browser runtime for subsequent navigation.",
+    note: "resolveLocaleFromRequest() is the checked example's application policy. The adapter shares compiled server catalogs and delivers active-locale browser fragments automatically. Locale switches navigate to a new document.",
   },
   strategies: {
     matrixSlug: "tanstack",

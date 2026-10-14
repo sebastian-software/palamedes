@@ -53,7 +53,7 @@ const page: FrameworkLanding = {
   },
   approach: {
     title: "Join both Remix loaders, then carry one locale through the document.",
-    lede: "Palamedes adds no separate build. It transforms the JavaScript Remix already compiled, scopes the server runtime to each request, and embeds serializable ICU strings in an inert document payload before browser modules initialize.",
+    lede: "Palamedes transforms the JavaScript Remix already compiled, shares immutable server catalogs, and delivers executable active-locale fragments through the asset server before translated browser modules run.",
     points: [
       {
         title: "A composable Node loader",
@@ -64,14 +64,14 @@ const page: FrameworkLanding = {
         body: "createPalamedesRemixAssetLoader() transforms ordinary and rich browser macros before Remix resolves imports, HMR boundaries, source maps, and minification.",
       },
       {
-        title: "One document catalog",
-        body: "createRemixI18nServer() scopes Fetch requests and emits the selected ICU catalog; initializeRemixClientI18n() installs it before translated browser code loads.",
+        title: "Shared registry, automatic browser delivery",
+        body: "One catalog asset registry serves both the server scope and browser loader. The adapter derives message dependencies and initializes browser delivery; application code supplies locale policy and ordinary error UI.",
       },
     ],
   },
   code: {
-    label: "server.ts + app/public/entry.ts",
-    caption: "Wire both transforms, then initialize the browser from the server-selected catalog.",
+    label: "server catalog and asset configuration",
+    caption: "Connect server catalogs and browser fragments through one registry.",
     source: `// package.json
 {
   "scripts": {
@@ -82,25 +82,33 @@ const page: FrameworkLanding = {
 // server.ts
 import {
   createPalamedesRemixAssetLoader,
-  PALEMEDES_REMIX_ASSET_PACKAGES,
+  createPalamedesRemixCatalogAssetRegistry,
+  PALAMEDES_REMIX_ASSET_PACKAGES,
 } from "@palamedes/remix"
+import { defineLocaleControls } from "@palamedes/core/locale"
+import { createRemixI18nServer } from "@palamedes/remix/server"
 import { createAssetServer } from "remix/assets"
+
+const catalogAssets = createPalamedesRemixCatalogAssetRegistry()
+const remixI18n = createRemixI18nServer({
+  locales: defineLocaleControls({ locales: ["en", "de"], defaultLocale: "en" }),
+  strategy: "cookie",
+  catalogAssets: { registry: catalogAssets },
+})
 
 const assets = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/**/public/**"],
-  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
-  scripts: { loaders: [createPalamedesRemixAssetLoader()] },
+  scripts: {
+    loaders: [createPalamedesRemixAssetLoader({ catalogAssets })],
+  },
 })
 
-// app/public/entry.ts
-import { createI18n } from "@palamedes/core"
-import { initializeRemixClientI18n } from "@palamedes/remix/client"
-
-initializeRemixClientI18n({ createI18n })
-await import("./interactive.js")`,
-    note: "Render remixI18n.renderClientBootstrap(locale) before the external entry. Rich UI source imports Trans, Plural, Select, and SelectOrdinal from @palamedes/remix/macro; the same asset loader lowers them for the browser.",
+// Serve catalogAssets.serve(request) and remixI18n.serveClientCatalogAsset(request)
+// before assets.fetch(request) under the asset namespace.`,
+    note: "The full example renders remixI18n.renderClientCatalog(locale) and renderClientEntry() inside the request scope. The adapter loads dependencies and imports the application entry. Rich messages use @palamedes/remix/macro; initial and lazy delivery failures reach ordinary error UI.",
   },
   strategies: {
     matrixSlug: "remix",
@@ -117,8 +125,8 @@ await import("./interactive.js")`,
       },
       {
         label: "Catalog path",
-        value: "PO → document",
-        note: "Server PO imports and inert browser bootstrap are checked.",
+        value: "Compiled ESM",
+        note: "Active-locale fragments and parser-free browser delivery are checked.",
       },
       {
         label: "Remix UI",
@@ -151,7 +159,7 @@ await import("./interactive.js")`,
     },
     {
       q: "Can Remix v3 browser modules use Palamedes macros?",
-      a: "Yes. Add createPalamedesRemixAssetLoader() to scripts.loaders and allow PALEMEDES_REMIX_ASSET_PACKAGES. Initialize the document bootstrap before importing translated modules; browser PO imports remain unsupported.",
+      a: "Yes. Share one createPalamedesRemixCatalogAssetRegistry() between the server and asset loader, allow PALAMEDES_REMIX_ASSET_PACKAGES, and render the adapter's client entry. It loads active-locale fragments before translated modules run; browser PO imports remain unsupported.",
     },
     {
       q: "Is Remix v3 support production-ready?",
