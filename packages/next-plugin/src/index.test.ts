@@ -50,7 +50,7 @@ describe("withPalamedes turbopack config", () => {
     expect(pattern.test("packages/next-plugin/catalog-fragment.cjs")).toBe(true);
     expect(pattern.test("src/catalog-fragment.cjs")).toBe(false);
     expect(rule.as).toBe("*.js");
-    expect(rule.loaders?.[0]?.loader).toContain("palamedes-fragment-loader.cjs");
+    expect(rule.loaders?.[0]?.loader).toContain("palamedes-po-loader.cjs");
   });
 
   it("matches ESM and CommonJS TypeScript and JavaScript extensions with the shared default", () => {
@@ -447,8 +447,9 @@ function collectWebpackRules(
 
 describe("withPalamedes webpack config", () => {
   it("compiles the small CommonJS fragment resource as a compiled ESM catalog", () => {
-    const fragmentRule = collectWebpackRules(withPalamedes()).find((rule) =>
-      rule.use?.[0]?.loader.includes("palamedes-fragment-loader"),
+    const fragmentRule = collectWebpackRules(withPalamedes()).find(
+      (rule) =>
+        rule.type === "javascript/auto" && rule.use?.[0]?.loader.includes("palamedes-po-loader"),
     );
     expect(
       fragmentRule?.test?.test("node_modules/@palamedes/next-plugin/catalog-fragment.cjs"),

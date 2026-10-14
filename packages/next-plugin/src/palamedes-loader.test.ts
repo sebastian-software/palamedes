@@ -25,6 +25,10 @@ const originalLoad = moduleLoader._load;
 const transformPalamedesMacros = vi.fn();
 const loadPalamedesConfigSync = vi.fn();
 
+function catalogQuery(catalog: string) {
+  return `palamedes-catalog=${encodeURIComponent(catalog)}&palamedes-selected=`;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   transformPalamedesMacros.mockReturnValue({
@@ -128,12 +132,8 @@ describe("palamedes-loader.cjs", () => {
     );
 
     expect(output).toContain('import { registerMessageLoaderGroup } from "@palamedes/runtime";');
-    expect(output).toContain(
-      "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fen.po&palamedes-selected=",
-    );
-    expect(output).toContain(
-      "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-    );
+    expect(output).toContain(catalogQuery("src/locales/en.po"));
+    expect(output).toContain(catalogQuery("src/locales/de.po"));
     expect(output).toContain(".then(({ messages }) => messages)");
     expect(dependencies).toEqual(["/repo/palamedes.yaml", "/repo/config/settings.ts"]);
   });
@@ -274,12 +274,8 @@ describe("palamedes-loader.cjs", () => {
     expect(output).toContain("_locale = document.documentElement.lang");
     expect(output).toContain("_modules = await Promise.all");
     expect(output).toContain("_fragments = await Promise.all");
-    expect(output).toContain(
-      "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fen.po&palamedes-selected=",
-    );
-    expect(output).toContain(
-      "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-    );
+    expect(output).toContain(catalogQuery("src/locales/en.po"));
+    expect(output).toContain(catalogQuery("src/locales/de.po"));
     expect(output).toContain(".initializeClientI18n(");
     expect(output).toContain("_i18n.load(");
     expect(output).not.toContain("registerMessageLoaderGroup");
@@ -339,11 +335,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/runtime") {
           return { initializeClientI18n: () => i18n };
         }
-        if (
-          specifier.includes(
-            "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-          )
-        ) {
+        if (specifier.includes(catalogQuery("src/locales/de.po"))) {
           return fragment;
         }
         throw new Error(`Unexpected import: ${specifier}`);
@@ -353,9 +345,7 @@ describe("palamedes-loader.cjs", () => {
       await vi.waitFor(() => expect(requested).toHaveLength(3));
       expect(moduleBodyRan).toBe(false);
       expect(
-        requested.some((specifier) =>
-          specifier.includes("palamedes-catalog=src%2Flocales%2Fen.po"),
-        ),
+        requested.some((specifier) => specifier.includes(catalogQuery("src/locales/en.po"))),
       ).toBe(false);
 
       resolveFragment({ messages: { id: "translated" } });
@@ -397,11 +387,7 @@ describe("palamedes-loader.cjs", () => {
           if (specifier === "@palamedes/core/compiled") return { createI18n: vi.fn() };
           if (specifier === "@palamedes/runtime")
             return { getI18n: () => i18n, initializeClientI18n };
-          if (
-            specifier.includes(
-              "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-            )
-          )
+          if (specifier.includes(catalogQuery("src/locales/de.po")))
             return { messages: { id: "translated" } };
           throw new Error(`Unexpected import: ${specifier}`);
         }),
@@ -508,19 +494,11 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/runtime") {
           return { initializeClientI18n: () => i18n };
         }
-        if (
-          specifier.includes(
-            "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-          )
-        ) {
+        if (specifier.includes(catalogQuery("src/locales/de.po"))) {
           fragmentRequests += 1;
           throw bootstrapError;
         }
-        if (
-          specifier.includes(
-            "catalog-fragment.cjs?palamedes-catalog=src%2Fsecondary-locales%2Fde.po&palamedes-selected=",
-          )
-        ) {
+        if (specifier.includes(catalogQuery("src/secondary-locales/de.po"))) {
           successfulFragmentRequests += 1;
           return { messages: { id: "translated" } };
         }
@@ -579,11 +557,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/runtime") {
           return { initializeClientI18n: () => i18n };
         }
-        if (
-          specifier.includes(
-            "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-          )
-        ) {
+        if (specifier.includes(catalogQuery("src/locales/de.po"))) {
           return { default: "not a catalog" };
         }
         throw new Error(`Unexpected import: ${specifier}`);
@@ -640,19 +614,11 @@ describe("palamedes-loader.cjs", () => {
             if (specifier === "@palamedes/runtime") return { initializeClientI18n: () => i18n };
             // The first loader group resolves last, so a registration order that
             // followed resolution order would invert the two catalogs.
-            if (
-              specifier.includes(
-                "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-              )
-            ) {
+            if (specifier.includes(catalogQuery("src/locales/de.po"))) {
               await new Promise((resolve) => setTimeout(resolve, 10));
               return { messages: { greeting: "from the base catalog" } };
             }
-            if (
-              specifier.includes(
-                "catalog-fragment.cjs?palamedes-catalog=src%2Foverrides%2Fde.po&palamedes-selected=",
-              )
-            ) {
+            if (specifier.includes(catalogQuery("src/overrides/de.po"))) {
               return { messages: { greeting: "from the override catalog" } };
             }
             throw new Error(`Unexpected import: ${specifier}`);
@@ -700,11 +666,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/runtime") {
           return { initializeClientI18n: () => ({}) };
         }
-        if (
-          specifier.includes(
-            "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-          )
-        ) {
+        if (specifier.includes(catalogQuery("src/locales/de.po"))) {
           throw bootstrapError;
         }
         throw new Error(`Unexpected import: ${specifier}`);
@@ -744,11 +706,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/runtime") {
           return { initializeClientI18n: () => ({}) };
         }
-        if (
-          specifier.includes(
-            "catalog-fragment.cjs?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=",
-          )
-        ) {
+        if (specifier.includes(catalogQuery("src/locales/de.po"))) {
           throw bootstrapError;
         }
         throw new Error(`Unexpected import: ${specifier}`);

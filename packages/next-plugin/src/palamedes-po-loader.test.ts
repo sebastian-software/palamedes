@@ -206,6 +206,40 @@ describe("palamedes-po-loader.cjs", () => {
     expect(result.code).toContain('"greeting":"Hallo"');
   });
 
+  it("compiles a configured catalog from a small fragment resource and tracks its dependencies", async () => {
+    const selection = Buffer.from(JSON.stringify(["id-a"])).toString("base64url");
+    const result = await runLoader(
+      {},
+      {
+        resourcePath: require.resolve("@palamedes/next-plugin/catalog-fragment"),
+        resourceQuery: `?palamedes-catalog=src%2Flocales%2Fde.po&palamedes-selected=${selection}`,
+      },
+    );
+    expect(compileCatalogArtifactSelected).toHaveBeenCalledWith(
+      expect.anything(),
+      path.resolve("/repo/src/locales/de.po"),
+      ["id-a"],
+    );
+    expect(createCatalogLoaderResult).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ locale: "de" }),
+    );
+    expect(result.dependencies).toContain("/repo/src/locales/de.po");
+    expect(compileCatalogModule).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "?palamedes-catalog=src%2Flocales%2Fde.po",
+    "?palamedes-catalog=../unconfigured.po&palamedes-selected=W10",
+    "?palamedes-catalog=&palamedes-selected=W10",
+  ])("rejects an invalid fragment query: %s", async (resourceQuery) => {
+    await expect(runLoader({}, { resourceQuery })).rejects.toThrow(
+      "Invalid Palamedes catalog fragment query",
+    );
+    expect(compileCatalogArtifactSelected).not.toHaveBeenCalled();
+    expect(compileCatalogModule).not.toHaveBeenCalled();
+  });
+
   it("warns once per development compilation when a selected sidecar host cannot add dependencies", async () => {
     const selection = Buffer.from(JSON.stringify(["id-a"])).toString("base64url");
     const emitWarning = vi.fn();

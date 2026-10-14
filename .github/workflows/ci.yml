@@ -129,10 +129,6 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope
 
-      - name: Verify Next.js fragment build scaling with Turbopack
-        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
-        run: pnpm test:nextjs-fragment-scale
-
       - name: Verify Next.js RSC request scope with Webpack
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope:webpack

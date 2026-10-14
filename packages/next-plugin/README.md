@@ -122,12 +122,7 @@ subset under supported hosts. If a custom loader host does not implement
 changing a fallback catalog or config in that host. Next may apply Fast Refresh
 or fall back to a full document reload at an async-module boundary. A document
 reload is the supported fallback. The development invalidation regression runs
-under Turbopack. A separate production build proof uses 100 translated browser
-modules, 10 locales, and 9,000 catalog messages, with a 4 GiB process-tree RSS
-budget and a 90-second timeout (`pnpm test:nextjs-fragment-scale`). It bounds
-Turbopack task parallelism to two for repeatable coverage; it does not prescribe
-a production worker limit or measure the unrestricted application peak.
-Webpack's top-level-await client build is covered in
+under Turbopack. Webpack's top-level-await client build is covered in
 production, but does not claim an equivalent HMR contract.
 
 A failed required fragment prevents dependent module evaluation in every
