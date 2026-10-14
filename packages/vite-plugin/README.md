@@ -165,6 +165,9 @@ through 6.2, which support object-form hooks but ignore filter metadata. Vite 3
 continues to use the function-form hook because it does not support object-form
 hooks. The MDX hook also declares an `.mdx` ID filter and retains its handler
 checks for compatibility.
+Hook filters allow query suffixes such as `page.ts?view=preview` and
+`page.mdx?view=preview`. Configured `include` and `exclude` patterns are still
+checked against the file path without its query inside the handler.
 See the [MDX guide](https://github.com/sebastian-software/palamedes/blob/main/docs/mdx.md).
 
 ## What This Package Handles

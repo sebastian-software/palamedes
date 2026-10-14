@@ -38,6 +38,7 @@ import {
 
 const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
+const MDX_HOOK_ID_REGEX = /\.mdx(?:\?.*)?$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
 const VIRTUAL_SERVER_CATALOGS = "virtual:palamedes/server-catalogs";
@@ -344,6 +345,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     ...configLoaderOptions
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
+  const transformIncludes = include == null ? [] : Array.isArray(include) ? include : [include];
   if (experimentalGraphSplitting === false) {
     throw new Error(
       "Palamedes v2 delivers compiled catalogs automatically. Remove experimentalGraphSplitting: false.",
@@ -690,7 +692,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           ? mdxTransformHandler
           : {
               filter: {
-                id: { include: MDX_FILE_REGEX, exclude },
+                id: MDX_HOOK_ID_REGEX,
               },
               handler: mdxTransformHandler,
             };
@@ -803,13 +805,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         ? transformHandler
         : {
             filter: {
-              id: {
-                include: [
-                  ...(Array.isArray(include) ? include : [include]),
-                  ...(mdxOverride !== false ? [MDX_FILE_REGEX] : []),
-                ],
-                exclude,
-              },
+              // Hook filters receive the raw ID, whereas the handler applies
+              // configured include/exclude patterns after stripping queries.
+              // Let query IDs through and leave exclusions to that handler so
+              // query text cannot reject a source file (e.g. ?scope=node_modules).
+              ...(transformIncludes.length > 0
+                ? {
+                    id: {
+                      include: [
+                        ...transformIncludes,
+                        ...(mdxOverride !== false ? [MDX_FILE_REGEX] : []),
+                        /\?/,
+                      ],
+                    },
+                  }
+                : {}),
               code: [...PALAMEDES_MACRO_PACKAGES],
             },
             handler: transformHandler,

@@ -173,7 +173,7 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
 });
 
 describe("declarative macro transform filters", () => {
-  it("skips calling the hook when a filter-aware Vite sees no macro import", async () => {
+  it("declares conservative ID filters and macro package code filters", () => {
     const plugin = palamedes({ mdx: false }).find(
       (candidate) => candidate.name === "palamedes:transform",
     );
@@ -182,24 +182,15 @@ describe("declarative macro transform filters", () => {
       throw new TypeError("Expected an object-form macro transform hook");
     }
 
-    const code = "export const answer = 42;";
-    const handler = vi.fn(hook.handler);
-    if (hook.filter.code?.some((macroPackage) => code.includes(macroPackage))) {
-      await handler.call({ error: vi.fn() } as never, code, "/repo/page.ts");
-    }
-
-    expect(hook.filter.id).toEqual({
-      include: [/\.([cm]?[jt]s|[jt]sx)$/],
-      exclude: /node_modules/,
+    expect(hook.filter?.id).toEqual({
+      include: [/\.([cm]?[jt]s|[jt]sx)$/, /\?/],
     });
-    expect(hook.filter.code).toEqual([
+    expect(hook.filter?.code).toEqual([
       "@palamedes/core/macro",
       "@palamedes/react/macro",
       "@palamedes/remix/macro",
       "@palamedes/solid/macro",
     ]);
-    expect(handler).not.toHaveBeenCalled();
-    expect(mocks.transformPalamedesMacros).not.toHaveBeenCalled();
   });
 
   it("preserves macro transform output when the filter matches", async () => {
@@ -211,7 +202,7 @@ describe("declarative macro transform filters", () => {
       throw new TypeError("Expected an object-form macro transform hook");
     }
     const code = 'import { t } from "@palamedes/react/macro";';
-    expect(hook.filter.code?.some((macroPackage) => code.includes(macroPackage))).toBe(true);
+    expect(hook.filter?.code).toContain("@palamedes/react/macro");
     const result = {
       code: "export const translated = true;",
       map: null,
@@ -270,8 +261,8 @@ describe("declarative macro transform filters", () => {
       throw new TypeError("Expected an object-form MDX transform hook");
     }
 
-    const idFilter = hook.filter.id;
-    expect(idFilter).toEqual({ include: /\.mdx$/i, exclude: /node_modules/ });
+    const idFilter = hook.filter?.id;
+    expect(idFilter).toEqual(/\.mdx(?:\?.*)?$/i);
     expect(typeof hook.handler).toBe("function");
   });
 });
