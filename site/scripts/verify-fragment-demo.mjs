@@ -4,14 +4,29 @@ import axe from "axe-core";
 const fragmentPattern = /\/fragment-demo\/assets\/palamedes-m-.*\.(en|fr)-.*\.js$/u;
 
 export async function verifyFragmentDemo(browser, baseUrl) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   const requests = [];
   const errors = [];
   page.on("request", (request) => requests.push(new URL(request.url()).pathname));
   page.on("pageerror", (error) => errors.push(error.message));
   try {
+    // Let the prerendered iframe finish before the parent attaches its listener.
+    await page.route("**/*.js", async (route) => {
+      if (!new URL(route.request().url()).pathname.startsWith("/assets/")) return route.continue();
+      const response = await route.fetch();
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await route.fulfill({ response });
+    });
     await page.goto(`${baseUrl}/message-splitting`, { waitUntil: "networkidle" });
+    await page.unrouteAll();
+    await page.waitForFunction(() => {
+      const frame = document.querySelector("iframe");
+      return (
+        frame.clientHeight >=
+        frame.contentDocument.getElementById("root").getBoundingClientRect().height - 1
+      );
+    });
     await page.getByRole("heading", { name: "Load the view. Load its messages." }).waitFor();
     const frame = page.frameLocator('iframe[title="Live message splitting demo"]');
     for (const locale of ["en", "fr"]) {

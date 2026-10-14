@@ -4,14 +4,25 @@ export function FragmentDemo() {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(1500);
   useEffect(() => {
+    const updateHeight = (nextHeight: unknown) => {
+      if (
+        typeof nextHeight === "number" &&
+        Number.isFinite(nextHeight) &&
+        nextHeight >= 200 &&
+        nextHeight <= 5000
+      )
+        setHeight(Math.ceil(nextHeight) + 2);
+    };
     const resize = (event: MessageEvent) => {
       if (event.origin !== location.origin || event.source !== frame.current?.contentWindow) return;
       if (event.data?.type !== "palamedes:demo-height") return;
-      const nextHeight = event.data.height;
-      if (Number.isFinite(nextHeight) && nextHeight >= 200 && nextHeight <= 5000)
-        setHeight(Math.ceil(nextHeight) + 2);
+      updateHeight(event.data.height);
     };
     window.addEventListener("message", resize);
+    // Prerendered iframe content can finish before the parent hydrates.
+    updateHeight(
+      frame.current?.contentDocument?.getElementById("root")?.getBoundingClientRect().height,
+    );
     return () => window.removeEventListener("message", resize);
   }, []);
   return (
