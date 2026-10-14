@@ -38,6 +38,7 @@ import {
 
 const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
+const MDX_HOOK_ID_REGEX = /\.mdx(?:\?.*)?$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
 const VIRTUAL_SERVER_CATALOGS = "virtual:palamedes/server-catalogs";
@@ -344,6 +345,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     ...configLoaderOptions
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
+  const transformIncludes = include == null ? [] : Array.isArray(include) ? include : [include];
   if (experimentalGraphSplitting === false) {
     throw new Error(
       "Palamedes v2 delivers compiled catalogs automatically. Remove experimentalGraphSplitting: false.",
@@ -562,7 +564,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   // Plugin 2: Compile MDX before framework JSX transforms.
   if (mdxOverride !== false) {
-    plugins.push({
+    const mdxPlugin: Plugin = {
       name: "palamedes:mdx",
       enforce: "pre" as const,
 
@@ -681,11 +683,25 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         modules.forEach((module) => context.server.moduleGraph.invalidateModule(module));
         return modules;
       },
-    });
+    };
+
+    const mdxTransformHandler = mdxPlugin.transform;
+    if (typeof mdxTransformHandler === "function") {
+      mdxPlugin.transform =
+        VITE_MAJOR < 4
+          ? mdxTransformHandler
+          : {
+              filter: {
+                id: MDX_HOOK_ID_REGEX,
+              },
+              handler: mdxTransformHandler,
+            };
+    }
+    plugins.push(mdxPlugin);
   }
 
   // Plugin 3: Transform macros
-  plugins.push({
+  const transformPlugin: Plugin = {
     name: "palamedes:transform",
     enforce: "pre" as const,
 
@@ -777,7 +793,39 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         this.error(transformErrorMessage(cleanId, error));
       }
     },
-  });
+  };
+
+  const transformHandler = transformPlugin.transform;
+  if (typeof transformHandler === "function") {
+    // Vite 3 requires function-form hooks. Vite 4 supports object hooks but
+    // ignores the filter metadata until Vite 6.3, so the handler keeps its
+    // existing ID and source checks as the compatibility fallback.
+    transformPlugin.transform =
+      VITE_MAJOR < 4
+        ? transformHandler
+        : {
+            filter: {
+              // Hook filters receive the raw ID, whereas the handler applies
+              // configured include/exclude patterns after stripping queries.
+              // Let query IDs through and leave exclusions to that handler so
+              // query text cannot reject a source file (e.g. ?scope=node_modules).
+              ...(transformIncludes.length > 0
+                ? {
+                    id: {
+                      include: [
+                        ...transformIncludes,
+                        ...(mdxOverride !== false ? [MDX_FILE_REGEX] : []),
+                        /\?/,
+                      ],
+                    },
+                  }
+                : {}),
+              code: [...PALAMEDES_MACRO_PACKAGES],
+            },
+            handler: transformHandler,
+          };
+  }
+  plugins.push(transformPlugin);
 
   // Plugin 4b: message sidecar modules for experimental graph splitting.
   // Per message-bearing source file, one per-locale module rendered by the
