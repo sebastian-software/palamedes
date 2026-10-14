@@ -109,7 +109,7 @@
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^",
-    "source-map-js": "^1.2.1"
+    "source-map-js": "1.2.2"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

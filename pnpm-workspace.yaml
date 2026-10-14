@@ -8,20 +8,21 @@ overrides:
   "eslint-config-setup>eslint-plugin-oxlint": "1.81.0"
   # Security patches permitted by each parent's existing dependency line.
   # Remove these once the parent lock resolutions reach the patched versions.
-  "brace-expansion@1.1.12": "1.1.18"
-  "brace-expansion@2.1.1": "2.1.4"
-  "brace-expansion@5.0.8": "5.0.9"
+  "brace-expansion@1.1.12": "1.1.21"
+  "brace-expansion@2.1.1": "2.1.7"
+  "brace-expansion@5.0.8": "5.0.12"
   "browserslist": "4.28.7"
   "colord@2.9.3": "2.9.4"
   "defu@6.1.4": "6.1.7"
   "gt>esbuild": "0.28.2"
   "js-yaml@3.15.1": "3.15.2"
-  "postcss-selector-parser@7.1.1": "7.1.3"
+  "postcss-selector-parser@7.1.1": "7.1.6"
   "postcss@8.5.22": "8.5.26"
   "@remix-run/test>esbuild": "0.28.2"
-  "ajv>fast-uri": "4.1.3"
-  "jsdom>undici": "8.10.0"
+  "ajv>fast-uri": "4.1.5"
+  "jsdom>undici": "8.10.2"
   "next>postcss": "8.5.26"
+  "@react-router/serve>morgan": "1.12.1"
   "postcss-svgo>svgo": "4.1.0"
   # remark-mdx-frontmatter 5.2 declares TOML 3; this tested override preserves its parse API.
   # Remove it once the parent supports a patched TOML release (>=4.2).
@@ -30,7 +31,16 @@ overrides:
   "unbuild>rollup-plugin-dts": "6.5.1"
   "tsx>esbuild": "0.28.2"
   # @vercel/blob 2.4 permits this patched Undici line; remove after its lock resolves >=8.
-  "@vercel/blob>undici": "8.10.0"
+  "@vercel/blob>undici": "8.10.2"
+  "compression": "1.8.2"
+  "markdown-it": "14.3.1"
+  "proxy-addr": "2.0.8"
+  "seroval": "1.6.3"
+  "shell-quote": "1.11.0"
+  "sharp": "0.35.5"
+  "source-map-js": "1.2.2"
+  "tinypool": "2.1.2"
+  "gt>smol-toml": "1.9.0"
   "waku>vite": "^8.2.0"
   "waku>@vitejs/plugin-react": "^6.0.5"
 
@@ -136,7 +146,7 @@ minimumReleaseAgeExclude:
   - "@esbuild/win32-ia32@0.28.2"
   - "@esbuild/win32-x64@0.28.2"
   - esbuild@0.28.2
-  - smol-toml@1.8.0
+  - smol-toml@1.9.0
   - "@solidjs/babel-plugin@2.0.0-rc.3"
   - "@solidjs/compiler-darwin-arm64@2.0.0-rc.3"
   - "@solidjs/compiler-darwin-x64@2.0.0-rc.3"
