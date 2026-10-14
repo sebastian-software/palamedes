@@ -65,7 +65,7 @@ const page: FrameworkLanding = {
       },
       {
         title: "Hydrate from root locale data",
-        body: "The root route exposes the resolved locale and the client entry loads the same catalog before React hydrates the document.",
+        body: "The root route exposes the document locale. The adapter loads its compiled message dependencies before hydration and before lazy route modules run; the application client entry hydrates React normally.",
       },
     ],
   },
@@ -84,12 +84,16 @@ export default {
 }
 
 // routes/locale-home.tsx
+import { t } from "@palamedes/core/macro"
+import type { Route } from "./+types/locale-home"
+import { normalizeLocale } from "~/lib/i18n"
+import { runServerI18n } from "~/lib/i18n.server"
+
 export async function loader({ params }: Route.LoaderArgs) {
   const locale = normalizeLocale(params.locale)
-  activateServerI18n(locale)
-  return { locale, title: t\`Welcome to Palamedes\` }
+  return runServerI18n(locale, () => ({ locale, title: t\`Welcome to Palamedes\` }))
 }`,
-    note: "The checked route module also localizes an action response. Its client entry activates the locale from root loader data before HydratedRouter hydrates the React tree.",
+    note: "runServerI18n() is the checked example's request helper: it creates isolated state over a shared server catalog. The adapter initializes browser fragments; the client entry calls HydratedRouter without an application-owned catalog loader. Actions use the same request helper.",
   },
   strategies: {
     matrixSlug: "react-router",
@@ -140,7 +144,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     },
     {
       q: "Does client navigation keep the active catalog synchronized?",
-      a: "Yes in the verified examples. Root locale data initializes the browser runtime before hydration, and the React client helper follows locale changes during navigation and switching.",
+      a: "The adapter loads active-document-locale fragments before hydration and lazy route execution. Language changes navigate to a new document so root locale data, server rendering, and browser messages remain aligned.",
     },
     {
       q: "Is React Router Framework Mode the same as Remix v3?",

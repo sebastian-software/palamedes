@@ -51,10 +51,10 @@ full-stack reference. Its setup has six ordered parts:
    generated executable catalog for the selected locale.
 4. Render the document and any Remix UI Frame endpoints inside
    `remixI18n.run()` or its middleware.
-5. Deliver the generated browser catalog through the Remix asset pipeline before
-   importing translated browser modules. The old JSON bootstrap is retained only
-   as a validated migration boundary and is rejected by the parser-free client;
-   executable asset delivery is tracked in #1214.
+5. Share one catalog asset registry between the server scope and browser asset
+   loader. Serve its generated modules through the asset namespace and render
+   the adapter's client entry. It loads active-locale fragments before translated
+   browser modules execute; application code does not initialize catalog loading.
 6. Import ordinary macros from `@palamedes/core/macro` and rich Remix UI macros
    from `@palamedes/remix/macro` in both server and browser source.
 

@@ -19,7 +19,7 @@ const TABS: CodeTab[] = [
     label: "Write",
     caption: "Messages live where the UI happens.",
     code: `import { t, plural } from "@palamedes/core/macro"
-import { Trans } from "@palamedes/react"
+import { Trans } from "@palamedes/react/macro"
 
 export function Booking({ seats }: { seats: number }) {
   return (
@@ -45,7 +45,8 @@ export function Booking({ seats }: { seats: number }) {
   {
     id: "translate",
     label: "Translate",
-    caption: "Source-string-first .po — readable by translators and every TMS.",
+    caption:
+      "Source-string-first .po catalogs stay readable in your repository. Check your TMS's import and export support.",
     code: `#: src/Booking.tsx:7
 msgid "Your trip to Lisbon"
 msgstr "Deine Reise nach Lissabon"

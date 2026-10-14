@@ -1,6 +1,14 @@
 import { Tabs } from "@base-ui/react/tabs";
+import { ButtonLink } from "@palamedes/site-ui";
 import { StepFlow } from "~/components/get-started/StepFlow";
-import { QUICKSTART_STEPS, STACKS } from "~/data/steps";
+import { QUICKSTART_STEPS, STACKS, type StackId } from "~/data/steps";
+import { docsHref } from "~/data/links";
+
+const GUIDES: Record<StackId, string> = {
+  react: docsHref("first-working-translation"),
+  solid: docsHref("api/vite-plugin"),
+  next: docsHref("nextjs-first-run"),
+};
 
 export function StackPicker() {
   return (
@@ -19,6 +27,9 @@ export function StackPicker() {
       {STACKS.map((stack) => (
         <Tabs.Panel key={stack.id} value={stack.id} className="mt-8">
           <StepFlow steps={QUICKSTART_STEPS[stack.id]} />
+          <ButtonLink variant="small" className="mt-6" href={GUIDES[stack.id]}>
+            Read the full {stack.label} guide
+          </ButtonLink>
         </Tabs.Panel>
       ))}
     </Tabs.Root>

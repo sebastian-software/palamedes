@@ -1,6 +1,6 @@
 import { FrameworkLandingPage } from "~/components/frameworks/FrameworkLandingPage";
 import type { FrameworkLanding } from "~/data/framework-landing";
-import { docsHref, NPM, repoHref } from "~/data/links";
+import { docsHref, repoHref } from "~/data/links";
 import { frameworkMeta } from "~/lib/meta";
 
 const page: FrameworkLanding = {
@@ -13,8 +13,8 @@ const page: FrameworkLanding = {
   headline: "Next.js i18n for the App Router, from server to client.",
   lede: "Palamedes gives Next.js 16 one translation model across Server Components, Client Components, and server actions. The Next plugin handles macro transforms and catalog loading; your application keeps control of routing and locale policy.",
   primary: {
-    label: "Open the Next.js demo",
-    href: "https://nextjs-route.examples.palamedes.dev/en",
+    label: "Set up the App Router",
+    href: docsHref("nextjs-first-run"),
   },
   secondary: {
     label: "Browse the TypeScript source",
@@ -28,8 +28,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "Next.js 16.2",
-      note: "App Router with the current Turbopack path.",
+      value: "Next.js 16",
+      note: "App Router proofs cover Turbopack and webpack.",
     },
     {
       label: "Rendering",
@@ -57,11 +57,11 @@ const page: FrameworkLanding = {
     points: [
       {
         title: "A native Next.js build path",
-        body: "withPalamedes() transforms TypeScript macros and compiles imported PO catalogs for Turbopack, with webpack available as a fallback.",
+        body: "withPalamedes() transforms macros and delivers compiled message dependencies through Turbopack or webpack. Graph splitting is automatic in v2; Client Components need no application-owned catalog loader.",
       },
       {
         title: "Request-scoped server i18n",
-        body: "A server-only scope binds getI18n() to the active request so downstream Server Components and actions use the right locale.",
+        body: "A server-only scope binds getI18n() to the active request. Complete compiled locale catalogs are shared across requests, while each request keeps its own locale and formatter state. Server Actions initialize their scope separately.",
       },
       {
         title: "The same authoring model",
@@ -79,13 +79,13 @@ export default withPalamedes({})
 
 // app/page.tsx — a Server Component
 import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n } from "@/lib/i18n.server"
+import { createNextServerI18n } from "@palamedes/next-plugin/server"
 
 export default async function Page() {
-  await createActiveServerI18n()
+  await createNextServerI18n({ locale: "de" })
   return <h1>{t\`Welcome to Palamedes\`}</h1>
 }`,
-    note: "The server helper resolves the locale, loads its catalog, and activates a request-local scope once. The checked example also initializes the client boundary and verifies a localized server action.",
+    note: "This first component uses a fixed locale. In an application, resolve it from your existing locale policy. The adapter shares server catalogs and loads Client Component fragments automatically; the full guide also covers separate Server Action initialization and ordinary host error UI.",
   },
   strategies: {
     matrixSlug: "nextjs",
@@ -136,7 +136,7 @@ export default async function Page() {
     },
     {
       q: "Can the same messages run in Client Components and server actions?",
-      a: "Yes. The React runtime initializes the browser-side instance while the server scope serves Server Components and actions. Both consume the same source-string-first catalogs.",
+      a: "Yes. The adapter initializes Client Components with compiled fragments for the document locale. Server Components and separately initialized Server Actions use shared immutable catalogs with request-local state. Both use the same source-string-first catalogs.",
     },
     {
       q: "How is this different from next-intl?",
@@ -151,12 +151,12 @@ export default async function Page() {
   finalCta: {
     headline: "See Next.js switch locale without switching i18n models.",
     primary: {
-      label: "Open the live route demo",
-      href: "https://nextjs-route.examples.palamedes.dev/en",
+      label: "Start the Next.js setup",
+      href: docsHref("nextjs-first-run"),
     },
     secondary: {
-      label: "View @palamedes/next-plugin",
-      href: NPM("@palamedes/next-plugin"),
+      label: "Set up with your agent",
+      href: docsHref("agent-skill"),
     },
   },
 };

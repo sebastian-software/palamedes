@@ -40,7 +40,7 @@ may change faster than Stable surfaces.
 
 | Surface                                               | Tier     | Notes                                                                                                                         |
 | ----------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `@palamedes/core` runtime API                         | Stable   | `createI18n`, message descriptors, locale activation, and source-message fallback behavior are app-facing.                    |
+| `@palamedes/core` runtime API                         | Stable   | `createI18n`, compiled message lookup, locale activation, and missing-message errors are app-facing.                          |
 | `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                  |
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                |
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                        |

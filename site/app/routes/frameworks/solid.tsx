@@ -99,7 +99,7 @@ import { Trans } from "@palamedes/solid/macro"
 export default function LocalePage() {
   return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }`,
-    note: "The route example activates a request-local server instance for SSR, initializes the browser locale once, and uses normal links for locale navigation.",
+    note: "The route example resolves request-local state for SSR. The adapter initializes the document locale and loads compiled browser fragments before translated modules run. Normal links navigate to a new document when the locale changes.",
   },
   strategies: {
     matrixSlug: "solid",
@@ -146,7 +146,7 @@ export default function LocalePage() {
     },
     {
       q: "Does Solid i18n work during server-side rendering?",
-      a: "Yes on the verified Solid 2 RC path. The example activates a server i18n instance before route rendering and initializes the matching client locale for hydration.",
+      a: "Yes on the verified Solid 2 RC path. Server rendering uses request-local state and shared immutable catalog messages. The adapter loads compiled browser dependencies for the matching document locale before hydration.",
     },
     {
       q: "Can I use route-based locales such as /de/products?",

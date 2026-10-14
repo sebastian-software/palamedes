@@ -123,7 +123,7 @@ const ROUTE_EXPECTATIONS = [
     h1: "Vite i18n for React and Solid, in one plugin.",
   },
   { path: "/proof", h1: "Claims you can re-run." },
-  { path: "/get-started", h1: "The guided 5-minute path." },
+  { path: "/get-started", h1: "Your first working translation." },
   { path: "/compare", h1: "Choose the i18n model you can keep." },
   { path: "/compare/lingui", h1: "The same idea, on an engine" },
   { path: "/compare/fbtee", h1: "Grammar in JSX, or standards" },
@@ -411,6 +411,7 @@ async function checkRoutes(context, label, { expectHydration }) {
       "/proof",
       "/compare",
       "/get-started",
+      "/docs/agent-skill",
       "/guides",
       "/docs/migrate-from-lingui",
       "/docs",
@@ -427,28 +428,29 @@ async function checkRoutes(context, label, { expectHydration }) {
       );
     }
     const hierarchy = await page.evaluate(() => {
-      const question = [...document.querySelectorAll("section")].find((section) =>
-        section.textContent?.includes("Start from your question"),
-      );
+      const sections = [...document.querySelectorAll("section")];
+      const question = sections.find((section) => section.textContent?.includes("Your next step"));
+      const clear = sections.find((section) => section.textContent?.includes("01 — Clear"));
+      const fast = sections.find((section) => section.textContent?.includes("03 — Fast"));
       const proofStrip = document.querySelector(".hairline-grid");
       const integration = document.querySelector('section[aria-label="First-party integrations"]');
       return {
-        questionAfterProof: Boolean(
-          question &&
+        clearAfterProof: Boolean(
+          clear &&
           proofStrip &&
-          proofStrip.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING,
+          proofStrip.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING,
         ),
-        questionBeforeIntegration: Boolean(
+        questionAfterBenefits: Boolean(
           question &&
+          fast &&
           integration &&
-          question.compareDocumentPosition(integration) & Node.DOCUMENT_POSITION_FOLLOWING,
+          fast.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING &&
+          integration.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING,
         ),
       };
     });
-    if (!hierarchy.questionAfterProof || !hierarchy.questionBeforeIntegration) {
-      fail(
-        "home hierarchy: question routing must follow the proof strip and precede deep evidence",
-      );
+    if (!hierarchy.clearAfterProof || !hierarchy.questionAfterBenefits) {
+      fail("home hierarchy: show component and delivery benefits before deeper evaluation paths");
     }
     // Comparison pages distinguish measured workflows from dated research.
     // The rival template leads with a verdict; the native-toolchain argument
@@ -810,27 +812,29 @@ async function checkGetStartedStructure(page, label) {
     fail(`get-started ${label}: package boundary rail is missing from step 02`);
   }
 
-  const loopHref = await page
-    .getByRole("link", { name: "See the local loop", exact: true })
-    .getAttribute("href");
+  const frameworkHrefs = await page
+    .getByRole("link", { name: "Choose your framework", exact: true })
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
   if (
-    loopHref !== "#loop" ||
+    !frameworkHrefs.includes("#install") ||
     (await page.locator("#loop").count()) !== 1 ||
     (await page.locator("#install").count()) !== 1
   ) {
-    fail(`get-started ${label}: preserved loop/install anchors drifted`);
+    fail(`get-started ${label}: manual setup must reach the preserved install anchor`);
   }
 
-  const frameworkHref = await page
-    .getByRole("link", { name: "Choose your framework", exact: true })
+  const skillHref = await page
+    .getByRole("link", { name: "Set up with your agent", exact: true })
     .getAttribute("href");
   const localeHref = await page
     .getByRole("link", { name: "Explore locale architecture", exact: true })
     .getAttribute("href");
-  if (frameworkHref !== "/frameworks" || localeHref !== "/locale-routing") {
-    fail(
-      `get-started ${label}: closing CTA must move forward (${frameworkHref ?? "missing"}, ${localeHref ?? "missing"})`,
-    );
+  if (
+    !frameworkHrefs.includes("/frameworks") ||
+    localeHref !== "/locale-routing" ||
+    skillHref !== "/docs/agent-skill"
+  ) {
+    fail(`get-started ${label}: framework, locale, or agent setup route is missing`);
   }
 }
 
@@ -975,7 +979,7 @@ async function checkProofViewport(browser, width, { textScale = 1 } = {}) {
   await context.close();
 }
 
-async function checkHomepageDecisionViewport(browser, width) {
+async function checkHomepageSetupViewport(browser, width) {
   const context = await browser.newContext({
     viewport: { width, height: 844 },
   });
@@ -985,23 +989,31 @@ async function checkHomepageDecisionViewport(browser, width) {
     fail(`home ${width}px: expected HTTP 200, got ${response?.status() ?? "no response"}`);
   } else {
     const metrics = await page.evaluate(() => {
-      const question = [...document.querySelectorAll("section")].find((section) =>
-        section.textContent?.includes("Start from your question"),
+      const clear = [...document.querySelectorAll("section")].find((section) =>
+        section.textContent?.includes("01 — Clear"),
       );
-      const firstDecision = question?.querySelector('a[href="/frameworks"]');
+      const setup = document.querySelector('a[href="/get-started#install"]');
+      const example = clear?.querySelector("pre");
       const absoluteTop = (element) =>
         Math.round(element.getBoundingClientRect().top + window.scrollY);
 
       return {
         pageHeight: document.documentElement.scrollHeight,
-        firstDecisionTop: firstDecision ? absoluteTop(firstDecision) : null,
+        viewportHeight: window.innerHeight,
+        setupBottom: setup ? Math.round(setup.getBoundingClientRect().bottom) : null,
+        exampleTop: example ? absoluteTop(example) : null,
       };
     });
-    if (metrics.firstDecisionTop === null || metrics.firstDecisionTop >= metrics.pageHeight * 0.2) {
-      fail(`home ${width}px: first decision route is not within the first fifth of the page`);
+    if (metrics.setupBottom === null || metrics.setupBottom > metrics.viewportHeight) {
+      fail(`home ${width}px: the primary setup action is outside the first viewport`);
+    }
+    if (metrics.exampleTop === null || metrics.exampleTop >= metrics.pageHeight * 0.2) {
+      fail(
+        `home ${width}px: the first component example is not within the first fifth of the page`,
+      );
     }
     console.log(
-      `  homepage ${width}px: first decision at ${metrics.firstDecisionTop}px of ${metrics.pageHeight}px`,
+      `  homepage ${width}px: setup visible at ${metrics.setupBottom}px; component example at ${metrics.exampleTop}px`,
     );
   }
   await context.close();
@@ -1168,8 +1180,8 @@ await checkProofViewport(browser, 320);
 await checkProofViewport(browser, 390);
 await checkProofViewport(browser, 430);
 await checkProofViewport(browser, 390, { textScale: 2 });
-await checkHomepageDecisionViewport(browser, 320);
-await checkHomepageDecisionViewport(browser, 390);
+await checkHomepageSetupViewport(browser, 320);
+await checkHomepageSetupViewport(browser, 390);
 await checkProgressiveDocsOutline(browser);
 await checkProgressiveOutlineAnchors(browser);
 

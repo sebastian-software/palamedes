@@ -32,12 +32,33 @@ export interface StrategyCard extends FeatureCard {
   slug: StrategySlug;
 }
 
+export const RUNTIME_BENEFITS: FeatureCard[] = [
+  {
+    icon: "brackets",
+    title: "Compiled messages, no runtime ICU parser",
+    body: "ICU stays in your source and catalogs. Compilation checks it and emits executable messages for development and production, so application runtimes do not parse it during rendering.",
+    href: docsHref("migration-v2"),
+  },
+  {
+    icon: "arrows",
+    title: "Translation fragments follow your code",
+    body: "Browser adapters select the active document locale and load a module's message dependencies before it runs. Lazy application modules bring their additional translation fragments with them.",
+    href: "/frameworks",
+  },
+  {
+    icon: "server",
+    title: "Shared catalogs, isolated requests",
+    body: "Servers load a complete active-locale catalog on demand and share its immutable messages. Each request keeps its own locale and formatter state without rebuilding the full message map.",
+    href: docsHref("migration-v2"),
+  },
+];
+
 export const STRATEGY_CARDS: StrategyCard[] = [
   {
     slug: "cookie",
     icon: "cookie",
     title: "Cookie",
-    body: "One URL for all locales. Best for apps behind login where SEO is irrelevant and switching should be instant.",
+    body: "One URL for all locales. Useful for signed-in apps; an explicit language choice is persisted and opens a new document in that locale.",
   },
   {
     slug: "route",
@@ -69,7 +90,7 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
   {
     icon: "compass",
     title: "Pick a locale strategy",
-    body: "Cookie, route, subdomain, or TLD — with a live demo for each, in your framework.",
+    body: "Cookie, route, subdomain, or TLD — with checked application examples and public demos where hosting is available.",
     href: "/frameworks",
   },
   {
@@ -93,8 +114,8 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
   {
     icon: "robot",
     title: "Using an AI assistant?",
-    body: "Point it at llms.txt — the whole API surface in one machine-readable file.",
-    href: "/llms.txt",
+    body: "Use the repository skill for Next.js or Vite/React setup and Lingui migration. It checks the target version, preserves catalogs, and verifies the rendered result.",
+    href: docsHref("agent-skill"),
   },
 ];
 

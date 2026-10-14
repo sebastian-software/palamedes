@@ -3,6 +3,7 @@ import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix";
 import { CodeShowcase } from "~/components/home/CodeShowcase";
 import { CompleteProof } from "~/components/home/CompleteProof";
 import { CtaBand } from "~/components/home/CtaBand";
+import { FeatureGrid } from "~/components/home/FeatureGrid";
 import { BenchmarkCommand } from "~/components/home/BenchmarkCommand";
 import { HomeHero } from "~/components/home/HomeHero";
 import { HomeFaq, HOME_FAQ } from "~/components/home/HomeFaq";
@@ -13,6 +14,7 @@ import { QuestionRoutes } from "~/components/home/QuestionRoutes";
 import { StatementBand } from "~/components/home/StatementBand";
 import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger";
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench";
+import { RUNTIME_BENEFITS } from "~/data/features";
 import contentStats from "~/data/generated/content-stats.json";
 import { decisionHref, REPO } from "~/data/links";
 import { pageMeta } from "~/lib/meta";
@@ -47,63 +49,67 @@ export default function Home() {
       <ProofStrip />
 
       <Section
-        num="01 — Start from your question"
-        eyebrow="Choose a path"
-        title="The right evidence depends on the decision in front of you."
-        lede="Begin with the question your team actually needs to answer. Every route returns to the same source-to-runtime model and its checked boundaries."
-      >
-        <QuestionRoutes />
-      </Section>
-
-      <IntegrationBand />
-
-      <Section
-        num="02 — Clear"
+        num="01 — Clear"
         eyebrow="Developer experience"
         title="Write the message where the interface happens."
-        lede="Messages stay readable in TypeScript and JSX. Palamedes transforms them for extraction and runtime use without making developers manage parallel identifiers, generated wrappers, or a second authoring language."
+        lede="Use t for text and ready-made Trans and Plural macros for rich copy and choices. Messages stay readable beside your components; the build turns them into compiled lookups. Your translators work with the source messages in repository-owned catalogs."
       >
         <div className="grid grid-cols-[minmax(0,8fr)_minmax(16rem,4fr)] gap-8 max-grid:grid-cols-1">
           <CodeShowcase />
           <aside className="border border-hair px-6 py-6">
             <p className="micro text-[10px] tracking-label text-gray-spec">
-              Start small, stay coherent
+              Components for real copy
             </p>
             <h3 className="display-serif mt-3 text-[22px] leading-tight uppercase">
-              Quick to adopt is useful. Safe to keep is the point.
+              Rich text. Plurals. One authoring model.
             </h3>
             <p className="mt-4 text-[13.5px] leading-relaxed text-ink/85">
-              The quickstart is one path into the system, not the product promise. The same message
-              model continues through catalogs, CI, server rendering, locale routing, and large
-              repositories.
+              Keep links and emphasis inside the translated sentence. Let plural rules select the
+              right copy for each language. The adapter supplies the compiled messages before your
+              component runs.
             </p>
             <QuickInstall />
+            <ButtonLink variant="small" className="mt-5" href="/get-started#install">
+              Set up your framework
+            </ButtonLink>
           </aside>
         </div>
       </Section>
 
       <Section
-        num="03 — Complete"
+        num="02 — Complete"
         eyebrow="Already wired"
-        title="Framework integrations and locale architectures are two different promises."
-        lede="The adapter layer supplies tested glue code for each supported host. Separately, the example matrix proves four application shapes for locale selection and URLs. You do not have to turn generic compatibility into an architecture yourself."
+        title="The integration is already built for your framework."
+        lede="First-party adapters connect message authoring, server rendering, browser delivery, and localized server functions. Start from a checked application, choose its locale policy, and keep catalog loading inside the adapter."
       >
         <CompleteProof />
       </Section>
 
+      <IntegrationBand />
+
       <Section
-        num="04 — Fast"
+        num="03 — Fast"
         eyebrow="Checked performance"
-        title="Fast enough to stay out of the way."
-        lede="The realistic workflow measures extraction and catalog updates across 1,500 files. The exact command, fixtures, machine details, and semantic checks remain available for reproduction."
+        title="Less work in the browser, on the server, and in your toolchain."
+        lede="Macros become compiled message lookups. Browser adapters deliver active-locale fragments along the module graph, and server requests reuse immutable catalogs. The native CLI keeps extraction and catalog updates fast as the source tree grows."
       >
         <div className="space-y-8">
+          <FeatureGrid cards={RUNTIME_BENEFITS} />
           <BenchmarkCommand />
           <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <ButtonLink variant="outline" href="/proof">
             Inspect benchmarks and verification
           </ButtonLink>
         </div>
+      </Section>
+
+      <Section
+        num="04 — Your next step"
+        eyebrow="Choose a path"
+        title="Try it in your stack, then inspect what matters to your team."
+        lede="Set up a first translation yourself or with the repository's agent skill. Explore locale policy, architecture, and reproducible evidence as your application needs them."
+      >
+        <QuestionRoutes />
       </Section>
 
       <StatementBand num="05 — Architecture" diagram href="/architecture">
@@ -133,7 +139,7 @@ export default function Home() {
               enterprise migration work.
             </p>
             <p className="text-ink/80">
-              The public boundary is as important as the capability: MIT-licensed source,
+              The public boundary is as important as the capability: MIT OR Apache-2.0 source,
               repository-owned catalogs, and no hosted TMS, machine translation, or account
               requirement. Architecture, release behavior, security policy, and rejected
               alternatives are documented before you depend on them.
@@ -159,8 +165,8 @@ export default function Home() {
       <Section
         num="08 — FAQ"
         eyebrow="Boundaries, stated plainly"
-        title="What Palamedes does—and what it does not claim to do."
-        lede="These answers are part of the page, the product boundary, and the structured data. They stay deliberately specific so a useful answer does not become a broader promise."
+        title="What to know before you adopt it."
+        lede="Check integration stability, catalog ownership, and how Palamedes fits your translation workflow."
       >
         <HomeFaq />
       </Section>

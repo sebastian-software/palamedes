@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { CtaBand } from "~/components/home/CtaBand";
+import { V2ReleaseNotice } from "~/components/V2ReleaseNotice";
 import { FrameworkPackageStats } from "~/components/frameworks/FrameworkPackageStats";
 import type { FrameworkLanding, FrameworkLandingFact } from "~/data/framework-landing";
 import { STRATEGY_CARDS } from "~/data/features";
@@ -72,6 +73,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
             {page.secondary.label}
           </ButtonLink>
         </div>
+        <V2ReleaseNotice className="mt-7 max-w-[44rem]" />
         <div className="mt-12">
           <Facts facts={page.facts} />
           <FrameworkPackageStats path={page.path} />

@@ -1,11 +1,11 @@
 export const HOME_FAQ = [
   {
     q: "Is Palamedes ready for production use?",
-    a: "Palamedes publishes its source, tests, examples, benchmark fixtures, and decision records so teams can inspect the supported surface. Production suitability remains a team decision: verify the framework, locale architecture, and workflow you intend to use against the current documentation and release notes.",
+    a: "Check the package version and host you intend to adopt. The 2.0 implementation is available in the repository and publication remains held. Stable APIs follow SemVer; Waku, Remix v3, and React Router RSC retain Preview contracts. The stability guide, checked examples, and release notes describe the supported paths.",
   },
   {
     q: "Which frameworks does Palamedes support?",
-    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite. The framework matrix shows the example and verification status for each supported host; Remix v3 remains explicitly qualified as preview work.",
+    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite. Waku, Remix v3, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
   },
   {
     q: "Does Palamedes replace a translation management system or write translations with AI?",
@@ -21,7 +21,7 @@ export const HOME_FAQ = [
   },
   {
     q: "Can a team migrate from an existing i18n library?",
-    a: "Yes, but migration depends on the source model, catalog format, runtime usage, and framework host. Palamedes provides a Lingui migration guide and comparison pages for selected tools; use them to establish the exact boundary before planning a migration.",
+    a: "The repository includes a Lingui migration guide and an agent skill for Next.js and Vite/React. Migration depends on the source model and IDs; the skill inventories them and preserves existing PO translations before changing catalogs. Other stacks require their own migration assessment.",
   },
 ] as const;
 

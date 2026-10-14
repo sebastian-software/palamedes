@@ -50,6 +50,7 @@ const QUESTIONS = [
     href: "/get-started",
     label: "Start the guided setup",
     resources: [
+      { label: "Set up with your coding agent", href: "/docs/agent-skill" },
       { label: "Technical guides", href: "/guides" },
       { label: "Migration guide", href: "/docs/migrate-from-lingui" },
       { label: "Reference docs", href: "/docs" },
