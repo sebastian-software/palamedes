@@ -60,7 +60,9 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
       const resourcePath = nextCatalogResourcePath(config, catalog, locale);
       return {
         locale,
-        specifier: `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`,
+        // A query creates a separate bundler module. Using the full PO file as
+        // its resource repeats that large loader input for every selection.
+        specifier: `${relativeImport(sourcePath, require.resolve("@palamedes/next-plugin/catalog-fragment"))}?palamedes-catalog=${encodeURIComponent(normalizePath(path.relative(config.rootDir, resourcePath)))}&${SELECTED_MESSAGES_QUERY}=${selection}`,
       };
     }),
   );

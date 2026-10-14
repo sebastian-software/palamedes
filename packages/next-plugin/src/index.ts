@@ -552,6 +552,12 @@ export function withPalamedes(
     });
   }
 
+  appendTurbopackRule(rules, "catalog-fragment.cjs", {
+    condition: { path: /[/\\]next-plugin[/\\]catalog-fragment\.cjs$/u },
+    loaders: [{ loader: poLoaderPath, options: poLoaderOptions }],
+    as: "*.js",
+  });
+
   appendTurbopackRule(rules, "server-catalogs.{mjs,cjs}", {
     loaders: [
       {
@@ -656,6 +662,12 @@ export function withPalamedes(
           };
         }
       }
+
+      config.module.rules.push({
+        test: /[/\\]next-plugin[/\\]catalog-fragment\.cjs$/u,
+        type: "javascript/auto",
+        use: [{ loader: poLoaderPath, options: webpackPoLoaderOptions }],
+      });
 
       config.module.rules.push({
         test: /[/\\]next-plugin[/\\]dist[/\\]server-catalogs\.(?:mjs|cjs)$/u,

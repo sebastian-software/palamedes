@@ -33,13 +33,20 @@ module.exports = function palamedesPoLoader() {
       loadPalamedesConfig,
       resolveLoaderCwd(this, options),
     );
-    const resource = path.resolve(this.resourcePath);
-    const locale =
-      cfg.locales.find((candidate) =>
-        cfg.catalogs.some(
-          (catalog) => path.resolve(catalogResourcePath(cfg, catalog, candidate)) === resource,
-        ),
-      ) ?? path.basename(this.resourcePath, path.extname(this.resourcePath));
+    const parameters = new URLSearchParams(this.resourceQuery ?? "");
+    const catalog = parameters.get("palamedes-catalog");
+    const selection = parameters.get(SELECTED_MESSAGES_QUERY);
+    const resourcePath = catalog === null ? this.resourcePath : path.resolve(cfg.rootDir, catalog);
+    const resource = path.resolve(resourcePath);
+    const configuredLocale = cfg.locales.find((candidate) =>
+      cfg.catalogs.some(
+        (catalog) => path.resolve(catalogResourcePath(cfg, catalog, candidate)) === resource,
+      ),
+    );
+    if (catalog !== null && (!catalog || !selection || !configuredLocale)) {
+      throw new TypeError("Invalid Palamedes catalog fragment query.");
+    }
+    const locale = configuredLocale ?? path.basename(resourcePath, path.extname(resourcePath));
     const artifactConfig = {
       rootDir: cfg.rootDir,
       locales: cfg.locales,
@@ -56,7 +63,6 @@ module.exports = function palamedesPoLoader() {
       missingFailureHint:
         "You see this error because `failOnMissing=true` in Palamedes Next plugin configuration.",
     };
-    const selection = new URLSearchParams(this.resourceQuery ?? "").get(SELECTED_MESSAGES_QUERY);
     let result;
     if (selection) {
       const compiledIds = JSON.parse(Buffer.from(selection, "base64url").toString("utf8"));
@@ -65,7 +71,7 @@ module.exports = function palamedesPoLoader() {
       }
       const artifact = await compileCatalogArtifactSelectedAsync(
         artifactConfig,
-        this.resourcePath,
+        resourcePath,
         compiledIds,
       );
       result = {
@@ -77,7 +83,7 @@ module.exports = function palamedesPoLoader() {
         result.warnings.push(createMissingErrorMessage(resolvedLocale, artifact.missing));
       }
     } else {
-      result = await compileCatalogModuleAsync(artifactConfig, this.resourcePath, loaderOptions);
+      result = await compileCatalogModuleAsync(artifactConfig, resourcePath, loaderOptions);
     }
     if (typeof this.addDependency === "function") {
       const configDependencies = Array.isArray(cfg.configDependencies)

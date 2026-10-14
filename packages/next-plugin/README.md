@@ -111,7 +111,10 @@ declarations that defer translation until component render remain valid. The
 client bootstrap also initializes the module's own fragment before its body, so
 custom compiled-adapter calls observe that fragment if they must run eagerly.
 
-Selected `.po` imports remain normal development dependencies. Their
+Selected fragments use a small adapter resource as the bundler input. Using the
+full PO file for each selected query would repeat that large input throughout
+Turbopack's module graph and loader pool. The native compiler reads the catalogs
+directly, and the loader registers their files as development dependencies. Their
 source-locale fallbacks and the Palamedes config are also registered as loader
 dependencies, so catalog and fallback-policy edits invalidate the affected
 subset under supported hosts. If a custom loader host does not implement

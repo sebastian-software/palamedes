@@ -43,6 +43,16 @@ function conditionList(rule: RuleItem): unknown[] {
 }
 
 describe("withPalamedes turbopack config", () => {
+  it("compiles small adapter fragments without matching an application's similarly named file", () => {
+    const rule = getRules(withPalamedes())["catalog-fragment.cjs"] as RuleItem;
+    const pattern = (rule.condition as { path: RegExp }).path;
+    expect(pattern.test("node_modules/@palamedes/next-plugin/catalog-fragment.cjs")).toBe(true);
+    expect(pattern.test("packages/next-plugin/catalog-fragment.cjs")).toBe(true);
+    expect(pattern.test("src/catalog-fragment.cjs")).toBe(false);
+    expect(rule.as).toBe("*.js");
+    expect(rule.loaders?.[0]?.loader).toContain("palamedes-po-loader.cjs");
+  });
+
   it("matches ESM and CommonJS TypeScript and JavaScript extensions with the shared default", () => {
     const rule = (getRules(withPalamedes())["*"] as RuleItem[])[0]!;
     const include = (
@@ -436,6 +446,18 @@ function collectWebpackRules(
 }
 
 describe("withPalamedes webpack config", () => {
+  it("compiles the small CommonJS fragment resource as a compiled ESM catalog", () => {
+    const fragmentRule = collectWebpackRules(withPalamedes()).find(
+      (rule) =>
+        rule.type === "javascript/auto" && rule.use?.[0]?.loader.includes("palamedes-po-loader"),
+    );
+    expect(
+      fragmentRule?.test?.test("node_modules/@palamedes/next-plugin/catalog-fragment.cjs"),
+    ).toBe(true);
+    expect(fragmentRule?.test?.test("src/catalog-fragment.cjs")).toBe(false);
+    expect(fragmentRule).toMatchObject({ type: "javascript/auto" });
+  });
+
   it("uses the shared bundler extension default", () => {
     const transformRule = collectWebpackRules(withPalamedes()).find((rule) =>
       rule.use?.[0]?.loader.includes("palamedes-loader"),
