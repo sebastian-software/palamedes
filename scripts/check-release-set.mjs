@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { publicWorkspacePackages } from "./release-packages.mjs";
 import { readReleasePolicy } from "./release-policy.mjs";
@@ -35,11 +35,22 @@ const publicPackages = publicWorkspacePackages(root).map(({ directory, name, ver
   version,
 }));
 
-const extraVersionFiles = new Set(
-  rootReleaseExtraFiles
-    .filter((file) => file?.type === "json" && file?.jsonpath === "$.version")
-    .map((file) => file.path),
-);
+// One globbed extra-file bumps every workspace manifest that carries a version.
+// release-please skips manifests without a version string, so private packages
+// stay out of the product release by omitting the field.
+const expectedVersionFileGlob = "{apps,packages}/*/package.json";
+const versionedPrivateManifests = ["apps", "packages"]
+  .filter((directory) => existsSync(path.join(root, directory)))
+  .flatMap((directory) =>
+    readdirSync(path.join(root, directory)).map((name) =>
+      path.join(directory, name, "package.json"),
+    ),
+  )
+  .filter((manifestPath) => existsSync(path.join(root, manifestPath)))
+  .filter((manifestPath) => {
+    const manifest = readJson(manifestPath);
+    return manifest.private && manifest.version !== undefined;
+  });
 // `--filter <name>` selects every workspace project with that name, and the
 // private workspace root shares its name with the published umbrella package.
 // A bare name filter there silently drags the whole workspace build into the
@@ -127,6 +138,13 @@ if (!rootReleaseConfig) {
     fail(`root release type is ${rootReleaseConfig["release-type"]}, expected rust`);
   }
 
+  // The rust strategy already bumps every workspace member and Cargo.lock in
+  // lockstep. The cargo-workspace plugin would add its own patch-bump releases
+  // for crates that depend on palamedes and override that lockstep version.
+  if (releaseConfig.plugins?.some((plugin) => (plugin?.type ?? plugin) === "cargo-workspace")) {
+    fail("root release config must not enable the cargo-workspace plugin");
+  }
+
   const rootCargo = readText(rootCargoPath);
   if (!/^\[package\]/mu.test(rootCargo)) {
     fail("root Cargo.toml must define the product [package]");
@@ -144,6 +162,24 @@ if (releaseManifest[rootReleasePath] !== expectedVersion) {
 
 if (rootReleaseExtraFiles.some((file) => file?.type === "toml")) {
   fail("root release extra-files must not update Cargo.toml or Cargo.lock");
+}
+
+const versionFileEntries = rootReleaseExtraFiles.filter((file) => file?.type === "json");
+if (
+  versionFileEntries.length !== 1 ||
+  versionFileEntries[0].path !== expectedVersionFileGlob ||
+  versionFileEntries[0].glob !== true ||
+  versionFileEntries[0].jsonpath !== "$.version"
+) {
+  fail(
+    `root release extra-files must contain exactly one json entry with glob: true, jsonpath: "$.version", and path: "${expectedVersionFileGlob}"`,
+  );
+}
+
+for (const manifestPath of versionedPrivateManifests) {
+  fail(
+    `${manifestPath} is private but has a version field; remove it so the release glob skips the package`,
+  );
 }
 
 for (const [name, version] of [
@@ -164,10 +200,6 @@ for (const [name, version] of [
 for (const packageInfo of publicPackages) {
   if (packageInfo.version !== expectedVersion) {
     fail(`${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`);
-  }
-
-  if (!extraVersionFiles.has(path.join(packageInfo.path, "package.json"))) {
-    fail(`${packageInfo.name} is missing from the root release extra-files list`);
   }
 
   if (packageInfo.isNative) {
