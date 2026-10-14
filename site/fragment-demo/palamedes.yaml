@@ -1,0 +1,5 @@
+locales: [en, fr]
+source-locale: en
+catalogs:
+  - path: locales/{locale}
+    include: [src/views]

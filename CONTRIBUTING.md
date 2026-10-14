@@ -145,6 +145,13 @@ available, install the managed browser once:
 pnpm exec playwright install chromium
 ```
 
+The prebuild builds the compatible native compiler and compiles
+`site/fragment-demo/` with the workspace Vite
+adapter into the Git-ignored `site/public/fragment-demo/` directory. Edit its
+source and catalogs, then rebuild; site development serves this production
+demo too. `pnpm verify:site-a11y` checks its entry and lazy fragment requests,
+locale isolation, byte receipts, module reuse, and failed-delivery recovery.
+
 `pnpm build:site` checks benchmark data, the example matrix, editorial-rail
 placement, Streamline assets, and generated Open Graph images before it
 regenerates content and builds the static site. The route check then exercises

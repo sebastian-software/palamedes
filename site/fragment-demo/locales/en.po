@@ -1,0 +1,76 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: en\n"
+
+msgid "Your workspace at a glance"
+msgstr "Your workspace at a glance"
+
+msgid "Welcome back, <0>Alex</0>. Here is what needs your attention."
+msgstr "Welcome back, <0>Alex</0>. Here is what needs your attention."
+
+msgid "Active projects"
+msgstr "Active projects"
+
+msgid "Team members"
+msgstr "Team members"
+
+msgid "{value, plural, one {# task is due today.} other {# tasks are due today.}}"
+msgstr "{value, plural, one {# task is due today.} other {# tasks are due today.}}"
+
+msgid "Open Projects to review the work, or Billing to check your plan."
+msgstr "Open Projects to review the work, or Billing to check your plan."
+
+msgid "Projects in progress"
+msgstr "Projects in progress"
+
+msgid "Keep the next milestone in sight. Your team can pick up where you left off."
+msgstr "Keep the next milestone in sight. Your team can pick up where you left off."
+
+msgid "Website launch"
+msgstr "Website launch"
+
+msgid "Ready for review"
+msgstr "Ready for review"
+
+msgid "Customer research"
+msgstr "Customer research"
+
+msgid "Interviews scheduled"
+msgstr "Interviews scheduled"
+
+msgid "Design system"
+msgstr "Design system"
+
+msgid "In progress"
+msgstr "In progress"
+
+msgid "Project updates stay with the project, so everyone has the same context."
+msgstr "Project updates stay with the project, so everyone has the same context."
+
+msgid "Your plan and billing"
+msgstr "Your plan and billing"
+
+msgid "Review the workspace plan before your next renewal."
+msgstr "Review the workspace plan before your next renewal."
+
+msgid "Current plan"
+msgstr "Current plan"
+
+msgid "Team workspace"
+msgstr "Team workspace"
+
+msgid "Billing cycle"
+msgstr "Billing cycle"
+
+msgid "Monthly"
+msgstr "Monthly"
+
+msgid "Payment status"
+msgstr "Payment status"
+
+msgid "Up to date"
+msgstr "Up to date"
+
+msgid "Invoices and payment details are available to workspace administrators."
+msgstr "Invoices and payment details are available to workspace administrators."

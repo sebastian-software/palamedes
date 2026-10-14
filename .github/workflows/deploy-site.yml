@@ -15,6 +15,11 @@ on:
       - "packages/**/src/**"
       - "packages/**/package.json"
       - "packages/**/tsconfig.json"
+      - "crates/palamedes/**"
+      - "crates/palamedes-node/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pnpm-lock.yaml"
       - "benchmarks/e2e-workflow/results/**"
       - "llms.txt"
@@ -41,9 +46,6 @@ jobs:
 
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
-        with:
-          rust: "false"
-          rust-cache: "false"
 
       - name: Install dependencies
         shell: bash

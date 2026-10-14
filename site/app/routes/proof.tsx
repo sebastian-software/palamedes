@@ -154,6 +154,9 @@ export default function Proof() {
           <ButtonLink variant="outline" href={repoHref("benchmarks/e2e-workflow/results", "tree")}>
             Browse checked-in reports
           </ButtonLink>
+          <ButtonLink variant="outline" href="/message-splitting">
+            Try the live fragment demo
+          </ButtonLink>
         </div>
         <CopyCommand
           command="pnpm bench:e2e"
