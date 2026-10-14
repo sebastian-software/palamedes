@@ -2,12 +2,14 @@
 
 V2 uses compiled messages on server and client, including development. The
 package roots and existing `compiled` subpaths share one implementation. This
-is a coordinated major transition; publication remains held while the host
-integration slices and final release verification are completed under #1204.
-This guide covers the runtime changes in #1206 and the shared migration rules
-used by the host slices. Publication remains held until #1215's aggregate
-verification proves every supported host's delivery, failure recovery,
-published-artifact and release-policy contract.
+guide covers the coordinated major transition and its breaking changes.
+For an overview of the improvements and their practical impact, read the
+[Palamedes 2.0 release notes](./release-notes-v2.md).
+
+Implementation and host verification are recorded in the
+[catalog delivery evidence](../benchmarks/catalog-delivery/README.md).
+Publication remains held pending release authorization and the current release
+gates; these documents do not announce an available 2.0 release.
 
 ## Compile catalogs before loading
 
