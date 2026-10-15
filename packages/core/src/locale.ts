@@ -95,6 +95,7 @@ export type BuildLocaleSwitchItemsOptions<TLocale extends string> = {
 
 const DEFAULT_LOCALE_COOKIE = "locale";
 const DEFAULT_CHOICE_COOKIE = "locale-choice";
+const DEFAULT_CHOICE_HANDOFF_PARAMETER = "__palamedes_locale_choice";
 const CHOICE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
@@ -151,6 +152,69 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
         return base && base !== tag ? [tag, base] : [tag];
       })
   );
+}
+
+/**
+ * Add a locale choice to a URL when it targets a different origin. The caller
+ * remains responsible for recording the choice and navigating. The source and
+ * target URLs must use HTTP or HTTPS.
+ */
+export function createChoiceHandoffUrl(options: {
+  url: string;
+  locale: string;
+  currentOrigin: string;
+  parameterName?: string;
+}): string {
+  const parameter = options.parameterName ?? DEFAULT_CHOICE_HANDOFF_PARAMETER;
+  const source = new URL(options.currentOrigin);
+  if (source.protocol !== "http:" && source.protocol !== "https:") {
+    throw new TypeError("createChoiceHandoffUrl: currentOrigin must use HTTP or HTTPS.");
+  }
+
+  const sourceOrigin = source.origin;
+  const target = new URL(options.url, sourceOrigin);
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    throw new TypeError("createChoiceHandoffUrl: url must use HTTP or HTTPS.");
+  }
+
+  if (target.origin !== sourceOrigin) {
+    target.searchParams.set(parameter, options.locale);
+  }
+
+  return target.href;
+}
+
+/**
+ * Remove and validate a locale choice handoff from a search string. The caller
+ * remains responsible for persisting the accepted choice and updating the URL.
+ */
+export function consumeChoiceHandoff<TLocale extends string>(options: {
+  search?: string | null;
+  currentLocale: TLocale;
+  locales: readonly TLocale[];
+  parameterName?: string;
+}): { choice: TLocale | null; search: string } {
+  const search = options.search ?? "";
+  const parameter = options.parameterName ?? DEFAULT_CHOICE_HANDOFF_PARAMETER;
+  const params = new URLSearchParams(search);
+  const transferredLocales = params.getAll(parameter);
+
+  if (transferredLocales.length === 0) {
+    return { choice: null, search };
+  }
+
+  const hasSingleMatchingChoice =
+    transferredLocales.length === 1 &&
+    transferredLocales[0] === options.currentLocale &&
+    options.locales.includes(options.currentLocale);
+
+  params.delete(parameter);
+  const remainingSearch = params.toString();
+
+  return {
+    choice: hasSingleMatchingChoice ? options.currentLocale : null,
+    search: remainingSearch ? `?${remainingSearch}` : "",
+  };
 }
 
 function stripPort(host: string | null | undefined): string | null {
