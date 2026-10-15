@@ -159,6 +159,8 @@ matrix and reusable in apps:
 | ------------------------------- | --------- |
 | `buildLocaleSwitchItems`        | Runtime   |
 | `BuildLocaleSwitchItemsOptions` | Type-only |
+| `consumeChoiceHandoff`          | Runtime   |
+| `createChoiceHandoffUrl`        | Runtime   |
 | `defineLocaleControls`          | Runtime   |
 | `HostLocaleConfig`              | Type-only |
 | `LocaleControls`                | Type-only |
@@ -183,6 +185,18 @@ matrix and reusable in apps:
   errors. Cookie names, protocols, configured hosts, and TLD labels are
   validated; locale identifiers must be DNS-safe only for the host-based
   `subdomain` and `tld` strategies.
+- `createChoiceHandoffUrl({ url, locale, currentOrigin, parameterName? })`:
+  adds the selected locale to a cross-origin URL using the
+  `__palamedes_locale_choice` query parameter by default and returns an absolute
+  URL. Same-origin URLs do not receive a handoff parameter. It uses the URL API
+  without accessing `window` or navigating. The source and target must use
+  HTTP or HTTPS; other schemes throw `TypeError`.
+- `consumeChoiceHandoff({ search, currentLocale, locales, parameterName? })`:
+  removes the handoff parameter from a search string and returns
+  `{ choice, search }`. It accepts only one supported locale that matches the
+  destination's current locale. The caller decides when to persist `choice`
+  with `serializeChoice()` and whether to replace the browser URL with the
+  cleaned search string.
 
 ## Macro Entry Point
 

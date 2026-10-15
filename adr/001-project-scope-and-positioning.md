@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
-**Last updated:** 2026-08-12
+**Last updated:** 2026-10-15
 
 ## Context
 
@@ -61,9 +61,12 @@ The product is opinionated about how those concerns fit together:
 - the native core owns shared semantic work
 - host adapters stay thin and do not invent competing catalog semantics
 
-Host frameworks continue to own routing, URL design, locale detection policy,
-rendering, and hosting. Palamedes integrates with those decisions instead of
-becoming a route-centric application framework.
+Host applications continue to own routing, URL design, the authoritative
+locale selection used for rendering, and hosting. Palamedes may provide
+headless primitives for optional client-side language suggestions. Applications
+own the presentation, persistence timing, and navigation that use those
+primitives. Palamedes integrates with application decisions instead of becoming
+a route-centric framework.
 
 Palamedes is explicitly not:
 

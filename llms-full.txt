@@ -64,7 +64,7 @@ IDs to source text plus context in every locale before extraction or removal.
 
 Recommended app-facing packages:
 
-- `@palamedes/core`: app-facing i18n instance and core macro entry point. Its complete root export inventory, including runtime and type-only names, is generated in `docs/api/core.md` from the published API contract.
+- `@palamedes/core`: app-facing i18n instance and core macro entry point. Its complete root export inventory, including runtime and type-only names, is generated in `docs/api/core.md` from the published API contract. Locale controls from `@palamedes/core/locale` include headless client-side suggestions and explicit cross-origin choice handoff helpers.
 - `@palamedes/runtime`: runtime bridge for transformed code
 - `@palamedes/react`: React translation components and React macro entry point
 - `@palamedes/solid`: Solid translation components and Solid macro entry point

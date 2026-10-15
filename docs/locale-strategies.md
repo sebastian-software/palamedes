@@ -147,6 +147,73 @@ opt-in through the same `tld` map. This is why the tld strategy resolves through
 an explicit, three-tiered policy rather than the subdomain strategy's pure
 label-is-locale rule.
 
+## Client-Side Suggestions For Prerendered Pages
+
+Static sites can keep locale selection in the build and URL while offering a
+client-side language suggestion. `suggest()` already provides the decision and
+canonical destination; the app supplies browser context and renders any UI it
+wants. Palamedes does not read browser globals or change the prerendered page.
+
+```ts
+import {
+  consumeChoiceHandoff,
+  createChoiceHandoffUrl,
+  defineLocaleControls,
+} from "@palamedes/core/locale";
+
+const locales = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+  hosts: { mode: "tld", defaultTld: "com", tld: { com: "en" } },
+});
+
+const currentLocale = locales.preferredLocale(document.documentElement.lang);
+const suggestion = locales.suggest({
+  currentLocale,
+  acceptLanguageHeader: navigator.languages.join(","),
+  cookieHeader: document.cookie,
+  pathname: location.pathname,
+  requestHost: location.host,
+  search: location.search,
+});
+
+if (suggestion) {
+  const href = createChoiceHandoffUrl({
+    url: suggestion.recommendedUrl,
+    locale: suggestion.recommendedLocale,
+    currentOrigin: location.origin,
+  });
+  const onSelectSuggestion = () => {
+    document.cookie = locales.serializeChoice(suggestion.recommendedLocale);
+  };
+  // Render your own localized link with href and onSelectSuggestion.
+}
+```
+
+The URL helper carries an explicit choice to a different origin so the
+destination can persist its own choice cookie and avoid suggesting a switch
+back immediately. On the destination, consume the parameter before making
+another suggestion:
+
+```ts
+const handoff = consumeChoiceHandoff({
+  search: location.search,
+  currentLocale,
+  locales: locales.locales,
+});
+
+if (handoff.choice) {
+  document.cookie = locales.serializeChoice(handoff.choice);
+}
+if (handoff.search !== location.search) {
+  history.replaceState(history.state, "", `${location.pathname}${handoff.search}${location.hash}`);
+}
+```
+
+The helpers are pure. The app owns the rendered copy and markup, the timing of
+cookie writes, and URL replacement. Browser language detection alone does not
+persist a preference or navigate.
+
 ## Switching Locale
 
 Locale _strategy_ (cookie, route, subdomain, or TLD) is independent from the
