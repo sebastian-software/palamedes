@@ -1,19 +1,10 @@
-# ADR-018: Binary Plugin Protocol For Rust-Hosted Extensions
+# ADR-025: Binary Plugin Protocol For Rust-Hosted Extensions
 
-- Status: Accepted
-- Date: 2026-07-25
-- Revised: 2026-09-01
+**Status:** Accepted
 
-## Context
+**Last updated:** 2026-10-16
 
-Palamedes extensions are independently shipped executables. Rust-first
-extensions such as commercial workflow commands should link the `palamedes`
-crates directly without maintaining N-API bindings, while users keep the single
-`pmds` entry point.
-
-ADR 017 places explicit plugin dispatch in the native CLI. A language-neutral
-subprocess protocol keeps independently versioned plugins outside the CLI's
-Rust ABI and prevents one plugin crash from corrupting the host process.
+Independently shipped CLI extensions use a bounded, versioned subprocess protocol.
 
 ## Decision
 
@@ -49,6 +40,17 @@ Rust ABI and prevents one plugin crash from corrupting the host process.
 10. The host bounds protocol line, byte, and event consumption. `describe` has
     a mandatory deadline; `run` remains unbounded unless the caller opts into a
     command deadline. A limit violation terminates the plugin process tree.
+
+## Context
+
+Palamedes extensions are independently shipped executables. Rust-first
+extensions such as commercial workflow commands should link the `palamedes`
+crates directly without maintaining N-API bindings, while users keep the single
+`pmds` entry point.
+
+ADR-015 places explicit plugin dispatch in the native CLI. A language-neutral
+subprocess protocol keeps independently versioned plugins outside the CLI's
+Rust ABI and prevents one plugin crash from corrupting the host process.
 
 ## Packaging And Resolution
 

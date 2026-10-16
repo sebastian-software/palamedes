@@ -1,8 +1,10 @@
-# ADR-029: README Theme Composition
+# ADR-028: README Theme Composition
 
-## Status
+**Status:** Accepted
 
-Active. Update this document when the contract changes.
+**Last updated:** 2026-10-16
+
+Native mdtheme composes the project README from its source and pinned shared themes.
 
 ## Decision
 
@@ -18,6 +20,19 @@ repositories explicitly delegate README ownership to mdtheme, so standards
 cannot append a second company footer. Published subpackage READMEs keep their
 compact registry format and existing generator.
 
+## Context
+
+The README needs consistent family branding without duplicate footers or
+hand-maintained generated output. Root and npm package READMEs have different
+rendering constraints, so their generators remain separate.
+
+## Theme badge placement
+
+The project pins mdtheme in `mise.toml` and uses one `mdtheme:badges:start` /
+`mdtheme:badges:end` comment pair in `README.md.src`. The Sebastian Software
+theme prepends its badge before the authored project badges.
+Ferramenta's header and footer stay unchanged. Update the CLI and theme pins together when their contracts change. Keep badge markup outside raw HTML blocks.
+
 ## Consequences
 
 Contributors edit the source, then regenerate. No JavaScript configuration or
@@ -25,11 +40,3 @@ Node installation is needed for the root README. Shared theme updates are
 reviewable Git diffs. Rendering requires network access to the Git sources.
 
 See [the contributor guide](https://github.com/sebastian-software/palamedes/blob/main/docs/readme-theme.md) for commands.
-
-## Theme badge placement
-
-The project pins mdtheme 0.4.0 and uses one `mdtheme:badges:start` /
-`mdtheme:badges:end` comment pair in `README.md.src`. Sebastian's
-`badges-prepend.md` places its badge before the authored project badges.
-Ferramenta's header and footer stay unchanged. Upgrade the CLI and lockfile
-before adopting this theme revision. Keep badge markup outside raw HTML blocks.

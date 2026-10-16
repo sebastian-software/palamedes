@@ -1,24 +1,16 @@
-# ADR-012: Translation Augmentation Boundary
+# ADR-010: Translation Augmentation Boundary
 
 **Status:** Accepted
-**Date:** 2026-03-30
 
-## Context
+**Last updated:** 2026-10-16
 
-Palamedes is now the intended Rust-first replacement for Lingui, not just a cleaner extraction and runtime toolchain.
-
-That creates a new architectural question:
-
-- which translation workflow capabilities belong in Palamedes Core as reusable local substrate
-- which capabilities should remain outside Core because they are product-specific or account-bound
-
-If Palamedes stops too early, higher-order translation workflows will rebuild repo, catalog, QA, and metadata semantics elsewhere. If it absorbs too much, it risks turning the OSS core into a hosted translation product in disguise.
+Local translation workflow primitives belong in the open-source core; remote providers and account policy stay outside it.
 
 ## Decision
 
 Palamedes should own host-neutral translation workflow primitives when they are local semantic concerns.
 
-That includes future support for:
+The boundary admits local primitives such as:
 
 - PO entry selection and delta targeting
 - context packaging inputs from catalogs and source metadata
@@ -36,6 +28,18 @@ Palamedes should not own:
 - billing, usage enforcement, or product-specific policy packs
 
 Those remain valid concerns for Palamedes+ or other higher-order products.
+
+## Context
+
+Palamedes supplies a complete local translation workflow. Managed products can
+reuse that workflow without moving provider or account policy into the core.
+
+That creates a new architectural question:
+
+- which translation workflow capabilities belong in Palamedes Core as reusable local substrate
+- which capabilities should remain outside Core because they are product-specific or account-bound
+
+If Palamedes stops too early, higher-order translation workflows will rebuild repo, catalog, QA, and metadata semantics elsewhere. If it absorbs too much, it risks turning the OSS core into a hosted translation product in disguise.
 
 ## Consequences
 

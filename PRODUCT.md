@@ -88,18 +88,18 @@ item. Comparisons do not define the homepage's identity.
 - Bound performance claims by the measured workflow, corpus, environment, and
   report date. Keep extraction, browser delivery, and server memory evidence
   separate. Use the presentation policy in
-  [ADR-026](adr/026-editorial-visual-brand-system.md#benchmark-presentation).
+  [ADR-011](adr/011-editorial-visual-brand-system.md#benchmark-presentation).
 - Keep every claim understandable without its graphic. Tables need a linear
   reading order, and visual benchmark results need equivalent text or tables.
 
-`PRODUCT.md` owns current messaging; ADR-001 and ADR-026 own durable positioning
+`PRODUCT.md` owns current messaging; ADR-001 and ADR-011 own durable positioning
 and visual decisions. Completed implementation plans and discarded design
 explorations belong in Git history, not beside these current sources.
 
 ## Brand Personality
 
 The durable visual and editorial contract is recorded in
-[ADR-026](./adr/026-editorial-visual-brand-system.md).
+[ADR-011](./adr/011-editorial-visual-brand-system.md).
 
 Precise, verifiable, calm. The visual voice is **Monument core × Editorial
 masthead**: a technical ledger with a classical Palamedes accent. Warm paper

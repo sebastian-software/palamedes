@@ -44,7 +44,7 @@ Palamedes navy/bronze palette, and integrated on 2026-08-17. The target path is
 
 No illustrations are committed. If an editorial illustration is needed, use
 UX Duotone under the rules in
-[ADR-026](../adr/026-editorial-visual-brand-system.md#licensed-asset-handling)
+[ADR-011](../adr/011-editorial-visual-brand-system.md#licensed-asset-handling)
 and record the used export here.
 
 ## Change rules

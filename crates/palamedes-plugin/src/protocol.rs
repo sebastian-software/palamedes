@@ -2,7 +2,7 @@
 //!
 //! The host writes one JSON [`Request`] to the plugin's stdin and reads
 //! newline-delimited JSON events from its stdout. See
-//! `docs/api/cli-binary-plugin.md` and ADR 018 for the protocol contract.
+//! `docs/api/cli-binary-plugin.md` and ADR-025 for the protocol contract.
 
 use std::collections::BTreeMap;
 

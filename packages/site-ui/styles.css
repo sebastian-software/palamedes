@@ -252,7 +252,7 @@
   /*
    * Family tool switcher. A plain <details> disclosure so it keeps working
    * without JavaScript; the flyout is a hairline sheet on paper, never a card
-   * (ADR-026: no radius, no shadow, no gradient).
+   * (ADR-011: no radius, no shadow, no gradient).
    */
   .pmds-switcher {
     position: relative;

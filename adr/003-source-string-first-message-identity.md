@@ -1,7 +1,38 @@
 # ADR-003: Source-String-First Message Identity
 
 **Status:** Accepted
-**Date:** 2026-03-17
+
+**Last updated:** 2026-10-16
+
+Source text and optional context identify a message throughout authoring and catalog workflows.
+
+## Decision
+
+Palamedes is source-string-first.
+
+The only conceptual message identity is:
+
+- `message`
+- plus optional `context`
+
+In gettext terms, that means:
+
+- `msgid`
+- plus optional `msgctxt`
+
+Explicit author-facing message IDs are not part of the Palamedes model.
+
+This applies across the product surface:
+
+- extraction results
+- catalog update requests
+- parsed catalog views
+- diagnostics
+- user-facing documentation
+
+When users author messages, Palamedes expects message text and optional context, not a separate stable product key.
+
+If author-facing explicit IDs are encountered in supported inputs, Palamedes should reject them clearly rather than silently preserving a second identity model.
 
 ## Context
 
@@ -31,34 +62,6 @@ That matters because identity affects almost every major surface:
 - migration guidance
 
 If Palamedes treats source strings as the conceptual model but still preserves author-facing explicit IDs as a parallel first-class path, the architecture becomes internally contradictory.
-
-## Decision
-
-Palamedes is source-string-first.
-
-The only conceptual message identity is:
-
-- `message`
-- plus optional `context`
-
-In gettext terms, that means:
-
-- `msgid`
-- plus optional `msgctxt`
-
-Explicit author-facing message IDs are not part of the Palamedes model.
-
-This applies across the product surface:
-
-- extraction results
-- catalog update requests
-- parsed catalog views
-- diagnostics
-- user-facing documentation
-
-When users author messages, Palamedes expects message text and optional context, not a separate stable product key.
-
-If author-facing explicit IDs are encountered in supported inputs, Palamedes should reject them clearly rather than silently preserving a second identity model.
 
 ## Alternatives Considered
 

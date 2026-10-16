@@ -60,7 +60,7 @@ function FamilyToolLink({
 /**
  * The family-wide tool switcher. Data only: the consuming site resolves the
  * groups from the family registry, so this package keeps depending on React
- * alone (ADR-021) and Palamedes+ opts out by leaving `toolSwitcher` unset.
+ * alone (ADR-027) and Palamedes+ opts out by leaving `toolSwitcher` unset.
  */
 export function ToolSwitcher({
   switcher,

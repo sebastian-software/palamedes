@@ -1,38 +1,10 @@
-# ADR-016: Native CLI And YAML-First Configuration
+# ADR-012: Native CLI And YAML-First Configuration
 
 **Status:** Accepted
-**Date:** 2026-06-28
-**Revised:** 2026-08-11
 
-## Context
+**Last updated:** 2026-10-16
 
-Palamedes already keeps most careful i18n work in Rust: extraction, catalog
-updates, audits, PO parsing, catalog merging, transform logic, ICU diagnostics,
-and runtime artifact compilation. Before this decision, the public `pmds` CLI
-was still a TypeScript/Node.js program that mostly orchestrated those native
-operations through `@palamedes/core-node`.
-
-That shape was convenient for early JavaScript project adoption, but it made the
-CLI boundary heavier than the work required:
-
-- every scripted CLI call started Node.js before reaching the Rust core
-- config loading depended on `jiti` and JavaScript/TypeScript config execution
-- extraction watch mode depended on Node packages such as `chokidar`
-- command parsing, glob expansion, printing, and exit-code handling lived in a
-  second runtime
-- non-JavaScript adoption paths, such as CMS integrations or mobile app
-  workflows, would inherit a Node.js dependency even when they only need the CLI
-
-This conflicted with the Rust-first boundary documented in ADR-002, ADR-007,
-and ADR-009. If `pmds` is the stable operational tool for extracting, auditing,
-reporting, and merging catalogs, it should not require a JavaScript runtime
-merely to reach logic that is already native.
-
-The config format had the same boundary problem. `palamedes.config.ts` and
-other JavaScript config files work well inside frontend projects, but they make
-Node.js part of the CLI contract. For a native CLI meant to work across
-frameworks and future non-JavaScript hosts, executable JavaScript config is the
-wrong default boundary.
+The native CLI owns operational workflows and reads data-only configuration, with YAML as the documented default.
 
 ## Decision
 
@@ -88,6 +60,17 @@ load the same YAML, JSON, and TOML data files as well as legacy
 `palamedes.config.*` files. That keeps Vite and Next.js integrations compatible
 while making the CLI boundary native.
 
+## Context
+
+The operational toolchain must run without a JavaScript runtime merely to reach
+semantics already owned by Rust. Command parsing, config discovery, watching,
+and catalog workflows therefore share the native process and its error model.
+
+Data-only configuration is portable across frontend projects and other hosts.
+Executing JavaScript configuration would add a second runtime and a code
+execution boundary to otherwise native commands. JavaScript host adapters can
+retain their own configuration loader without imposing it on the CLI.
+
 ## Alternatives Considered
 
 ### 1. Keep the TypeScript CLI and rely on native bindings
@@ -122,15 +105,15 @@ for hand-authored project config. It remains supported as a data-only format.
 
 ## Consequences
 
-- This is a breaking CLI/config change for projects using
-  `palamedes.config.ts`, `.js`, `.mjs`, or `.cjs` with `pmds`.
+- Projects invoking `pmds` use data configuration; JavaScript-host config is
+  not a native CLI execution path.
 - New projects should create `palamedes.yaml`.
 - Existing JavaScript framework integrations can continue through
   `@palamedes/config`, but the CLI no longer treats JavaScript config as a
   runtime dependency.
 - JSON and TOML are supported secondary data formats for teams that prefer or
   generate those formats.
-- `@palamedes/cli` package publishing now includes native CLI binary packages
+- `@palamedes/cli` package publishing includes native CLI binary packages
   in addition to the existing `@palamedes/core-node-*` native binding packages.
 - CI and release validation must track the Rust CLI crate, npm CLI package, and
   platform-specific CLI binary packages as one release set.

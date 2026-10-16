@@ -27,7 +27,7 @@ export interface SiteCounterpart extends SiteLinkDefinition {
  * One entry of the Ferramenta family, already resolved to a label and a
  * destination by the consuming site. The shared chrome never reads the family
  * registry itself: keeping it configuration preserves the React-only
- * dependency contract of this package (ADR-021).
+ * dependency contract of this package (ADR-027).
  */
 export interface SiteFamilyTool extends SiteLinkDefinition {
   /** Terse job line under the name in the switcher, e.g. "regex engine". */

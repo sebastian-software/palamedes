@@ -1167,6 +1167,48 @@ async function gotoAndSettle(page, path, { settleMs }) {
   return response;
 }
 
+async function checkDecisionRedirects() {
+  const redirects = JSON.parse(
+    readFileSync(join(repoRoot, "site/decision-redirects.json"), "utf8"),
+  );
+  const context = await browser.newContext();
+  try {
+    for (const [source, target] of Object.entries(redirects)) {
+      const response = await context.request.get(`${baseUrl}/decisions/${source}/`);
+      const html = await response.text();
+      if (
+        response.status() !== 200 ||
+        !html.includes(`content="0;url=/decisions/${target}"`) ||
+        !html.includes(`rel="canonical" href="https://palamedes.dev/decisions/${target}"`)
+      ) {
+        fail(`decision redirect: ${source} must lead directly to ${target}`);
+      }
+    }
+  } finally {
+    await context.close();
+  }
+
+  const [source, target] = Object.entries(redirects)[0];
+  for (const javaScriptEnabled of [true, false]) {
+    const redirectContext = await browser.newContext({ javaScriptEnabled });
+    try {
+      const page = await redirectContext.newPage();
+      await page.goto(`${baseUrl}/decisions/${source}/`);
+      await page.waitForURL(`${baseUrl}/decisions/${target}`);
+      const heading = await page.locator("h1").first().textContent();
+      if (!heading?.startsWith(`ADR-${target.slice(0, 3)}:`)) {
+        fail(`decision redirect: wrong destination heading with JavaScript ${javaScriptEnabled}`);
+      }
+    } finally {
+      await redirectContext.close();
+    }
+  }
+  console.log(
+    `  ${Object.keys(redirects).length} decision redirects verified; JS and no-JS navigation passed`,
+  );
+}
+
+await checkDecisionRedirects();
 await checkRoutes(await browser.newContext(), "default", {
   expectHydration: true,
 });

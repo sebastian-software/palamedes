@@ -72,7 +72,7 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
 
 const SOURCE_FALLBACK_POLICY_TARGETS = [
   {
-    file: "adr/004-internal-compiled-lookup-keys.md",
+    file: "adr/020-internal-compiled-lookup-keys.md",
     snippets: [
       "Low-level transforms and v2 first-party host adapters generate compact runtime calls without embedding the authored source message by default.",
       "Set `keepSourceFallbacks: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.",

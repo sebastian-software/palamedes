@@ -4,7 +4,7 @@
 //! perform a request until the release environment supplies the allowlisted
 //! `PALAMEDES_UPDATE_ENDPOINT`; invalid values fail the build. This keeps an
 //! undeployed or malformed endpoint from becoming an implicit network call.
-//! ADR 027 owns the client contract; the shared service half lives in the
+//! ADR-016 owns the client contract; the shared service half lives in the
 //! public `sebastian-software/version-service` repository.
 
 use std::ffi::OsString;

@@ -2,7 +2,7 @@
 
 Rust SDK for authoring `pmds` binary plugins. Binary plugins are standalone
 executables that the Palamedes CLI spawns and drives over a versioned
-newline-delimited JSON protocol on stdio (ADR 018). This crate wraps that
+newline-delimited JSON protocol on stdio (ADR-025). This crate wraps that
 protocol so a plugin registers namespaced commands, receives the resolved
 project context, emits diagnostics, and returns a result without implementing
 the wire format itself.
@@ -12,8 +12,8 @@ crates.io yet.
 
 ## Documentation
 
-- [Plugin protocol (ADR 018)](https://github.com/sebastian-software/palamedes/blob/main/adr/018-binary-plugin-protocol.md)
-- [CLI plugin execution boundary (ADR 017)](https://github.com/sebastian-software/palamedes/blob/main/adr/017-cli-plugin-execution-boundary.md)
+- [Plugin protocol (ADR-025)](https://github.com/sebastian-software/palamedes/blob/main/adr/025-binary-plugin-protocol.md)
+- [CLI plugin execution boundary (ADR-015)](https://github.com/sebastian-software/palamedes/blob/main/adr/015-cli-plugin-execution-boundary.md)
 
 ## License
 

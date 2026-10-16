@@ -1,22 +1,10 @@
-# ADR-017: Host Explicit Binary CLI Plugins In Rust
+# ADR-015: Host Explicit Binary CLI Plugins In Rust
 
-- Status: Accepted
-- Date: 2026-07-22
-- Revised: 2026-08-03
-- Issue: [#365](https://github.com/sebastian-software/palamedes/issues/365)
+**Status:** Accepted
 
-## Context
+**Last updated:** 2026-10-16
 
-The Rust `pmds` binary owns extraction, audits, reports, and catalog operations.
-Third-party workflows need resolved project configuration and semantic catalog
-discovery, but independently shipped extensions must not link into the CLI or
-execute implicitly during built-in commands.
-
-The first implementation hosted JavaScript plugins in the npm launcher. That
-made the launcher a second CLI runtime, required executable JavaScript config,
-and duplicated configuration and dispatch semantics outside Rust. Palamedes
-plugins are distributed as standalone executables now, so that boundary no
-longer needs a JavaScript host.
+The Rust CLI dispatches explicitly configured executable plugins without making the npm launcher a second runtime.
 
 ## Decision
 
@@ -31,7 +19,7 @@ Use one native command boundary:
    Palamedes data config (`yaml`, `yml`, `json`, or `toml`). JavaScript and
    TypeScript files are not CLI configuration.
 4. Every plugin is a standalone executable that speaks the versioned binary
-   plugin protocol from ADR 018. ESM and CJS plugin modules are not supported.
+   plugin protocol from ADR-025. ESM and CJS plugin modules are not supported.
 5. Package resolution is deterministic and relative to the config file.
    Installed packages are never discovered or executed merely because they are
    present.
@@ -46,6 +34,17 @@ Use one native command boundary:
 The npm package keeps only the platform-selection launcher required to expose a
 stable `pmds` bin from a platform-neutral package. It does not parse commands,
 load configuration, or host plugins.
+
+## Context
+
+The Rust `pmds` binary owns extraction, audits, reports, and catalog operations.
+Third-party workflows need resolved project configuration and semantic catalog
+discovery, but independently shipped extensions must not link into the CLI or
+execute implicitly during built-in commands.
+
+Hosting plugin semantics in the npm launcher would create a second CLI
+runtime and duplicate configuration and dispatch outside Rust. Standalone
+executables preserve a language-neutral extension boundary.
 
 ## Trust Model
 
@@ -75,9 +74,9 @@ broken plugin cannot affect core workflows.
   the protocol; the supported SDK is Rust-first.
 - CLI plugin configuration is portable data and cannot execute code while
   loading.
-- The previous `@palamedes/cli/plugin` JavaScript API and JS/TS CLI configs are
-  removed rather than maintained as a parallel compatibility surface.
+- JavaScript module plugins and JS/TS CLI configs are not parallel extension
+  paths; plugin discovery and dispatch stay in the native CLI.
 - The npm launcher remains a packaging bridge until package managers expose a
   transitive optional dependency's bin as the installed package's public bin.
-  [ADR-024](./024-npm-launcher-is-a-packaging-bridge.md) records the launcher
+  [ADR-014](./014-npm-launcher-is-a-packaging-bridge.md) records the launcher
   distribution decision and its rejected alternatives.

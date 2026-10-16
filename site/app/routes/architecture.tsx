@@ -24,7 +24,7 @@ const MECHANISMS = [
     body: "In v2, generated catalogs compile into message functions in development and production. Package roots and compiled subpaths use the same parser-free runtime. Invalid ICU fails compilation; missing compiled entries reach host error handling.",
     artifact: "Native catalog renderer",
     href: repoHref("crates/palamedes-node/src/catalog.rs"),
-    adr: ["011", "022", "023"],
+    adr: ["019", "004", "005"],
   },
   {
     number: "02",
@@ -32,7 +32,7 @@ const MECHANISMS = [
     body: "Extraction caches source analysis behind conservative file stamps. A cache miss is normal; a result that cannot be trusted is discarded instead of being treated as an optimization win.",
     artifact: "Extraction cache",
     href: repoHref("crates/palamedes/src/extract_cache.rs"),
-    adr: ["019"],
+    adr: ["022"],
   },
   {
     number: "03",
@@ -40,7 +40,7 @@ const MECHANISMS = [
     body: "Each extraction worker owns a thread-local Oxc arena and resets it between files. On the 1,500-file corpus, replacing per-file allocation removed the allocator pressure that had obscured useful parallel work.",
     artifact: "Thread-local extraction arena",
     href: repoHref("crates/palamedes/src/extract.rs"),
-    adr: ["002", "013"],
+    adr: ["002", "023"],
   },
   {
     number: "04",
@@ -48,15 +48,15 @@ const MECHANISMS = [
     body: "Ferrocat's PO scanner uses vectorized byte search—including a NEON path—then falls back to portable search. The optimization lives below the catalog contract, so host adapters do not need to know it exists.",
     artifact: "Ferrocat PO scanner",
     href: "https://github.com/sebastian-software/ferrocat/blob/main/crates/ferrocat-po/src/scan.rs",
-    adr: ["006"],
+    adr: ["009"],
   },
   {
     number: "05",
     title: "Parallelism is earned by measurement",
     body: "The 1,500-file fixture measured 119 ms serial, reached 45 ms at four workers, then regressed to 197 ms at twenty. Profiling attributed 92.8% of twenty-worker samples to mach_vm_protect, so the default is bounded rather than maximal.",
     artifact: "Worker-count evidence",
-    href: decisionHref("013-bounded-parallel-extraction"),
-    adr: ["013"],
+    href: decisionHref("023-bounded-parallel-extraction"),
+    adr: ["023"],
   },
   {
     number: "06",
@@ -64,7 +64,7 @@ const MECHANISMS = [
     body: "Ferrocat performs catalog parsing, merging, auditing, and compilation as one semantic surface. It exists so catalog correctness does not depend on a set of loosely coordinated scripts.",
     artifact: "Catalog artifact pipeline",
     href: repoHref("crates/palamedes/src/catalog_artifact", "tree"),
-    adr: ["006", "015", "022"],
+    adr: ["009", "021", "004"],
   },
   {
     number: "07",
@@ -72,7 +72,7 @@ const MECHANISMS = [
     body: "The Node binding passes typed values across N-API and exposes meaningful workflow operations. It avoids JSON transport and avoids pushing catalog semantics back into TypeScript orchestration.",
     artifact: "Node binding surface",
     href: repoHref("crates/palamedes-node/src/lib.rs"),
-    adr: ["007", "009", "010"],
+    adr: ["013", "017", "018"],
   },
   {
     number: "08",
@@ -80,15 +80,15 @@ const MECHANISMS = [
     body: "Framework integrations own host concerns such as module hooks, routing conventions, and rendering. They do not become alternate implementations of extraction, catalog behavior, or runtime meaning.",
     artifact: "Adapter architecture",
     href: decisionHref("008-framework-adapter-architecture"),
-    adr: ["002", "008", "014"],
+    adr: ["002", "008", "024"],
   },
   {
     number: "09",
     title: "Hosts converge on one runtime contract",
     body: "Servers load the active locale's complete compiled catalog lazily and share immutable messages across requests. Request-local locale and formatter state stays isolated. Browser adapters deliver the document locale's fragments along the module graph.",
     artifact: "Request-scope contract",
-    href: decisionHref("025-react-router-rsc-entry-request-scope"),
-    adr: ["005", "020", "025"],
+    href: decisionHref("026-react-router-rsc-entry-request-scope"),
+    adr: ["006", "007", "026"],
   },
   {
     number: "10",
@@ -96,7 +96,7 @@ const MECHANISMS = [
     body: "The site derives benchmark display, corpus scope, matrix axes, and decision indexes from checked repository data. A changed fixture or missing decision cannot silently become a stronger public claim.",
     artifact: "Public-evidence guards",
     href: repoHref("scripts/verify-site-bench-data.mjs"),
-    adr: ["019", "026"],
+    adr: ["022", "011"],
   },
 ] as const;
 

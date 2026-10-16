@@ -1,4 +1,4 @@
-//! Lifecycle of the on-disk extraction cache (ADR 019): where it lives, when
+//! Lifecycle of the on-disk extraction cache (ADR-022): where it lives, when
 //! it is valid, and when it has to be rebuilt.
 
 use std::path::{Path, PathBuf};

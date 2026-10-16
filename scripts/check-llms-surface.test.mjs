@@ -136,7 +136,7 @@ test("rejects a missing translation patch outcome from full context", () => {
 test("rejects an incomplete ADR inventory in full context", () => {
   expectRejected(
     "llms-full.txt",
-    (text) => text.replace("- `/adr/025-react-router-rsc-entry-request-scope.md`\n", ""),
+    (text) => text.replace("- `/adr/026-react-router-rsc-entry-request-scope.md`\n", ""),
     /LLMS ADR inventory changed/,
   );
 });

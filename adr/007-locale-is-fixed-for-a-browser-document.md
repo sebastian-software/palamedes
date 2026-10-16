@@ -1,24 +1,10 @@
-# ADR-020: Locale Is Fixed for a Browser Document
+# ADR-007: Locale Is Fixed for a Browser Document
 
 **Status:** Accepted
-**Revised:** 2026-08-11
 
-## Context
+**Last updated:** 2026-10-16
 
-Locale selection is request and bootstrap state. Applications resolve it before
-translated UI renders and normally keep it stable for the user's session.
-
-Changing the locale safely inside a running document is a whole-application
-concern. Module state, memoized `Intl` formatters, data and query caches, browser
-stores, and third-party components may all contain locale-derived values. A
-framework subscription can update translated components, but it cannot verify
-or invalidate those other values. Partial updates can therefore produce a
-mixed-language document.
-
-Palamedes exposes the active instance through the plain `getI18n()` getter.
-Keeping locale access independent of framework reactivity makes the same
-primitive usable in render functions, helpers, callbacks, actions, and event
-handlers.
+A browser document has one active locale; changing language uses a new document.
 
 ## Decision
 
@@ -44,6 +30,23 @@ data config because it selects the generated component contract. A configured
 `mdx.framework` overrides the Vite plugin's top-level `framework` default, while
 an explicit Vite `mdx` override is applied last and wins over data config.
 Extraction otherwise produces the same messages for every UI framework.
+
+## Context
+
+Locale selection is request and bootstrap state. Applications resolve it before
+translated UI renders and normally keep it stable for the user's session.
+
+Changing the locale safely inside a running document is a whole-application
+concern. Module state, memoized `Intl` formatters, data and query caches, browser
+stores, and third-party components may all contain locale-derived values. A
+framework subscription can update translated components, but it cannot verify
+or invalidate those other values. Partial updates can therefore produce a
+mixed-language document.
+
+Palamedes exposes the active instance through the plain `getI18n()` getter.
+Keeping locale access independent of framework reactivity makes the same
+primitive usable in render functions, helpers, callbacks, actions, and event
+handlers.
 
 ## Application-Owned Remount
 

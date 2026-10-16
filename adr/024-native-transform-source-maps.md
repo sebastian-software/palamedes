@@ -1,27 +1,10 @@
-# ADR-014: Native Transform Source Maps
+# ADR-024: Native Transform Source Maps
 
 **Status:** Accepted
-**Date:** 2026-05-21
 
-## Context
+**Last updated:** 2026-10-16
 
-Palamedes already performs macro transformation in the Rust core. Before this
-decision, the Rust transform returned final code plus byte-offset edits, and
-`@palamedes/transform` replayed those edits through the JavaScript
-`magic-string` package to generate source maps.
-
-That split left the transform workflow divided across two string models:
-
-- Rust and OXC use UTF-8 byte offsets.
-- JavaScript strings and JS `magic-string` use UTF-16 code unit indexes.
-
-This boundary caused a real bug when non-ASCII source text appeared before a
-later macro edit. The wrapper had to translate native byte offsets into
-JavaScript string indexes before source-map generation could work safely.
-
-The split also meant the native transform could produce correct final code
-while the JavaScript wrapper still had to reconstruct the edit sequence to
-produce a map. That is unnecessary orchestration outside the native workflow.
+The native transform produces code and source maps from the same UTF-8 edit model.
 
 ## Decision
 
@@ -31,7 +14,7 @@ The Rust core uses `string_wizard`, Rolldown's Rust-native MagicString-style
 editing library, to apply transform edits and generate source maps from the same
 UTF-8 byte offsets used by OXC spans.
 
-The native transform result now owns:
+The native transform result owns:
 
 - final transformed code
 - compiled runtime IDs
@@ -41,8 +24,22 @@ The native transform result now owns:
 Unchanged modules return no source map.
 
 `@palamedes/transform` remains the public JavaScript transform package, but it
-no longer replays edits through JS `magic-string`. It forwards the native code
+does not replay edits through JS `magic-string`. It forwards the native code
 and native source map.
+
+## Context
+
+Macro transformation and source maps must describe the same edits. Splitting
+code generation from map generation creates two offset models and duplicates
+the transform workflow.
+
+The two ecosystems use different string indexes:
+
+- Rust and OXC use UTF-8 byte offsets.
+- JavaScript strings and JS `magic-string` use UTF-16 code unit indexes.
+
+Non-ASCII text before an edit makes those offsets diverge. Generating the
+code and map together avoids conversion mistakes and a second edit replay.
 
 ## Alternatives Considered
 
@@ -69,9 +66,9 @@ of the transform workflow.
   Rust parser and transformer.
 - The JavaScript transform wrapper is smaller and no longer depends on
   `magic-string`.
-- The N-API transform result has a new optional `map` field.
+- The N-API transform result has an optional `map` field.
 - `edits` remain in the native result for compatibility, debugging, and future
   tooling, but host packages should not need to replay them for normal
   transform output.
-- Transform benchmarks now include native source-map generation as part of the
+- Transform benchmarks include native source-map generation as part of the
   native transform path.

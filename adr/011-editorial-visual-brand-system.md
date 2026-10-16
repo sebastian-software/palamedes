@@ -1,18 +1,10 @@
-# ADR-026: Editorial Visual Brand System
+# ADR-011: Editorial Visual Brand System
 
 **Status:** Accepted
-**Date:** 2026-08-16
+
 **Last updated:** 2026-10-16
 
-## Context
-
-Palamedes needs one visual language across marketing pages, documentation,
-proof artifacts, and shared site UI. The homepage revamp established a warm
-editorial masthead over a technical ledger, but its tokens, typography, icon
-rules, numeric presentation, and callout treatment were not yet recorded as a
-durable decision. Without that contract, individual routes can drift back to
-generic documentation chrome, mixed icon families, or several competing
-callout systems.
+One editorial visual language connects product pages, documentation, and inspectable evidence.
 
 ## Decision
 
@@ -86,6 +78,15 @@ project assets. Keep account screenshots, invoices, and license records private.
 Count unique assets rather than placements, and do not treat an export limit as
 a project usage allowance.
 
+## Context
+
+Palamedes needs one visual language across marketing pages, documentation,
+proof artifacts, and shared site UI. A warm editorial masthead and
+technical ledger need consistent typography, icon rules, numeric presentation,
+and callout treatment. Without a shared contract, individual routes can drift back to
+generic documentation chrome, mixed icon families, or several competing
+callout systems.
+
 ## Alternatives Considered
 
 ### Per-route styling
@@ -102,9 +103,8 @@ generic grouping device instead of a meaningful accent.
 ### Mixed open icon libraries
 
 Rejected. Mixing Lucide or other sets with Sharp Duo loses the deliberate
-geometry and makes licensing/provenance harder to audit. Lucide was used only
-as a documented transition state and was removed when the licensed Sharp Duo
-selection was committed.
+geometry and makes licensing/provenance harder to audit. The Sharp Duo inventory and its attribution remain
+inspectable in the asset manifest.
 
 ## Consequences
 

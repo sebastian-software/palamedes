@@ -201,7 +201,7 @@ enum MacroResolution {
 
 impl MacroResolution {
     /// Extraction deliberately avoids the semantic pass the transform runs
-    /// (ADR-019): it is the dominant remaining cost of `pmds extract`, and on
+    /// (ADR-022): it is the dominant remaining cost of `pmds extract`, and on
     /// the realistic benchmark corpus it adds about 60% to parsing and visiting
     /// a macro-bearing file. A name that is never re-bound in the module can
     /// only resolve to the import, so the pass is built for the files that do
@@ -2284,7 +2284,7 @@ fn extract_one_file(
  * to 197 ms at twenty — worse than serial. Four is the measured floor, not a
  * core count, which is why it is a constant and not `available_parallelism()`.
  *
- * See ADR-013 for the full measurement and the reasoning behind the bound.
+ * See ADR-023 for the full measurement and the reasoning behind the bound.
  */
 pub const DEFAULT_EXTRACT_THREADS: usize = 4;
 

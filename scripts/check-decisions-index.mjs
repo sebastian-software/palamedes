@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { validateDecisionRedirects } from "../site/scripts/decision-redirects.mjs";
 
 function decisionEntries(index) {
   return [...index.matchAll(/^\d+\. \[(ADR-\d{3}: .+)\]\(\.\/(adr\/[^)]+\.md)\)$/gmu)].map(
@@ -37,12 +38,36 @@ export function checkDecisionsIndex({ read, listDirectories } = {}) {
     throw new Error("DECISIONS.md ADR links must match the files in adr/");
   }
 
-  for (const { file, title } of entries) {
-    const canonicalTitle = adrTitle(readFile(file), file);
+  for (const [index, { file, title }] of entries.entries()) {
+    const number = String(index + 1).padStart(3, "0");
+    if (!file.startsWith(`adr/${number}-`) || !title.startsWith(`ADR-${number}:`)) {
+      throw new Error(`DECISIONS.md reading order must be contiguous at ADR-${number}`);
+    }
+    const source = readFile(file);
+    const canonicalTitle = adrTitle(source, file);
     if (title !== canonicalTitle) {
       throw new Error(`DECISIONS.md title for ${file} must match its ADR heading`);
     }
+    if (!/^\*\*Status:\*\* (Accepted|Proposed)$/mu.test(source)) {
+      throw new Error(`${file} must declare its current decision status`);
+    }
+    if (!/^\*\*Last updated:\*\* \d{4}-\d{2}-\d{2}$/mu.test(source)) {
+      throw new Error(`${file} must declare its last semantic update`);
+    }
+    if (source.match(/^## .+$/mu)?.[0] !== "## Decision") {
+      throw new Error(`${file} must lead with the decision`);
+    }
+    for (const section of ["Context", "Consequences"]) {
+      if (!source.includes(`\n## ${section}\n`)) {
+        throw new Error(`${file} must explain ${section.toLowerCase()}`);
+      }
+    }
   }
+
+  validateDecisionRedirects(
+    JSON.parse(readFile("site/decision-redirects.json")),
+    adrFiles.map((file) => path.basename(file, ".md")),
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
