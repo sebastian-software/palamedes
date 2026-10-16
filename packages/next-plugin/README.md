@@ -76,12 +76,16 @@ export const createActiveServerI18n = cache(async () => {
 
 ```tsx
 // app/page.tsx
-import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
 import { createActiveServerI18n } from "../lib/i18n.server";
 
 export default async function Page() {
   await createActiveServerI18n();
-  return <h1>{t`Welcome to Palamedes`}</h1>;
+  return (
+    <h1>
+      <Trans>Welcome to Palamedes</Trans>
+    </h1>
+  );
 }
 ```
 
