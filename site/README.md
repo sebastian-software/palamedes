@@ -69,10 +69,16 @@ per-cell hosting status (#306).
 
 [`PRODUCT.md`](../PRODUCT.md) owns current messaging and evidence rules.
 [ADR-001](../adr/001-project-scope-and-positioning.md) records positioning and
-scope; [ADR-026](../adr/026-editorial-visual-brand-system.md) records the visual,
+scope; [ADR-011](../adr/011-editorial-visual-brand-system.md) records the visual,
 benchmark-presentation, and licensed-asset rules. Asset provenance lives in the
 [Streamline manifest](streamline-asset-manifest.md) and
 [framework brand ledger](framework-brand-usage.md).
+
+The decision landing page is generated from `DECISIONS.md`, including its
+reading groups. The numbered ADR files define sidebar order. After renumbering,
+update repository references and `decision-redirects.json`; the prebuild emits
+small canonical redirects under the ignored `public/decisions/` directory so
+existing public links keep reaching the same topics, including without JavaScript.
 
 Every Markdown article under `site/content/blog/` except `README.md` is published
 by the site prebuild. Keep that directory for finished articles; a body label

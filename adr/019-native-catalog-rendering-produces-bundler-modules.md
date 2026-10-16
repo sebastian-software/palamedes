@@ -1,20 +1,10 @@
-# ADR-011: Native Catalog Rendering Produces Bundler Modules
+# ADR-019: Native Catalog Rendering Produces Bundler Modules
 
 **Status:** Accepted
-**Date:** 2026-03-17
-**Revised:** 2026-08-11
 
-## Context
+**Last updated:** 2026-10-16
 
-Palamedes compiles configured catalogs into runtime lookup maps, while Vite and
-Next consume generated JavaScript modules. A short-lived design put final module
-rendering in each host adapter, but it duplicated escaping and generated-module
-semantics at every adapter boundary.
-
-The compiler already owns message lowering, JavaScript-safe literal escaping,
-and the executable message-function representation described by ADR-022. Keeping
-the final module renderer beside that lowering gives every host the same output
-and diagnostics without asking adapters to maintain a second generator.
+One native renderer produces executable catalog modules for every bundler integration.
 
 ## Decision
 
@@ -41,6 +31,18 @@ The intended stack is:
 - `palamedes-node` exposes that result through typed N-API bindings
 - Vite and Next adapters handle host integration around returned modules and
   selected message maps
+
+## Context
+
+Palamedes compiles configured catalogs into runtime lookup maps, while Vite and
+Next consume generated JavaScript modules. A short-lived design put final module
+rendering in each host adapter, but it duplicated escaping and generated-module
+semantics at every adapter boundary.
+
+The compiler already owns message lowering, JavaScript-safe literal escaping,
+and the executable message-function representation described by ADR-004. Keeping
+the final module renderer beside that lowering gives every host the same output
+and diagnostics without asking adapters to maintain a second generator.
 
 ## Alternatives Considered
 

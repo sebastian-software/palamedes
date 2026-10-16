@@ -52,7 +52,7 @@ function parseSection(name) {
    * Only the cold lane feeds the site. The warm table repeats the same row
    * shape, so without this the last match would win and bench.ts would be
    * validated against warm medians — silently publishing cache-hit numbers as
-   * the cross-tool comparison. See ADR-019.
+   * the cross-tool comparison. See ADR-022.
    */
   const profileBody = section.split(/^## /m)[0];
   const coldStart = profileBody.indexOf("### Cold");

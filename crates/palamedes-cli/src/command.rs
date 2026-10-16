@@ -1,12 +1,12 @@
 //! The execution contract every built-in command implements.
 //!
-//! The shape deliberately mirrors a binary plugin command (ADR 018): a command
+//! The shape deliberately mirrors a binary plugin command (ADR-025): a command
 //! resolves its inputs from a context, produces a structured result, renders
 //! that result, and only then reports the verdict that decides the exit code.
 //!
 //! Nothing here crosses a process boundary, and nothing is meant to. Built-ins
 //! stay compiled into `pmds` precisely so they keep working without
-//! configuration, plugin resolution, or the npm wrapper (ADR 017), the same way
+//! configuration, plugin resolution, or the npm wrapper (ADR-015), the same way
 //! git keeps its core commands in one binary and reserves subprocess dispatch
 //! for third-party extensions. The point of the shared shape is that a command
 //! reaches the outside world through its context and its renderer instead of

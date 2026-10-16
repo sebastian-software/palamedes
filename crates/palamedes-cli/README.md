@@ -4,7 +4,7 @@ The `pmds` command-line interface for
 [Palamedes](https://palamedes.dev). It carries the built-in `extract`, `lint`,
 `audit`, `report`, `catalog`, and `version` commands, reads the YAML-first
 project configuration, and runs binary plugins over the protocol described in
-ADR 018.
+ADR-025.
 
 The binary ships through the `@palamedes/cli` npm package and its platform
 packages. It is not published to crates.io yet.

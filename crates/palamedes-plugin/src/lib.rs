@@ -1,7 +1,7 @@
 //! Rust SDK for authoring `pmds` binary plugins.
 //!
 //! Binary plugins are standalone executables the Palamedes CLI spawns and
-//! drives over a versioned newline-delimited JSON protocol on stdio (ADR 018).
+//! drives over a versioned newline-delimited JSON protocol on stdio (ADR-025).
 //! This crate wraps that protocol so a plugin can register namespaced commands,
 //! receive the resolved project context, emit diagnostics and output, and
 //! return a result without implementing the wire format itself.

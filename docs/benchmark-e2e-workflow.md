@@ -172,7 +172,7 @@ that feeds the speedup table. Both cold medians and Palamedes warm medians feed
 to model an edit before each run. It answers "what does the next run cost?",
 which is what a developer actually experiences. It is not a like-for-like
 comparison: Palamedes reuses its extraction cache
-([ADR-019](../adr/019-extraction-cache.md)), while the other tools have no
+([ADR-022](../adr/022-extraction-cache.md)), while the other tools have no
 comparable local cache and re-extract in full, so their warm and cold numbers
 are the same by design. Those numbers are deliberately kept out of every
 speedup ratio.

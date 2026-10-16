@@ -1,8 +1,16 @@
-# ADR-028: Effective Flow Project Setup
+# ADR-029: Effective Flow Project Setup
 
-## Status
+**Status:** Accepted
 
-Active
+**Last updated:** 2026-10-16
+
+One tracked setup record owns the project-specific Effective Flow configuration; runtime state stays local and ignored.
+
+## Decision
+
+The configuration below is the single tracked Effective Flow setup for this
+repository. `.effective-flow/` holds generated runtime state and is ignored.
+No second setup file or local copy defines competing values.
 
 ## Context
 
@@ -29,3 +37,8 @@ runtime directory and completely gitignored.
 | plan.dir                          | docs/plan                  |
 | language.project                  | en                         |
 | mergeGate.completion              | merge                      |
+
+## Consequences
+
+Project workflow changes update this table and its references together.
+Runtime artifacts do not enter the decision corpus or source control.

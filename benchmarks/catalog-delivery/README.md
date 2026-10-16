@@ -127,8 +127,8 @@ Node 24.15.0 on macOS arm64. All commands exited with status 0.
 
 The runtime and adapter contract is defined by the [v2 migration
 guide](../../docs/migration-v2.md), [ADR-008](../../adr/008-framework-adapter-architecture.md),
-[ADR-022](../../adr/022-generated-catalogs-use-executable-message-functions.md),
-and [ADR-023](../../adr/023-generated-production-runtime-is-parser-free.md).
+[ADR-004](../../adr/004-generated-catalogs-use-executable-message-functions.md),
+and [ADR-005](../../adr/005-generated-production-runtime-is-parser-free.md).
 
 These checks do not publish packages or enable release publication. The
 repository release hold remains active until the final evidence and release

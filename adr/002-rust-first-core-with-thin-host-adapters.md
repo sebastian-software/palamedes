@@ -1,35 +1,10 @@
 # ADR-002: Rust-First Core with Thin Host Adapters
 
 **Status:** Accepted
-**Date:** 2026-03-17
-**Revised:** 2026-08-11
 
-## Context
+**Last updated:** 2026-10-16
 
-The hot path in Palamedes is dominated by work that benefits from a native implementation:
-
-- parsing and traversing source files
-- extracting messages
-- transforming macro syntax into runtime calls
-- reading and writing catalogs
-- validating and normalizing ICU message structures
-
-If that path is split across many TypeScript layers and utility packages, the project pays several costs:
-
-- semantic logic gets duplicated
-- boundaries become chatty
-- performance improvements are harder to realize end-to-end
-- it becomes unclear which layer actually owns i18n behavior
-
-At the same time, Palamedes still lives in JavaScript application ecosystems.
-Some responsibilities are naturally specific to those hosts:
-
-- JavaScript-host config loading
-- bundler integration
-- framework hooks
-- packaging and host-facing API ergonomics
-
-That means Palamedes needs a strict ownership split rather than a vague "native helpers under a JavaScript toolchain" model.
+Rust owns host-neutral i18n semantics; TypeScript connects them to JavaScript hosts.
 
 ## Decision
 
@@ -58,6 +33,33 @@ is the primary home for:
 - packaging and host-facing API ergonomics
 
 The TypeScript layer should call coarse native operations rather than rebuilding semantic pipelines locally.
+
+## Context
+
+The hot path in Palamedes is dominated by work that benefits from a native implementation:
+
+- parsing and traversing source files
+- extracting messages
+- transforming macro syntax into runtime calls
+- reading and writing catalogs
+- validating and normalizing ICU message structures
+
+If that path is split across many TypeScript layers and utility packages, the project pays several costs:
+
+- semantic logic gets duplicated
+- boundaries become chatty
+- performance improvements are harder to realize end-to-end
+- it becomes unclear which layer actually owns i18n behavior
+
+At the same time, Palamedes still lives in JavaScript application ecosystems.
+Some responsibilities are naturally specific to those hosts:
+
+- JavaScript-host config loading
+- bundler integration
+- framework hooks
+- packaging and host-facing API ergonomics
+
+That means Palamedes needs a strict ownership split rather than a vague "native helpers under a JavaScript toolchain" model.
 
 ## Alternatives Considered
 

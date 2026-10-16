@@ -110,7 +110,7 @@ try {
   }
 
   // The platform package must expose the native binary as its own `pmds` bin
-  // so known-platform environments can skip the Node launcher (ADR-024).
+  // so known-platform environments can skip the Node launcher (ADR-014).
   const nativeManifest = JSON.parse(
     readFileSync(path.join(nativeInstallDir, "package.json"), "utf8"),
   );

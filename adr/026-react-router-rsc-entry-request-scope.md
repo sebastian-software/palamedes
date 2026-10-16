@@ -1,22 +1,10 @@
-# ADR-025: React Router RSC Entry Request Scope
+# ADR-026: React Router RSC Entry Request Scope
 
 **Status:** Accepted
-**Date:** 2026-08-08
-**Revised:** 2026-08-11
 
-## Context
+**Last updated:** 2026-10-16
 
-React Router RSC Server Functions execute in an RSC request that is separate
-from ordinary Framework Mode route actions. Palamedes needs one request-local
-i18n initialization point that is active before a Server Function's arguments
-and default parameters are evaluated and survives its async rendering and
-revalidation work.
-
-React Router 8.3.0's generated Framework Mode `entry.rsc.tsx` accepts the
-original Fetch `Request` and invokes `unstable_matchRSCServerRequest` from its
-default `fetch()` method. Its supported custom-entry convention permits
-wrapping that default method. The RSC API is experimental and explicitly may
-break in patch or minor releases.
+React Router RSC initializes request-local i18n around the complete framework entry before Server Function dispatch.
 
 ## Decision
 
@@ -26,9 +14,25 @@ entry `fetch()` method. The resolver receives the original request and returns
 a fresh, activated i18n instance. The package runs the complete default entry
 inside `@palamedes/runtime/server`'s `AsyncLocalStorage` scope.
 
-Support exactly the tested RSC Framework Mode contract: `@react-router/dev`
-and `react-router` 8.3.0 plus `@vitejs/plugin-rsc` 0.5.34. Do not instrument
-`"use server"` bodies for this integration. Do not claim RSC Data Mode support.
+Support the tested RSC Framework Mode contract and the peer ranges declared in
+the [package manifest](../packages/react-router-rsc/package.json). The pinned
+fixture owns exact verification versions. Keep the adapter Preview while the
+upstream RSC contract is experimental. Do not instrument `"use server"` bodies
+or claim RSC Data Mode support.
+
+## Context
+
+React Router RSC Server Functions execute in an RSC request that is separate
+from ordinary Framework Mode route actions. Palamedes needs one request-local
+i18n initialization point that is active before a Server Function's arguments
+and default parameters are evaluated and survives its async rendering and
+revalidation work.
+
+React Router's generated RSC Framework Mode `entry.rsc.tsx` accepts the
+original Fetch `Request` and invokes `unstable_matchRSCServerRequest` from its
+default `fetch()` method. Its supported custom-entry convention permits
+wrapping that default method. The RSC API is experimental and explicitly may
+break in patch or minor releases.
 
 ## Alternatives Considered
 
@@ -50,9 +54,9 @@ misses helpers before the initializer, and cannot cover default parameters.
   the active locale during Server Function dispatch, rendering, and streaming.
 - Concurrent RSC and SSR graphs use isolated async contexts.
 - Resolver/catalog failures are clear server failures and prevent dispatch.
-- Vite's current graph-splitting manifest does not identify RSC Server Function
-  module fragments. Applications load the active locale's server catalog in
-  the resolver until upstream exposes a safe mapping.
+- RSC request initialization can use a complete active-locale server catalog.
+  Browser fragment delivery does not establish module-level splitting for
+  RSC Server Function requests.
 - Node-compatible `AsyncLocalStorage` is required; Edge/Worker runtimes remain
   unsupported without application-specific verification. `scope.run()`
   restores its caller after the entry settles, while async resources created

@@ -18,7 +18,7 @@ The native core builds on three first-party Rust crates:
 
 - `ferrocat` (https://github.com/sebastian-software/ferrocat) owns catalog and
   ICU semantics: PO and FCL parsing, merging, auditing, and compilation
-  (`/adr/006-ferrocat-as-catalog-and-icu-foundation.md`)
+  (`/adr/009-ferrocat-as-catalog-and-icu-foundation.md`)
 - `ferromark` (https://github.com/sebastian-software/ferromark) owns CommonMark
   and MDX parsing behind the MDX extraction path
   (`crates/palamedes/src/mdx.rs`)
@@ -46,7 +46,7 @@ When helping with Palamedes code:
 6. Use `getI18n()`/runtime wiring instead of inventing framework-global runtime APIs.
 7. Keep host adapter examples thin. Do not move catalog semantics into framework glue.
 8. Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
-9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/016-native-cli-and-yaml-first-configuration.md`).
+9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/012-native-cli-and-yaml-first-configuration.md`).
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
 11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
 
@@ -74,7 +74,7 @@ Recommended app-facing packages:
 - `@palamedes/waku`: ESM-only request-scoped i18n interceptor for Waku server actions
 - `@palamedes/tanstack`: ESM-only request-scoped i18n middleware for TanStack Start server functions
 - `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`, `pmds version`); also dispatches explicitly configured binary CLI plugins
-- The native CLI's advisory update check is configured for the next release after completed service readiness; the consuming release and live evidence remain pending in Palamedes #1036 and version-service #12. All six release CLI builds embed exactly `https://version-service.sebastian-software.de/check`; invalid build-time values fail the build. Ordinary builds without the endpoint remain default-off, and packaging smoke tests opt out without changing the shipped artifact's behavior. When enabled it claims a platform cache at most once per 24 hours, sends only the project identifier, CLI version, OS, architecture, a CI boolean, and a year-month install cohort, respects `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0` before cache/network access, treats cache/network/response failures as silent non-fatal outcomes within a two-second network deadline, and writes a newer-version notice only to stderr. Coarse dimensions do not guarantee anonymity or prevent every linkable combination. The shared service (sebastian-software/version-service) reads path, `Content-Type`, and `Content-Length` only for protocol validation and forwards nothing but the documented aggregate dimensions to its sink; application code does not access or persist client IP, forwarded, user-agent, or other identifying headers. Request volume is not a unique-installation count. Acknowledgement is not proof of later event visibility, and a timeout can follow ingestion. See `/docs/cli.md` and `/adr/027-privacy-bounded-cli-update-check.md` for rollout evidence, service limitations, and disable/rollback ownership.
+- The native CLI's advisory update check is configured for the next release after completed service readiness; the consuming release and live evidence remain pending in Palamedes #1036 and version-service #12. All six release CLI builds embed exactly `https://version-service.sebastian-software.de/check`; invalid build-time values fail the build. Ordinary builds without the endpoint remain default-off, and packaging smoke tests opt out without changing the shipped artifact's behavior. When enabled it claims a platform cache at most once per 24 hours, sends only the project identifier, CLI version, OS, architecture, a CI boolean, and a year-month install cohort, respects `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0` before cache/network access, treats cache/network/response failures as silent non-fatal outcomes within a two-second network deadline, and writes a newer-version notice only to stderr. Coarse dimensions do not guarantee anonymity or prevent every linkable combination. The shared service (sebastian-software/version-service) reads path, `Content-Type`, and `Content-Length` only for protocol validation and forwards nothing but the documented aggregate dimensions to its sink; application code does not access or persist client IP, forwarded, user-agent, or other identifying headers. Request volume is not a unique-installation count. Acknowledgement is not proof of later event visibility, and a timeout can follow ingestion. See `/docs/cli.md` and `/adr/016-privacy-bounded-cli-update-check.md` for rollout evidence, service limitations, and disable/rollback ownership.
 - `@palamedes/config`: config loading for the JS plugin loaders; also reads legacy `palamedes.config.ts`/`.js` as a compatibility path (the native CLI reads only YAML/JSON/TOML)
 
 Advanced/custom-tooling packages:
@@ -424,7 +424,7 @@ unusual Git orchestration.
 
 Extraction performance is already handled by the CLI and needs no user tuning by default. `pmds extract` runs a bounded parallel read/parse pass (`--threads <COUNT>`, or `extract-threads` in the config) and reuses an on-disk extraction cache (`--no-cache` disables it for one run; `extract-cache: false` disables it permanently).
 
-The thread default is `4`, clamped to the available cores and the number of files; `1` runs serial. It is a measured floor, not a core count: a one-shot `pmds extract` pays worker setup on every invocation and gets slower again above it. Do not recommend raising `--threads` without a measurement on the user's own corpus and hardware. Both keys are read by the native CLI only — the JS config loader in `@palamedes/config` ignores them. See `/adr/013-bounded-parallel-extraction.md` and `/adr/019-extraction-cache.md`.
+The thread default is `4`, clamped to the available cores and the number of files; `1` runs serial. It is a measured floor, not a core count: a one-shot `pmds extract` pays worker setup on every invocation and gets slower again above it. Do not recommend raising `--threads` without a measurement on the user's own corpus and hardware. Both keys are read by the native CLI only — the JS config loader in `@palamedes/config` ignores them. See `/adr/023-bounded-parallel-extraction.md` and `/adr/022-extraction-cache.md`.
 
 Plugin commands:
 
@@ -439,8 +439,8 @@ plugin protocol. The host caches validated manifests under `.palamedes` by
 canonical binary path and file metadata, re-describes them when the binary,
 host, or protocol identity changes, and treats cache failures as non-fatal.
 See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
-`/adr/017-cli-plugin-execution-boundary.md`, and
-`/adr/018-binary-plugin-protocol.md`.
+`/adr/015-cli-plugin-execution-boundary.md`, and
+`/adr/025-binary-plugin-protocol.md`.
 
 ## Framework guidance
 
@@ -553,32 +553,32 @@ ADRs:
 - `/adr/001-project-scope-and-positioning.md`
 - `/adr/002-rust-first-core-with-thin-host-adapters.md`
 - `/adr/003-source-string-first-message-identity.md`
-- `/adr/004-internal-compiled-lookup-keys.md`
-- `/adr/005-universal-geti18n-runtime-model.md`
-- `/adr/006-ferrocat-as-catalog-and-icu-foundation.md`
-- `/adr/007-native-boundary-and-distribution.md`
+- `/adr/004-generated-catalogs-use-executable-message-functions.md`
+- `/adr/005-generated-production-runtime-is-parser-free.md`
+- `/adr/006-universal-geti18n-runtime-model.md`
+- `/adr/007-locale-is-fixed-for-a-browser-document.md`
 - `/adr/008-framework-adapter-architecture.md`
-- `/adr/009-typed-napi-boundary-with-workflow-first-native-operations.md`
-- `/adr/010-generated-typescript-types-derived-from-the-native-binding-surface.md`
-- `/adr/011-native-catalog-rendering-produces-bundler-modules.md`
-- `/adr/012-translation-augmentation-boundary.md`
-- `/adr/013-bounded-parallel-extraction.md`
-- `/adr/014-native-transform-source-maps.md`
-- `/adr/015-runtime-formatter-subset-diagnostics.md`
-- `/adr/016-native-cli-and-yaml-first-configuration.md`
-- `/adr/017-cli-plugin-execution-boundary.md`
-- `/adr/018-binary-plugin-protocol.md`
-- `/adr/019-extraction-cache.md`
-- `/adr/020-locale-is-fixed-for-a-browser-document.md`
-- `/adr/021-shared-cross-repository-site-ui.md`
-- `/adr/022-generated-catalogs-use-executable-message-functions.md`
-- `/adr/023-generated-production-runtime-is-parser-free.md`
-- `/adr/024-npm-launcher-is-a-packaging-bridge.md`
-- `/adr/025-react-router-rsc-entry-request-scope.md`
-- `/adr/026-editorial-visual-brand-system.md`
-- `/adr/027-privacy-bounded-cli-update-check.md`
-- `/adr/028-effective-flow-project-setup.md`
-- `/adr/029-readme-theme-composition.md`
+- `/adr/009-ferrocat-as-catalog-and-icu-foundation.md`
+- `/adr/010-translation-augmentation-boundary.md`
+- `/adr/011-editorial-visual-brand-system.md`
+- `/adr/012-native-cli-and-yaml-first-configuration.md`
+- `/adr/013-native-boundary-and-distribution.md`
+- `/adr/014-npm-launcher-is-a-packaging-bridge.md`
+- `/adr/015-cli-plugin-execution-boundary.md`
+- `/adr/016-privacy-bounded-cli-update-check.md`
+- `/adr/017-typed-napi-boundary-with-workflow-first-native-operations.md`
+- `/adr/018-generated-typescript-types-derived-from-the-native-binding-surface.md`
+- `/adr/019-native-catalog-rendering-produces-bundler-modules.md`
+- `/adr/020-internal-compiled-lookup-keys.md`
+- `/adr/021-runtime-formatter-subset-diagnostics.md`
+- `/adr/022-extraction-cache.md`
+- `/adr/023-bounded-parallel-extraction.md`
+- `/adr/024-native-transform-source-maps.md`
+- `/adr/025-binary-plugin-protocol.md`
+- `/adr/026-react-router-rsc-entry-request-scope.md`
+- `/adr/027-shared-cross-repository-site-ui.md`
+- `/adr/028-readme-theme-composition.md`
+- `/adr/029-effective-flow-project-setup.md`
 
 ## Development commands
 

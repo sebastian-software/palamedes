@@ -59,7 +59,7 @@ The useful evidence is in the repo:
 - [`docs/catalog-formats.md`](../../../docs/catalog-formats.md)
 - [`docs/stability.md`](../../../docs/stability.md)
 - [`docs/cli.md`](../../../docs/cli.md)
-- [`adr/006-ferrocat-as-catalog-and-icu-foundation.md`](../../../adr/006-ferrocat-as-catalog-and-icu-foundation.md)
+- [`adr/009-ferrocat-as-catalog-and-icu-foundation.md`](../../../adr/009-ferrocat-as-catalog-and-icu-foundation.md)
 
 The lesson is not "use Rust for everything." The lesson is narrower: give the
 hard semantic layer one owner, then let the JavaScript packages stay small.

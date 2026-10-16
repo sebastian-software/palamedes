@@ -829,7 +829,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   // Plugin 4b: message sidecar modules for experimental graph splitting.
   // Per message-bearing source file, one per-locale module rendered by the
-  // native catalog-module renderer (ADR-022: the single generator, so split
+  // native catalog-module renderer (ADR-004: the single generator, so split
   // artifacts stay on the branded parser-free compiled ABI) plus one
   // aggregator that registers the branded exports with the runtime. The
   // bundler then distributes messages along the module graph.
