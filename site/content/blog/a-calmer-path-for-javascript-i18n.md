@@ -8,8 +8,6 @@ title: "A calmer path for JavaScript i18n"
 
 # A Calmer Path For JavaScript i18n
 
-Status: draft
-
 JavaScript i18n usually starts small.
 
 A team adds a translation helper, a few message files, and a locale switcher.

@@ -8,8 +8,6 @@ title: "The third time I built JavaScript i18n tooling"
 
 # The Third Time I Built JavaScript i18n Tooling
 
-Status: draft
-
 Palamedes is not my first pass at JavaScript i18n.
 
 That matters because i18n mistakes age badly. A clever shortcut can feel good
@@ -22,12 +20,11 @@ to the code, context when the same sentence means different things, extraction
 into catalogs translators can inspect. That model is old, but the important
 parts are still sound.
 
-The second lesson came from recent enterprise work. Sebastian Werner's public
-profile lists a Regrello project from October 2024 to September 2025 focused
-on frontend internationalization with Lingui: replacing thousands of hardcoded
-strings with translation macros, building language dictionaries, and putting
-message extraction and compilation into the workflow. Salesforce later
-announced the Regrello acquisition and noted that it completed on October 1, 2025.
+The second lesson came from my enterprise work at Regrello from October 2024
+to September 2025, focused on frontend internationalization with Lingui:
+replacing thousands of hardcoded strings with translation macros, building
+language dictionaries, and putting message extraction and compilation into the
+workflow.
 
 That kind of migration work makes the pain concrete.
 
@@ -77,10 +74,9 @@ as frameworks change. Show the work in the repo.
 
 Evidence:
 
-- [Sebastian Werner profile at Sebastian Software](https://sebastian-software.de/werner)
-- [Sebastian Consulting profile](https://sebastian-consulting.de/de/werner)
+- [My profile at Sebastian Software](https://sebastian-software.de/werner)
+- [My consulting profile](https://sebastian-consulting.de/de/werner)
 - [qooxdoo](https://qooxdoo.org/)
-- [Salesforce announcement for Regrello](https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-regrello/)
 - [Palamedes ADRs](../../../adr/001-project-scope-and-positioning.md)
 - [proof and benchmark page](../../../docs/proof-and-benchmarks.md)
 

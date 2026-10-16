@@ -1,5 +1,5 @@
 {
   "minimumMajor": 2,
   "publicationEnabled": false,
-  "reason": "Palamedes v2 implementation is in progress. Complete #1215 and obtain release authorization before enabling publication."
+  "reason": "Palamedes v2 publication remains held. Complete the React and Solid TanStack Start verification in #1252, reconcile the release layout in #1154, and obtain explicit release authorization before enabling publication."
 }
