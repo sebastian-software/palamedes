@@ -1,8 +1,8 @@
 # Streamline Asset Manifest
 
-Selection and provenance ledger for Streamline assets intended for
+Selection and provenance ledger for Streamline assets shipped by
 palamedes.dev. This file records project use; it does not redistribute assets
-or grant rights under the repository's MIT license.
+or grant rights under the repository's MIT OR Apache-2.0 licenses.
 
 ## License context
 
@@ -11,8 +11,8 @@ or grant rights under the repository's MIT license.
   Illustrations**
 - Selected icon set: **Streamline Sharp Duo** only
 - Selected illustration set: **Streamline UX Duotone** only
-- Initial unique icon count: **8**
-- Initial illustration count: **3**
+- Committed unique icon count: **8**
+- Committed illustration count: **0**
 - Standard project allowance to monitor: **100 unique icons**
 - Standard project allowance to monitor: **50 illustrations**
 - Licensed source access: account owner only; contributors receive only the
@@ -20,7 +20,7 @@ or grant rights under the repository's MIT license.
 - Private evidence: retain the account screenshot, invoice, and applicable
   license text outside the public repository
 
-`THIRD_PARTY_NOTICES.md` excludes these assets from the Palamedes MIT grant,
+`THIRD_PARTY_NOTICES.md` excludes these assets from the Palamedes MIT OR Apache-2.0 grant,
 and the public site footer carries the required Streamline OSS attribution.
 
 ## Selected icons
@@ -42,15 +42,10 @@ Palamedes navy/bronze palette, and integrated on 2026-08-17. The target path is
 
 ## Selected illustrations
 
-These entries are selected as implementation experiments and pending licensed
-export. The target path is
-`site/public/illustrations/streamline/ux-duotone/<filename>.svg`.
-
-| Role                                     | Asset                  | Source                                                                                          | Target filename              | Export date | SHA-256 |
-| ---------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------- | ----------- | ------- |
-| Brand story / maintainer trust / closing | Quill Software Writing | [Streamline](https://www.streamlinehq.com/illustrations/download/quill-software-writing--10413) | `quill-software-writing.svg` | pending     | pending |
-| Complete local workflow introduction     | Flowchart Paper        | [Streamline](https://www.streamlinehq.com/illustrations/download/flowchart-paper--10295)        | `flowchart-paper.svg`        | pending     | pending |
-| Proof / verification introduction        | App Testing            | [Streamline](https://www.streamlinehq.com/illustrations/download/app-testing--10295)            | `app-testing.svg`            | pending     | pending |
+No illustrations are committed. If an editorial illustration is needed, use
+UX Duotone under the rules in
+[ADR-026](../adr/026-editorial-visual-brand-system.md#licensed-asset-handling)
+and record the used export here.
 
 ## Change rules
 
@@ -59,6 +54,8 @@ export. The target path is
 - Record every unique committed icon here, even when it is used only once.
 - Record every committed illustration here. Repeated placements do not create
   additional manifest entries.
+- Keep decorative assets hidden from assistive technology; give meaningful
+  assets adjacent text rather than relying on tooltips.
 - Do not commit unused exports, complete sets, source archives, screenshots of
   licensed vectors, or account/license credentials.
 - Complete the export date and hash after optimization so the manifest

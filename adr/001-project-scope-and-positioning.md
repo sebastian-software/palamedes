@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
-**Last updated:** 2026-10-15
+**Last updated:** 2026-10-16
 
 ## Context
 
@@ -102,6 +102,9 @@ Product communication follows the same architecture:
 
 - Lead with Palamedes as a durable i18n foundation for TypeScript teams, not
   with setup speed, “small”, “lightweight”, or “narrow”.
+- Treat durability as a design goal, not a promise that an adopter will never
+  need another migration. "Complete" means the complete local workflow, not
+  a hosted TMS, machine translation, or support for every framework.
 - Address greenfield adopters and users of any existing i18n stack. Lingui
   migration remains one focused acquisition path, not the primary audience.
 - Present first-party framework breadth as direct, tested integration rather
@@ -110,6 +113,12 @@ Product communication follows the same architecture:
 - Present cookie, route, subdomain, and TLD locale architectures as a separate
   proof axis. The verified applications show that common policy choices are
   already engineered without making Palamedes own application routing.
+- Keep smoke verification, browser verification, Preview qualifications, and
+  live hosting status distinct. Example counts support those claims without
+  becoming a substitute for integration depth.
+- Make architecture a primary evaluation path. Focused framework, locale,
+  migration, and comparison pages keep the same product position while
+  answering different entry questions.
 - Tie performance claims to checked benchmark workflows and exact reports.
   Public summaries use honest rounded values and avoid decimal precision that
   the benchmark does not warrant.
@@ -126,6 +135,9 @@ Artifact ownership is explicit:
   principles.
 - This ADR records the durable decision, its rationale, its tradeoffs, and the
   conditions that should reopen it.
+- ADR-026 owns visual and benchmark-presentation rules. Completed plans and
+  discarded design explorations remain recoverable in Git history; they do
+  not remain parallel sources of current product requirements.
 
 ## Alternatives Considered
 
@@ -201,6 +213,9 @@ Review this decision when:
 - either site needs a cross-product link before the destination is live
 - public copy again describes the product primarily as small or narrow
 - a new general positioning document duplicates `PRODUCT.md`
+- visitor feedback shows that the audience cannot explain the product or the
+  value of its first-party integrations, or adoption evidence changes the
+  principal reason teams evaluate Palamedes
 
 Current alignment is visible in:
 

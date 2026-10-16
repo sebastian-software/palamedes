@@ -8,8 +8,6 @@ title: "Measuring Palamedes honestly"
 
 # Measuring Palamedes Honestly
 
-Status: draft
-
 Benchmarks are useful when they answer a narrow question.
 
 They get less useful when they become a slogan. "Fast" is easy to say and hard
@@ -34,9 +32,12 @@ The strongest checked comparison is the end-to-end extract/update workflow:
 pnpm benchmark:e2e-workflow
 ```
 
-That harness compares Palamedes, Lingui, React Intl, and i18next-cli on the same
-generated source/catalog update workflow and writes machine-readable results
-under `benchmarks/e2e-workflow/results/`.
+That harness runs Palamedes, Lingui, fbtee, General Translation, React Intl,
+and i18next-cli against the same generated corpus and writes machine-readable
+results under `benchmarks/e2e-workflow/results/`. Each result records its
+command scope. React Intl only extracts messages in this run, so it is shown
+as a narrower reference and excluded from same-scope extract-and-update
+speedup claims.
 
 The hot-path proof command is not hidden behind a private dashboard either:
 

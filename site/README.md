@@ -65,6 +65,20 @@ the site build until the constants (and any prose quoting them) are updated
 consciously. Matrix demo links live in `app/data/matrix.ts` with explicit
 per-cell hosting status (#306).
 
+## Content sources
+
+[`PRODUCT.md`](../PRODUCT.md) owns current messaging and evidence rules.
+[ADR-001](../adr/001-project-scope-and-positioning.md) records positioning and
+scope; [ADR-026](../adr/026-editorial-visual-brand-system.md) records the visual,
+benchmark-presentation, and licensed-asset rules. Asset provenance lives in the
+[Streamline manifest](streamline-asset-manifest.md) and
+[framework brand ledger](framework-brand-usage.md).
+
+Every Markdown article under `site/content/blog/` except `README.md` is published
+by the site prebuild. Keep that directory for finished articles; a body label
+such as "Status: draft" does not prevent publication. Remove completed plans
+and discarded design explorations rather than maintaining a parallel archive.
+
 ## AI assistant context (llms.txt)
 
 The repo-root `llms.txt` and `llms-full.txt` are copied into the build by

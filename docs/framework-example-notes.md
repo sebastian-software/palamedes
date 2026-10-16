@@ -34,6 +34,11 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 The route example uses a dynamic `/$locale` segment; this is the canonical
 TanStack shape and remains under verification.
 
+These examples use React Start. Verification against the current React Start
+release and a separate Solid Start integration remain v2 release work in
+[#1252](https://github.com/sebastian-software/palamedes/issues/1252). The Solid
+examples below use Solid with Nitro and do not prove Solid Start support.
+
 ## Solid
 
 The `solid-cookie`, `solid-route`, `solid-subdomain`, and

@@ -66,6 +66,36 @@ the reader may be starting greenfield or from any established i18n stack:
 6. Palamedes+ may add managed automation and collaboration later; Palamedes
    remains useful without it.
 
+## Public Content And Evidence
+
+The homepage introduces the product through Clear, Complete, and Fast, with
+concrete code, workflow artifacts, and evidence beside each claim. Framework
+setup, locale policy, performance, migration, and comparison pages answer
+focused entry questions while preserving the same product position.
+Architecture is a primary evaluation path, with its own top-level navigation
+item. Comparisons do not define the homepage's identity.
+
+- Describe a **complete local workflow** when "complete" could imply a hosted
+  TMS, machine translation, or support for every framework.
+- Present a durable foundation as a design goal, never a guarantee that a team
+  will never migrate again. Setup guides do not promise a completion time.
+- Keep framework integration, locale architecture, verification depth, and live
+  demo availability distinct. Example counts describe evidence, not additional
+  framework support. Preserve Preview qualifications beside the relevant claim.
+- Distinguish the implementation on `main` from available registry releases.
+  During the v2 publication hold, identify upcoming behavior as a preview and
+  direct evaluators to repository examples and the migration guide.
+- Bound performance claims by the measured workflow, corpus, environment, and
+  report date. Keep extraction, browser delivery, and server memory evidence
+  separate. Use the presentation policy in
+  [ADR-026](adr/026-editorial-visual-brand-system.md#benchmark-presentation).
+- Keep every claim understandable without its graphic. Tables need a linear
+  reading order, and visual benchmark results need equivalent text or tables.
+
+`PRODUCT.md` owns current messaging; ADR-001 and ADR-026 own durable positioning
+and visual decisions. Completed implementation plans and discarded design
+explorations belong in Git history, not beside these current sources.
+
 ## Brand Personality
 
 The durable visual and editorial contract is recorded in

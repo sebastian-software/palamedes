@@ -3,6 +3,12 @@
 **Draft for the planned 2.0 release.** These notes describe the implementation
 on `main`. Publication remains held; they do not announce an available release.
 
+The original migration and delivery verification is complete. Current release
+work includes verified TanStack Start support for React and Solid, tracked in
+[#1252](https://github.com/sebastian-software/palamedes/issues/1252). The existing
+Solid examples use Solid with Nitro; they do not establish Solid Start support.
+See [Contributing](../CONTRIBUTING.md#releases) for the release gates.
+
 Palamedes 2.0 makes translation delivery part of the framework integration.
 You still write messages next to your code and keep translations in catalogs.
 The adapter connects those messages to the application, while the runtime

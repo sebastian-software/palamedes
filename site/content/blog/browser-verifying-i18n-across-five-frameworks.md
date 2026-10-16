@@ -8,8 +8,6 @@ title: "Browser-verifying i18n across five frameworks"
 
 # How We Browser-Verify i18n Across Five Frameworks
 
-Status: draft
-
 Cross-framework i18n is easy to claim and hard to prove.
 
 A README can list framework names. A demo can work in one happy path. Neither
@@ -69,8 +67,9 @@ For Palamedes, the thesis is:
 The matrix is where that thesis has to survive contact with frameworks.
 
 Next.js and React Router do not fail in the same places. TanStack Start,
-Solid, and Waku each have their own server/client boundaries. Remix v3 is
-covered separately by the smoke lane while its UI adapter settles.
+Solid, and Waku each have their own server/client boundaries. Remix v3 has a
+focused full-stack browser proof; its other three locale strategies remain
+smoke-only and the adapter remains Preview.
 Route-based locale state and cookie-based locale state put pressure on different
 parts of the adapter layer.
 

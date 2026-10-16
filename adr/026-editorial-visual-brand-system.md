@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-16
+**Last updated:** 2026-10-16
 
 ## Context
 
@@ -36,14 +37,54 @@ surfaces:
 - non-brand marketing pictograms use only licensed Streamline Sharp Duo
   exports recorded in `site/streamline-asset-manifest.md`. Framework and vendor
   marks are the intentional brand exception;
-- public benchmark values follow the checked rounding and scope policy in
-  `site/homepage-revamp-concept.md`: whole milliseconds below one second, one
-  decimal for multi-second values, and floored speedup factors. Exact values
-  remain available in the checked source artifacts.
+- larger editorial illustrations, when used, come only from Streamline UX
+  Duotone. Keep them distinct from the small Sharp Duo pictograms, preserve
+  their geometry, and use the same navy/bronze palette. Use either layer only
+  where it helps the reader; avoid repeated decorative icons or illustrations;
+- framework marks identify integrations, not customers or adoption. Preserve
+  their geometry and record their provenance and usage constraints in
+  `site/framework-brand-usage.md`;
+- public benchmark values follow the rounding, scope, and evidence policy
+  below. Exact values remain available in the checked source artifacts.
 
 ARDO continues to own documentation chrome. Palamedes applies this language
 through ARDO's public token and component APIs rather than overriding internal
 classes.
+
+### Benchmark Presentation
+
+- Display whole milliseconds below one second and one decimal place for
+  multi-second values. Floor public speedup factors so rounding never
+  increases a claim. Retain exact medians and ratios in checked reports.
+- Derive displayed values from those checked results and fail the site build
+  when quoted values drift.
+- Describe measured extract-and-catalog-update results as workflow comparisons.
+  Exclude narrower extraction-only runs from same-scope headline ranges and
+  keep their qualification beside each result. Keep warm-cache measurements
+  separate from cross-tool comparisons.
+- Prefer a compact results ledger with a dominant time, secondary factor, and
+  visible scope per workflow. Keep the environment, corpus, date, and report
+  link adjacent. Avoid unit grids or unreadably small linear bars.
+- Make claims understandable without graphics and provide equivalent text or
+  tables for visual results. Preserve linear reading order, keyboard access,
+  responsive reflow, reduced-motion behavior, and readable no-JavaScript output.
+
+### Licensed Asset Handling
+
+The [asset manifest](../site/streamline-asset-manifest.md) owns the exact asset
+inventory, export dates, optimized-file hashes, and recorded license allowances.
+Store only used, optimized project SVGs under
+`site/public/icons/streamline/sharp-duo/` or
+`site/public/illustrations/streamline/ux-duotone/`. Replacements stay within
+their respective set and update the manifest.
+
+Keep third-party assets outside the repository's MIT OR Apache-2.0 grant.
+Preserve the root third-party notice and public Streamline attribution. Do not
+redistribute assets as a standalone library or selectable catalog. Licensed
+source access stays with the account owner; contributors receive the prepared
+project assets. Keep account screenshots, invoices, and license records private.
+Count unique assets rather than placements, and do not treat an export limit as
+a project usage allowance.
 
 ## Alternatives Considered
 
