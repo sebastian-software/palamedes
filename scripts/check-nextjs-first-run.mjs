@@ -60,7 +60,7 @@ test("Next.js first run keeps its executable server path and navigation in sync"
   assertIncludes(
     siteSteps,
     `// src/app/page.tsx
-import { t } from "@palamedes/core/macro"
+import { Trans } from "@palamedes/react/macro"
 import { createActiveServerI18n } from "../lib/load-i18n.server"`,
   );
   assert.ok(

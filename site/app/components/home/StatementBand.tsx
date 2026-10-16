@@ -1,93 +1,31 @@
 import type { ReactNode } from "react";
 
 /*
- * The dark positioning band — Home's single deliberate style break. The
- * ScopeDiagram renders, in developer-facing terms, the part Palamedes owns
- * (stable across supported hosts) vs. the part each host owns (differs per
- * stack). Labels are intentionally plain, not the internal architecture names.
+ * A navy statement band for the one sentence a page most wants remembered —
+ * an honest trade-off, a position. The meander marks the break in rhythm.
  */
 export function StatementBand({
   num,
-  diagram = false,
   href,
   children,
 }: {
   num: string;
-  diagram?: boolean;
-  /** Optional route to the detailed evidence behind this positioning statement. */
+  /** Optional route to the detailed evidence behind this statement. */
   href?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="border-t border-hair bg-ink px-8 pt-0 pb-16 text-paper max-tight:px-5">
-      <div className="meander -mx-8 mb-14 max-tight:-mx-5" aria-hidden />
-      <p className="micro tracking-th text-accent-soft">{num}</p>
-      <p className="mt-6 max-w-[46rem] text-[clamp(1.1rem,2vw,1.45rem)] leading-[1.55] text-paper/90">
+    <section className="pmds-band pmds-band--mist relative" aria-label={num}>
+      <div className="meander absolute inset-x-0 top-0" aria-hidden />
+      <p className="pmds-kicker">{num}</p>
+      <p className="mt-8 max-w-[48rem] text-[clamp(1.25rem,1rem+1vw,1.85rem)] leading-[1.5] text-ink/90">
         {children}
       </p>
-      {diagram ? <ScopeDiagram /> : null}
       {href ? (
-        <a
-          href={href}
-          className="micro mt-8 inline-block text-[10px] tracking-label text-accent-soft underline underline-offset-4 hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-soft"
-        >
-          Inspect the architecture →
+        <a href={href} className="pmds-arrow-link mt-8">
+          Inspect the evidence →
         </a>
       ) : null}
     </section>
-  );
-}
-
-const OWNED = [
-  "author & transform",
-  "extract & update",
-  "audit, merge & compile",
-  "runtime integration",
-];
-const HOST = ["routing & URLs", "locale detection", "rendering", "hosting"];
-
-function ScopeDiagram() {
-  return (
-    <div
-      className="mt-12 max-w-[44em]"
-      role="img"
-      aria-label="Palamedes owns the part that stays the same across supported hosts: authoring and transformation, extraction and catalog updates, audits, semantic merges and compilation, and runtime integration, all on one Rust core. Each host owns routing and URLs, locale detection, rendering, and hosting."
-    >
-      <p className="micro text-[10px] tracking-label text-accent-soft">
-        Palamedes owns it — shared across supported hosts
-      </p>
-      <div className="mt-2 grid grid-cols-4 gap-px border border-accent-soft/40 bg-accent-soft/40 max-tight:grid-cols-2">
-        {OWNED.map((label) => (
-          <span
-            key={label}
-            className="mono-nums bg-ink px-3 py-2.5 text-center text-[11px] text-paper"
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-      <p className="mono-nums mt-1.5 text-center text-[10px] tracking-label text-accent-soft uppercase">
-        └─── one Rust core, everywhere ───┘
-      </p>
-      <div className="mx-auto my-3 h-6 w-px bg-accent-soft/40" aria-hidden />
-      <p className="micro text-[10px] tracking-label text-paper/75">
-        Each host owns it — specific to that stack
-      </p>
-      <div className="mt-2 grid grid-cols-4 gap-px border border-paper/20 bg-paper/20 max-tight:grid-cols-2">
-        {HOST.map((label) => (
-          <span
-            key={label}
-            className="mono-nums bg-ink px-3 py-2.5 text-center text-[11px] text-paper/75"
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-      <p className="mt-6 text-[15px] text-paper">
-        Adopt another supported host, and the integration changes without redefining your messages
-        or catalogs.{" "}
-        <span className="text-accent-soft">The full local workflow stays coherent.</span>
-      </p>
-    </div>
   );
 }

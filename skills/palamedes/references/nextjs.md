@@ -67,11 +67,15 @@ scope; a custom server getter or extra scope activation is unnecessary.
 
 ```tsx
 // src/app/page.tsx
-import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
 import { createActiveServerI18n } from "../lib/i18n.server";
 
 function Welcome() {
-  return <h1>{t`Welcome to Palamedes`}</h1>;
+  return (
+    <h1>
+      <Trans>Welcome to Palamedes</Trans>
+    </h1>
+  );
 }
 
 export default async function Page() {

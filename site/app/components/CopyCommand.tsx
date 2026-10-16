@@ -85,7 +85,7 @@ export function CopyCommand({
         </code>
         <button
           type="button"
-          className="micro min-h-11 shrink-0 border-l border-hair px-3 text-[10px] text-gray-spec transition-colors hover:bg-ink hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+          className="micro min-h-11 shrink-0 border-l border-hair px-3 text-[10px] text-gray-spec transition-colors hover:bg-mist hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
           aria-label={`Copy command: ${command}`}
           onClick={async () => {
             const activation = ++activationRef.current;

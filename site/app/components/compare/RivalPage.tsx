@@ -1,5 +1,6 @@
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { CtaBand } from "~/components/home/CtaBand";
+import { PageHero } from "~/components/marketing/PageHero";
 import { StatementBand } from "~/components/home/StatementBand";
 import { BENCH_FOOTNOTE, type Rival, type RivalCode, type RivalRow } from "~/data/rivals";
 
@@ -18,9 +19,9 @@ function toLines(code: string): { no: number; text: string }[] {
 }
 
 function toneFor(line: string): string {
-  if (line.startsWith("import ") || line.startsWith("export ")) return "text-accent-soft";
-  if (line.startsWith("//") || line.startsWith("#")) return "text-paper/70";
-  return "text-paper/85";
+  if (line.startsWith("import ") || line.startsWith("export ")) return "text-slate";
+  if (line.startsWith("//") || line.startsWith("#")) return "text-gray-spec";
+  return "text-ink/90";
 }
 
 function CodePane({ label, code }: { label: string; code: string }) {
@@ -31,11 +32,11 @@ function CodePane({ label, code }: { label: string; code: string }) {
      * code block instead of matching its neighbour.
      */
     <div className="flex h-full flex-col bg-paper">
-      <p className="micro border-b border-hair px-5 py-3 text-[10px] tracking-label text-gray-spec">
+      <p className="micro border-b border-hair px-5 py-3 text-[11px] tracking-label text-gray-spec">
         {label}
       </p>
       <pre
-        className="grow overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+        className="pmds-code grow overflow-x-auto border-0 px-5 py-4 font-mono text-[12.5px] leading-[1.7] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
         tabIndex={0}
       >
         {toLines(code).map((line) => (
@@ -56,7 +57,7 @@ function CodeCompare({ code }: { code: RivalCode }) {
         <CodePane label={code.palamedesLabel} code={code.palamedesCode} />
       </div>
       {code.note ? (
-        <p className="mt-4 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">{code.note}</p>
+        <p className="mt-4 max-w-[52em] text-[15.5px] leading-relaxed text-ink/85">{code.note}</p>
       ) : null}
     </div>
   );
@@ -88,12 +89,12 @@ function RivalMatrix({ rival, rows }: { rival: string; rows: RivalRow[] }) {
             <tr key={row.criterion}>
               <th
                 scope="row"
-                className="border border-hair px-4 py-3 text-left align-top text-[12.5px] font-bold"
+                className="border border-hair px-4 py-3 text-left align-top text-[14px] font-bold"
               >
                 {row.criterion}
               </th>
-              <td className="border border-hair px-4 py-3 align-top text-[13px]">{row.rival}</td>
-              <td className="border border-hair border-l-2 border-l-accent bg-hover-fill px-4 py-3 align-top text-[13px]">
+              <td className="border border-hair px-4 py-3 align-top text-[14.5px]">{row.rival}</td>
+              <td className="border border-hair border-l-2 border-l-accent bg-hover-fill px-4 py-3 align-top text-[14.5px]">
                 {row.palamedes}
               </td>
             </tr>
@@ -121,12 +122,12 @@ function LedgerColumn({
   accent?: boolean;
 }) {
   return (
-    <div className="bg-paper px-6 py-6">
-      <p className="micro text-[10px] tracking-label text-gray-spec">{label}</p>
+    <div className="bg-paper px-7 py-7">
+      <p className="micro text-[11px] tracking-label text-gray-spec">{label}</p>
       <h3 className={`mt-2 text-[15px] font-bold ${accent ? "text-accent" : ""}`}>{title}</h3>
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
-          <li key={item} className="flex gap-2.5 text-[13.5px] leading-relaxed text-ink/85">
+          <li key={item} className="flex gap-2.5 text-[15.5px] leading-relaxed text-ink/85">
             <span aria-hidden className={`mono-nums ${accent ? "text-accent" : "text-gray-spec"}`}>
               ·
             </span>
@@ -140,11 +141,11 @@ function LedgerColumn({
 
 function PickList({ title, items, accent }: { title: string; items: string[]; accent?: boolean }) {
   return (
-    <div className="bg-paper px-6 py-6">
+    <div className="bg-paper px-7 py-7">
       <h3 className={`text-[15px] font-bold ${accent ? "text-accent" : ""}`}>{title}</h3>
       <ul className="mt-3 space-y-2">
         {items.map((item) => (
-          <li key={item} className="flex gap-2 text-[13.5px] leading-relaxed text-ink/85">
+          <li key={item} className="flex gap-2 text-[15.5px] leading-relaxed text-ink/85">
             <span aria-hidden className="mono-nums text-accent">
               ·
             </span>
@@ -159,22 +160,19 @@ function PickList({ title, items, accent }: { title: string; items: string[]; ac
 function RivalFaq({ rival }: { rival: Rival }) {
   return (
     /* See HomeFaq: the site guard counts the entries inside this list. */
-    <div className="border-y border-hair" data-faq-list>
-      {rival.faq.map((entry, index) => (
-        <details key={entry.q} className="group border-b border-hair last:border-b-0">
-          <summary className="grid cursor-pointer grid-cols-[2.75rem_1fr_auto] gap-4 px-5 py-5 text-[15px] font-semibold leading-snug marker:content-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent">
-            <span className="mono-nums text-[11px] font-normal text-gray-spec">0{index + 1}</span>
+    <div className="max-w-[56rem] border-t border-hair" data-faq-list>
+      {rival.faq.map((entry) => (
+        <details key={entry.q} className="group border-b border-hair">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-6 text-[18px] leading-snug font-semibold marker:content-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
             <span>{entry.q}</span>
-            <span className="text-accent group-open:hidden" aria-hidden>
+            <span
+              aria-hidden
+              className="grid size-8 shrink-0 place-items-center border border-hair text-[18px] font-normal text-accent transition-transform group-open:rotate-45"
+            >
               +
             </span>
-            <span className="hidden text-accent group-open:inline" aria-hidden>
-              −
-            </span>
           </summary>
-          <p className="max-w-[52rem] px-5 pb-6 pl-[5.75rem] text-[14px] leading-relaxed text-ink/80 max-tight:pl-5">
-            {entry.a}
-          </p>
+          <p className="max-w-[46rem] pb-7 text-[16px] leading-relaxed text-ink/80">{entry.a}</p>
         </details>
       ))}
     </div>
@@ -191,40 +189,42 @@ export function RivalPage({ rival }: { rival: Rival }) {
 
   return (
     <Page>
-      <section className="px-8 pt-16 pb-14 max-tight:px-5">
-        <p className="eyebrow">{rival.eyebrow}</p>
-        <p className="micro mt-5 max-w-[58em] text-[10px] tracking-label text-gray-spec">
-          For {rival.audience}
-        </p>
-        <h1 className="mt-6 max-w-[13em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          {rival.headline}
-        </h1>
-        <p className="mt-6 max-w-[40em]">{rival.lede}</p>
-
-        <dl className="mt-10 grid grid-cols-4 gap-px border border-hair bg-hair max-grid:grid-cols-2 max-tight:grid-cols-1">
+      <PageHero
+        kicker={rival.eyebrow}
+        title={rival.headline}
+        lede={rival.lede}
+        actions={
+          <>
+            <ButtonLink href={rival.evaluation.href}>{rival.evaluation.label}</ButtonLink>
+            <ButtonLink variant="outline" href="#decide">
+              See the decision summary
+            </ButtonLink>
+          </>
+        }
+        aside={
+          <div className="border border-ink bg-paper px-7 py-7">
+            <p className="micro text-[11px] tracking-label text-accent">Our recommendation</p>
+            <p className="mt-4 text-[17px] leading-relaxed">{rival.thesis}</p>
+            <p className="mt-5 border-t border-hair pt-4 text-[14px] leading-relaxed text-ink/70">
+              For {rival.audience}
+            </p>
+          </div>
+        }
+      />
+      <div className="pmds-measured pb-[clamp(3.5rem,6vw,5.5rem)]">
+        <dl className="grid grid-cols-4 gap-px border border-hair bg-hair max-grid:grid-cols-2 max-tight:grid-cols-1">
           {rival.facts.map((fact) => (
-            <div key={fact.label} className="bg-paper px-4 py-4">
-              <dt className="micro text-[10px] tracking-label text-gray-spec">{fact.label}</dt>
-              <dd className="mono-nums mt-1 text-[13.5px]">{fact.value}</dd>
+            <div key={fact.label} className="bg-paper px-5 py-5">
+              <dt className="micro text-[11px] tracking-label text-gray-spec">{fact.label}</dt>
+              <dd className="mono-nums mt-2 text-[15px]">{fact.value}</dd>
             </div>
           ))}
         </dl>
-        <p className="mono-nums mt-3 text-[11px] text-gray-spec">
+        <p className="mt-3 text-[13px] text-gray-spec">
           {rival.name} figures: {rival.subject}, researched {rival.researched}. Projects move;
           re-check before you decide.
         </p>
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href={rival.evaluation.href}>{rival.evaluation.label}</ButtonLink>
-          <ButtonLink variant="outline" href="#decide">
-            See the decision summary
-          </ButtonLink>
-        </div>
-        <EditorialRail tone="emphasis" className="mt-12 bg-hover-fill py-6 pr-6">
-          <p className="micro text-[10px] tracking-label text-gray-spec">Recommendation</p>
-          <p className="mt-3 max-w-[46em] text-[16px] leading-relaxed">{rival.thesis}</p>
-        </EditorialRail>
-      </section>
+      </div>
 
       <Section
         num="01 — Decide"
@@ -239,7 +239,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
         {rival.migration ? (
           <EditorialRail tone="emphasis" className="mt-8">
             <p className="micro text-[10px] text-gray-spec">Coming from {rival.name}?</p>
-            <p className="mt-1 text-[13.5px] leading-relaxed">{rival.migration.body}</p>
+            <p className="mt-1 text-[15.5px] leading-relaxed">{rival.migration.body}</p>
             <a
               href={rival.migration.href}
               className="mono-nums mt-3 inline-block text-[13px] text-accent"
@@ -260,8 +260,8 @@ export function RivalPage({ rival }: { rival: Rival }) {
         >
           {rival.differences.map((difference) => (
             <div key={difference.title} className="bg-paper px-6 py-6">
-              <h3 className="text-[15px] font-bold">{difference.title}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{difference.body}</p>
+              <h3 className="text-[18px] leading-snug font-bold">{difference.title}</h3>
+              <p className="mt-2 text-[15.5px] leading-relaxed text-ink/85">{difference.body}</p>
               <a
                 href={rival.outcomeProof.href}
                 className="mono-nums mt-4 inline-block text-[12px] text-accent hover:underline"

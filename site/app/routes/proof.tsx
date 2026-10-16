@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { PageHero } from "~/components/marketing/PageHero";
 import { CopyCommand } from "~/components/CopyCommand";
 import { pageMeta } from "~/lib/meta";
 import { CtaBand } from "~/components/home/CtaBand";
@@ -130,52 +131,81 @@ function CorpusLedger() {
   );
 }
 
+const CHECKS = [
+  { value: "3", label: "benchmark corpora, from 80 to 1,500 files, with reports in the repo" },
+  {
+    value: String(contentStats.smokeExampleCount),
+    label: "example apps built and smoke-checked on relevant changes",
+  },
+  {
+    value: String(contentStats.browserExampleCount),
+    label: "of them driven in a real browser on a weekly schedule",
+  },
+  { value: String(contentStats.adrCount), label: "decision records, alternatives included" },
+] as const;
+
 export default function Proof() {
   return (
     <Page>
-      <section className="relative overflow-hidden px-8 pt-16 pb-14 max-tight:px-5">
-        {/* Style break: oversized ghosted section digit behind the hero. */}
-        <span
-          aria-hidden
-          className="ghost-glyph absolute -top-10 right-4 text-[220px] leading-none select-none"
-        >
-          01
-        </span>
-        <p className="eyebrow">Benchmarks · verification · decisions</p>
-        <h1 className="mt-6 text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Claims you can re-run.
-        </h1>
-        <p className="mt-6 max-w-[38em]">
-          Every number on this page comes from a checked-in, machine-readable report with fixtures
-          and commands in the repo. If a claim can't be re-run, we don't make it.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href={docsHref("benchmark-e2e-workflow")}>Re-run the benchmarks</ButtonLink>
-          <ButtonLink variant="outline" href={repoHref("benchmarks/e2e-workflow/results", "tree")}>
-            Browse checked-in reports
-          </ButtonLink>
-          <ButtonLink variant="outline" href="/message-splitting">
-            Try the live fragment demo
-          </ButtonLink>
-        </div>
+      <PageHero
+        kicker="Proof"
+        title="Claims you can re-run."
+        lede="Every benchmark number on this page comes from a report in the repository — with the fixtures and the command to reproduce it. If a measurement can’t be re-run, it doesn’t go on this page."
+        actions={
+          <>
+            <ButtonLink href={docsHref("benchmark-e2e-workflow")}>Re-run the benchmarks</ButtonLink>
+            <ButtonLink
+              variant="outline"
+              href={repoHref("benchmarks/e2e-workflow/results", "tree")}
+            >
+              Browse checked-in reports
+            </ButtonLink>
+            <ButtonLink variant="outline" href="/message-splitting">
+              Try the live fragment demo
+            </ButtonLink>
+          </>
+        }
+        aside={
+          <div className="border border-ink bg-paper">
+            <p className="micro border-b border-hair px-6 py-4 text-[11px] tracking-label text-accent">
+              What is checked, and how
+            </p>
+            <ul>
+              {CHECKS.map((check) => (
+                <li
+                  key={check.label}
+                  className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-hair px-6 py-4 last:border-b-0"
+                >
+                  <span className="mono-nums min-w-[2.5ch] text-[26px] leading-none text-accent">
+                    {check.value}
+                  </span>
+                  <span className="min-w-0 flex-1 basis-48 text-[15px] leading-snug text-ink/85">
+                    {check.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      >
         <CopyCommand
           command="pnpm bench:e2e"
           label="Re-run from the repository root"
-          className="mt-7 max-w-[30rem]"
+          className="mt-8 max-w-[30rem]"
         />
-      </section>
+      </PageHero>
 
       <Section
         num="01 — Benchmarks"
-        title="Three corpora, two lanes, one rule: every number re-runs."
-        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact and is marked as narrower scope. Every run uses the same logical inventory and is validated semantically. The cached Palamedes re-run is shown separately as a capability, not turned into a competitor speedup claim."
+        title="How fast is extraction? Measured three ways."
+        lede="The benchmark times the whole job: scanning source, extracting messages, writing output. Tools that also update catalogs are compared like for like; React Intl only extracts, so it is marked as narrower scope. Every run is checked for the same messages, not just timed. Palamedes’ cached re-run is shown on its own — a capability, not a race."
       >
         <div className="space-y-8">
           <CorpusLedger />
           <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <EditorialRail tone="emphasis">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
-            <p className="mt-1 text-[13.5px]">
+            <p className="mt-1 text-[15.5px] leading-relaxed">
               These are machine-local numbers from the checked-in report, not a marketing average.
               Your hardware will differ; the ratios are the signal. Commands to reproduce:{" "}
               <code>pnpm bench:e2e</code>. For why extraction is slow in the first place, see{" "}
@@ -194,17 +224,18 @@ export default function Proof() {
 
       <Section
         num="02 — Verification"
-        title={`${contentStats.smokeExampleCount} apps smoke-checked on relevant changes; ${contentStats.browserExampleCount} browser-checked weekly.`}
+        title={`${contentStats.smokeExampleCount} apps built on every relevant change. ${contentStats.browserExampleCount} driven in a real browser every week.`}
+        lede="“Works with your framework” is easy to say. Here it means an application that is built and smoke-checked — and, for the browser-verified examples, loaded, switched between languages, and captured as a screenshot you can diff."
       >
         <div className="hairline-grid mb-10 grid-cols-3 max-tight:grid-cols-1">
           {VERIFICATION_STEPS.map((step, index) => (
-            <div key={step.title} className="bg-paper px-6 py-6">
+            <div key={step.title} className="bg-paper px-7 py-7">
               <div className="flex items-start justify-between gap-4">
                 <p className="mono-nums text-[11px] text-accent">0{index + 1}</p>
                 <StreamlineIcon name={step.icon} />
               </div>
-              <h3 className="mt-3 text-[15px] font-bold">{step.title}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{step.body}</p>
+              <h3 className="mt-4 text-[18px] font-bold">{step.title}</h3>
+              <p className="mt-2 text-[15.5px] leading-relaxed text-ink/80">{step.body}</p>
             </div>
           ))}
         </div>
@@ -226,7 +257,7 @@ export default function Proof() {
       >
         <EditorialRail tone="emphasis">
           <p className="micro text-[10px] text-gray-spec">Exact boundary</p>
-          <p className="mt-1 text-[13.5px]">
+          <p className="mt-1 text-[15.5px] leading-relaxed">
             This proves every stage Palamedes controls. A TMS remains an external boundary, so
             import and export fidelity depends on the selected product, format, and project
             configuration.
@@ -275,7 +306,7 @@ export default function Proof() {
                 className="grid grid-cols-[4rem_1fr_7rem] items-center border-b border-hair px-5 py-3 last:border-b-0 max-tight:grid-cols-[3rem_1fr]"
               >
                 <span className="mono-nums text-[11px] text-accent">{decision.number}</span>
-                <a href={decision.href} className="text-[13px] font-medium hover:text-accent">
+                <a href={decision.href} className="text-[15px] font-medium hover:text-accent">
                   {decision.title}
                 </a>
                 <span className="micro text-[10px] text-gray-spec max-tight:hidden">

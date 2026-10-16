@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { PageHero } from "~/components/marketing/PageHero";
 import { CtaBand } from "~/components/home/CtaBand";
 import { StreamlineIcon } from "~/components/icons/StreamlineIcon";
 import { docsHref } from "~/data/links";
@@ -26,23 +27,19 @@ export function meta() {
 export default function Guides() {
   return (
     <Page>
-      <section className="px-8 pt-16 pb-14 max-tight:px-5">
-        <p className="eyebrow">Guides</p>
-        <h1 className="mt-6 max-w-[13em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          The decisions that actually cost you time.
-        </h1>
-        <p className="mt-6 max-w-[42em]">
-          Not a tutorial index. These are the four questions that get expensive when answered late
-          in a TypeScript i18n project — and each answer here is anchored to something you can
-          re-run from the repository rather than to an opinion.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="/get-started">Follow the guided quickstart</ButtonLink>
-          <ButtonLink variant="outline" href={docsHref()}>
-            Browse the documentation
-          </ButtonLink>
-        </div>
-      </section>
+      <PageHero
+        kicker="Guides"
+        title="The decisions that actually cost you time."
+        lede="Four questions get expensive when a TypeScript i18n project answers them late: server components, message syntax, URL strategy, and build speed. Each guide explains the choice in plain terms and backs it with something you can re-run."
+        actions={
+          <>
+            <ButtonLink href="/get-started">Follow the guided quickstart</ButtonLink>
+            <ButtonLink variant="outline" href={docsHref()}>
+              Browse the documentation
+            </ButtonLink>
+          </>
+        }
+      />
 
       <Section
         num="01 — Guides"
@@ -55,18 +52,16 @@ export default function Guides() {
               key={topic.slug}
               to={`/${topic.slug}`}
               viewTransition
-              className="group bg-paper px-6 py-6 transition-colors hover:bg-hover-fill"
+              className="group bg-paper px-7 py-8 transition-colors hover:bg-hover-fill"
             >
               <div className="flex items-start justify-between gap-4">
-                <p className="micro text-[10px] tracking-label text-gray-spec">{topic.eyebrow}</p>
+                <p className="micro text-[11px] tracking-label text-accent">{topic.eyebrow}</p>
                 <StreamlineIcon name={topic.icon} />
               </div>
-              <h2 className="mt-3 text-[17px] font-bold group-hover:text-accent">
+              <h2 className="mt-4 text-[21px] leading-snug font-bold tracking-[-0.01em] group-hover:text-accent">
                 {topic.headline}
               </h2>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-                {topic.problem.title}
-              </p>
+              <p className="mt-3 text-[16px] leading-relaxed text-ink/80">{topic.problem.title}</p>
               <span className="micro mt-4 inline-block text-[12px] text-accent">
                 Read the guide →
               </span>
@@ -84,35 +79,35 @@ export default function Guides() {
           <Link
             to="/compare"
             viewTransition
-            className="group bg-paper px-6 py-5 transition-colors hover:bg-hover-fill"
+            className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
           >
-            <p className="text-[14px] font-bold group-hover:text-accent">
+            <p className="text-[17px] font-bold group-hover:text-accent">
               Weighing Palamedes against another library
             </p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">
+            <p className="mt-2 text-[15px] leading-relaxed text-ink/80">
               Eight head-to-head comparisons, each opening with what the other project does better.
             </p>
           </Link>
           <Link
             to="/proof"
             viewTransition
-            className="group bg-paper px-6 py-5 transition-colors hover:bg-hover-fill"
+            className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
           >
-            <p className="text-[14px] font-bold group-hover:text-accent">
+            <p className="text-[17px] font-bold group-hover:text-accent">
               Checking the claims yourself
             </p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">
+            <p className="mt-2 text-[15px] leading-relaxed text-ink/80">
               Benchmarks, the ICU proof, the verified example matrix and the decision records.
             </p>
           </Link>
           <a
             href={docsHref()}
-            className="group bg-paper px-6 py-5 transition-colors hover:bg-hover-fill"
+            className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
           >
-            <p className="text-[14px] font-bold group-hover:text-accent">
+            <p className="text-[17px] font-bold group-hover:text-accent">
               Implementing something specific
             </p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">
+            <p className="mt-2 text-[15px] leading-relaxed text-ink/80">
               The reference documentation: configuration, CLI, API and troubleshooting.
             </p>
           </a>

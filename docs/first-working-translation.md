@@ -90,10 +90,14 @@ maps are not part of the standard flow.
 
 ```tsx
 // src/App.tsx
-import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
 
 export function App() {
-  return <h1>{t`Welcome to Palamedes`}</h1>;
+  return (
+    <h1>
+      <Trans>Welcome to Palamedes</Trans>
+    </h1>
+  );
 }
 ```
 

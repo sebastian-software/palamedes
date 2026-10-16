@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { CtaBand } from "~/components/home/CtaBand";
+import { PageHero } from "~/components/marketing/PageHero";
 import { V2ReleaseNotice } from "~/components/V2ReleaseNotice";
 import { FrameworkPackageStats } from "~/components/frameworks/FrameworkPackageStats";
 import type { FrameworkLanding, FrameworkLandingFact } from "~/data/framework-landing";
@@ -13,10 +14,10 @@ function Facts({ facts }: { facts: FrameworkLandingFact[] }) {
   return (
     <dl className="hairline-grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
       {facts.map((fact) => (
-        <div key={fact.label} className="bg-paper px-5 py-5">
-          <dt className="micro text-[10px] tracking-label text-gray-spec">{fact.label}</dt>
-          <dd className="mono-nums mt-2 text-[17px] text-accent">{fact.value}</dd>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">{fact.note}</p>
+        <div key={fact.label} className="bg-paper px-6 py-6">
+          <dt className="micro text-[11px] tracking-label text-gray-spec">{fact.label}</dt>
+          <dd className="mono-nums mt-3 text-[21px] text-accent">{fact.value}</dd>
+          <p className="mt-2 text-[14.5px] leading-relaxed text-ink/80">{fact.note}</p>
         </div>
       ))}
     </dl>
@@ -31,11 +32,11 @@ function StrategyGrid({ page }: { page: FrameworkLanding }) {
       {STRATEGY_CARDS.map((strategy) => {
         const cell = matrixSlug ? cellFor(matrixSlug, strategy.slug) : undefined;
         return (
-          <div key={strategy.title} className="bg-paper px-5 py-5">
-            <h3 className="text-[15px] font-bold">{strategy.title}</h3>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">{strategy.body}</p>
+          <div key={strategy.title} className="bg-paper px-6 py-6">
+            <h3 className="text-[17px] font-bold">{strategy.title}</h3>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink/80">{strategy.body}</p>
             {cell ? (
-              <p className="mono-nums mt-4 flex flex-wrap gap-3 text-[11px]">
+              <p className="mono-nums mt-4 flex flex-wrap gap-3 text-[12px]">
                 {cell.demoLinks?.[0] ? (
                   <a href={cell.demoLinks[0].href} className="text-accent hover:text-ink">
                     <span aria-hidden>{cell.status === "live" ? "● " : "◌ "}</span>open demo
@@ -61,35 +62,36 @@ function StrategyGrid({ page }: { page: FrameworkLanding }) {
 export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
   return (
     <Page>
-      <section className="px-8 pt-16 pb-14 max-tight:px-5">
-        <p className="eyebrow">{page.eyebrow}</p>
-        <h1 className="mt-6 max-w-[15em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          {page.headline}
-        </h1>
-        <p className="mt-6 max-w-[44em]">{page.lede}</p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href={page.primary.href}>{page.primary.label}</ButtonLink>
-          <ButtonLink variant="outline" href={page.secondary.href}>
-            {page.secondary.label}
-          </ButtonLink>
-        </div>
-        <V2ReleaseNotice className="mt-7 max-w-[44rem]" />
-        <div className="mt-12">
-          <Facts facts={page.facts} />
-          <FrameworkPackageStats path={page.path} />
-        </div>
-      </section>
+      <PageHero
+        kicker={page.eyebrow}
+        title={page.headline}
+        lede={page.lede}
+        actions={
+          <>
+            <ButtonLink href={page.primary.href}>{page.primary.label}</ButtonLink>
+            <ButtonLink variant="outline" href={page.secondary.href}>
+              {page.secondary.label}
+            </ButtonLink>
+          </>
+        }
+      >
+        <V2ReleaseNotice className="mt-7 max-w-[40rem]" />
+      </PageHero>
+      <div className="pmds-measured pb-[clamp(3.5rem,6vw,5.5rem)]">
+        <Facts facts={page.facts} />
+        <FrameworkPackageStats path={page.path} />
+      </div>
 
       <Section num="01 — The framework problem" title={page.problem.title} lede={page.problem.lede}>
         <EditorialRail>
-          <p className="micro text-[10px] tracking-label text-gray-spec">
+          <p className="micro text-[11px] tracking-label text-gray-spec">
             What the integration has to get right
           </p>
           <ul className="mt-3 space-y-2">
             {page.problem.points.map((point) => (
               <li
                 key={point}
-                className="flex max-w-[56em] gap-2.5 text-[13.5px] leading-relaxed text-ink/85"
+                className="flex max-w-[56em] gap-2.5 text-[16px] leading-relaxed text-ink/85"
               >
                 <span aria-hidden className="mono-nums text-gray-spec">
                   ·
@@ -104,9 +106,9 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
       <Section num="02 — The Palamedes model" title={page.approach.title} lede={page.approach.lede}>
         <div className="hairline-grid grid-cols-3 max-grid:grid-cols-2 max-tight:grid-cols-1">
           {page.approach.points.map((point) => (
-            <div key={point.title} className="bg-paper px-6 py-6">
-              <h3 className="text-[15px] font-bold">{point.title}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{point.body}</p>
+            <div key={point.title} className="bg-paper px-7 py-7">
+              <h3 className="text-[18px] leading-snug font-bold">{point.title}</h3>
+              <p className="mt-2 text-[15.5px] leading-relaxed text-ink/80">{point.body}</p>
             </div>
           ))}
         </div>
@@ -118,13 +120,13 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
             {page.code.label}
           </p>
           <pre
-            className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] text-paper/85 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+            className="pmds-code overflow-x-auto border-0 px-5 py-4 font-mono text-[12.5px] leading-[1.7] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
             tabIndex={0}
           >
             <code>{page.code.source}</code>
           </pre>
         </div>
-        <p className="mt-4 max-w-[54em] text-[13.5px] leading-relaxed text-ink/85">
+        <p className="mt-5 max-w-[48em] text-[16px] leading-relaxed text-ink/80">
           {page.code.note}
         </p>
       </Section>
@@ -135,11 +137,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
         lede={page.strategies.lede}
       >
         <StrategyGrid page={page} />
-        <Link
-          to="/locale-routing"
-          viewTransition
-          className="mono-nums mt-6 inline-block text-[13px] text-accent"
-        >
+        <Link to="/locale-routing" viewTransition className="pmds-arrow-link mt-6">
           Compare the four locale strategies →
         </Link>
       </Section>
@@ -147,8 +145,8 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
       <Section num="05 — Proof and boundaries" title={page.proof.title} lede={page.proof.lede}>
         <Facts facts={page.proof.facts} />
         <EditorialRail tone="emphasis" className="mt-8">
-          <h3 className="text-[15px] font-bold">{page.boundary.title}</h3>
-          <p className="mt-2 max-w-[56em] text-[13.5px] leading-relaxed text-ink/85">
+          <h3 className="text-[18px] font-bold">{page.boundary.title}</h3>
+          <p className="mt-2 max-w-[48em] text-[16px] leading-relaxed text-ink/80">
             {page.boundary.body}
           </p>
           {page.boundary.link ? (
@@ -169,10 +167,10 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
           {page.faq.map((entry, index) => (
             <div
               key={entry.q}
-              className={`px-6 py-5 max-tight:px-4 ${index > 0 ? "border-t border-hair" : ""}`}
+              className={`px-7 py-6 max-tight:px-4 ${index > 0 ? "border-t border-hair" : ""}`}
             >
-              <dt className="text-[15px] font-bold">{entry.q}</dt>
-              <dd className="mt-2 max-w-[58em] text-[13.5px] leading-relaxed text-ink/85">
+              <dt className="text-[18px] leading-snug font-bold">{entry.q}</dt>
+              <dd className="mt-2 max-w-[48em] text-[16px] leading-relaxed text-ink/80">
                 {entry.a}
               </dd>
             </div>
@@ -187,17 +185,18 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
               key={related.href}
               to={related.href}
               viewTransition
-              className="group bg-paper px-6 py-5 transition-colors hover:bg-hover-fill"
+              className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
             >
-              <p className="text-[14px] font-bold group-hover:text-accent">{related.label}</p>
-              <span className="micro mt-2 inline-block text-[12px] text-accent">Open page →</span>
+              <p className="text-[18px] leading-snug font-bold group-hover:text-accent">
+                {related.label}
+              </p>
+              <span className="micro mt-3 inline-block text-[11px] tracking-label text-accent">
+                Open page →
+              </span>
             </Link>
           ))}
         </div>
-        <a
-          href={docsHref("framework-example-notes")}
-          className="mono-nums mt-6 inline-block text-[13px] text-accent"
-        >
+        <a href={docsHref("framework-example-notes")} className="pmds-arrow-link mt-6">
           Read the framework verification notes →
         </a>
       </Section>

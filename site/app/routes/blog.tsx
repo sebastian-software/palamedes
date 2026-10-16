@@ -1,4 +1,5 @@
 import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { PageHero } from "~/components/marketing/PageHero";
 import { pageMeta } from "~/lib/meta";
 import { CtaBand } from "~/components/home/CtaBand";
 import { REPO } from "~/data/links";
@@ -25,31 +26,21 @@ export function meta() {
 export default function Blog() {
   return (
     <Page>
-      <section className="relative overflow-hidden px-8 pt-16 pb-14 max-tight:px-5">
-        {/* Style break: oversized ghosted section glyph behind the hero. */}
-        <span
-          aria-hidden
-          className="ghost-glyph absolute -top-14 right-6 text-[260px] leading-none select-none"
-        >
-          §
-        </span>
-        <p className="eyebrow">Blog</p>
-        <h1 className="mt-6 max-w-[12em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Building i18n tooling in the&nbsp;open.
-        </h1>
-        <p className="mt-6 max-w-[38em]">
-          Design notes, honest benchmarks, and lessons from the third time around — written by the
-          maintainer, not a content team.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href={posts[0]?.href ?? "/blog"}>Read the latest note</ButtonLink>
-          <ButtonLink variant="outline" href="/proof">
-            Inspect the evidence
-          </ButtonLink>
-        </div>
-      </section>
+      <PageHero
+        kicker="Blog"
+        title={<>Building i18n tooling in the&nbsp;open.</>}
+        lede="Design notes, honest benchmarks, and lessons from the third time around — written by the maintainer, not a content team."
+        actions={
+          <>
+            <ButtonLink href={posts[0]?.href ?? "/blog"}>Read the latest note</ButtonLink>
+            <ButtonLink variant="outline" href="/proof">
+              Inspect the evidence
+            </ButtonLink>
+          </>
+        }
+      />
 
-      <Section num="01 — Posts">
+      <Section num="01 — Posts" title="Notes from the maintainer.">
         <div className="border border-hair">
           {posts.map((post, index) => (
             <a
@@ -63,10 +54,10 @@ export default function Blog() {
                 {String(index + 1).padStart(2, "0")}
               </span>
               <span>
-                <h3 className="text-[17px] font-bold tracking-tight group-hover:text-accent">
+                <h3 className="text-[20px] leading-snug font-bold tracking-tight group-hover:text-accent">
                   {post.title}
                 </h3>
-                <p className="mt-1.5 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
+                <p className="mt-2 max-w-[48em] text-[16px] leading-relaxed text-ink/80">
                   {post.excerpt}
                 </p>
               </span>

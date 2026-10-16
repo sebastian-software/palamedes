@@ -84,82 +84,77 @@ function IntegrationList({
   label: string;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(10rem,0.7fr)_3fr] max-tight:grid-cols-1">
-      <p className="micro border-r border-hair px-5 py-5 text-[10px] tracking-label text-gray-spec max-tight:border-r-0 max-tight:border-b">
-        {label}
-      </p>
-      <ul
-        aria-label={label}
-        className={`grid ${integrations.length > 2 ? "grid-cols-4 max-grid:grid-cols-2" : "grid-cols-2"} max-tight:grid-cols-1`}
-      >
-        {integrations.map((integration) => (
-          <li
-            key={integration.name}
-            className="border-r border-b border-hair last:border-r-0 even:max-grid:border-r-0 max-tight:border-r-0"
+    <ul aria-label={label} className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+      {integrations.map((integration) => (
+        <li key={integration.name}>
+          <a
+            href={integration.href}
+            aria-label={
+              integration.note ? `${integration.name} (${integration.note})` : integration.name
+            }
+            className="group flex min-h-14 items-center gap-2.5 px-4 py-2 transition-colors hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
           >
-            <a
-              href={integration.href}
-              aria-label={integration.name}
-              className="group flex min-h-20 items-center justify-between gap-3 px-5 py-4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
-            >
-              <span className="flex min-w-0 items-center gap-2.5">
-                <img
-                  src={integration.logo}
-                  alt={integration.suffix ? "" : integration.name}
-                  aria-hidden={integration.suffix ? true : undefined}
-                  className={`${integration.logoClass} shrink-0 object-contain`}
-                />
-                {integration.suffix ? (
-                  <span className="text-[14px] font-semibold tracking-[-0.01em] group-hover:text-accent">
-                    {integration.suffix}
-                  </span>
-                ) : null}
+            <img
+              src={integration.logo}
+              alt=""
+              aria-hidden
+              className={`${integration.logoClass} shrink-0 object-contain`}
+            />
+            {integration.suffix ? (
+              <span className="text-[15px] font-semibold tracking-[-0.01em] group-hover:text-accent">
+                {integration.suffix}
               </span>
-              {integration.note ? (
-                <span className="micro text-[10px] tracking-label text-gray-spec">
-                  {integration.note}
-                </span>
-              ) : (
-                <span aria-hidden className="text-accent">
-                  →
-                </span>
-              )}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
+            ) : null}
+            {integration.note ? (
+              <span className="micro text-[11px] tracking-label text-gray-spec">
+                {integration.note}
+              </span>
+            ) : null}
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }
+
+const ASSURANCES = [
+  "Open source — MIT OR Apache-2.0",
+  "No account, no hosted service",
+  "Translations live in your Git repository",
+];
 
 // Assets are downloaded unmodified from the project-controlled sources recorded
 // in framework-brand-usage.md and THIRD_PARTY_NOTICES.md. The label beside an
 // icon covers projects that publish an emblem but no separate wordmark asset.
+// Marks identify first-party integrations, not customers or adoption.
 export function IntegrationBand() {
   return (
-    <section aria-label="First-party integrations" className="border-b border-hair">
-      <div className="grid grid-cols-[minmax(13rem,1fr)_3fr] max-grid:grid-cols-1">
-        <div className="border-r border-hair px-7 py-6 max-grid:border-r-0 max-grid:border-b">
-          <p className="eyebrow">First-party integrations</p>
-          <p className="mt-3 max-w-[17rem] text-[13px] leading-relaxed text-ink/80">
-            Frontend and full-stack adapters are verified as applications. Backend integrations use
-            the same request-local runtime in Hono and Express.
-          </p>
-          <a
-            href="/docs/stability"
-            className="micro mt-4 inline-block text-[10px] tracking-label text-accent underline underline-offset-4"
-          >
-            Integration stability →
-          </a>
-        </div>
-        <div>
-          <IntegrationList
-            integrations={FRONTEND_INTEGRATIONS}
-            label="Frontend and full-stack adapters"
-          />
-          <IntegrationList integrations={BACKEND_INTEGRATIONS} label="Backend integrations" />
-        </div>
+    <section
+      aria-label="First-party integrations"
+      className="border-t border-hair px-[var(--pmds-gutter)] pt-12 pb-14"
+    >
+      <p className="text-center text-[15px] text-ink/80">
+        Frontend and full-stack adapters, each verified as a working app — plus the same runtime for
+        Hono and Express
+      </p>
+      <div className="mx-auto mt-6 max-w-[64rem] space-y-1">
+        <IntegrationList
+          integrations={FRONTEND_INTEGRATIONS}
+          label="Frontend and full-stack adapters"
+        />
+        <IntegrationList integrations={BACKEND_INTEGRATIONS} label="Backend integrations" />
       </div>
+      <ul
+        aria-label="Project boundaries"
+        className="mx-auto mt-10 flex max-w-[64rem] flex-wrap justify-center gap-x-10 gap-y-3 border-t border-hair pt-8"
+      >
+        {ASSURANCES.map((assurance) => (
+          <li key={assurance} className="flex items-center gap-2.5 text-[14px] text-ink/85">
+            <span aria-hidden className="size-1.5 rotate-45 bg-accent" />
+            {assurance}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

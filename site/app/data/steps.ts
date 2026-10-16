@@ -61,8 +61,8 @@ export default defineConfig({ plugins: [palamedes(), react()] })
       title: "Write & extract",
       body: "Author the message in your component, then run one command — it creates src/locales/en.po and de.po.",
       code: `// src/App.tsx
-import { t } from "@palamedes/core/macro"
-export const App = () => <h1>{t\`Welcome to Palamedes\`}</h1>
+import { Trans } from "@palamedes/react/macro"
+export const App = () => <h1><Trans>Welcome to Palamedes</Trans></h1>
 
 $ pmds extract`,
     },
@@ -169,18 +169,14 @@ export const createActiveServerI18n = cache(() => createNextServerI18n({ locale:
     },
     {
       title: "Write & extract",
-      body: "Author the message in a Server Component and run it inside the request-local server scope, then extract catalogs.",
+      body: "Activate the request-local server scope in a Server Component, write the message, then extract catalogs.",
       code: `// src/app/page.tsx
-import { t } from "@palamedes/core/macro"
+import { Trans } from "@palamedes/react/macro"
 import { createActiveServerI18n } from "../lib/load-i18n.server"
-
-function translateWelcome() {
-  return t\`Welcome to Palamedes\`
-}
 
 export default async function Page() {
   await createActiveServerI18n()
-  return <h1>{translateWelcome()}</h1>
+  return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }
 
 $ pmds extract`,

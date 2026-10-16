@@ -140,11 +140,15 @@ export const TOPICS = [
     code: {
       caption: "The same component, on either side of the boundary.",
       label: "Server component or client island — identical code",
-      code: `import { t } from "@palamedes/core/macro"
+      code: `import { Plural } from "@palamedes/react/macro"
 
 // No "use client". No provider. No locale prop.
 export default async function CheckoutHeading({ seats }) {
-  return <h1>{t\`Buy \${seats} seats\`}</h1>
+  return (
+    <h1>
+      <Plural value={seats} one="Buy one seat" other="Buy # seats" />
+    </h1>
+  )
 }`,
       note: "Nothing here declares which side of the boundary it runs on, because nothing needs to. The macro compiles to a getI18n() call, and on the server that resolves against request-local scope.",
     },
