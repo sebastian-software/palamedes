@@ -8,16 +8,31 @@ One editorial visual language connects product pages, documentation, and inspect
 
 ## Decision
 
-Use the **Monument core × Editorial masthead** system for all Palamedes web
-surfaces:
+Use the **Inscription and ledger, opened up** system for all Palamedes web
+surfaces — the classical masthead and evidence ledger, composed as an
+editorial page that explains before it proves:
 
 - warm paper `#faf9f4` is the ground, navy `#0e2a4d` is the primary ink, and
   bronze `#8e6628` is the single semantic accent;
 - Cinzel Hellenic is the display face, paired with restrained body type, mono
   uppercase micro-labels, and tabular numbers;
-- micro-labels use one 10 px treatment (11 px is reserved for the larger
-  eyebrow role), and `gray-spec` is no lighter than `#6f695b` on paper so
-  small text retains WCAG AA contrast;
+- section kickers use one 12 px mono treatment led by a short bronze rule;
+  remaining micro-labels use 10–11 px, and `gray-spec` is no lighter than
+  `#6f695b` on paper so small text retains WCAG AA contrast. Marketing body
+  copy stays at 15–21 px;
+- marketing pages run full width. Content sits on one shared 76 rem measure,
+  and paper, parchment (`#f3efe3`), and mist (`#e8edf2`, a pale tint of the
+  navy ink) bands carry the page rhythm with soft, close-valued transitions.
+  The site has no dark surfaces: navy is ink — text, rules, small marks, and
+  the primary button — never a band or panel background. Code is set like a
+  printed listing on a light ground (`#f4f6f8`) with bronze marks and slate
+  (`#4f6074`) secondary tokens. Statement and closing bands use mist and are
+  marked by the meander ornament. On parchment, mist, and listing grounds,
+  bronze text uses `#866026`, the same accent deepened just enough for WCAG AA;
+- concepts a newcomer may not know are explained in an "In plain words" aside
+  beside the artifact they describe, never only in a tooltip;
+- product specimens — real code, catalog entries, rendered components in
+  several languages, address bars — are the primary marketing imagery;
 - mastheads and running heads use rules, alignment, and whitespace rather than
   cards; border radius, box shadows, and gradients are outside the system;
 - structural rules are one-pixel hairlines. Editorial qualifications, asides,
@@ -81,7 +96,10 @@ a project usage allowance.
 ## Context
 
 Palamedes needs one visual language across marketing pages, documentation,
-proof artifacts, and shared site UI. A warm editorial masthead and
+proof artifacts, and shared site UI. The October 2026 revision kept the palette,
+display type, logo, and hard rules but opened the composition: the earlier
+dense spec-sheet layout proved technically convincing yet hard to understand
+on first contact. A warm editorial masthead and
 technical ledger need consistent typography, icon rules, numeric presentation,
 and callout treatment. Without a shared contract, individual routes can drift back to
 generic documentation chrome, mixed icon families, or several competing

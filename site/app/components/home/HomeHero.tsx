@@ -1,43 +1,57 @@
 import { ButtonLink } from "@palamedes/site-ui";
-import { V2ReleaseNotice } from "~/components/V2ReleaseNotice";
 
+import { HeroMorph } from "./HeroMorph";
+
+/*
+ * The first screen states the whole idea in four words, offers two doors —
+ * start now, or have it explained first — and proves the promise with the
+ * sentence a developer writes turning into six languages.
+ */
 export function HomeHero() {
   return (
-    <section className="border-b border-hair px-8 pt-8 pb-16 max-tight:px-5">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center border-y border-hair py-3 max-tight:grid-cols-[1fr_auto]">
-        <p className="micro text-[10px] tracking-label text-ink/70">
-          Open-source i18n for TypeScript
-        </p>
-        <img src="/logo.svg" alt="" aria-hidden width={42} height={42} className="size-10" />
-        <p className="micro text-right text-[10px] tracking-label text-ink/70 max-tight:hidden">
-          Source to runtime · MIT OR Apache-2.0
-        </p>
-      </div>
-
-      <div className="mx-auto max-w-[64rem] pt-14 text-center">
-        <p className="eyebrow">A foundation you can keep</p>
-        <h1 className="display-serif mt-7 uppercase">
-          <span className="flex flex-nowrap justify-center gap-x-[0.22em] text-[clamp(2.15rem,6.1vw,5.8rem)] leading-[0.92] tracking-[-0.025em] max-tight:flex-wrap max-tight:gap-x-[0.14em]">
-            <span>Clear.</span>
-            <span>Complete.</span>
-            <span>Fast.</span>
-          </span>
-          <span className="mt-3 block text-[clamp(2.6rem,8.3vw,7.5rem)] leading-[0.9] tracking-[-0.035em] text-accent">
-            Pick three.
-          </span>
-        </h1>
-        <p className="mx-auto mt-8 max-w-[48rem] text-[17px] leading-[1.7] text-ink/90 max-tight:text-[15px]">
-          Write readable messages with ready-made components. Connect your framework with a
-          first-party adapter. Compile translations ahead of time and keep catalog work fast with a
-          native toolchain. One i18n foundation, from your first component to a growing application.
-        </p>
-        <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <ButtonLink href="/get-started#install">Start with your framework</ButtonLink>
-          <ButtonLink variant="outline" href="/docs/release-notes-v2">
-            Explore Palamedes 2.0
-          </ButtonLink>
+    <section
+      className="pmds-hero pmds-band--mist relative overflow-hidden"
+      aria-labelledby="home-title"
+    >
+      <img
+        src="/logo.svg"
+        alt=""
+        aria-hidden
+        width={240}
+        height={240}
+        className="pointer-events-none absolute -top-16 -right-40 w-[min(52rem,72vw)] opacity-[0.07] max-lg:hidden"
+      />
+      <div className="relative mx-auto grid max-w-[var(--pmds-measure)] grid-cols-1 items-center gap-x-16 gap-y-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div>
+          <p className="pmds-kicker">Open-source i18n for React, Solid &amp; TypeScript</p>
+          <h1 id="home-title" className="pmds-hero-title [--text-hero:clamp(2.45rem,5.6vw,4.4rem)]">
+            Just write
+            <span className="block text-accent">the sentence.</span>
+          </h1>
+          <p className="mt-8 max-w-[36rem] text-[clamp(1.125rem,1rem+0.5vw,1.375rem)] leading-[1.6] text-ink/85">
+            Palamedes turns the plain sentences in your components into a complete translation
+            workflow. Translators get clean files, visitors get compiled messages screen by screen,
+            and your tooling stays fast enough to run on every save.
+          </p>
+          <div className="mt-10 flex flex-wrap gap-3">
+            <ButtonLink href="/get-started#install">Start the guided setup</ButtonLink>
+            <ButtonLink variant="outline" href="#journey">
+              Show me how it works
+            </ButtonLink>
+          </div>
+          <p className="mt-6 max-w-[36rem] text-[13.5px] leading-relaxed text-ink/70">
+            <strong className="font-semibold text-ink">2.0 preview.</strong> Try the upcoming
+            release through the repository examples; the registry still supplies 1.x.{" "}
+            <a
+              href="/docs/release-notes-v2"
+              className="text-accent underline underline-offset-4 hover:text-ink"
+            >
+              Read the release notes
+            </a>
+            .
+          </p>
         </div>
-        <V2ReleaseNotice className="mx-auto mt-7 max-w-[42rem]" />
+        <HeroMorph />
       </div>
     </section>
   );

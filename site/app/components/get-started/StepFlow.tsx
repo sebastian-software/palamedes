@@ -36,7 +36,7 @@ export function StepFlow({ steps }: { steps: Step[] }) {
               {step.kind === "package-boundary" ? (
                 <EditorialRail tone="emphasis">
                   <p className="micro text-[10px] text-gray-spec">Package boundary</p>
-                  <h3 className="mt-1 text-[15px] font-bold">{step.title}</h3>
+                  <h3 className="mt-1 text-[18px] font-bold">{step.title}</h3>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed">
                     Install the scoped <code>@palamedes/*</code> packages shown above. The top-level{" "}
                     <code>palamedes</code> and <code>create-palamedes</code> names are reserved for
@@ -45,13 +45,13 @@ export function StepFlow({ steps }: { steps: Step[] }) {
                 </EditorialRail>
               ) : (
                 <>
-                  <h3 className="text-[15px] font-bold">{step.title}</h3>
-                  <p className="mt-1.5 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
+                  <h3 className="text-[18px] font-bold">{step.title}</h3>
+                  <p className="mt-1.5 max-w-[52em] text-[15.5px] leading-relaxed text-ink/85">
                     {step.body}
                   </p>
                   {step.code ? (
                     <pre
-                      className="mt-4 overflow-x-auto bg-ink px-4 py-3 font-mono text-[12px] leading-[1.7] text-paper/90 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+                      className="pmds-code mt-4 overflow-x-auto px-4 py-3 font-mono text-[12.5px] leading-[1.7] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
                       tabIndex={0}
                     >
                       {step.code}

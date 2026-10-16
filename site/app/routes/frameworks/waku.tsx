@@ -87,10 +87,10 @@ export default defineConfig({
 })
 
 // pages/[locale].tsx — a Server Component
-import { t } from "@palamedes/core/macro"
+import { Trans } from "@palamedes/react/macro"
 
 export default async function LocalePage() {
-  return <h1>{t\`Welcome to Palamedes\`}</h1>
+  return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }`,
     note: "The checked example resolves the request locale before this page renders. The adapter initializes interactive client modules and loads their active-locale fragments; the application supplies ordinary error UI. Locale changes navigate to a new document.",
   },

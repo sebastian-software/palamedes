@@ -18,7 +18,7 @@ export function StackPicker() {
           <Tabs.Tab
             key={stack.id}
             value={stack.id}
-            className="micro min-h-11 border-r border-b border-hair px-5 py-2.5 text-[11px] tracking-label transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent data-[selected]:bg-ink data-[selected]:text-paper"
+            className="micro min-h-11 border-r border-b border-hair px-5 py-2.5 text-[11px] tracking-label transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent data-[selected]:bg-mist data-[selected]:font-semibold data-[selected]:text-ink data-[selected]:border-b-accent"
           >
             {stack.label}
           </Tabs.Tab>

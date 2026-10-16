@@ -16,33 +16,37 @@ const COLUMN_CLASSES = {
 
 export function FeatureGrid({ cards, columns = 3 }: FeatureGridProps) {
   return (
-    <div className={`hairline-grid ${COLUMN_CLASSES[columns]}`}>
+    <ul className={`hairline-grid ${COLUMN_CLASSES[columns]}`}>
       {cards.map((card) => (
-        <div key={card.title} className="bg-paper px-6 py-6">
-          <FeatureIcon name={card.icon} className="text-accent" />
-          <h3 className="mt-5 text-[15px] font-bold">{card.title}</h3>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{card.body}</p>
+        <li key={card.title} className="flex flex-col bg-paper px-7 py-8">
+          <FeatureIcon name={card.icon} className="size-8" />
+          <h3 className="mt-5 text-[18px] leading-snug font-bold tracking-[-0.01em]">
+            {card.title}
+          </h3>
+          <p className="mt-2 text-[15.5px] leading-relaxed text-ink/80">{card.body}</p>
           {card.href ? (
             /* Static files like /llms.txt are same-origin but not routes. */
             card.href.startsWith("/") && !card.href.includes(".") ? (
               <Link
                 to={card.href}
                 viewTransition
-                className="micro mt-4 inline-block text-[12px] text-accent hover:text-ink"
+                className="pmds-arrow-link mt-auto self-start pt-3"
+                aria-label={`${card.title}: read more`}
               >
-                More →
+                Read more →
               </Link>
             ) : (
               <a
                 href={card.href}
-                className="micro mt-4 inline-block text-[12px] text-accent hover:text-ink"
+                className="pmds-arrow-link mt-auto self-start pt-3"
+                aria-label={`${card.title}: read more`}
               >
-                More →
+                Read more →
               </a>
             )
           ) : null}
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

@@ -4,55 +4,53 @@ import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/Stre
 
 const QUESTIONS = [
   {
-    icon: "app-widgets-plugin-extension",
-    question: "Where does Palamedes need to run?",
+    icon: "deployment-workflow-collaboration",
+    question: "Starting a new project?",
     answer:
-      "Choose a frontend or full-stack adapter, or take the same request-local model into a backend service.",
-    href: "/frameworks",
-    label: "Choose an integration",
+      "Pick your framework and get a first message rendering in a second language — yourself or with your coding agent.",
+    href: "/get-started",
+    label: "Start the guided setup",
     resources: [
       { label: "Frontend and full-stack adapters", href: "/frameworks#frontend-frameworks" },
       { label: "Backend services", href: "/frameworks#backend-integrations" },
+      { label: "Set up with your coding agent", href: "/docs/agent-skill" },
+    ],
+  },
+  {
+    icon: "app-widgets-plugin-extension",
+    question: "Moving an existing app?",
+    answer:
+      "Bring your translations with you. For Lingui, the migration guide and agent skill preserve existing PO translations; for other stacks, start with an honest comparison.",
+    href: "/docs/migrate-from-lingui",
+    label: "Read the migration guide",
+    resources: [
+      { label: "Compare with your current tool", href: "/compare" },
       { label: "React Server Components", href: "/react-server-components-i18n" },
     ],
   },
   {
     icon: "globe-app-network",
-    question: "How should locale selection live in the application?",
+    question: "Deciding how languages appear in URLs?",
     answer:
-      "Compare cookie, route-prefix, subdomain, and top-level-domain shapes before wiring the host.",
+      "Cookie, path, subdomain, or country domain: understand what each one costs before you wire it into the host.",
     href: "/locale-routing",
     label: "Explore locale architecture",
     resources: [
       { label: "Locale-strategy reference", href: "/docs/locale-strategies" },
-      { label: "Verified application matrix", href: "/frameworks#frontend-frameworks" },
+      { label: "Technical guides", href: "/guides" },
     ],
   },
   {
     icon: "code-analysis",
-    question: "Does the architecture fit your constraints?",
+    question: "Evaluating it for your team?",
     answer:
-      "Inspect the system boundary first, then test its performance, message semantics, and evidence.",
+      "Check the system boundary, performance, and message semantics against your constraints — then re-run the evidence.",
     href: "/architecture",
     label: "Inspect the architecture",
     resources: [
       { label: "Performance", href: "/i18n-performance" },
       { label: "ICU MessageFormat", href: "/icu-messageformat" },
       { label: "Proof", href: "/proof" },
-      { label: "Comparisons", href: "/compare" },
-    ],
-  },
-  {
-    icon: "deployment-workflow-collaboration",
-    question: "Are you starting fresh or moving an existing stack?",
-    answer:
-      "Follow one guided first translation, or enter through the migration and implementation material you need.",
-    href: "/get-started",
-    label: "Start the guided setup",
-    resources: [
-      { label: "Set up with your coding agent", href: "/docs/agent-skill" },
-      { label: "Technical guides", href: "/guides" },
-      { label: "Migration guide", href: "/docs/migrate-from-lingui" },
       { label: "Reference docs", href: "/docs" },
     ],
   },
@@ -67,48 +65,38 @@ const QUESTIONS = [
 
 export function QuestionRoutes() {
   return (
-    <ul aria-label="Decision paths" className="border-y border-hair">
+    <ul
+      aria-label="Decision paths"
+      className="grid grid-cols-1 gap-px border border-hair bg-hair md:grid-cols-2"
+    >
       {QUESTIONS.map((entry) => (
-        <li
-          key={entry.question}
-          className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-5 border-b border-hair px-5 py-5 last:border-b-0 max-grid:grid-cols-[2.5rem_minmax(0,1fr)] max-tight:grid-cols-[2rem_minmax(0,1fr)] max-tight:gap-3"
-        >
-          <span className="pt-0.5">
-            <StreamlineIcon name={entry.icon} />
-          </span>
-          <div className="min-w-0">
-            <h3>
-              <Link
-                to={entry.href}
-                viewTransition
-                className="group grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent max-tight:grid-cols-1 max-tight:gap-1"
-              >
-                <span className="text-[15px] font-semibold leading-snug group-hover:text-accent">
-                  {entry.question}
-                </span>
-                <span className="micro text-[10px] tracking-label text-accent">
-                  {entry.label} →
-                </span>
-              </Link>
-            </h3>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-ink/75">{entry.answer}</p>
-            <ul
-              aria-label={`${entry.question} resources`}
-              className="mt-2 flex flex-wrap gap-x-5 gap-y-1"
-            >
-              {entry.resources.map((resource) => (
-                <li key={resource.href}>
-                  <Link
-                    to={resource.href}
-                    viewTransition
-                    className="inline-flex min-h-11 items-center text-[12.5px] text-accent underline decoration-hair underline-offset-4 hover:decoration-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  >
-                    {resource.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+        <li key={entry.question} className="flex min-w-0 flex-col bg-paper px-7 py-8">
+          <StreamlineIcon name={entry.icon} className="size-8" />
+          <h3 className="mt-5 text-[22px] leading-snug font-bold tracking-[-0.015em]">
+            {entry.question}
+          </h3>
+          <p className="mt-3 max-w-[32rem] text-[16px] leading-relaxed text-ink/80">
+            {entry.answer}
+          </p>
+          <Link
+            to={entry.href}
+            viewTransition
+            className="pmds-button pmds-button--outline mt-6 self-start"
+          >
+            {entry.label}
+          </Link>
+          <ul
+            aria-label={`${entry.question} resources`}
+            className="mt-5 flex flex-wrap gap-x-5 border-t border-hair pt-3"
+          >
+            {entry.resources.map((resource) => (
+              <li key={resource.href}>
+                <Link to={resource.href} viewTransition className="pmds-arrow-link text-[12.5px]">
+                  {resource.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </li>
       ))}
     </ul>

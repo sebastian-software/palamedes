@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { PageHero } from "~/components/marketing/PageHero";
 import { pageMeta } from "~/lib/meta";
 import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix";
 import { FwPanels } from "~/components/frameworks/FwPanels";
@@ -24,34 +25,30 @@ export function meta() {
 export default function Frameworks() {
   return (
     <Page>
-      <section className="px-8 pt-16 pb-14 max-tight:px-5">
-        <p className="eyebrow">Framework matrix</p>
-        <h1 className="mt-6 max-w-[14em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Six server frameworks. Vite. Two backend runtimes. One mental model.
-        </h1>
-        <p className="mt-6 max-w-[38em]">
-          Frontend and full-stack hosts use first-party adapters and verified example applications.
-          Hono and Express are a separate backend path: they use the shared runtime directly with
-          request-local locale resolution. Start with the integration boundary you own, then inspect
-          its exact setup and verification evidence.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="#frontend-frameworks">Frontend and full-stack adapters</ButtonLink>
-          <ButtonLink variant="outline" href="#backend-integrations">
-            Backend integrations
-          </ButtonLink>
-        </div>
-      </section>
+      <PageHero
+        kicker="Frameworks"
+        title="Built for the framework you already use."
+        lede="Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite each get an integration made for them. The six server frameworks run as real example apps in four URL strategies; Hono and Express use the same runtime for backend messages."
+        actions={
+          <>
+            <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>
+            <ButtonLink variant="outline" href="#backend-integrations">
+              Backend integrations
+            </ButtonLink>
+          </>
+        }
+      />
 
       <Section
         num="01 — Matrix"
-        title={`The ${contentStats.serverFrameworkCount} × ${contentStats.localeStrategyCount} server matrix, plus Vite.`}
+        title="Every server framework, every URL strategy — running as an app."
+        lede={`${contentStats.serverFrameworkCount} frameworks × ${contentStats.localeStrategyCount} locale strategies. Open a live demo, or read the source of the exact app behind each cell.`}
         id="frontend-frameworks"
       >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
           All {contentStats.smokeExampleCount} apps are smoke-checked on relevant pull requests and
-          main pushes. The {contentStats.browserExampleCount} browser-capable examples — the
+          main pushes. The {contentStats.browserExampleCount} browser-capable examples — the{" "}
           {contentStats.screenshotExampleCount} established UI-adapter matrix apps plus the Vite MDX
           proof — cover SSR output, locale switching, and localized server actions or functions in
           weekly or manual Playwright runs; the four Remix v3 apps cover server responses and locale
@@ -102,7 +99,8 @@ export default function Frameworks() {
 
       <CtaBand
         headline="See your framework speaking three languages — right now."
-        primary={{ label: "Open the live matrix", href: DEMO_NEXTJS_COOKIE }}
+        lede="The live demos are the same applications CI checks. Switch the language and watch server and client stay in step."
+        primary={{ label: "Open a live demo", href: DEMO_NEXTJS_COOKIE }}
         secondary={{ label: "Get started", href: "/get-started" }}
       />
     </Page>

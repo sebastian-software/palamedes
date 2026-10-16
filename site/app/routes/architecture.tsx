@@ -1,4 +1,6 @@
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { PageHero } from "~/components/marketing/PageHero";
+import { PlainWords } from "~/components/marketing/PlainWords";
 
 import { AdrChip } from "~/components/architecture/AdrChip";
 import { CtaBand } from "~/components/home/CtaBand";
@@ -165,33 +167,41 @@ const COMPILED_CATALOG_ARTIFACT =
 export default function Architecture() {
   return (
     <Page>
-      <section className="border-b border-hair px-8 pt-16 pb-14 max-tight:px-5">
-        <p className="eyebrow">Inside Palamedes</p>
-        <h1 className="display-serif mt-6 max-w-[13ch] text-[clamp(2.8rem,6.5vw,6rem)] leading-[0.94] uppercase">
-          “Written in Rust” is the boring half.
-        </h1>
-        <p className="mt-7 max-w-[48rem] text-[17px] leading-[1.7] text-ink/85">
-          The useful question is where the model lives, how it crosses the host boundary, and what
-          prevents a framework integration from becoming a second i18n system. Palamedes keeps the
-          answer inspectable in source and decision records.
-        </p>
-        <div className="mt-9 flex flex-wrap gap-3">
-          <ButtonLink href="/proof">Inspect the evidence</ButtonLink>
-          <ButtonLink variant="outline" href={decisionHref()}>
-            Read the ADR trail
-          </ButtonLink>
-        </div>
-      </section>
+      <PageHero
+        kicker="Architecture"
+        title="One model, from your code to every runtime."
+        lede="Palamedes has two halves. A native core does the heavy, shared work — extraction, catalogs, checks, compilation. Thin adapters connect it to each framework. That split is why changing or adding a framework doesn’t change your messages or your catalogs."
+        aside={
+          <div className="space-y-4">
+            <PlainWords
+              question="Why is the core written in Rust?"
+              answer="Extraction and catalog work run on every save and in every CI job. Native code does that work in milliseconds instead of seconds — the same reason bundlers and compilers such as esbuild, SWC, and Oxc went native. And because every adapter calls the same core, every framework gets the same behavior."
+            />
+            <PlainWords
+              question="What is an adapter?"
+              answer="The small framework-specific piece that plugs Palamedes into Next.js, Solid, or another host: it hooks into the build, loads the right catalog on the server, and hands messages to the browser. It never re-implements the translation logic."
+            />
+          </div>
+        }
+        actions={
+          <>
+            <ButtonLink href="/proof">Inspect the evidence</ButtonLink>
+            <ButtonLink variant="outline" href={decisionHref()}>
+              Read the decision trail
+            </ButtonLink>
+          </>
+        }
+      />
 
       <Section
         num="00 — The wrapper question"
         eyebrow="One model, several hosts"
-        title="Adapters connect the application; they do not redefine the product."
+        title="Your app keeps its decisions. Palamedes keeps the model consistent."
         lede="An application owns its routing, locale policy, rendering, and hosting. Palamedes owns the work that must stay consistent when any of those choices changes: authoring, transforms, catalogs, validation, compilation, and the runtime contract."
       >
         <EditorialRail tone="emphasis" className="mb-8 bg-hover-fill py-5 pr-6">
           <p className="micro text-[10px] tracking-label text-[#79521a]">The answer</p>
-          <p className="mt-2 max-w-[52rem] text-[15px] leading-relaxed">
+          <p className="mt-2 max-w-[48rem] text-[17px] leading-relaxed">
             Palamedes is not a native wrapper around five JavaScript implementations. It is one
             model that crosses a typed host boundary, produces inspectable artifacts, and leaves
             each framework adapter responsible only for its host.
@@ -209,14 +219,14 @@ export default function Architecture() {
                   <span className="mono-nums text-[10px] text-gray-spec">{layer.number}</span>
                   <StreamlineIcon name={layer.icon} />
                 </div>
-                <h2 className="mt-7 text-[15px] font-semibold">{layer.title}</h2>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink/70">{layer.body}</p>
+                <h2 className="mt-7 text-[17px] font-bold">{layer.title}</h2>
+                <p className="mt-2 text-[15px] leading-relaxed text-ink/75">{layer.body}</p>
               </li>
             ))}
           </ol>
           <div className="grid grid-cols-5 border-t border-hair max-grid:grid-cols-1">
-            <div className="col-start-2 col-span-2 border-x border-hair bg-ink px-5 py-3 text-paper max-grid:col-span-1 max-grid:col-start-1 max-grid:border-x-0">
-              <p className="micro text-[10px] tracking-label text-paper/65">
+            <div className="col-start-2 col-span-2 border-x border-hair bg-mist px-5 py-3 text-ink max-grid:col-span-1 max-grid:col-start-1 max-grid:border-x-0">
+              <p className="micro text-[11px] tracking-label text-slate">
                 Typed N-API boundary · between orchestration and native semantics
               </p>
             </div>
@@ -230,20 +240,18 @@ export default function Architecture() {
         title="The catalog enters the application as code, not a parser job."
         lede="The native compiler renders executable catalog modules. This is exact output from the renderer—not a hand-written approximation. Production hosts load that checked artifact through the parser-free entrypoint."
       >
-        <div className="border border-hair bg-ink px-5 py-5 text-paper max-tight:px-4">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-paper/20 pb-3">
-            <p className="micro text-[10px] tracking-label text-paper/65">
-              Generated catalog module
-            </p>
+        <div className="pmds-code px-5 py-5 max-tight:px-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-hair pb-3">
+            <p className="micro text-[11px] tracking-label text-slate">Generated catalog module</p>
             <a
               href={repoHref("crates/palamedes-node/src/catalog.rs")}
-              className="micro text-[10px] tracking-label text-paper"
+              className="micro text-[11px] tracking-label text-accent"
             >
               Inspect native renderer →
             </a>
           </div>
           <pre
-            className="overflow-x-auto text-[12px] leading-relaxed text-paper/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-paper"
+            className="overflow-x-auto text-[12.5px] leading-relaxed text-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             tabIndex={0}
           >
             <code>{COMPILED_CATALOG_ARTIFACT}</code>
@@ -255,7 +263,7 @@ export default function Architecture() {
         num="02 — The machine"
         eyebrow="Mechanisms, not adjectives"
         title="Ten places where the design refuses to split apart."
-        lede="Every claim below points to an artifact or an accepted decision. The list is intentionally implementation-facing: it is more useful than a generic language or performance badge."
+        lede="Rust explains the speed. The rest of the story is where each decision lives and what keeps it from drifting. Every item below points to the code or the accepted decision behind it."
       >
         <ol className="border-y border-hair">
           {MECHANISMS.map((mechanism) => (
@@ -265,8 +273,8 @@ export default function Architecture() {
             >
               <span className="mono-nums text-[11px] text-gray-spec">{mechanism.number}</span>
               <div>
-                <h2 className="text-[17px] font-semibold">{mechanism.title}</h2>
-                <p className="mt-2 max-w-[48rem] text-[14px] leading-relaxed text-ink/80">
+                <h2 className="text-[19px] leading-snug font-bold">{mechanism.title}</h2>
+                <p className="mt-2 max-w-[46rem] text-[16px] leading-relaxed text-ink/80">
                   {mechanism.body}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -289,7 +297,7 @@ export default function Architecture() {
           <p className="micro text-[10px] tracking-label text-gray-spec">
             First-party Rust foundations
           </p>
-          <p className="mt-3 max-w-[48rem] text-[14px] leading-relaxed text-ink/80">
+          <p className="mt-3 max-w-[46rem] text-[16px] leading-relaxed text-ink/80">
             Three crates from the same open-source family carry the work that is not specific to
             Palamedes. Each is released separately, so the parsing and traversal layers can be read
             and reported against on their own.
@@ -303,7 +311,7 @@ export default function Architecture() {
                 <a href={crate.href} className="text-[15px] font-semibold text-accent">
                   {crate.name} →
                 </a>
-                <p className="text-[14px] leading-relaxed text-ink/80">{crate.role}</p>
+                <p className="text-[16px] leading-relaxed text-ink/80">{crate.role}</p>
               </li>
             ))}
           </ul>

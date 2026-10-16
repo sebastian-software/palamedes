@@ -78,12 +78,12 @@ import { withPalamedes } from "@palamedes/next-plugin"
 export default withPalamedes({})
 
 // app/page.tsx — a Server Component
-import { t } from "@palamedes/core/macro"
+import { Trans } from "@palamedes/react/macro"
 import { createNextServerI18n } from "@palamedes/next-plugin/server"
 
 export default async function Page() {
   await createNextServerI18n({ locale: "de" })
-  return <h1>{t\`Welcome to Palamedes\`}</h1>
+  return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }`,
     note: "This first component uses a fixed locale. In an application, resolve it from your existing locale policy. The adapter shares server catalogs and loads Client Component fragments automatically; the full guide also covers separate Server Action initialization and ordinary host error UI.",
   },

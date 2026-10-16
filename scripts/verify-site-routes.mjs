@@ -94,7 +94,7 @@ const ROUTE_EXPECTATIONS = [
   // checks below. Its marketing headline is intentionally not a test contract.
   { path: "/" },
   { path: "/message-splitting", h1: "Load the view. Load its messages." },
-  { path: "/frameworks", h1: "Six server frameworks." },
+  { path: "/frameworks", h1: "Built for the framework you already use." },
   {
     path: "/frameworks/nextjs",
     h1: "Next.js i18n for the App Router, from server to client.",
@@ -357,11 +357,6 @@ async function checkRoutes(context, label, { expectHydration }) {
   if (expectHydration) {
     currentPath = "/";
     await gotoAndSettle(page, "/", { settleMs: 1500 });
-    // The framework matrix (the second home table) renders all 24 cells.
-    const cells = await page.locator("table").nth(1).locator("tbody td").count();
-    if (cells !== 24) {
-      fail(`home matrix: expected 24 cells, got ${cells}`);
-    }
     // Homepage completion blocks: real routing destinations, a reproducible
     // benchmark command, and the six FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
@@ -429,29 +424,27 @@ async function checkRoutes(context, label, { expectHydration }) {
       );
     }
     const hierarchy = await page.evaluate(() => {
-      const sections = [...document.querySelectorAll("section")];
-      const question = sections.find((section) => section.textContent?.includes("Your next step"));
-      const clear = sections.find((section) => section.textContent?.includes("01 — Clear"));
-      const fast = sections.find((section) => section.textContent?.includes("03 — Fast"));
-      const proofStrip = document.querySelector(".hairline-grid");
+      const paths = document.querySelector('[aria-label="Decision paths"]');
       const integration = document.querySelector('section[aria-label="First-party integrations"]');
+      const hero = document.querySelector(".pmds-hero");
+      const explainers = ["#journey", "#why-rust", "#frameworks"].map((selector) =>
+        document.querySelector(selector),
+      );
+      const follows = (earlier, later) =>
+        Boolean(
+          earlier &&
+          later &&
+          earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+        );
       return {
-        clearAfterProof: Boolean(
-          clear &&
-          proofStrip &&
-          proofStrip.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ),
-        questionAfterBenefits: Boolean(
-          question &&
-          fast &&
-          integration &&
-          fast.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING &&
-          integration.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ),
+        heroFirst:
+          follows(hero, integration) && explainers.every((section) => follows(hero, section)),
+        pathsAfterExplainers:
+          follows(integration, paths) && explainers.every((section) => follows(section, paths)),
       };
     });
-    if (!hierarchy.clearAfterProof || !hierarchy.questionAfterBenefits) {
-      fail("home hierarchy: show component and delivery benefits before deeper evaluation paths");
+    if (!hierarchy.heroFirst || !hierarchy.pathsAfterExplainers) {
+      fail("home hierarchy: explain the product and its evidence before deeper evaluation paths");
     }
     // Comparison pages distinguish measured workflows from dated research.
     // The rival template leads with a verdict; the native-toolchain argument
@@ -539,7 +532,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     await comparePage.close();
     const benchmarkCommand = await page
-      .getByText("$ pnpm benchmark:e2e-workflow", { exact: false })
+      .getByText("pnpm benchmark:e2e-workflow", { exact: true })
       .isVisible();
     if (!benchmarkCommand) {
       fail("home benchmark: reproducible command missing");
@@ -565,11 +558,25 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (faqSchemaCount !== 6) {
       fail(`home FAQ schema: expected 6 answers, got ${faqSchemaCount}`);
     }
-    // Code showcase tabs toggle.
-    await page.getByRole("tab", { name: "Translate" }).click();
-    const poVisible = await page.getByText('msgid "Your trip to Lisbon"').isVisible();
-    if (!poVisible) {
-      fail("code showcase: Translate tab did not reveal .po pane");
+    // The tour's rendered card switches language, and its seat stepper selects
+    // the plural form for that locale.
+    await page.getByRole("button", { name: "DE (German)", exact: true }).click();
+    const germanCard = page.locator('article[lang="de"]');
+    if (!(await germanCard.getByText("Deine Reise beginnt morgen.").isVisible())) {
+      fail("tour card: German did not switch the rendered card");
+    }
+    const fewerSeats = page.getByRole("button", { name: "One seat fewer" });
+    await fewerSeats.click();
+    await fewerSeats.click();
+    if ((await germanCard.getByText("1 Platz frei").count()) !== 1) {
+      fail("tour card: the seat stepper did not select the German singular form");
+    }
+    // The verified framework matrix on /frameworks renders all 24 cells.
+    currentPath = "/frameworks";
+    await gotoAndSettle(page, "/frameworks", { settleMs: 1000 });
+    const cells = await page.locator("table").first().locator("tbody td").count();
+    if (cells !== 24) {
+      fail(`framework matrix: expected 24 cells, got ${cells}`);
     }
     // Get-started keeps the diagram, stack picker, and forward route as distinct
     // numbered sections. Each stack gives the package caveat its own numbered
@@ -602,7 +609,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     await page.getByRole("banner").getByRole("link", { name: "Architecture", exact: true }).click();
     try {
       await page
-        .getByRole("heading", { level: 1, name: "“Written in Rust” is the boring half." })
+        .getByRole("heading", { level: 1, name: "One model, from your code to every runtime." })
         .waitFor({ timeout: 5000 });
     } catch {
       fail("client-side navigation to /architecture failed");
@@ -664,19 +671,23 @@ async function checkRoutes(context, label, { expectHydration }) {
     // No-JS completeness: the new proof strip and ledger must be static HTML.
     currentPath = "/";
     await gotoAndSettle(page, "/", { settleMs: 100 });
-    const statText = await page.getByText("first-party server-framework integrations").isVisible();
+    const statText = await page
+      .getByText("example applications, built and smoke-checked when relevant code changes")
+      .isVisible();
     const stat = await page.getByText(linguiRatio, { exact: false }).first().isVisible();
     if (!statText || !stat) {
-      fail("no-JS: proof-strip stats missing from prerendered HTML");
+      fail("no-JS: proof figures and benchmark factors missing from prerendered HTML");
     }
-    const ledger = await page.getByText("Checked result ledger", { exact: false }).isVisible();
+    const ledger = await page
+      .getByRole("table", { name: /Extract and catalog update/u })
+      .isVisible();
     if (!ledger) {
-      fail("no-JS: benchmark ledger missing from prerendered HTML");
+      fail("no-JS: benchmark playback table missing from prerendered HTML");
     }
     const integrationBand = await page
       .getByRole("region", { name: "First-party integrations" })
       .isVisible();
-    const questionRouting = await page.getByText("Where does Palamedes need to run?").isVisible();
+    const questionRouting = await page.getByText("Starting a new project?").isVisible();
     const faq = await page.getByText("Is Palamedes ready for production use?").isVisible();
     if (!integrationBand || !questionRouting || !faq) {
       fail("no-JS: homepage completion blocks missing from prerendered HTML");
@@ -990,11 +1001,8 @@ async function checkHomepageSetupViewport(browser, width) {
     fail(`home ${width}px: expected HTTP 200, got ${response?.status() ?? "no response"}`);
   } else {
     const metrics = await page.evaluate(() => {
-      const clear = [...document.querySelectorAll("section")].find((section) =>
-        section.textContent?.includes("01 — Clear"),
-      );
       const setup = document.querySelector('a[href="/get-started#install"]');
-      const example = clear?.querySelector("pre");
+      const example = document.querySelector("#journey pre");
       const absoluteTop = (element) =>
         Math.round(element.getBoundingClientRect().top + window.scrollY);
 

@@ -365,12 +365,9 @@ function checkoutLabel(seats) {
   </fbt:plural>
 </fbt>`,
       palamedesLabel: "Palamedes",
-      palamedesCode: `import { plural } from "@palamedes/core/macro"
+      palamedesCode: `import { Plural } from "@palamedes/react/macro"
 
-plural(seats, {
-  one: "Buy one seat",
-  other: "Buy # seats",
-})`,
+<Plural value={seats} one="Buy one seat" other="Buy # seats" />`,
       note: "fbtee's source is more prescriptive and gives translators mandatory context; that is a strength when the team wants the FBT grammar discipline. Palamedes uses an ICU plural that remains visible in a standard catalog, with context available when the source sentence alone is insufficient.",
     },
     pickRival: [

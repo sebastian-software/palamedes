@@ -1,7 +1,7 @@
 export const HOME_FAQ = [
   {
     q: "Is Palamedes ready for production use?",
-    a: "Check the package version and host you intend to adopt. The 2.0 implementation is available in the repository and publication remains held. Stable APIs follow SemVer; Waku, Remix v3, and React Router RSC retain Preview contracts. The stability guide, checked examples, and release notes describe the supported paths.",
+    a: "The registry currently ships 1.x. The 2.0 implementation is available in the repository while its publication is on hold — try it through the checked examples and release notes. Stable APIs follow SemVer; Waku, Remix v3, and React Router RSC keep Preview contracts. The stability guide lists exactly what each path guarantees.",
   },
   {
     q: "Which frameworks does Palamedes support?",
@@ -9,11 +9,11 @@ export const HOME_FAQ = [
   },
   {
     q: "Does Palamedes replace a translation management system or write translations with AI?",
-    a: "No. Palamedes provides a complete local workflow for source messages and repository-owned catalogs. It does not provide a hosted TMS, machine translation, or an AI translation service.",
+    a: "No. Palamedes covers the complete local workflow for your source messages and the catalogs in your repository. It is not a hosted translation management system, and it does not machine-translate or AI-translate your text.",
   },
   {
     q: "Where do translation catalogs live?",
-    a: "Catalogs are repository-owned artifacts. The toolchain extracts messages, updates catalogs, audits and merges them semantically, and compiles runtime artifacts as part of the application workflow.",
+    a: "In your repository, as plain files you review like code. The toolchain extracts messages, updates the catalogs, audits and merges them by meaning, and compiles them for your build.",
   },
   {
     q: "How do translators work with Palamedes?",
@@ -30,22 +30,19 @@ export function HomeFaq() {
     /* data-faq-list scopes the site guard's FAQ count to the questions
      * themselves, so an unrelated disclosure elsewhere on the page — the family
      * tool switcher in the header, for one — cannot be mistaken for an answer. */
-    <div className="border-y border-hair" data-faq-list>
-      {HOME_FAQ.map((entry, index) => (
-        <details key={entry.q} className="group border-b border-hair last:border-b-0">
-          <summary className="grid cursor-pointer grid-cols-[2.75rem_1fr_auto] gap-4 px-5 py-5 text-[15px] font-semibold leading-snug marker:content-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent">
-            <span className="mono-nums text-[11px] font-normal text-gray-spec">0{index + 1}</span>
+    <div className="max-w-[56rem] border-t border-hair" data-faq-list>
+      {HOME_FAQ.map((entry) => (
+        <details key={entry.q} className="group border-b border-hair">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-6 text-[18px] leading-snug font-semibold marker:content-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
             <span>{entry.q}</span>
-            <span className="text-accent group-open:hidden" aria-hidden>
+            <span
+              aria-hidden
+              className="grid size-8 shrink-0 place-items-center border border-hair text-[18px] font-normal text-accent transition-transform group-open:rotate-45"
+            >
               +
             </span>
-            <span className="hidden text-accent group-open:inline" aria-hidden>
-              −
-            </span>
           </summary>
-          <p className="max-w-[52rem] px-5 pb-6 pl-[5.75rem] text-[14px] leading-relaxed text-ink/80 max-tight:pl-5">
-            {entry.a}
-          </p>
+          <p className="max-w-[46rem] pb-7 text-[16px] leading-relaxed text-ink/80">{entry.a}</p>
         </details>
       ))}
     </div>

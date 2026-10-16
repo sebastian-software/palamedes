@@ -40,8 +40,10 @@ durable scope and positioning decision, including its rationale and review
 triggers, lives in
 [ADR-001](adr/001-project-scope-and-positioning.md).
 
-Keep the headline **Clear. Complete. Fast. Pick three.** Explain its promises
-through concrete application work: Clear means readable macros and ready-made
+Open the homepage with the four-word promise **Just write the sentence.** and
+the same sentence morphing through several languages. Keep **Clear. Complete.
+Fast. Pick three.** as the design-goal statement that sums up what changes.
+Explain its promises through concrete application work: Clear means readable macros and ready-made
 rich-message and choice components; Complete means first-party framework
 integration and checked locale architectures; Fast means macros compiled to
 message lookups, automatic browser fragments, shared server catalogs, and the
@@ -68,8 +70,17 @@ the reader may be starting greenfield or from any established i18n stack:
 
 ## Public Content And Evidence
 
-The homepage introduces the product through Clear, Complete, and Fast, with
-concrete code, workflow artifacts, and evidence beside each claim. Framework
+The homepage is a guided tour for someone choosing an i18n library who may
+never have used i18n tooling. Every section opens with a line that earns
+attention, then explains the mechanism in plain words a newcomer can follow —
+what a macro is, what extraction and a `.po` catalog are, what compiling a
+message means, why messages load per screen, why the core is native, why
+framework wiring is the real work — and shows the real artifact beside it.
+After what changes and how one sentence travels through the toolchain, the
+page plays back the checked benchmark, explains framework integration and URL
+strategies, compares alternatives honestly (including when not to choose
+Palamedes), and closes with receipts, the maintainer's origin story,
+situation-based next steps, and the FAQ. Framework
 setup, locale policy, performance, migration, and comparison pages answer
 focused entry questions while preserving the same product position.
 Architecture is a primary evaluation path, with its own top-level navigation
@@ -91,6 +102,11 @@ item. Comparisons do not define the homepage's identity.
   [ADR-011](adr/011-editorial-visual-brand-system.md#benchmark-presentation).
 - Keep every claim understandable without its graphic. Tables need a linear
   reading order, and visual benchmark results need equivalent text or tables.
+- Show idiomatic code. In JSX, write messages with the `<Trans>`, `<Plural>`,
+  and `<Select>` components; use the `t` macro only where JSX children cannot
+  reach (attributes such as `alt` or `aria-label`) or in non-JSX code such as
+  loaders, server functions, and request-scoped server helpers. Do not mix both
+  styles in one example without that reason.
 
 `PRODUCT.md` owns current messaging; ADR-001 and ADR-011 own durable positioning
 and visual decisions. Completed implementation plans and discarded design
@@ -101,13 +117,19 @@ explorations belong in Git history, not beside these current sources.
 The durable visual and editorial contract is recorded in
 [ADR-011](./adr/011-editorial-visual-brand-system.md).
 
-Precise, verifiable, calm. The visual voice is **Monument core × Editorial
-masthead**: a technical ledger with a classical Palamedes accent. Warm paper
-ground (`#faf9f4`), navy ink (`#0e2a4d`), one bronze accent (`#8e6628`),
-Cinzel Hellenic display type, mono uppercase micro-labels, hairline rules, and
-tabular numbers. Terminal green/amber remain reserved for CLI output. Hard
-rules: zero border-radius, zero box-shadow, zero gradients. Confidence comes
-from evidence density and typographic discipline, not visual loudness.
+Precise, verifiable, calm — and warm enough to be felt. The visual voice is
+**Inscription and ledger, opened up**: a classical Palamedes masthead over an
+editorial page that explains before it proves. Warm paper ground (`#faf9f4`),
+parchment (`#f3efe3`) and mist (`#e8edf2`) bands with soft transitions, navy
+ink (`#0e2a4d`) that is never used as a background, one bronze accent
+(`#8e6628`), inscription-scale Cinzel Hellenic headlines, readable 16–21 px
+body copy, hairline rules, and tabular numbers. Code reads like a printed
+listing on a light ground, not a dark editor.
+Product specimens — real code, a real `.po` entry, a rendered component in
+several languages, URL bars — are the imagery. Terminal green/amber remain
+reserved for CLI output. Hard rules: zero border-radius, zero box-shadow, zero
+gradients. Confidence comes from clear explanation and evidence, not visual
+loudness.
 
 Non-brand marketing pictograms come exclusively from **Streamline Sharp Duo**
 under the project's existing Pro license, colored with the navy and bronze
@@ -130,8 +152,10 @@ an implementation dependency for its own documentation chrome.
 
 ## Design Principles
 
-1. **Show the work.** Proof artifacts (terminal output, benchmark tables,
-   screenshot matrices) are the imagery. Real numbers, mono + tabular, always.
+1. **Explain, then show the work.** Name the reader's situation and the
+   benefit in plain words first; then let proof artifacts (specimens,
+   terminal output, benchmark tables, screenshot matrices) carry the claim.
+   Real numbers, mono + tabular, always.
 2. **Hairlines, not boxes.** Structure comes from rules and the framed column
    grid, never from cards, shadows, or rounded containers.
 3. **One accent, spent deliberately.** Bronze `#8e6628` marks interaction and

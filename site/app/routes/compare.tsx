@@ -1,11 +1,13 @@
 import { Link } from "react-router";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { PageHero } from "~/components/marketing/PageHero";
 import { pageMeta } from "~/lib/meta";
 import { CtaBand } from "~/components/home/CtaBand";
 import { StatementBand } from "~/components/home/StatementBand";
 import contentStats from "~/data/generated/content-stats.json";
 import { REPO, decisionHref, docsHref } from "~/data/links";
+import { NOT_FOR_YOU } from "~/data/fit";
 import { NATIVE_SHIFT, RIVALS } from "~/data/rivals";
 
 export const handle = { layout: "bare" };
@@ -14,35 +16,10 @@ export function meta() {
   return pageMeta({
     title:
       "Palamedes compared — Lingui, fbtee, i18next, next-intl, React Intl, Paraglide, Intlayer, Tolgee",
-    description:
-      "Choose an i18n model that stays coherent as a TypeScript application grows. Compare Palamedes with eight alternatives through explicit recommendations, dated research, checked workflow evidence and honest exits.",
+    description: `Choose an i18n model that stays coherent as a TypeScript application grows. Compare Palamedes with ${RIVALS.length} alternatives through explicit recommendations, dated research, checked workflow evidence and honest exits.`,
     path: "/compare",
   });
 }
-
-/* The cases where the answer is "use something else", stated plainly. */
-const NOT_FOR_YOU = [
-  {
-    case: "You build with Vue, Angular, or Svelte",
-    answer:
-      "Palamedes ships React and Solid packages only. Lingui covers Vue, i18next covers nearly everything, and vue-i18n is the idiomatic choice inside the Vue ecosystem.",
-  },
-  {
-    case: "You ship React Native",
-    answer:
-      "There is no React Native adapter here. fbtee has an explicit Expo path, while Lingui and i18next also support React Native today.",
-  },
-  {
-    case: "Kilobytes are your hard constraint",
-    answer:
-      "Paraglide's zero-runtime compilation beats a runtime layer on bundle size by construction. If that is the number you are judged on, start there.",
-  },
-  {
-    case: "You want the i18n library to own routing",
-    answer:
-      "next-intl treats localized pathnames and domain routing as core product. Palamedes leaves URLs to your router on purpose.",
-  },
-];
 
 function measuredWorkflow(rival: (typeof RIVALS)[number]) {
   return rival.rows.find((row) => row.palamedes.includes("¹"));
@@ -51,33 +28,35 @@ function measuredWorkflow(rival: (typeof RIVALS)[number]) {
 export default function Compare() {
   return (
     <Page>
-      <section className="px-8 pt-16 pb-14 max-tight:px-5">
-        <p className="eyebrow">Comparison</p>
-        <h1 className="mt-6 max-w-[12em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Choose the i18n model you can keep.
-        </h1>
-        <p className="mt-6 max-w-[42em]">
-          For React and Solid teams that want source strings, repository-owned PO catalogs and one
+      <PageHero
+        kicker="Compare"
+        title="Choose the i18n model you can keep."
+        lede={`Every i18n library makes a bet: where your text lives, who keeps it in sync, and what runs in the browser. Here is how Palamedes compares with ${RIVALS.length} alternatives — including the cases where another tool is the better choice.`}
+        actions={
+          <>
+            <ButtonLink href="/compare/lingui">Compare the closest model: Lingui</ButtonLink>
+            <ButtonLink variant="outline" href="/proof">
+              Inspect the workflow proof
+            </ButtonLink>
+          </>
+        }
+        aside={
+          <div className="border border-ink bg-paper px-7 py-7">
+            <p className="micro text-[11px] tracking-label text-accent">Decision frame</p>
+            <h2 className="mt-3 text-[21px] leading-snug font-bold tracking-[-0.01em]">
+              {NATIVE_SHIFT.title}
+            </h2>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink/85">{NATIVE_SHIFT.body}</p>
+          </div>
+        }
+      >
+        <p className="mt-7 max-w-[40rem] text-[14px] leading-relaxed text-ink/75">
+          For React and Solid teams that want source strings, repository-owned PO catalogs, and one
           runtime model across supported hosts, Palamedes is the more durable default. That is a
-          recommendation, not a claim that every alternative loses: each page states when another
-          tool is the better fit, links the workflow outcome to proof, and keeps measured results
-          separate from dated research.
+          recommendation, not a claim that every alternative loses: measured results stay separate
+          from dated research.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="/compare/lingui">Compare the closest model: Lingui</ButtonLink>
-          <ButtonLink variant="outline" href="/proof">
-            Inspect the workflow proof
-          </ButtonLink>
-        </div>
-
-        <EditorialRail tone="emphasis" className="mt-12 bg-hover-fill py-6 pr-6">
-          <p className="micro text-[10px] tracking-label text-gray-spec">Decision frame</p>
-          <h2 className="mt-2 max-w-[24em] text-[19px] font-bold">{NATIVE_SHIFT.title}</h2>
-          <p className="mt-3 max-w-[46em] text-[15px] leading-relaxed text-ink/85">
-            {NATIVE_SHIFT.body}
-          </p>
-        </EditorialRail>
-      </section>
+      </PageHero>
 
       <Section
         num="01 — Comparison ledger"
@@ -112,7 +91,7 @@ export default function Compare() {
                 return (
                   <tr key={rival.slug}>
                     <th scope="row" className="border border-hair px-4 py-4 text-left align-top">
-                      <p className="text-[14px] font-bold">Palamedes vs {rival.name}</p>
+                      <p className="text-[16px] font-bold">Palamedes vs {rival.name}</p>
                       <p className="mt-1 text-[12.5px] leading-relaxed text-ink/75">{rival.card}</p>
                     </th>
                     <td className="border border-hair bg-hover-fill px-4 py-4 align-top text-[13px] leading-relaxed">
@@ -149,8 +128,8 @@ export default function Compare() {
           </table>
         </div>
         <EditorialRail tone="emphasis" className="mt-8 bg-hover-fill py-5 pr-6">
-          <h3 className="text-[15px] font-bold">Weighing something not listed here?</h3>
-          <p className="mt-2 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
+          <h3 className="text-[18px] font-bold">Weighing something not listed here?</h3>
+          <p className="mt-2 max-w-[52em] text-[15.5px] leading-relaxed text-ink/85">
             These cover the libraries most teams actually shortlist. If yours is missing, open an
             issue with the comparison you need — every page here is backed by a dated research note
             in the repository, and we would rather write one than guess.
@@ -172,8 +151,8 @@ export default function Compare() {
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           {NOT_FOR_YOU.map((entry) => (
             <div key={entry.case} className="bg-paper px-6 py-6">
-              <h3 className="text-[15px] font-bold">{entry.case}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{entry.answer}</p>
+              <h3 className="text-[18px] font-bold">{entry.case}</h3>
+              <p className="mt-2 text-[15.5px] leading-relaxed text-ink/85">{entry.answer}</p>
             </div>
           ))}
         </div>
@@ -186,16 +165,16 @@ export default function Compare() {
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">What we prove</h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+            <h3 className="text-[18px] font-bold">What we prove</h3>
+            <p className="mt-2 text-[15.5px] leading-relaxed text-ink/85">
               One checked fixture exercises nested select and plural branches across extraction,
               transformation, catalog update, compilation, and six executions of the transformed
               runtime function. You can re-run it yourself.
             </p>
           </div>
           <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">What we only snapshot</h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+            <h3 className="text-[18px] font-bold">What we only snapshot</h3>
+            <p className="mt-2 text-[15.5px] leading-relaxed text-ink/85">
               Statements about other tools on these pages are dated observations from their public
               documentation and repositories — not permanent claims about their internals or where
               they are heading.
@@ -213,10 +192,10 @@ export default function Compare() {
           <p className="micro text-[10px] tracking-label text-gray-spec">
             The best argument against us
           </p>
-          <h3 className="mt-2 text-[15px] font-bold">
+          <h3 className="mt-2 text-[18px] font-bold">
             Mozilla&apos;s Project Fluent thinks ICU is the wrong shape.
           </h3>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+          <p className="mt-2 text-[15.5px] leading-relaxed text-ink/85">
             Fluent&apos;s case is worth stating properly, because it is the strongest one anybody
             makes. In ICU, the structure of a message is fixed by the source language: if English
             needs no gender agreement, the message has no gender selector, and a translator into a
@@ -224,7 +203,7 @@ export default function Compare() {
             inverts that — a translation may introduce selectors and grammatical machinery the
             original never had. It ships in Firefox, so this is proven at scale, not theoretical.
           </p>
-          <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
+          <p className="mt-3 text-[15.5px] leading-relaxed text-ink/85">
             We chose ICU anyway, for reasons we will defend: TMS and CAT tools process it directly,
             and it keeps PO catalogs interoperable across a mixed localization toolchain.
             Fluent&apos;s expressiveness is real; its format instead requires Fluent-aware tooling.

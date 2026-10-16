@@ -82,7 +82,7 @@ export function FwPanels() {
             }`}
           >
             <div>
-              <h3 className="text-[15px] font-bold">
+              <h3 className="text-[18px] font-bold">
                 <Link
                   to={frameworkLandingHref(panel.slug)}
                   viewTransition
@@ -96,7 +96,7 @@ export function FwPanels() {
               </p>
             </div>
             <div>
-              <p className="max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">{panel.body}</p>
+              <p className="max-w-[52em] text-[15.5px] leading-relaxed text-ink/85">{panel.body}</p>
               <p className="mono-nums mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
                 {cookie?.demoLinks?.map((link) => (
                   <a key={link.href} href={link.href} className="text-accent hover:text-ink">

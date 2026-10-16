@@ -2,7 +2,8 @@
 
 The public Palamedes website, live at <https://palamedes.dev> — React Router 8
 (framework mode) with ARDO route generation, full prerendering, Tailwind v4,
-and a Swiss-spec-grid design system. Private workspace, never published to npm.
+and the Palamedes editorial design system (ADR-011). Private workspace, never
+published to npm.
 
 ## Commands
 
