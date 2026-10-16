@@ -485,7 +485,7 @@ client cache to poll. Packaging smoke tests opt out without disabling checks
 in the shipped artifact. Removing endpoint embedding only affects future
 builds; existing binaries require an opt-out or an update to a disabled build.
 See
-[ADR-027](../adr/027-privacy-bounded-cli-update-check.md) for the data boundary
+[ADR-016](../adr/016-privacy-bounded-cli-update-check.md) for the data boundary
 and the [version-service](https://github.com/sebastian-software/version-service)
 repository for the service implementation and its deployment guide.
 

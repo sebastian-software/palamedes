@@ -77,7 +77,7 @@ measured floor rather than a core count: extraction gets slower again above it,
 because a one-shot `pmds extract` pays worker setup on every invocation and
 never amortizes it. Raise it only with a measurement on your own corpus and
 hardware; see
-[ADR-013](https://github.com/sebastian-software/palamedes/blob/main/adr/013-bounded-parallel-extraction.md)
+[ADR-023](https://github.com/sebastian-software/palamedes/blob/main/adr/023-bounded-parallel-extraction.md)
 for the numbers. `--threads` on `pmds extract` or `pmds lint` overrides this
 value.
 
@@ -91,7 +91,7 @@ extractor version, source reference root, reference-scope behavior, MDX options,
 or lint rule levels change. Use `--no-cache` on `pmds extract` or `pmds lint` for
 a one-off cold run, or set this to `false` if a tool in your pipeline rewrites
 files without changing their size or modification time. See
-[ADR-019](https://github.com/sebastian-software/palamedes/blob/main/adr/019-extraction-cache.md).
+[ADR-022](https://github.com/sebastian-software/palamedes/blob/main/adr/022-extraction-cache.md).
 If the cache cannot be persisted, the command continues with its normal result
 but prints a warning to stderr even without `--verbose`; watch mode reports a
 persistent write failure once per process rather than once per file event. Use

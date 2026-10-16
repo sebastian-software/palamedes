@@ -1,26 +1,10 @@
-# ADR-004: Internal Compiled Lookup Keys
+# ADR-020: Internal Compiled Lookup Keys
 
 **Status:** Accepted
-**Date:** 2026-03-17
-**Revised:** 2026-09-11
 
-## Context
+**Last updated:** 2026-10-16
 
-Even in a source-string-first system, the runtime representation does not need to use raw source strings as lookup keys.
-
-There are practical reasons to derive a compact lookup key during compilation:
-
-- smaller runtime payloads
-- stable compact object keys
-- easier stripping of source text from transformed output when desired
-- compatibility with runtime maps generated from compiled catalogs
-
-The risk is that these derived keys start leaking into the public message model and become mistaken for the true identity of a message.
-
-Palamedes needs both of these statements to be true at the same time:
-
-- the public model is source-string-first
-- the runtime is allowed to use compact compiled lookup keys
+Compiled lookup keys are compact execution artifacts, while message identity remains source-first.
 
 ## Decision
 
@@ -58,6 +42,24 @@ first-party adapters default to `false`.
 
 Source code, extraction, catalog updates, parsed catalog data, and user-facing diagnostics remain source-string-first.
 
+## Context
+
+Even in a source-string-first system, the runtime representation does not need to use raw source strings as lookup keys.
+
+There are practical reasons to derive a compact lookup key during compilation:
+
+- smaller runtime payloads
+- stable compact object keys
+- easier stripping of source text from transformed output when desired
+- compatibility with runtime maps generated from compiled catalogs
+
+The risk is that these derived keys start leaking into the public message model and become mistaken for the true identity of a message.
+
+Palamedes needs both of these statements to be true at the same time:
+
+- the public model is source-string-first
+- the runtime is allowed to use compact compiled lookup keys
+
 ## Alternatives Considered
 
 ### 1. Use raw source strings as runtime lookup keys
@@ -82,18 +84,9 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 - Documentation must describe the keys as implementation detail, not as product identity.
 - The runtime key contract can be shared cleanly between transformed code and compiled catalog artifacts without turning those keys into a public authoring concept.
 
-## Implementation status
+## Validation
 
-Core package roots and compiled aliases now reject missing compiled entries.
-Source metadata is diagnostic information only, and telemetry cannot suppress
-lookup or execution failures. Low-level transforms and v2 first-party host
-adapters generate compact runtime calls without embedding the authored source
-message by default. Set `keepSourceFallbacks: true` only when authored source
-text is needed as diagnostic metadata; `false` is the default and produces
-compact, hash-only output. This legacy option name never implies a runtime
-fallback mode.
-
-Transparent host delivery and initial/hydration/navigation error recovery are
-tracked in the dependent integration slices of #1204. An import rejection by
-itself does not establish a usable host error boundary. The coordinated v2
-release remains held until those paths and migration proofs are complete.
+Low-level transforms and v2 first-party host adapters generate compact runtime calls without embedding the authored source message by default.
+Set `keepSourceFallbacks: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.
+This option never enables runtime fallback. See the
+[v2 migration guide](../docs/migration-v2.md) for legacy API replacements.

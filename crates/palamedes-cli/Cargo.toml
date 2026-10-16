@@ -11,7 +11,7 @@ description = "Native command-line interface for Palamedes."
 readme = "README.md"
 keywords = ["i18n", "internationalization", "cli", "gettext", "ferramenta"]
 categories = ["command-line-utilities", "internationalization", "development-tools"]
-# ADR-024 keeps a Node-free escape hatch open, which `cargo install
+# ADR-014 keeps a Node-free escape hatch open, which `cargo install
 # palamedes-cli` would serve. That decision is still open
 # (sebastian-software/palamedes#1153); until then nothing may reach the
 # registry by accident.

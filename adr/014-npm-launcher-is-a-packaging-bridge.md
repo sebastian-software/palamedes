@@ -1,11 +1,28 @@
-# ADR-024: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch
+# ADR-014: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch
 
 **Status:** Accepted
-**Date:** 2026-08-03
+
+**Last updated:** 2026-10-16
+
+A minimal npm launcher preserves per-project native CLI distribution and an explicit direct-binary path.
+
+## Decision
+
+1. `@palamedes/cli` keeps the minimal Node launcher as its public `pmds` bin:
+   platform selection, spawn, exit-code propagation, and `SIGINT`/`SIGTERM`
+   forwarding to the native child. It never parses commands or loads
+   configuration. On Unix it isolates the native process group before
+   forwarding so terminal signals are delivered exactly once.
+2. Every platform package additionally declares its own `bin` entry pointing at
+   the native executable. Environments that know their platform ahead of time —
+   CI images, deployment targets — may depend on the platform package directly
+   and get a native `pmds` without any Node process.
+3. Nothing is installed, downloaded, copied, or rewritten at install time or at
+   run time.
 
 ## Context
 
-Since ADR-016/017 the CLI is one native executable; the npm `@palamedes/cli`
+Since ADR-012/015 the CLI is one native executable; the npm `@palamedes/cli`
 package only selects the installed platform package and spawns it. npm remains
 the primary distribution channel because the CLI version must be pinned per
 project in `package.json` and travel with every checkout — global channels
@@ -29,20 +46,6 @@ The wrapper's real cost is one Node boot (~30–50 ms) and an idle Node parent
 process per invocation. `pmds` is invoked at low frequency (extraction, audits,
 one CI run), so this cost is small in absolute terms but visible in process
 lists and long-running watch workflows.
-
-## Decision
-
-1. `@palamedes/cli` keeps the minimal Node launcher as its public `pmds` bin:
-   platform selection, spawn, exit-code propagation, and `SIGINT`/`SIGTERM`
-   forwarding to the native child. It never parses commands or loads
-   configuration. On Unix it isolates the native process group before
-   forwarding so terminal signals are delivered exactly once.
-2. Every platform package additionally declares its own `bin` entry pointing at
-   the native executable. Environments that know their platform ahead of time —
-   CI images, deployment targets — may depend on the platform package directly
-   and get a native `pmds` without any Node process.
-3. Nothing is installed, downloaded, copied, or rewritten at install time or at
-   run time.
 
 ## Alternatives Considered
 
@@ -71,7 +74,7 @@ lists and long-running watch workflows.
   channels need it too), move process-owner assumptions such as clap's
   help/error exits and signal ownership into a host process, and make Node the
   permanent CLI host instead of a launchpad. In-process bindings belong to the
-  programmatic engine surface of `@palamedes/core-node` (ADR-007). Revisit
+  programmatic engine surface of `@palamedes/core-node` (ADR-013). Revisit
   only if a genuine in-process JS↔Rust workflow API is needed — then as
   core-node surface, never as the CLI shell.
 - **Global system channels as primary distribution (Homebrew and similar):**
@@ -92,4 +95,4 @@ lists and long-running watch workflows.
   platform `bin` declarations) but still exactly one implementation of CLI
   semantics.
 - The launcher remains deletable the day package managers expose a transitive
-  optional dependency's bin as a public bin (ADR-017's standing consequence).
+  optional dependency's bin as a public bin (ADR-015's standing consequence).

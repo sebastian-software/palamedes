@@ -1,22 +1,10 @@
-# ADR-022: Generated Catalogs Use Executable Message Functions
+# ADR-004: Generated Catalogs Use Executable Message Functions
 
 **Status:** Accepted
-**Date:** 2026-08-01
-**Revised:** 2026-09-11
 
-## Context
+**Last updated:** 2026-10-16
 
-Generated catalogs previously exposed only ICU strings, so the browser parsed
-each dynamic message on first use. Attaching a second map of pre-parsed nodes
-would remove parsing, but it would duplicate every dynamic message key and keep
-an AST interpreter in the browser hot path.
-
-Palamedes needs one generated representation that handles plain strings,
-variables, formatters, plurals, selects, and rich-text tags across the Core,
-React, and Solid renderers. Palamedes' supported application model is message
-authoring through macros and supported extraction, translation in source
-catalogs, and compilation before execution. Runtime interpretation of
-uncompiled ICU catalogs is not a separate supported application model.
+Generated catalogs contain literal strings and executable message functions shared by Core, React, and Solid.
 
 ## Decision
 
@@ -46,7 +34,7 @@ compilation under the rule above.
 This build-time translation fallback is distinct from failure to deliver a
 compiled fragment at runtime. Failed delivery and unexpected missing compiled
 entries must reach host error handling rather than render substitute source
-text or internal keys, as specified in ADR-004. Concrete adapter integration
+text or internal keys, as specified in ADR-020. Concrete adapter integration
 and recovery mechanics are described in [ADR-008](008-framework-adapter-architecture.md)
 and the [v2 migration guide](../docs/migration-v2.md).
 
@@ -68,11 +56,24 @@ fragments. Uncompiled ICU maps are not an alternative runtime input.
 
 Ferrocat remains the Rust-side ICU parser. The Rust core lowers its AST into a
 host-neutral message program, and the Node host boundary renders safe JavaScript
-module source in accordance with ADR-011.
+module source in accordance with ADR-019.
 
 The native renderer is the single catalog-module generator. The public
 TypeScript `renderCatalogModule()` compatibility helper delegates to that
 renderer instead of parsing ICU and maintaining a second JavaScript generator.
+
+## Context
+
+Raw ICU strings require parsing during execution. A parallel map of pre-parsed
+nodes would avoid that parse but duplicate dynamic message keys and retain an
+AST interpreter. One executable representation avoids both costs.
+
+Palamedes needs one generated representation that handles plain strings,
+variables, formatters, plurals, selects, and rich-text tags across the Core,
+React, and Solid renderers. Palamedes' supported application model is message
+authoring through macros and supported extraction, translation in source
+catalogs, and compilation before execution. Runtime interpretation of
+uncompiled ICU catalogs is not a separate supported application model.
 
 ## Alternatives Considered
 
@@ -95,9 +96,7 @@ Solid. The renderer parameter keeps one compiler output portable across hosts.
 ### 4. Retain runtime support for uncompiled ICU catalogs
 
 Rejected because it adds a second execution model outside Palamedes' intended
-extraction, translation, and compilation workflow. Earlier revisions retained
-this compatibility path; the September 2026 decision replaces that policy for
-both server and client. Small applications can load a complete compiled catalog
+extraction, translation, and compilation workflow. Small applications can load a complete compiled catalog
 without needing a runtime parser.
 
 ## Consequences
@@ -106,8 +105,8 @@ without needing a runtime parser.
   AST traversal.
 - Generated catalog values are `string | CompiledMessage`; consumers must not
   assume every generated value is JSON-serializable.
-- Runtime parser and parsed-node inspection APIs must be audited and migrated
-  out of the public application runtime contract. Build-time tooling may still
+- Runtime parser and parsed-node inspection APIs stay outside the public
+  application runtime contract. Build-time tooling may still
   parse ICU and inspect its representation.
 - The compiler owns safe JavaScript expression generation, including escaped
   literals, computed object keys, nested choices, and plural-pound semantics.
@@ -115,20 +114,13 @@ without needing a runtime parser.
   `@palamedes/core` as a direct runtime dependency because the module imports
   `defineCompiledCatalog()` from its `compiled` entrypoint.
 - Runtime and bundle benchmarks must cover both payload size and first-render
-  execution before the representation is considered stable.
-- ADR-023 applies the parser-free contract to the complete public application
+  execution when the generated representation changes.
+- ADR-005 applies the parser-free contract to the complete public application
   runtime, including package-root imports.
 
-## Implementation status
-
-The compiled representation and its first-party host integrations are
-implemented. Catalog module compilation rejects invalid or unsupported
-messages instead of generating a lazy-parser fallback, and Core, React,
-Solid, Next, Vite, and Remix use the same executable catalog contract. The
-request-scope integrations use the same generated representation through their
-adapter-owned delivery paths.
+## Validation
 
 The [catalog-delivery evidence report](../benchmarks/catalog-delivery/README.md)
-records the parser-free artifact, browser delivery, and server reuse checks.
-The migration rules and exact replacements are maintained in the
-[v2 migration guide](../docs/migration-v2.md).
+records parser-free artifacts, browser delivery, server catalog reuse, and host
+failure checks. The [v2 migration guide](../docs/migration-v2.md) owns legacy
+API replacements; release status belongs in the release policy and tracker.

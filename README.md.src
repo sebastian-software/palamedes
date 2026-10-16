@@ -98,7 +98,7 @@ a few files and extract again. On the realistic corpus (1,500 files, 6,000
 messages) a cold extract and catalog update takes `73 ms`; touching `5` source
 files and re-running takes `47 ms`, because extraction is cached per
 file and validated by a `stat` — unchanged files are neither read nor parsed
-([ADR-019](https://palamedes.dev/decisions/019-extraction-cache)). In watch
+([ADR-022](https://palamedes.dev/decisions/022-extraction-cache)). In watch
 mode that cache is held in memory for the life of the process.
 
 The compared tools have no equivalent local cache: they re-extract in full, so
@@ -119,7 +119,7 @@ released in the open:
 
 - [`ferrocat`](https://github.com/sebastian-software/ferrocat) — catalog and
   ICU semantics: PO and FCL parsing, merging, auditing, and compilation
-  ([ADR-006](adr/006-ferrocat-as-catalog-and-icu-foundation.md))
+  ([ADR-009](adr/009-ferrocat-as-catalog-and-icu-foundation.md))
 - [`ferromark`](https://github.com/sebastian-software/ferromark) — CommonMark
   and MDX parsing behind the MDX extraction path
 - [`ferralk`](https://github.com/sebastian-software/ferralk) — parallel source

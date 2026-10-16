@@ -31,7 +31,7 @@ project is excluded. Project content stays between the two frames.
 Published subpackage READMEs retain their compact registry family blocks and
 existing regeneration command. The root README uses native theme composition.
 
-See the [living decision](../adr/029-readme-theme-composition.md).
+See the [living decision](../adr/028-readme-theme-composition.md).
 
 ## Theme badge placement
 

@@ -1,41 +1,10 @@
-# ADR-027: Privacy-Bounded CLI Update Check With Deployment-Gated Rollout
+# ADR-016: Privacy-Bounded CLI Update Checks
 
-- Status: Accepted; service readiness complete, activation configured for the next release
-- Date: 2026-08-22 (amended 2026-08-27: shared service, project and cohort
-  fields; amended 2026-09-02: production hostname; amended 2026-09-07:
-  release activation and readiness evidence —
-  [#1036](https://github.com/sebastian-software/palamedes/issues/1036))
-- Issue: [#855](https://github.com/sebastian-software/palamedes/issues/855)
+**Status:** Accepted
 
-## Context
+**Last updated:** 2026-10-16
 
-The native CLI cannot currently tell a user that a newer release exists. A
-small update request can answer that question and provide aggregate evidence
-about versions and platforms that make update checks. It is also a
-trust-sensitive network side effect: an automatic request can reveal more than
-its JSON body through application logging, stable identifiers, repeated
-attempts, or accidental command and filesystem context.
-
-The production hostname now exists at
-`version-service.sebastian-software.de`, owned by the public
-[version-service](https://github.com/sebastian-software/version-service)
-repository. Production readiness was completed on September 6 in
-[version-service #11](https://github.com/sebastian-software/version-service/issues/11#issuecomment-5558984060).
-The verification is associated with candidate
-`04b56723d03c28e9b94a4db9fbbc57a2ee1a3940`; this is deployment-history
-correlation, not attestation of the revision active inside Bunny. The release
-workflow now configures activation for the next release. A consuming release
-and its production-check evidence are still pending in
-[#1036](https://github.com/sebastian-software/palamedes/issues/1036) and
-[version-service #12](https://github.com/sebastian-software/version-service/issues/12).
-
-The no-identifier boundary has one important measurement consequence. A
-24-hour client cache rate-limits requests from one installation, but the server
-cannot recognize that installation again on a later day. Weekly unique active
-installations are therefore not derivable. The honest measurements are
-rate-limited request volume, version, OS, architecture, and CI/local
-distributions, and — through a coarse year-month install cohort — requests
-from older cohorts, not counts of retained installations.
+Advisory update checks use an owned endpoint, bounded work, explicit opt-outs, and no installation identifier.
 
 ## Decision
 
@@ -47,8 +16,7 @@ The native `pmds` binary owns one advisory update-check mechanism:
    `PALAMEDES_UPDATE_ENDPOINT` is exactly the owned HTTPS route
    `https://version-service.sebastian-software.de/check`. Missing values keep it
    disabled; malformed, alternate-origin, credentialed, port-qualified, query,
-   or fragment values fail the build. With service readiness complete,
-   `publish-native` sets that variable for all six CLI artifacts, including
+   or fragment values fail the build. The release workflow sets that variable for all six CLI artifacts, including
    the two host-built musl targets. Ordinary builds and general validation
    remain default-off. Packaging smoke checks set `PALAMEDES_UPDATE_CHECK=0`,
    explicitly inside the musl container too; this runtime opt-out is not a
@@ -109,18 +77,11 @@ requires HTTP 200 and an exact bounded `{"success":true}` acknowledgement.
 That acknowledgement does not prove later event visibility, and a client
 timeout can follow ingestion.
 
-Bunny raw request logging was observed off during readiness verification;
-this is not a historical-deletion guarantee. Shield/per-client rate limiting
-is intentionally absent. Aggregate monitoring and health checks provide
-limited detection, not abuse prevention or proof of individual ingestion.
-
-Release execution remains Palamedes-owned and production observation requires
-operator authorization. Keep #1036 and version-service #12 open until an
-actual published artifact and a valid matching private service-side event
-are verified, with sanitized evidence linked in both issues. A silent CLI
-exit or an unrelated aggregate increase is insufficient; colliding aggregate
-dimensions leave attribution ambiguous. Follow the service runbook's bounded
-observation window and do not delete the cache to retry an ambiguous check.
+Service operators own raw request logging, retention, abuse controls, and
+production observation. Client success alone does not establish ingestion,
+privacy alignment, or the active deployed revision. Verify those properties
+through the service runbook with sanitized evidence; do not reset the client
+cache to manufacture repeated observations.
 
 For immediate user-side disable, set `DO_NOT_TRACK=1` or
 `PALAMEDES_UPDATE_CHECK=0`. Maintainers can remove endpoint embedding from
@@ -128,6 +89,28 @@ future builds and publish a new patch release; existing binaries stay enabled
 until users opt out or install a disabled build. Service-side containment
 belongs to version-service operators. Disarming `BUNNY_DEPLOY_ENABLED` only
 prevents future deployments, not requests to an already deployed service.
+
+## Context
+
+The native CLI provides an advisory notice when a newer release exists. A
+small update request can answer that question and provide aggregate evidence
+about versions and platforms that make update checks. It is also a
+trust-sensitive network side effect: an automatic request can reveal more than
+its JSON body through application logging, stable identifiers, repeated
+attempts, or accidental command and filesystem context.
+
+The [CLI guide](../docs/cli.md#advisory-update-checks) and the
+[version-service repository](https://github.com/sebastian-software/version-service)
+own release readiness, deployment evidence, and the service runbook. This
+record defines the enduring client and privacy contract, not rollout status.
+
+The no-identifier boundary has one important measurement consequence. A
+24-hour client cache rate-limits requests from one installation, but the server
+cannot recognize that installation again on a later day. Weekly unique active
+installations are therefore not derivable. The honest measurements are
+rate-limited request volume, version, OS, architecture, and CI/local
+distributions, and — through a coarse year-month install cohort — requests
+from older cohorts, not counts of retained installations.
 
 ## Alternatives Considered
 
@@ -143,13 +126,6 @@ not implement the self-controlled aggregation contract, and would make its
 data-retention policy part of CLI behavior. The shared service does read the
 distribution registry server-side as its version source — behind the owned
 endpoint, where the retention contract stays ours.
-
-### Per-project Cloudflare Worker with Workers Analytics Engine
-
-Superseded (original decision of 2026-08-22). Cloudflare is not part of our
-operated stack, and a per-repository service does not scale to the other CLIs.
-The shared Bunny Edge Scripting service with the Rybbit sink replaces it; the
-reviewed request-validation contract carried over unchanged.
 
 ### Add a stable anonymous installation identifier
 

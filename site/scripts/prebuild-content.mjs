@@ -14,6 +14,7 @@ import {
   selectScreenshotExamples,
 } from "../../scripts/example-matrix.mjs";
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
+import { writeDecisionRedirects } from "./decision-redirects.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -130,7 +131,8 @@ for (const doc of docs) {
   await writeRouteFromSource(doc);
 }
 
-await writeDecisionsIndex(adrs);
+await writeDecisionsIndex();
+await writeDecisionRedirects(repoRoot, publicRoot);
 for (const adr of adrs) {
   await writeRouteFromSource(adr);
 }
@@ -414,35 +416,13 @@ async function writeDocsNavigation(docs) {
   );
 }
 
-async function writeDecisionsIndex(adrs) {
-  const lines = [
-    "---",
-    'title: "Decision Records"',
-    'description: "Generated index of the Palamedes product, architecture, communication, and operational decision records."',
-    "order: 0",
-    "---",
-    "",
-    "# Decision Records",
-    "",
-    '<p className="pmds-docs-micro-label">Decision trail / recorded in the repository</p>',
-    "",
-    "The ADR files remain canonical in `adr/`. This decision trail is generated from their current title, status, and date during the site prebuild.",
-    "",
-    "| No. | Decision | Status | Date |",
-    "| ---: | --- | --- | --- |",
-  ];
-
-  for (const adr of adrs) {
-    const content = await readRepoFile(adr.source);
-    const title = extractTitle(content) ?? titleFromPath(adr.source);
-    const number = adr.source.match(/adr\/(\d{3})-/u)?.[1] ?? "—";
-    const status = extractAdrMeta(content, "Status") ?? "—";
-    const date = extractAdrMeta(content, "Date") ?? "—";
-    const shortTitle = title.replace(/^ADR-\d{3}:\s*/u, "");
-    lines.push(`| ${number} | [${shortTitle}](${adr.route}) | ${status} | ${date} |`);
-  }
-  lines.push("");
-  await writeGeneratedFile(join(routesRoot, "decisions/index.md"), lines.join("\n"));
+async function writeDecisionsIndex() {
+  await writeRouteFromSource({
+    source: "DECISIONS.md",
+    route: "/decisions",
+    out: join(routesRoot, "decisions/index.md"),
+    order: 0,
+  });
 }
 
 async function writeBlogIndexData(posts) {
@@ -502,7 +482,10 @@ async function writeRouteFromSource(entry) {
   const lede = extractLede(parsed.content);
   const description = lede?.text;
   const status = extractAdrMeta(parsed.content, "Status");
-  const date = entry.date ?? extractAdrMeta(parsed.content, "Date");
+  const date =
+    entry.date ??
+    extractAdrMeta(parsed.content, "Last updated") ??
+    extractAdrMeta(parsed.content, "Date");
   const body = lede ? removeLedeBlock(parsed.content, lede) : parsed.content;
   const content = transformLinks(body, entry.source);
   const usesProgressiveOutline =
@@ -963,8 +946,8 @@ function extractLede(content) {
     if (paragraph === "" || paragraph.startsWith("#") || paragraph.startsWith("```")) continue;
     if (paragraph.startsWith("|") || paragraph.startsWith("- ") || paragraph.startsWith("* "))
       continue;
-    if (/^\*\*(Status|Date):\*\*/u.test(paragraph)) continue;
-    if (/^(Status|Date):/u.test(paragraph)) continue;
+    if (/^\*\*(Status|Date|Last updated):\*\*/u.test(paragraph)) continue;
+    if (/^(Status|Date|Last updated):/u.test(paragraph)) continue;
     return {
       start: blockStart + innerOffset,
       end: blockStart + block.length,

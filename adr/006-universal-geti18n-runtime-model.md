@@ -1,24 +1,10 @@
-# ADR-005: Universal `getI18n()` Runtime Model
+# ADR-006: Universal `getI18n()` Runtime Model
 
 **Status:** Accepted
-**Date:** 2026-03-17
 
-## Context
+**Last updated:** 2026-10-16
 
-A recurring source of complexity in JavaScript i18n tooling is splitting runtime access across multiple patterns:
-
-- hook-like APIs for components
-- direct runtime objects for non-component code
-- separate client and server access paths
-
-That tends to create several problems:
-
-- users must choose between overlapping abstractions
-- transform output becomes harder to standardize
-- the runtime contract depends too much on framework-specific expectations
-- server behavior becomes harder to explain and validate
-
-Palamedes needs one runtime primitive that transformed code can target consistently.
+Application code reads the active runtime through one environment-independent getter.
 
 ## Decision
 
@@ -40,6 +26,23 @@ Palamedes does not adopt a split public model like:
 
 - hook-shaped access for one environment
 - direct runtime access for another environment
+
+## Context
+
+A recurring source of complexity in JavaScript i18n tooling is splitting runtime access across multiple patterns:
+
+- hook-like APIs for components
+- direct runtime objects for non-component code
+- separate client and server access paths
+
+That tends to create several problems:
+
+- users must choose between overlapping abstractions
+- transform output becomes harder to standardize
+- the runtime contract depends too much on framework-specific expectations
+- server behavior becomes harder to explain and validate
+
+Palamedes needs one runtime primitive that transformed code can target consistently.
 
 ## Alternatives Considered
 

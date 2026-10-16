@@ -118,7 +118,7 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
           {warm.touchedFiles} changed source files; {displayBenchmarkTime(baseline.medianMs)} is the
           cold workflow result. No speedup factor is calculated for the non-comparable cached run.{" "}
           <a
-            href={decisionHref("019-extraction-cache")}
+            href={decisionHref("022-extraction-cache")}
             className="text-accent underline underline-offset-2"
           >
             Cache details →

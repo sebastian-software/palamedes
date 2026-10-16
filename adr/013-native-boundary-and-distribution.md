@@ -1,21 +1,10 @@
-# ADR-007: Native Boundary and Distribution
+# ADR-013: Native Boundary and Distribution
 
 **Status:** Accepted
-**Date:** 2026-03-17
-**Revised:** 2026-08-25
 
-## Context
+**Last updated:** 2026-10-16
 
-If Palamedes is Rust-first, it still needs a practical delivery and integration model for Node-based tooling.
-
-That boundary has to satisfy a few constraints:
-
-- usable in normal Node.js environments today
-- compatible with CLI and bundler plugin use cases
-- coarse-grained enough that the boundary does not become the new source of complexity
-- realistic to package and distribute across supported platforms
-
-At the same time, Palamedes should avoid turning the binding layer into a second semantic API surface.
+Platform packages deliver the native engine and CLI behind small, platform-aware wrappers.
 
 ## Decision
 
@@ -25,7 +14,7 @@ The boundary rules are:
 
 - prefer coarse native operations over fine-grained helper exports
 - keep the TypeScript wrapper thin and ergonomic
-- allow simple serialized payloads where they keep the boundary straightforward
+- use typed N-API values for the in-process Node boundary under ADR-017
 - do not treat the binding layer as the primary place to model i18n semantics
 
 The package model is:
@@ -69,6 +58,19 @@ it must have a reproducible native build and load smoke test on a matching
 runner, and its ongoing cost must be justified across both the CLI and Node
 binding package families. Adding a target is therefore an explicit update to
 this ADR and the platform-support contract, not an incidental packaging change.
+
+## Context
+
+If Palamedes is Rust-first, it still needs a practical delivery and integration model for Node-based tooling.
+
+That boundary has to satisfy a few constraints:
+
+- usable in normal Node.js environments today
+- compatible with CLI and bundler plugin use cases
+- coarse-grained enough that the boundary does not become the new source of complexity
+- realistic to package and distribute across supported platforms
+
+At the same time, Palamedes should avoid turning the binding layer into a second semantic API surface.
 
 ## Alternatives Considered
 

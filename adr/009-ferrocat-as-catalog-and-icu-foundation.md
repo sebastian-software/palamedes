@@ -1,7 +1,34 @@
-# ADR-006: Ferrocat as Catalog and ICU Foundation
+# ADR-009: Ferrocat as Catalog and ICU Foundation
 
 **Status:** Accepted
-**Date:** 2026-03-17
+
+**Last updated:** 2026-10-16
+
+Ferrocat owns reusable catalog and ICU semantics; Palamedes owns source processing and product workflows.
+
+## Decision
+
+`ferrocat` is the foundation for host-neutral PO, catalog, and ICU semantics in Palamedes.
+
+`ferrocat` is the preferred home for:
+
+- PO parsing and serialization
+- catalog update semantics
+- normalized parsed-catalog access
+- PO and FCL storage semantics, including deterministic catalog ordering
+- ICU parsing and validation
+- plural and gettext-adjacent catalog behavior
+- other reusable host-neutral catalog primitives
+
+Palamedes remains the home for:
+
+- OXC-based source processing
+- product-shaped workflow operations
+- host-aware config and file orchestration
+- runtime module code generation
+- framework adapter behavior
+
+Palamedes should delegate more general catalog-format concerns to `ferrocat` over time, but should not mirror the full low-level `ferrocat` surface into its public package APIs.
 
 ## Context
 
@@ -28,30 +55,6 @@ At the same time, Palamedes still needs product-shaped workflows on top of those
 
 That means Palamedes needs a clean boundary, not just a dependency swap.
 
-## Decision
-
-`ferrocat` is the foundation for host-neutral PO, catalog, and ICU semantics in Palamedes.
-
-`ferrocat` is the preferred home for:
-
-- PO parsing and serialization
-- catalog update semantics
-- normalized parsed-catalog access
-- PO and FCL storage semantics, including deterministic catalog ordering
-- ICU parsing and validation
-- plural and gettext-adjacent catalog behavior
-- other reusable host-neutral catalog primitives
-
-Palamedes remains the home for:
-
-- OXC-based source processing
-- product-shaped workflow operations
-- host-aware config and file orchestration
-- runtime module code generation
-- framework adapter behavior
-
-Palamedes should delegate more general catalog-format concerns to `ferrocat` over time, but should not mirror the full low-level `ferrocat` surface into its public package APIs.
-
 ## Alternatives Considered
 
 ### 1. Keep catalog semantics primarily inside Palamedes
@@ -71,7 +74,7 @@ Rejected because it recreates the fragmentation that the Rust-first architecture
 - Palamedes should prefer high-level `ferrocat` APIs over bespoke catalog glue whenever the semantic fit is good.
 - Remaining local catalog logic in Palamedes should be treated as candidate delegation material, not as a permanent second foundation.
 - New generic catalog or ICU helpers should default to `ferrocat` unless they are clearly product-specific.
-- Catalog compilation/export for runtime maps can now be delegated to Ferrocat's artifact APIs and compiled-key contract, while Palamedes remains responsible for host-side module rendering and config-aware orchestration.
+- Catalog compilation/export for runtime maps uses Ferrocat artifact APIs and its compiled-key contract; Palamedes owns runtime module rendering and config-aware orchestration.
 - Build-time message-function generation must parse through Ferrocat and only
   lower its AST into Palamedes' executable runtime operations; Palamedes must
   not grow a second Rust ICU parser for compilation.

@@ -44,7 +44,7 @@ export function RouterSiteLink({
  * the `ferramenta-family` registry — names, jobs, and destinations are never
  * copied into this repository (ferramenta ADR-0001). Only the registry entry
  * point is imported: it is data with no React and no CSS, so `site-ui` keeps
- * its React-only dependency contract (ADR-021) and the shared chrome receives
+ * its React-only dependency contract (ADR-027) and the shared chrome receives
  * plain configuration.
  */
 const FAMILY_CURRENT = "palamedes";

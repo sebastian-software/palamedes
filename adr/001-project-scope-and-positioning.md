@@ -1,42 +1,10 @@
 # ADR-001: Project Scope and Open Positioning
 
 **Status:** Accepted
-**Date:** 2026-03-17
+
 **Last updated:** 2026-10-16
 
-## Context
-
-Palamedes needs a durable definition of what it owns, how it differs from
-adjacent tools, and how the project communicates those choices.
-
-Many established i18n libraries grew under different constraints:
-
-- broad backward compatibility
-- support for many historical API styles
-- multiple overlapping runtime models
-- a mix of build-time and runtime concerns spread across many packages
-
-Palamedes deliberately avoids that overlap, but “opinionated” no longer means
-“small” or “narrow”. The project now covers transformation, extraction, catalog
-updates, audits, semantic merging, compilation, runtime integration, and
-first-party adapters across several frontend and server hosts. Its verified
-framework matrix and CI flows are part of the product strength, not incidental
-examples.
-
-The repository is also public. Product and marketing reasoning committed here
-is visible to users, contributors, competitors, and future maintainers.
-Describing that material as an “internal story” creates a false distinction and
-makes the open-source project sound less candid than it is.
-
-Finally, two general product narratives would drift. `PRODUCT.md` and a
-separate storyline document would both try to answer what Palamedes is and how
-to present it, without a meaningful ownership boundary between them.
-
-Palamedes and the planned Palamedes+ product also need a repository and content
-boundary that users can understand. Technical comparison of open-source client
-libraries helps people evaluate this project. Pricing, company, market, hosted
-platform, AI-service, and other commercial research serves the managed product
-and would blur the promise of this repository if it remained here.
+Palamedes is a TypeScript i18n foundation with a complete local workflow and an explicit boundary to managed services.
 
 ## Decision
 
@@ -135,9 +103,19 @@ Artifact ownership is explicit:
   principles.
 - This ADR records the durable decision, its rationale, its tradeoffs, and the
   conditions that should reopen it.
-- ADR-026 owns visual and benchmark-presentation rules. Completed plans and
+- ADR-011 owns visual and benchmark-presentation rules. Completed plans and
   discarded design explorations remain recoverable in Git history; they do
   not remain parallel sources of current product requirements.
+
+## Context
+
+A long-lived application needs authoring, catalogs, runtime behavior, and host
+integration to remain coherent. Broad compatibility paths or framework-specific
+semantics would multiply the models contributors and users must understand.
+
+The public repository also needs one clear product position and an explicit
+boundary to managed services. Duplicate marketing narratives and commercial
+research would weaken that boundary and drift from the implementation.
 
 ## Alternatives Considered
 

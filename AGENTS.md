@@ -1,4 +1,4 @@
-**Effective Flow project setup:** adr/028-effective-flow-project-setup.md
+**Effective Flow project setup:** adr/029-effective-flow-project-setup.md
 
 # Palamedes project guidance
 
@@ -6,7 +6,7 @@
 
 - `crates/` contains the Rust core, CLI, Node binding, and plugin SDK. `packages/` contains the JavaScript packages and native sidecars; `examples/` contains the integration matrix.
 - `docs/` contains product and API documentation. The documentation site lives in `site/` and is built from the repository content.
-- ADRs live under `adr/` and are indexed by `DECISIONS.md`. Read the relevant ADR before changing a boundary or workflow; ADR-028 defines the Effective Flow setup for this repository.
+- ADRs live under `adr/` and are indexed by `DECISIONS.md`. Read the relevant ADR before changing a boundary or workflow; ADR-029 defines the Effective Flow setup for this repository.
 
 ## Change preflight
 

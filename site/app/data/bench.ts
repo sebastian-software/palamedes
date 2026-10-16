@@ -36,7 +36,7 @@ export interface BenchCorpus {
 /*
  * The warm lane: what the *next* extract costs after an edit, which is the run
  * a developer triggers dozens of times a day. Palamedes reuses its extraction
- * cache here (ADR-019); the compared tools have no comparable local cache and
+ * cache here (ADR-022); the compared tools have no comparable local cache and
  * re-extract in full, so their warm medians equal their cold ones.
  *
  * That is why this shape carries no competitor row and no ratio field: warm is

@@ -26,6 +26,7 @@ packages/cli-*/LICENSE
 site/build/
 site/.react-router/
 site/public/fragment-demo/
+site/public/decisions/
 
 # Next.js
 .next/
