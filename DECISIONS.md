@@ -8,6 +8,24 @@ They describe the repository contract; the
 Numbers express reading order, not the date a decision was made. Git history
 preserves earlier versions and the rationale for changes.
 
+## The model at a glance
+
+- [Rust owns shared semantics](./adr/002-rust-first-core-with-thin-host-adapters.md);
+  TypeScript adapters connect them to application hosts.
+- [Message text and optional context are the public identity](./adr/003-source-string-first-message-identity.md).
+  Compiled lookup keys remain internal artifacts.
+- [Catalogs compile to executable messages](./adr/004-generated-catalogs-use-executable-message-functions.md),
+  and [every public application runtime is parser-free](./adr/005-generated-production-runtime-is-parser-free.md).
+- [One `getI18n()` primitive](./adr/006-universal-geti18n-runtime-model.md) resolves
+  the active instance: request-local on the server, with a
+  [document-fixed locale in the browser](./adr/007-locale-is-fixed-for-a-browser-document.md).
+- [The native CLI owns local workflows and data configuration](./adr/012-native-cli-and-yaml-first-configuration.md).
+  [Explicit executable plugins](./adr/015-cli-plugin-execution-boundary.md)
+  extend it without moving shared semantics into a JavaScript CLI.
+
+The sections below explain the decisions behind this model. Start with the
+foundations; use the remaining groups when working on those boundaries.
+
 ## Product and system foundations
 
 Start with the product boundary, semantic model, runtime, and shared presentation principles.
@@ -59,6 +77,26 @@ Read these when changing shared documentation surfaces or the repository workflo
 
 ## Maintaining living decisions
 
+Palamedes deliberately uses a living variant of ADRs. The
+[classic convention](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+keeps accepted decisions as historical records with stable numbers and links
+to successors when a decision changes. Here, each file describes the current
+decision and may be revised in place; numbers organize the reading sequence.
+Contributors and coding agents can read the current contract directly without
+resolving successor chains or combining conflicting historical instructions.
+Each current record still explains its context, alternatives, and consequences.
+The tradeoff is that earlier decisions and their chronology require Git history
+rather than a self-contained supersession log.
+
+- Keep each record focused on one significant decision and its rationale.
+  There is no target document count. A choice deserves a separate record when
+  it has meaningful alternatives and durable consequences that future
+  contributors need to understand.
+- Related decisions may remain separate when they can change independently.
+  For example, executable catalog functions do not by themselves guarantee
+  parser-free package entrypoints. Merge records when they explain the same
+  choice; move API inventories, procedures, and experiment detail to their
+  owning documentation rather than expanding the decision log.
 - Update an existing record when its decision evolves. Keep the current
   contract clear instead of appending amendments or supersession chains.
 - Use `Status: Accepted` for the current corpus and `Last updated: YYYY-MM-DD`
