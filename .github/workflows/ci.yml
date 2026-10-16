@@ -233,7 +233,6 @@ jobs:
       # not reviewed in a pull request. Renovate's `:standards` preset bumps the
       # pin; the drift it then reports is applied in that same pull request.
       - name: "Guard: the pinned standards CLI matches the repository stamp"
-        if: ${{ matrix.full }}
         run: |
           node -p "
           const meta = require('./.repometa.json');
@@ -242,9 +241,36 @@ jobs:
           if (manifest.currentVersion !== meta.standards) {
             throw new Error('The installed @sebastian-software/standards ships manifest version ' + manifest.currentVersion + ', but .repometa.json is stamped ' + meta.standards + '. Raise the pin to the release whose manifest is version ' + meta.standards + ' and refresh the lockfile.');
           }
-          'standards CLI and repository stamp are aligned at version ' + meta.standards
+          const { readFileSync } = require('node:fs');
+          const { join, relative } = require('node:path');
+          const cli = '@sebastian-software/standards';
+          const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+          const units = paths.flatMap((dir) => {
+            const file = join(dir, 'package.json');
+            try { const pkg = JSON.parse(readFileSync(file, 'utf8')); return isRecord(pkg) ? [{ file: relative(process.cwd(), file), pkg }] : []; } catch { return []; }
+          });
+          const exact = (spec) => typeof spec === 'string' && /^(?:0|[1-9][0-9]*)[.](?:0|[1-9][0-9]*)[.](?:0|[1-9][0-9]*)(?:-(?:[0-9]*[A-Za-z-][0-9A-Za-z-]*|0|[1-9][0-9]*)(?:[.](?:[0-9]*[A-Za-z-][0-9A-Za-z-]*|0|[1-9][0-9]*))*)?(?:[+][0-9A-Za-z-]+(?:[.][0-9A-Za-z-]+)*)?/.exec(spec)?.[0] === spec && spec.length <= 256 && spec.split(/[+-]/, 1)[0].split('.').every((part) => Number(part) <= Number.MAX_SAFE_INTEGER);
+          const shown = (spec) => {
+            const text = typeof spec === 'string' ? spec : JSON.stringify(spec);
+            const reduced = text.includes('://') ? text.slice(0, text.indexOf('://') + 1) : text;
+            return [...reduced].map((char) => { const code = char.charCodeAt(0); return code < 32 || (code >= 127 && code < 160) ? '?' : char; }).join('');
+          };
+          const declared = units.flatMap((unit) => [unit.pkg.devDependencies, unit.pkg.dependencies].filter((deps) => isRecord(deps) && Object.hasOwn(deps, cli)).map((deps) => ({ file: unit.file, spec: deps[cli] })));
+          const exempt = units.some((unit) => unit.pkg.name === cli);
+          const loose = exempt ? [] : declared.filter((entry) => !exact(entry.spec));
+          if (loose.length > 0) {
+            throw new Error(loose.map((entry) => entry.file + ' declares ' + cli + ' as ' + shown(entry.spec)).join('; ') + ' — the pin must be a bare exact version literal such as 0.11.1. Set its value to an exact version in that package.json and dependency field (install with pnpm add --save-exact @sebastian-software/standards@<version>, adding --save-dev for a devDependency), and refresh the lockfile.');
+          }
+          if (!exempt && units.length > 0 && declared.length === 0) {
+            throw new Error('No package.json declares ' + cli + ', but this workflow runs it. Add @sebastian-software/standards@<version> as a devDependency pinned to a bare exact version literal in the package.json this job installs from, and refresh the lockfile.');
+          }
+          'standards CLI and repository stamp are aligned at version ' + meta.standards + ', and the pin is an exact version literal'
           "
 
+      # `@sebastian-software/standards` is a pinned devDependency, so this runs
+      # the exact version the lockfile records and CI executes nothing that was
+      # not reviewed in a pull request. Renovate's `:standards` preset bumps the
+      # pin; the drift it then reports is applied in that same pull request.
       - name: Check org standards
         if: ${{ matrix.full }}
         run: pnpm exec standards check
