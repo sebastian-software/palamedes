@@ -562,6 +562,72 @@ header.ardo-header > div {
   }
 }
 
+/* ----------------------------------------------------------------- flow -- */
+
+/*
+ * A four-station flow: one hairline joins the stations on wide screens and a
+ * bronze marker travels it, the way a message moves from server render to
+ * server action. Under reduced motion the marker is not shown. It passes behind
+ * the station squares, which sit above it in the stacking order.
+ */
+.pmds-flow-line,
+.pmds-flow-token {
+  display: none;
+}
+
+@media (min-width: 80rem) {
+  .pmds-flow-line {
+    position: absolute;
+    top: 1.25rem;
+    /* The fourth station starts at 75% plus three quarters of the 2.5rem gap. */
+    right: calc(25% - 3.125rem);
+    left: 1.25rem;
+    display: block;
+    height: 1px;
+    background: rgb(134 96 38 / 0.45);
+  }
+
+  .pmds-flow-token {
+    position: absolute;
+    top: calc(1.25rem - 4px);
+    left: 1.25rem;
+    width: 9px;
+    height: 9px;
+    background: var(--color-accent);
+    rotate: 45deg;
+  }
+
+  /* Only a moving marker means something; at rest it would hide a station. */
+  @media (prefers-reduced-motion: no-preference) {
+    .pmds-flow-token {
+      display: block;
+      animation: pmds-flow-travel 7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    }
+  }
+}
+
+@keyframes pmds-flow-travel {
+  0%,
+  6% {
+    left: 1.25rem;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  96%,
+  100% {
+    left: calc(75% + 3.125rem);
+    opacity: 0;
+  }
+}
+
 /* --------------------------------------------------------------- actions -- */
 
 .pmds-page .pmds-button:not(.pmds-button--small) {

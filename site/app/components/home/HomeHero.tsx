@@ -1,5 +1,6 @@
 import { ButtonLink } from "@palamedes/site-ui";
 
+import { AgentStart } from "./AgentStart";
 import { HeroMorph } from "./HeroMorph";
 
 /*
@@ -51,7 +52,10 @@ export function HomeHero() {
             .
           </p>
         </div>
-        <HeroMorph />
+        <div>
+          <HeroMorph />
+          <AgentStart />
+        </div>
       </div>
     </section>
   );
