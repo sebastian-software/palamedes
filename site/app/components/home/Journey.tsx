@@ -148,14 +148,40 @@ export function Journey() {
         title="Follow one sentence from your editor to your visitor."
         lede="Six stops, each explained in plain words. You don’t need an i18n background — just the one component below."
       />
+      <nav aria-label="Stops on the tour" className="mt-10">
+        <ol className="flex flex-wrap gap-2">
+          {STOPS.map((stop, index) => (
+            <li key={stop.step}>
+              <a
+                href={`#stop-${stop.step.toLowerCase()}`}
+                className="group flex min-h-11 items-center gap-2.5 border border-ink/15 bg-paper px-3 py-1.5 text-[14px] font-semibold transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                <span
+                  aria-hidden
+                  className="display-serif grid size-6 place-items-center border border-accent text-[13px] text-accent"
+                >
+                  {index + 1}
+                </span>
+                {stop.step}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </nav>
       <ol className="pmds-journey mt-16">
         {STOPS.map((stop, index) => (
-          <li key={stop.step} className="pmds-journey-stop">
+          <li
+            key={stop.step}
+            id={`stop-${stop.step.toLowerCase()}`}
+            className="pmds-journey-stop scroll-mt-24"
+          >
             <span aria-hidden className="pmds-journey-marker">
               {index + 1}
             </span>
-            <div className="grid grid-cols-1 gap-x-14 gap-y-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <div>
+            <div
+              className={`grid grid-cols-1 gap-x-14 gap-y-8 ${index % 2 === 0 ? "lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]" : "lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"}`}
+            >
+              <div className={index % 2 === 0 ? undefined : "lg:order-2"}>
                 <p className="micro text-[12px] tracking-label text-accent">
                   Stop {index + 1} · {stop.step}
                 </p>
@@ -165,7 +191,9 @@ export function Journey() {
                 <p className="mt-5 text-[17px] leading-[1.7] text-ink/85">{stop.body}</p>
                 <PlainWords {...stop.plain} className="mt-7" />
               </div>
-              <div className="min-w-0 lg:pt-8">{stop.artifact}</div>
+              <div className={`min-w-0 lg:pt-8 ${index % 2 === 0 ? "" : "lg:order-1"}`}>
+                {stop.artifact}
+              </div>
             </div>
           </li>
         ))}
