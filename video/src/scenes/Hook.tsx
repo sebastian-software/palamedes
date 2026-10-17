@@ -19,11 +19,30 @@ const GLUE = [
   "hydrate-catalog.ts",
 ];
 
-export function Hook() {
+/** Scene frames at which each part arrives; the defaults follow the promo's voice. */
+export interface HookCues {
+  title: number;
+  listing: number;
+  files: number;
+  glue: number;
+  crowd: number;
+  bars: number;
+}
+
+export const PROMO_HOOK: HookCues = {
+  title: Math.round(BEAT * 3.4),
+  listing: 145,
+  files: 205,
+  glue: 262,
+  crowd: 288,
+  bars: 4,
+};
+
+export function Hook({ cues = PROMO_HOOK }: { cues?: HookCues }) {
   const frame = useCurrentFrame();
-  // Cues follow the voice: "Keys…" at ~5.2 s, "files…" at ~7 s, "glue…" at ~9 s.
-  const crowd = ease(frame, 288, 40);
-  const fadeOut = interpolate(frame, [BAR * 3.8, BAR * 4], [1, 0], {
+  // Cues follow the voice: keys, then files, then glue, then the crowd.
+  const crowd = ease(frame, cues.crowd, 40);
+  const fadeOut = interpolate(frame, [BAR * (cues.bars - 0.2), BAR * cues.bars], [1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -38,7 +57,7 @@ export function Hook() {
           position: "absolute",
           left: 140,
           top: 210,
-          ...arrive(frame, Math.round(BEAT * 3.4)),
+          ...arrive(frame, cues.title),
         }}
       >
         <Display size={78} style={{ color: C.bronze }}>
@@ -53,7 +72,7 @@ export function Hook() {
           top: 380,
           width: 880,
           transform: `rotate(${-1.5 * crowd}deg) scale(${1 - 0.04 * crowd})`,
-          ...arrive(frame, 145),
+          ...arrive(frame, cues.listing),
         }}
       >
         <Listing
@@ -80,7 +99,7 @@ export function Hook() {
       </div>
 
       {LOCALES.map((file, index) => {
-        const start = 205 + index * (BEAT / 3);
+        const start = cues.files + index * (BEAT / 3);
         const drift = crowd * (index - 2) * 18;
         return (
           <div
@@ -109,7 +128,7 @@ export function Hook() {
       })}
 
       {GLUE.map((file, index) => {
-        const start = 262 + index * (BEAT / 3);
+        const start = cues.glue + index * (BEAT / 3);
         return (
           <div
             key={file}

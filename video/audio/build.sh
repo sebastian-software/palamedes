@@ -13,7 +13,7 @@ OUT=$WORK/out/$NAME
 mkdir -p "$WORK/music" "$OUT"
 
 # --- score ----------------------------------------------------------------
-"$PY" -I "$HERE/compose.py" "$WORK/music"
+"$PY" -I "$HERE/compose.py" "$WORK/music" "$CUES"
 [ -f "$WORK/music/ir.wav" ] || "$PY" -I "$HERE/hall.py" "$WORK/music/ir.wav"
 fluidsynth -ni -q -R 0 -C 0 -g 0.45 -r 48000 -F "$WORK/music/piano.wav" "$WORK/sf/piano.sf2" "$WORK/music/piano.mid"
 fluidsynth -ni -q -R 0 -C 0 -g 0.35 -r 48000 -F "$WORK/music/strings.wav" "$WORK/sf/strings.sf3" "$WORK/music/strings.mid" 2>/dev/null
@@ -46,7 +46,9 @@ ffmpeg -v error -y -i "$OUT/premix.wav" \
 
 # --- picture and mux --------------------------------------------------------
 PROPS=$(python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])).get('props', {})))" "$CUES")
-(cd "$VIDEO" && ./node_modules/.bin/remotion render src/index.ts PalamedesPromo "$OUT/picture.mp4" --props="$PROPS" --codec=h264 --crf=18 --muted --log=error)
-ffmpeg -v error -y -i "$OUT/picture.mp4" -i "$OUT/audio.wav" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart "$WORK/out/palamedes-promo-$NAME.mp4"
-cp "$OUT/captions.srt" "$WORK/out/palamedes-promo-$NAME.srt"
-echo "wrote $WORK/out/palamedes-promo-$NAME.mp4"
+COMP=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('composition', 'PalamedesPromo'))" "$CUES")
+FILE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('output', 'palamedes-promo-' + sys.argv[2]))" "$CUES" "$NAME")
+(cd "$VIDEO" && ./node_modules/.bin/remotion render src/index.ts "$COMP" "$OUT/picture.mp4" --props="$PROPS" --codec=h264 --crf=18 --muted --log=error)
+ffmpeg -v error -y -i "$OUT/picture.mp4" -i "$OUT/audio.wav" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart "$WORK/out/$FILE.mp4"
+cp "$OUT/captions.srt" "$WORK/out/$FILE.srt"
+echo "wrote $WORK/out/$FILE.mp4"

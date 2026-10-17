@@ -14,6 +14,7 @@ import { BAR, BEAT } from "../timeline";
 import { ease, useBrandFonts } from "../ui";
 import { Camera, cameraAt, type CamKey } from "./camera";
 import { arc, mix, pop, ramp, scramble, typed, type Point } from "./motion";
+import { Spark, SparkFlight } from "./spark";
 import { cell, Gray, Ink, lineHeight, Title, Token, Win, type WinBox } from "./stage";
 
 /*
@@ -64,6 +65,7 @@ const CATALOG: WinBox = { x: 2500, y: 380, fontSize: 26 };
 const COMPONENT: WinBox = { x: 4700, y: 150, fontSize: 22 };
 const COMPILED: WinBox = { x: 4700, y: 720, fontSize: 22 };
 const GATE = { x: 4300, y: 250, width: 90, height: 800 };
+const GATE_CENTRE: Point = [GATE.x + GATE.width / 2, 600];
 const SHEET = { x: 6900, y: 220, width: 860 };
 const SPREAD = { dx: -260, gap: 60 };
 const BROWSER = { x: 7800, y: 240, width: 1120, height: 800 };
@@ -96,69 +98,6 @@ function marked(text: string, marks: readonly string[]): ReactNode {
       {text.slice(0, at)}
       <Ink>{hit}</Ink>
       {marked(text.slice(at + hit.length), marks)}
-    </>
-  );
-}
-
-/** A token that flies along an arc, leaving a short trail of ghosts. */
-function Flight({
-  frame,
-  from,
-  to,
-  start,
-  end,
-  fontSize,
-  lift = 260,
-  children,
-  melt = 8,
-  color,
-}: {
-  frame: number;
-  from: Point;
-  to: Point;
-  start: number;
-  end: number;
-  fontSize: number | ((t: number) => number);
-  lift?: number;
-  children: (t: number) => ReactNode;
-  melt?: number;
-  color?: string;
-}) {
-  if (frame < start - 12 || frame > end + melt) return null;
-  const raised = ease(frame, start - 12, 12);
-  const t = ramp(frame, start, end, Easing.inOut(Easing.cubic));
-  const size = (value: number) => (typeof fontSize === "number" ? fontSize : fontSize(value));
-  const start0: Point = [from[0], from[1] - raised * 36];
-  const position = (value: number): Point => arc(start0, to, value, lift);
-  const landed = ease(frame, end, melt);
-  const flying = t > 0 && t < 1;
-  return (
-    <>
-      {flying &&
-        [3, 2, 1].map((step) => {
-          const past = Math.max(0, t - step * 0.035);
-          return (
-            <Token
-              key={step}
-              at={position(past)}
-              fontSize={size(past)}
-              opacity={0.3 - step * 0.08}
-              color="transparent"
-            >
-              {children(past)}
-            </Token>
-          );
-        })}
-      <Token
-        at={position(t)}
-        fontSize={size(t)}
-        frame={1 - landed}
-        scale={1 + 0.14 * raised * (1 - t) + Math.sin(t * Math.PI) * 0.08}
-        rotate={Math.sin(t * Math.PI) * -3}
-        color={color}
-      >
-        {children(t)}
-      </Token>
     </>
   );
 }
@@ -268,7 +207,7 @@ function Catalog({ f }: { f: number }) {
       <Title
         x={CATALOG.x}
         y={130}
-        width={1700}
+        width={1250}
         kicker="3 · Translate"
         text="Translators fill in German. Your code stays as it is."
         frame={f}
@@ -557,22 +496,18 @@ function piecePlacement(index: number, f: number) {
   const piece = PIECES[index] ?? PIECES[0]!;
   const appear = pop(f, B(8, 2) + index * BEAT * 0.25, { damping: 16 });
   const tear = pop(f, B(9, 1) + index * 4, { damping: 15, stiffness: 110 });
-  let x = SHEET.x + SPREAD.dx * tear;
-  let y = (TOPS[index] ?? 0) + (index - 1.5) * SPREAD.gap * tear;
+  const x = SHEET.x + SPREAD.dx * tear;
+  const y = (TOPS[index] ?? 0) + (index - 1.5) * SPREAD.gap * tear;
   let scale = mix(0.9, 1, appear);
-  let rotate = (TILT[index] ?? 0) * tear;
+  const rotate = (TILT[index] ?? 0) * tear;
   const load = LOADS[piece.name];
+  let gone = 0;
   if (load) {
-    const t = ramp(f, load.start, load.end, Easing.inOut(Easing.cubic));
-    const [tx, ty] = slotAt(load.slot);
-    const [ax, ay] = arc([x, y], [tx, ty], t, 160);
-    x = ax;
-    y = ay;
-    scale = mix(scale, 0.36, t);
-    rotate = mix(rotate, 0, t);
+    const fold = ramp(f, load.start, load.start + 9, Easing.in(Easing.cubic));
+    scale = mix(scale, 0.02, fold);
+    gone = ramp(f, load.start + 5, load.start + 9);
   }
-  const docked = load ? 1 - ease(f, load.end, 6) : 1;
-  return { x, y, scale, rotate, opacity: Math.min(1, appear * 1.4) * docked, tear };
+  return { x, y, scale, rotate, opacity: Math.min(1, appear * 1.4) * (1 - gone), tear };
 }
 
 function Pieces({ f }: { f: number }) {
@@ -654,7 +589,7 @@ function Pieces({ f }: { f: number }) {
                 top: place.y,
                 width: SHEET.width,
                 height,
-                transformOrigin: "0 0",
+                transformOrigin: "50% 50%",
                 transform: `rotate(${place.rotate}deg) scale(${place.scale})`,
                 clipPath: clip(index, height),
                 background: C.paper,
@@ -749,10 +684,45 @@ function Pieces({ f }: { f: number }) {
                 not downloaded
               </span>
             )}
+            {LOADS[piece.name] && (
+              <PieceSpark f={f} index={index} load={LOADS[piece.name]} height={height} />
+            )}
           </div>
         );
       })}
     </>
+  );
+}
+
+/** A loaded piece travels as a spark to its place in the browser's downloads. */
+function PieceSpark({
+  f,
+  index,
+  load,
+  height,
+}: {
+  f: number;
+  index: number;
+  load: { start: number; end: number; slot: number } | undefined;
+  height: number;
+}) {
+  if (!load || f < load.start + 5 || f > load.end) return null;
+  const place = piecePlacement(index, f);
+  const from: Point = [place.x + SHEET.width / 2, place.y + height / 2];
+  const [sx, sy] = slotAt(load.slot);
+  const to: Point = [sx + 165, sy + 38];
+  const t = ramp(f, load.start + 9, load.end - 8, Easing.inOut(Easing.cubic));
+  const shown = Math.min(
+    ramp(f, load.start + 5, load.start + 9),
+    1 - ramp(f, load.end - 8, load.end - 4),
+  );
+  return (
+    <Spark
+      at={arc(from, to, t, 160)}
+      turn={(f - load.start) * 9}
+      size={54 * (1 + Math.sin((f - load.start) * 0.5) * 0.12)}
+      opacity={shown}
+    />
   );
 }
 
@@ -914,7 +884,8 @@ function Browser({ f }: { f: number }) {
               padding: "10px 16px",
               border: `1.5px solid ${C.ink}`,
               background: C.paper,
-              opacity: ease(f, item.at, 6),
+              opacity: ramp(f, item.at - 8, item.at - 4),
+              transform: `scale(${mix(0.02, 1, ramp(f, item.at - 8, item.at, Easing.out(Easing.back(1.4))))})`,
             }}
           >
             <span style={{ display: "block", fontFamily: FONT.mono, fontSize: 20, color: C.ink }}>
@@ -961,11 +932,29 @@ function Browser({ f }: { f: number }) {
   );
 }
 
-export function JourneyFlight() {
+/**
+ * Bars of the choreography above (left) mapped to bars of a longer cut
+ * (right), so the flight can follow a narrator without being redrawn.
+ */
+export type FlightWarp = readonly (readonly [number, number])[];
+
+function warp(frame: number, anchors: FlightWarp | undefined): number {
+  if (!anchors || anchors.length < 2) return frame;
+  const bar = frame / BAR;
+  for (let index = 0; index < anchors.length - 1; index += 1) {
+    const [o0 = 0, n0 = 0] = anchors[index] ?? [];
+    const [o1 = 0, n1 = 0] = anchors[index + 1] ?? [];
+    if (bar <= n1 || index === anchors.length - 2) {
+      return (o0 + ((o1 - o0) * (bar - n0)) / (n1 - n0)) * BAR;
+    }
+  }
+  return frame;
+}
+
+export function JourneyFlight({ anchors }: { anchors?: FlightWarp }) {
   useBrandFonts();
-  const f = useCurrentFrame();
+  const f = warp(useCurrentFrame(), anchors);
   const camera = cameraAt(KEYS, f);
-  const lhCode = lineHeight(CODE.fontSize);
   return (
     <AbsoluteFill style={{ background: C.parchment }}>
       <AbsoluteFill
@@ -983,73 +972,69 @@ export function JourneyFlight() {
         <Browser f={f} />
         <Pieces f={f} />
 
-        {/* 2 · the sentence and its plural leave the component */}
-        <Flight
+        {/* 2 · the sentence and its plural leave the component as sparks */}
+        <SparkFlight
           frame={f}
-          from={cell(CODE, SENT_LINE, SENT_COL)}
-          to={cell(CATALOG, PO_EN, 7)}
+          from={{ at: cell(CODE, SENT_LINE, SENT_COL), fontSize: CODE.fontSize, lines: [EN] }}
+          to={{ at: cell(CATALOG, PO_EN, 7), fontSize: CATALOG.fontSize, lines: [EN] }}
           start={B(2, 3)}
           end={B(3, 3)}
-          fontSize={CODE.fontSize}
           lift={320}
-        >
-          {() => EN}
-        </Flight>
-        <Flight
+          render={() => EN}
+        />
+        <SparkFlight
           frame={f}
-          from={cell(CODE, PL_LINE, PL_COL)}
-          to={cell(CATALOG, PO_PL, 7)}
+          from={{ at: cell(CODE, PL_LINE, PL_COL), fontSize: CODE.fontSize, lines: [PLURAL_PROPS] }}
+          to={{ at: cell(CATALOG, PO_PL, 7), fontSize: CATALOG.fontSize, lines: [ICU] }}
           start={B(3, 0.2)}
           end={B(4, 0.2)}
-          fontSize={CODE.fontSize}
           lift={220}
-        >
-          {(t) => scramble(PLURAL_PROPS, ICU, ramp(t, 0.15, 0.85, Easing.linear), f)}
-        </Flight>
+          render={(side) => (side === "from" ? PLURAL_PROPS : ICU)}
+        />
 
-        {/* 4 · the pair enters the build, then parts ways */}
-        <Flight
+        {/* 4 · the pair enters the build as one spark and leaves as two */}
+        <SparkFlight
           frame={f}
-          from={cell(CATALOG, PO_EN, 7)}
-          to={[GATE.x + GATE.width + 30, 600]}
+          from={{ at: cell(CATALOG, PO_EN, 7), fontSize: CATALOG.fontSize, lines: [EN, DE] }}
+          to={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
           start={B(6, 0.6)}
-          end={B(7, 0.4)}
-          fontSize={CODE.fontSize}
+          end={B(7, 0.3)}
           lift={120}
-          melt={1}
-        >
-          {() => (
+          drop={false}
+          render={() => (
             <>
               {EN}
               {"\n"}
               <span style={{ color: C.bronze }}>{DE}</span>
             </>
           )}
-        </Flight>
-        <Flight
+        />
+        <SparkFlight
           frame={f}
-          from={[GATE.x + GATE.width + 30, 600]}
-          to={cell(COMPONENT, ID_LINE, ID_COL)}
+          from={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
+          to={{ at: cell(COMPONENT, ID_LINE, ID_COL), fontSize: COMPONENT.fontSize, lines: [ID] }}
           start={B(7, 0.4)}
           end={B(7, 2.6)}
-          fontSize={(t) => mix(CODE.fontSize, COMPONENT.fontSize, t)}
           lift={140}
+          grab={false}
           color={C.bronze}
-        >
-          {(t) => scramble(EN, ID, t, f)}
-        </Flight>
-        <Flight
+          render={() => ID}
+        />
+        <SparkFlight
           frame={f}
-          from={[GATE.x + GATE.width + 30, 600 + lhCode]}
-          to={cell(COMPILED, ENTRY_LINE, ENTRY_PREFIX.length)}
-          start={B(7, 0.6)}
+          from={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
+          to={{
+            at: cell(COMPILED, ENTRY_LINE, ENTRY_PREFIX.length),
+            fontSize: COMPILED.fontSize,
+            lines: [DE],
+          }}
+          start={B(7, 0.5)}
           end={B(7, 2.8)}
-          fontSize={(t) => mix(CODE.fontSize, COMPILED.fontSize, t)}
           lift={-120}
+          grab={false}
           color={C.bronze}
-        >
-          {() => DE}
-        </Flight>
+          render={() => DE}
+        />
       </Camera>
     </AbsoluteFill>
   );

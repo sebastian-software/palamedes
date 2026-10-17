@@ -4,10 +4,19 @@ import { C, FONT } from "../brand";
 import { BAR } from "../timeline";
 import { arrive, Display } from "../ui";
 
-/* Bars 22–23: the end card. It holds still and fades only at the very end. */
-export function End() {
+/** Scene frames for the domain and the licence line; defaults follow the promo. */
+export interface EndCues {
+  domain: number;
+  note: number;
+  bars: number;
+}
+
+export const PROMO_END: EndCues = { domain: 20, note: 24, bars: 2 };
+
+/* The end card. It holds still and fades only at the very end. */
+export function End({ cues = PROMO_END }: { cues?: EndCues }) {
   const frame = useCurrentFrame();
-  const out = interpolate(frame, [BAR * 2 - 18, BAR * 2], [1, 0], {
+  const out = interpolate(frame, [BAR * cues.bars - 18, BAR * cues.bars], [1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -41,7 +50,7 @@ export function End() {
           fontFamily: FONT.mono,
           fontSize: 36,
           color: C.ink,
-          ...arrive(frame, 20),
+          ...arrive(frame, cues.domain),
         }}
       >
         palamedes.dev
@@ -52,7 +61,7 @@ export function End() {
           fontFamily: FONT.sans,
           fontSize: 24,
           color: C.slate,
-          ...arrive(frame, 24),
+          ...arrive(frame, cues.note),
         }}
       >
         Open source · MIT OR Apache-2.0 · React, Solid &amp; TypeScript

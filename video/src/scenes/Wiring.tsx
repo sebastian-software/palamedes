@@ -35,9 +35,22 @@ const MOMENTS = [
   { where: "Back on the server", title: "A server action replies" },
 ] as const;
 
-export function Wiring() {
+/** Scene frames for each mark and the travelling message; defaults follow the promo. */
+export interface WiringCues {
+  marks: readonly number[];
+  travel: readonly [number, number];
+  bars: number;
+}
+
+export const PROMO_WIRING: WiringCues = {
+  marks: MARKS.map((_, index) => 8 + index * (BEAT / 2.5)),
+  travel: [BAR * 0.9, BAR * 1.85],
+  bars: 2,
+};
+
+export function Wiring({ cues = PROMO_WIRING }: { cues?: WiringCues }) {
   const frame = useCurrentFrame();
-  const travel = interpolate(frame, [BAR * 0.9, BAR * 1.85], [0, 1], {
+  const travel = interpolate(frame, [...cues.travel], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -47,7 +60,11 @@ export function Wiring() {
 
   return (
     <AbsoluteFill
-      style={{ background: C.paper, padding: "110px 160px", opacity: sceneFade(frame, BAR * 2) }}
+      style={{
+        background: C.paper,
+        padding: "110px 160px",
+        opacity: sceneFade(frame, BAR * cues.bars),
+      }}
     >
       <Kicker style={arrive(frame, 0)}>Framework integration</Kicker>
       <Display size={70} style={{ marginTop: 26, maxWidth: 1500, ...arrive(frame, 3) }}>
@@ -62,7 +79,7 @@ export function Wiring() {
               display: "flex",
               alignItems: "center",
               gap: 12,
-              ...arrive(frame, 8 + index * (BEAT / 2.5), 10),
+              ...arrive(frame, cues.marks[index] ?? 8, 10),
             }}
           >
             {mark.file ? (

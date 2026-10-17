@@ -138,7 +138,7 @@ export function Token({
       <span
         style={{
           position: "absolute",
-          inset: `-${fontSize * 0.25}px -${fontSize * 0.6}px`,
+          inset: `-${fontSize * 0.2}px -${fontSize * 0.35}px`,
           border: `2px solid ${C.bronze}`,
           background: C.paper,
           opacity: frame,

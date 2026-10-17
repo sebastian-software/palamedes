@@ -1,6 +1,36 @@
 {
   "total": 65.7,
-  "props": { "claim": { "words": [6, 43, 67], "pick": 86 } },
+  "plan": [
+    ["Dm", "hook"],
+    ["Bb", "hook"],
+    ["Gm", "hook"],
+    [["Asus", "A"], "hook"],
+    ["F", "meet"],
+    ["C", "meet"],
+    ["Dm", "speak"],
+    ["Bb", "speak"],
+    ["F", "journey"],
+    ["C", "journey"],
+    ["Dm", "journey"],
+    ["Bb", "journey"],
+    ["F", "journey"],
+    ["C", "journey"],
+    ["Bb", "wiring"],
+    ["C", "wiring"],
+    ["Dm", "rust"],
+    ["Bb", "rust"],
+    ["C", "rust"],
+    [["Bb", "C"], "claim"],
+    ["F", "claim"],
+    ["F", "end"],
+    ["F", "end"]
+  ],
+  "props": {
+    "claim": {
+      "words": [6, 43, 67],
+      "pick": 86
+    }
+  },
   "cues": [
     {
       "take": "af_bella/l01_s7",
@@ -12,7 +42,11 @@
       "at": 5.15,
       "text": "Keys instead of sentences, files to keep in sync, and glue for every framework."
     },
-    { "take": "af_bella/l03_s11", "at": 12.43, "text": "Meet Palamedes. Just write the sentence," },
+    {
+      "take": "af_bella/l03_s11",
+      "at": 12.43,
+      "text": "Meet Palamedes. Just write the sentence,"
+    },
     {
       "take": "af_bella/l04_s23",
       "at": 17.45,
@@ -43,7 +77,15 @@
       "at": 46.15,
       "text": "Its Rust core keeps the tooling fast: 73 milliseconds for 1,500 files."
     },
-    { "take": "af_bella/l10_s11", "at": 54.48, "text": "Clear. Complete. Fast. Pick three." },
-    { "take": "af_bella/l11_s11", "at": 60.35, "text": "Palamedes. Open source, at palamedes.dev." }
+    {
+      "take": "af_bella/l10_s11",
+      "at": 54.48,
+      "text": "Clear. Complete. Fast. Pick three."
+    },
+    {
+      "take": "af_bella/l11_s11",
+      "at": 60.35,
+      "text": "Palamedes. Open source, at palamedes.dev."
+    }
   ]
 }

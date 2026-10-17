@@ -52,7 +52,7 @@ export function Camera({
   const speed =
     Math.hypot((now.x - before.x) * now.z, (now.y - before.y) * now.z) +
     Math.abs(Math.log(now.z / before.z)) * 900;
-  const blur = Math.min(12, Math.max(0, speed - 22) * 0.1);
+  const blur = Math.min(5, Math.max(0, speed - 34) * 0.05);
   return (
     <div
       style={{

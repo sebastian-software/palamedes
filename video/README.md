@@ -1,8 +1,8 @@
 # Palamedes promo film
 
-The Remotion source in this directory renders `PalamedesPromo`, a 66-second
-1920×1080 marketing film built from the palamedes.dev homepage visuals, and
-`PalamedesPoster`, its still. Remotion and React are build-time dependencies
+The Remotion source in this directory renders two films built from the
+palamedes.dev homepage visuals: `PalamedesFilm`, a 2:09 explainer, and
+`PalamedesPromo`, a 66-second promo; `PalamedesPoster` is the promo's still. Remotion and React are build-time dependencies
 only; the site never ships them. This directory is its own pnpm project and
 is not part of the repository workspace.
 
@@ -15,10 +15,12 @@ pnpm run render:poster   # poster still → audio/.work/out/poster.png
 
 ## Story and timing
 
-The film is cut to its score: 84 BPM in 4/4, 23 bars. `src/timeline.ts` holds
-the bar plan; `audio/compose.py` writes the score from the same plan, and
-`audio/cues/promo.json` places the voice on it. Change a scene's length in all
-three together.
+Both films are cut to their score: 84 BPM in 4/4. A cut's scene table in
+`src/` and the `plan` in its cue sheet (`audio/cues/*.json`) list the same
+bars; `audio/compose.py` writes the score from that plan, and the cue sheet
+places the voice on it. Change a scene's length in both together.
+
+The promo has 23 bars (`src/timeline.ts`, `audio/cues/promo.json`):
 
 | Bars  | Scene   | Beat                                                                 |
 | ----- | ------- | -------------------------------------------------------------------- |
@@ -30,6 +32,32 @@ three together.
 | 17–19 | Rust    | The checked extraction benchmark, played back in real time           |
 | 20–21 | Claim   | "Clear. Complete. Fast. Pick three."                                 |
 | 22–23 | End     | Emblem, promise, palamedes.dev                                       |
+
+## The long cut
+
+`PalamedesFilm` (`src/film/`) has 45 bars (`src/film/timeline.ts`,
+`audio/cues/film.json`) and takes its time to explain each strength:
+
+| Bars  | Scene      | Beat                                                               |
+| ----- | ---------- | ------------------------------------------------------------------ |
+| 1–5   | Hook       | Keys, a file per language, glue files: the familiar mess           |
+| 6–10  | Reveal     | You write, your translators add the languages, your visitors read  |
+| 11–24 | Journey    | One sentence through extract, translate, build, split and load     |
+| 25–30 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`   |
+| 31–34 | Frameworks | The adapters, each arriving as its name is spoken                  |
+| 35–37 | Fast       | The checked extraction benchmark, played back in real time         |
+| 38–40 | Agent      | The skill command, the prompt and the scope line from the homepage |
+| 41–42 | Claim      | "Clear, complete, and fast. Pick all three."                       |
+| 43–45 | End        | Emblem, promise, palamedes.dev                                     |
+
+The journey is `JourneyFlight` (`src/flight/`), one camera flight over a
+world in which the sentence is the protagonist. It also renders on its own
+over 12 bars; in the film, `JOURNEY_WARP` maps those bars onto 14 so every
+station meets its line. Text that moves collapses into a spark, travels, and
+unfolds where it lands (`src/flight/spark.tsx`), so nothing is dragged across
+the frame at full size.
+
+`pnpm run render:film` builds the long cut, `pnpm run render:promo` the promo.
 
 The scenes import their content from the site: `site/app/data/journey.ts`
 (real transform and compiler output), `specimen.ts` (the rendered card), and
@@ -53,7 +81,16 @@ pnpm run render:promo     # score, voice track, mix, picture, MP4 + SRT
 
 Both write to `audio/.work/` (ignored).
 
-- **Voice:** Chatterbox (MIT), conditioned on a synthetic reference spoken by
+- **Voice, long cut:** ElevenLabs Eleven v4 with the premade voice "Brian",
+  generated under a paid plan, which grants commercial rights to what is
+  generated during the subscription; no real person's voice is cloned.
+  `audio/eleven.py <work> audio/lines-film.json --env <path-to-.env>` writes
+  seeded takes to `audio/.work/takes/eleven-brian/`. `lines-film.json` spells
+  names for the voice ("Pala-meedeez", "Veet"); the cue sheet carries the
+  correct spelling for captions. The model sometimes starts the next line after
+  a pause, so chosen takes go through `audio/clean.py`, which drops such stray
+  bursts, and are saved as `<line>.wav` for the cue sheet. Keep the chosen takes.
+- **Voice, promo:** Chatterbox (MIT), conditioned on a synthetic reference spoken by
   one of Kokoro's (Apache-2.0) built-in voices; no real person's voice is
   cloned. `audio/voice.py <work> audio/lines.json --voice <kokoro-voice>`
   writes seeded takes to `audio/.work/takes/<voice>/`. Takes are chosen by ear

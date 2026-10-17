@@ -1,8 +1,10 @@
 """The Palamedes promo score: an original, calm piano piece with a string pad.
 
+usage: compose.py <out-dir> <cues.json>
 Writes piano.mid, strings.mid and bars.json (bar start times in seconds) into
-the directory given as the first argument. The bar plan matches SCENES in
-src/timeline.ts (84 BPM, 23 bars), so every cut lands on a downbeat.
+<out-dir>. The bar plan comes from the cue sheet ("plan": one [chord, section]
+per bar, or [[chord, chord], section] for half bars) and matches the cut's
+scene table in src/ (84 BPM), so every cut lands on a downbeat.
 
 The arc: a sparse D minor problem, a turn to F major at the reveal, a steady
 walk through the journey with a melody and strings, sixteenths for the speed
@@ -24,16 +26,7 @@ CH = {
 }
 
 # One entry per bar: (chord, or [chord, chord] for half bars; section).
-PLAN = (
-    [("Dm", "hook"), ("Bb", "hook"), ("Gm", "hook"), (["Asus", "A"], "hook")]
-    + [("F", "meet"), ("C", "meet")]
-    + [("Dm", "speak"), ("Bb", "speak")]
-    + [("F", "journey"), ("C", "journey"), ("Dm", "journey"), ("Bb", "journey"), ("F", "journey"), ("C", "journey")]
-    + [("Bb", "wiring"), ("C", "wiring")]
-    + [("Dm", "rust"), ("Bb", "rust"), ("C", "rust")]
-    + [(["Bb", "C"], "claim"), ("F", "claim")]
-    + [("F", "end"), ("F", "end")]
-)
+PLAN = [(chord, section) for chord, section in json.load(open(sys.argv[2]))["plan"]]
 
 # Short motifs per chord, two variations each (midi, start beat, beats).
 MOTIF = {
@@ -59,7 +52,11 @@ def pedal(track, start, end):
     track.append((end - 15, mido.Message("control_change", channel=0, control=64, value=0)))
 
 
-SECTION_VEL = {"hook": 56, "meet": 62, "speak": 64, "journey": 66, "wiring": 68, "rust": 72, "claim": 82, "end": 70}
+SECTION_VEL = {
+    "hook": 56, "meet": 62, "speak": 64, "reveal": 62, "journey": 66, "complete": 68,
+    "wiring": 68, "rust": 72, "agent": 68, "claim": 82, "end": 70,
+}
+MELODY = ("speak", "reveal", "journey", "complete", "wiring", "rust", "agent")
 STRINGS_FROM = {"journey": 2}  # the pad enters on the third journey bar
 bar_times = []
 sec_per_tick = 60.0 / BPM / TPB
@@ -111,8 +108,8 @@ for b, (chords, sec) in enumerate(PLAN):
             p = sorted(top)[pat[k % len(pat)] % len(top)]
             note(piano, 0, p, ts + k * step, step + 30, base - (14 if sixteenths else 10), jitter=6)
     # melody through the journey and the wiring, octave-doubled for speed
-    if sec in ("speak", "journey", "wiring", "rust") and not isinstance(chords, list):
-        seen = sum(1 for x in PLAN[:b] if x[0] == chords and x[1] in ("speak", "journey", "wiring", "rust"))
+    if sec in MELODY and not isinstance(chords, list):
+        seen = sum(1 for x in PLAN[:b] if x[0] == chords and x[1] in MELODY)
         for p, st, ln in MOTIF.get(chords, MOTIF["F"])[seen % 2]:
             v = base + 12
             note(piano, 0, p, t0 + st * TPB, ln * TPB - 40, v, jitter=5)
@@ -120,8 +117,8 @@ for b, (chords, sec) in enumerate(PLAN):
                 note(piano, 0, p + 12, t0 + st * TPB, ln * TPB - 40, v - 10, jitter=5)
     # strings: a slow pad from the third journey bar on, cello on the root
     journey_index = sum(1 for x in PLAN[:b] if x[1] == "journey")
-    if (sec == "journey" and journey_index >= STRINGS_FROM["journey"]) or sec in ("wiring", "rust", "claim", "end"):
-        sv = {"journey": 58, "wiring": 66, "rust": 78, "claim": 92, "end": 80}[sec]
+    if (sec == "journey" and journey_index >= STRINGS_FROM["journey"]) or sec in ("complete", "wiring", "rust", "agent", "claim", "end"):
+        sv = {"journey": 58, "complete": 64, "wiring": 66, "rust": 78, "agent": 68, "claim": 92, "end": 80}[sec]
         length = BAR * (2 if b == len(PLAN) - 1 else 1)
         first = sec == "journey" and journey_index == STRINGS_FROM["journey"]
         last = b == len(PLAN) - 1
