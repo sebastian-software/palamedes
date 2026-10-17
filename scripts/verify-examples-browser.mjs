@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { parseExampleArgs, planBrowserRun, ROOT } from "./example-matrix.mjs";
 import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs";
+import { resolveExternalBrowserTarget } from "./example-browser-target.mjs";
 
 function parseBrowserArgs(argv) {
   return {
@@ -32,7 +33,7 @@ function runVitest(example, options) {
         env: {
           ...process.env,
           PALAMEDES_VERIFY_EXAMPLE_ID: example.id,
-          PALAMEDES_VERIFY_BASE_URL: `http://127.0.0.1:${example.port}`,
+          PALAMEDES_VERIFY_BASE_URL: options.baseUrl ?? `http://127.0.0.1:${example.port}`,
           PALAMEDES_VERIFY_FRAMEWORK: example.framework,
           PALAMEDES_VERIFY_HOST_MISMATCH_URL:
             example.strategy === "route" ? `http://de.lvh.me:${example.port}/en` : "",
@@ -54,6 +55,7 @@ function runVitest(example, options) {
       },
     );
 
+    child.once("error", reject);
     child.on("exit", (code) => {
       if (code === 0) {
         resolve();
@@ -109,6 +111,10 @@ async function waitForServer(port, pathToCheck = "/") {
 }
 
 async function verifyExample(example, options) {
+  if (options.baseUrl) {
+    await runVitest(example, options);
+    return;
+  }
   await verifyBrowserArtifacts(example);
   await ensurePortFree(example.port);
   const child = startCommand({
@@ -144,14 +150,15 @@ async function main() {
   const browserOptions = parseBrowserArgs(process.argv);
   const filters = parseExampleArgs(process.argv);
   const plan = planBrowserRun(filters, browserOptions);
+  const baseUrl = resolveExternalBrowserTarget(process.argv, plan);
 
   if (plan.length === 0) {
     throw new Error("No browser-verifiable examples matched the provided filters");
   }
 
   for (const { example, options } of plan) {
-    console.log(`\n[verify:browser] ${example.id} on port ${example.port}`);
-    await verifyExample(example, options);
+    console.log(`\n[verify:browser] ${example.id} at ${baseUrl ?? `local port ${example.port}`}`);
+    await verifyExample(example, { ...options, baseUrl });
     if (example.id === "tanstack-cookie") {
       await runDeliveryProof("proof-tanstack-catalog-errors.mjs");
       await runDeliveryProof("proof-tanstack-development.mjs");
