@@ -66,17 +66,27 @@ export function FrameworkWiring() {
         lede="Modern frameworks run your components in several places — on the server, in the browser, inside server actions. The right messages must be ready in each place, for each visitor, at the right moment. Palamedes ships that wiring as a first-party adapter for your framework, and tests it as a real app."
       />
 
-      <ol className="mt-14 grid grid-cols-1 gap-px border border-hair bg-hair md:grid-cols-2 xl:grid-cols-4">
-        {MOMENTS.map((moment, index) => (
-          <li key={moment.title} className="bg-paper px-6 py-7">
-            <p className="micro text-[11px] tracking-label text-accent">
-              {index + 1} · {moment.where}
-            </p>
-            <h3 className="mt-3 text-[19px] leading-snug font-bold">{moment.title}</h3>
-            <p className="mt-2 text-[15.5px] leading-relaxed text-ink/80">{moment.body}</p>
-          </li>
-        ))}
-      </ol>
+      <div className="pmds-flow relative mt-16">
+        <span aria-hidden className="pmds-flow-line" />
+        <span aria-hidden className="pmds-flow-token" />
+        <ol className="relative grid grid-cols-1 gap-y-10 md:grid-cols-2 md:gap-x-10 xl:grid-cols-4">
+          {MOMENTS.map((moment, index) => (
+            <li key={moment.title} className="min-w-0">
+              <span
+                aria-hidden
+                className="display-serif relative z-10 grid size-10 place-items-center border border-accent bg-paper text-[17px] text-accent"
+              >
+                {index + 1}
+              </span>
+              <p className="micro mt-5 text-[11px] tracking-label text-accent">{moment.where}</p>
+              <h3 className="mt-2 text-[19px] leading-snug font-bold">{moment.title}</h3>
+              <p className="mt-2 max-w-[22rem] text-[15.5px] leading-relaxed text-ink/80">
+                {moment.body}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </div>
       <p className="mt-6 max-w-[46rem] text-[16px] leading-relaxed text-ink/80">
         Without an adapter, every one of these moments is glue code you write and maintain. With
         Palamedes it is a package for {FRAMEWORKS.map((framework) => framework.name).join(", ")},

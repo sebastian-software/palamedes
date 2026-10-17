@@ -9,20 +9,12 @@ import { Band } from "~/components/marketing/Band";
  */
 const OWNERSHIP = [
   {
-    title: "Plain files in your repository",
-    body: "Catalogs are gettext .po files: reviewable in pull requests, readable by translation tools, yours to take anywhere.",
-  },
-  {
-    title: "Open source, both ways",
-    body: "MIT OR Apache-2.0. Architecture, release rules, and security policy are public.",
-  },
-  {
-    title: "Nothing to sign up for",
-    body: "No account and no hosted service. The complete workflow runs on your machine and in your CI.",
+    title: "Your translations stay yours",
+    body: "Catalogs are plain gettext .po files in your repository: reviewable in pull requests, readable by translation tools, and yours to take anywhere.",
   },
   {
     title: "A maintainer you can name",
-    body: "Built and maintained by Sebastian Software GmbH, in the open.",
+    body: "Built and maintained in the open by Sebastian Software GmbH, with every architectural decision written down.",
   },
 ] as const;
 
