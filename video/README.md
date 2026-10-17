@@ -1,7 +1,7 @@
 # Palamedes promo film
 
 The Remotion source in this directory renders two films built from the
-palamedes.dev homepage visuals: `PalamedesFilm`, a 2:09 explainer, and
+palamedes.dev homepage visuals: `PalamedesFilm`, a 2:14 explainer, and
 `PalamedesPromo`, a 66-second promo; `PalamedesPoster` is the promo's still. Remotion and React are build-time dependencies
 only; the site never ships them. This directory is its own pnpm project and
 is not part of the repository workspace.
@@ -35,20 +35,21 @@ The promo has 23 bars (`src/timeline.ts`, `audio/cues/promo.json`):
 
 ## The long cut
 
-`PalamedesFilm` (`src/film/`) has 45 bars (`src/film/timeline.ts`,
+`PalamedesFilm` (`src/film/`) has 47 bars (`src/film/timeline.ts`,
 `audio/cues/film.json`) and takes its time to explain each strength:
 
-| Bars  | Scene      | Beat                                                               |
-| ----- | ---------- | ------------------------------------------------------------------ |
-| 1–5   | Hook       | Keys, a file per language, glue files: the familiar mess           |
-| 6–10  | Reveal     | You write, your translators add the languages, your visitors read  |
-| 11–24 | Journey    | One sentence through extract, translate, build, split and load     |
-| 25–30 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`   |
-| 31–34 | Frameworks | The adapters, each arriving as its name is spoken                  |
-| 35–37 | Fast       | The checked extraction benchmark, played back in real time         |
-| 38–40 | Agent      | The skill command, the prompt and the scope line from the homepage |
-| 41–42 | Claim      | "Clear, complete, and fast. Pick all three."                       |
-| 43–45 | End        | Emblem, promise, palamedes.dev                                     |
+| Bars  | Scene      | Beat                                                              |
+| ----- | ---------- | ----------------------------------------------------------------- |
+| 1–2   | Open       | "Your app speaks English. Most of the world doesn't."             |
+| 3–7   | Hook       | Keys, a file per language, glue files: the familiar mess          |
+| 8–12  | Reveal     | You write, your translators add the languages, your visitors read |
+| 13–26 | Journey    | One sentence through extract, translate, build, split and load    |
+| 27–32 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`  |
+| 33–36 | Frameworks | The adapters, each arriving as its name is spoken                 |
+| 37–39 | Fast       | The checked extraction benchmark, played back in real time        |
+| 40–42 | Agent      | The skill command, then the homepage's prompt typed and sent      |
+| 43–44 | Claim      | "Clear, complete, and fast. Pick all three."                      |
+| 45–47 | End        | Emblem, promise, palamedes.dev                                    |
 
 The journey is `JourneyFlight` (`src/flight/`), one camera flight over a
 world in which the sentence is the protagonist. It also renders on its own
@@ -58,6 +59,27 @@ unfolds where it lands (`src/flight/spark.tsx`), so nothing is dragged across
 the frame at full size.
 
 `pnpm run render:film` builds the long cut, `pnpm run render:promo` the promo.
+
+## snapcn components
+
+Some motion comes from [snapcn](https://snapcn.dev) (MIT), a shadcn-style
+registry of Remotion components. Like shadcn, its source is copied in and is
+ours to edit: the core in `src/lib/snap-cn-ui`, the components in
+`src/components/snap-cn` (Text Reveal, Text Swap, Cursor Track, Prompt Send,
+and Input and Caret for Prompt Send). Both folders stay as upstream ships them
+and are excluded from lint and format; the only edits are marked `Palamedes:`
+in `prompt-send.tsx` and keep its surfaces flat (ADR-011). `src/snapcn-theme.ts`
+re-skins every component with the site palette, zero radius and the brand
+faces. The `@/` import alias lives in both `tsconfig.json` and
+`remotion.config.ts`, because Remotion's bundler does not read tsconfig paths.
+
+- Headlines arrive on Text Reveal's `soft-blur-in` settings, applied inline in
+  the brand faces by `src/kinetic.tsx`.
+- In the browser, Text Swap turns the ID into the German sentence in one face,
+  and Cursor Track clicks the tab in screen space.
+- The agent scene hands over to Prompt Send, which types and sends the prompt.
+- All moving type renders with `text-rendering: geometricPrecision`, which
+  stops glyphs from snapping to the pixel grid while the camera scales them.
 
 The scenes import their content from the site: `site/app/data/journey.ts`
 (real transform and compiler output), `specimen.ts` (the rendered card), and

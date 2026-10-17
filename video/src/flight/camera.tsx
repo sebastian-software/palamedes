@@ -64,6 +64,9 @@ export function Camera({
         transformOrigin: "0 0",
         transform: `translate(${W / 2}px, ${H / 2}px) scale(${now.z}) translate(${-now.x}px, ${-now.y}px)`,
         filter: blur > 0.3 ? `blur(${blur.toFixed(2)}px)` : undefined,
+        // Type stays steady while the world scales: no hinting, no pixel snapping.
+        textRendering: "geometricPrecision",
+        WebkitFontSmoothing: "antialiased",
       }}
     >
       {children}

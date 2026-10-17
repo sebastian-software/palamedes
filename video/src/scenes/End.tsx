@@ -2,6 +2,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "rem
 
 import { C, FONT } from "../brand";
 import { BAR } from "../timeline";
+import { Revealed } from "../kinetic";
 import { arrive, Display } from "../ui";
 
 /** Scene frames for the domain and the licence line; defaults follow the promo. */
@@ -41,8 +42,11 @@ export function End({ cues = PROMO_END }: { cues?: EndCues }) {
       >
         PALAMEDES
       </p>
-      <Display size={72} style={{ marginTop: 40, ...arrive(frame, 12) }}>
-        Just write <span style={{ color: C.bronze }}>the sentence.</span>
+      <Display size={72} style={{ marginTop: 40 }}>
+        <Revealed text="Just write" frame={frame} at={12} />
+        <span style={{ color: C.bronze }}>
+          <Revealed text="the sentence." frame={frame} at={18} />
+        </span>
       </Display>
       <p
         style={{

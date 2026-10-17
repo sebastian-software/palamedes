@@ -2,11 +2,12 @@ import { AbsoluteFill, useCurrentFrame } from "remotion";
 
 import { C } from "../brand";
 import { BAR } from "../timeline";
-import { arrive, Display, sceneFade } from "../ui";
+import { Revealed } from "../kinetic";
+import { Display, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 41–42: "Clear, complete, and fast. For once, you get to pick all
+ * Bars 43–44: "Clear, complete, and fast. For once, you get to pick all
  * three." Each word arrives as it is spoken; the answer lands with the full
  * chord on the second downbeat.
  */
@@ -28,18 +29,13 @@ export function FilmClaim() {
         opacity: sceneFade(frame, BAR * 2),
       }}
     >
-      <div style={{ display: "flex", gap: 40 }}>
+      <Display size={120}>
         {WORDS.map((word) => (
-          <Display key={word.text} size={120} style={arrive(frame, word.cue - 3, 10, 26)}>
-            {word.text}
-          </Display>
+          <Revealed key={word.text} text={word.text} frame={frame} at={word.cue - 4} />
         ))}
-      </div>
-      <Display
-        size={140}
-        style={{ marginTop: 34, color: C.bronze, ...arrive(frame, PICK - 4, 12, 30) }}
-      >
-        Pick all three.
+      </Display>
+      <Display size={140} style={{ marginTop: 34, color: C.bronze }}>
+        <Revealed text="Pick all three." frame={frame} at={PICK - 5} unit="character" stagger={1} />
       </Display>
     </AbsoluteFill>
   );

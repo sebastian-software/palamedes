@@ -7,10 +7,15 @@ import { End } from "../scenes/End";
 import { Hook } from "../scenes/Hook";
 import { Rust } from "../scenes/Rust";
 import { Wiring } from "../scenes/Wiring";
+import { SnapCnUIProvider } from "@/lib/snap-cn-ui";
+
+import { steady } from "../kinetic";
+import { palamedesTheme } from "../snapcn-theme";
 import { useBrandFonts } from "../ui";
 import { Agent } from "./Agent";
 import { Complete } from "./Complete";
 import { FilmClaim } from "./FilmClaim";
+import { Open } from "./Open";
 import { Reveal } from "./Reveal";
 import { at, FILM_SCENES, type FilmSection, JOURNEY_WARP } from "./timeline";
 
@@ -21,6 +26,7 @@ import { at, FILM_SCENES, type FilmSection, JOURNEY_WARP } from "./timeline";
  * the offset at which the cue sheet places each take.
  */
 const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
+  ["open", <Open key="open" />],
   [
     "hook",
     <Hook
@@ -58,17 +64,19 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
 export function PalamedesFilm() {
   useBrandFonts();
   return (
-    <AbsoluteFill style={{ background: C.mist }}>
-      {PARTS.map(([section, scene]) => (
-        <Sequence
-          key={section}
-          from={FILM_SCENES[section].from}
-          durationInFrames={FILM_SCENES[section].to - FILM_SCENES[section].from}
-          name={section}
-        >
-          {scene}
-        </Sequence>
-      ))}
-    </AbsoluteFill>
+    <SnapCnUIProvider theme={palamedesTheme}>
+      <AbsoluteFill style={{ background: C.mist, ...steady }}>
+        {PARTS.map(([section, scene]) => (
+          <Sequence
+            key={section}
+            from={FILM_SCENES[section].from}
+            durationInFrames={FILM_SCENES[section].to - FILM_SCENES[section].from}
+            name={section}
+          >
+            {scene}
+          </Sequence>
+        ))}
+      </AbsoluteFill>
+    </SnapCnUIProvider>
   );
 }

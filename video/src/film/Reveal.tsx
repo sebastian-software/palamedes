@@ -4,11 +4,12 @@ import { HERO_MESSAGE, HERO_MORPH } from "../../../site/app/data/journey";
 import { C, FONT } from "../brand";
 import { ramp } from "../flight/motion";
 import { BAR, BEAT, FPS } from "../timeline";
+import { Revealed } from "../kinetic";
 import { arrive, Display, ease, Kicker, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 6–10: "That's exactly why we built Palamedes. You just write your
+ * Bars 8–12: "That's exactly why we built Palamedes. You just write your
  * sentences… Your translators bring the languages, and Palamedes takes care
  * of everything in between." The emblem settles, then the division of labour
  * is set out in three rows; Palamedes is the rail between them.
@@ -31,7 +32,8 @@ export function Reveal() {
   const morph = Math.max(0, frame - CUE.visitors);
   const index = Math.min(HERO_MORPH.length - 1, Math.floor(morph / STEP));
   const entry = HERO_MORPH[index] ?? HERO_MORPH[0];
-  const settle = interpolate(morph - index * STEP, [0, 9], [0, 1], { extrapolateRight: "clamp" });
+  const previous = index > 0 ? HERO_MORPH[index - 1] : undefined;
+  const leave = interpolate(morph - index * STEP, [0, 9], [0, 1], { extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill style={{ background: C.mist, opacity: sceneFade(frame, BAR * 5) }}>
@@ -135,18 +137,46 @@ export function Reveal() {
               {entry.locale}
             </span>
             <span
-              lang={entry.locale}
-              dir={entry.dir}
-              style={{
-                fontFamily: FONT.sans,
-                fontSize: 76,
-                fontWeight: 500,
-                color: C.ink,
-                opacity: frame >= CUE.visitors ? settle : 0,
-                transform: `translateY(${(1 - settle) * 16}px)`,
-              }}
+              style={{ position: "relative", display: "inline-block", minWidth: 1200, height: 96 }}
             >
-              {entry.text}
+              {previous && morph - index * STEP < 10 ? (
+                <span
+                  lang={previous.locale}
+                  dir={previous.dir}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    fontFamily: FONT.sans,
+                    fontSize: 76,
+                    fontWeight: 500,
+                    color: C.ink,
+                    opacity: 1 - leave,
+                    transform: `translateY(${-18 * leave}px)`,
+                    filter: `blur(${(6 * leave).toFixed(2)}px)`,
+                  }}
+                >
+                  {previous.text}
+                </span>
+              ) : null}
+              {frame >= CUE.visitors ? (
+                <span
+                  lang={entry.locale}
+                  dir={entry.dir}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    fontFamily: FONT.sans,
+                    fontSize: 76,
+                    fontWeight: 500,
+                    color: C.ink,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <Revealed text={entry.text} frame={morph} at={index * STEP + 2} blur={8} />
+                </span>
+              ) : null}
             </span>
           </div>
         </div>

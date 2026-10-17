@@ -53,7 +53,7 @@ def pedal(track, start, end):
 
 
 SECTION_VEL = {
-    "hook": 56, "meet": 62, "speak": 64, "reveal": 62, "journey": 66, "complete": 68,
+    "open": 50, "hook": 56, "meet": 62, "speak": 64, "reveal": 62, "journey": 66, "complete": 68,
     "wiring": 68, "rust": 72, "agent": 68, "claim": 82, "end": 70,
 }
 MELODY = ("speak", "reveal", "journey", "complete", "wiring", "rust", "agent")
@@ -92,7 +92,7 @@ for b, (chords, sec) in enumerate(PLAN):
         for k in range(eighths):
             vel = base - 6 + (8 if k == 0 else 0)
             note(piano, 0, root + lh[k % 8], ts + k * TPB // 2, TPB // 2 + 60, vel)
-        if sec == "hook":
+        if sec in ("open", "hook"):
             # a single, questioning upper note in the first and third bar
             if h == 0 and b in (0, 2):
                 note(piano, 0, 74 if b == 0 else 70, ts, BAR, base + 4)

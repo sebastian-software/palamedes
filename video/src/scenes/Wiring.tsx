@@ -2,6 +2,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "rem
 
 import { C, FONT } from "../brand";
 import { BAR, BEAT } from "../timeline";
+import { Revealed } from "../kinetic";
 import { arrive, Display, Kicker, sceneFade } from "../ui";
 
 /*
@@ -67,8 +68,12 @@ export function Wiring({ cues = PROMO_WIRING }: { cues?: WiringCues }) {
       }}
     >
       <Kicker style={arrive(frame, 0)}>Framework integration</Kicker>
-      <Display size={70} style={{ marginTop: 26, maxWidth: 1500, ...arrive(frame, 3) }}>
-        The wiring is already built — and tested as real apps.
+      <Display size={70} style={{ marginTop: 26, maxWidth: 1500 }}>
+        <Revealed
+          text="The wiring is already built — and tested as real apps."
+          frame={frame}
+          at={3}
+        />
       </Display>
 
       <div style={{ display: "flex", alignItems: "center", gap: 40, marginTop: 70, height: 70 }}>

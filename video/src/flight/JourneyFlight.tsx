@@ -1,5 +1,9 @@
 import { Fragment, type ReactNode } from "react";
-import { AbsoluteFill, Easing, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, Sequence, useCurrentFrame } from "remotion";
+
+import { CursorTrack } from "@/components/snap-cn/cursor-track";
+import { TextSwap } from "@/components/snap-cn/text-swap";
+import { SnapCnUIProvider } from "@/lib/snap-cn-ui";
 
 import {
   HERO_MESSAGE,
@@ -10,6 +14,7 @@ import {
 } from "../../../site/app/data/journey";
 import { SPECIMEN_LOCALES, specimenSeats } from "../../../site/app/data/specimen";
 import { C, FONT } from "../brand";
+import { palamedesTheme } from "../snapcn-theme";
 import { BAR, BEAT } from "../timeline";
 import { ease, useBrandFonts } from "../ui";
 import { Camera, cameraAt, type CamKey } from "./camera";
@@ -70,6 +75,7 @@ const SHEET = { x: 6900, y: 220, width: 860 };
 const SPREAD = { dx: -260, gap: 60 };
 const BROWSER = { x: 7800, y: 240, width: 1120, height: 800 };
 const ADVANCE = 1233 / 2048;
+const TAB: Point = [BROWSER.x + 30 + 2 * 230 + 100, BROWSER.y + 64 + 35];
 
 const KEYS: CamKey[] = [
   { f: 0, x: 960, y: 600, z: 0.92 },
@@ -727,18 +733,46 @@ function PieceSpark({
 }
 
 const TABS = ["Home", "Search", "Trip details", "Checkout"] as const;
+const SWAP_TITLE = B(11, 0.8);
+const SWAP_SEATS = B(11, 1.2);
+const CLICK = B(10, 3.3);
 
-function Browser({ f }: { f: number }) {
+/** A line set like TextSwap sets it, for the frames before the swap begins. */
+function Swapless({
+  text,
+  size,
+  weight,
+  color,
+}: {
+  text: string;
+  size: number;
+  weight: number;
+  color: string;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: FONT.sans,
+        fontSize: size,
+        fontWeight: weight,
+        letterSpacing: "-0.02em",
+        color,
+        textRendering: "geometricPrecision",
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+function Browser({ f, real }: { f: number; real: (frame: number) => number }) {
   const shown = pop(f, B(9, 3.2), { damping: 15 });
-  const clicked = f >= B(10, 3.3);
-  const cursor = ramp(f, B(10, 2), B(10, 3.2), Easing.inOut(Easing.cubic));
-  const tabX = BROWSER.x + 30 + 2 * 230 + 100;
-  const tabY = BROWSER.y + 64 + 35;
-  const [cx, cy] = [mix(BROWSER.x + 760, tabX, cursor), mix(BROWSER.y + 640, tabY, cursor)];
-  const ring = ramp(f, B(10, 3.3), B(10, 3.3) + 14);
-  const title = scramble(ID, DE, ramp(f, B(11, 0.8), B(11, 2.2), Easing.linear), f);
-  const seats = scramble(PLURAL_ID, SEATS, ramp(f, B(11, 1.2), B(11, 2.6), Easing.linear), f);
-  const resolved = title === DE;
+  const clicked = f >= CLICK;
   return (
     <div
       style={{
@@ -800,34 +834,51 @@ function Browser({ f }: { f: number }) {
         {clicked ? (
           <div
             lang="de"
-            style={{ border: `1.5px solid ${C.hair}`, background: C.white, padding: "40px 44px" }}
+            style={{ border: `1.5px solid ${C.hair}`, background: C.white, padding: "34px 44px" }}
           >
-            <p
+            {/* The ID resolves into the German sentence: one face, a shared-axis swap. */}
+            <div style={{ position: "relative", height: 80 }}>
+              {f < SWAP_TITLE ? (
+                <Swapless text={ID} size={52} weight={700} color={C.ink} />
+              ) : (
+                <Sequence from={real(SWAP_TITLE)} layout="none">
+                  <TextSwap
+                    fromText={ID}
+                    toText={DE}
+                    transition="shared-axis-y"
+                    fontSize={52}
+                    fontWeight={700}
+                    color={C.ink}
+                    fontFamily={FONT.sans}
+                  />
+                </Sequence>
+              )}
+            </div>
+            <div
               style={{
-                margin: 0,
-                fontFamily: resolved ? FONT.sans : FONT.mono,
-                fontSize: resolved ? 52 : 46,
-                fontWeight: 700,
-                color: title === ID ? C.gray : C.ink,
-                whiteSpace: "pre",
-              }}
-            >
-              {title}
-            </p>
-            <p
-              style={{
-                display: "inline-block",
-                margin: "28px 0 0",
-                padding: "10px 18px",
+                position: "relative",
+                width: 300,
+                height: 62,
+                margin: "24px auto 0",
                 border: `2px solid ${C.bronze}`,
-                fontFamily: seats === SEATS ? FONT.sans : FONT.mono,
-                fontSize: 30,
-                color: seats === PLURAL_ID ? C.gray : C.bronze,
-                whiteSpace: "pre",
               }}
             >
-              {seats}
-            </p>
+              {f < SWAP_SEATS ? (
+                <Swapless text={PLURAL_ID} size={30} weight={400} color={C.bronze} />
+              ) : (
+                <Sequence from={real(SWAP_SEATS)} layout="none">
+                  <TextSwap
+                    fromText={PLURAL_ID}
+                    toText={SEATS}
+                    transition="shared-axis-y"
+                    fontSize={30}
+                    fontWeight={400}
+                    color={C.bronze}
+                    fontFamily={FONT.sans}
+                  />
+                </Sequence>
+              )}
+            </div>
           </div>
         ) : (
           <div>
@@ -897,37 +948,6 @@ function Browser({ f }: { f: number }) {
           </div>
         ))}
       </div>
-      <svg
-        width={40}
-        height={48}
-        viewBox="0 0 20 24"
-        style={{
-          position: "absolute",
-          left: cx - BROWSER.x,
-          top: cy - BROWSER.y,
-          opacity: ease(f, B(10, 1.8), 8) * (1 - ease(f, B(11, 1), 10)),
-        }}
-      >
-        <path
-          d="M1 1 L1 19 L6 14 L9.5 22 L12.5 20.8 L9 13 L16 13 Z"
-          fill={C.ink}
-          stroke={C.paper}
-          strokeWidth={1.4}
-        />
-      </svg>
-      <span
-        style={{
-          position: "absolute",
-          left: tabX - BROWSER.x - 30,
-          top: tabY - BROWSER.y - 30,
-          width: 60,
-          height: 60,
-          border: `3px solid ${C.bronze}`,
-          borderRadius: "50%",
-          transform: `scale(${mix(0.3, 1.6, ring)})`,
-          opacity: ring > 0 && ring < 1 ? 1 - ring : 0,
-        }}
-      />
     </div>
   );
 }
@@ -951,91 +971,131 @@ function warp(frame: number, anchors: FlightWarp | undefined): number {
   return frame;
 }
 
+function unwarp(frame: number, anchors: FlightWarp | undefined): number {
+  if (!anchors || anchors.length < 2) return frame;
+  const bar = frame / BAR;
+  for (let index = 0; index < anchors.length - 1; index += 1) {
+    const [o0 = 0, n0 = 0] = anchors[index] ?? [];
+    const [o1 = 0, n1 = 0] = anchors[index + 1] ?? [];
+    if (bar <= o1 || index === anchors.length - 2) {
+      return (n0 + ((n1 - n0) * (bar - o0)) / (o1 - o0)) * BAR;
+    }
+  }
+  return frame;
+}
+
+/** A world point on screen, normalized, under the camera at a choreography frame. */
+function onScreen(point: Point, frame: number): Point {
+  const cam = cameraAt(KEYS, frame);
+  return [((point[0] - cam.x) * cam.z + 960) / 1920, ((point[1] - cam.y) * cam.z + 540) / 1080];
+}
+
 export function JourneyFlight({ anchors }: { anchors?: FlightWarp }) {
   useBrandFonts();
   const f = warp(useCurrentFrame(), anchors);
   const camera = cameraAt(KEYS, f);
+  const real = (frame: number) => Math.round(unwarp(frame, anchors));
+  const walk = real(B(10, 2));
+  const [sx, sy] = onScreen([BROWSER.x + 760, BROWSER.y + 640], B(10, 2));
+  const [tx, ty] = onScreen(TAB, CLICK);
+  const reach = real(CLICK) - walk;
   return (
-    <AbsoluteFill style={{ background: C.parchment }}>
-      <AbsoluteFill
-        style={{
-          backgroundImage: `linear-gradient(${C.hair} 1px, transparent 1px), linear-gradient(90deg, ${C.hair} 1px, transparent 1px)`,
-          backgroundSize: `${(72 * camera.z).toFixed(2)}px ${(72 * camera.z).toFixed(2)}px`,
-          backgroundPosition: `${(-camera.x * camera.z * 0.6).toFixed(1)}px ${(-camera.y * camera.z * 0.6).toFixed(1)}px`,
-          opacity: 0.35,
-        }}
-      />
-      <Camera keys={KEYS} frame={f}>
-        <Write f={f} />
-        <Catalog f={f} />
-        <Build f={f} />
-        <Browser f={f} />
-        <Pieces f={f} />
-
-        {/* 2 · the sentence and its plural leave the component as sparks */}
-        <SparkFlight
-          frame={f}
-          from={{ at: cell(CODE, SENT_LINE, SENT_COL), fontSize: CODE.fontSize, lines: [EN] }}
-          to={{ at: cell(CATALOG, PO_EN, 7), fontSize: CATALOG.fontSize, lines: [EN] }}
-          start={B(2, 3)}
-          end={B(3, 3)}
-          lift={320}
-          render={() => EN}
-        />
-        <SparkFlight
-          frame={f}
-          from={{ at: cell(CODE, PL_LINE, PL_COL), fontSize: CODE.fontSize, lines: [PLURAL_PROPS] }}
-          to={{ at: cell(CATALOG, PO_PL, 7), fontSize: CATALOG.fontSize, lines: [ICU] }}
-          start={B(3, 0.2)}
-          end={B(4, 0.2)}
-          lift={220}
-          render={(side) => (side === "from" ? PLURAL_PROPS : ICU)}
-        />
-
-        {/* 4 · the pair enters the build as one spark and leaves as two */}
-        <SparkFlight
-          frame={f}
-          from={{ at: cell(CATALOG, PO_EN, 7), fontSize: CATALOG.fontSize, lines: [EN, DE] }}
-          to={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
-          start={B(6, 0.6)}
-          end={B(7, 0.3)}
-          lift={120}
-          drop={false}
-          render={() => (
-            <>
-              {EN}
-              {"\n"}
-              <span style={{ color: C.bronze }}>{DE}</span>
-            </>
-          )}
-        />
-        <SparkFlight
-          frame={f}
-          from={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
-          to={{ at: cell(COMPONENT, ID_LINE, ID_COL), fontSize: COMPONENT.fontSize, lines: [ID] }}
-          start={B(7, 0.4)}
-          end={B(7, 2.6)}
-          lift={140}
-          grab={false}
-          color={C.bronze}
-          render={() => ID}
-        />
-        <SparkFlight
-          frame={f}
-          from={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
-          to={{
-            at: cell(COMPILED, ENTRY_LINE, ENTRY_PREFIX.length),
-            fontSize: COMPILED.fontSize,
-            lines: [DE],
+    <SnapCnUIProvider theme={palamedesTheme}>
+      <AbsoluteFill style={{ background: C.parchment }}>
+        <AbsoluteFill
+          style={{
+            backgroundImage: `linear-gradient(${C.hair} 1px, transparent 1px), linear-gradient(90deg, ${C.hair} 1px, transparent 1px)`,
+            backgroundSize: `${(72 * camera.z).toFixed(2)}px ${(72 * camera.z).toFixed(2)}px`,
+            backgroundPosition: `${(-camera.x * camera.z * 0.6).toFixed(1)}px ${(-camera.y * camera.z * 0.6).toFixed(1)}px`,
+            opacity: 0.35,
           }}
-          start={B(7, 0.5)}
-          end={B(7, 2.8)}
-          lift={-120}
-          grab={false}
-          color={C.bronze}
-          render={() => DE}
         />
-      </Camera>
-    </AbsoluteFill>
+        <Camera keys={KEYS} frame={f}>
+          <Write f={f} />
+          <Catalog f={f} />
+          <Build f={f} />
+          <Browser f={f} real={real} />
+          <Pieces f={f} />
+
+          {/* 2 · the sentence and its plural leave the component as sparks */}
+          <SparkFlight
+            frame={f}
+            from={{ at: cell(CODE, SENT_LINE, SENT_COL), fontSize: CODE.fontSize, lines: [EN] }}
+            to={{ at: cell(CATALOG, PO_EN, 7), fontSize: CATALOG.fontSize, lines: [EN] }}
+            start={B(2, 3)}
+            end={B(3, 3)}
+            lift={320}
+            render={() => EN}
+          />
+          <SparkFlight
+            frame={f}
+            from={{
+              at: cell(CODE, PL_LINE, PL_COL),
+              fontSize: CODE.fontSize,
+              lines: [PLURAL_PROPS],
+            }}
+            to={{ at: cell(CATALOG, PO_PL, 7), fontSize: CATALOG.fontSize, lines: [ICU] }}
+            start={B(3, 0.2)}
+            end={B(4, 0.2)}
+            lift={220}
+            render={(side) => (side === "from" ? PLURAL_PROPS : ICU)}
+          />
+
+          {/* 4 · the pair enters the build as one spark and leaves as two */}
+          <SparkFlight
+            frame={f}
+            from={{ at: cell(CATALOG, PO_EN, 7), fontSize: CATALOG.fontSize, lines: [EN, DE] }}
+            to={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
+            start={B(6, 0.6)}
+            end={B(7, 0.3)}
+            lift={120}
+            drop={false}
+            render={() => (
+              <>
+                {EN}
+                {"\n"}
+                <span style={{ color: C.bronze }}>{DE}</span>
+              </>
+            )}
+          />
+          <SparkFlight
+            frame={f}
+            from={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
+            to={{ at: cell(COMPONENT, ID_LINE, ID_COL), fontSize: COMPONENT.fontSize, lines: [ID] }}
+            start={B(7, 0.4)}
+            end={B(7, 2.6)}
+            lift={140}
+            grab={false}
+            color={C.bronze}
+            render={() => ID}
+          />
+          <SparkFlight
+            frame={f}
+            from={{ at: GATE_CENTRE, fontSize: CODE.fontSize, lines: [] }}
+            to={{
+              at: cell(COMPILED, ENTRY_LINE, ENTRY_PREFIX.length),
+              fontSize: COMPILED.fontSize,
+              lines: [DE],
+            }}
+            start={B(7, 0.5)}
+            end={B(7, 2.8)}
+            lift={-120}
+            grab={false}
+            color={C.bronze}
+            render={() => DE}
+          />
+        </Camera>
+        {/* The click, in screen space: the camera holds still while it happens. */}
+        <Sequence from={walk} durationInFrames={real(B(11, 0.6)) - walk} layout="none">
+          <CursorTrack
+            path={[
+              { at: 0, x: sx, y: sy, duration: 8 },
+              { at: Math.max(10, reach - 18), x: tx, y: ty, duration: 18, click: true },
+              { at: reach + 14, x: tx + 0.04, y: ty + 0.3, duration: 16 },
+            ]}
+          />
+        </Sequence>
+      </AbsoluteFill>
+    </SnapCnUIProvider>
   );
 }

@@ -5,11 +5,12 @@ import { SPECIMEN_LOCALES, specimenSeats } from "../../../site/app/data/specimen
 import { C, FONT } from "../brand";
 import { ramp } from "../flight/motion";
 import { BAR } from "../timeline";
+import { Revealed } from "../kinetic";
 import { arrive, Display, ease, Kicker, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 25–30: "And it doesn't stop there." Four cards arrive as the voice
+ * Bars 27–32: "And it doesn't stop there." Four cards arrive as the voice
  * names them, then one rail joins them from the first sentence to the last
  * translation. Formats are real Intl output for German; the CLI cards show
  * the commands and what docs/cli.md says they do, with no invented output.
@@ -147,8 +148,8 @@ export function Complete() {
       }}
     >
       <Kicker style={arrive(frame, 0)}>Complete</Kicker>
-      <Display size={72} style={{ marginTop: 22, ...arrive(frame, 4) }}>
-        And it doesn't stop there.
+      <Display size={72} style={{ marginTop: 22 }}>
+        <Revealed text="And it doesn't stop there." frame={frame} at={4} />
       </Display>
 
       <div style={{ display: "flex", gap: 32, marginTop: 70 }}>

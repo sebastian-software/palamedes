@@ -3,6 +3,7 @@ import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 
 import { C, FONT } from "../brand";
 import { BAR, BEAT } from "../timeline";
+import { Revealed } from "../kinetic";
 import { arrive, Display, ease, Listing, Mark, Tag } from "../ui";
 
 /*
@@ -49,19 +50,20 @@ export function Hook({ cues = PROMO_HOOK }: { cues?: HookCues }) {
 
   return (
     <AbsoluteFill style={{ background: C.mist, opacity: fadeOut }}>
-      <div style={{ position: "absolute", left: 140, top: 110, ...arrive(frame, 4) }}>
-        <Display size={78}>Adding a second language is easy.</Display>
+      <div style={{ position: "absolute", left: 140, top: 110 }}>
+        <Display size={78}>
+          <Revealed text="Adding a second language is easy." frame={frame} at={4} />
+        </Display>
       </div>
       <div
         style={{
           position: "absolute",
           left: 140,
           top: 210,
-          ...arrive(frame, cues.title),
         }}
       >
         <Display size={78} style={{ color: C.bronze }}>
-          Living with it is the hard part.
+          <Revealed text="Living with it is the hard part." frame={frame} at={cues.title} />
         </Display>
       </div>
 

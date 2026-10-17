@@ -2,6 +2,7 @@ import { Children, type CSSProperties, type ReactNode } from "react";
 
 import { C, FONT } from "../brand";
 import type { Point } from "./motion";
+import { Revealed } from "../kinetic";
 import { ease } from "../ui";
 
 /*
@@ -183,7 +184,6 @@ export function Title({
   size?: number;
 }) {
   const gone = out === undefined ? 0 : ease(frame, out, 10);
-  const words = text.split(" ");
   return (
     <div style={{ position: "absolute", left: x, top: y, width, opacity: 1 - gone }}>
       <p
@@ -213,23 +213,7 @@ export function Title({
           color: C.ink,
         }}
       >
-        {words.map((word, index) => {
-          const t = ease(frame, at + 3 + index * 2, 12);
-          return (
-            <span
-              // Words of a fixed headline never reorder.
-              key={`${word}-${index.toString()}`}
-              style={{
-                display: "inline-block",
-                marginRight: "0.28em",
-                opacity: t,
-                transform: `translateY(${(1 - t) * 26}px)`,
-              }}
-            >
-              {word}
-            </span>
-          );
-        })}
+        <Revealed text={text} frame={frame} at={at + 3} />
       </h2>
     </div>
   );

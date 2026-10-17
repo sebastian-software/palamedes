@@ -3,6 +3,7 @@ import { AbsoluteFill, useCurrentFrame } from "remotion";
 import { BENCH_META, BENCH_REALISTIC, displayBenchmarkTime } from "../../../site/app/data/bench";
 import { C, FONT } from "../brand";
 import { BAR, FPS } from "../timeline";
+import { Revealed } from "../kinetic";
 import { arrive, Display, Kicker, sceneFade } from "../ui";
 
 /*
@@ -24,8 +25,8 @@ export function Rust() {
       style={{ background: C.mist, padding: "100px 160px", opacity: sceneFade(frame, BAR * 3) }}
     >
       <Kicker style={arrive(frame, 0)}>Why Rust?</Kicker>
-      <Display size={66} style={{ marginTop: 24, ...arrive(frame, 3) }}>
-        Because nobody likes waiting for their tools.
+      <Display size={66} style={{ marginTop: 24 }}>
+        <Revealed text="Because nobody likes waiting for their tools." frame={frame} at={3} />
       </Display>
       <div
         style={{
@@ -47,7 +48,9 @@ export function Rust() {
           }}
         >
           <span>Extract + catalog update · {BENCH_REALISTIC.corpus}</span>
-          <span style={{ color: C.ink, fontSize: 28 }}>{(elapsed / 1000).toFixed(2)} s</span>
+          <span style={{ color: C.ink, fontSize: 28, fontVariantNumeric: "tabular-nums" }}>
+            {(elapsed / 1000).toFixed(2)} s
+          </span>
         </div>
         {ROWS.map((row) => {
           const done = elapsed >= row.medianMs;
