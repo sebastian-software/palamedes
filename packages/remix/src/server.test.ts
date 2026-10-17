@@ -37,7 +37,7 @@ describe("stable Remix client entries", () => {
     });
     expect(assetServer.getImportMap).toHaveBeenCalledWith([
       "app/public/client.tsx",
-      expect.stringMatching(/remix\/dist\/client\.mjs$/u),
+      expect.stringContaining(path.join("remix", "dist", "client.mjs")),
     ]);
     const mapSource = html.match(/<script type="importmap"[^>]*>(.*?)<\/script>/u)?.[1];
     expect(JSON.parse(mapSource!)).toEqual(importMap);
