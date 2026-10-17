@@ -9,7 +9,7 @@ import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 40–42: "Working with a coding agent? Add the Palamedes skill and
+ * Bars 41–43: "Working with a coding agent? Add the Palamedes skill and
  * simply ask it to set up translations for you." The command types itself,
  * then snapcn's Prompt Send writes the homepage's prompt and sends it. The
  * scope line is the homepage's too, so nobody expects more from the skill.

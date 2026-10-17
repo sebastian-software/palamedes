@@ -7,7 +7,7 @@ import { Display, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 43–44: "Clear, complete, and fast. For once, you get to pick all
+ * Bars 44–45: "Clear, complete, and fast. For once, you get to pick all
  * three." Each word arrives as it is spoken; the answer lands with the full
  * chord on the second downbeat.
  */

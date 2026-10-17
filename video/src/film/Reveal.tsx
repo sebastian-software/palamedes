@@ -9,7 +9,7 @@ import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 8–12: "That's exactly why we built Palamedes. You just write your
+ * Bars 9–13: "That's exactly why we built Palamedes. You just write your
  * sentences… Your translators bring the languages, and Palamedes takes care
  * of everything in between." The emblem settles, then the division of labour
  * is set out in three rows; Palamedes is the rail between them.

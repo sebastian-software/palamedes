@@ -1,7 +1,7 @@
 # Palamedes promo film
 
 The Remotion source in this directory renders two films built from the
-palamedes.dev homepage visuals: `PalamedesFilm`, a 2:14 explainer, and
+palamedes.dev homepage visuals: `PalamedesFilm`, a 2:17 explainer, and
 `PalamedesPromo`, a 66-second promo; `PalamedesPoster` is the promo's still. Remotion and React are build-time dependencies
 only; the site never ships them. This directory is its own pnpm project and
 is not part of the repository workspace.
@@ -35,21 +35,21 @@ The promo has 23 bars (`src/timeline.ts`, `audio/cues/promo.json`):
 
 ## The long cut
 
-`PalamedesFilm` (`src/film/`) has 47 bars (`src/film/timeline.ts`,
+`PalamedesFilm` (`src/film/`) has 48 bars (`src/film/timeline.ts`,
 `audio/cues/film.json`) and takes its time to explain each strength:
 
-| Bars  | Scene      | Beat                                                              |
-| ----- | ---------- | ----------------------------------------------------------------- |
-| 1–2   | Open       | "Your app speaks English. Most of the world doesn't."             |
-| 3–7   | Hook       | Keys, a file per language, glue files: the familiar mess          |
-| 8–12  | Reveal     | You write, your translators add the languages, your visitors read |
-| 13–26 | Journey    | One sentence through extract, translate, build, split and load    |
-| 27–32 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`  |
-| 33–36 | Frameworks | The adapters, each arriving as its name is spoken                 |
-| 37–39 | Fast       | The checked extraction benchmark, played back in real time        |
-| 40–42 | Agent      | The skill command, then the homepage's prompt typed and sent      |
-| 43–44 | Claim      | "Clear, complete, and fast. Pick all three."                      |
-| 45–47 | End        | Emblem, promise, palamedes.dev                                    |
+| Bars  | Scene      | Beat                                                                  |
+| ----- | ---------- | --------------------------------------------------------------------- |
+| 1–2   | Open       | "Your app speaks English. Most of the world doesn't."                 |
+| 3–8   | Hook       | Looks simple until the details: plurals, word order, prices and dates |
+| 9–13  | Reveal     | You write, your translators add the languages, your visitors read     |
+| 14–27 | Journey    | One sentence through extract, translate, build, split and load        |
+| 28–33 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`      |
+| 34–37 | Frameworks | The adapters, each arriving as its name is spoken                     |
+| 38–40 | Fast       | The checked extraction benchmark, played back in real time            |
+| 41–43 | Agent      | The skill command, then the homepage's prompt typed and sent          |
+| 44–45 | Claim      | "Clear, complete, and fast. Pick all three."                          |
+| 46–48 | End        | Emblem, promise, palamedes.dev                                        |
 
 The journey is `JourneyFlight` (`src/flight/`), one camera flight over a
 world in which the sentence is the protagonist. It also renders on its own

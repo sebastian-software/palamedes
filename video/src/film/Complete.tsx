@@ -10,7 +10,7 @@ import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 27–32: "And it doesn't stop there." Four cards arrive as the voice
+ * Bars 28–33: "And it doesn't stop there." Four cards arrive as the voice
  * names them, then one rail joins them from the first sentence to the last
  * translation. Formats are real Intl output for German; the CLI cards show
  * the commands and what docs/cli.md says they do, with no invented output.

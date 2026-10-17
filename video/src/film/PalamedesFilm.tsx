@@ -4,7 +4,6 @@ import { AbsoluteFill, Sequence } from "remotion";
 import { C } from "../brand";
 import { JourneyFlight } from "../flight/JourneyFlight";
 import { End } from "../scenes/End";
-import { Hook } from "../scenes/Hook";
 import { Rust } from "../scenes/Rust";
 import { Wiring } from "../scenes/Wiring";
 import { SnapCnUIProvider } from "@/lib/snap-cn-ui";
@@ -14,6 +13,7 @@ import { palamedesTheme } from "../snapcn-theme";
 import { useBrandFonts } from "../ui";
 import { Agent } from "./Agent";
 import { Complete } from "./Complete";
+import { Details } from "./Details";
 import { FilmClaim } from "./FilmClaim";
 import { Open } from "./Open";
 import { Reveal } from "./Reveal";
@@ -27,20 +27,7 @@ import { at, FILM_SCENES, type FilmSection, JOURNEY_WARP } from "./timeline";
  */
 const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
   ["open", <Open key="open" />],
-  [
-    "hook",
-    <Hook
-      key="hook"
-      cues={{
-        title: at(3.4),
-        listing: at(6),
-        files: at(8.5),
-        glue: at(10.4),
-        crowd: at(11.7),
-        bars: 5,
-      }}
-    />,
-  ],
+  ["hook", <Details key="hook" />],
   ["reveal", <Reveal key="reveal" />],
   ["journey", <JourneyFlight key="journey" anchors={JOURNEY_WARP} />],
   ["complete", <Complete key="complete" />],

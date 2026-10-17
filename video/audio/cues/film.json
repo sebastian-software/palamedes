@@ -1,13 +1,14 @@
 {
   "composition": "PalamedesFilm",
   "output": "palamedes-film",
-  "total": 134.267,
+  "total": 137.1,
   "plan": [
     ["F", "open"],
     ["C", "open"],
     ["Dm", "hook"],
     ["Bb", "hook"],
     ["Gm", "hook"],
+    ["Dm", "hook"],
     ["Bb", "hook"],
     [["Asus", "A"], "hook"],
     ["F", "reveal"],
@@ -59,67 +60,67 @@
     },
     {
       "take": "eleven-brian/01-hook",
-      "at": 6.3,
-      "text": "Adding a second language to your app is easy. Living with it is the hard part: you invent a key for every sentence, keep a stack of language files in sync, and write glue code for every framework you touch."
+      "at": 6.1,
+      "text": "Translating an app looks simple, until you spend a minute on the details. One seat, but three seats. Words that change their order. Prices and dates that every language writes its own way. And that's with just two languages."
     },
     {
       "take": "eleven-brian/02-reveal",
-      "at": 20.3,
+      "at": 23.13,
       "text": "That's exactly why we built Palamedes. You just write your sentences, right where they're used. Your translators bring the languages, and Palamedes takes care of everything in between."
     },
     {
       "take": "eleven-brian/03-write",
-      "at": 34.6,
+      "at": 37.43,
       "text": "Here's how it works. That little Trans tag around your sentence is a macro: it looks like plain JSX to you, and your build rewrites it later."
     },
     {
       "take": "eleven-brian/04-extract",
-      "at": 43.9,
+      "at": 46.73,
       "text": "One command lifts every sentence out of your code and into catalog files your translators already know."
     },
     {
       "take": "eleven-brian/05-translate",
-      "at": 50.5,
+      "at": 53.33,
       "text": "They add the translations, and your code stays exactly as it is."
     },
     {
       "take": "eleven-brian/06-build",
-      "at": 54.8,
+      "at": 57.63,
       "text": "Then your build does the clever part: every sentence becomes a short ID, and every translation becomes ready-to-run code."
     },
     {
       "take": "eleven-brian/07-load",
-      "at": 63.3,
+      "at": 66.13,
       "text": "The catalog is split into one piece per screen, so each screen loads only its own words, in your visitor's language."
     },
     {
       "take": "eleven-brian/08-complete",
-      "at": 74.7,
+      "at": 77.53,
       "text": "And it doesn't stop there. Plurals, numbers and dates, server rendering and server actions, a linter for your messages and an audit that catches every missing translation: it's one complete toolchain, from the first sentence to the last translation."
     },
     {
       "take": "eleven-brian/09-frameworks",
-      "at": 91.73,
+      "at": 94.57,
       "text": "The wiring for your framework is already built, for Next.js, React Router, TanStack, Solid, Waku and Vite, and every one of them is tested as a real app."
     },
     {
       "take": "eleven-brian/10-fast",
-      "at": 103.17,
+      "at": 106.0,
       "text": "And it's seriously fast. Its Rust core works through fifteen hundred files in just seventy-three milliseconds."
     },
     {
       "take": "eleven-brian/11-agent",
-      "at": 111.83,
+      "at": 114.67,
       "text": "Working with a coding agent? Add the Palamedes skill and simply ask it to set up translations for you."
     },
     {
       "take": "eleven-brian/12-claim",
-      "at": 120.2,
+      "at": 123.03,
       "text": "Clear, complete, and fast. For once, you get to pick all three."
     },
     {
       "take": "eleven-brian/13-end",
-      "at": 126.2,
+      "at": 129.03,
       "text": "Palamedes is open source. Get started today at palamedes dot dev."
     }
   ]
