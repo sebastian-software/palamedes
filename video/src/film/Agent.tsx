@@ -11,7 +11,7 @@ import { at } from "./timeline";
 /*
  * Bars 41–43: "Working with a coding agent? Add the Palamedes skill and
  * simply ask it to set up translations for you." The command types itself,
- * then snapcn's Prompt Send writes the homepage's prompt and sends it. The
+ * then snapcn's Prompt Send writes the homepage's prompt below it and sends it. The
  * scope line is the homepage's too, so nobody expects more from the skill.
  */
 const COMMAND = "npx skills add sebastian-software/palamedes --skill palamedes";
@@ -30,15 +30,14 @@ function eased(text: string, frame: number, start: number, duration: number): st
 
 export function Agent() {
   const frame = useCurrentFrame();
-  const handover = ease(frame, CUE.handover - 6, 12);
 
   return (
     <AbsoluteFill style={{ background: C.mist, opacity: sceneFade(frame, BAR * 3) }}>
-      <AbsoluteFill style={{ padding: "150px 160px", opacity: 1 - handover }}>
+      <AbsoluteFill style={{ padding: "130px 160px" }}>
         <Display size={70}>
           <Revealed text="Working with a coding agent?" frame={frame} at={4} />
         </Display>
-        <div style={{ marginTop: 80, ...arrive(frame, CUE.command - 8) }}>
+        <div style={{ marginTop: 64, ...arrive(frame, CUE.command - 8) }}>
           <p
             style={{
               margin: 0,
@@ -68,20 +67,39 @@ export function Agent() {
         </div>
       </AbsoluteFill>
 
+      <p
+        style={{
+          position: "absolute",
+          left: 160,
+          top: 540,
+          margin: 0,
+          fontFamily: FONT.sans,
+          fontSize: 28,
+          fontWeight: 600,
+          color: C.slate,
+          ...arrive(frame, CUE.handover - 8),
+        }}
+      >
+        Then ask
+      </p>
+      {/* Prompt Send paints no page of its own here and sits below the command. */}
       <Sequence from={CUE.handover - 8} layout="none">
-        <AbsoluteFill style={{ opacity: handover }}>
+        <AbsoluteFill style={{ transform: "translateY(190px)" }}>
           <PromptSend
             text={PROMPT}
             placeholder="Ask your agent…"
             chips={[]}
             radius={0}
+            // 742 stage px is 1600 frame px: the composer lines up with the command.
+            width={742}
             fontFamily={FONT.sans}
-            theme={{ background: C.mist }}
+            theme={{ background: "transparent" }}
             revealAt={0.05}
             typeStart={0.55}
             typeDuration={1.7}
-            cutInAt={0.7}
-            cutOutAt={2.35}
+            // No cuts: the whole composer stays in frame.
+            cutInAt={99}
+            cutOutAt={99}
             cursorAt={2.4}
             clickAt={2.95}
           />
@@ -91,11 +109,9 @@ export function Agent() {
       <p
         style={{
           position: "absolute",
-          left: 0,
-          right: 0,
+          left: 160,
           bottom: 110,
           margin: 0,
-          textAlign: "center",
           fontFamily: FONT.sans,
           fontSize: 28,
           color: C.slate,

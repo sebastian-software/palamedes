@@ -1,7 +1,7 @@
 # Palamedes promo film
 
 The Remotion source in this directory renders two films built from the
-palamedes.dev homepage visuals: `PalamedesFilm`, a 2:17 explainer, and
+palamedes.dev homepage visuals: `PalamedesFilm`, a 2:20 explainer, and
 `PalamedesPromo`, a 66-second promo; `PalamedesPoster` is the promo's still. Remotion and React are build-time dependencies
 only; the site never ships them. This directory is its own pnpm project and
 is not part of the repository workspace.
@@ -35,7 +35,7 @@ The promo has 23 bars (`src/timeline.ts`, `audio/cues/promo.json`):
 
 ## The long cut
 
-`PalamedesFilm` (`src/film/`) has 48 bars (`src/film/timeline.ts`,
+`PalamedesFilm` (`src/film/`) has 49 bars (`src/film/timeline.ts`,
 `audio/cues/film.json`) and takes its time to explain each strength:
 
 | Bars  | Scene      | Beat                                                                  |
@@ -47,9 +47,9 @@ The promo has 23 bars (`src/timeline.ts`, `audio/cues/promo.json`):
 | 28–33 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`      |
 | 34–37 | Frameworks | The adapters, each arriving as its name is spoken                     |
 | 38–40 | Fast       | The checked extraction benchmark, played back in real time            |
-| 41–43 | Agent      | The skill command, then the homepage's prompt typed and sent          |
+| 41–43 | Agent      | The skill command, then the homepage's prompt typed and sent below it |
 | 44–45 | Claim      | "Clear, complete, and fast. Pick all three."                          |
-| 46–48 | End        | Emblem, promise, palamedes.dev                                        |
+| 46–49 | End        | Emblem, promise, palamedes.dev, then who makes it and who consults    |
 
 The journey is `JourneyFlight` (`src/flight/`), one camera flight over a
 world in which the sentence is the protagonist. It also renders on its own

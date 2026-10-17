@@ -45,7 +45,7 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
   ["fast", <Rust key="fast" />],
   ["agent", <Agent key="agent" />],
   ["claim", <FilmClaim key="claim" />],
-  ["end", <End key="end" cues={{ domain: at(3.8), note: at(1.4), bars: 3 }} />],
+  ["end", <End key="end" cues={{ domain: at(3.8), note: at(1.4), bars: 4, company: at(5.4) }} />],
 ];
 
 export function PalamedesFilm() {

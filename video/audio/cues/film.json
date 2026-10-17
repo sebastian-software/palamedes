@@ -1,7 +1,7 @@
 {
   "composition": "PalamedesFilm",
   "output": "palamedes-film",
-  "total": 137.1,
+  "total": 139.967,
   "plan": [
     ["F", "open"],
     ["C", "open"],
@@ -48,6 +48,7 @@
     ["C", "agent"],
     [["Bb", "C"], "claim"],
     ["F", "claim"],
+    ["F", "end"],
     ["F", "end"],
     ["F", "end"],
     ["F", "end"]

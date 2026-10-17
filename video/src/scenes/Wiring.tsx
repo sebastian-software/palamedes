@@ -8,7 +8,7 @@ import { arrive, Display, sceneFade } from "../ui";
 /*
  * Bars 15–16: framework integration. The marks of the first-party adapters
  * arrive on the beat, then a message travels the four moments every adapter
- * has to get right. Preview adapters keep their qualification on screen.
+ * has to get right. Support levels stay off screen, so the film outlives them.
  */
 interface IntegrationMark {
   file: string | null;
@@ -20,12 +20,12 @@ interface IntegrationMark {
 const MARKS: readonly IntegrationMark[] = [
   { file: "nextjs", label: null, h: 30 },
   { file: "react-router", label: null, h: 36 },
-  { file: "tanstack", label: "Start", h: 46 },
+  { file: "tanstack", label: null, h: 46 },
   { file: "solid", label: "Solid", h: 40 },
   // Waku's published SVG is drawn for dark surfaces; the ledger forbids
   // recolouring a mark, so the film names it instead.
-  { file: null, name: "Waku", label: "preview", h: 32 },
-  { file: "remix", label: "preview", h: 26 },
+  { file: null, name: "Waku", label: null, h: 32 },
+  { file: "remix", label: null, h: 26 },
   { file: "vite", label: null, h: 30 },
 ];
 
