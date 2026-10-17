@@ -33,6 +33,17 @@ review by qualified counsel.
 | Hono           | [Hono project logo](https://raw.githubusercontent.com/honojs/hono/main/docs/images/hono-logo.svg)                     | Official emblem + name       | The project publishes an emblem at this source; the canonical name is displayed beside it.                                                                                                         |
 | Express        | [Express dark wordmark](https://expressjs.com/images/logos/logo-express-black.svg)                                    | Unmodified official wordmark | Express directs users to the OpenJS trademark policy. The mark is used only to identify the supported backend integration.                                                                         |
 
+## Promo film
+
+The promo film source in `video/` shows the same unmodified Next.js, TanStack
+Start, Solid, React Router, Remix, and Vite files in one framework-integration
+scene. They serve the same purpose there: identifying first-party integrations,
+with the Preview qualifications on screen. Waku appears as its name in text,
+because its published SVG is drawn for dark surfaces and must not be
+recoloured. The film is not published yet. Publishing it is a new public
+marketing use and needs the Product Owner's acceptance under the preconditions
+below.
+
 ## Preconditions for a future logo change
 
 1. Reconfirm the concrete marketing use with any maintainer who asks for it;
