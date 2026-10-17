@@ -124,6 +124,10 @@ Both write to `audio/.work/` (ignored).
   fluidsynth. The piano is the Salamander Grand Piano V3 by Alexander Holm
   (CC BY 3.0); the strings come from MuseScore General (MIT). Credit the
   Salamander piano wherever the film is published.
+- **Captions:** `audio/captions.py <work> <cues.json> <out.vtt>` writes WebVTT
+  for the homepage: each line of the cue sheet is split at its punctuation into
+  cues of at most two short lines, timed to the words as spoken (faster-whisper,
+  cached as `words.json` next to the takes).
 - **Mix:** the music ducks under the voice and the result is normalised to
   -16 LUFS with a -1.5 dBTP ceiling.
 
