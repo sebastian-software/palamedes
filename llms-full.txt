@@ -505,6 +505,10 @@ host. See /docs/api/remix.md.
 
 Use `@palamedes/react-router-rsc` only for the exact tested experimental React Router RSC Framework Mode contract. Configure a custom `app/entry.rsc.tsx` that wraps the default RSC entry with `createReactRouterRscI18nRequestScope(createRequestI18n)`. It receives the original request and activates a fresh i18n instance before Server Function argument evaluation, dispatch, revalidation, SSR, and streams. `scope.run()` restores its caller after dispatch settles, but async resources created inside it retain the request locale when they run later; separately initiated work without an inherited context has no active locale and needs explicit data or a new scope. RSC Data Mode, Edge/Worker runtimes, and graph-split server message fragments are not supported. See `/docs/api/react-router-rsc.md`.
 
+### Waku support status
+
+Waku support is Preview, verified with Waku 1.0.0-rc.3 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. Required unstable_getRequest and host CSP unstable_setNonce APIs keep the adapter outside the Stable SemVer contract independently of the unreleased Palamedes v2 publication preview. Re-evaluate after stable equivalents exist and request/action/stream/catalog recovery/CSP proofs pass; stable upstream 1.0 alone does not promote it. See /docs/stability.md#waku-preview-contract and /docs/api/waku.md.
+
 ### TanStack Start, Solid, Waku, React Router
 
 Use the verified examples as the source of truth for framework-specific wiring. Palamedes' goal is a consistent runtime/catalog model across these hosts.

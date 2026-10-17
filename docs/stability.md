@@ -63,6 +63,25 @@ may change faster than Stable surfaces.
 | Compiled catalog artifact internals                   | Preview  | Public loaders can consume them; the internal representation may evolve in minors.                                            |
 | `crates/*` Rust APIs                                  | Preview  | The Rust crates support the Node toolchain today. They are not yet a separately promised public Rust SDK.                     |
 
+### Waku Preview contract
+
+The examples verify Waku `1.0.0-rc.3` with React, React DOM, and
+`react-server-dom-webpack` `19.3.1` on Node.js 22.22 or newer. Upstream
+Waku is a release candidate, not a beta or stable 1.0 release. Its fixed public
+APIs do not cover the explicitly unstable request and nonce APIs used here.
+
+`@palamedes/waku` remains **Preview**: its interceptor reads
+`unstable_getRequest`, and host CSP setup uses `unstable_setNonce` in Waku's
+render scope. The catalog middleware uses the public Hono middleware contract;
+it cannot replace request access inside that render scope. Reconsider the
+adapter's SemVer tier when Waku provides stable equivalents and request
+isolation, server actions, streams, catalog recovery, and CSP have been
+reverified. Waku reaching stable 1.0 alone does not promote the adapter.
+
+This adapter tier is separate from the repository's unreleased Palamedes v2
+publication preview. The release hold applies to all v2 packages; after v2
+publication, Waku remains Preview until that boundary is resolved.
+
 ## Stable Surfaces
 
 Palamedes treats these as stable adoption surfaces:
@@ -72,7 +91,6 @@ Palamedes treats these as stable adoption surfaces:
 - documented FCL storage configuration and conversion workflows
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
-- Waku server-action interceptor documented in `@palamedes/waku` (Preview while Waku's interceptor API is unstable)
 - TanStack Start server-function middleware documented in `@palamedes/tanstack`
 - runtime access through `getI18n()`
 - `createI18n(options?)` and descriptor-based lookup behavior
