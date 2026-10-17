@@ -4,6 +4,8 @@ packages:
   - "benchmarks/*"
   - "site"
 
+# Root devDependencies anchor existing optional React/RSC and dotenv peers.
+# Waku examples and adapter tests declare their own compatible React 19.3.1 trio.
 overrides:
   "eslint-config-setup>eslint-plugin-oxlint": "1.81.0"
   # Security patches permitted by each parent's existing dependency line.

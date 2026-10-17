@@ -29,7 +29,7 @@ const page: FrameworkLanding = {
     {
       label: "Verified against",
       value: "Waku 1 RC",
-      note: "React 19 Server Components on 1.0.0-rc.0.",
+      note: "React 19.3.1 Server Components on 1.0.0-rc.3.",
     },
     {
       label: "Rendering",
@@ -126,7 +126,7 @@ export default async function LocalePage() {
   },
   boundary: {
     title: "Current proof follows Waku's RC API.",
-    body: "The matrix pins Waku 1.0.0-rc.0, and the integration is intentionally thin and Vite-based. Re-verify version-specific behavior when adopting the stable release; claims on this page follow the checked example.",
+    body: "The matrix pins Waku 1.0.0-rc.3 with React 19.3.1. The adapter remains Preview because request access and host CSP nonces require unstable_getRequest and unstable_setNonce. Re-evaluate after stable equivalents and regression proofs; upstream 1.0 alone does not promote this SemVer tier. This is separate from the unreleased Palamedes v2 publication preview.",
     link: {
       label: "Read the RSC i18n guide",
       href: "/react-server-components-i18n",
@@ -147,7 +147,7 @@ export default async function LocalePage() {
     },
     {
       q: "Is Waku support production-stable?",
-      a: "Palamedes browser-verifies its Waku integration, but the framework version in the matrix is still a Waku 1 release candidate. Evaluate that upstream maturity separately from the translation integration.",
+      a: "The adapter is Preview and the verified Waku 1.0.0-rc.3 host is an upstream release candidate. Required unstable request and nonce APIs keep the adapter outside Palamedes' Stable SemVer contract. This tier is independent of the unreleased v2 publication preview.",
     },
   ],
   related: [
