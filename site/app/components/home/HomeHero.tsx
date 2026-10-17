@@ -1,6 +1,7 @@
 import { ButtonLink } from "@palamedes/site-ui";
 
 import { AgentStart } from "./AgentStart";
+import { FilmLink } from "./FilmLink";
 import { HeroMorph } from "./HeroMorph";
 
 /*
@@ -40,6 +41,7 @@ export function HomeHero() {
               Show me how it works
             </ButtonLink>
           </div>
+          <FilmLink />
           <p className="mt-6 max-w-[36rem] text-[13.5px] leading-relaxed text-ink/70">
             <strong className="font-semibold text-ink">2.0 preview.</strong> Try the upcoming
             release through the repository examples; the registry still supplies 1.x.{" "}
