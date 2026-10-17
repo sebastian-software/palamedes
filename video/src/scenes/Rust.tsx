@@ -4,7 +4,7 @@ import { BENCH_META, BENCH_REALISTIC, displayBenchmarkTime } from "../../../site
 import { C, FONT } from "../brand";
 import { BAR, FPS } from "../timeline";
 import { Revealed } from "../kinetic";
-import { arrive, Display, Kicker, sceneFade } from "../ui";
+import { arrive, Display, sceneFade } from "../ui";
 
 /*
  * Bars 17–19: the checked realistic benchmark at 1:1 speed. Every bar fills in
@@ -24,9 +24,10 @@ export function Rust() {
     <AbsoluteFill
       style={{ background: C.mist, padding: "100px 160px", opacity: sceneFade(frame, BAR * 3) }}
     >
-      <Kicker style={arrive(frame, 0)}>Why Rust?</Kicker>
-      <Display size={66} style={{ marginTop: 24 }}>
-        <Revealed text="Because nobody likes waiting for their tools." frame={frame} at={3} />
+      <Display size={60}>
+        <Revealed text="Why Rust?" frame={frame} at={3} />
+        <br />
+        <Revealed text="Because nobody likes waiting for their tools." frame={frame} at={9} />
       </Display>
       <div
         style={{

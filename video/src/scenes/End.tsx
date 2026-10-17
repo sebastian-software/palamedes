@@ -42,7 +42,7 @@ export function End({ cues = PROMO_END }: { cues?: EndCues }) {
       >
         PALAMEDES
       </p>
-      <Display size={72} style={{ marginTop: 40 }}>
+      <Display size={64} style={{ marginTop: 40 }}>
         <Revealed text="Just write" frame={frame} at={12} />
         <span style={{ color: C.bronze }}>
           <Revealed text="the sentence." frame={frame} at={18} />

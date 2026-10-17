@@ -84,6 +84,8 @@ export function Display({
         lineHeight: 1.04,
         letterSpacing: "0.005em",
         color: C.ink,
+        // No lone word on a second line: the browser evens the lines out.
+        textWrap: "balance",
         ...style,
       }}
     >
@@ -121,9 +123,8 @@ export function Listing({
           borderBottom: `1.5px solid ${C.hair}`,
           background: C.paper,
           fontFamily: FONT.mono,
-          fontSize: 17,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
+          fontSize: 19,
+          letterSpacing: "0.02em",
           color: C.slate,
         }}
       >

@@ -5,7 +5,7 @@ import { C, FONT } from "../brand";
 import { ramp } from "../flight/motion";
 import { BAR, BEAT, FPS } from "../timeline";
 import { Revealed } from "../kinetic";
-import { arrive, Display, ease, Kicker, sceneFade } from "../ui";
+import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
@@ -67,7 +67,17 @@ export function Reveal() {
         <div
           style={{ position: "absolute", top: ROW_Y[0], width: 1400, ...arrive(frame, CUE.rows) }}
         >
-          <Kicker>You write</Kicker>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: FONT.sans,
+              fontSize: 30,
+              fontWeight: 600,
+              color: C.slate,
+            }}
+          >
+            You write
+          </p>
           <p
             style={{
               display: "inline-block",
@@ -87,7 +97,18 @@ export function Reveal() {
         </div>
 
         <div style={{ position: "absolute", top: ROW_Y[1], width: 1400 }}>
-          <Kicker style={arrive(frame, CUE.translators)}>Your translators add</Kicker>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: FONT.sans,
+              fontSize: 30,
+              fontWeight: 600,
+              color: C.slate,
+              ...arrive(frame, CUE.translators),
+            }}
+          >
+            Your translators add
+          </p>
           <div style={{ display: "flex", gap: 22, marginTop: 24 }}>
             {TRANSLATED.map((item, position) => (
               <p
@@ -121,7 +142,18 @@ export function Reveal() {
         </div>
 
         <div style={{ position: "absolute", top: ROW_Y[2], width: 1400 }}>
-          <Kicker style={arrive(frame, CUE.visitors)}>Your visitors read</Kicker>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: FONT.sans,
+              fontSize: 30,
+              fontWeight: 600,
+              color: C.slate,
+              ...arrive(frame, CUE.visitors),
+            }}
+          >
+            Your visitors read
+          </p>
           <div style={{ display: "flex", alignItems: "baseline", gap: 40, marginTop: 20 }}>
             <span
               style={{

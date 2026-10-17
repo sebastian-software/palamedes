@@ -51,7 +51,7 @@ export function Hook({ cues = PROMO_HOOK }: { cues?: HookCues }) {
   return (
     <AbsoluteFill style={{ background: C.mist, opacity: fadeOut }}>
       <div style={{ position: "absolute", left: 140, top: 110 }}>
-        <Display size={78}>
+        <Display size={70}>
           <Revealed text="Adding a second language is easy." frame={frame} at={4} />
         </Display>
       </div>
@@ -59,10 +59,10 @@ export function Hook({ cues = PROMO_HOOK }: { cues?: HookCues }) {
         style={{
           position: "absolute",
           left: 140,
-          top: 210,
+          top: 196,
         }}
       >
-        <Display size={78} style={{ color: C.bronze }}>
+        <Display size={70} style={{ color: C.bronze }}>
           <Revealed text="Living with it is the hard part." frame={frame} at={cues.title} />
         </Display>
       </div>

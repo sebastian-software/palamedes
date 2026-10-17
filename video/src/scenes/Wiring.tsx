@@ -3,7 +3,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "rem
 import { C, FONT } from "../brand";
 import { BAR, BEAT } from "../timeline";
 import { Revealed } from "../kinetic";
-import { arrive, Display, Kicker, sceneFade } from "../ui";
+import { arrive, Display, sceneFade } from "../ui";
 
 /*
  * Bars 15–16: framework integration. The marks of the first-party adapters
@@ -67,10 +67,9 @@ export function Wiring({ cues = PROMO_WIRING }: { cues?: WiringCues }) {
         opacity: sceneFade(frame, BAR * cues.bars),
       }}
     >
-      <Kicker style={arrive(frame, 0)}>Framework integration</Kicker>
-      <Display size={70} style={{ marginTop: 26, maxWidth: 1500 }}>
+      <Display size={62} style={{ maxWidth: 1500 }}>
         <Revealed
-          text="The wiring is already built — and tested as real apps."
+          text={"The wiring is already built\u00a0— and tested as real apps."}
           frame={frame}
           at={3}
         />
@@ -162,10 +161,9 @@ export function Wiring({ cues = PROMO_WIRING }: { cues?: WiringCues }) {
               <p
                 style={{
                   margin: "26px 0 0",
-                  fontFamily: FONT.mono,
-                  fontSize: 18,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
+                  fontFamily: FONT.sans,
+                  fontSize: 22,
+                  fontWeight: 600,
                   color: C.bronze,
                 }}
               >

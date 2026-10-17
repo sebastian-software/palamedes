@@ -74,9 +74,8 @@ export function Win({
           borderBottom: `${EDGE}px solid ${C.hair}`,
           background: C.paper,
           fontFamily: FONT.mono,
-          fontSize: 17,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
+          fontSize: 19,
+          letterSpacing: "0.02em",
           color: C.slate,
           whiteSpace: "nowrap",
         }}
@@ -166,17 +165,15 @@ export function Title({
   x,
   y,
   width,
-  kicker,
   text,
   frame,
   at,
   out,
-  size = 66,
+  size = 58,
 }: {
   x: number;
   y: number;
   width: number;
-  kicker: string;
   text: string;
   frame: number;
   at: number;
@@ -186,34 +183,18 @@ export function Title({
   const gone = out === undefined ? 0 : ease(frame, out, 10);
   return (
     <div style={{ position: "absolute", left: x, top: y, width, opacity: 1 - gone }}>
-      <p
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 18,
-          margin: 0,
-          fontFamily: FONT.mono,
-          fontSize: 22,
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: C.bronze,
-          opacity: ease(frame, at, 12),
-        }}
-      >
-        <span style={{ width: 52 * ease(frame, at, 16), height: 2, background: C.bronze }} />
-        {kicker}
-      </p>
       <h2
         style={{
-          margin: "20px 0 0",
+          margin: 0,
           fontFamily: FONT.display,
           fontWeight: 400,
           fontSize: size,
           lineHeight: 1.08,
           color: C.ink,
+          textWrap: "balance",
         }}
       >
-        <Revealed text={text} frame={frame} at={at + 3} />
+        <Revealed text={text} frame={frame} at={at} />
       </h2>
     </div>
   );

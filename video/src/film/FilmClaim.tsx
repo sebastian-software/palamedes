@@ -29,12 +29,12 @@ export function FilmClaim() {
         opacity: sceneFade(frame, BAR * 2),
       }}
     >
-      <Display size={120}>
+      <Display size={108}>
         {WORDS.map((word) => (
           <Revealed key={word.text} text={word.text} frame={frame} at={word.cue - 4} />
         ))}
       </Display>
-      <Display size={140} style={{ marginTop: 34, color: C.bronze }}>
+      <Display size={126} style={{ marginTop: 30, color: C.bronze }}>
         <Revealed text="Pick all three." frame={frame} at={PICK - 5} unit="character" stagger={1} />
       </Display>
     </AbsoluteFill>

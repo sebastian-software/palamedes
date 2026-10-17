@@ -100,7 +100,7 @@
     {
       "take": "eleven-brian/09-frameworks",
       "at": 91.73,
-      "text": "The wiring for your framework is already built, for Next.js, React Router, TanStack, Solid and Vite, and every one of them is tested as a real app."
+      "text": "The wiring for your framework is already built, for Next.js, React Router, TanStack, Solid, Waku and Vite, and every one of them is tested as a real app."
     },
     {
       "take": "eleven-brian/10-fast",

@@ -49,8 +49,8 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
     <Wiring
       key="frameworks"
       cues={{
-        marks: [at(3.2), at(4.7), at(5.9), at(6.95), at(7.2), at(7.4), at(7.6)],
-        travel: [at(8.2), at(10.9)],
+        marks: [at(2.95), at(4.1), at(5.2), at(6.25), at(6.95), at(7.3), at(7.6)],
+        travel: [at(8.3), at(10.9)],
         bars: 4,
       }}
     />,

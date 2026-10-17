@@ -5,7 +5,7 @@ import { PromptSend } from "@/components/snap-cn/prompt-send";
 import { C, FONT } from "../brand";
 import { Revealed } from "../kinetic";
 import { BAR } from "../timeline";
-import { arrive, Display, ease, Kicker, sceneFade } from "../ui";
+import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
@@ -35,18 +35,16 @@ export function Agent() {
   return (
     <AbsoluteFill style={{ background: C.mist, opacity: sceneFade(frame, BAR * 3) }}>
       <AbsoluteFill style={{ padding: "150px 160px", opacity: 1 - handover }}>
-        <Kicker style={arrive(frame, 0)}>With your coding agent</Kicker>
-        <Display size={80} style={{ marginTop: 24 }}>
+        <Display size={70}>
           <Revealed text="Working with a coding agent?" frame={frame} at={4} />
         </Display>
         <div style={{ marginTop: 80, ...arrive(frame, CUE.command - 8) }}>
           <p
             style={{
               margin: 0,
-              fontFamily: FONT.mono,
-              fontSize: 18,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
+              fontFamily: FONT.sans,
+              fontSize: 28,
+              fontWeight: 600,
               color: C.slate,
             }}
           >

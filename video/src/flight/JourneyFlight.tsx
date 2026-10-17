@@ -71,27 +71,27 @@ const COMPONENT: WinBox = { x: 4700, y: 150, fontSize: 22 };
 const COMPILED: WinBox = { x: 4700, y: 720, fontSize: 22 };
 const GATE = { x: 4300, y: 250, width: 90, height: 800 };
 const GATE_CENTRE: Point = [GATE.x + GATE.width / 2, 600];
-const SHEET = { x: 6900, y: 220, width: 860 };
-const SPREAD = { dx: -260, gap: 60 };
-const BROWSER = { x: 7800, y: 240, width: 1120, height: 800 };
+const SHEET = { x: 6900, y: 260, width: 860 };
+const SPREAD = { dx: -260, gap: 40 };
+const BROWSER = { x: 7800, y: 250, width: 1120, height: 800 };
 const ADVANCE = 1233 / 2048;
 const TAB: Point = [BROWSER.x + 30 + 2 * 230 + 100, BROWSER.y + 64 + 35];
 
 const KEYS: CamKey[] = [
   { f: 0, x: 960, y: 600, z: 0.92 },
-  { f: B(1, 2), x: 960, y: 570, z: 1.1, ease: Easing.inOut(Easing.cubic) },
-  { f: B(2, 2), x: 960, y: 600, z: 1.04 },
+  { f: B(1, 2), x: 960, y: 520, z: 1.1, ease: Easing.inOut(Easing.cubic) },
+  { f: B(2, 2), x: 960, y: 560, z: 0.95 },
   { f: B(3, 1), x: 2050, y: 520, z: 0.72 },
-  { f: B(3, 3.5), x: 3080, y: 600, z: 1 },
-  { f: B(5, 3.5), x: 3080, y: 560, z: 1.16, ease: Easing.inOut(Easing.cubic) },
-  { f: B(6, 1), x: 3300, y: 620, z: 1 },
+  { f: B(3, 3.5), x: 3080, y: 580, z: 1 },
+  { f: B(5, 3.5), x: 3080, y: 520, z: 1.05, ease: Easing.inOut(Easing.cubic) },
+  { f: B(6, 1), x: 3300, y: 600, z: 1 },
   { f: B(6, 3.5), x: 4250, y: 600, z: 0.92 },
-  { f: B(7, 2.5), x: 5050, y: 640, z: 0.75 },
-  { f: B(8, 1), x: 5070, y: 640, z: 0.77, ease: Easing.inOut(Easing.cubic) },
-  { f: B(8, 3), x: 7300, y: 660, z: 0.82 },
-  { f: B(9, 3.5), x: 7250, y: 660, z: 0.76, ease: Easing.inOut(Easing.cubic) },
-  { f: B(10, 0.5), x: 7790, y: 650, z: 0.7 },
-  { f: B(11, 0.5), x: 7800, y: 650, z: 0.71, ease: Easing.inOut(Easing.cubic) },
+  { f: B(7, 2.5), x: 5050, y: 600, z: 0.72 },
+  { f: B(8, 1), x: 5070, y: 600, z: 0.74, ease: Easing.inOut(Easing.cubic) },
+  { f: B(8, 3), x: 7300, y: 650, z: 0.74 },
+  { f: B(9, 3.5), x: 7250, y: 650, z: 0.72, ease: Easing.inOut(Easing.cubic) },
+  { f: B(10, 0.5), x: 7700, y: 650, z: 0.7 },
+  { f: B(11, 0.5), x: 7710, y: 650, z: 0.71, ease: Easing.inOut(Easing.cubic) },
   { f: B(11, 3), x: BROWSER.x + 560, y: BROWSER.y + 400, z: 1.1, ease: Easing.inOut(Easing.cubic) },
 ];
 
@@ -118,8 +118,7 @@ function Write({ f }: { f: number }) {
       <Title
         x={CODE.x}
         y={110}
-        width={1500}
-        kicker="1 · Write"
+        width={1400}
         text="Write the sentence, right where it's used."
         frame={f}
         at={8}
@@ -128,7 +127,7 @@ function Write({ f }: { f: number }) {
         style={{
           position: "absolute",
           left: CODE.x,
-          top: 260,
+          top: 200,
           margin: 0,
           fontFamily: FONT.sans,
           fontSize: 28,
@@ -204,7 +203,6 @@ function Catalog({ f }: { f: number }) {
         x={CATALOG.x}
         y={130}
         width={1700}
-        kicker="2 · Extract"
         text="One command lifts every sentence out."
         frame={f}
         at={B(3, 0.5)}
@@ -214,12 +212,11 @@ function Catalog({ f }: { f: number }) {
         x={CATALOG.x}
         y={130}
         width={1250}
-        kicker="3 · Translate"
-        text="Translators fill in German. Your code stays as it is."
+        text="Translators add the translations. Your code stays as it is."
         frame={f}
         at={B(4, 2)}
         out={B(6, 2)}
-        size={60}
+        size={54}
       />
       <Win
         box={CATALOG}
@@ -325,15 +322,14 @@ function Build({ f }: { f: number }) {
   return (
     <>
       <Title
-        x={3820}
-        y={-60}
-        width={2440}
-        kicker="4 · Build"
+        x={3950}
+        y={0}
+        width={2300}
         text="The build swaps each sentence for a short ID, and each translation for ready-to-run code."
         frame={f}
         at={B(6, 3)}
         out={B(8, 1.5)}
-        size={54}
+        size={50}
       />
       <div
         style={{
@@ -522,25 +518,23 @@ function Pieces({ f }: { f: number }) {
   return (
     <>
       <Title
-        x={6480}
-        y={-40}
+        x={6600}
+        y={60}
         width={2100}
-        kicker="5 · Split"
         text="Then the catalog splits: one piece per screen."
         frame={f}
         at={B(8, 2.5)}
         out={B(10)}
-        size={60}
+        size={54}
       />
       <Title
-        x={6480}
-        y={-40}
+        x={6600}
+        y={60}
         width={2100}
-        kicker="6 · Load"
         text="Each screen loads only its own words."
         frame={f}
         at={B(10, 0.5)}
-        size={60}
+        size={54}
       />
       {["ja", "es", "fr"].map((locale, index) => {
         const depth = 3 - index;

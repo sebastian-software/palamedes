@@ -6,7 +6,7 @@ import { C, FONT } from "../brand";
 import { ramp } from "../flight/motion";
 import { BAR } from "../timeline";
 import { Revealed } from "../kinetic";
-import { arrive, Display, ease, Kicker, sceneFade } from "../ui";
+import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
@@ -37,14 +37,12 @@ const DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeZone: "UT
 function Card({
   frame,
   cue,
-  kicker,
   title,
   children,
   lit,
 }: {
   frame: number;
   cue: number;
-  kicker: string;
   title: string;
   children: ReactNode;
   lit: number;
@@ -65,18 +63,6 @@ function Card({
       <p
         style={{
           margin: 0,
-          fontFamily: FONT.mono,
-          fontSize: 17,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
-          color: C.bronze,
-        }}
-      >
-        {kicker}
-      </p>
-      <p
-        style={{
-          margin: "12px 0 0",
           fontFamily: FONT.sans,
           fontSize: 30,
           fontWeight: 700,
@@ -147,8 +133,7 @@ export function Complete() {
         opacity: sceneFade(frame, BAR * 6),
       }}
     >
-      <Kicker style={arrive(frame, 0)}>Complete</Kicker>
-      <Display size={72} style={{ marginTop: 22 }}>
+      <Display size={64}>
         <Revealed text="And it doesn't stop there." frame={frame} at={4} />
       </Display>
 
@@ -156,7 +141,7 @@ export function Complete() {
         <Card
           frame={frame}
           cue={CUE.plurals}
-          kicker="ICU, compiled"
+
           title="Plurals, numbers, dates"
           lit={lit(0)}
         >
@@ -173,7 +158,7 @@ export function Complete() {
         <Card
           frame={frame}
           cue={CUE.server}
-          kicker="Server and browser"
+
           title="Server rendering, server actions"
           lit={lit(1)}
         >
@@ -190,7 +175,7 @@ export function Complete() {
         <Card
           frame={frame}
           cue={CUE.lint}
-          kicker="Lint"
+
           title="A linter for your messages"
           lit={lit(2)}
         >
@@ -199,7 +184,7 @@ export function Complete() {
         <Card
           frame={frame}
           cue={CUE.audit}
-          kicker="Audit"
+
           title="An audit for every catalog"
           lit={lit(3)}
         >
