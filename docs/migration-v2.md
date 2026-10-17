@@ -85,7 +85,10 @@ file path and the same asset server, for example
 `await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer })`.
 The adapter emits the stable asset server's import map for both the application
 and bootstrap; supply `nonce` with a restrictive script CSP. The adapter does
-not need the separate `@remix-run/ui` primitives package. See the [Remix API guide](./api/remix.md#tested-remix-version).
+not need the separate `@remix-run/ui` primitives package. Remove the former
+`catalogAssets.clientModuleUrl` override; it now throws a migration diagnostic.
+Configure the asset server's mounts so bootstrap URLs and import-map scopes
+stay aligned. See the [Remix API guide](./api/remix.md#tested-remix-version).
 
 ## Author rich text and choices with macros
 

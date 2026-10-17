@@ -151,6 +151,9 @@ const entry = await remixI18n.renderClientEntry("app/public/client.tsx", { asset
 The adapter renders the stable Remix import map for both the entry and its own
 bootstrap, followed by an external script. It also delivers ordinary
 catalog-independent error UI and Reload recovery. Applications do not query internal catalog links.
+Configure custom mounts on the actual asset server. The former
+`catalogAssets.clientModuleUrl` override is rejected because stable Remix must
+resolve the bootstrap URL and its dependency import-map scopes together.
 
 The shared registry can also be the server catalog loader. Omit the old
 application `loadMessages` function and let `run()` await the executable

@@ -12,6 +12,22 @@ import { createRemixI18nRequestScope, createRemixI18nServer } from "./server";
 describe("stable Remix client entries", () => {
   const locales = defineLocaleControls({ locales: ["en", "de"], defaultLocale: "en" });
 
+  it("rejects the retired URL override instead of emitting a bootstrap outside its import-map scope", () => {
+    expect(() =>
+      createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+        catalogAssets: {
+          // @ts-expect-error Legacy JavaScript callers receive the migration diagnostic too.
+          clientModuleUrl: "/custom/client.mjs",
+        },
+      }),
+    ).toThrow(
+      "Remove catalogAssets.clientModuleUrl. Pass the actual assetServer to renderClientEntry()",
+    );
+  });
+
   it("includes both application and bootstrap dependencies in an escaped, nonce-bearing import map", async () => {
     const remixI18n = createRemixI18nServer({
       locales,

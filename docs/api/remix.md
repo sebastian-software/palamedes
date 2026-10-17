@@ -275,8 +275,9 @@ A custom Reload button uses `data-palamedes-reload`. The external bootstrap
 and inline import map work with `script-src 'self' 'nonce-…'`; pass the request
 nonce to cover both scripts, without `unsafe-inline` or `unsafe-eval`.
 Entry and bootstrap URLs come from the asset server, including custom mounts
-and fingerprints. `catalogAssets.clientModuleUrl` remains an advanced override
-for the served `@palamedes/remix/client` module.
+and fingerprints. The former `catalogAssets.clientModuleUrl` override is
+rejected: relocating a module URL without its import-map scope breaks bare
+dependency resolution. Configure the actual asset server's mounts instead.
 
 The lower-level `initializeRemixClientI18nAsync()` and `startRemixClient()` are
 available for custom host integrations. Generated executable catalogs never
