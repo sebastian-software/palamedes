@@ -63,6 +63,13 @@ may change faster than Stable surfaces.
 | Compiled catalog artifact internals                   | Preview  | Public loaders can consume them; the internal representation may evolve in minors.                                            |
 | `crates/*` Rust APIs                                  | Preview  | The Rust crates support the Node toolchain today. They are not yet a separately promised public Rust SDK.                     |
 
+## Unverified Hosts
+
+React Native and Expo are not currently supported application hosts. The Stable
+React renderer and compiled runtime do not establish Metro, Hermes, or native
+device compatibility. The [React Native assessment](https://github.com/sebastian-software/palamedes/blob/main/docs/research/react-native-support.md)
+records the reusable pieces, missing integration boundaries, and required proof.
+
 ## Stable Surfaces
 
 Palamedes treats these as stable adoption surfaces:
