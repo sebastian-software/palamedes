@@ -1,6 +1,6 @@
 import { t } from "@palamedes/core/macro";
-import { Frame } from "remix/ui";
-import { renderToStream } from "remix/ui/server";
+import { Frame } from "remix/component";
+import { renderToStream } from "remix/component/server";
 
 import type { Locale } from "./i18n.ts";
 

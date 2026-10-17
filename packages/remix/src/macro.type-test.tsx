@@ -1,4 +1,4 @@
-/** @jsxImportSource remix/ui */
+/** @jsxImportSource remix/component */
 import { Plural, Select, SelectOrdinal, Trans } from "./macro";
 
 const name = "Ada";

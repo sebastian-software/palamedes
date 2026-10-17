@@ -1503,7 +1503,7 @@ fn transforms_trans_jsx_macro() {
 #[test]
 fn transforms_remix_trans_macro_to_its_native_compiled_runtime() {
     let source = r#"import { Trans as Message } from "@palamedes/remix/macro";
-import { jsxs as render } from "remix/ui/jsx-runtime";
+import { jsxs as render } from "remix/component/jsx-runtime";
 const view = render(Message, { children: ["Hello ", name] });
 "#;
     let result = transform_macros(source, "view.js", None)
@@ -1523,7 +1523,7 @@ const view = render(Message, { children: ["Hello ", name] });
 #[test]
 fn transforms_remix_lowered_rich_macros_by_binding_identity() {
     let source = r#"import { Trans as Message } from "@palamedes/react/macro";
-import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/component/jsx-runtime";
 export function View() {
   return makeMany(Message, { children: [
     "Hello ",
@@ -1563,7 +1563,7 @@ export function View() {
 #[test]
 fn transforms_remix_lowered_choice_macros() {
     let source = r##"import { Plural as Count, Select as Pick, SelectOrdinal as Rank } from "@palamedes/react/macro";
-import { jsx as render } from "remix/ui/jsx-runtime";
+import { jsx as render } from "remix/component/jsx-runtime";
 export function labels(count, gender, position) {
   return [
     render(Count, { value: count, offset: 1, one: "# item", other: "# items" }),
@@ -1599,7 +1599,7 @@ export function labels(count, gender, position) {
 #[test]
 fn transforms_remix_development_jsx_output() {
     let source = r#"import { Trans as Message } from "@palamedes/react/macro";
-import { jsxDEV as render } from "remix/ui/jsx-dev-runtime";
+import { jsxDEV as render } from "remix/component/jsx-dev-runtime";
 export function View() {
   return render(Message, { children: ["Hello ", name] }, void 0, true, {
     fileName: "view.tsx",
@@ -1626,7 +1626,7 @@ export function View() {
 }
 "#;
     let lowered = r#"import { Trans as Message } from "@palamedes/react/macro";
-import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/component/jsx-runtime";
 export function View() {
   return makeMany(Message, { children: [
     "Hello ",
@@ -1664,7 +1664,7 @@ export function View() {
 }
 "#;
     let lowered = r#"import { Trans as Message } from "@palamedes/react/macro";
-import { jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+import { jsx as make, jsxs as makeMany } from "remix/component/jsx-runtime";
 export function View() {
   return makeMany(Message, { children: [
     "Green-e® applies to ",
@@ -1694,7 +1694,7 @@ export function View() {
 #[test]
 fn transforms_nested_icu_choices_in_remix_lowered_choice_options() {
     let source = r##"import { Plural as Count } from "@palamedes/react/macro";
-import { jsx as render } from "remix/ui/jsx-runtime";
+import { jsx as render } from "remix/component/jsx-runtime";
 export function label(count) {
   return render(Count, {
     value: count,
@@ -1714,7 +1714,7 @@ export function label(count) {
 #[test]
 fn rejects_nested_message_macros_in_remix_lowered_children() {
     let source = r##"import { Plural as Count, Trans as Message } from "@palamedes/react/macro";
-import { jsx as render, jsxs as renderMany } from "remix/ui/jsx-runtime";
+import { jsx as render, jsxs as renderMany } from "remix/component/jsx-runtime";
 export function View(count) {
   return renderMany(Message, { children: [
     render(Count, { value: count, one: "# item", other: "# items" }),
@@ -1736,7 +1736,7 @@ export function View(count) {
 fn rejects_macros_nested_in_remix_lowered_component_props() {
     let source = r#"import { Trans as Message } from "@palamedes/react/macro";
 import { t } from "@palamedes/core/macro";
-import { jsx as render } from "remix/ui/jsx-runtime";
+import { jsx as render } from "remix/component/jsx-runtime";
 export function View() {
   return render(Message, { children: render(Button, { title: t`Save` }) });
 }
@@ -1754,7 +1754,7 @@ export function View() {
 #[test]
 fn ignores_non_palamedes_and_shadowed_remix_jsx_calls() {
     let source = r#"import { Trans as Message } from "@palamedes/react/macro";
-import { jsx as render } from "remix/ui/jsx-runtime";
+import { jsx as render } from "remix/component/jsx-runtime";
 export function View(render) {
   const ordinary = render(Message, { children: "shadowed" });
   return [ordinary, jsx(Widget, { children: "ordinary" })];
@@ -1771,15 +1771,15 @@ export function View(render) {
 fn rejects_dynamic_remix_lowered_macro_shapes() {
     let cases = [
         r#"import { Trans } from "@palamedes/react/macro";
-import { jsx } from "remix/ui/jsx-runtime";
+import { jsx } from "remix/component/jsx-runtime";
 export function View() { return jsx(Trans, props); }
 "#,
         r#"import { Trans } from "@palamedes/react/macro";
-import { jsx } from "remix/ui/jsx-runtime";
+import { jsx } from "remix/component/jsx-runtime";
 export function View() { return jsx(Trans, { ...props, children: "Hello" }); }
 "#,
         r#"import { Trans } from "@palamedes/react/macro";
-import { jsxs } from "remix/ui/jsx-runtime";
+import { jsxs } from "remix/component/jsx-runtime";
 export function View() { return jsxs(Trans, { children: [...parts] }); }
 "#,
     ];
@@ -1795,7 +1795,7 @@ export function View() { return jsxs(Trans, { children: [...parts] }); }
 #[test]
 fn rejects_eager_remix_lowered_choices_at_module_scope() {
     let source = r##"import { Plural as Count } from "@palamedes/react/macro";
-import { jsx as render } from "remix/ui/jsx-runtime";
+import { jsx as render } from "remix/component/jsx-runtime";
 const label = render(Count, { value: count, one: "# item", other: "# items" });
 "##;
     let error = transform_macros_raw(source, "view.js", None)

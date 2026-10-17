@@ -170,4 +170,3 @@ minimumReleaseAgeExclude:
   - "@remix-run/render-middleware@0.2.0"
   - "@remix-run/spa@0.1.0"
   - "@remix-run/ui@0.8.0"
-  - remix@3.0.0-rc.1

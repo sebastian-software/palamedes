@@ -72,6 +72,24 @@ claim a host migration is complete until its initial and lazy failure proof,
 locale selection, recovery behavior, and published parser-free artifact check
 pass.
 
+### Stable Remix 3
+
+`@palamedes/remix` targets stable `remix@^3.0.0`; the four examples pin `3.0.0`.
+RC.1 and earlier prereleases are no longer supported. Replace `remix/ui` with
+`remix/component` in component, server, test, and JSX runtime imports, and in
+`jsxImportSource`. For component HMR, replace `remix/ui-hmr` with
+`remix/component-hmr` and `uiHmr()` with `componentHmr()`. Keep the Node hook
+order (`remix/node-tsx`, then `@palamedes/remix/register`) and the shared catalog
+asset registry setup. `renderClientEntry()` is now asynchronous: pass an entry
+file path and the same asset server, for example
+`await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer })`.
+The adapter emits the stable asset server's import map for both the application
+and bootstrap; supply `nonce` with a restrictive script CSP. The adapter does
+not need the separate `@remix-run/ui` primitives package. Remove the former
+`catalogAssets.clientModuleUrl` override; it now throws a migration diagnostic.
+Configure the asset server's mounts so bootstrap URLs and import-map scopes
+stay aligned. See the [Remix API guide](./api/remix.md#tested-remix-version).
+
 ## Author rich text and choices with macros
 
 Move direct ICU/choice components to the authoring entrypoint so extraction and

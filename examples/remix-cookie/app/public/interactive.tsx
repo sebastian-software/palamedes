@@ -1,6 +1,6 @@
 import { t } from "@palamedes/core/macro";
 import { Plural, Select, Trans } from "@palamedes/remix/macro";
-import type { Handle, RemixNode } from "remix/ui";
+import type { Handle, RemixNode } from "remix/component";
 
 export type ClientProofProps = {
   audience: "developer" | "other";

@@ -1,6 +1,6 @@
 import { createController } from "remix/router";
-import { createElement } from "remix/ui";
-import { renderToString } from "remix/ui/server";
+import { createElement } from "remix/component";
+import { renderToString } from "remix/component/server";
 
 import {
   getLocaleLabel,
@@ -13,6 +13,7 @@ import { renderFrameContent, renderFrameDocument } from "../frame-page.tsx";
 import { renderHomePage } from "../page.ts";
 import { ClientProof } from "../public/interactive.tsx";
 import { routes } from "../routes.ts";
+import { assetServer } from "../assets.ts";
 
 export default createController(routes, {
   actions: {
@@ -23,6 +24,9 @@ export default createController(routes, {
           new Response(
             renderHomePage({
               clientCatalog: remixI18n.renderClientCatalog(locale),
+              clientEntry: await remixI18n.renderClientEntry("app/public/client.tsx", {
+                assetServer,
+              }),
               clientProof: await renderToString(
                 createElement(ClientProof, { audience: "developer", count: 1 }),
               ),
