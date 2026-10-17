@@ -28,8 +28,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "Start 1.168",
-      note: "With TanStack Router 1.170 and Vite 8.",
+      value: "React Start 1.169.3",
+      note: "With TanStack Router 1.170.45 and Vite 8.2.2.",
     },
     {
       label: "Server model",
@@ -151,6 +151,10 @@ export const getStatus = createServerFn({ method: "GET" })
     },
   },
   faq: [
+    {
+      q: "Does this verification include Solid Start?",
+      a: "The checked examples use React Start 1.169.3. Solid Start needs a separate host binding and application proof: its Solid 2 prerelease requires newer Solid web packages than the existing Solid/Nitro examples. That verification remains a Palamedes v2 release requirement in issue #1252.",
+    },
     {
       q: "Does Palamedes replace TanStack Router's i18n routing patterns?",
       a: "No. Keep locale params, rewrites, redirects, and links in TanStack Router. Palamedes turns the locale resolved by those routes into the active catalog for server and client code.",
