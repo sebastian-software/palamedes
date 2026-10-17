@@ -38,6 +38,36 @@ only to `live` only when:
 This gate keeps repository readiness distinct from hosting availability. Do not
 publish a provisional live URL or infer readiness from container startup alone.
 
+### Run The Cookie Proof Against A Deployed Host
+
+After deployment, run the same full-stack browser contract against its final
+origin. Replace the placeholder with the real HTTPS origin:
+
+```sh
+pnpm verify:examples:browser -- --id remix-cookie --base-url https://YOUR-REMIX-HOST
+```
+
+This mode uses the already-running host. It does not build or start a local app,
+stop local listeners, change DNS, or deploy an image. Chromium uses normal TLS
+verification. The target must be an origin without a path, credentials, query,
+or fragment. HTTP is accepted only for loopback rehearsal; that rehearsal does
+not satisfy the public HTTPS readiness gate.
+
+The existing contract checks localized SSR and hydration, explicit locale cookie
+writes and full-document navigation, rich client messages, interaction, Frames,
+active-locale catalog delivery, and initial/lazy failure recovery. Failure
+injection occurs in the isolated browser context. Observed JavaScript responses
+are checked for parser code; receipts are written under
+`coverage/catalog-delivery/remix-cookie.network.json`. Retain the command output,
+host, image revision, and receipts with the deployment evidence.
+
+`--base-url` currently requires `--id remix-cookie`. The route, subdomain, and
+TLD examples remain server smoke proofs; a passing cookie run must not promote
+their hosting status or imply browser parity. The final supported Remix version
+must first pass the compatibility work in [#1260](https://github.com/sebastian-software/palamedes/issues/1260).
+This runner is preparation for [#1261](https://github.com/sebastian-software/palamedes/issues/1261),
+not evidence that public hosting has been completed.
+
 ## Live Reference URLs
 
 These URLs describe the intended public reference shape — six frameworks, each in
