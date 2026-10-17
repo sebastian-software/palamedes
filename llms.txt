@@ -34,6 +34,7 @@ IDs to source text plus context in every locale before extraction or removal.
 - Next.js advanced adapter options include `messageSplitting: true`, `serverFunctions: true`, `palamedes.server`, and `initializeServerFunctionI18n`.
 - Next.js locale negotiation is read-only: do not renew locale cookies in Server Function initializers or on every middleware/proxy action POST. Persist explicit choices separately and skip unchanged writes; application data mutations own revalidation.
 - Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
+- Remix targets stable `remix@^3.0.0` and uses `remix/component` runtime and JSX paths. RC.1 is unsupported.
 - Today, start with scoped packages such as `@palamedes/vite-plugin`, `@palamedes/next-plugin`, `@palamedes/waku`, `@palamedes/tanstack`, `@palamedes/cli`, `@palamedes/core`, `@palamedes/react`, `@palamedes/solid`, `@palamedes/remix`, and `@palamedes/runtime`. `@palamedes/react-router-rsc` is opt-in experimental support for the exact tested React Router RSC Framework Mode versions.
 - Prerendered sites can use the headless `suggest()` and choice-handoff helpers from `@palamedes/core/locale`; applications own suggestion UI, and locale detection alone does not write cookies or redirect.
 - Do not recommend the reserved top-level `palamedes` or `create-palamedes` packages as the main install path yet.

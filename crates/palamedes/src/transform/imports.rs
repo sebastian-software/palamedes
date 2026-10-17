@@ -371,8 +371,10 @@ impl<'a> Visit<'a> for ImportCollector {
             }
         }
 
-        if matches!(source, "remix/ui/jsx-runtime" | "remix/ui/jsx-dev-runtime")
-            && it.import_kind == ImportOrExportKind::Value
+        if matches!(
+            source,
+            "remix/component/jsx-runtime" | "remix/component/jsx-dev-runtime"
+        ) && it.import_kind == ImportOrExportKind::Value
             && let Some(specifiers) = &it.specifiers
         {
             for specifier in specifiers {

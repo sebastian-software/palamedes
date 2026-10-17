@@ -4,7 +4,7 @@ import type {
   SelectMacroProps,
   SelectOrdinalMacroProps,
 } from "@palamedes/core/macro";
-import type { Handle, RemixNode } from "remix/ui";
+import type { Handle, RemixNode } from "remix/component";
 
 import type { TransProps } from "./transShared";
 

@@ -151,3 +151,18 @@ Validate runtime packages with `pnpm check:runtime` after `pnpm build`, and run
 the relevant framework tests after migrating the application's authoring and
 catalog setup. Initial loading, hydration and later navigation failure recovery
 remain part of each host integration's release proof.
+
+## Stable Remix 3
+
+`@palamedes/remix` targets stable `remix@^3.0.0`; the four examples pin `3.0.0`.
+RC.1 and earlier prereleases are no longer supported. Replace `remix/ui` with
+`remix/component` in component, server, test, and JSX runtime imports, and in
+`jsxImportSource`. For component HMR, replace `remix/ui-hmr` with
+`remix/component-hmr` and `uiHmr()` with `componentHmr()`. Keep the Node hook
+order (`remix/node-tsx`, then `@palamedes/remix/register`) and the shared catalog
+asset registry setup. `renderClientEntry()` is now asynchronous: pass an entry
+file path and the same asset server, for example
+`await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer })`.
+The adapter emits the stable asset server's import map for both the application
+and bootstrap; supply `nonce` with a restrictive script CSP. The adapter does
+not need the separate `@remix-run/ui` primitives package. See the [Remix API guide](./api/remix.md#tested-remix-version).

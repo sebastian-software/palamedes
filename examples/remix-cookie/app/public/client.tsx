@@ -1,4 +1,4 @@
-import { createRoot } from "remix/ui";
+import { createRoot } from "remix/component";
 
 const { ClientProof } = await import("./interactive.tsx");
 const container = document.querySelector<HTMLElement>("[data-remix-client-proof]");
