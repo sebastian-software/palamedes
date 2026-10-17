@@ -121,9 +121,7 @@ function CompanyBand({ frame, at }: { frame: number; at: number }) {
         <p style={{ ...text, marginTop: 16 }}>
           TypeScript, React, Rust, and agentic software development.
         </p>
-        <p style={{ ...text, marginTop: 8, color: C.ink, fontWeight: 600 }}>
-          Work with us · sebastian-consulting.com
-        </p>
+        <p style={{ ...text, marginTop: 6 }}>sebastian-consulting.com</p>
       </div>
     </div>
   );

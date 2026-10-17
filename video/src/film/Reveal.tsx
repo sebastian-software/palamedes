@@ -121,6 +121,7 @@ export function Reveal() {
                   background: C.paper,
                   fontFamily: FONT.sans,
                   fontSize: 30,
+                  whiteSpace: "nowrap",
                   color: C.ink,
                   ...arrive(frame, CUE.translators + 4 + position * 5),
                 }}
@@ -166,7 +167,7 @@ export function Reveal() {
                 opacity: ease(frame, CUE.visitors, 10),
               }}
             >
-              {entry.locale}
+              {previous && morph - index * STEP < 9 ? previous.locale : entry.locale}
             </span>
             <span
               style={{ position: "relative", display: "inline-block", minWidth: 1200, height: 96 }}
