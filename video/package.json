@@ -1,0 +1,28 @@
+{
+  "name": "@palamedes/promo-video",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:picture": "remotion render src/index.ts PalamedesPromo audio/.work/out/picture.mp4 --codec=h264 --crf=18 --muted",
+    "render:poster": "remotion still src/index.ts PalamedesPoster audio/.work/out/poster.png --image-format=png",
+    "render:promo": "sh audio/build.sh audio/cues/promo.json",
+    "render:film": "sh audio/build.sh audio/cues/film.json"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.535",
+    "@remotion/google-fonts": "4.0.535",
+    "class-variance-authority": "0.7.1",
+    "culori": "4.0.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.535"
+  },
+  "devDependencies": {
+    "@types/culori": "4.0.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

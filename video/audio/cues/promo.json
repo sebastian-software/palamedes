@@ -1,0 +1,91 @@
+{
+  "total": 65.7,
+  "plan": [
+    ["Dm", "hook"],
+    ["Bb", "hook"],
+    ["Gm", "hook"],
+    [["Asus", "A"], "hook"],
+    ["F", "meet"],
+    ["C", "meet"],
+    ["Dm", "speak"],
+    ["Bb", "speak"],
+    ["F", "journey"],
+    ["C", "journey"],
+    ["Dm", "journey"],
+    ["Bb", "journey"],
+    ["F", "journey"],
+    ["C", "journey"],
+    ["Bb", "wiring"],
+    ["C", "wiring"],
+    ["Dm", "rust"],
+    ["Bb", "rust"],
+    ["C", "rust"],
+    [["Bb", "C"], "claim"],
+    ["F", "claim"],
+    ["F", "end"],
+    ["F", "end"]
+  ],
+  "props": {
+    "claim": {
+      "words": [6, 43, 67],
+      "pick": 86
+    }
+  },
+  "cues": [
+    {
+      "take": "af_bella/l01_s7",
+      "at": 0.35,
+      "text": "Adding a second language is easy. Living with it is the hard part."
+    },
+    {
+      "take": "af_bella/l02_s7",
+      "at": 5.15,
+      "text": "Keys instead of sentences, files to keep in sync, and glue for every framework."
+    },
+    {
+      "take": "af_bella/l03_s11",
+      "at": 12.43,
+      "text": "Meet Palamedes. Just write the sentence,"
+    },
+    {
+      "take": "af_bella/l04_s23",
+      "at": 17.45,
+      "text": "and your app speaks every language your visitors do."
+    },
+    {
+      "take": "af_bella/l05_s11",
+      "at": 25.85,
+      "text": "One command collects every sentence into catalogs your translators already know."
+    },
+    {
+      "take": "af_bella/l06_s7",
+      "at": 31.55,
+      "text": "Your build turns them into tiny functions, and every screen loads only its own words."
+    },
+    {
+      "take": "af_bella/l07_s7",
+      "at": 37.6,
+      "text": "And your visitors simply read their language."
+    },
+    {
+      "take": "af_bella/l08_s23",
+      "at": 40.5,
+      "text": "The wiring for your framework is already built, and tested as real apps."
+    },
+    {
+      "take": "af_bella/l09_s7",
+      "at": 46.15,
+      "text": "Its Rust core keeps the tooling fast: 73 milliseconds for 1,500 files."
+    },
+    {
+      "take": "af_bella/l10_s11",
+      "at": 54.48,
+      "text": "Clear. Complete. Fast. Pick three."
+    },
+    {
+      "take": "af_bella/l11_s11",
+      "at": 60.35,
+      "text": "Palamedes. Open source, at palamedes.dev."
+    }
+  ]
+}
