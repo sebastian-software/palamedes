@@ -72,6 +72,7 @@ fn write_project(root: &Path) {
 
 fn pmds(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args(arguments)
         .current_dir(root)
         .output()

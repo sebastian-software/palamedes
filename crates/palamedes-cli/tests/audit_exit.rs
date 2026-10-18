@@ -121,6 +121,7 @@ fn audit_operational_failures_keep_the_generic_exit_code() {
 
 fn audit(cwd: &Path, arguments: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .arg("audit")
         .args(arguments)
         .current_dir(cwd)

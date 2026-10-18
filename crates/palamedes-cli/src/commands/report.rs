@@ -12,16 +12,16 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct ReportOptions {
-    /// Path to a Palamedes config file.
+    #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Only report selected target locale(s); comma-separated values are supported.
+    #[arg(help = tr!("Only report selected target locale(s); comma-separated values are supported."))]
     #[arg(long, num_args = 1..)]
     locale: Vec<String>,
-    /// Print the machine-readable report as JSON.
+    #[arg(help = tr!("Print the machine-readable report as JSON."))]
     #[arg(long)]
     json: bool,
-    /// Fail when any reported locale is below this translated percentage.
+    #[arg(help = tr!("Fail when any reported locale is below this translated percentage."))]
     #[arg(long)]
     fail_if_below: Option<f64>,
 }
@@ -98,7 +98,7 @@ fn resolve_report_locales(config: &LoadedConfig, selected: &[String]) -> Vec<Str
 
 fn print_report(result: &CatalogCoverageResult) {
     if result.locales.is_empty() {
-        println!("No target locales configured.");
+        println!("{}", tr!("No target locales configured."));
         return;
     }
 
@@ -107,18 +107,25 @@ fn print_report(result: &CatalogCoverageResult) {
         .iter()
         .map(|locale| locale.locale.len())
         .max()
-        .unwrap_or("Locale".len())
-        .max("Locale".len())
+        .unwrap_or(tr!("Locale").chars().count())
+        .max(tr!("Locale").chars().count())
         + 2;
+    let translated_width = 11.max(tr!("Translated").chars().count());
+    let missing_width = 8.max(tr!("Missing").chars().count());
+    let fuzzy_width = 6.max(tr!("Fuzzy").chars().count());
 
     println!(
-        "{:<locale_column_width$}Translated  Missing  Fuzzy  Complete",
-        "Locale"
+        "{:<locale_column_width$}{:<translated_width$} {:<missing_width$} {:<fuzzy_width$} {}",
+        tr!("Locale"),
+        tr!("Translated"),
+        tr!("Missing"),
+        tr!("Fuzzy"),
+        tr!("Complete")
     );
     for locale in &result.locales {
         let translated = format!("{}/{}", locale.translated, locale.total);
         println!(
-            "{:<locale_column_width$}{:<11} {:<8} {:<6} {}",
+            "{:<locale_column_width$}{:<translated_width$} {:<missing_width$} {:<fuzzy_width$} {}",
             locale.locale,
             translated,
             locale.missing,

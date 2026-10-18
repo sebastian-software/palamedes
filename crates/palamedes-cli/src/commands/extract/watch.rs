@@ -63,11 +63,7 @@ impl WatchMatchers {
                     (include, exclude) => {
                         let error = include.err().or(exclude.err());
                         eprintln!(
-                            "Warning: Could not build watch patterns for catalog '{}'{}. Changes to its source files will not trigger extraction until the watcher restarts.",
-                            catalog.path,
-                            error
-                                .map(|error| format!(": {error}"))
-                                .unwrap_or_default()
+                            "{}", tr!("Warning: Could not build watch patterns for catalog {catalog}{error}. Changes to its source files will not trigger extraction until the watcher restarts.", catalog = format!("'{}'", catalog.path), error = error.map(|error| format!(": {error}")).unwrap_or_default())
                         );
                         None
                     }
@@ -171,7 +167,7 @@ pub(super) fn run_watch_mode(
     initial_config: &LoadedConfig,
     options: &ExtractOptions,
 ) -> Result<(), CliError> {
-    println!("Watching for changes...");
+    println!("{}", tr!("Watching for changes..."));
     let mut config = initial_config.clone();
     /*
      * One cache for the life of the watcher. Every rebuild after the first
@@ -243,7 +239,13 @@ pub(super) fn run_watch_mode(
                 options.config.as_deref(),
             ) {
                 Ok(()) => {
-                    eprintln!("Config changed; reloaded {}", config.config_path.display());
+                    eprintln!(
+                        "{}",
+                        tr!(
+                            "Config changed; reloaded {path}",
+                            path = config.config_path.display()
+                        )
+                    );
                     let next_watch_paths = WatchPaths::build(&config);
                     let next_config_path = next_watch_paths.config;
                     if next_config_path != watched_config_path {
@@ -252,8 +254,12 @@ pub(super) fn run_watch_mode(
                             watcher.watch(&next_config_path, RecursiveMode::NonRecursive)
                         {
                             eprintln!(
-                                "Warning: Could not watch config {}: {error}. Changes to it will only be noticed through a watched parent directory.",
-                                next_config_path.display()
+                                "{}",
+                                tr!(
+                                    "Warning: Could not watch config {path}: {error}. Changes to it will only be noticed through a watched parent directory.",
+                                    error = error,
+                                    path = next_config_path.display()
+                                )
                             );
                         }
                         watched_config_path = next_config_path;
@@ -275,8 +281,12 @@ pub(super) fn run_watch_mode(
                         // be visible, or its source edits are silently missed.
                         if let Err(error) = watcher.watch(root, RecursiveMode::Recursive) {
                             eprintln!(
-                                "Warning: Could not watch {}: {error}. Changes under this root will not trigger extraction until the watcher restarts.",
-                                root.display()
+                                "{}",
+                                tr!(
+                                    "Warning: Could not watch {path}: {error}. Changes under this root will not trigger extraction until the watcher restarts.",
+                                    error = error,
+                                    path = root.display()
+                                )
                             );
                         }
                     }
@@ -293,14 +303,18 @@ pub(super) fn run_watch_mode(
                 }
                 Err(error) => {
                     eprintln!(
-                        "Warning: Could not reload config: {error}. Keeping the previous configuration and continuing to watch for changes."
+                        "{}",
+                        tr!(
+                            "Warning: Could not reload config: {error}. Keeping the previous configuration and continuing to watch for changes.",
+                            error = error.localized()
+                        )
                     );
                 }
             }
         }
 
         if options.verbose {
-            eprintln!("Source changed; extracting catalogs");
+            eprintln!("{}", tr!("Source changed; extracting catalogs"));
         }
         run_watch_extraction(&config, options, &mut cache, &mut cache_warnings)?;
     }
@@ -341,7 +355,13 @@ fn run_watch_extraction(
     match result {
         Ok(_) => Ok(()),
         Err(error) => {
-            eprintln!("Warning: {error} Continuing to watch for changes.");
+            eprintln!(
+                "{}",
+                tr!(
+                    "Warning: {error} Continuing to watch for changes.",
+                    error = error.localized()
+                )
+            );
             Ok(())
         }
     }

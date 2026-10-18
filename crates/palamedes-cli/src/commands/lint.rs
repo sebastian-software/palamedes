@@ -17,19 +17,19 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct LintOptions {
-    /// Path to a Palamedes config file.
+    #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Print one deterministic machine-readable JSON document.
+    #[arg(help = tr!("Print one deterministic machine-readable JSON document."))]
     #[arg(long)]
     json: bool,
-    /// Fail on error or warning diagnostics.
+    #[arg(help = tr!("Fail on error or warning diagnostics."))]
     #[arg(long, default_value = "error")]
     fail_on: LintFailOn,
-    /// Worker threads for the parallel source-analysis pass.
+    #[arg(help = tr!("Worker threads for the parallel source-analysis pass."))]
     #[arg(long)]
     threads: Option<usize>,
-    /// Ignore and do not write the shared source-analysis cache.
+    #[arg(help = tr!("Ignore and do not write the shared source-analysis cache."))]
     #[arg(long)]
     no_cache: bool,
 }
@@ -177,7 +177,7 @@ impl Command for LintOptions {
                 diagnostic.code,
                 diagnostic.message
             );
-            println!("  help: {}", diagnostic.help);
+            println!("  {} {}", tr!("help:"), diagnostic.help);
         }
         for failure in &output.failed_files {
             println!(
@@ -186,12 +186,15 @@ impl Command for LintOptions {
             );
         }
         println!(
-            "Source lint: {} error(s), {} warning(s), {} info, {} suppressed across {} file(s)",
-            output.summary.errors,
-            output.summary.warnings,
-            output.summary.infos,
-            output.summary.suppressed,
-            output.summary.files
+            "{}",
+            tr!(
+                "Source lint: {errors} error(s), {warnings} warning(s), {infos} info, {suppressed} suppressed across {files} file(s)",
+                errors = output.summary.errors,
+                files = output.summary.files,
+                infos = output.summary.infos,
+                suppressed = output.summary.suppressed,
+                warnings = output.summary.warnings
+            )
         );
         Ok(())
     }

@@ -16,10 +16,10 @@ pub struct CatalogCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum CatalogSubcommand {
-    /// Merge two current catalogs, optionally against an explicit ancestor.
+    #[command(about = tr!("Merge two current catalogs, optionally against an explicit ancestor."))]
     Merge(MergeOptions),
-    /// Run as a deletion-aware Git merge driver with merge/rebase role mapping.
+    #[command(about = tr!("Run as a deletion-aware Git merge driver with merge/rebase role mapping."))]
     MergeDriver(MergeDriverOptions),
-    /// Convert configured PO catalogs to another Palamedes storage format.
+    #[command(about = tr!("Convert configured PO catalogs to another Palamedes storage format."))]
     Convert(ConvertOptions),
 }

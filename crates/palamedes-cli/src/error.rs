@@ -97,6 +97,119 @@ pub enum CliError {
 }
 
 impl CliError {
+    /// Human output only; Display remains stable for structured diagnostics.
+    pub fn localized(&self) -> String {
+        if crate::i18n::language() == crate::i18n::Language::English {
+            return self.to_string();
+        }
+        match self {
+            Self::Config(error) => error.localized(),
+            Self::Io { path, source } => tr!(
+                "I/O error for {path}: {source}",
+                path = path.display(),
+                source = source
+            ),
+            Self::Json(source) => tr!("Could not serialize JSON output: {source}", source = source),
+            Self::CurrentDir(source) => tr!(
+                "Could not determine the current directory: {source}",
+                source = source
+            ),
+            Self::InvalidMergeInputCount(count) => tr!(
+                "Catalog merge requires exactly two input files, received {count}.",
+                count = count
+            ),
+            Self::MissingConvertInput => {
+                tr!("Catalog convert requires either an input file or --config.").to_owned()
+            }
+            Self::InvalidConvertOutput => {
+                tr!("Catalog convert --output can only be used with a single input file.")
+                    .to_owned()
+            }
+            Self::UnsupportedConvertSource => {
+                tr!("Catalog convert --to=fcl only supports PO source catalogs.").to_owned()
+            }
+            Self::InvalidThreshold => {
+                tr!("Invalid --fail-if-below value. Expected a percent from 0 to 100.").to_owned()
+            }
+            Self::AuditFailedOnError { errors } => tr!(
+                "Catalog audit failed with {errors} error(s).",
+                errors = errors
+            ),
+            Self::AuditFailedOnWarning { errors, warnings } => tr!(
+                "Catalog audit failed with {errors} error(s) and {warnings} warning(s).",
+                errors = errors,
+                warnings = warnings
+            ),
+            Self::AuditFailedOnInfo {
+                errors,
+                warnings,
+                infos,
+            } => tr!(
+                "Catalog audit failed with {errors} error(s), {warnings} warning(s), and {infos} info diagnostic(s).",
+                errors = errors,
+                infos = infos,
+                warnings = warnings
+            ),
+            Self::CompletenessBelowThreshold { threshold, locales } => tr!(
+                "Catalog completeness below {threshold} for {locales}.",
+                locales = locales,
+                threshold = threshold
+            ),
+            Self::ExtractionFailed { failures } => tr!(
+                "Extraction failed for {failures} source file(s); catalogs were not updated.",
+                failures = failures
+            ),
+            Self::CatalogDrift { catalogs } => tr!(
+                "Catalog extraction check found drift in {catalogs} catalog file(s).",
+                catalogs = catalogs
+            ),
+            Self::LintFailedOnError { errors } => tr!(
+                "Source lint failed with {errors} error diagnostic(s).",
+                errors = errors
+            ),
+            Self::LintFailedOnWarning { errors, warnings } => tr!(
+                "Source lint failed with {errors} error(s) and {warnings} warning(s).",
+                errors = errors,
+                warnings = warnings
+            ),
+            Self::LintAnalysisFailed { failures } => tr!(
+                "Source lint could not analyze {failures} source file(s).",
+                failures = failures
+            ),
+            Self::GlobPattern { pattern, source } => tr!(
+                "Could not build glob pattern {pattern}: {source}",
+                pattern = pattern,
+                source = source
+            ),
+            Self::DiscoveryPattern { pattern, source } => tr!(
+                "Could not use {pattern} for source discovery: {source}",
+                pattern = pattern,
+                source = source
+            ),
+            Self::Discovery(source) => {
+                tr!("Could not discover source files: {source}", source = source)
+            }
+            Self::Watch(source) => tr!("Could not watch source files: {source}", source = source),
+            Self::ExtractionCheckFailed { message } => tr!(
+                "Catalog extraction check failed: {message}",
+                message = message
+            ),
+            Self::MergeFormatInference { path, paths } => tr!(
+                "Could not infer catalog merge format from logical --path `{path}` or merge paths ({paths}). Git supplies extensionless temporary files for %O, %A, and %B; pass --format po or --format fcl.",
+                path = path.display(),
+                paths = paths
+            ),
+            Self::EmptyCatalogSources { catalog, include } => tr!(
+                "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior.",
+                catalog = format!("'{catalog}'"),
+                include = include
+            ),
+            // Core, OS, third-party, and already-rendered check diagnostics retain
+            // their original technical detail, codes, and source snippets.
+            Self::Core(error) => error.to_string(),
+        }
+    }
+
     /// Process status for this failure.
     pub fn exit_code(&self) -> u8 {
         match self {
