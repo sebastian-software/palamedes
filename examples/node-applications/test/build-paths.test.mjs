@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -104,12 +104,12 @@ for (const mode of ["unbundled", "rolldown"]) {
 }
 
 test("catalog edits and invalid ICU are observed on restart or rebuild", async () => {
-  const fixture = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-rebuild-"));
+  await mkdir(path.join(root, ".palamedes"), { recursive: true });
+  const fixture = await mkdtemp(path.join(root, ".palamedes/rebuild-"));
   scratch.push(fixture);
   for (const name of ["src", "tooling", "package.json", "palamedes.yaml", "tsconfig.json"]) {
     await cp(path.join(root, name), path.join(fixture, name), { recursive: true });
   }
-  await symlink(path.join(root, "node_modules"), path.join(fixture, "node_modules"), "junction");
   const catalog = path.join(fixture, "src/locales/de.po");
   const original = await readFile(catalog, "utf8");
   await writeFile(
