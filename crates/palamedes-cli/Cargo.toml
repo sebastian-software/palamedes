@@ -45,3 +45,10 @@ ureq = { version = "3.4.0", default-features = false, features = ["json", "rustl
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"
 signal-hook = "0.4.4"
+
+[build-dependencies]
+ferrocat = "=3.4.2"
+palamedes = { version = "1.25.1", path = "../.." }
+
+[dev-dependencies]
+ferrocat = "=3.4.2"

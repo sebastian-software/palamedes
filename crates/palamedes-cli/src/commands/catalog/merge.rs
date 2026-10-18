@@ -16,67 +16,64 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct MergeOptions {
-    /// Two current catalog files, ordered as ours and theirs when `--base` is set.
+    #[arg(help = tr!("Two current catalog files, ordered as ours and theirs when `--base` is set."))]
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
-    /// Output catalog path.
+    #[arg(help = tr!("Output catalog path."))]
     #[arg(long)]
     output: PathBuf,
-    /// Path to a Palamedes config file.
+    #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Catalog format.
+    #[arg(help = tr!("Catalog format."))]
     #[arg(long)]
     format: Option<MergeFormat>,
-    /// Common ancestor catalog path for a deletion-aware three-way merge.
+    #[arg(help = tr!("Common ancestor catalog path for a deletion-aware three-way merge."))]
     #[arg(long)]
     base: Option<PathBuf>,
-    /// Catalog conflict strategy.
+    #[arg(help = tr!("Catalog conflict strategy."))]
     #[arg(long, default_value = "use-first")]
     conflict_strategy: MergeConflictStrategy,
-    /// Source locale for catalog semantics.
+    #[arg(help = tr!("Source locale for catalog semantics."))]
     #[arg(long)]
     source_locale: Option<String>,
-    /// Locale of the merged catalog.
+    #[arg(help = tr!("Locale of the merged catalog."))]
     #[arg(long)]
     locale: Option<String>,
-    /// Real catalog pathname. Git merge drivers hand the driver temporary
-    /// files, so `--output` cannot identify which configured catalog is being
-    /// merged; pass `%P` here. Defaults to `--output`.
+    #[arg(help = tr!("Real catalog pathname. Git merge drivers hand the driver temporary files, so `--output` cannot identify which configured catalog is being merged; pass `%P` here. Defaults to `--output`."))]
     #[arg(long)]
     path: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
 pub struct MergeDriverOptions {
-    /// Common ancestor supplied by Git as `%O`.
+    #[arg(help = tr!("Common ancestor supplied by Git as `%O`."))]
     ancestor: PathBuf,
-    /// Git's `%A` file (stage 2 during conflicts).
+    #[arg(help = tr!("Git's `%A` file (stage 2 during conflicts)."))]
     current: PathBuf,
-    /// Git's `%B` file (stage 3 during conflicts).
+    #[arg(help = tr!("Git's `%B` file (stage 3 during conflicts)."))]
     other: PathBuf,
-    /// Output catalog, normally `%A`.
+    #[arg(help = tr!("Output catalog, normally `%A`."))]
     output: PathBuf,
-    /// Real catalog pathname supplied by Git as `%P`.
+    #[arg(help = tr!("Real catalog pathname supplied by Git as `%P`."))]
     #[arg(long)]
     path: PathBuf,
-    /// Path to a Palamedes config file.
+    #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Catalog format.
+    #[arg(help = tr!("Catalog format."))]
     #[arg(long)]
     format: Option<MergeFormat>,
-    /// Catalog conflict strategy. `use-first` always means the logical branch
-    /// being merged or rebased, even though Git swaps `%A`/`%B` during rebase.
+    #[arg(help = tr!("Catalog conflict strategy. `use-first` always means the logical branch being merged or rebased, even though Git swaps `%A`/`%B` during rebase."))]
     #[arg(long, default_value = "use-first")]
     conflict_strategy: MergeConflictStrategy,
-    /// Source locale for catalog semantics.
+    #[arg(help = tr!("Source locale for catalog semantics."))]
     #[arg(long)]
     source_locale: Option<String>,
-    /// Locale of the merged catalog.
+    #[arg(help = tr!("Locale of the merged catalog."))]
     #[arg(long)]
     locale: Option<String>,
-    /// Git operation role mapping. `auto` detects an active rebase.
+    #[arg(help = tr!("Git operation role mapping. `auto` detects an active rebase."))]
     #[arg(long, default_value = "auto")]
     operation: GitMergeOperation,
 }
@@ -126,8 +123,11 @@ impl Command for MergeOptions {
                 if self.config.is_none() =>
             {
                 eprintln!(
-                    "Note: pmds cannot read {}, so configured PO output options and source-locale are not applied to this merge.",
-                    path.display()
+                    "{}",
+                    tr!(
+                        "Note: pmds cannot read {path}, so configured PO output options and source-locale are not applied to this merge.",
+                        path = path.display()
+                    )
                 );
                 None
             }

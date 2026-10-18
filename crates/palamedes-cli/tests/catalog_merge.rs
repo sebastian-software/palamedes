@@ -16,6 +16,7 @@ fn base_only_entry_deleted_from_both_sides_stays_deleted() {
     fs::write(&theirs, "").expect("write theirs");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args([
             "catalog",
             "merge",
@@ -111,6 +112,7 @@ fn explicit_format_overrides_the_logical_path() {
     fs::write(&theirs, "msgid \"Hello\"\nmsgstr \"Ihr\"\n").expect("write theirs");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args([
             "catalog",
             "merge-driver",
@@ -150,6 +152,7 @@ fn merge_uses_the_logical_path_without_a_three_way_base() {
     fs::write(&theirs, "msgid \"New\"\nmsgstr \"Neu\"\n").expect("write theirs");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args([
             "catalog",
             "merge",
@@ -187,6 +190,7 @@ fn extensionless_driver_files_report_the_logical_path_when_format_is_unknown() {
     }
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args([
             "catalog",
             "merge-driver",
@@ -233,6 +237,7 @@ fn merges_in_a_project_configured_in_typescript() {
     fs::write(&theirs, "msgid \"Hello\"\nmsgstr \"Ihr\"\n").expect("write theirs");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args([
             "catalog",
             "merge",
@@ -360,6 +365,7 @@ fn commit_all(fixture: &std::path::Path, message: &str) {
 
 fn git(fixture: &std::path::Path, arguments: &[&str]) -> std::process::Output {
     let output = Command::new("git")
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args(arguments)
         .current_dir(fixture)
         .output()

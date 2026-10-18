@@ -330,6 +330,19 @@ caller coordination.
 
 ## CLI model
 
+The native CLI embeds English, German, and Spanish UI translations compiled from
+its PO catalogs at build time. It selects the first nonempty value in
+`PALAMEDES_UI_LOCALE > LC_ALL > LC_MESSAGES > LANG` order. POSIX encodings and
+modifiers are stripped; supported base languages handle regional tags. Invalid,
+unsupported, C/POSIX, and absent values select English without falling through
+to a lower-priority variable. This controls UI output independently of catalog
+`--locale` filters. JSON documents, raw values, diagnostic codes, and exit codes
+stay stable. Compiler/OS/third-party details, Clap argument-error details, and
+plugin-owned messages retain their wording. No Node or external UI catalog files
+are needed at runtime; the private Rust generator supports literal messages and
+arguments, rejects invalid/missing/fuzzy translations, and is not a public Rust
+application adapter. See `docs/cli.md#output-language`.
+
 Core commands:
 
 ```bash

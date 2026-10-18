@@ -4,7 +4,7 @@
 //! implementation in its own module — the two places that have to agree, and
 //! nothing else.
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 
 use crate::command::{Context, execute};
 use crate::commands::audit::AuditOptions;
@@ -19,7 +19,7 @@ use crate::plugins;
 #[derive(Debug, Parser)]
 #[command(name = "pmds")]
 #[command(version)]
-#[command(about = "Palamedes CLI for extraction, source lint, audits, reports, and catalogs")]
+#[command(about = tr!("Palamedes CLI for extraction, source lint, audits, reports, and catalogs"))]
 pub struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -27,24 +27,28 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Extract messages from source files.
+    #[command(about = tr!("Extract messages from source files."))]
     Extract(ExtractOptions),
-    /// Check Palamedes source authoring without updating catalogs.
+    #[command(about = tr!("Check Palamedes source authoring without updating catalogs."))]
     Lint(LintOptions),
-    /// Audit catalogs for translation and ICU authoring issues.
+    #[command(about = tr!("Audit catalogs for translation and ICU authoring issues."))]
     Audit(AuditOptions),
-    /// Report per-locale catalog translation completeness.
+    #[command(about = tr!("Report per-locale catalog translation completeness."))]
     Report(ReportOptions),
-    /// Work with Palamedes catalog files.
+    #[command(about = tr!("Work with Palamedes catalog files."))]
     Catalog(CatalogCommand),
-    /// Show version information.
+    #[command(about = tr!("Show version information."))]
     Version,
-    /// Dispatch an explicitly configured binary plugin namespace.
+    #[command(about = tr!("Dispatch an explicitly configured binary plugin namespace."))]
     #[command(external_subcommand)]
     Plugin(Vec<String>),
 }
 
 impl Cli {
+    pub fn parse_localized() -> Result<Self, clap::Error> {
+        let matches = localize_help(Self::command()).try_get_matches()?;
+        Self::from_arg_matches(&matches)
+    }
     /// Runs the invoked command.
     pub fn execute(&self) -> Result<u8, CliError> {
         let context = Context::from_env();
@@ -62,4 +66,42 @@ impl Cli {
             Command::Plugin(args) => Ok(plugins::run(args, &context)),
         }
     }
+}
+
+fn localize_help(command: clap::Command) -> clap::Command {
+    let mut command = command
+        .help_template(format!(
+            "{{about-with-newline}}\n{} {{usage}}\n\n{{all-args}}{{after-help}}",
+            tr!("Usage:")
+        ))
+        .subcommand_help_heading(tr!("Commands"))
+        .mut_subcommands(localize_help);
+    command.build();
+    let has_help = command.get_arguments().any(|arg| arg.get_id() == "help");
+    let has_version = command.get_arguments().any(|arg| arg.get_id() == "version");
+    let has_help_command = command
+        .get_subcommands()
+        .any(|command| command.get_name() == "help");
+    command = command.mut_args(|arg| {
+        let heading = if arg.is_positional() {
+            tr!("Arguments")
+        } else {
+            tr!("Options")
+        };
+        arg.help_heading(heading)
+    });
+    if has_help {
+        command = command.mut_arg("help", |arg| arg.help(tr!("Print help")));
+    }
+    if has_version {
+        command = command.mut_arg("version", |arg| arg.help(tr!("Print version")));
+    }
+    if has_help_command {
+        command = command.mut_subcommand("help", |command| {
+            command.about(tr!(
+                "Print this message or the help of the given subcommand(s)"
+            ))
+        });
+    }
+    command
 }

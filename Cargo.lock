@@ -1449,6 +1449,7 @@ dependencies = [
  "clap",
  "config",
  "ferralk",
+ "ferrocat",
  "globset",
  "libc",
  "notify",

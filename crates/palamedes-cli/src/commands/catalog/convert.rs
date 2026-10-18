@@ -11,21 +11,21 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct ConvertOptions {
-    /// Input catalog file for single-file conversion.
+    #[arg(help = tr!("Input catalog file for single-file conversion."))]
     input: Option<PathBuf>,
-    /// Path to a Palamedes config file for config-wide conversion.
+    #[arg(help = tr!("Path to a Palamedes config file for config-wide conversion."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Target catalog format.
+    #[arg(help = tr!("Target catalog format."))]
     #[arg(long)]
     to: ConvertFormat,
-    /// Output catalog path for single-file conversion.
+    #[arg(help = tr!("Output catalog path for single-file conversion."))]
     #[arg(long)]
     output: Option<PathBuf>,
-    /// Source locale for single-file conversion.
+    #[arg(help = tr!("Source locale for single-file conversion."))]
     #[arg(long, default_value = "en")]
     source_locale: String,
-    /// Locale for single-file conversion.
+    #[arg(help = tr!("Locale for single-file conversion."))]
     #[arg(long)]
     locale: Option<String>,
 }
@@ -121,17 +121,37 @@ impl Command for ConvertOptions {
                 output,
                 config_ignored,
             } => {
-                println!("Converted {} -> {}", input.display(), output.display());
+                println!(
+                    "{}",
+                    tr!(
+                        "Converted {input} -> {output}",
+                        input = input.display(),
+                        output = output.display()
+                    )
+                );
                 if *config_ignored {
                     println!(
-                        "Single-file input provided; --config was not used for catalog selection."
+                        "{}",
+                        tr!(
+                            "Single-file input provided; --config was not used for catalog selection."
+                        )
                     );
                 }
             }
             ConvertReport::Configured { converted, skipped } => {
-                println!("Converted {converted} catalog(s), skipped {skipped}.");
                 println!(
-                    "Update Palamedes config catalogs to use `format: fcl` before switching workflows."
+                    "{}",
+                    tr!(
+                        "Converted {converted} catalog(s), skipped {skipped}.",
+                        converted = converted,
+                        skipped = skipped
+                    )
+                );
+                println!(
+                    "{}",
+                    tr!(
+                        "Update Palamedes config catalogs to use `format: fcl` before switching workflows."
+                    )
                 );
             }
         }

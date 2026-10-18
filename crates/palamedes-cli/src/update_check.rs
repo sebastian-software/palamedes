@@ -329,8 +329,13 @@ fn run_due_check(
 fn update_notice(current: &str, latest: &str) -> Option<String> {
     let current = Version::parse(current).ok()?;
     let latest = Version::parse(latest).ok()?;
-    (latest > current)
-        .then(|| format!("A new version of palamedes is available: {current} → {latest}"))
+    (latest > current).then(|| {
+        tr!(
+            "A new version of palamedes is available: {current} → {latest}",
+            current = current,
+            latest = latest
+        )
+    })
 }
 
 #[derive(Clone, Copy)]

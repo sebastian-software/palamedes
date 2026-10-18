@@ -129,6 +129,11 @@ pnpm exec pmds report
 
 ## Catalog workflow commands
 
+`pmds` embeds en/de/es UI translations. `PALAMEDES_UI_LOCALE` overrides
+`LC_ALL > LC_MESSAGES > LANG`; unsupported/invalid/C/POSIX values fall back to
+English. UI language does not change catalog `--locale` selection, JSON, codes,
+or exit statuses. Technical diagnostics and plugin messages keep their wording.
+
 - `pmds report --fail-if-below 90`: per-locale completeness gate for CI
 - `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, and MDX files. Use `pmds lint` rather than the Preview ESLint/Oxlint adapter for stable CI and MDX.
 - `pmds extract --check --json --fail-on-empty-catalog`: CI drift check with an empty-source guard. `--fail-on-empty-catalog` exits with code 1 before any configured catalog is written or marked obsolete when one catalog matches no source files. Without the flag, extraction warns and projects the empty catalog. Check JSON uses status `error`; watch mode leaves catalogs unchanged for the failed cycle and continues watching. The check can still update the extraction cache unless `--no-cache` is passed.

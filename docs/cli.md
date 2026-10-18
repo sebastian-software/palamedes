@@ -4,6 +4,47 @@ The `@palamedes/cli` package publishes `pmds`. Its npm launcher selects the
 installed platform binary; the native Rust executable owns built-in and plugin
 command dispatch.
 
+## Output Language
+
+The native CLI embeds English, German, and Spanish translations for its help,
+command summaries, progress messages, and host-owned operational errors. It
+selects the first nonempty value in this order:
+
+1. `PALAMEDES_UI_LOCALE` — an explicit UI-language override
+2. `LC_ALL`
+3. `LC_MESSAGES`
+4. `LANG`
+
+POSIX forms such as `de_DE.UTF-8@euro` and regional tags such as `es-MX` select
+their supported base language. `C`, `POSIX`, invalid or unsupported values, and
+an absent environment select English. An unsupported higher-priority value
+does not fall through to another variable. Shells without POSIX locale variables,
+including Windows shells, use English unless an override is provided.
+
+```sh
+LANG=de_DE.UTF-8 pmds --help
+PALAMEDES_UI_LOCALE=es pmds report
+PALAMEDES_UI_LOCALE=en pmds extract --check --json
+```
+
+In PowerShell, use `$env:PALAMEDES_UI_LOCALE = 'de'` before invoking `pmds`.
+This setting controls the CLI's own output. Existing `--locale` options still
+select catalog languages. Command names, flags, diagnostic codes, JSON documents,
+raw values, and exit codes retain their existing contracts.
+
+Compiler diagnostic details, third-party/OS error details, and plugin-owned
+messages retain their original wording. Clap argument errors have a localized
+summary followed by Clap's original technical details. These are separate from
+the translated CLI presentation; their structured messages are not rewritten.
+
+Translations live in `crates/palamedes-cli/locales/*.po`. The native build uses
+Palamedes's canonical catalog compilation and ICU lowering to generate Rust
+literal/argument formatting code. Missing or fuzzy translations, malformed ICU,
+placeholder mismatches, and constructs beyond that private generator's subset
+fail the build. The installed binary needs neither Node nor external UI catalog
+files, and it does not parse ICU to render its own messages. This private
+generator is not a general-purpose Rust application adapter.
+
 ## Plugin Commands
 
 Plugins register a namespace plus commands. They are invoked as:
