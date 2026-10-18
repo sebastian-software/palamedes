@@ -1,8 +1,10 @@
 import { plural, t } from "@palamedes/core/macro";
 import { getI18n } from "@palamedes/runtime";
+import { setImmediate } from "node:timers/promises";
 
 export async function getBooking(id: string) {
-  await Promise.resolve();
+  // Yield across an event-loop turn, as an asynchronous storage lookup would.
+  await setImmediate();
   if (id !== "BK-1") {
     return { code: "BOOKING_NOT_FOUND", message: t`Booking ${id} was not found.` };
   }

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
+import { createInterface } from "node:readline";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -17,6 +19,7 @@ const expected = {
   es: "La reserva BK-1 está confirmada.",
 };
 const scratch = [];
+let productionDeployment;
 
 export async function runProbe(mode, locale = "en", id = "BK-1", cwd = root) {
   const entry =
@@ -34,6 +37,58 @@ export async function runProbe(mode, locale = "en", id = "BK-1", cwd = root) {
 before(async () => {
   await buildApplication("unbundled");
   await buildApplication("rolldown");
+  productionDeployment = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-production-"));
+  scratch.push(productionDeployment);
+  // Legacy deploy writes workspace install metadata. Keep that state isolated.
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-packaging-"));
+  scratch.push(workspace);
+  const repository = path.resolve(root, "../..");
+  for (const file of ["pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
+    await cp(path.join(repository, file), path.join(workspace, file));
+  }
+  await writeFile(path.join(workspace, "package.json"), JSON.stringify({ private: true }));
+  for (const directory of ["examples/node-applications", "packages/core", "packages/runtime"]) {
+    const source = path.join(repository, directory);
+    const target = path.join(workspace, directory);
+    await mkdir(target, { recursive: true });
+    const manifest = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
+    delete manifest.devDependencies;
+    await writeFile(path.join(target, "package.json"), JSON.stringify(manifest));
+    await cp(path.join(source, "dist"), path.join(target, "dist"), { recursive: true });
+  }
+  assert.ok(process.env.npm_execpath, "Run the fixture through pnpm test");
+  await run(
+    process.execPath,
+    [
+      process.env.npm_execpath,
+      "--config.verify-deps-before-run=false",
+      "--offline",
+      "--ignore-scripts",
+      "--filter",
+      "@palamedes/example-node-applications",
+      "deploy",
+      "--legacy",
+      "--prod",
+      productionDeployment,
+    ],
+    {
+      cwd: workspace,
+      timeout: 60_000,
+      maxBuffer: 2_000_000,
+    },
+  );
+  for (const file of [
+    "src",
+    "tooling",
+    "palamedes.yaml",
+    "node_modules/@palamedes/core-node",
+    "node_modules/@palamedes/config",
+    "node_modules/@palamedes/transform",
+    "node_modules/typescript",
+    "node_modules/rolldown",
+  ]) {
+    await assert.rejects(readFile(path.join(productionDeployment, file)), { code: "ENOENT" });
+  }
 });
 after(async () => {
   for (const directory of scratch) await rm(directory, { recursive: true, force: true });
@@ -107,12 +162,12 @@ for (const mode of ["unbundled", "rolldown"]) {
 }
 
 test("catalog edits and invalid ICU are observed on restart or rebuild", async () => {
-  const fixture = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-rebuild-"));
+  await mkdir(path.join(root, ".palamedes"), { recursive: true });
+  const fixture = await mkdtemp(path.join(root, ".palamedes/rebuild-"));
   scratch.push(fixture);
   for (const name of ["src", "tooling", "package.json", "palamedes.yaml", "tsconfig.json"]) {
     await cp(path.join(root, name), path.join(fixture, name), { recursive: true });
   }
-  await symlink(path.join(root, "node_modules"), path.join(fixture, "node_modules"), "junction");
   const catalog = path.join(fixture, "src/locales/de.po");
   const original = await readFile(catalog, "utf8");
   await writeFile(
@@ -219,5 +274,121 @@ for (const mode of modes) {
     const machineSyntax = await runCli(mode, ["--unknown", "--json"], { LANG: "es_ES" });
     assert.equal(machineSyntax.code, 2);
     assert.deepEqual(JSON.parse(machineSyntax.stderr), { code: "INVALID_ARGUMENTS" });
+  });
+}
+
+async function startHttp(t, mode, framework, cwd = root) {
+  const entry =
+    mode === "direct"
+      ? ["--import", "./tooling/register.mjs", `src/${framework}-server.ts`]
+      : [`dist/${mode}/${mode === "unbundled" ? `${framework}-server` : framework}.js`];
+  const child = spawn(process.execPath, entry, {
+    cwd,
+    env: { ...process.env, PORT: "0", LANG: "de_DE.UTF-8", NODE_OPTIONS: "" },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 20_000,
+  });
+  let stderr = "";
+  child.stderr.setEncoding("utf8").on("data", (chunk) => {
+    stderr += chunk;
+  });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, "exit");
+      child.kill();
+      await exited;
+    }
+  });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    const line = await Promise.race([
+      once(lines, "line").then(([value]) => value),
+      once(child, "exit").then(() => {
+        throw new Error(`Server failed to start: ${stderr}`);
+      }),
+      once(child, "error").then(([error]) => {
+        throw error;
+      }),
+    ]);
+    return { base: `http://127.0.0.1:${JSON.parse(line).port}`, stderr: () => stderr };
+  } finally {
+    lines.close();
+  }
+}
+
+for (const mode of modes) {
+  for (const framework of ["express", "hono"]) {
+    for (const deployed of mode === "direct" ? [false] : [false, true]) {
+      test(`${mode}/${framework}${deployed ? "/production" : ""}: real HTTP requests isolate locales through async service calls`, async (t) => {
+        const server = await startHttp(t, mode, framework, deployed ? productionDeployment : root);
+        const cases = [
+          ["de-DE,de;q=0.9,en;q=0.8", "de"],
+          ["es-MX,en;q=0.5", "es"],
+          ["en", "en"],
+          ["fr,zh;q=0.5", "en"],
+          [undefined, "en"],
+        ];
+        // Reuse one process/store and interleave different locales, including cold loads.
+        await Promise.all(
+          Array.from({ length: 4 }, () => cases)
+            .flat()
+            .map(async ([header, locale]) => {
+              const response = await fetch(`${server.base}/bookings/BK-1`, {
+                headers: header ? { "Accept-Language": header } : {},
+                signal: AbortSignal.timeout(5000),
+              });
+              assert.equal(response.status, 200);
+              assert.equal(response.headers.get("content-language"), locale);
+              assert.match(response.headers.get("vary"), /Accept-Language/iu);
+              const booking = await response.json();
+              assert.equal(booking.message, expected[locale]);
+              assert.equal(
+                booking.label,
+                { en: "Booking details.", de: "Buchungsdetails.", es: "Detalles de la reserva." }[
+                  locale
+                ],
+              );
+              assert.equal(booking.amount, 149);
+              assert.equal(booking.currency, "EUR");
+              assert.equal(booking.startsAt, "2026-10-18T12:00:00Z");
+            }),
+        );
+        const missing = await fetch(`${server.base}/bookings/missing`, {
+          headers: { "Accept-Language": "de" },
+          signal: AbortSignal.timeout(5000),
+        });
+        assert.equal(missing.status, 404);
+        const error = await missing.json();
+        assert.equal(error.code, "BOOKING_NOT_FOUND");
+        assert.equal(error.message, "Buchung missing wurde nicht gefunden.");
+        assert.equal(server.stderr(), "");
+      });
+    }
+  }
+}
+
+for (const framework of ["express", "hono"]) {
+  test(`unbundled/${framework}: missing deployed catalogs fail visibly and recover`, async (t) => {
+    const catalog = path.join(productionDeployment, "dist/unbundled/.palamedes/es-0.mjs");
+    const original = await readFile(catalog, "utf8");
+    const server = await startHttp(t, "unbundled", framework, productionDeployment);
+    await rm(catalog);
+    try {
+      const response = await fetch(`${server.base}/bookings/BK-1`, {
+        headers: { "Accept-Language": "es" },
+        signal: AbortSignal.timeout(5000),
+      });
+      assert.equal(response.status, 500);
+      assert.deepEqual(await response.json(), { code: "INTERNAL_ERROR" });
+    } finally {
+      await writeFile(catalog, original);
+    }
+    const recovered = await fetch(`${server.base}/bookings/BK-1`, {
+      headers: { "Accept-Language": "es" },
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(recovered.status, 200);
+    assert.equal((await recovered.json()).message, expected.es);
+    assert.match(server.stderr(), /ERR_MODULE_NOT_FOUND/u);
   });
 }

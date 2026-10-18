@@ -2,6 +2,9 @@
   "name": "@palamedes/example-node-applications",
   "version": "0.0.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "imports": {
     "#palamedes/node": "./.palamedes/server.mjs"
@@ -13,13 +16,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hono/node-server": "2.1.5",
     "@palamedes/core": "workspace:^",
-    "@palamedes/runtime": "workspace:^"
+    "@palamedes/runtime": "workspace:^",
+    "express": "5.2.1",
+    "hono": "4.13.7"
   },
   "devDependencies": {
     "@palamedes/config": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/transform": "workspace:^",
+    "@types/express": "5.0.6",
     "@types/node": "^24.0.0",
     "rolldown": "1.2.6",
     "typescript": "7.0.2"

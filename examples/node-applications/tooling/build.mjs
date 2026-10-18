@@ -59,9 +59,11 @@ export async function buildApplication(mode, applicationRoot = root) {
       input: {
         probe: path.join(applicationRoot, "src/probe.ts"),
         cli: path.join(applicationRoot, "src/cli.ts"),
+        express: path.join(applicationRoot, "src/express-server.ts"),
+        hono: path.join(applicationRoot, "src/hono-server.ts"),
       },
       platform: "node",
-      external: [/^@palamedes\/(?:core|runtime)(?:\/|$)/u],
+      external: [/^@palamedes\/(?:core|runtime)(?:\/|$)/u, "express", "hono", "@hono/node-server"],
       plugins: [
         {
           name: "palamedes-node-probe",
