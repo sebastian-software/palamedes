@@ -49,7 +49,7 @@ const DOC_GROUPS = [
     title: "Integrate and operate",
     description: "Connect a host, choose locale behavior, and keep day-to-day work predictable.",
     match:
-      /\/(locale-strategies|framework-example-notes|demo-deployments|backend-servers|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+      /\/(locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
   },
   {
     title: "Evaluate and migrate",
@@ -74,7 +74,7 @@ const DOC_INDEX_GROUPS = [
     title: "Guides",
     description: "Start a translation workflow, connect a host, and operate it day to day.",
     match:
-      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
   },
   {
     title: "References",
@@ -264,6 +264,7 @@ async function collectDocs() {
     ["framework-example-notes.md", 55],
     ["demo-deployments.md", 56],
     ["backend-servers.md", 60],
+    ["rust-applications.md", 65],
     ["migrate-from-lingui.md", 70],
     ["comparison-with-lingui.md", 80],
     ["approach-comparison.md", 90],

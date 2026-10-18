@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import axe from "axe-core";
 import { startSiteStaticServer } from "./site-static-server.mjs";
+import { isKnownArdoBreadcrumbHydrationWarning } from "./verify-site-route-errors.mjs";
 import { verifyFragmentDemo } from "../site/scripts/verify-fragment-demo.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,6 +40,7 @@ const paths = [
   "/icu-messageformat",
   "/locale-routing",
   "/docs",
+  "/docs/rust-applications",
   "/decisions",
   "/blog",
   "/compare",
@@ -65,6 +67,7 @@ const chromiumExecutable = [
 ].find((path) => path && existsSync(path));
 
 const failures = [];
+const knownHydrationWarnings = [];
 let browser;
 
 try {
@@ -110,8 +113,15 @@ try {
           `${viewport.name} ${path}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`,
         );
       }
-      if (runtimeErrors.length > 0) {
-        failures.push(`${viewport.name} ${path}: runtime errors: ${runtimeErrors.join(" | ")}`);
+      const unexpectedErrors = runtimeErrors.filter((message) => {
+        if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
+          knownHydrationWarnings.push(`${viewport.name} ${path}`);
+          return false;
+        }
+        return true;
+      });
+      if (unexpectedErrors.length > 0) {
+        failures.push(`${viewport.name} ${path}: runtime errors: ${unexpectedErrors.join(" | ")}`);
       }
     }
 
@@ -353,6 +363,12 @@ try {
 } finally {
   await browser?.close();
   await staticServer?.close();
+}
+
+if (knownHydrationWarnings.length > 0) {
+  console.warn(
+    `Known ARDO breadcrumb hydration warnings filtered: ${knownHydrationWarnings.join(", ")}`,
+  );
 }
 
 if (failures.length > 0) {

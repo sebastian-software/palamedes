@@ -114,6 +114,16 @@ export default function Guides() {
         </div>
       </Section>
 
+      <Section
+        num="03 — Rust · Experimental"
+        title="Building a native CLI or service?"
+        lede="Use Cargo to prepare PO catalogs, then load the selected language file when your Rust program runs. The Rust guide covers setup, deployment, and the current limits of the unpublished crates."
+      >
+        <ButtonLink variant="outline" href={docsHref("rust-applications")}>
+          Try the Rust applications guide
+        </ButtonLink>
+      </Section>
+
       <CtaBand
         headline="Every guide is backed by something you can re-run."
         primary={{ label: "See the proof", href: "/proof" }}

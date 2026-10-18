@@ -14,7 +14,10 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 import { startSiteStaticServer } from "./site-static-server.mjs";
-import { isExpectedSkippedViewTransitionError } from "./verify-site-route-errors.mjs";
+import {
+  isExpectedSkippedViewTransitionError,
+  isKnownArdoBreadcrumbHydrationWarning,
+} from "./verify-site-route-errors.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const clientDir = join(repoRoot, "site/build/client");
@@ -167,6 +170,7 @@ const ROUTE_EXPECTATIONS = [
   },
   { path: "/docs/platform-support", h1: "Platform Support" },
   { path: "/docs/cli", h1: "CLI Reference" },
+  { path: "/docs/rust-applications", h1: "Rust Applications (Experimental)" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
   { path: "/decisions", h1: "Decision Records" },
   {
@@ -358,7 +362,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     currentPath = "/";
     await gotoAndSettle(page, "/", { settleMs: 1500 });
     // Homepage completion blocks: real routing destinations, a reproducible
-    // benchmark command, and the six FAQ entries must remain present together.
+    // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
     const integrationLinks = await integrationSection.locator("ul a").count();
     if (integrationLinks !== 9) {
@@ -399,6 +403,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     const contextualRoutes = [
       "/frameworks#frontend-frameworks",
       "/frameworks#backend-integrations",
+      "/docs/rust-applications",
       "/react-server-components-i18n",
       "/locale-routing",
       "/i18n-performance",
@@ -544,9 +549,20 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!warmLaneCopy) {
       fail("home benchmark: changed-source-files copy collapsed or missing");
     }
+    const rustApplications = page.locator("#rust-applications");
+    const rustCopy = (await rustApplications.innerText()).replaceAll(/\s+/gu, " ").toLowerCase();
+    if (
+      !rustCopy.includes("experimental") ||
+      !rustCopy.includes("crates are unpublished") ||
+      !rustCopy.includes("message contract changes need matching catalogs") ||
+      !rustCopy.includes("not supported yet") ||
+      (await rustApplications.locator('a[href="/docs/rust-applications"]').count()) !== 1
+    ) {
+      fail("home Rust applications: experimental limits and guide link must accompany the claim");
+    }
     const faqEntries = await page.locator("[data-faq-list] details").count();
-    if (faqEntries !== 6) {
-      fail(`home FAQ: expected 6 entries, got ${faqEntries}`);
+    if (faqEntries !== 7) {
+      fail(`home FAQ: expected 7 entries, got ${faqEntries}`);
     }
     const faqSchemaCount = await page.locator('script[type="application/ld+json"]').evaluateAll(
       (scripts) =>
@@ -555,8 +571,8 @@ async function checkRoutes(context, label, { expectHydration }) {
           .filter((entry) => entry["@type"] === "FAQPage")
           .flatMap((entry) => entry.mainEntity ?? []).length,
     );
-    if (faqSchemaCount !== 6) {
-      fail(`home FAQ schema: expected 6 answers, got ${faqSchemaCount}`);
+    if (faqSchemaCount !== 7) {
+      fail(`home FAQ schema: expected 7 answers, got ${faqSchemaCount}`);
     }
     // The tour's rendered card switches language, and its seat stepper selects
     // the plural form for that locale.
@@ -1146,26 +1162,6 @@ function trackPageErrors(
       consoleErrors.push(`${getPath()}: HTTP ${response.status()} ${response.url()}`);
     }
   });
-}
-
-function isKnownArdoBreadcrumbHydrationWarning(path, message) {
-  return (
-    isArdoGeneratedContentRoute(path) &&
-    message.includes("Minified React error #418") &&
-    message.includes("args[]=HTML")
-  );
-}
-
-function isArdoGeneratedContentRoute(path) {
-  return (
-    path === "/docs" ||
-    path.startsWith("/docs/") ||
-    path === "/decisions" ||
-    path.startsWith("/decisions/") ||
-    path === "/api-reference" ||
-    path.startsWith("/api-reference/") ||
-    path.startsWith("/blog/")
-  );
 }
 
 async function gotoAndSettle(page, path, { settleMs }) {
