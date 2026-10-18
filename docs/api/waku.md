@@ -4,13 +4,22 @@
 handlers, including `"use server"` actions. It is opt-in: existing Waku
 applications do not change until an interceptor is registered.
 
+The adapter is **Preview**, verified with Waku `1.0.0-rc.3` and React, React DOM,
+and `react-server-dom-webpack` `19.3.1`. Waku is an upstream release candidate;
+the adapter's separate Preview SemVer tier reflects its required
+`unstable_getRequest` and host CSP `unstable_setNonce` APIs. Stable upstream
+1.0 alone will not promote the adapter. Re-evaluate when stable equivalents
+exist and the request, action, streaming, catalog recovery, and CSP proofs pass.
+The unreleased Palamedes v2 publication preview is a separate release status.
+See the [stability policy](../stability.md#waku-preview-contract).
+
 ## Installation
 
 ```sh
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
 
-The adapter supports `waku@^1.0.0-rc.0` and Node.js 22.22 or newer. Register the Palamedes Vite plugin for macro transformation and generated catalog
+The adapter supports `waku@^1.0.0-rc.3` and Node.js 22.22 or newer. Register the Palamedes Vite plugin for macro transformation and generated catalog
 delivery; application-owned catalog imports or loader maps are unnecessary.
 `@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
 unsupported.
@@ -119,7 +128,7 @@ Pass locale data explicitly to background work.
 The adapter relies on `@palamedes/runtime/server` and Node's
 `AsyncLocalStorage`. Edge and Worker runtimes are unsupported unless their
 Node-compatible `AsyncLocalStorage` behavior is independently verified. Waku's
-interceptor and request APIs are unstable-prefixed; revalidate this adapter when
+request and nonce APIs are unstable-prefixed; revalidate this adapter when
 upgrading Waku.
 
 ## Middleware ordering

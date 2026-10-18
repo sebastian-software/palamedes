@@ -4,6 +4,15 @@ Request-scoped i18n interceptor for Waku server actions.
 
 ## Installation
 
+The adapter is **Preview**, verified with Waku `1.0.0-rc.3` and React, React DOM,
+and `react-server-dom-webpack` `19.3.1`. Waku is an upstream release candidate;
+the adapter's separate Preview SemVer tier reflects its required
+`unstable_getRequest` and host CSP `unstable_setNonce` APIs. Stable upstream
+1.0 alone will not promote the adapter. Re-evaluate when stable equivalents
+exist and the request, action, streaming, catalog recovery, and CSP proofs pass.
+The unreleased Palamedes v2 publication preview is a separate release status.
+See the [stability policy](../../docs/stability.md#waku-preview-contract).
+
 ```sh
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
@@ -92,10 +101,10 @@ the handler while they are consumed later. Those callbacks do not extend the
 caller's request ownership.
 
 `@palamedes/waku` uses `@palamedes/runtime/server`, which requires Node's
-`AsyncLocalStorage`. It supports the pinned Waku line `^1.0.0-rc.0` on
+`AsyncLocalStorage`. It supports the pinned Waku line `^1.0.0-rc.3` on
 Node.js 22.22 or later. Do not use this adapter in Edge or Worker runtimes
 unless their Node-compatible `AsyncLocalStorage` behavior has been independently
-verified. Waku's interceptor and request-accessor APIs are unstable-prefixed,
+verified. Waku's request and nonce APIs are unstable-prefixed,
 so treat the adapter as coupled to that Waku line and revalidate it when
 upgrading Waku.
 

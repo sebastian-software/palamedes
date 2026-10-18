@@ -25,7 +25,10 @@ try {
         type: "module",
         dependencies: {
           "@palamedes/waku": overrides["@palamedes/waku"],
-          waku: "1.0.0-rc.0",
+          waku: "1.0.0-rc.3",
+          react: "~19.3.1",
+          "react-dom": "~19.3.1",
+          "react-server-dom-webpack": "~19.3.1",
         },
       },
       null,
@@ -48,7 +51,7 @@ try {
     JSON.parse(
       readFileSync(path.join(consumerRoot, "node_modules", "waku", "package.json"), "utf8"),
     ).version,
-    "1.0.0-rc.0",
+    "1.0.0-rc.3",
   );
 
   assert.deepEqual(manifest.exports["./server"], {
