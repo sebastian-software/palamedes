@@ -49,13 +49,13 @@ full-stack reference. Its setup has six ordered parts:
    source maps in development.
 3. Create the request-local server with `createRemixI18nServer()`, loading the
    generated executable catalog for the selected locale.
-4. Render the document and any Remix UI Frame endpoints inside
+4. Render the document and any Remix Frame endpoints inside
    `remixI18n.run()` or its middleware.
 5. Share one catalog asset registry between the server scope and browser asset
    loader. Serve its generated modules through the asset namespace and render
    the adapter's client entry. It loads active-locale fragments before translated
    browser modules execute; application code does not initialize catalog loading.
-6. Import ordinary macros from `@palamedes/core/macro` and rich Remix UI macros
+6. Import ordinary macros from `@palamedes/core/macro` and rich Remix macros
    from `@palamedes/remix/macro` in both server and browser source.
 
 Locale controls must perform a full document navigation. This is a deliberate
@@ -255,24 +255,29 @@ adapter's catalog link and application entry in the document:
 
 ```ts
 const clientCatalog = remixI18n.renderClientCatalog(locale);
-const clientEntry = remixI18n.renderClientEntry("/assets/app/public/client.tsx");
+const clientEntry = await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer });
 ```
 
-`renderClientEntry()` returns an external module script. The adapter initializes
-the document locale, awaits its catalog and imports the application entry.
+`renderClientEntry()` is asynchronous and accepts an entry file path plus the
+same `assetServer` used for browser delivery. It renders the import map for the
+application and adapter bootstrap, then an external module script. The adapter
+initializes the document locale, awaits its catalog and imports the application
+entry.
 Application code does not query catalog links, build loader maps or handle
 catalog readiness. The asset loader selects each module's actual message IDs
 and awaits the active locale's fragment before evaluating that module. Modules
 loaded after interaction request only their additional fragments.
 
 Initial and lazy catalog network or evaluation failures reach a catalog-independent
-error page with Reload and Home actions. `renderClientEntry(entry, { errorHtml,
+error page with Reload and Home actions. `renderClientEntry(entry, { assetServer, errorHtml,
 nonce })` accepts trusted ordinary host error markup and an optional CSP nonce.
 A custom Reload button uses `data-palamedes-reload`. The external bootstrap
-works with `script-src 'self'`, without `unsafe-inline` or `unsafe-eval`.
-If custom Remix asset mounts relocate installed packages, set
-`catalogAssets.clientModuleUrl` to the served `@palamedes/remix/client` module;
-the default uses Remix's `/assets/npm` mount.
+and inline import map work with `script-src 'self' 'nonce-…'`; pass the request
+nonce to cover both scripts, without `unsafe-inline` or `unsafe-eval`.
+Entry and bootstrap URLs come from the asset server, including custom mounts
+and fingerprints. The former `catalogAssets.clientModuleUrl` override is
+rejected: relocating a module URL without its import-map scope breaks bare
+dependency resolution. Configure the actual asset server's mounts instead.
 
 The lower-level `initializeRemixClientI18nAsync()` and `startRemixClient()` are
 available for custom host integrations. Generated executable catalogs never
@@ -294,17 +299,17 @@ Reload affected documents to install a new generation. Close the registry with
 
 ## Support Matrix
 
-| Area                   | Support contract                                                                                |
-| ---------------------- | ----------------------------------------------------------------------------------------------- |
-| Server macros          | Ordinary macros transformed after `remix/node-tsx`                                              |
-| Browser macros         | Ordinary macros transformed by the post-compile asset loader                                    |
-| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules                  |
-| Request scope          | Fetch requests and streamed responses through `createRemixI18nServer()`                         |
-| Client catalog         | Adapter-owned executable fragments for the active document locale; inert ICU bootstrap rejected |
-| HMR and source maps    | Source edits invalidate through Remix; composed authored TS/TSX maps and diagnostics            |
-| Remix UI Frames        | Document render and direct frame reload retain their own request-local locale                   |
-| Locale strategies      | Cookie, route, subdomain, TLD, and `Accept-Language`; switching reloads the document            |
-| Public hosting         | Source example and CI proof available; public deployment not yet verified                       |
+| Area                | Support contract                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| Server macros       | Ordinary macros transformed after `remix/node-tsx`                                              |
+| Browser macros      | Ordinary macros transformed by the post-compile asset loader                                    |
+| Rich Remix messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules                  |
+| Request scope       | Fetch requests and streamed responses through `createRemixI18nServer()`                         |
+| Client catalog      | Adapter-owned executable fragments for the active document locale; inert ICU bootstrap rejected |
+| HMR and source maps | Source edits invalidate through Remix; composed authored TS/TSX maps and diagnostics            |
+| Remix Frames        | Document render and direct frame reload retain their own request-local locale                   |
+| Locale strategies   | Cookie, route, subdomain, TLD, and `Accept-Language`; switching reloads the document            |
+| Public hosting      | Source example and CI proof available; public deployment not yet verified                       |
 
 Reactive same-document locale replacement, browser `.po` loading, and an Edge
 or Worker server runtime are non-goals for the current Node integration. The
@@ -321,25 +326,25 @@ plain runtime calls with no per-request transform work. The cost moves from
 build time to process start and recurs per cold start — the same tradeoff Remix
 makes for its own TypeScript and JSX lowering via `oxc-transform`.
 
-## Remix UI Frames and Rich Messages
+## Remix Frames and Rich Messages
 
-Server-rendered Remix UI Frames are supported. Put the full document and the
+Server-rendered Remix Frames are supported. Put the full document and the
 endpoint used by each `<Frame>` inside `remixI18n.run()` (or middleware) so the
 initial stream and direct frame reload each establish request-local i18n state.
 The `remix-cookie` smoke test requests both `/frames` and
 `/frames/locale-summary` with a German locale and verifies the same translated
 frame content.
 
-Ordinary JavaScript macros, including `t`, remain supported in Remix UI
+Ordinary JavaScript macros, including `t`, remain supported in Remix
 components because they survive Remix's JSX lowering. The native transformer
-also recognizes the binding identities imported from `remix/ui/jsx-runtime`
-and `remix/ui/jsx-dev-runtime`; it can recover the static `Trans`, `Plural`,
+also recognizes the binding identities imported from `remix/component/jsx-runtime`
+and `remix/component/jsx-dev-runtime`; it can recover the static `Trans`, `Plural`,
 `Select`, and `SelectOrdinal` structure and produce the same message identity as
 authored TSX.
 
 Use `Trans`, `Plural`, `Select`, and `SelectOrdinal` from
 `@palamedes/remix/macro`. The transform targets
-`@palamedes/remix/compiled`, whose `Trans` component produces branded Remix UI
+`@palamedes/remix/compiled`, whose `Trans` component produces branded Remix
 nodes without a React dependency. Named tag placeholders preserve the supplied
 Remix element's props while replacing its authored children with translated
 children. Primitive placeholders, Remix elements, and nested node arrays are
@@ -361,17 +366,22 @@ manually in the example controller. Move those pieces to the full-stack setup:
    or `remixI18n.middleware()`.
 4. Keep the Node command order as
    `node --import remix/node-tsx --import @palamedes/remix/register server.ts`.
-5. Render `renderClientCatalog(locale)` and `renderClientEntry(entryUrl)`;
+5. Render `renderClientCatalog(locale)` and `await renderClientEntry(entryPath, { assetServer })`;
    route the adapter asset handlers before the regular Remix asset server.
 
 ## Tested Remix Version
 
-The published peer range is `remix@^3.0.0-rc.1`; the examples are pinned to the
-exact proven version, currently `remix@3.0.0-rc.1`. A newer prerelease or stable
-release becomes supported only after all four example manifests move together
-and both `pnpm verify:examples:smoke -- --framework remix` and
-`pnpm verify:examples:browser -- --id remix-cookie` pass. `remix@next` may be
-run as a non-blocking canary but does not expand the supported range by itself.
+The peer range is `remix@^3.0.0`; all four examples pin the stable baseline
+`remix@3.0.0`. RC.1 and earlier prereleases are no longer supported. Update
+`remix/ui` imports (including `/server`, `/test`, and JSX runtimes) and
+`jsxImportSource` to `remix/component`. Component HMR users must also rename
+`remix/ui-hmr` to `remix/component-hmr` and `uiHmr()` to `componentHmr()`.
+The integration uses no APIs from the separately versioned `@remix-run/ui`.
+
+When changing the stable baseline, move all four example manifests together
+and run `pnpm verify:examples:smoke -- --framework remix` and
+`pnpm verify:examples:browser -- --id remix-cookie`. A `remix@next` canary is
+non-blocking and does not expand support to prereleases.
 
 ## Public Demo Readiness
 

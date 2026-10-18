@@ -1,6 +1,6 @@
 import { plural, t } from "@palamedes/core/macro";
 
-import { LOCALES, LOCALE_LABELS, remixI18n, type Locale } from "./i18n.ts";
+import { LOCALES, LOCALE_LABELS, type Locale } from "./i18n.ts";
 
 export type LocaleSwitchLink = {
   href?: string;
@@ -14,6 +14,7 @@ export type RenderHomePageOptions = {
   hasLocaleChoice?: boolean;
   clientCatalog?: string;
   clientProof?: string;
+  clientEntry?: string;
   strategyLabel?: string;
   switchLinks?: LocaleSwitchLink[];
 };
@@ -25,6 +26,7 @@ export function renderHomePage({
   hasLocaleChoice = false,
   clientCatalog,
   clientProof,
+  clientEntry,
   strategyLabel = "cookie",
   switchLinks,
 }: RenderHomePageOptions): string {
@@ -63,7 +65,7 @@ export function renderHomePage({
       ${clientProof ? `<div data-remix-client-proof>${clientProof}</div>` : ""}
     </main>
     ${clientCatalog ?? ""}
-    ${clientProof ? remixI18n.renderClientEntry("/assets/app/public/client.tsx") : ""}
+    ${clientEntry ?? ""}
   </body>
 </html>`;
 }

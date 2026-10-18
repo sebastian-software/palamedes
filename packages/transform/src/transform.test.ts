@@ -248,7 +248,7 @@ const el = <Trans>Hello {name}</Trans>;
   it("transforms Remix-lowered JSX runtime calls", () => {
     const code = `
 import { Trans as Message } from "@palamedes/react/macro";
-import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/component/jsx-runtime";
 export function View() {
   return makeMany(Message, { children: [
     "Hello ",
@@ -271,7 +271,7 @@ export function View() {
   it("targets the Remix compiled runtime for Remix rich-message macros", () => {
     const code = `
 import { Trans as Message } from "@palamedes/remix/macro";
-import { jsxs } from "remix/ui/jsx-runtime";
+import { jsxs } from "remix/component/jsx-runtime";
 const view = jsxs(Message, { children: ["Hello ", name] });
 `;
     const result = transformPalamedesMacros(code, "view.js");

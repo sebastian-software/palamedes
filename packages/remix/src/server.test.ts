@@ -9,6 +9,87 @@ import { createRouter } from "remix/router";
 import { createPalamedesRemixCatalogAssetRegistry } from "./index";
 import { createRemixI18nRequestScope, createRemixI18nServer } from "./server";
 
+describe("stable Remix client entries", () => {
+  const locales = defineLocaleControls({ locales: ["en", "de"], defaultLocale: "en" });
+
+  it("rejects the retired URL override instead of emitting a bootstrap outside its import-map scope", () => {
+    expect(() =>
+      createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+        catalogAssets: {
+          // @ts-expect-error Legacy JavaScript callers receive the migration diagnostic too.
+          clientModuleUrl: "/custom/client.mjs",
+        },
+      }),
+    ).toThrow(
+      "Remove catalogAssets.clientModuleUrl. Pass the actual assetServer to renderClientEntry()",
+    );
+  });
+
+  it("includes both application and bootstrap dependencies in an escaped, nonce-bearing import map", async () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+    const importMap = {
+      imports: { "@palamedes/runtime": "/assets/runtime.js" },
+      scopes: { "/assets/": { example: "</script><script>alert(1)</script>" } },
+    };
+    const assetServer = {
+      getHref: vi.fn(async (file: string) =>
+        file === "app/public/client.tsx"
+          ? "/assets/app/client.hash.js"
+          : "/assets/remix/client.hash.js",
+      ),
+      getImportMap: vi.fn(async () => importMap),
+    };
+    const html = await remixI18n.renderClientEntry("app/public/client.tsx", {
+      assetServer,
+      nonce: 'request"nonce',
+      errorHtml: "<p>Reload</p>",
+    });
+    expect(assetServer.getImportMap).toHaveBeenCalledWith([
+      "app/public/client.tsx",
+      expect.stringContaining(path.join("remix", "dist", "client.mjs")),
+    ]);
+    const mapSource = html.match(/<script type="importmap"[^>]*>(.*?)<\/script>/u)?.[1];
+    expect(JSON.parse(mapSource!)).toEqual(importMap);
+    expect(mapSource).not.toContain("</script>");
+    expect(html.match(/nonce="request&quot;nonce"/gu)).toHaveLength(2);
+    const entryUrl = html.match(/src="([^"]+)"/u)?.[1];
+    const response = remixI18n.serveClientCatalogAsset(
+      new Request(`https://example.test${entryUrl}`),
+    );
+    expect(response?.status).toBe(200);
+    const source = await response?.text();
+    expect(source).toContain('from"/assets/remix/client.hash.js"');
+    expect(source).toContain('import("/assets/app/client.hash.js")');
+    expect(source).toContain('"errorHtml":"<p>Reload</p>"');
+  });
+
+  it("propagates asset graph compilation failures before rendering an entry", async () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+    const failure = new Error("Invalid catalog in client entry graph");
+    await expect(
+      remixI18n.renderClientEntry("app/public/client.tsx", {
+        assetServer: {
+          getHref: async () => "/assets/client.js",
+          async getImportMap() {
+            throw failure;
+          },
+        },
+      }),
+    ).rejects.toBe(failure);
+  });
+});
+
 function createTestI18n(locale: string): I18nInstance {
   return {
     locale,

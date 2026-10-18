@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import type { AssetServer } from "remix/assets";
 
 import {
   createI18n,
@@ -83,8 +85,6 @@ export type RemixI18nServerOptions<
     resolvePath?: (locale: TLocale) => string;
     basePath?: string;
     registry?: PalamedesRemixCatalogAssetRegistry;
-    /** Override the client module URL when the Remix asset server uses custom mounts. */
-    clientModuleUrl?: string;
   };
   createI18n?: () => T;
   routeParam?: string;
@@ -109,10 +109,18 @@ export type RemixI18nServer<TLocale extends string, T extends PalamedesI18n = Pa
   renderClientBootstrap(locale: TLocale, options?: { elementId?: string }): string;
   createClientCatalogAsset(locale: TLocale): RemixClientCatalogAsset<TLocale>;
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
-  /** Render an external, CSP-compatible adapter bootstrap for the application entry. */
-  renderClientEntry(entryUrl: string, options?: { errorHtml?: string; nonce?: string }): string;
+  /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
+  renderClientEntry(entryPath: string, options: RemixClientEntryOptions): Promise<string>;
   serveClientCatalogAsset(request: Request): Response | undefined;
   serializeLocaleCookie(locale: TLocale): string;
+};
+
+export type RemixClientEntryOptions = {
+  /** The same asset server that uses the Palamedes catalog loader. */
+  assetServer: Pick<AssetServer, "getHref" | "getImportMap">;
+  errorHtml?: string;
+  /** CSP nonce applied to both the import map and the external module script. */
+  nonce?: string;
 };
 
 export type RemixClientCatalogAsset<TLocale extends string = string> = {
@@ -156,6 +164,11 @@ export function createRemixI18nServer<
   TLocale extends string,
   T extends PalamedesI18n = PalamedesI18n,
 >(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
+  if (options.catalogAssets && Object.hasOwn(options.catalogAssets, "clientModuleUrl")) {
+    throw new TypeError(
+      "Remove catalogAssets.clientModuleUrl. Pass the actual assetServer to renderClientEntry(); stable Remix resolves bootstrap URLs and import-map scopes through that server's mounts.",
+    );
+  }
   if (options.catalogAssets?.registry && typeof options.catalogVersion === "function") {
     throw new TypeError(
       "Remix registry catalog versions are derived from executable content. Remove the legacy messages callback or provide a deployment version string.",
@@ -332,19 +345,28 @@ export function createRemixI18nServer<
     return `<link rel="modulepreload" href="${escapeHtmlAttribute(href)}" data-palamedes-catalog-locale="${escapeHtmlAttribute(locale)}" data-palamedes-catalog-version="${escapeHtmlAttribute(createClientCatalogAsset(locale).catalogVersion)}" />`;
   };
 
-  const renderClientEntry = (
-    entryUrl: string,
-    entryOptions: { errorHtml?: string; nonce?: string } = {},
-  ): string => {
+  const renderClientEntry = async (
+    entryPath: string,
+    entryOptions: RemixClientEntryOptions,
+  ): Promise<string> => {
     const basePath = options.catalogAssets?.basePath ?? "/assets";
-    const clientUrl =
-      options.catalogAssets?.clientModuleUrl ??
-      `${basePath.replace(/\/$/u, "")}/npm/@palamedes/remix/dist/client.mjs`;
+    // Node's require resolver selects our CJS export, but browser assets must use
+    // the ESM sibling emitted by the same package build (including from CJS hosts).
+    const clientPath = createRequire(import.meta.url)
+      .resolve("@palamedes/remix/client")
+      .replace(/\.cjs$/u, ".mjs");
+    const [entryUrl, clientUrl, importMap] = await Promise.all([
+      entryOptions.assetServer.getHref(entryPath),
+      entryOptions.assetServer.getHref(clientPath),
+      entryOptions.assetServer.getImportMap([entryPath, clientPath]),
+    ]);
     const source = `import{startRemixClient}from${JSON.stringify(clientUrl)};await startRemixClient(()=>import(${JSON.stringify(entryUrl)}),${JSON.stringify({ errorHtml: entryOptions.errorHtml })});`;
     const key = createHash("sha256").update(source).digest("hex");
     clientEntries.set(key, source);
     const src = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/${key}.js`;
-    return `<script type="module" src="${escapeHtmlAttribute(src)}"${entryOptions.nonce ? ` nonce="${escapeHtmlAttribute(entryOptions.nonce)}"` : ""}></script>`;
+    const nonce = entryOptions.nonce ? ` nonce="${escapeHtmlAttribute(entryOptions.nonce)}"` : "";
+    const serializedImportMap = JSON.stringify(importMap).replace(/</gu, "\\u003c");
+    return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}"${nonce}></script>`;
   };
 
   const serveClientCatalogAsset = (request: Request): Response | undefined => {

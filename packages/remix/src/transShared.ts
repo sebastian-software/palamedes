@@ -9,7 +9,7 @@ import type {
   MessageMetadata,
   PalamedesI18n,
 } from "@palamedes/core/compiled";
-import { createElement, type Handle, type RemixElement, type RemixNode } from "remix/ui";
+import { createElement, type Handle, type RemixElement, type RemixNode } from "remix/component";
 
 export type TransProps = {
   // `id` is optional in authored source: the compiler injects it after

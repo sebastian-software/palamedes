@@ -491,13 +491,15 @@ Use `@palamedes/remix`. Register it after `remix/node-tsx`. Share one
 `createPalamedesRemixCatalogAssetRegistry()` between the browser asset loader
 and `createRemixI18nServer({ catalogAssets: { registry } })`. Server locale
 catalogs load lazily and are shared immutably. Render `renderClientCatalog(locale)`
-and `renderClientEntry(entryUrl)`; serve registry and server catalog handlers
+and `await renderClientEntry(entryPath, { assetServer })`; the adapter emits the
+stable asset-server import map for the application and bootstrap (pass `nonce`
+with a restrictive script CSP); serve registry and server catalog handlers
 before the Remix asset server. The adapter owns readiness, selected executable
 browser fragments and ordinary error-page recovery. Apps own locale selection
 and optional untranslated error markup. Inert ICU bootstrap payloads are rejected.
 Locale changes reload the document; only the active locale is requested.
 Development watches catalog/config inputs; custom runners can use `watch: true`
-or `registry.invalidate()`. Node.js >=24.3 and remix@3.0.0-rc.1 are the verified
+or `registry.invalidate()`. Node.js >=24.3 and remix@3.0.0 are the verified
 host. See /docs/api/remix.md.
 
 

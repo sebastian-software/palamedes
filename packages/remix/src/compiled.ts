@@ -1,6 +1,6 @@
 import type { PalamedesI18n } from "@palamedes/core/compiled";
 import { getI18n } from "@palamedes/runtime";
-import { Fragment } from "remix/ui";
+import { Fragment } from "remix/component";
 
 import { createTrans } from "./transShared";
 

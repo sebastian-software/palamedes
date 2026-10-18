@@ -8,9 +8,9 @@ import {
   type CompiledMessageBranch,
 } from "@palamedes/core/compiled";
 import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime";
-import { createElement, type RemixElement } from "remix/ui";
-import { renderToString } from "remix/ui/server";
-import { render } from "remix/ui/test";
+import { createElement, type RemixElement } from "remix/component";
+import { renderToString } from "remix/component/server";
+import { render } from "remix/component/test";
 
 import { Trans, type TransProps } from "./compiled";
 import type {
