@@ -11,6 +11,31 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 `@palamedes/tanstack` is ESM-only. Use ESM imports; CommonJS
 `require("@palamedes/tanstack")` is not supported.
 
+## Verified dependency baseline and Solid follow-up
+
+The React fixtures pin `@tanstack/react-start@1.169.3` and
+`@tanstack/react-router@1.170.45`. React Start requires `seroval@^1.6.7`;
+the workspace override uses 1.6.9. Keeping the previous 1.6.3 override causes
+Start to fail at module import because its serializer has no `isStream` export.
+
+Solid Start remains **under integration verification** in
+[#1252](https://github.com/sebastian-software/palamedes/issues/1252).
+The existing Solid/Nitro examples use Solid and `@solidjs/web@2.0.0-rc.3`.
+Solid Start's separate `2.0.0-rc.8` release requires
+`@solidjs/web >=2.0.0-rc.6 <3.0.0`. The stable 1.169.3 package declares
+`solid-js >=1.0.0`; that broad peer range alone does not prove compatibility
+with Palamedes' Solid 2 baseline. Neither Start line is proven by the Nitro examples.
+
+A probe using Solid Start 2.0.0-rc.8 with matching Solid and
+`@solidjs/web@2.0.0-rc.6` also exposed legacy Solid 1 Vite-plugin peers.
+Importing that host's root entry directly in Node evaluates client DOM
+`template()` calls and throws a client-only API error. This does not establish
+whether Start's bundled server path fails; it needs its own representative
+fixture and SSR/hydration/navigation/catalog-failure browser checks before a
+Solid host export or support claim is added.
+
+The v2 publication hold remains active until both Start integrations are proven.
+
 ## Global server-function middleware
 
 Create the middleware once and register it in `src/start.ts`. The resolver gets
@@ -104,7 +129,7 @@ and begins before server-function validation and handler execution.
 
 `@palamedes/tanstack` uses `@palamedes/runtime/server`, which requires Node's
 `AsyncLocalStorage`. It supports the pinned TanStack Start line
-`@tanstack/react-start@^1.168.38` on Node.js 22.22 or later. Do not use this
+`@tanstack/react-start@^1.169.3` on Node.js 22.22 or later. Do not use this
 adapter in Edge or Worker runtimes unless their Node-compatible
 `AsyncLocalStorage` behavior has been independently verified.
 
