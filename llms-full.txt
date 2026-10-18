@@ -330,18 +330,32 @@ caller coordination.
 
 ## CLI model
 
-The native CLI embeds English, German, and Spanish UI translations compiled from
-its PO catalogs at build time. It selects the first nonempty value in
+The native CLI loads English, German, and Spanish UI translations compiled from
+its PO catalogs into external `<locale>.pmd.json` files. No language, including
+English, is embedded. It selects the first nonempty value in
 `PALAMEDES_UI_LOCALE > LC_ALL > LC_MESSAGES > LANG` order. POSIX encodings and
 modifiers are stripped; supported base languages handle regional tags. Invalid,
 unsupported, C/POSIX, and absent values select English without falling through
 to a lower-priority variable. This controls UI output independently of catalog
 `--locale` filters. JSON documents, raw values, diagnostic codes, and exit codes
 stay stable. Compiler/OS/third-party details, Clap argument-error details, and
-plugin-owned messages retain their wording. No Node or external UI catalog files
-are needed at runtime; the private Rust generator supports literal messages and
-arguments, rejects invalid/missing/fuzzy translations, and is not a public Rust
-application adapter. See `docs/cli.md#output-language`.
+plugin-owned messages retain their wording. Node is not needed at runtime.
+Platform packages install catalogs in `bin/pmds-locales/` beside the executable;
+`PALAMEDES_UI_CATALOG_DIR` can override the directory. Only the selected locale is
+loaded. Missing/corrupt/incompatible catalogs fail before execution without
+another-language or source-text recovery. See `docs/cli.md#output-language`.
+
+Experimental, unpublished workspace crates `palamedes-build` and `palamedes-i18n`
+expose the Rust application path. A Cargo build script uses `CatalogBuilder` to
+write generated `macro_rules!` definitions/schema and external catalogs. Rustc
+expands source-first calls into internal-ID lookups. The runtime decodes compiled
+instructions without PO/ICU parsing, supports independent explicit locale
+contexts, and validates version, locale, inventory, arguments, and contract
+fingerprint. Literal text, display arguments, and string selects are supported;
+plurals, number/date/time formatting, rich text, and contexts fail compilation.
+`extract_messages()` provides token-based Rust source extraction; the CLI's
+existing extraction command has not gained a Rust frontend. The crates.io hold
+remains in force. See `docs/cli.md#rust-application-integration` and `crates/palamedes-i18n/examples/cli`.
 
 Core commands:
 

@@ -1,0 +1,302 @@
+//! Rust message rendering from external, build-compiled catalogs.
+//!
+//! No catalogs, source-message fallback, or ICU parser are embedded here.
+//! `palamedes-build` generates the schema and author-facing translation macro.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+/// Version of the external instruction format. Not an ICU or PO input format.
+pub const FORMAT_VERSION: u32 = 1;
+
+/// Internal compile-time support for generated macros, including raw literals.
+#[doc(hidden)]
+pub const fn source_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut index = 0;
+    while index < left.len() {
+        if left[index] != right[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+/// Internal compile-time argument validation for generated translation calls.
+#[doc(hidden)]
+pub const fn assert_arguments(expected: &[&str], supplied: &[&str]) {
+    assert!(
+        expected.len() == supplied.len(),
+        "translation argument count mismatch"
+    );
+    let mut index = 0;
+    while index < supplied.len() {
+        let mut matched = false;
+        let mut candidate = 0;
+        while candidate < expected.len() {
+            if source_eq(supplied[index], expected[candidate]) {
+                matched = true;
+            }
+            candidate += 1;
+        }
+        assert!(matched, "unknown translation argument");
+        let mut previous = 0;
+        while previous < index {
+            assert!(
+                !source_eq(supplied[index], supplied[previous]),
+                "duplicate translation argument"
+            );
+            previous += 1;
+        }
+        index += 1;
+    }
+}
+
+/// Build-generated identity and argument contract for a catalog family.
+#[derive(Clone, Copy, Debug)]
+pub struct Schema {
+    /// Fingerprint of the message identities and their argument sets.
+    pub fingerprint: &'static str,
+    /// Required messages. Contains internal IDs, never source text.
+    pub messages: &'static [MessageSpec],
+}
+
+/// Build-generated signature of one message.
+#[derive(Debug)]
+pub struct MessageSpec {
+    /// Internal compiled lookup key.
+    pub id: &'static str,
+    /// Named arguments, sorted for deterministic comparison.
+    pub arguments: &'static [&'static str],
+    /// Whether this message is safe to borrow as literal text.
+    pub literal: bool,
+}
+
+/// Serializable compiler output. Applications load it through [`Catalog`].
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogArtifact {
+    /// Instruction format version.
+    pub version: u32,
+    /// Application message contract fingerprint.
+    pub fingerprint: String,
+    /// Locale that this artifact renders.
+    pub locale: String,
+    /// Exactly one compiled representation per message.
+    pub messages: BTreeMap<String, Message>,
+}
+
+/// A compiled literal or message program, never an unparsed ICU pattern.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum Message {
+    /// Text which is already fully compiled.
+    Literal(String),
+    /// Build-lowered operations evaluated by the Rust runtime.
+    Program(Vec<Instruction>),
+}
+
+/// The supported Rust instruction set. Unsupported ICU fails at build time.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
+pub enum Instruction {
+    /// Append literal text, including already-resolved ICU quoting.
+    Text { value: String },
+    /// Append a named argument without interpreting its contents.
+    Argument { name: String },
+    /// Select a string branch, using `other` when no branch matches.
+    Select {
+        name: String,
+        options: BTreeMap<String, Vec<Instruction>>,
+    },
+}
+
+/// Load or rendering errors. Hosts choose how to present them.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// External artifact could not be read.
+    #[error("could not read catalog {path}: {source}")]
+    Io {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
+    /// Artifact is not valid compiled catalog data.
+    #[error("invalid compiled catalog: {0}")]
+    Decode(#[from] serde_json::Error),
+    /// Format, locale, message inventory, or arguments are incompatible.
+    #[error("incompatible compiled catalog: {0}")]
+    Incompatible(String),
+    /// A lookup was not part of the catalog contract.
+    #[error("compiled catalog does not contain message {0}")]
+    MissingMessage(String),
+    /// Render arguments do not match the compiled message contract.
+    #[error("invalid arguments for compiled message {0}")]
+    Arguments(String),
+}
+
+/// An owned, validated catalog for one explicit locale.
+///
+/// Independent catalogs can be shared across threads or used per request.
+/// Loading never probes another locale or substitutes source text.
+#[derive(Debug)]
+pub struct Catalog {
+    artifact: CatalogArtifact,
+    specifications: BTreeMap<&'static str, &'static MessageSpec>,
+}
+
+impl Catalog {
+    /// Decode and validate external bytes against the program's schema.
+    pub fn from_bytes(bytes: &[u8], locale: &str, schema: Schema) -> Result<Self, Error> {
+        let artifact: CatalogArtifact = serde_json::from_slice(bytes)?;
+        if artifact.version != FORMAT_VERSION {
+            return Err(Error::Incompatible("unsupported format version".into()));
+        }
+        if artifact.fingerprint != schema.fingerprint || artifact.locale != locale {
+            return Err(Error::Incompatible(
+                "message contract or locale mismatch".into(),
+            ));
+        }
+        if artifact.messages.len() != schema.messages.len() {
+            return Err(Error::Incompatible("message inventory mismatch".into()));
+        }
+        for spec in schema.messages {
+            let message = artifact
+                .messages
+                .get(spec.id)
+                .ok_or_else(|| Error::MissingMessage(spec.id.into()))?;
+            let mut arguments = BTreeSet::new();
+            match message {
+                Message::Literal(_) if spec.literal => {}
+                Message::Program(program) if !spec.literal => validate(program, &mut arguments)?,
+                _ => {
+                    return Err(Error::Incompatible(format!(
+                        "message kind mismatch: {}",
+                        spec.id
+                    )));
+                }
+            }
+            if arguments.into_iter().ne(spec.arguments.iter().copied()) {
+                return Err(Error::Incompatible(format!(
+                    "argument mismatch: {}",
+                    spec.id
+                )));
+            }
+        }
+        let specifications: BTreeMap<_, _> = schema
+            .messages
+            .iter()
+            .map(|message| (message.id, message))
+            .collect();
+        if specifications.len() != schema.messages.len() {
+            return Err(Error::Incompatible(
+                "duplicate schema message identity".into(),
+            ));
+        }
+        Ok(Self {
+            artifact,
+            specifications,
+        })
+    }
+
+    /// Load from a caller-selected file. Relative paths are relative to its CWD.
+    pub fn load(path: impl AsRef<Path>, locale: &str, schema: Schema) -> Result<Self, Error> {
+        let path = path.as_ref();
+        let bytes = std::fs::read(path).map_err(|source| Error::Io {
+            path: path.to_owned(),
+            source,
+        })?;
+        Self::from_bytes(&bytes, locale, schema)
+    }
+
+    /// The locale actually loaded. No ambient process-global state is used.
+    pub fn locale(&self) -> &str {
+        &self.artifact.locale
+    }
+
+    /// Borrow an already-compiled constant string.
+    pub fn literal(&self, id: &str) -> Result<&str, Error> {
+        match self.artifact.messages.get(id) {
+            Some(Message::Literal(value)) => Ok(value),
+            Some(_) => Err(Error::Arguments(id.into())),
+            None => Err(Error::MissingMessage(id.into())),
+        }
+    }
+
+    /// Render with named display values. Argument text is never parsed as ICU.
+    pub fn render(&self, id: &str, values: &[(&str, String)]) -> Result<String, Error> {
+        let spec = self
+            .specifications
+            .get(id)
+            .ok_or_else(|| Error::MissingMessage(id.into()))?;
+        let arguments: BTreeMap<_, _> = values
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect();
+        if arguments.len() != values.len()
+            || arguments.keys().copied().ne(spec.arguments.iter().copied())
+        {
+            return Err(Error::Arguments(id.into()));
+        }
+        match &self.artifact.messages[id] {
+            Message::Literal(value) => Ok(value.clone()),
+            Message::Program(program) => {
+                let mut output = String::new();
+                execute(program, &arguments, &mut output);
+                Ok(output)
+            }
+        }
+    }
+}
+
+fn validate<'a>(
+    program: &'a [Instruction],
+    arguments: &mut BTreeSet<&'a str>,
+) -> Result<(), Error> {
+    for instruction in program {
+        match instruction {
+            Instruction::Text { .. } => {}
+            Instruction::Argument { name } => {
+                arguments.insert(name);
+            }
+            Instruction::Select { name, options } => {
+                arguments.insert(name);
+                if !options.contains_key("other") {
+                    return Err(Error::Incompatible(
+                        "select requires an other branch".into(),
+                    ));
+                }
+                for branch in options.values() {
+                    validate(branch, arguments)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn execute(program: &[Instruction], values: &BTreeMap<&str, &str>, output: &mut String) {
+    for instruction in program {
+        match instruction {
+            Instruction::Text { value } => output.push_str(value),
+            Instruction::Argument { name } => output.push_str(values[name.as_str()]),
+            Instruction::Select { name, options } => {
+                let branch = options
+                    .get(values[name.as_str()])
+                    .unwrap_or(&options["other"]);
+                execute(branch, values, output);
+            }
+        }
+    }
+}

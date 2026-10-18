@@ -99,9 +99,6 @@ pub enum CliError {
 impl CliError {
     /// Human output only; Display remains stable for structured diagnostics.
     pub fn localized(&self) -> String {
-        if crate::i18n::language() == crate::i18n::Language::English {
-            return self.to_string();
-        }
         match self {
             Self::Config(error) => error.localized(),
             Self::Io { path, source } => tr!(

@@ -149,21 +149,64 @@ fn catalog_selection_json_and_policy_codes_are_independent_of_ui_language() {
 }
 
 #[test]
-fn installed_binary_needs_neither_node_nor_adjacent_catalog_files() {
+fn installed_binary_loads_only_the_external_requested_language_without_node() {
     let directory = tempfile::tempdir().unwrap();
     let executable = directory
         .path()
         .join(format!("pmds{}", std::env::consts::EXE_SUFFIX));
     fs::copy(env!("CARGO_BIN_EXE_pmds"), &executable).unwrap();
-    let output = Command::new(executable)
+    let catalogs = directory.path().join("pmds-locales");
+    fs::create_dir(&catalogs).unwrap();
+    let source = std::path::Path::new(env!("CARGO_BIN_EXE_pmds"))
+        .parent()
+        .unwrap()
+        .join("pmds-locales/de.pmd.json");
+    fs::copy(source, catalogs.join("de.pmd.json")).unwrap();
+    let output = Command::new(&executable)
         .arg("version")
         .current_dir(directory.path())
         .env("PATH", "")
         .env("PALAMEDES_UI_LOCALE", "de")
+        .env_remove("PALAMEDES_UI_CATALOG_DIR")
         .env("PALAMEDES_UPDATE_CHECK", "0")
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(String::from_utf8_lossy(&output.stdout).contains("Schnelle i18n-Werkzeuge"));
     assert!(output.stderr.is_empty());
+    #[cfg(unix)]
+    {
+        let links = directory.path().join("links");
+        fs::create_dir(&links).unwrap();
+        let linked = links.join("pmds");
+        std::os::unix::fs::symlink(&executable, &linked).unwrap();
+        let output = Command::new(linked)
+            .arg("--help")
+            .env("PALAMEDES_UI_LOCALE", "de")
+            .env_remove("PALAMEDES_UI_CATALOG_DIR")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("Aufruf:"));
+    }
+    // English is also external: no adjacent English catalog means failure.
+    let english = Command::new(&executable)
+        .arg("--help")
+        .env("PALAMEDES_UI_LOCALE", "en")
+        .env_remove("PALAMEDES_UI_CATALOG_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(english.status.code(), Some(1));
+    assert!(english.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&english.stderr).contains("en.pmd.json"));
+    fs::remove_file(catalogs.join("de.pmd.json")).unwrap();
+    let missing = Command::new(&executable)
+        .arg("--help")
+        .env("PALAMEDES_UI_LOCALE", "de")
+        .env_remove("PALAMEDES_UI_CATALOG_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(missing.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("de.pmd.json"));
 }

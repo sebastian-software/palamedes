@@ -27,7 +27,10 @@ console.log(`${packageJson.name}: native artifact guard passed (${artifacts.join
 
 export function nativeArtifacts(packageJson) {
   if (typeof packageJson.bin === "object" && packageJson.bin !== null) {
-    return Object.values(packageJson.bin).filter((value) => typeof value === "string");
+    const binaries = Object.values(packageJson.bin).filter((value) => typeof value === "string");
+    return packageJson.name?.startsWith("@palamedes/cli-")
+      ? [...binaries, ...["en", "de", "es"].map((locale) => `bin/pmds-locales/${locale}.pmd.json`)]
+      : binaries;
   }
 
   return typeof packageJson.main === "string" && packageJson.main.endsWith(".node")
