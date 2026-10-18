@@ -1,0 +1,30 @@
+{
+  "name": "@palamedes/example-node-applications",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#palamedes/node": "./.palamedes/server.mjs"
+  },
+  "scripts": {
+    "build": "node tooling/build.mjs",
+    "direct": "node --import ./tooling/register.mjs src/probe.ts",
+    "test": "node --test test/build-paths.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@palamedes/core": "workspace:^",
+    "@palamedes/runtime": "workspace:^"
+  },
+  "devDependencies": {
+    "@palamedes/config": "workspace:^",
+    "@palamedes/core-node": "workspace:^",
+    "@palamedes/transform": "workspace:^",
+    "@types/node": "^24.0.0",
+    "rolldown": "1.2.6",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}

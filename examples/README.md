@@ -12,10 +12,11 @@ The matrix is a verification surface, not an assumption that one application
 uses all six frameworks. Each example is independently useful as a reference
 for its own host and locale strategy.
 
-`examples/` holds 26 apps: the 25 of the verification matrix defined in
+`examples/` holds 27 apps: the 25 of the verification matrix defined in
 [`scripts/example-matrix.mjs`](../scripts/example-matrix.mjs) — 24 server
 framework/locale-strategy combinations plus the Vite MDX proof — and the
-focused React Router RSC fixture described below, which is verified on its own.
+focused React Router RSC and [Node application](./node-applications/README.md)
+fixtures, which are verified on their own.
 Every count on this page is derived from that file and enforced by
 `pnpm check:example-matrix`.
 

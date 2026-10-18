@@ -1,0 +1,16 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Booking {id} is confirmed."
+msgstr "Buchung {id} ist bestätigt."
+
+msgid "Booking {id} was not found."
+msgstr "Buchung {id} wurde nicht gefunden."
+
+msgid "{seats, plural, one {# seat available} other {# seats available}}"
+msgstr "{seats, plural, one {# Platz verfügbar} other {# Plätze verfügbar}}"
+
+msgid "Your booking costs {price} on {date}."
+msgstr "Ihre Buchung kostet {price} am {date}."

@@ -75,8 +75,8 @@ The current proof:
   `main`; five UI-adapter families, Vite, and the focused Remix cookie proof
   make 22 browser-capable examples for the scheduled Playwright flow. The
   other three Remix locale strategies retain smoke coverage. `examples/` holds
-  26 apps: those 25 plus the focused React Router RSC cookie fixture, which
-  sits outside the matrix and has its own verifier.
+  27 apps: those 25 plus the focused React Router RSC cookie and Node application
+  fixtures, which sit outside the matrix and have their own verifiers.
 - The image above is one demo in three locales: switch language and the copy,
   plural seat counts, currency, and dates all change together. The 20
   UI-adapter examples have versioned captures in
