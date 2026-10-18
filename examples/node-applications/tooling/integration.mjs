@@ -49,6 +49,8 @@ export function createIntegration(root) {
     return [
       'import {createI18n} from "@palamedes/core/compiled";',
       'import {createServerCatalogStore} from "@palamedes/runtime/server";',
+      `export const locales=${JSON.stringify(config.locales)};`,
+      `export const defaultLocale=${JSON.stringify(config.sourceLocale)};`,
       `const loaders={${loaders.join(",")}};`,
       'const store=createServerCatalogStore({load:({locale})=>{if(!Object.hasOwn(loaders,locale))throw new Error("Unsupported catalog locale: "+locale);return loaders[locale]()}});',
       "export async function createNodeI18n(options){const messages=await store.load(options.locale);const i18n=createI18n(options);i18n.load(options.locale,messages);return i18n;}",

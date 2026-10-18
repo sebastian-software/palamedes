@@ -82,6 +82,9 @@ for (const mode of ["unbundled", "rolldown"]) {
       env: { ...process.env, NODE_OPTIONS: "" },
     });
     assert.equal(JSON.parse(stdout).message, expected.de);
+    const cli = await runCli(mode, ["show", "BK-1"], { LANG: "de_DE.UTF-8" }, deployed, true);
+    assert.equal(cli.code, 0, cli.stderr);
+    assert.ok(cli.stdout.includes(expected.de));
     for (const file of await readdir(deployed, { recursive: true })) {
       if (file.startsWith(`node_modules${path.sep}`)) continue;
       if (!file.endsWith(".js") && !file.endsWith(".mjs")) continue;
@@ -140,3 +143,81 @@ test("catalog edits and invalid ICU are observed on restart or rebuild", async (
     assert.equal((await runProbe(mode, "de", "BK-1", fixture)).message, expected.de);
   }
 });
+
+async function runCli(mode, args, environment = {}, cwd = root, deployed = false) {
+  const env = { ...process.env, NODE_OPTIONS: "" };
+  for (const name of ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"]) delete env[name];
+  Object.assign(env, environment);
+  const entry = deployed
+    ? ["cli.js"]
+    : mode === "direct"
+      ? ["--import", "./tooling/register.mjs", "src/cli.ts"]
+      : [`dist/${mode}/cli.js`];
+  try {
+    return {
+      ...(await run(process.execPath, [...entry, ...args], { cwd, env, timeout: 20_000 })),
+      code: 0,
+    };
+  } catch (error) {
+    return error;
+  }
+}
+
+for (const mode of modes) {
+  test(`${mode}: CLI selects environment locales and keeps machine output stable`, async () => {
+    const cases = [
+      [{ LC_ALL: "de_DE.UTF-8", LC_MESSAGES: "es_ES.UTF-8", LANG: "en_US" }, "de"],
+      [{ LC_ALL: "", LC_MESSAGES: "es_ES.UTF-8", LANG: "de_DE" }, "es"],
+      [{ LANG: "de_DE.UTF-8@euro" }, "de"],
+      [{ LC_ALL: "C.UTF-8", LANG: "de_DE" }, "en"],
+      [{ LC_ALL: "POSIX", LANG: "de_DE" }, "en"],
+      [{ LC_ALL: "fr_FR.UTF-8", LANG: "de_DE" }, "en"],
+      [{ LC_ALL: "invalid!", LANG: "de_DE" }, "en"],
+      [{}, "en"],
+    ];
+    for (const [environment, locale] of cases) {
+      const result = await runCli(mode, ["show", "BK-1"], environment);
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.stderr, "");
+      assert.ok(result.stdout.includes(expected[locale]), result.stdout);
+    }
+    const overridden = await runCli(mode, ["show", "BK-1", "--locale", "es-MX"], {
+      LC_ALL: "de_DE",
+    });
+    assert.ok(overridden.stdout.includes(expected.es));
+    const invalidOverride = await runCli(mode, ["show", "BK-1", "--locale", "???"], {
+      LANG: "de_DE",
+    });
+    assert.ok(invalidOverride.stdout.includes(expected.en));
+    const help = await runCli(mode, ["--help"], { LANG: "de_DE" });
+    assert.equal(help.code, 0);
+    assert.match(help.stdout, /Eine Buchung nachschlagen\.\nshow <id> \[--locale/u);
+    const missing = await runCli(mode, ["show", "missing"], { LANG: "de_DE" });
+    assert.equal(missing.code, 1);
+    assert.equal(missing.stdout, "");
+    assert.match(missing.stderr, /Buchung missing wurde nicht gefunden/u);
+    const syntax = await runCli(mode, ["--unknown"], { LANG: "de_DE" });
+    assert.equal(syntax.code, 2);
+    assert.equal(syntax.stdout, "");
+    assert.match(syntax.stderr, /Ungültige Argumente/u);
+    const machine = await Promise.all(
+      ["en_US", "de_DE", "es_ES"].map((LANG) => runCli(mode, ["show", "BK-1", "--json"], { LANG })),
+    );
+    assert.equal(machine[0].stdout, machine[1].stdout);
+    assert.equal(machine[0].stdout, machine[2].stdout);
+    assert.deepEqual(JSON.parse(machine[0].stdout), {
+      code: "BOOKING_CONFIRMED",
+      id: "BK-1",
+      seats: 2,
+      amount: 149,
+      currency: "EUR",
+      startsAt: "2026-10-18T12:00:00Z",
+    });
+    const machineError = await runCli(mode, ["show", "missing", "--json"], { LANG: "es_ES" });
+    assert.equal(machineError.code, 1);
+    assert.deepEqual(JSON.parse(machineError.stderr), { code: "BOOKING_NOT_FOUND" });
+    const machineSyntax = await runCli(mode, ["--unknown", "--json"], { LANG: "es_ES" });
+    assert.equal(machineSyntax.code, 2);
+    assert.deepEqual(JSON.parse(machineSyntax.stderr), { code: "INVALID_ARGUMENTS" });
+  });
+}

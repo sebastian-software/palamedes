@@ -14,3 +14,12 @@ msgstr "{seats, plural, one {# seat available} other {# seats available}}"
 
 msgid "Your booking costs {price} on {date}."
 msgstr "Your booking costs {price} on {date}."
+
+msgid "Look up a booking."
+msgstr "Look up a booking."
+
+msgid "Invalid arguments. Run with --help."
+msgstr "Invalid arguments. Run with --help."
+
+msgid "Booking details."
+msgstr "Booking details."

@@ -56,7 +56,10 @@ export async function buildApplication(mode, applicationRoot = root) {
   } else {
     const prefix = "\0palamedes-node:";
     const bundle = await rolldown({
-      input: path.join(applicationRoot, "src/probe.ts"),
+      input: {
+        probe: path.join(applicationRoot, "src/probe.ts"),
+        cli: path.join(applicationRoot, "src/cli.ts"),
+      },
       platform: "node",
       external: [/^@palamedes\/(?:core|runtime)(?:\/|$)/u],
       plugins: [
@@ -89,7 +92,7 @@ export async function buildApplication(mode, applicationRoot = root) {
       ],
     });
     try {
-      await bundle.write({ dir: out, format: "esm", entryFileNames: "probe.js", sourcemap: true });
+      await bundle.write({ dir: out, format: "esm", entryFileNames: "[name].js", sourcemap: true });
     } finally {
       await bundle.close();
     }

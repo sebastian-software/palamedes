@@ -43,3 +43,28 @@ copy production output into a temporary deployment containing only Core and
 Runtime, verify that no compiler or macros are required, and exercise missing
 catalog failure and recovery. These are executable compatibility probes, not
 an expansion of the public supported-host matrix. Follow-up: issue #1270.
+
+## CLI example
+
+The `cli.ts` entry uses the same async booking service on all three paths:
+
+```sh
+LANG=de_DE.UTF-8 node --import ./examples/node-applications/tooling/register.mjs examples/node-applications/src/cli.ts show BK-1
+LANG=es_ES.UTF-8 node examples/node-applications/dist/unbundled/cli.js --help
+node examples/node-applications/dist/rolldown/cli.js show BK-1 --locale de --json
+```
+
+Language selection uses `--locale`, then the first nonempty environment value
+in `LC_ALL`, `LC_MESSAGES`, `LANG` order. POSIX encodings/modifiers are removed
+and underscores become language-tag hyphens. A supported base language handles
+regional tags such as `de-DE`. `C`, `POSIX`, invalid or unsupported values, and
+an absent environment fall back to the configured source locale. An unsupported
+higher-precedence value does not fall through to a lower-precedence variable.
+This also supplies a default for Windows shells without POSIX locale variables.
+
+Human-readable help, booking details, and errors are localized. Commands and
+flags stay fixed. Success/help use stdout and exit 0; missing bookings use
+stderr and exit 1; argument errors use stderr and exit 2. `--json` keeps raw
+values and field names stable across locales, including machine-readable errors.
+Real child-process tests cover environment precedence, overrides, normalization,
+fallback, help, output streams, exit codes, and isolated prebuilt deployments.
