@@ -52,7 +52,14 @@ thiserror = "2.0.20"
 ignore = "0.4.33"
 
 [workspace]
-members = ["crates/palamedes-cli", "crates/palamedes-node", "crates/palamedes-plugin"]
+members = [
+  "crates/palamedes-cli",
+  "crates/palamedes-node",
+  "crates/palamedes-plugin",
+  "crates/palamedes-i18n",
+  "crates/palamedes-build",
+  "crates/palamedes-i18n/examples/cli",
+]
 default-members = [".", "crates/palamedes-cli", "crates/palamedes-node", "crates/palamedes-plugin"]
 resolver = "2"
 

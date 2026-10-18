@@ -1443,17 +1443,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "palamedes-build"
+version = "1.25.1"
+dependencies = [
+ "ferrocat",
+ "palamedes",
+ "palamedes-i18n",
+ "proc-macro2",
+ "serde_json",
+ "sha2",
+ "syn 2.0.119",
+ "tempfile",
+]
+
+[[package]]
 name = "palamedes-cli"
 version = "1.25.1"
 dependencies = [
  "clap",
  "config",
  "ferralk",
- "ferrocat",
  "globset",
  "libc",
  "notify",
  "palamedes",
+ "palamedes-build",
+ "palamedes-i18n",
  "palamedes-plugin",
  "semver",
  "serde",
@@ -1463,6 +1478,25 @@ dependencies = [
  "tempfile",
  "thiserror",
  "ureq",
+]
+
+[[package]]
+name = "palamedes-example-rust-cli"
+version = "0.0.0"
+dependencies = [
+ "palamedes-build",
+ "palamedes-i18n",
+ "tempfile",
+]
+
+[[package]]
+name = "palamedes-i18n"
+version = "1.25.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

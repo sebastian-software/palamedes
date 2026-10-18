@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-18
 
 Every public application entrypoint executes compiled messages without an ICU parser.
 
@@ -58,6 +58,13 @@ inputs. Parser removal does not require graph splitting or prohibit complete
 active-locale catalogs on either server or client.
 
 ## Context
+
+The Rust application runtime follows the same no-ICU-parser boundary. It loads
+versioned compiled instruction data from external catalogs and evaluates that
+data without parsing source message patterns. JSON artifact decoding is a
+transport operation, not runtime ICU parsing. Its dependency graph excludes the
+semantic compiler, OXC, Ferrocat, and the ICU parser. Build tooling owns those
+dependencies; no language catalog is embedded as a runtime fallback.
 
 Executable catalog functions remove parsing from individual message lookups,
 but that alone does not guarantee a parser-free application graph. Every public

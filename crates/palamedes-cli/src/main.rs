@@ -19,7 +19,10 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    i18n::initialize();
+    if let Err(error) = i18n::initialize() {
+        eprintln!("pmds: {error}");
+        return ExitCode::from(1);
+    }
     let cli = match cli::Cli::parse_localized() {
         Ok(cli) => cli,
         Err(error) => {

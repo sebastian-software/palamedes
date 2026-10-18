@@ -6,7 +6,7 @@ command dispatch.
 
 ## Output Language
 
-The native CLI embeds English, German, and Spanish translations for its help,
+The native CLI loads external English, German, and Spanish catalogs for its help,
 command summaries, progress messages, and host-owned operational errors. It
 selects the first nonempty value in this order:
 
@@ -37,13 +37,87 @@ messages retain their original wording. Clap argument errors have a localized
 summary followed by Clap's original technical details. These are separate from
 the translated CLI presentation; their structured messages are not rewritten.
 
-Translations live in `crates/palamedes-cli/locales/*.po`. The native build uses
-Palamedes's canonical catalog compilation and ICU lowering to generate Rust
-literal/argument formatting code. Missing or fuzzy translations, malformed ICU,
-placeholder mismatches, and constructs beyond that private generator's subset
-fail the build. The installed binary needs neither Node nor external UI catalog
-files, and it does not parse ICU to render its own messages. This private
-generator is not a general-purpose Rust application adapter.
+Translations live in `crates/palamedes-cli/locales/*.po`. Cargo uses
+`palamedes-build` and Palamedes's canonical catalog compiler to produce
+`<locale>.pmd.json` files. Platform packages install them in `bin/pmds-locales/`
+beside the executable. Only the selected locale is loaded, including English;
+no translation catalog or source-text rendering fallback is embedded.
+Set `PALAMEDES_UI_CATALOG_DIR` to override the directory. Discovery does not
+depend on the project configuration or current working directory.
+
+A missing, corrupt, wrong-locale, or incompatible catalog fails before command
+execution with exit code 1 and a technical loader diagnostic on stderr. It does
+not load another language or substitute source text. Copying the native executable
+also requires copying `pmds-locales/`. No Node runtime is required.
+
+Missing or fuzzy translations, malformed ICU, placeholder mismatches, and
+unsupported Rust constructs fail the build. The Rust runtime decodes prepared
+instructions without a PO/ICU parser. Its current subset is literal text, display
+arguments, and string selects. Plurals, number/date/time formatting, rich text,
+and translation contexts are rejected. JavaScript retains its broader feature set.
+
+## Rust Application Integration
+
+The experimental workspace crates `palamedes-build` and `palamedes-i18n` expose
+the same path used by the CLI. They remain unpublished under the existing crates.io
+hold (#1153). Use workspace path dependencies or Git dependencies pinned to a
+reviewed revision. The [Rust CLI example](../crates/palamedes-i18n/examples/cli/) is a complete
+consumer with three languages and an isolated deployment test.
+
+Add `palamedes-i18n` as a dependency and `palamedes-build` as a build dependency.
+In `build.rs`:
+
+```rust
+fn main() {
+    palamedes_build::CatalogBuilder::new("locales", "en")
+        .locales(&["en", "de", "es"])
+        .build()
+        .expect("compile application catalogs");
+}
+```
+
+`build()` reads `<locale>.po` files, requires a matching reviewed message inventory,
+and writes `messages.rs` plus `catalogs/<locale>.pmd.json` into Cargo's `OUT_DIR`.
+The result contains both paths; `install_to()` copies catalogs into a host-selected
+distribution directory. Cargo tracks catalog changes and runs the generator as
+part of `cargo build`. No separate command or Node process is required.
+
+In the application, include the generated definitions and load a catalog explicitly:
+
+```rust,ignore
+include!(concat!(env!("OUT_DIR"), "/messages.rs"));
+
+let catalog = palamedes_i18n::Catalog::load(
+    "translations/de.pmd.json", "de", CATALOG_SCHEMA,
+)?;
+let greeting = translate!(&catalog, "Hello {name}!", name = "Ada")?;
+```
+
+The generator creates a `macro_rules! translate` definition. Rust's own compiler
+expands invocations into internal-ID lookups and named argument values. Source
+literals are resolved during constant evaluation, not retained as runtime rendering fallbacks. Literal messages
+return a borrowed string; messages with arguments return an owned string.
+Arguments can appear in any order. Missing, duplicate, or extra arguments fail compilation; display values are inserted
+literally. Direct runtime rendering also checks its argument contract.
+
+Each runtime catalog has an explicit locale. Applications can hold independent
+instances per request or share immutable instances across threads. The runtime
+does not inspect headers, environment variables, or filesystem locations.
+`Catalog::from_bytes()` supports other storage mechanisms. The host owns language
+selection, catalog discovery, and distribution.
+
+The external format carries a version, locale, and fingerprint of message
+identities and argument signatures. Loading also checks the complete inventory
+and instruction signatures. Compatible translation edits require no executable
+rebuild; changed message contracts require matching catalogs. These files contain
+data, not native code, and are separate from the JavaScript catalog ABI.
+
+`palamedes_build::extract_messages(source, macro_name)` extracts source literals
+and line numbers from Rust token trees, including calls inside attributes. It
+ignores comments and ordinary string contents and rejects dynamic source
+expressions. This is a Rust tooling API. `pmds extract` retains its documented
+JavaScript/TypeScript/MDX inputs; Rust catalog-update orchestration is not yet
+integrated into that command.
 
 ## Plugin Commands
 

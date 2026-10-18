@@ -63,6 +63,12 @@ pnpm add -D @palamedes/cli-linux-x64-musl
 pnpm exec pmds --version
 ```
 
+Native packages include external UI catalogs in `bin/pmds-locales/`. When copying
+the executable into another image or installation, copy that directory beside it
+as well. English is external too. `PALAMEDES_UI_CATALOG_DIR` can select another
+catalog directory; missing or incompatible catalogs fail explicitly. See the
+[output-language reference](../../docs/cli.md#output-language).
+
 ## Usage
 
 ```bash

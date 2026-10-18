@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { buildNativePackage, rustArtifactFileName } from "../../../scripts/build-native-lib.mjs";
 
@@ -53,6 +53,14 @@ buildNativePackage({
 
     mkdirSync(binDir, { recursive: true });
     copyFileSync(sourcePath, targetPath);
+    const catalogDirectory = path.join(path.dirname(sourcePath), "pmds-locales");
+    if (!existsSync(catalogDirectory)) {
+      throw new Error(`Expected compiled CLI catalogs at ${catalogDirectory}`);
+    }
+    // Replace the generated asset directory so removed languages cannot linger
+    // in a package assembled after an earlier build.
+    rmSync(path.join(binDir, "pmds-locales"), { recursive: true, force: true });
+    cpSync(catalogDirectory, path.join(binDir, "pmds-locales"), { recursive: true });
     if (process.platform !== "win32") {
       chmodSync(targetPath, 0o755);
     }

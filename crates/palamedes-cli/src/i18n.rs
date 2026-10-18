@@ -1,4 +1,4 @@
-//! Embedded, build-compiled CLI messages. No runtime catalog or ICU parsing.
+//! External, build-compiled CLI messages. No embedded catalogs or ICU parsing.
 
 use std::sync::OnceLock;
 
@@ -11,12 +11,37 @@ pub enum Language {
 }
 
 static LANGUAGE: OnceLock<Language> = OnceLock::new();
+static CATALOG: OnceLock<palamedes_i18n::Catalog> = OnceLock::new();
 
-pub fn initialize() {
+pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     let values = ["PALAMEDES_UI_LOCALE", "LC_ALL", "LC_MESSAGES", "LANG"].map(|name| {
         std::env::var_os(name).map(|value| value.into_string().unwrap_or_else(|_| "\0".to_owned()))
     });
-    let _ = LANGUAGE.set(select_language(values.iter().map(Option::as_deref)));
+    let language = select_language(values.iter().map(Option::as_deref));
+    let locale = match language {
+        Language::English => "en",
+        Language::German => "de",
+        Language::Spanish => "es",
+    };
+    let directory =
+        match std::env::var_os("PALAMEDES_UI_CATALOG_DIR").filter(|value| !value.is_empty()) {
+            Some(directory) => std::path::PathBuf::from(directory),
+            None => {
+                let executable = std::fs::canonicalize(std::env::current_exe()?)?;
+                executable
+                    .parent()
+                    .ok_or("CLI executable has no parent directory")?
+                    .join("pmds-locales")
+            }
+        };
+    let catalog = palamedes_i18n::Catalog::load(
+        directory.join(format!("{locale}.pmd.json")),
+        locale,
+        CATALOG_SCHEMA,
+    )?;
+    let _ = CATALOG.set(catalog);
+    let _ = LANGUAGE.set(language);
+    Ok(())
 }
 
 fn select_language<'a>(values: impl IntoIterator<Item = Option<&'a str>>) -> Language {
@@ -51,15 +76,29 @@ pub fn language() -> Language {
     LANGUAGE.get().copied().unwrap_or_default()
 }
 
-pub fn choose(english: &'static str, german: &'static str, spanish: &'static str) -> &'static str {
-    match language() {
-        Language::English => english,
-        Language::German => german,
-        Language::Spanish => spanish,
-    }
+pub fn catalog() -> &'static palamedes_i18n::Catalog {
+    #[cfg(test)]
+    return CATALOG.get_or_init(|| {
+        palamedes_i18n::Catalog::load(
+            concat!(env!("OUT_DIR"), "/catalogs/en.pmd.json"),
+            "en",
+            CATALOG_SCHEMA,
+        )
+        .expect("load external unit-test catalog")
+    });
+    #[cfg(not(test))]
+    CATALOG
+        .get()
+        .expect("CLI catalog loaded before argument parsing")
 }
 
-include!(concat!(env!("OUT_DIR"), "/cli_messages.rs"));
+include!(concat!(env!("OUT_DIR"), "/messages.rs"));
+
+macro_rules! tr {
+    ($($tokens:tt)*) => {
+        translate!(crate::i18n::catalog(), $($tokens)*).expect("validated CLI catalog and arguments")
+    };
+}
 
 #[cfg(test)]
 mod tests {
