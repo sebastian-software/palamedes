@@ -355,7 +355,7 @@ fingerprint. Literal text, display arguments, and string selects are supported;
 plurals, number/date/time formatting, rich text, and contexts fail compilation.
 `extract_messages()` provides token-based Rust source extraction; the CLI's
 existing extraction command has not gained a Rust frontend. The crates.io hold
-remains in force. See `docs/cli.md#rust-application-integration` and `crates/palamedes-i18n/examples/cli`.
+remains in force. See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
 
 Core commands:
 

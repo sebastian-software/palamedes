@@ -137,7 +137,7 @@ English. UI language does not change catalog `--locale` selection, JSON, codes,
 or exit statuses. Technical diagnostics and plugin messages keep their wording.
 Missing or incompatible UI catalogs fail explicitly. Experimental Rust workspace
 crates `palamedes-build` and `palamedes-i18n` provide Cargo generation and a
-parser-free external catalog runtime; see `docs/cli.md#rust-application-integration`.
+parser-free external catalog runtime; see `docs/rust-applications.md`.
 
 - `pmds report --fail-if-below 90`: per-locale completeness gate for CI
 - `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, and MDX files. Use `pmds lint` rather than the Preview ESLint/Oxlint adapter for stable CI and MDX.

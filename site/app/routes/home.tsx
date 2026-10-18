@@ -10,6 +10,7 @@ import { Journey } from "~/components/home/Journey";
 import { OriginStory } from "~/components/home/OriginStory";
 import { ProofSection } from "~/components/home/ProofSection";
 import { QuestionRoutes } from "~/components/home/QuestionRoutes";
+import { RustApplications } from "~/components/home/RustApplications";
 import { RustRace } from "~/components/home/RustRace";
 import { Band, BandHeader } from "~/components/marketing/Band";
 import { REPO } from "~/data/links";
@@ -54,6 +55,7 @@ export default function Home() {
       <Journey />
       <RustRace />
       <FrameworkWiring />
+      <RustApplications />
       <Chooser />
       <ProofSection />
       <OriginStory />

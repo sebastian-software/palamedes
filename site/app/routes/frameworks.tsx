@@ -97,6 +97,17 @@ export default function Frameworks() {
         </ButtonLink>
       </Section>
 
+      <Section
+        num="05 — Rust · Experimental"
+        id="rust-applications"
+        title="Your Rust app can load translations separately."
+        lede="The experimental Cargo integration prepares external language catalogs for native CLIs and services. Text, display arguments, and string selects work today; broader ICU formatting is not supported yet. The crates are unpublished. Start with the guide and its complete example."
+      >
+        <ButtonLink variant="outline" href={docsHref("rust-applications")}>
+          Rust applications guide
+        </ButtonLink>
+      </Section>
+
       <CtaBand
         headline="See your framework speaking three languages — right now."
         lede="The live demos are the same applications CI checks. Switch the language and watch server and client stay in step."

@@ -144,6 +144,11 @@ export function IntegrationBand() {
         />
         <IntegrationList integrations={BACKEND_INTEGRATIONS} label="Backend integrations" />
       </div>
+      <p className="mt-5 text-center text-[15px]">
+        <a href="/docs/rust-applications" className="pmds-arrow-link">
+          Rust applications · experimental
+        </a>
+      </p>
       <ul
         aria-label="Project boundaries"
         className="mx-auto mt-10 flex max-w-[64rem] flex-wrap justify-center gap-x-10 gap-y-3 border-t border-hair pt-8"

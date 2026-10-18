@@ -81,7 +81,7 @@ AST-map alternative to the existing JavaScript ABI.
 
 The experimental Rust target has an explicit compiler/runtime subset. It rejects
 unsupported constructs at compilation rather than interpreting ICU at runtime.
-Integration and current limits belong in the [CLI reference](../docs/cli.md#rust-application-integration).
+Integration and current limits belong in the [Rust applications guide](../docs/rust-applications.md).
 
 ## Context
 
