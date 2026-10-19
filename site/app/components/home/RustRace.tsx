@@ -25,6 +25,8 @@ const ROWS = BENCH_REALISTIC.rows
   .filter((row) => row.tool !== "React Intl")
   .sort((left, right) => left.medianMs - right.medianMs);
 const LONGEST = Math.max(...ROWS.map((row) => row.medianMs));
+// The track spans ten seconds, so even the slowest run ends short of the edge.
+const TRACK_MS = Math.max(10_000, LONGEST);
 
 const REASONS = [
   {
@@ -167,7 +169,7 @@ export function RustRace() {
             </thead>
             <tbody>
               {ROWS.map((row) => {
-                const percent = (row.medianMs / LONGEST) * 100;
+                const percent = (row.medianMs / TRACK_MS) * 100;
                 const done = phase === "finished" || elapsed >= row.medianMs;
                 const width = phase === "ready" ? 0 : percent;
                 return (
@@ -208,7 +210,7 @@ export function RustRace() {
                       </span>
                     </td>
                     <td
-                      className={`mono-nums px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-30"} ${row.accent ? "text-accent" : "text-ink"}`}
+                      className={`mono-nums px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-0"} ${row.accent ? "text-accent" : "text-ink"}`}
                     >
                       {displayBenchmarkTime(row.medianMs)}
                     </td>

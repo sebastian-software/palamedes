@@ -365,13 +365,13 @@ async function checkRoutes(context, label, { expectHydration }) {
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
     const integrationLinks = await integrationSection.locator("ul a").count();
-    if (integrationLinks !== 11) {
-      fail(`home integration band: expected 11 linked entries, got ${integrationLinks}`);
+    if (integrationLinks !== 12) {
+      fail(`home integration band: expected 12 linked entries, got ${integrationLinks}`);
     }
     const expectedGroups = {
       "UI libraries": 2,
       Frameworks: 5,
-      "Build tools": 1,
+      "Build tools": 2,
       Backends: 2,
       Rust: 1,
     };
