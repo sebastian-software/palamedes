@@ -40,9 +40,9 @@ export function RustApplications() {
             need matching catalogs and an application build.
           </p>
           <p>
-            This path is experimental and the crates are unpublished. Text, display arguments, and
-            string selects work today. Plurals, localized numbers, dates and times, rich text, and
-            translation contexts are not supported yet.
+            This path is experimental and the crates are unpublished. Text, display arguments,
+            string selects, and cardinal and ordinal plurals work today. Localized number, date and
+            time formatting, rich text, and translation contexts are not supported yet.
           </p>
           <div className="flex flex-wrap items-center gap-5">
             <ButtonLink href="/docs/rust-applications">Try the Rust guide</ButtonLink>

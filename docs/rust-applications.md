@@ -8,9 +8,9 @@ languages can ship without rebuilding it.
 This is an experimental repository integration. `palamedes-build` and
 `palamedes-i18n` are **not published on crates.io**; the publication hold in
 [#1153](https://github.com/sebastian-software/palamedes/issues/1153) still applies.
-The current subset is text, display arguments, and string selects. Plurals,
-localized number/date/time formatting, rich text, and translation contexts are
-rejected. This path does not yet offer the full TypeScript workflow or a stable
+The current subset is text, display arguments, string selects, and cardinal and
+ordinal plurals. Localized number/date/time formatting, rich text, and translation
+contexts are rejected. This path does not yet offer the full TypeScript workflow or a stable
 Rust SDK contract. See the [stability guide](./stability.md).
 
 ## Build a Small CLI
@@ -41,10 +41,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "f9504835a97de43ad9f29161730c2d90692b0557" }
+palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "f5f4ebb572d8f69e9b67c76b82bbbd2ee59d43cd" }
 
 [build-dependencies]
-palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "f9504835a97de43ad9f29161730c2d90692b0557" }
+palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "f5f4ebb572d8f69e9b67c76b82bbbd2ee59d43cd" }
 ```
 
 Inside the Palamedes workspace, path dependencies are also possible. There is no
@@ -186,10 +186,64 @@ messages with arguments return `Result<String, Error>`. Argument values implemen
 `Display` and are inserted literally.
 
 The [checked Rust CLI example](../crates/palamedes-i18n/examples/cli/) also shows
-string selects and three languages. Its deployment test copies the executable
+string selects, plurals, and three languages. Its deployment test copies the executable
 and selected catalogs into an isolated directory, compiles real PO updates against
 the exported contract, and adds a compatible language. It checks that the copied
 executable stays byte-for-byte unchanged.
+
+## Plural Messages
+
+Add a complete ICU plural message to the source PO, rather than joining a count
+and a translated noun in Rust. For example, append to `locales/en.po`:
+
+```po
+msgid "{count, plural, one {# file} other {# files}}"
+msgstr "{count, plural, one {# file} other {# files}}"
+```
+
+Append its translation to `locales/de.po`:
+
+```po
+msgid "{count, plural, one {# file} other {# files}}"
+msgstr "{count, plural, one {# Datei} other {# Dateien}}"
+```
+
+Then add a call in `main()`. Adding a message changes the contract, so rebuild
+and redeploy the executable together with its catalogs:
+
+```rust
+let count = 2_usize;
+println!(
+    "{}",
+    translate!(&catalog, "{count, plural, one {# file} other {# files}}", count = count)?
+);
+// With the German catalog: 2 Dateien
+```
+
+`plural` uses the selected catalog locale's CLDR cardinal rules; `selectordinal`
+uses its ordinal rules. ICU4X caches the required rule sets when the catalog
+loads. Its compiled CLDR rule data is part of the runtime dependency; translated
+messages remain external. Regional locales such as `pt-PT` and `pt-BR` retain
+their own rules. Supply the categories your translation needs: `zero`, `one`,
+`two`, `few`, `many`, and the required `other`. A missing category selects `other`.
+
+Exact branches such as `=0` match the original count before category selection.
+With `offset:1`, category selection and `#` use the count minus one. A `#` inside
+a nested select keeps the enclosing plural's value; a nested plural supplies
+its own value. An apostrophe-quoted `'#'` remains literal text.
+
+Arguments keep the SDK's `Display` contract. A plural value must render as a
+plain signed decimal with at most 18 fractional digits and a coefficient that
+fits `i128`, including after offset subtraction. Invalid values, non-finite
+numbers, exponent notation, and arithmetic overflow return `Error::PluralArgument`.
+Counts are never rounded through `f64`. Decimal strings retain visible digits:
+English `"1"` selects `one`, while `"1.0"` selects `other`. A floating-point value
+whose Rust display is `1` consequently selects `one`.
+
+`#` emits the adjusted value as plain decimal text, preserving fractional zeros.
+It does not add localized grouping, separators, or digits. `{count, number}` and
+number/date/time styles remain unsupported; format those values in the host
+application when needed.
 
 ## Update Translations Without Building the Application
 
@@ -198,7 +252,8 @@ published 1.x CLI does not have this experimental command. Its own
 [external UI catalogs](./cli.md#output-language) must be installed alongside it.
 The update command itself does not invoke Cargo or rustc for your application.
 
-After the initial application build, change `locales/de.po` to:
+After the initial application build, change the greeting entry in `locales/de.po`
+to the following, keeping any other entries:
 
 ```po
 msgid "Hello {name}!"
@@ -238,6 +293,11 @@ API loads `CatalogContract::load(schema_path)` and calls
 
 ## Catalog Compatibility and Failures
 
+Plural and pound instructions use compiled format version 2. Version 1 artifacts
+and exported schemas must be regenerated with the matching builder, runtime,
+and `pmds` implementation. Upgrade the executable and its catalogs together once;
+compatible PO updates can then continue using the exported version 2 schema.
+
 Each catalog carries a format version, locale, and fingerprint of message IDs and
 argument signatures. Loading checks those fields, the complete message inventory,
 and the prepared instruction signatures. The Rust data format is separate from
@@ -264,14 +324,14 @@ expressions. It is an API for Rust tooling. **`pmds extract` does not yet extrac
 Rust sources**; its existing inputs remain JavaScript, TypeScript, and MDX.
 The small example above maintains its PO entries directly.
 
-| Message feature                     | Experimental Rust support                 |
-| ----------------------------------- | ----------------------------------------- |
-| Literal text                        | Supported                                 |
-| Named display arguments             | Supported; argument names checked by Rust |
-| String selects                      | Supported                                 |
-| Plurals and ordinal plurals         | Rejected at build time                    |
-| Localized numbers, dates, and times | Rejected at build time                    |
-| Rich text and translation contexts  | Rejected at build time                    |
+| Message feature                     | Experimental Rust support                                    |
+| ----------------------------------- | ------------------------------------------------------------ |
+| Literal text                        | Supported                                                    |
+| Named display arguments             | Supported; argument names checked by Rust                    |
+| String selects                      | Supported                                                    |
+| Plurals and ordinal plurals         | Supported; CLDR categories, exact branches, offsets, and `#` |
+| Localized numbers, dates, and times | Rejected at build time                                       |
+| Rich text and translation contexts  | Rejected at build time                                       |
 
 Palamedes's own `pmds` CLI uses this integration for external English, German, and
 Spanish catalogs. Its environment precedence, installation layout, and diagnostic

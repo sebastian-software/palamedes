@@ -60,7 +60,7 @@ fail the build. The general Rust SDK defaults to build-time fallback resolution
 and reports incomplete translations. Malformed ICU, placeholder mismatches, and
 unsupported Rust constructs always fail compilation. The Rust runtime decodes prepared
 instructions without a PO/ICU parser. Its current subset is literal text, display
-arguments, and string selects. Plurals, number/date/time formatting, rich text,
+arguments, string selects, and cardinal/ordinal plurals. Number/date/time formatting, rich text,
 and translation contexts are rejected. JavaScript retains its broader feature set.
 
 For source builds, `build.rs` writes only inside Cargo's `OUT_DIR`. The native
@@ -69,6 +69,11 @@ then installs catalogs with the binary. This supports separate `build.build-dir`
 and target directories. A bare `cargo build` does not install language assets;
 run the native package build or explicitly set `PALAMEDES_UI_CATALOG_DIR` to the
 reported `out_dir/catalogs` directory when launching an uninstalled executable.
+
+The compilation summary itself uses plural messages in English, German, and
+Spanish. Plural categories follow ICU4X/CLDR rules; `#` emits plain decimal output.
+See [Rust plural messages](./rust-applications.md#plural-messages) for numeric
+inputs, offsets, and the separate limits on number formatting.
 
 ## Rust Application Integration
 
