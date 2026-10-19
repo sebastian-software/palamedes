@@ -245,8 +245,10 @@ when possible, for example:
 - `ci: expand native build matrix`
 
 During the coordinated v2 transition, `.release-policy.json` holds release
-creation and package/container publication, including forced publication. The
-next Release Please version is explicitly `2.0.0`; the current version files
+creation and package publication, including forced package publication. Demo
+container publication follows `main` independently; it does not authorize a
+package release. The next Release Please version is explicitly `2.0.0`; the
+current version files
 continue to describe the last release until its generated release PR lands.
 Implementation PRs can merge into `main` behind this hold. A Publish workflow
 dispatch with `dry_run` still builds and verifies artifacts without publishing.
