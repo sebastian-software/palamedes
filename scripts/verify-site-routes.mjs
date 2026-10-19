@@ -1097,11 +1097,15 @@ async function checkProgressiveOutlineAnchors(browser) {
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'));
 
-  if (docs.length !== 26) {
-    fail(`progressive docs outline: expected 26 generated long docs, got ${docs.length}`);
+  if (docs.length !== 27) {
+    fail(`progressive docs outline: expected 27 generated long docs, got ${docs.length}`);
   }
   if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/remix/index.md")) {
     fail("progressive docs outline: Remix API guide is missing its generated outline");
+  }
+
+  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "rust-applications.mdx")) {
+    fail("progressive docs outline: Rust application guide is missing its generated outline");
   }
 
   const context = await browser.newContext();
