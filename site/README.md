@@ -96,6 +96,10 @@ root files, not the build output. The copy step rewrites hosted `docs/` and
 
 ## Deployment
 
+Site-wide Rybbit pageview, interaction, and video tracking is described in
+[Website analytics](analytics.md), including activation settings, coverage,
+visitor exclusions, and the isolated browser check.
+
 Deployed to GitHub Pages by
 [`.github/workflows/deploy-site.yml`](../.github/workflows/deploy-site.yml)
 on pushes to `main` that touch `site/**`, the lockfile, or the benchmark

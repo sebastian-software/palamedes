@@ -85,6 +85,8 @@ export function CopyCommand({
         </code>
         <button
           type="button"
+          data-analytics-event="code_copy"
+          data-analytics-id={`command-${label.toLowerCase().replace(/[^a-z0-9]+/gu, "-")}`}
           className="micro min-h-11 shrink-0 border-l border-hair px-3 text-[10px] text-gray-spec transition-colors hover:bg-mist hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
           aria-label={`Copy command: ${command}`}
           onClick={async () => {

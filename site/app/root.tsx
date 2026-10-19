@@ -22,6 +22,7 @@ import docsNavigation from "~/data/generated/docs-navigation.json";
 import decisionLedger from "~/data/generated/decision-ledger.json";
 import blogPosts from "~/data/generated/blog-posts.json";
 import { PRIMARY_NAVIGATION_GROUPS, isPrimaryNavigationLinkActive } from "~/data/navigation";
+import { SiteAnalytics } from "~/components/SiteAnalytics";
 
 import "./app.css";
 
@@ -98,6 +99,7 @@ function PrimaryNavigation() {
                 className={`pmds-nav-link${active ? " active" : ""}`}
                 aria-current={active ? "page" : undefined}
                 to={link.href}
+                data-analytics-id={`primary-nav-${link.href}`}
                 viewTransition
               >
                 {link.label}
@@ -132,6 +134,7 @@ export default function App() {
 
   return (
     <SiteUiProvider linkComponent={RouterSiteLink}>
+      <SiteAnalytics />
       <ArdoRoot
         config={config}
         tocLabel="Page outline"

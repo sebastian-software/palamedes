@@ -21,6 +21,9 @@ export function RenderedCard() {
             <button
               key={entry.locale}
               type="button"
+              data-analytics-id={`rendered-card-locale-${entry.locale}`}
+              data-analytics-event="demo_locale"
+              data-analytics-value={entry.locale}
               aria-pressed={position === index}
               onClick={() => setIndex(position)}
               className="mono-nums min-h-11 min-w-11 border border-transparent px-2 text-[12px] tracking-[0.08em] text-ink/75 transition-colors hover:border-hair hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent aria-pressed:border-ink aria-pressed:bg-mist aria-pressed:font-semibold aria-pressed:text-ink"
@@ -53,6 +56,7 @@ export function RenderedCard() {
               onClick={() => setSeats((value) => Math.max(1, value - 1))}
               disabled={seats <= 1}
               aria-label="One seat fewer"
+              data-analytics-id="rendered-card-seats-decrease"
             >
               −
             </button>
@@ -68,6 +72,7 @@ export function RenderedCard() {
               onClick={() => setSeats((value) => Math.min(9, value + 1))}
               disabled={seats >= 9}
               aria-label="One seat more"
+              data-analytics-id="rendered-card-seats-increase"
             >
               +
             </button>
