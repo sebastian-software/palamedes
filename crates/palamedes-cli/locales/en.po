@@ -420,8 +420,8 @@ msgstr "Reject missing or fuzzy translations instead of compiling a fallback."
 msgid "Write the compilation result as JSON."
 msgstr "Write the compilation result as JSON."
 
-msgid "Compiled {count} Rust language catalog(s)."
-msgstr "Compiled {count} Rust language catalog(s)."
+msgid "{count, plural, one {Compiled # Rust language catalog.} other {Compiled # Rust language catalogs.}}"
+msgstr "{count, plural, one {Compiled # Rust language catalog.} other {Compiled # Rust language catalogs.}}"
 
 msgid "{locale}: missing translation for {message}; compiled fallback from {resolved}."
 msgstr "{locale}: missing translation for {message}; compiled fallback from {resolved}."

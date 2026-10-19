@@ -362,6 +362,7 @@ fn compile_message(
         ),
         Some(RuntimeCompiledMessage::Nodes(nodes)) => {
             let program = lower(nodes, &mut arguments)?;
+            palamedes_i18n::validate_program(&program)?;
             if arguments.is_empty() {
                 Message::Literal(
                     program

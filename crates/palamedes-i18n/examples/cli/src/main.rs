@@ -21,6 +21,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "Ada".into())
         .to_string_lossy()
         .into_owned();
+    let count: u64 = arguments
+        .next()
+        .unwrap_or_else(|| "2".into())
+        .to_string_lossy()
+        .parse()?;
     let catalog = palamedes_i18n::Catalog::load(
         directory.join(format!("{locale}.pmd.json")),
         &locale,
@@ -34,6 +39,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "{mode, select, preview {Preview for {name}} other {Ready for {name}}}",
             mode = "preview",
             name = name
+        )?
+    );
+    println!(
+        "{}",
+        translate!(
+            &catalog,
+            "{count, plural, one {# file} other {# files}}",
+            count = count
         )?
     );
     Ok(())

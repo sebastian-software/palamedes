@@ -3,3 +3,6 @@ msgstr "Hallo {name}!"
 
 msgid "{mode, select, preview {Preview for {name}} other {Ready for {name}}}"
 msgstr "{mode, select, preview {Vorschau für {name}} other {Bereit für {name}}}"
+
+msgid "{count, plural, one {# file} other {# files}}"
+msgstr "{count, plural, one {# Datei} other {# Dateien}}"

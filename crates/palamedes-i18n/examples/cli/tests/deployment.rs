@@ -33,8 +33,22 @@ fn copied_application_loads_replaceable_external_data_and_has_no_language_fallba
     assert!(german.status.success(), "{german:?}");
     assert_eq!(
         String::from_utf8(german.stdout).unwrap(),
-        "Hallo Ada {literal}!\nVorschau für Ada {literal}\n"
+        "Hallo Ada {literal}!\nVorschau für Ada {literal}\n2 Dateien\n"
     );
+    for (count, expected) in [("0", "0 Dateien"), ("1", "1 Datei"), ("2", "2 Dateien")] {
+        let output = Command::new(&executable)
+            .arg(&catalogs)
+            .args(["de", "Ada", count])
+            .current_dir(directory.path())
+            .env("PATH", "")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().lines().last(),
+            Some(expected)
+        );
+    }
     // Compile real PO changes against the application's exported contract.
     // The application executable is copied once and is never rebuilt here.
     let before = fs::read(&executable).unwrap();
@@ -63,7 +77,9 @@ fn copied_application_loads_replaceable_external_data_and_has_no_language_fallba
     let french_po = german_po
         .replace("Hallo ", "Bonjour ")
         .replace("Vorschau für ", "Aperçu pour ")
-        .replace("Bereit für ", "Prêt pour ");
+        .replace("Bereit für ", "Prêt pour ")
+        .replace("# Datei}", "# fichier}")
+        .replace("# Dateien}", "# fichiers}");
     fs::write(po.join("fr.po"), french_po).unwrap();
     palamedes_build::CatalogBuilder::new(&po, "en")
         .locales(&["fr"])
@@ -71,11 +87,9 @@ fn copied_application_loads_replaceable_external_data_and_has_no_language_fallba
         .unwrap();
     let french = run("fr");
     assert!(french.status.success(), "{french:?}");
-    assert!(
-        String::from_utf8(french.stdout)
-            .unwrap()
-            .starts_with("Bonjour ")
-    );
+    let french = String::from_utf8(french.stdout).unwrap();
+    assert!(french.starts_with("Bonjour "));
+    assert!(french.ends_with("2 fichiers\n"));
     assert_eq!(fs::read(&executable).unwrap(), before);
     assert!(!catalogs.join("en.pmd.json").exists());
     let path = catalogs.join("de.pmd.json");
@@ -87,7 +101,14 @@ fn copied_application_loads_replaceable_external_data_and_has_no_language_fallba
     assert!(!corrupt.status.success());
     assert!(corrupt.stdout.is_empty());
     let binary = fs::read(&executable).unwrap();
-    for text in ["Hello {name}!", "Hallo ", "¡Hola, "] {
+    for text in [
+        "Hello {name}!",
+        "Hallo ",
+        "¡Hola, ",
+        "{count, plural",
+        "# Dateien",
+        "# archivos",
+    ] {
         assert!(
             !binary
                 .windows(text.len())

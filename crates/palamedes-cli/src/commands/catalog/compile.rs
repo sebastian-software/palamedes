@@ -68,7 +68,7 @@ impl Command for CompileOptions {
         println!(
             "{}",
             tr!(
-                "Compiled {count} Rust language catalog(s).",
+                "{count, plural, one {Compiled # Rust language catalog.} other {Compiled # Rust language catalogs.}}",
                 count = output.catalogs.len()
             )
         );

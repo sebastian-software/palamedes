@@ -1494,6 +1494,10 @@ dependencies = [
 name = "palamedes-i18n"
 version = "1.25.1"
 dependencies = [
+ "fixed_decimal",
+ "icu_locale_core",
+ "icu_plurals",
+ "icu_provider",
  "serde",
  "serde_json",
  "tempfile",

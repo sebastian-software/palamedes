@@ -11,7 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use palamedes::{RuntimeMessageChoiceKind, RuntimeMessageNode};
-use palamedes_i18n::Instruction;
+use palamedes_i18n::{Instruction, PluralKind};
 use proc_macro2::{TokenStream, TokenTree};
 
 pub use catalogs::{CatalogContract, CatalogUpdate, MissingTranslation};
@@ -259,16 +259,61 @@ fn lower(
     nodes: &[RuntimeMessageNode],
     arguments: &mut BTreeSet<String>,
 ) -> BuildResult<Vec<Instruction>> {
-    nodes.iter().map(|node| Ok(match node {
-        RuntimeMessageNode::Text { value } | RuntimeMessageNode::Literal { value } => Instruction::Text { value: value.clone() },
-        RuntimeMessageNode::Variable { name } => { check_argument(name)?; arguments.insert(name.clone()); Instruction::Argument { name: name.clone() } }
-        RuntimeMessageNode::Choice { variable, kind: RuntimeMessageChoiceKind::Select, options, .. } => {
-            check_argument(variable)?;
-            arguments.insert(variable.clone());
-            Instruction::Select { name: variable.clone(), options: options.iter().map(|(selector, branch)| Ok((selector.clone(), lower(branch, arguments)?))).collect::<BuildResult<_>>()? }
-        }
-        _ => return Err("Rust catalogs currently support text, arguments, and string selects; plural, number/date/time formatting, and rich text are unsupported".into()),
-    })).collect()
+    let mut program = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let instruction = match node {
+            RuntimeMessageNode::Text { value } | RuntimeMessageNode::Literal { value } => {
+                Instruction::Text {
+                    value: value.clone(),
+                }
+            }
+            RuntimeMessageNode::Variable { name } => {
+                check_argument(name)?;
+                arguments.insert(name.clone());
+                Instruction::Argument { name: name.clone() }
+            }
+            RuntimeMessageNode::Choice {
+                variable,
+                kind,
+                offset,
+                options,
+            } => {
+                check_argument(variable)?;
+                arguments.insert(variable.clone());
+                let options = options
+                    .iter()
+                    .map(|(selector, branch)| Ok((selector.clone(), lower(branch, arguments)?)))
+                    .collect::<BuildResult<_>>()?;
+                match kind {
+                    RuntimeMessageChoiceKind::Select => Instruction::Select {
+                        name: variable.clone(),
+                        options,
+                    },
+                    RuntimeMessageChoiceKind::Plural | RuntimeMessageChoiceKind::Selectordinal => {
+                        Instruction::Plural {
+                            name: variable.clone(),
+                            kind: match kind {
+                                RuntimeMessageChoiceKind::Plural => PluralKind::Cardinal,
+                                _ => PluralKind::Ordinal,
+                            },
+                            offset: offset.unwrap_or(0),
+                            options,
+                        }
+                    }
+                }
+            }
+            RuntimeMessageNode::Pound => Instruction::Pound,
+            _ => {
+                return Err(concat!(
+                    "Rust catalogs support text, arguments, selects, and plurals; ",
+                    "number/date/time formatting and rich text are unsupported"
+                )
+                .into());
+            }
+        };
+        program.push(instruction);
+    }
+    Ok(program)
 }
 
 fn check_argument(name: &str) -> BuildResult<()> {
