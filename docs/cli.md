@@ -70,9 +70,16 @@ then installs catalogs with the binary. This supports separate `build.build-dir`
 and target directories. A bare `cargo build` does not install language assets;
 run the native package build or explicitly set `PALAMEDES_UI_CATALOG_DIR` to the
 reported `out_dir/catalogs` directory when launching an uninstalled executable.
+`cargo run -p palamedes-cli` does not refresh a `target/<profile>/pmds-locales/`
+directory left by an earlier package build. After changing message sources, those
+files may have a stale fingerprint. Rebuild the native platform package, or use
+the current `palamedes-cli` `build-script-executed.out_dir` from
+`cargo build -p palamedes-cli --message-format=json` and point
+`PALAMEDES_UI_CATALOG_DIR` to its `catalogs/` child. Bootstrap errors include this
+source-checkout guidance as well as the installed-package repair.
 
-The compilation summary itself uses plural messages in English, German, Spanish, and
-French. Plural categories follow ICU4X/CLDR rules; `#` emits plain decimal output.
+Counted summaries and host-owned verdicts use plural messages in English, German, Spanish, and
+French. Each count in a multi-count summary selects its own plural branch. Plural categories follow ICU4X/CLDR rules; `#` emits plain decimal output.
 See [Rust plural messages](./rust-applications.md#plural-messages) for numeric
 inputs, offsets, and the separate limits on number formatting.
 

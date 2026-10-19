@@ -41,10 +41,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "f5f4ebb572d8f69e9b67c76b82bbbd2ee59d43cd" }
+palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "439f1bfaf28fca9792ea9e95359e3a95116fb913" }
 
 [build-dependencies]
-palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "f5f4ebb572d8f69e9b67c76b82bbbd2ee59d43cd" }
+palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "439f1bfaf28fca9792ea9e95359e3a95116fb913" }
 ```
 
 Inside the Palamedes workspace, path dependencies are also possible. There is no
@@ -181,9 +181,12 @@ to that module's crate-relative path so calls from other modules resolve correct
 There is no source-rewriting command to run before Cargo. The generator produces
 definitions; the normal Rust compiler processes macro invocations. Arguments
 can appear in any order. Unknown source messages and missing, extra, or duplicate
-argument names fail compilation. Constant messages return `Result<&str, Error>`;
-messages with arguments return `Result<String, Error>`. Argument values implement
-`Display` and are inserted literally.
+argument names fail compilation. A plural or ordinal argument also requires a
+built-in integer/float type or a validated `PluralNumber`; bare strings and other
+`Display` values fail compilation in those positions. Constant messages return `Result<&str, Error>`;
+messages with arguments return `Result<String, Error>`. Nonplural argument values
+implement `Display` and are inserted literally. Numeric expressions are borrowed
+and evaluated once, just like other arguments.
 
 The [checked Rust CLI example](../crates/palamedes-i18n/examples/cli/) also shows
 string selects, plurals, and three languages. Its deployment test copies the executable
@@ -232,13 +235,37 @@ With `offset:1`, category selection and `#` use the count minus one. A `#` insid
 a nested select keeps the enclosing plural's value; a nested plural supplies
 its own value. An apostrophe-quoted `'#'` remains literal text.
 
-Arguments keep the SDK's `Display` contract. A plural value must render as a
-plain signed decimal with at most 18 fractional digits and a coefficient that
-fits `i128`, including after offset subtraction. Invalid values, non-finite
-numbers, exponent notation, and arithmetic overflow return `Error::PluralArgument`.
-Counts are never rounded through `f64`. Decimal strings retain visible digits:
-English `"1"` selects `one`, while `"1.0"` selects `other`. A floating-point value
-whose Rust display is `1` consequently selects `one`.
+The generated signature distinguishes display arguments from numeric plural and
+ordinal arguments. Built-in integers and floating-point values, including borrowed
+values, work directly. A call such as `count = "drei"` fails Rust compilation,
+as do bare decimal strings. Ordinary text and select arguments still accept
+`Display` values.
+
+For decimal input that must preserve visible fractional zeros, parse it into
+`PluralNumber` before calling the macro:
+
+```rust
+let count: palamedes_i18n::PluralNumber = "1.0".parse()?;
+println!(
+    "{}",
+    translate!(&catalog, "{count, plural, one {# file} other {# files}}", count = count)?
+);
+```
+
+`PluralNumber` validates the signed plain decimal and preserves its visible
+digits. English `"1"` selects `one`, while `"1.0"` selects `other`. A floating-point
+value whose Rust display is `1` consequently selects `one`. The numeric range
+remains at most 18 fractional digits and an `i128` coefficient, including after
+offset subtraction. Invalid decimal input fails parsing. Non-finite floats,
+exponent notation, out-of-range numeric values, and arithmetic overflow can still
+return `Error::PluralArgument` at rendering time; type checking cannot prove those
+value constraints. Counts are never rounded through `f64`.
+
+Translations and independent catalog updates cannot introduce a plural for an
+argument that the source message only uses as display/select text. Such a change
+would impose a new numeric requirement on existing callers, so compilation and
+catalog loading reject it. Translations may simplify a numeric argument to plain
+display without weakening the source contract.
 
 `#` emits the adjusted value as plain decimal text, preserving fractional zeros.
 It does not add localized grouping, separators, or digits. `{count, number}` and
@@ -324,14 +351,14 @@ expressions. It is an API for Rust tooling. **`pmds extract` does not yet extrac
 Rust sources**; its existing inputs remain JavaScript, TypeScript, and MDX.
 The small example above maintains its PO entries directly.
 
-| Message feature                     | Experimental Rust support                                    |
-| ----------------------------------- | ------------------------------------------------------------ |
-| Literal text                        | Supported                                                    |
-| Named display arguments             | Supported; argument names checked by Rust                    |
-| String selects                      | Supported                                                    |
-| Plurals and ordinal plurals         | Supported; CLDR categories, exact branches, offsets, and `#` |
-| Localized numbers, dates, and times | Rejected at build time                                       |
-| Rich text and translation contexts  | Rejected at build time                                       |
+| Message feature                     | Experimental Rust support                                       |
+| ----------------------------------- | --------------------------------------------------------------- |
+| Literal text                        | Supported                                                       |
+| Named display arguments             | Supported; names checked, numeric plural types enforced by Rust |
+| String selects                      | Supported                                                       |
+| Plurals and ordinal plurals         | Supported; CLDR categories, exact branches, offsets, and `#`    |
+| Localized numbers, dates, and times | Rejected at build time                                          |
+| Rich text and translation contexts  | Rejected at build time                                          |
 
 Palamedes's own `pmds` CLI uses this integration for external English, German, Spanish, and
 French catalogs. Its environment precedence, installation layout, and diagnostic

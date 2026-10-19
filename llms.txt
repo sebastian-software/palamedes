@@ -139,6 +139,9 @@ Missing or incompatible UI catalogs fail explicitly. Experimental Rust workspace
 crates `palamedes-build` and `palamedes-i18n` provide Cargo generation and a
 parser-free external catalog runtime. Cardinal/ordinal plurals use ICU4X/CLDR
 rules with exact branches, offsets, and scoped `#` (plain decimal output).
+Generated plural/ordinal calls require built-in numeric types or a validated
+`PluralNumber`; bare strings fail compilation. Parse decimal strings into
+`PluralNumber` to preserve visible fractional zeros.
 Number/date/time formatting remains unsupported. Format version 2 requires
 matching regenerated catalogs and schemas; see `docs/rust-applications.md`.
 `pmds catalog compile --target rust --schema <schema.pmd.json> --catalog-dir <dir>
