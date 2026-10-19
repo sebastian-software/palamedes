@@ -149,6 +149,15 @@ try {
   await search.press("Enter");
   await page.waitForURL((url) => url.pathname !== "/");
   const searchPageUrl = page.url();
+  // The URL changes before React commits the route and runs its analytics effect.
+  // Wait for that visit before navigating back, including on slower CI runners.
+  await page.waitForFunction(
+    (pathname) =>
+      window.__events.some(
+        ({ name, properties }) => name === "pageview" && properties.page === pathname,
+      ),
+    new URL(searchPageUrl).pathname,
+  );
   assert.equal((await events(page, "search_use")).length, 1);
   assert.equal((await events(page, "search_result")).length, 1);
   assert.ok(
@@ -157,6 +166,10 @@ try {
   );
   await page.goBack();
   await page.waitForURL(`${origin}/`);
+  await page.waitForFunction(() => {
+    const views = window.__events.filter(({ name }) => name === "pageview");
+    return views.length >= 3 && views.at(-1).properties.page === "/";
+  });
   await page.getByRole("button", { name: "One seat more" }).click();
   assert.equal(
     (await events(page, "button_click")).filter(
