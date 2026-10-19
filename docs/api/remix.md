@@ -380,7 +380,7 @@ The integration uses no APIs from the separately versioned `@remix-run/ui`.
 
 When changing the stable baseline, move all four example manifests together
 and run `pnpm verify:examples:smoke -- --framework remix` and
-`pnpm verify:examples:browser -- --id remix-cookie`. A `remix@next` canary is
+`pnpm verify:examples:browser -- --framework remix`. A `remix@next` canary is
 non-blocking and does not expand support to prereleases.
 
 ## Public Demo Readiness
@@ -390,7 +390,7 @@ but hosting is managed separately. Add a live-demo URL only after all of these
 conditions are true:
 
 - the published examples image contains the pinned Remix example;
-- the smoke matrix and focused Remix Chromium check are green;
+- the smoke matrix and all four Remix Chromium checks are green;
 - the deployment is reachable over its final HTTPS hostname;
 - locale navigation produces matching SSR, `<html lang>`, and bootstrap data;
 - hydration, interaction, Frames, and browser-console checks pass against that
@@ -398,3 +398,19 @@ conditions are true:
 
 Until then, public pages link the repository example and label hosting as
 pending instead of presenting an unverified URL.
+
+## Four-Strategy Browser Verification
+
+All four examples pin stable `remix@3.0.0` and use the same server-rendered
+interactive island, browser asset loader, executable catalog fragments, and
+rich-message runtime. Cookie, route, and subdomain cover English, German, and
+Spanish; TLD also covers French. Chromium verifies initial rendering,
+interaction, full-document locale switches, direct reloads, document and
+standalone Frame responses, and initial/lazy catalog failure recovery under CSP.
+The examples send their own `Content-Security-Policy` header with a fresh nonce
+for each document, applied to the import map and external bootstrap.
+Route Frame URLs retain the locale prefix (`/de/frames` and
+`/de/frames/locale-summary`); host strategies retain the locale host.
+
+Public deployment remains pending. See the [deployment guide](../demo-deployments.md)
+for external-host commands and the image, routing, DNS, TLS, and caching gates.

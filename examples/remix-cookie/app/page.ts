@@ -15,6 +15,7 @@ export type RenderHomePageOptions = {
   clientCatalog?: string;
   clientProof?: string;
   clientEntry?: string;
+  framesHref?: string;
   strategyLabel?: string;
   switchLinks?: LocaleSwitchLink[];
 };
@@ -27,6 +28,7 @@ export function renderHomePage({
   clientCatalog,
   clientProof,
   clientEntry,
+  framesHref = "/frames",
   strategyLabel = "cookie",
   switchLinks,
 }: RenderHomePageOptions): string {
@@ -62,7 +64,7 @@ export function renderHomePage({
       <p>${escapeHtml(description)}</p>
       <p>${escapeHtml(seats)}</p>
       <p>Active locale: <strong data-testid="server-locale-value">${escapeHtml(localeLabel)}</strong></p>
-      ${clientProof ? `<div data-remix-client-proof>${clientProof}</div>` : ""}
+      ${clientProof ? `<div data-remix-client-proof data-remix-frames-href="${escapeHtml(framesHref)}">${clientProof}</div>` : ""}
     </main>
     ${clientCatalog ?? ""}
     ${clientEntry ?? ""}
@@ -85,7 +87,7 @@ function renderLocaleSwitcher(
       const locale = item.locale;
       const active = locale === currentLocale;
       if (item.href) {
-        return `<a aria-current="${active ? "page" : "false"}" href="${escapeHtml(item.href)}">
+        return `<a data-testid="locale-switch-${escapeHtml(locale)}" aria-current="${active ? "page" : "false"}" href="${escapeHtml(item.href)}">
         ${escapeHtml(LOCALE_LABELS[locale])}
       </a>`;
       }

@@ -349,7 +349,7 @@ describe("workflow contracts", () => {
     const workflow = await readRepositoryFile(".github/workflows/example-verification.yml");
     for (const step of [
       "Install Playwright Chromium",
-      "Browser-test 22 browser-capable examples",
+      "Browser-test 25 browser-capable examples",
     ]) {
       const start = workflow.indexOf(`- name: ${step}`);
       expect(start).toBeGreaterThan(-1);

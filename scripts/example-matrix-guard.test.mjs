@@ -139,9 +139,12 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
     expect(selectScreenshotExamples({ framework: "vite" })).toEqual([]);
   });
 
-  it("keeps the Remix cookie proof in browser selection and out of screenshots", () => {
+  it("keeps all Remix strategies in browser selection and out of screenshots", () => {
     expect(selectBrowserExamples({ framework: "remix" }).map((example) => example.id)).toEqual([
       "remix-cookie",
+      "remix-route",
+      "remix-subdomain",
+      "remix-tld",
     ]);
     expect(selectScreenshotExamples({ framework: "remix" })).toEqual([]);
   });

@@ -12,6 +12,7 @@ on:
       - "pnpm-workspace.yaml"
       - "package.json"
       - "scripts/example-matrix*.mjs"
+      - "scripts/example-browser-target*.mjs"
       - "scripts/example-time-zone-contract.test.mjs"
       - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
@@ -36,6 +37,7 @@ on:
       - "pnpm-workspace.yaml"
       - "package.json"
       - "scripts/example-matrix*.mjs"
+      - "scripts/example-browser-target*.mjs"
       - "scripts/example-time-zone-contract.test.mjs"
       - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
@@ -99,7 +101,7 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || inputs.run_browser
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Browser-test 22 browser-capable examples
+      - name: Browser-test 25 browser-capable examples
         if: github.event_name != 'workflow_dispatch' || inputs.run_browser
         env:
           PALAMEDES_BROWSER_RETRY: ${{ github.event_name == 'schedule' && '1' || '0' }}

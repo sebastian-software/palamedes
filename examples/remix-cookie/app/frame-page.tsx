@@ -16,6 +16,7 @@ type FramePageOptions = {
  * partial establishes its own equivalent scope for client-initiated reloads.
  */
 export function renderFrameDocument({ locale, localeLabel, request }: FramePageOptions) {
+  const framePath = `${new URL(request.url).pathname.replace(/\/$/u, "")}/locale-summary`;
   const title = t`Remix v3 is rendering ${locale} with Palamedes`;
 
   return renderToStream(
@@ -37,7 +38,7 @@ export function renderFrameDocument({ locale, localeLabel, request }: FramePageO
           <Frame
             fallback={<p data-palamedes-frame-fallback="true">Loading locale summary…</p>}
             name="locale-summary"
-            src="/frames/locale-summary"
+            src={framePath}
           />
         </main>
       </body>
@@ -47,7 +48,7 @@ export function renderFrameDocument({ locale, localeLabel, request }: FramePageO
       signal: request.signal,
       resolveFrame(src) {
         const frameUrl = new URL(src, request.url);
-        if (frameUrl.pathname !== "/frames/locale-summary") {
+        if (frameUrl.pathname !== framePath) {
           throw new Error(`Unexpected Remix frame source: ${frameUrl.pathname}`);
         }
 

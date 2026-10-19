@@ -17,6 +17,13 @@ export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
   cookies: { choice: LOCALE_COOKIE },
+});
+
+// Local mismatch demonstrations use host hints without changing route switch targets.
+const routeHostHints = defineLocaleControls<Locale>({
+  locales: LOCALES,
+  defaultLocale: DEFAULT_LOCALE,
+  cookies: { choice: LOCALE_COOKIE },
   hosts: { locales: { en: "en.lvh.me", de: "de.lvh.me", es: "es.lvh.me" } },
 });
 
@@ -48,7 +55,7 @@ export function getRootRedirectLocale(request: Request): Locale {
 }
 
 export function getRouteBanner(request: Request, locale: Locale): string | null {
-  const suggestion = locales.suggest({
+  const suggestion = routeHostHints.suggest({
     acceptLanguageHeader: request.headers.get("accept-language"),
     cookieHeader: request.headers.get("cookie"),
     currentLocale: locale,

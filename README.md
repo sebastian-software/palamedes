@@ -72,9 +72,9 @@ The current proof:
 - Six framework families, each with cookie, route, subdomain, and tld locale
   strategies, plus Vite MDX: those 25 make up the verification matrix in
   `scripts/example-matrix.mjs` and are smoke-verified on relevant PRs and
-  `main`; five UI-adapter families, Vite, and the focused Remix cookie proof
-  make 22 browser-capable examples for the scheduled Playwright flow. The
-  other three Remix locale strategies retain smoke coverage. `examples/` holds
+  `main`; six framework families and Vite
+  make 25 browser-capable examples for Playwright on relevant PRs, `main`
+  pushes, weekly runs, and opted-in manual dispatches. `examples/` holds
   26 apps: those 25 plus the focused React Router RSC cookie fixture, which
   sits outside the matrix and has its own verifier.
 - The image above is one demo in three locales: switch language and the copy,
@@ -157,9 +157,10 @@ easier to review, and easier to carry from one framework to the next.
 
 - Recommended for new projects and teams that want cleaner i18n foundations
 - All 25 examples of the verification matrix are smoke-verified on relevant
-  PRs and `main`; 22 browser-capable examples across Next.js, TanStack Start,
-  Solid, Waku, React Router, Vite, and the focused Remix v3 cookie flow run
-  Playwright weekly or manually. The 26th app in `examples/`, the focused
+  PRs and `main`; 25 browser-capable examples across Next.js, TanStack Start,
+  Solid, Waku, React Router, Vite, and all four Remix v3 strategies run
+  Playwright on relevant PRs, `main` pushes, weekly runs, and opted-in manual
+  dispatches. The 26th app in `examples/`, the focused
   React Router RSC cookie fixture, has its own verifier. Remix requires
   Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
