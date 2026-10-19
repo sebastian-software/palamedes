@@ -1,13 +1,14 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import { installInteractions, trackEvent } from "~/lib/analytics";
-import { enableAnalytics } from "~/lib/analytics-bootstrap";
+import { enableAnalytics, reportPageview } from "~/lib/analytics-bootstrap";
 
-/** Rybbit owns initial/SPA pageviews; this component owns semantic site events. */
+/** Own pathname pageviews and semantic actions in the shared site shell. */
 export function SiteAnalytics() {
   const { pathname } = useLocation();
   useEffect(() => {
     if (!enableAnalytics()) return;
+    reportPageview();
     const uninstall = installInteractions(document);
     const sent = new Set<number>();
     let scheduled = 0;

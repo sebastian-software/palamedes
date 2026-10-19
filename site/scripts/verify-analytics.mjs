@@ -21,13 +21,12 @@ const browser = await chromium.launch({
 });
 const origin = "https://palamedes.dev";
 
-// A transport fixture, not a replacement implementation of Rybbit's pageview logic.
-// The actual instance/version and its SPA settings are verified during activation.
+// A transport fixture; the installed SDK is also checked during activation.
 const sdkFixture = `
 window.__events = [];
 window.rybbit = {
   event: (name, properties) => window.__events.push({name, properties}),
-  pageview: () => {},
+  pageview: () => window.__events.push({name: 'pageview', properties: {page: location.pathname}}),
 };
 `;
 const playerFixture = `<!doctype html><html><body><p>Player protocol fixture</p><script>
@@ -87,6 +86,20 @@ try {
     1,
     "Build the site with VITE_RYBBIT_SCRIPT_URL and VITE_RYBBIT_SITE_ID before this check (use the test values in site/analytics.md)",
   );
+  assert.deepEqual(
+    (await events(page, "pageview")).map(({ properties }) => properties.page),
+    ["/"],
+  );
+  await page.evaluate(() => {
+    history.pushState(history.state, "", "/?search=private#anchor");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await page.waitForTimeout(600);
+  assert.equal((await events(page, "pageview")).length, 1, "Query/anchor changes aren't visits");
+  await page.evaluate(() => {
+    history.replaceState(history.state, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
 
   await page.getByRole("button", { name: "One seat more" }).click();
   assert.equal(
@@ -135,6 +148,7 @@ try {
   await page.getByRole("option").first().waitFor();
   await search.press("Enter");
   await page.waitForURL((url) => url.pathname !== "/");
+  const searchPageUrl = page.url();
   assert.equal((await events(page, "search_use")).length, 1);
   assert.equal((await events(page, "search_result")).length, 1);
   assert.ok(
@@ -151,6 +165,10 @@ try {
     2,
   );
   assert.equal(active.requests(), 1, "SPA navigation must not reinstall the SDK");
+  assert.deepEqual(
+    (await events(page, "pageview")).map(({ properties }) => properties.page),
+    ["/", new URL(searchPageUrl).pathname, "/"],
+  );
 
   await page.goto(`${origin}/get-started`, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "Vite + Solid", exact: true }).click();

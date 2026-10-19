@@ -1,17 +1,19 @@
 # Website analytics
 
 The shared site shell loads Rybbit once on `palamedes.dev` in production builds.
-Rybbit owns initial pageviews and SPA pageviews. Site listeners report semantic
-actions with safe properties, including actions in the same-origin fragment
+The site reports initial pageviews and pathname changes. Site listeners report
+semantic actions with safe properties, including actions in the same-origin fragment
 demo and playback events from the Bunny film. Development, localhost builds,
 and preview hostnames don't load the SDK.
 
 ## Activate the production site
 
-The implementation audit on October 19, 2026 found no Rybbit script in the
-deployed homepage HTML or tracked site source, and no repository variables for
-the website. The actual instance URL, site ID, installed version, and dashboard
-settings still need confirmation before production activation.
+The production entry is [Palamedes](https://t.sebastian-software.de/5/main) on
+self-hosted Rybbit v2.6.0, configured on October 19, 2026. The public script is
+`https://t.sebastian-software.de/api/script.js` and its site ID is `170bf759583c`.
+Both repository Actions variables are configured. Analytics remain private;
+daily user-ID salting and bot exclusion are enabled, and IP collection is off.
+Production ingestion still needs verification after this change is deployed.
 
 1. Open the existing Rybbit instance and select or create the `palamedes.dev`
    site. Use its script URL and site ID, not the CLI update-service site.
@@ -20,19 +22,22 @@ settings still need confirmation before production activation.
    `PALAMEDES_RYBBIT_SITE_ID`. These are public browser configuration, not API
    credentials. Deploy Site passes them to Vite as `VITE_RYBBIT_SCRIPT_URL`
    and `VITE_RYBBIT_SITE_ID`. Both absent means tracking stays disabled.
-3. In this site's tracking settings, enable **Automatic Initial Pageview** and
-   **SPA Navigation**. Disable URL parameter and ordinary fragment tracking so
-   searches and anchors don't split page reports. The site code must not call
-   `rybbit.pageview()` in addition to this automatic tracking.
+3. In this site's tracking settings, disable **Automatic Initial Pageview** and
+   **SPA Navigation**. The shared shell calls `rybbit.pageview()` once after
+   script loading and on each subsequent pathname change, including history
+   navigation. Rybbit v2.6.0's SPA listener counts query/anchor-only changes as
+   visits even when URL parameters are disabled. Disable **URL Parameters** too;
+   the site has no hash routing. Keep these settings when upgrading Rybbit so
+   automatic and site-owned pageviews don't run together.
 4. Disable Rybbit's **Outbound Links**, **Button Clicks**, **Copy Events**, and
    **Form Interactions** autocapture for this site. The site listeners already
    cover those actions with stable identifiers and safe properties. Running
    both would count actions twice, and automatic copy capture includes the
    copied text. Keep Session Replay disabled for this aggregate event setup.
 5. Confirm the installed script supports `window.rybbit.event(name, properties)`
-   and the settings above. The integration uses the current documented API;
-   self-hosted installations can lag behind it. Reuse existing visitor
-   exclusions. The code also honors `disable-rybbit` and `__RYBBIT_OPTOUT__`.
+   and the settings above. The installed v2.6.0 script was tested against an
+   isolated ingestion sink with automatic pageviews disabled as required above.
+   Reuse existing visitor exclusions. The code also honors `disable-rybbit` and `__RYBBIT_OPTOUT__`.
 6. After deployment, use one controlled visit to check the homepage, a docs
    route, browser back/forward, an action, and the film. Confirm one pageview
    per actual page visit and the expected events in Rybbit. Record this live
@@ -56,7 +61,7 @@ changing layout structure.
 
 | Surface                                                     | Event / properties                                                  | Verification                                                                             |
 | ----------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| All public routes, including docs, API, decisions, and blog | Rybbit automatic pageview; SPA navigation enabled                   | Live activation: direct entry, reload, internal links, back/forward                      |
+| All public routes, including docs, API, decisions, and blog | Site-owned initial/pathname pageview                                | Live activation: direct entry, reload, internal links, back/forward                      |
 | Navigation, CTAs, downloads, outbound links                 | `link_click`, destination origin/path, external/anchor flags        | Browser check and live activation; URL queries/fragments excluded from properties        |
 | Site and generated buttons                                  | `button_click`, control/placement                                   | Browser check; custom actions replace the generic event                                  |
 | Quickstart and ARDO tabs                                    | `tab_select`, stable tab value/control                              | Selection observer covers pointer and keyboard activation                                |
@@ -125,7 +130,8 @@ pnpm --filter @palamedes/site test
 The browser check serves local build files under an intercepted production
 origin, replaces the SDK with an isolated event sink, and replaces Bunny with a
 Player.js protocol fixture. No analytics or video requests reach production.
-It checks listener cleanup across navigation, keyboard search selection,
+It checks one pageview per pathname visit, query/anchor exclusion, listener
+cleanup across navigation, keyboard search selection,
 deduplication, payload content, iframe locale changes, opt-out, localhost
 exclusion, and blocked-SDK usability. Pure unit tests cover played-interval
 merging, seeking, pause/resume, playback speed, completion, and invalid samples.
