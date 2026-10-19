@@ -12,6 +12,8 @@ export const FILM = {
   duration: "2:40",
   /** Opens the hosted player page; used as the link when JavaScript is off. */
   page: `${PLAYER}?autoplay=false`,
+  /** A still from the film, shown until someone presses play. */
+  poster: "/media/palamedes-film-poster.webp",
   /** Loaded into the dialog on click, so playback starts at the reader's request. */
   embed: `${PLAYER}?autoplay=true&preload=true`,
 } as const;
