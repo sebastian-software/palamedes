@@ -19,7 +19,11 @@ import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion";
  * the finished race. Scope stays beside every row, and the cached Palamedes
  * re-run is reported on its own because the other tools have no equivalent.
  */
-const ROWS = [...BENCH_REALISTIC.rows].sort((left, right) => left.medianMs - right.medianMs);
+// React Intl's run covers extraction only, a narrower job than the rest, so the
+// homepage race leaves it out; the proof page keeps it with its scope note.
+const ROWS = BENCH_REALISTIC.rows
+  .filter((row) => row.tool !== "React Intl")
+  .sort((left, right) => left.medianMs - right.medianMs);
 const LONGEST = Math.max(...ROWS.map((row) => row.medianMs));
 
 const REASONS = [
@@ -108,7 +112,11 @@ export function RustRace() {
         <p className="pmds-lede">
           Your i18n tooling runs every time you save, commit, or open a pull request. Here is the
           same job — extract every message from a 1,500-file project and update the catalogs — in
-          six tools, played back in real time.
+          five tools, played back in real time. React Intl only extracts, so it runs on the{" "}
+          <a href="/proof" className="text-accent underline underline-offset-4 hover:text-ink">
+            proof page
+          </a>{" "}
+          with its narrower scope marked.
         </p>
       </Reveal>
 

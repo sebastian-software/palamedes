@@ -21,7 +21,7 @@ export const handle = { layout: "bare" };
 export function meta() {
   const title = "Palamedes — just write the sentence";
   const description =
-    "Open-source i18n for React, Solid, and TypeScript: write plain sentences in your components, give translators standard .po files, ship compiled messages per screen, and keep tooling fast with a Rust core. First-party adapters for Next.js, React Router, TanStack Start, Solid, and Vite, with Waku and Remix v3 in preview.";
+    "Open-source i18n for React, Solid, and TypeScript: write plain sentences in your components, give translators standard .po files, ship compiled messages per screen, and keep tooling fast with a Rust core. First-party adapters for Next.js, React Router, TanStack Start, Solid, Waku, Remix v3, and Vite, plus Hono, Express, and Rust.";
 
   return [
     ...pageMeta({ title, description, path: "/" }),
