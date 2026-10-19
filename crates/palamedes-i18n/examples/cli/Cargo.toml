@@ -16,4 +16,5 @@ palamedes-i18n = { path = "../.." }
 palamedes-build = { path = "../../../palamedes-build" }
 
 [dev-dependencies]
+palamedes-build = { path = "../../../palamedes-build" }
 tempfile = "3.27.0"

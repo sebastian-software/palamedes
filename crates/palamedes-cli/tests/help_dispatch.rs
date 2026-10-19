@@ -3,6 +3,10 @@ use std::process::Command;
 #[test]
 fn help_is_owned_by_clap_before_plugin_dispatch() {
     let output = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
         .env("PALAMEDES_UI_LOCALE", "en")
         .arg("help")
         .output()

@@ -184,3 +184,33 @@ fn catalogs_have_no_shared_locale_state() {
         scope.spawn(|| assert_eq!(spanish.literal("constant").unwrap(), "Español"));
     });
 }
+
+#[test]
+fn file_errors_keep_the_path_and_distinguish_incompatibility_causes() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("selected.pmd.json");
+    for (field, value, expected) in [
+        ("version", serde_json::json!(999), "format version mismatch"),
+        ("locale", serde_json::json!("fr"), "locale mismatch"),
+        (
+            "fingerprint",
+            serde_json::json!("old-contract"),
+            "contract fingerprint mismatch",
+        ),
+    ] {
+        let mut data = serde_json::to_value(artifact("de")).unwrap();
+        data[field] = value;
+        std::fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
+        let error = Catalog::load(&path, "de", SCHEMA).unwrap_err();
+        assert!(matches!(error, Error::Load { .. }));
+        let text = error.to_string();
+        assert!(
+            text.contains(path.to_str().unwrap()) && text.contains(expected),
+            "{text}"
+        );
+        assert!(std::error::Error::source(&error).is_some());
+    }
+    std::fs::write(&path, "{}").unwrap();
+    let text = Catalog::load(&path, "de", SCHEMA).unwrap_err().to_string();
+    assert!(text.contains(path.to_str().unwrap()) && text.contains("missing field"));
+}

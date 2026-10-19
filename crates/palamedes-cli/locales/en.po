@@ -392,3 +392,39 @@ msgstr "Could not infer catalog merge format from logical --path `{path}` or mer
 
 msgid "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
 msgstr "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
+
+msgid "Compile external language catalogs against an existing Rust application schema."
+msgstr "Compile external language catalogs against an existing Rust application schema."
+
+msgid "Compiled catalog target."
+msgstr "Compiled catalog target."
+
+msgid "Directory containing source and target PO catalogs."
+msgstr "Directory containing source and target PO catalogs."
+
+msgid "Exported Rust application schema."
+msgstr "Exported Rust application schema."
+
+msgid "Output locale; repeat for multiple languages."
+msgstr "Output locale; repeat for multiple languages."
+
+msgid "Directory for compiled language files."
+msgstr "Directory for compiled language files."
+
+msgid "Fallback locale; repeat in resolution order."
+msgstr "Fallback locale; repeat in resolution order."
+
+msgid "Reject missing or fuzzy translations instead of compiling a fallback."
+msgstr "Reject missing or fuzzy translations instead of compiling a fallback."
+
+msgid "Write the compilation result as JSON."
+msgstr "Write the compilation result as JSON."
+
+msgid "Compiled {count} Rust language catalog(s)."
+msgstr "Compiled {count} Rust language catalog(s)."
+
+msgid "{locale}: missing translation for {message}; compiled fallback from {resolved}."
+msgstr "{locale}: missing translation for {message}; compiled fallback from {resolved}."
+
+msgid "Could not compile Rust language catalogs: {source}"
+msgstr "Could not compile Rust language catalogs: {source}"

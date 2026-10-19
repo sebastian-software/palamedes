@@ -392,3 +392,39 @@ msgstr "No se pudo determinar el formato con --path `{path}` ni con las rutas de
 
 msgid "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
 msgstr "El catálogo {catalog} no encontró archivos fuente (include: {include}); no se actualizaron los catálogos. Corrija los patrones u omita --fail-on-empty-catalog para emitir solo una advertencia."
+
+msgid "Compile external language catalogs against an existing Rust application schema."
+msgstr "Compilar catálogos de idiomas externos con un esquema existente de una aplicación Rust."
+
+msgid "Compiled catalog target."
+msgstr "Destino del catálogo compilado."
+
+msgid "Directory containing source and target PO catalogs."
+msgstr "Directorio con los catálogos PO de origen y destino."
+
+msgid "Exported Rust application schema."
+msgstr "Esquema exportado de la aplicación Rust."
+
+msgid "Output locale; repeat for multiple languages."
+msgstr "Idioma de salida; repetir para varios idiomas."
+
+msgid "Directory for compiled language files."
+msgstr "Directorio para los archivos de idiomas compilados."
+
+msgid "Fallback locale; repeat in resolution order."
+msgstr "Idioma de respaldo; repetir en el orden de resolución."
+
+msgid "Reject missing or fuzzy translations instead of compiling a fallback."
+msgstr "Rechazar traducciones ausentes o sin revisar en lugar de compilar un respaldo."
+
+msgid "Write the compilation result as JSON."
+msgstr "Escribir el resultado de la compilación como JSON."
+
+msgid "Compiled {count} Rust language catalog(s)."
+msgstr "Se compilaron {count} catálogo(s) de idiomas para Rust."
+
+msgid "{locale}: missing translation for {message}; compiled fallback from {resolved}."
+msgstr "{locale}: falta la traducción de {message}; se compiló el respaldo de {resolved}."
+
+msgid "Could not compile Rust language catalogs: {source}"
+msgstr "No se pudieron compilar los catálogos de idiomas para Rust: {source}"

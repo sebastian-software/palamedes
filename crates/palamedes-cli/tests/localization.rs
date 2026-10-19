@@ -4,6 +4,10 @@ use std::process::{Command, Output};
 fn pmds(args: &[&str], environment: &[(&str, &str)], cwd: &std::path::Path) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_pmds"));
     command
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
         .args(args)
         .current_dir(cwd)
         .env("PALAMEDES_UPDATE_CHECK", "0");
@@ -157,10 +161,7 @@ fn installed_binary_loads_only_the_external_requested_language_without_node() {
     fs::copy(env!("CARGO_BIN_EXE_pmds"), &executable).unwrap();
     let catalogs = directory.path().join("pmds-locales");
     fs::create_dir(&catalogs).unwrap();
-    let source = std::path::Path::new(env!("CARGO_BIN_EXE_pmds"))
-        .parent()
-        .unwrap()
-        .join("pmds-locales/de.pmd.json");
+    let source = std::path::Path::new(concat!(env!("OUT_DIR"), "/catalogs/de.pmd.json"));
     fs::copy(source, catalogs.join("de.pmd.json")).unwrap();
     let output = Command::new(&executable)
         .arg("version")
@@ -209,4 +210,52 @@ fn installed_binary_loads_only_the_external_requested_language_without_node() {
     assert_eq!(missing.status.code(), Some(1));
     assert!(missing.stdout.is_empty());
     assert!(String::from_utf8_lossy(&missing.stderr).contains("de.pmd.json"));
+}
+
+#[test]
+fn broken_catalog_bootstrap_names_the_locale_path_cause_and_repair() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("de.pmd.json");
+    let original: serde_json::Value = serde_json::from_slice(
+        &fs::read(concat!(env!("OUT_DIR"), "/catalogs/de.pmd.json")).unwrap(),
+    )
+    .unwrap();
+    for (field, value, cause) in [
+        ("version", serde_json::json!(999), "format version mismatch"),
+        ("locale", serde_json::json!("fr"), "locale mismatch"),
+        (
+            "fingerprint",
+            serde_json::json!("stale"),
+            "contract fingerprint mismatch",
+        ),
+    ] {
+        let mut data = original.clone();
+        data[field] = value;
+        fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
+        let output = pmds(
+            &["--help"],
+            &[
+                ("PALAMEDES_UI_LOCALE", "de"),
+                (
+                    "PALAMEDES_UI_CATALOG_DIR",
+                    directory.path().to_str().unwrap(),
+                ),
+            ],
+            directory.path(),
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        for required in [
+            "UI language catalog",
+            "locale 'de'",
+            "Searched locations",
+            path.to_str().unwrap(),
+            cause,
+            "Reinstall pmds",
+            "PALAMEDES_UI_CATALOG_DIR",
+        ] {
+            assert!(stderr.contains(required), "{required}: {stderr}");
+        }
+    }
 }

@@ -305,6 +305,10 @@ fn lint_reports_an_unwritable_extraction_cache_without_verbose_output() {
 
 fn pmds(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
         .env("PALAMEDES_UI_LOCALE", "en")
         .args(arguments)
         .current_dir(root)

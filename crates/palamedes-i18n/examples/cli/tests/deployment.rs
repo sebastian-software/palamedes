@@ -35,23 +35,40 @@ fn copied_application_loads_replaceable_external_data_and_has_no_language_fallba
         String::from_utf8(german.stdout).unwrap(),
         "Hallo Ada {literal}!\nVorschau für Ada {literal}\n"
     );
-    // Translators can update a compatible language without rebuilding Rust.
-    let path = catalogs.join("de.pmd.json");
-    let data = fs::read_to_string(&path)
-        .unwrap()
-        .replace("Hallo ", "Guten Tag ");
-    fs::write(&path, data).unwrap();
+    // Compile real PO changes against the application's exported contract.
+    // The application executable is copied once and is never rebuilt here.
+    let before = fs::read(&executable).unwrap();
+    let po = directory.path().join("locales");
+    fs::create_dir(&po).unwrap();
+    fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/locales/en.po"),
+        po.join("en.po"),
+    )
+    .unwrap();
+    let german_po =
+        fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/locales/de.po")).unwrap();
+    fs::write(po.join("de.po"), german_po.replace("Hallo ", "Guten Tag ")).unwrap();
+    let contract =
+        palamedes_build::CatalogContract::load(concat!(env!("OUT_DIR"), "/schema.pmd.json"))
+            .unwrap();
+    palamedes_build::CatalogBuilder::new(&po, "en")
+        .locales(&["de"])
+        .compile_updates(&contract, &catalogs)
+        .unwrap();
     assert!(
         String::from_utf8(run("de").stdout)
             .unwrap()
             .starts_with("Guten Tag ")
     );
-    // A compatible new locale is also a data-only installation.
-    let french = fs::read_to_string(&path)
-        .unwrap()
-        .replace("\"locale\":\"de\"", "\"locale\":\"fr\"")
-        .replace("Guten Tag ", "Bonjour ");
-    fs::write(catalogs.join("fr.pmd.json"), french).unwrap();
+    let french_po = german_po
+        .replace("Hallo ", "Bonjour ")
+        .replace("Vorschau für ", "Aperçu pour ")
+        .replace("Bereit für ", "Prêt pour ");
+    fs::write(po.join("fr.po"), french_po).unwrap();
+    palamedes_build::CatalogBuilder::new(&po, "en")
+        .locales(&["fr"])
+        .compile_updates(&contract, &catalogs)
+        .unwrap();
     let french = run("fr");
     assert!(french.status.success(), "{french:?}");
     assert!(
@@ -59,6 +76,9 @@ fn copied_application_loads_replaceable_external_data_and_has_no_language_fallba
             .unwrap()
             .starts_with("Bonjour ")
     );
+    assert_eq!(fs::read(&executable).unwrap(), before);
+    assert!(!catalogs.join("en.pmd.json").exists());
+    let path = catalogs.join("de.pmd.json");
     let missing = run("en");
     assert!(!missing.status.success());
     assert!(missing.stdout.is_empty());

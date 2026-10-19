@@ -1,21 +1,21 @@
-//! Cargo integration for external, parser-free Rust catalogs.
+//! Cargo integration and standalone compilation for external Rust catalogs.
 //!
-//! The build emits macro definitions and a schema into `OUT_DIR`. Rust itself
-//! expands calls to those macros. No translation text is emitted as Rust code.
+//! Generated macros resolve source literals during Rust constant evaluation.
+//! Application builds export a contract for later data-only translation updates.
 
-use std::collections::{BTreeMap, BTreeSet};
+mod catalogs;
+
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use palamedes::{
-    CatalogArtifactConfig, CatalogArtifactRequest, CatalogConfig, PalamedesCatalogFormat,
-    RuntimeCompiledMessage, RuntimeMessageChoiceKind, RuntimeMessageNode, compile_catalog_artifact,
-    compile_runtime_catalog_messages, parse_po,
-};
-use palamedes_i18n::{CatalogArtifact, FORMAT_VERSION, Instruction, Message};
+use palamedes::{RuntimeMessageChoiceKind, RuntimeMessageNode};
+use palamedes_i18n::Instruction;
 use proc_macro2::{TokenStream, TokenTree};
-use sha2::{Digest, Sha256};
+
+pub use catalogs::{CatalogContract, CatalogUpdate, MissingTranslation};
+use catalogs::{PreparedCatalogs, Signature};
 
 type BuildResult<T> = Result<T, Box<dyn Error>>;
 
@@ -93,15 +93,22 @@ pub struct CatalogBuilder {
     directory: PathBuf,
     source_locale: String,
     locales: Vec<String>,
+    fallback_locales: Vec<String>,
+    fail_on_missing: bool,
     macro_name: String,
+    module_path: String,
 }
 
-/// Generated files. Install `catalog_directory` alongside the application.
+/// Generated application-build files and translation completeness diagnostics.
 pub struct CompiledCatalogs {
     /// Rust schema and macro definitions; include this at module scope.
     pub rust_module: PathBuf,
-    /// One `<locale>.pmd.json` file for every requested locale.
+    /// Source-free contract used to compile compatible updates independently.
+    pub schema_file: PathBuf,
+    /// One `<locale>.pmd.json` file for every requested output locale.
     pub catalog_directory: PathBuf,
+    /// Missing or fuzzy translations resolved at build time.
+    pub missing: Vec<MissingTranslation>,
 }
 
 impl CatalogBuilder {
@@ -111,13 +118,28 @@ impl CatalogBuilder {
             directory: directory.into(),
             source_locale: source_locale.into(),
             locales: Vec::new(),
+            fallback_locales: Vec::new(),
+            fail_on_missing: false,
             macro_name: "translate".into(),
+            module_path: "crate".into(),
         }
     }
 
-    /// Select the locales to compile. The source locale must be included.
+    /// Select output locales. The source PO is always an input, even when not emitted.
     pub fn locales(mut self, locales: &[&str]) -> Self {
         self.locales = locales.iter().map(|locale| (*locale).to_owned()).collect();
+        self
+    }
+
+    /// Resolve missing translations through this shared chain, then the source locale/message.
+    pub fn fallback_locales(mut self, locales: &[&str]) -> Self {
+        self.fallback_locales = locales.iter().map(|locale| (*locale).to_owned()).collect();
+        self
+    }
+
+    /// Reject missing or fuzzy target translations even when a valid fallback exists.
+    pub fn fail_on_missing(mut self, strict: bool) -> Self {
+        self.fail_on_missing = strict;
         self
     }
 
@@ -127,195 +149,110 @@ impl CatalogBuilder {
         self
     }
 
-    /// Compile into Cargo's `OUT_DIR` and register catalog change tracking.
-    pub fn build(self) -> BuildResult<CompiledCatalogs> {
-        println!("cargo:rerun-if-changed={}", self.directory.display());
-        self.compile_to(Path::new(&std::env::var("OUT_DIR")?))
+    /// Crate-relative module containing the generated definitions (default: `crate`).
+    /// Set this when including messages.rs inside a module rather than at crate root.
+    pub fn module_path(mut self, path: &str) -> Self {
+        self.module_path = path.into();
+        self
     }
 
-    /// Compile into an explicit output directory, useful for other build hosts.
+    /// Compile inside Cargo's `OUT_DIR`, tracking inputs and reporting fallback use.
+    pub fn build(self) -> BuildResult<CompiledCatalogs> {
+        println!("cargo:rerun-if-changed={}", self.directory.display());
+        let compiled = self.compile_to(Path::new(&std::env::var("OUT_DIR")?))?;
+        for missing in &compiled.missing {
+            println!(
+                "cargo:warning={}: missing translation for {:?}; compiled fallback from {}",
+                missing.locale, missing.message, missing.resolved_locale
+            );
+        }
+        Ok(compiled)
+    }
+
+    /// Generate application definitions, an update contract, and language data.
     pub fn compile_to(self, output: &Path) -> BuildResult<CompiledCatalogs> {
         syn::parse_str::<syn::Ident>(&self.macro_name)?;
-        if self.locales.is_empty()
-            || !self.locales.contains(&self.source_locale)
-            || self.locales.iter().collect::<BTreeSet<_>>().len() != self.locales.len()
-        {
-            return Err("locales must be unique and include the source locale".into());
+        syn::parse_str::<syn::Path>(&self.module_path)?;
+        if self.module_path != "crate" && !self.module_path.starts_with("crate::") {
+            return Err("generated module path must start with crate".into());
         }
-        for locale in &self.locales {
-            if locale.is_empty()
-                || !locale
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            {
-                return Err(format!("invalid catalog locale: {locale}").into());
-            }
-        }
-        let root = fs::canonicalize(&self.directory)?;
-        let mut catalogs = BTreeMap::new();
-        for locale in &self.locales {
-            let parsed = parse_po(&fs::read_to_string(root.join(format!("{locale}.po")))?)?;
-            let mut messages = BTreeMap::new();
-            for item in parsed
-                .items
-                .into_iter()
-                .filter(|item| !item.obsolete && !item.msgid.is_empty())
-            {
-                if item.msgctxt.is_some()
-                    || item.msgid_plural.is_some()
-                    || item.flags.contains_key("fuzzy")
-                {
-                    return Err(format!(
-                        "{locale}: Rust catalogs require reviewed, context-free ICU messages"
-                    )
-                    .into());
-                }
-                if item.msgstr.first().is_none_or(String::is_empty) {
-                    return Err(
-                        format!("{locale}: missing translation for {:?}", item.msgid).into(),
-                    );
-                }
-                if messages.insert(item.msgid.clone(), ()).is_some() {
-                    return Err(format!("{locale}: duplicate source {:?}", item.msgid).into());
-                }
-            }
-            catalogs.insert(locale.clone(), messages);
-        }
-        let sources = &catalogs[&self.source_locale];
-        if sources.is_empty()
-            || catalogs
-                .values()
-                .any(|catalog| catalog.keys().ne(sources.keys()))
-        {
-            return Err("Rust catalogs must have the same nonempty message inventory".into());
-        }
-        let mut artifacts = BTreeMap::new();
-        let mut signature: BTreeMap<String, (String, BTreeSet<String>, bool)> = BTreeMap::new();
-        for locale in &self.locales {
-            let artifact = compile_catalog_artifact(&CatalogArtifactRequest {
-                config: CatalogArtifactConfig {
-                    root_dir: root.to_string_lossy().into_owned(),
-                    locales: self.locales.clone(),
-                    source_locale: self.source_locale.clone(),
-                    fallback_locales: None,
-                    pseudo_locale: None,
-                    catalogs: vec![CatalogConfig {
-                        path: "{locale}".into(),
-                        format: PalamedesCatalogFormat::Po,
-                    }],
-                },
-                resource_path: root
-                    .join(format!("{locale}.po"))
-                    .to_string_lossy()
-                    .into_owned(),
-            })?;
-            let lowered = compile_runtime_catalog_messages(&artifact.messages);
-            let mut messages = BTreeMap::new();
-            for source in sources.keys() {
-                let id = ferrocat::compiled_key_with_policy(
-                    source,
-                    None,
-                    ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-                );
-                let mut arguments = BTreeSet::new();
-                let message = match lowered.get(&id) {
-                    None => Message::Literal(artifact.messages[&id].clone()),
-                    Some(RuntimeCompiledMessage::Nodes(nodes)) => {
-                        let program = lower(nodes, &mut arguments)
-                            .map_err(|error| format!("{locale}, {source:?}: {error}"))?;
-                        if arguments.is_empty() {
-                            Message::Literal(
-                                program
-                                    .into_iter()
-                                    .map(|instruction| match instruction {
-                                        Instruction::Text { value } => value,
-                                        _ => unreachable!("no arguments means only text"),
-                                    })
-                                    .collect(),
-                            )
-                        } else {
-                            Message::Program(program)
-                        }
-                    }
-                    Some(RuntimeCompiledMessage::Lazy) => {
-                        return Err(format!("{locale}: invalid ICU for {source:?}").into());
-                    }
-                };
-                let literal = matches!(message, Message::Literal(_));
-                if let Some((_, expected, expected_literal)) = signature.get(source) {
-                    if expected != &arguments || *expected_literal != literal {
-                        return Err(format!("{locale}: placeholder mismatch for {source:?}").into());
-                    }
-                } else {
-                    signature.insert(source.clone(), (id.clone(), arguments, literal));
-                }
-                messages.insert(id, message);
-            }
-            artifacts.insert(locale, messages);
-        }
-        let contract: BTreeMap<_, _> = signature
-            .values()
-            .map(|(id, arguments, literal)| (id, (arguments, literal)))
-            .collect();
-        let fingerprint: String = Sha256::digest(serde_json::to_vec(&contract)?)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        let mut generated = format!(
-            "pub const CATALOG_SCHEMA: ::palamedes_i18n::Schema = ::palamedes_i18n::Schema {{ fingerprint: {fingerprint:?}, messages: &[\n"
-        );
-        for (id, arguments, literal) in signature.values() {
-            generated.push_str(&format!("::palamedes_i18n::MessageSpec {{ id: {id:?}, arguments: &{:?}, literal: {literal} }},\n", arguments.iter().collect::<Vec<_>>()));
-        }
-        generated.push_str("] };\n");
-        generated.push_str(&format!(
-            "macro_rules! {} {{\n(@signature $source:literal) => {{ const {{\n",
-            self.macro_name
-        ));
-        for (index, (source, (id, arguments, literal))) in signature.iter().enumerate() {
-            if index > 0 {
-                generated.push_str("else ");
-            }
-            generated.push_str(&format!("if ::palamedes_i18n::source_eq($source, {source:?}) {{ ({id:?}, &{:?} as &[&str], {literal}) }}\n", arguments.iter().collect::<Vec<_>>()));
-        }
-        generated.push_str(
-            "else { panic!(\"source message is absent from compiled catalogs\") }\n} };\n",
-        );
-        generated.push_str(&format!(
-            "($catalog:expr, $source:literal $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool) = {}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[]); assert!(SIGNATURE.2); }};\n($catalog).literal(SIGNATURE.0)\n}}}};\n", self.macro_name
-        ));
-        generated.push_str(&format!(
-            "($catalog:expr, $source:literal, $($argument:ident = $value:expr),+ $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool) = {}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[$(::std::stringify!($argument)),+]); assert!(!SIGNATURE.2); }};\n($catalog).render(SIGNATURE.0, &[$((::std::stringify!($argument), ::std::format!(\"{{}}\", $value)),)+])\n}}}};\n}}\n", self.macro_name
-        ));
+        let prepared = catalogs::prepare(&self)?;
+        let generated = generate_module(&self.macro_name, &self.module_path, &prepared);
+        fs::create_dir_all(output)?;
         let catalog_directory = output.join("catalogs");
-        fs::create_dir_all(&catalog_directory)?;
-        for entry in fs::read_dir(&catalog_directory)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file()
-                && entry.file_name().to_string_lossy().ends_with(".pmd.json")
-            {
-                fs::remove_file(entry.path())?;
-            }
-        }
-        for (locale, messages) in artifacts {
-            let artifact = CatalogArtifact {
-                version: FORMAT_VERSION,
-                fingerprint: fingerprint.clone(),
-                locale: locale.clone(),
-                messages,
-            };
-            fs::write(
-                catalog_directory.join(format!("{locale}.pmd.json")),
-                serde_json::to_vec(&artifact)?,
-            )?;
-        }
+        prepared.write_catalogs(&catalog_directory)?;
+        prepared.remove_stale_catalogs(&catalog_directory)?;
         let rust_module = output.join("messages.rs");
         fs::write(&rust_module, generated)?;
+        let schema_file = output.join("schema.pmd.json");
+        fs::write(&schema_file, serde_json::to_vec(&prepared.contract)?)?;
         Ok(CompiledCatalogs {
             rust_module,
+            schema_file,
             catalog_directory,
+            missing: prepared.missing,
         })
     }
+
+    /// Compile only language files against an existing application's exported contract.
+    ///
+    /// All inputs are validated before output files are touched. This does not
+    /// generate Rust code or invoke Cargo/rustc for the application.
+    pub fn compile_updates(
+        self,
+        contract: &CatalogContract,
+        output: &Path,
+    ) -> BuildResult<CatalogUpdate> {
+        contract.validate()?;
+        let prepared = catalogs::prepare(&self)?;
+        if prepared.contract != *contract {
+            return Err("catalog update changes the application message contract; rebuild the application and export a matching schema".into());
+        }
+        let files = prepared.write_catalogs(output)?;
+        Ok(CatalogUpdate {
+            catalogs: files,
+            missing: prepared.missing,
+        })
+    }
+}
+
+fn generate_module(name: &str, module_path: &str, prepared: &PreparedCatalogs) -> String {
+    let fingerprint = &prepared.contract.fingerprint;
+    let mut generated = format!(
+        "pub const CATALOG_SCHEMA: ::palamedes_i18n::Schema = ::palamedes_i18n::Schema {{ fingerprint: {fingerprint:?}, messages: &[\n"
+    );
+    for (id, spec) in &prepared.contract.messages {
+        generated.push_str(&format!(
+            "::palamedes_i18n::MessageSpec {{ id: {id:?}, arguments: &{:?}, literal: {} }},\n",
+            spec.arguments.iter().collect::<Vec<_>>(),
+            spec.literal
+        ));
+    }
+    generated.push_str("] };\n");
+    // The source table is used only during const evaluation. Each call site
+    // expands a small lookup, rather than another copy of the entire catalog.
+    let lookup = format!("__palamedes_{name}_signature");
+    generated.push_str(&format!("pub(crate) const fn {lookup}(source: &str) -> (&'static str, &'static [&'static str], bool) {{\ntype Signature = (&'static str, &'static [&'static str], bool);\nconst MESSAGES: &[(&str, Signature)] = &[\n"));
+    for (
+        source,
+        Signature {
+            id,
+            arguments,
+            literal,
+        },
+    ) in &prepared.signature
+    {
+        generated.push_str(&format!(
+            "({source:?}, ({id:?}, &{:?}, {literal})),\n",
+            arguments.iter().collect::<Vec<_>>()
+        ));
+    }
+    generated.push_str("];\nlet mut low = 0; let mut high = MESSAGES.len();\nwhile low < high { let mid = low + (high - low) / 2; let comparison = ::palamedes_i18n::source_cmp(source, MESSAGES[mid].0);\nif comparison == 0 { return MESSAGES[mid].1; }\nif comparison < 0 { high = mid; } else { low = mid + 1; }\n}\npanic!(\"source message is absent from compiled catalogs\")\n}\n");
+    let lookup_path = format!("$crate{}::{lookup}", &module_path["crate".len()..]);
+    generated.push_str(&format!("macro_rules! {name} {{\n(@signature $source:literal) => {{ const {{ {lookup_path}($source) }} }};\n"));
+    generated.push_str(&format!("($catalog:expr, $source:literal $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool) = {name}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[]); assert!(SIGNATURE.2); }};\n($catalog).literal(SIGNATURE.0)\n}}}};\n"));
+    generated.push_str(&format!("($catalog:expr, $source:literal, $($argument:ident = $value:expr),+ $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool) = {name}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[$(::std::stringify!($argument)),+]); assert!(!SIGNATURE.2); }};\n($catalog).render(SIGNATURE.0, &[$((::std::stringify!($argument), ::std::format!(\"{{}}\", $value)),)+])\n}}}};\n}}\n"));
+    generated
 }
 
 fn lower(
