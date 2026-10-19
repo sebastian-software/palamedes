@@ -392,3 +392,39 @@ msgstr "Katalogformat konnte weder aus --path `{path}` noch aus den Merge-Pfaden
 
 msgid "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
 msgstr "Katalog {catalog} findet keine Quelldateien (include: {include}); Kataloge wurden nicht aktualisiert. Korrigieren Sie die Suchmuster oder lassen Sie --fail-on-empty-catalog weg, um nur eine Warnung auszugeben."
+
+msgid "Compile external language catalogs against an existing Rust application schema."
+msgstr "Externe Sprachkataloge gegen ein bestehendes Rust-Anwendungsschema kompilieren."
+
+msgid "Compiled catalog target."
+msgstr "Zielformat des kompilierten Katalogs."
+
+msgid "Directory containing source and target PO catalogs."
+msgstr "Verzeichnis mit Quell- und Zielkatalogen im PO-Format."
+
+msgid "Exported Rust application schema."
+msgstr "Exportiertes Schema der Rust-Anwendung."
+
+msgid "Output locale; repeat for multiple languages."
+msgstr "Ausgabesprache; für mehrere Sprachen wiederholen."
+
+msgid "Directory for compiled language files."
+msgstr "Verzeichnis für kompilierte Sprachdateien."
+
+msgid "Fallback locale; repeat in resolution order."
+msgstr "Fallback-Sprache; in Auflösungsreihenfolge wiederholen."
+
+msgid "Reject missing or fuzzy translations instead of compiling a fallback."
+msgstr "Fehlende oder ungeprüfte Übersetzungen ablehnen, statt einen Fallback zu kompilieren."
+
+msgid "Write the compilation result as JSON."
+msgstr "Kompilierungsergebnis als JSON ausgeben."
+
+msgid "Compiled {count} Rust language catalog(s)."
+msgstr "{count} Rust-Sprachkatalog(e) kompiliert."
+
+msgid "{locale}: missing translation for {message}; compiled fallback from {resolved}."
+msgstr "{locale}: Übersetzung für {message} fehlt; Fallback aus {resolved} kompiliert."
+
+msgid "Could not compile Rust language catalogs: {source}"
+msgstr "Rust-Sprachkataloge konnten nicht kompiliert werden: {source}"

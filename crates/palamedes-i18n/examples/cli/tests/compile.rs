@@ -38,12 +38,21 @@ fn real_rust_compilation_resolves_literal_values_and_checks_calls() {
             r#"translate!(catalog, "Hello {name}!", name = "Ada", name = "Grace")"#,
             Some("translation argument count mismatch"),
         ),
+        (
+            r#"translate!(catalog, "{mode, select, preview {Preview for {name}} other {Ready for {name}}}", name = "Ada", name = "Grace")"#,
+            Some("duplicate translation argument"),
+        ),
     ] {
         fs::write(directory.path().join("src/lib.rs"), format!("{generated}\npub fn check(catalog: &palamedes_i18n::Catalog) {{ let _ = {call}; }}\n")).unwrap();
         let output = Command::new(env!("CARGO"))
             .args(["check", "--offline", "--quiet"])
             .current_dir(directory.path())
             .env("CARGO_TARGET_DIR", directory.path().join("target"))
+            .env("CARGO_BUILD_BUILD_DIR", directory.path().join("build"))
+            .env(
+                "RUSTC",
+                std::path::Path::new(env!("CARGO")).with_file_name("rustc"),
+            )
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&output.stderr);

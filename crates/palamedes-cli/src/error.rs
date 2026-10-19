@@ -17,6 +17,8 @@ pub const REPORT_VERDICT_EXIT_CODE: u8 = 6;
 
 #[derive(Debug, Error)]
 pub enum CliError {
+    #[error("Could not compile Rust language catalogs: {message}")]
+    CatalogCompilation { message: String },
     #[error(transparent)]
     Config(#[from] ConfigError),
     #[error(transparent)]
@@ -100,6 +102,10 @@ impl CliError {
     /// Human output only; Display remains stable for structured diagnostics.
     pub fn localized(&self) -> String {
         match self {
+            Self::CatalogCompilation { message } => tr!(
+                "Could not compile Rust language catalogs: {source}",
+                source = message
+            ),
             Self::Config(error) => error.localized(),
             Self::Io { path, source } => tr!(
                 "I/O error for {path}: {source}",

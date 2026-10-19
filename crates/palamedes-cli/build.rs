@@ -3,16 +3,12 @@ mod update_endpoint;
 
 fn main() {
     update_endpoint::configure();
-    let catalogs = palamedes_build::CatalogBuilder::new("locales", "en")
+    palamedes_build::CatalogBuilder::new("locales", "en")
         .locales(&["en", "de", "es"])
+        .module_path("crate::i18n")
+        .fail_on_missing(true)
         .build()
         .expect("compile external CLI translation catalogs");
-    // Cargo has no asset-install phase for native executables. Place the
-    // generated data beside the executable in its target/profile directory;
-    // npm packaging copies this directory together with the executable.
-    let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-    let profile_directory = output.ancestors().nth(3).expect("Cargo profile directory");
-    catalogs
-        .install_to(&profile_directory.join("pmds-locales"))
-        .expect("install development CLI catalogs");
+    // Asset installation belongs to the packaging host. Cargo reports this
+    // build's OUT_DIR through --message-format=json even with build.build-dir.
 }

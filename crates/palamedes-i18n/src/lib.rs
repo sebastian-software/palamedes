@@ -29,6 +29,30 @@ pub const fn source_eq(left: &str, right: &str) -> bool {
     true
 }
 
+/// Internal lexicographic comparison used by generated const binary searches.
+#[doc(hidden)]
+pub const fn source_cmp(left: &str, right: &str) -> i8 {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let mut index = 0;
+    while index < left.len() && index < right.len() {
+        if left[index] < right[index] {
+            return -1;
+        }
+        if left[index] > right[index] {
+            return 1;
+        }
+        index += 1;
+    }
+    if left.len() < right.len() {
+        -1
+    } else if left.len() > right.len() {
+        1
+    } else {
+        0
+    }
+}
+
 /// Internal compile-time argument validation for generated translation calls.
 #[doc(hidden)]
 pub const fn assert_arguments(expected: &[&str], supplied: &[&str]) {
@@ -135,7 +159,23 @@ pub enum Error {
     /// Artifact is not valid compiled catalog data.
     #[error("invalid compiled catalog: {0}")]
     Decode(#[from] serde_json::Error),
-    /// Format, locale, message inventory, or arguments are incompatible.
+    /// A file was read but decoding or validation failed.
+    #[error("could not load compiled catalog {path}: {source}")]
+    Load {
+        path: std::path::PathBuf,
+        #[source]
+        source: Box<Error>,
+    },
+    /// The producer uses a different instruction format.
+    #[error("compiled catalog format version mismatch: expected {expected}, found {actual}")]
+    FormatVersion { expected: u32, actual: u32 },
+    /// The file belongs to another locale.
+    #[error("compiled catalog locale mismatch: expected {expected}, found {actual}")]
+    Locale { expected: String, actual: String },
+    /// The file was compiled against a different application contract.
+    #[error("compiled catalog contract fingerprint mismatch: expected {expected}, found {actual}")]
+    Contract { expected: String, actual: String },
+    /// Message inventory or arguments are incompatible.
     #[error("incompatible compiled catalog: {0}")]
     Incompatible(String),
     /// A lookup was not part of the catalog contract.
@@ -161,12 +201,22 @@ impl Catalog {
     pub fn from_bytes(bytes: &[u8], locale: &str, schema: Schema) -> Result<Self, Error> {
         let artifact: CatalogArtifact = serde_json::from_slice(bytes)?;
         if artifact.version != FORMAT_VERSION {
-            return Err(Error::Incompatible("unsupported format version".into()));
+            return Err(Error::FormatVersion {
+                expected: FORMAT_VERSION,
+                actual: artifact.version,
+            });
         }
-        if artifact.fingerprint != schema.fingerprint || artifact.locale != locale {
-            return Err(Error::Incompatible(
-                "message contract or locale mismatch".into(),
-            ));
+        if artifact.locale != locale {
+            return Err(Error::Locale {
+                expected: locale.into(),
+                actual: artifact.locale,
+            });
+        }
+        if artifact.fingerprint != schema.fingerprint {
+            return Err(Error::Contract {
+                expected: schema.fingerprint.into(),
+                actual: artifact.fingerprint,
+            });
         }
         if artifact.messages.len() != schema.messages.len() {
             return Err(Error::Incompatible("message inventory mismatch".into()));
@@ -217,7 +267,10 @@ impl Catalog {
             path: path.to_owned(),
             source,
         })?;
-        Self::from_bytes(&bytes, locale, schema)
+        Self::from_bytes(&bytes, locale, schema).map_err(|source| Error::Load {
+            path: path.to_owned(),
+            source: Box::new(source),
+        })
     }
 
     /// The locale actually loaded. No ambient process-global state is used.

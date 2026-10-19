@@ -2,6 +2,7 @@
 
 use clap::{Args, Subcommand};
 
+pub mod compile;
 pub mod convert;
 pub mod merge;
 
@@ -22,4 +23,6 @@ pub enum CatalogSubcommand {
     MergeDriver(MergeDriverOptions),
     #[command(about = tr!("Convert configured PO catalogs to another Palamedes storage format."))]
     Convert(ConvertOptions),
+    #[command(about = tr!("Compile external language catalogs against an existing Rust application schema."))]
+    Compile(compile::CompileOptions),
 }

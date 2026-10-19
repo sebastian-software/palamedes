@@ -23,22 +23,32 @@ pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         Language::German => "de",
         Language::Spanish => "es",
     };
-    let directory =
-        match std::env::var_os("PALAMEDES_UI_CATALOG_DIR").filter(|value| !value.is_empty()) {
-            Some(directory) => std::path::PathBuf::from(directory),
-            None => {
-                let executable = std::fs::canonicalize(std::env::current_exe()?)?;
-                executable
-                    .parent()
-                    .ok_or("CLI executable has no parent directory")?
-                    .join("pmds-locales")
-            }
+    let mut locations = Vec::new();
+    let mut load = || -> Result<palamedes_i18n::Catalog, Box<dyn std::error::Error>> {
+        let directory =
+            match std::env::var_os("PALAMEDES_UI_CATALOG_DIR").filter(|value| !value.is_empty()) {
+                Some(directory) => std::path::PathBuf::from(directory),
+                None => {
+                    let executable = std::fs::canonicalize(std::env::current_exe()?)?;
+                    executable
+                        .parent()
+                        .ok_or("CLI executable has no parent directory")?
+                        .join("pmds-locales")
+                }
+            };
+        let path = directory.join(format!("{locale}.pmd.json"));
+        locations.push(path.clone());
+        Ok(palamedes_i18n::Catalog::load(path, locale, CATALOG_SCHEMA)?)
+    };
+    let catalog = load().map_err(|cause| {
+        let searched = if locations.is_empty() {
+            "  (catalog directory could not be determined)".to_owned()
+        } else {
+            locations.iter().map(|path| format!("  {}", path.display())).collect::<Vec<_>>().join("\n")
         };
-    let catalog = palamedes_i18n::Catalog::load(
-        directory.join(format!("{locale}.pmd.json")),
-        locale,
-        CATALOG_SCHEMA,
-    )?;
+        // Catalog loading failed, so bootstrap diagnostics cannot use tr!.
+        format!("could not load the UI language catalog for locale '{locale}'.\nSearched locations:\n{searched}\nCause: {cause}\nReinstall pmds together with its pmds-locales directory, or set PALAMEDES_UI_CATALOG_DIR to the directory containing matching <locale>.pmd.json files.")
+    })?;
     let _ = CATALOG.set(catalog);
     let _ = LANGUAGE.set(language);
     Ok(())

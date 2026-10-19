@@ -61,6 +61,7 @@ impl Cli {
                 CatalogSubcommand::Merge(options) => execute(options, &context).map(|()| 0),
                 CatalogSubcommand::MergeDriver(options) => execute(options, &context).map(|()| 0),
                 CatalogSubcommand::Convert(options) => execute(options, &context).map(|()| 0),
+                CatalogSubcommand::Compile(options) => execute(options, &context).map(|()| 0),
             },
             Command::Version => execute(&VersionCommand, &context).map(|()| 0),
             Command::Plugin(args) => Ok(plugins::run(args, &context)),

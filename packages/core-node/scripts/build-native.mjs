@@ -82,14 +82,18 @@ buildNativePackage({
       .filter(Boolean)
       .join(" ");
   },
-  postBuild({ packageDir, profile, repoRoot, target }) {
+  postBuild({ packageDir, cargoMessages }) {
     const binaryName = rustArtifactFileName({ name: "palamedes_node", kind: "cdylib" });
-    const sourcePath = target.rustTarget
-      ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
-      : path.join(repoRoot, "target", profile, binaryName);
+    const sourcePath = cargoMessages
+      .filter(
+        (message) =>
+          message.reason === "compiler-artifact" && message.target.name === "palamedes_node",
+      )
+      .flatMap((message) => message.filenames)
+      .find((file) => path.basename(file) === binaryName);
     const targetPath = path.join(packageDir, "palamedes-node.node");
 
-    if (!existsSync(sourcePath)) {
+    if (!sourcePath || !existsSync(sourcePath)) {
       throw new Error(`Expected native binary at ${sourcePath}`);
     }
 
