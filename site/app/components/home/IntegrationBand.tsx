@@ -1,10 +1,13 @@
+import { Fragment } from "react";
+
 import { frameworkLandingHref } from "~/data/framework-landing";
 
 type Integration = {
   name: string;
   href: string;
-  logo: string;
-  logoClass: string;
+  /** Shown as a mark when set; otherwise the name is set as text. */
+  logo?: string;
+  logoClass?: string;
   suffix?: string;
   note?: string;
 };
@@ -47,7 +50,6 @@ const GROUPS: readonly IntegrationGroup[] = [
         href: frameworkLandingHref("tanstack"),
         logo: "/framework-logos/tanstack.svg",
         logoClass: "h-7 w-auto max-w-[5.25rem]",
-        suffix: "Start",
       },
       {
         name: "React Router",
@@ -78,6 +80,9 @@ const GROUPS: readonly IntegrationGroup[] = [
         logo: "/framework-logos/vite.svg",
         logoClass: "h-4 w-auto max-w-[5rem]",
       },
+      // Set as text: Turbopack's mark belongs to Vercel, whose permission for
+      // product marketing is still outstanding (framework-brand-usage.md).
+      { name: "Turbopack", href: frameworkLandingHref("nextjs"), suffix: "Turbopack" },
     ],
   },
   {
@@ -130,12 +135,14 @@ function IntegrationList({ group }: { group: IntegrationGroup }) {
               }
               className="group flex min-h-14 items-center gap-2.5 px-4 py-2 transition-colors hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
             >
-              <img
-                src={integration.logo}
-                alt=""
-                aria-hidden
-                className={`${integration.logoClass} shrink-0 object-contain`}
-              />
+              {integration.logo ? (
+                <img
+                  src={integration.logo}
+                  alt=""
+                  aria-hidden
+                  className={`${integration.logoClass ?? ""} shrink-0 object-contain`}
+                />
+              ) : null}
               {integration.suffix ? (
                 <span className="text-[15px] font-semibold tracking-[-0.01em] group-hover:text-accent">
                   {integration.suffix}
@@ -175,7 +182,11 @@ export function IntegrationBand() {
       </p>
       <div className="mx-auto mt-6 flex max-w-[72rem] flex-wrap items-start justify-center gap-x-8 gap-y-6">
         {GROUPS.map((group) => (
-          <IntegrationList key={group.label} group={group} />
+          <Fragment key={group.label}>
+            {/* Build tools, backends and Rust start the second row. */}
+            {group.label === "Build tools" ? <span aria-hidden className="basis-full" /> : null}
+            <IntegrationList group={group} />
+          </Fragment>
         ))}
       </div>
       <ul
