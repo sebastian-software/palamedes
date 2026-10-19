@@ -353,8 +353,18 @@ internal-ID lookups. Each call expands a small lookup, not the whole catalog.
 A source-free `schema.pmd.json` exports the immutable message contract. The runtime decodes compiled
 instructions without PO/ICU parsing, supports independent explicit locale
 contexts, and validates version, locale, inventory, arguments, and contract
-fingerprint. Literal text, display arguments, and string selects are supported;
-plurals, number/date/time formatting, rich text, and contexts fail compilation.
+fingerprint. Literal text, display arguments, string selects, and cardinal/ordinal
+plurals are supported. Plural rules use cached ICU4X/CLDR data for the catalog's
+locale, including regional distinctions. Exact numeric branches precede category
+selection; offset-adjusted counts drive categories and `#`. Nested plural/select
+scopes and quoted pound signs retain ICU semantics. `#` emits plain decimal text;
+localized number/date/time formatting, rich text, and contexts fail compilation.
+Plural arguments use the Display value as a signed plain decimal, at most 18
+fractional digits with an i128 coefficient (also after offset subtraction).
+Invalid/non-finite/exponent values and overflow return Error::PluralArgument;
+visible fractional zeros matter to CLDR. Rule payloads keep Catalog Send + Sync.
+Instruction format version 2 requires regenerating version 1 catalogs and schemas
+with the matching executable once before independent translation updates.
 `extract_messages()` provides token-based Rust source extraction; the CLI's
 existing extraction command has not gained a Rust frontend. Build-time missing
 or fuzzy translations resolve through the configured fallback chain and source
