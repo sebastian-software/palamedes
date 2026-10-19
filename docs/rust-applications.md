@@ -333,7 +333,7 @@ The small example above maintains its PO entries directly.
 | Localized numbers, dates, and times | Rejected at build time                                       |
 | Rich text and translation contexts  | Rejected at build time                                       |
 
-Palamedes's own `pmds` CLI uses this integration for external English, German, and
-Spanish catalogs. Its environment precedence, installation layout, and diagnostic
+Palamedes's own `pmds` CLI uses this integration for external English, German, Spanish, and
+French catalogs. Its environment precedence, installation layout, and diagnostic
 boundaries are documented in [CLI output language](./cli.md#output-language).
 Those are policies of `pmds`, not defaults imposed on your application.
