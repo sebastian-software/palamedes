@@ -8,12 +8,10 @@ and preview hostnames don't load the SDK.
 
 ## Activate the production site
 
-The production entry is [Palamedes](https://t.sebastian-software.de/5/main) on
-self-hosted Rybbit v2.6.0, configured on October 19, 2026. The public script is
-`https://t.sebastian-software.de/api/script.js` and its site ID is `170bf759583c`.
-Both repository Actions variables are configured. Analytics remain private;
-daily user-ID salting and bot exclusion are enabled, and IP collection is off.
-Production ingestion still needs verification after this change is deployed.
+The production site entry and both repository Actions variables were configured
+on October 19, 2026. The installed Rybbit version is 2.6.0. Production ingestion
+still needs verification after this change is deployed. Automatic initial and
+SPA pageviews must be disabled before deploying this integration.
 
 1. Open the existing Rybbit instance and select or create the `palamedes.dev`
    site. Use its script URL and site ID, not the CLI update-service site.
