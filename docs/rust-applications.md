@@ -41,10 +41,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "fd9d8f67477a14101a572b8adfa5f453efc72ea1" }
+palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "f9504835a97de43ad9f29161730c2d90692b0557" }
 
 [build-dependencies]
-palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "fd9d8f67477a14101a572b8adfa5f453efc72ea1" }
+palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "f9504835a97de43ad9f29161730c2d90692b0557" }
 ```
 
 Inside the Palamedes workspace, path dependencies are also possible. There is no
@@ -64,9 +64,15 @@ msgid "Hello {name}!"
 msgstr "Hallo {name}!"
 ```
 
-The source-language catalog is required too. Every selected locale must have the
-same nonempty message inventory and reviewed, nonempty translations. Missing or
-fuzzy entries, malformed ICU, and argument mismatches fail the build.
+The source-language PO defines the complete message inventory and is always an
+input. `.locales()` chooses which language files to emit; it does not require
+shipping an English file. Target catalogs may omit entries or contain empty or
+fuzzy translations. By default, those entries compile through `.fallback_locales()`
+and ultimately the source locale/message. Cargo reports fallback use; other build
+hosts can inspect `CompiledCatalogs::missing`. Set `.fail_on_missing(true)` to reject
+incomplete target translations. Invalid or unsupported ICU and argument mismatches
+still fail compilation. A fallback is compiled into the selected language file;
+no source text or fallback language is embedded in the executable.
 
 ### `build.rs`
 
@@ -76,12 +82,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .locales(&["en", "de"])
         .build()?;
     catalogs.install_to(std::path::Path::new("dist/translations"))?;
+    std::fs::copy(&catalogs.schema_file, "dist/schema.pmd.json")?;
     Ok(())
 }
 ```
 
-`build()` writes generated definitions to `OUT_DIR/messages.rs` and prepared
-catalogs to `OUT_DIR/catalogs/<locale>.pmd.json`. Cargo tracks the input catalogs
+`build()` writes generated definitions to `OUT_DIR/messages.rs`, an exported
+message contract to `OUT_DIR/schema.pmd.json`, and language data to
+`OUT_DIR/catalogs/<locale>.pmd.json`. Keep the schema with your translation-build
+inputs; it contains IDs and argument signatures, not translations. The running
+application only needs its selected language file. Cargo tracks the input catalogs
 and runs this build script when they change. `install_to()` copies the language
 files to a distribution directory chosen by your application. Here that is
 `dist/translations/` relative to the package root; the build script owns this
@@ -152,7 +162,7 @@ service can keep independent instances per locale and share them across threads.
 ## What the Generator and Rust Compiler Each Do
 
 1. Cargo invokes `build.rs` as part of `cargo build`. `palamedes-build` uses
-   Palamedes's catalog compiler and Ferrocat's ICU semantics to prepare language
+   Ferrocat's catalog compiler and Palamedes's shared message lowering to prepare language
    data and generate a schema plus a real `macro_rules! translate` definition.
 2. `include!` makes those definitions available to your Rust program. Rust's own
    compiler expands `translate!` calls. It resolves source literals to internal
@@ -160,6 +170,13 @@ service can keep independent instances per locale and share them across threads.
 3. The executable loads one prepared catalog and renders its instructions.
    The runtime decodes JSON data; it contains no PO or ICU parser. No language
    catalog or source-text rendering fallback is embedded in the executable.
+
+The generator emits one sorted source/signature table and a shared const function
+that searches it by binary search. Each macro invocation expands a small lookup,
+not a copy of the whole catalog. Both table lookup and argument validation happen
+during constant evaluation; the table is not runtime translation storage. If the
+generated definitions live inside a module, set `.module_path("crate::messages")`
+to that module's crate-relative path so calls from other modules resolve correctly.
 
 There is no source-rewriting command to run before Cargo. The generator produces
 definitions; the normal Rust compiler processes macro invocations. Arguments
@@ -170,8 +187,54 @@ messages with arguments return `Result<String, Error>`. Argument values implemen
 
 The [checked Rust CLI example](../crates/palamedes-i18n/examples/cli/) also shows
 string selects and three languages. Its deployment test copies the executable
-and selected catalogs into an isolated directory, changes compatible translations,
-and adds a compatible language without rebuilding the executable.
+and selected catalogs into an isolated directory, compiles real PO updates against
+the exported contract, and adds a compatible language. It checks that the copied
+executable stays byte-for-byte unchanged.
+
+## Update Translations Without Building the Application
+
+Use a matching native `pmds` build from the pinned repository revision; the
+published 1.x CLI does not have this experimental command. Its own
+[external UI catalogs](./cli.md#output-language) must be installed alongside it.
+The update command itself does not invoke Cargo or rustc for your application.
+
+After the initial application build, change `locales/de.po` to:
+
+```po
+msgid "Hello {name}!"
+msgstr "Guten Tag {name}!"
+```
+
+Compile that PO file against the already exported contract:
+
+```sh
+pmds catalog compile --target rust \
+  --schema dist/schema.pmd.json \
+  --catalog-dir locales --locale de \
+  --output dist/translations
+```
+
+This writes only `de.pmd.json`, checks the schema fingerprint and full message
+contract, and leaves other installed locales in the output directory alone.
+Keep `en.po` as the source-inventory input. Repeat `--locale` for multiple output
+languages; a new language uses the same workflow with its own `<locale>.po` file.
+Use `--fallback-locale` to configure the build-time chain, `--fail-on-missing` for
+strict completeness, or `--json` for the output paths and missing-translation
+report. Invalid or changed contracts fail before any output catalog is replaced.
+Each accepted language file is replaced atomically.
+
+With the `install_dir` created in the deployment example, install the new data
+and run the same copied executable:
+
+```sh
+cp dist/translations/de.pmd.json "$install_dir/translations/"
+(cd "$install_dir" && ./greeting-cli de translations)
+# Guten Tag Ada!
+```
+
+No application build belongs between those two runs. The equivalent Rust tooling
+API loads `CatalogContract::load(schema_path)` and calls
+`CatalogBuilder::compile_updates(&contract, output_directory)`.
 
 ## Catalog Compatibility and Failures
 
@@ -182,12 +245,13 @@ the JavaScript catalog ABI.
 
 You can replace translated text or add a locale without rebuilding the executable
 as long as the message contract stays compatible. Generate new language files
-from the same message inventory and signatures, and include the source locale in
-the builder's selected locales. Adding or removing messages or changing their
-argument contract requires matching catalogs and an application build.
+from the same message inventory and signatures using the exported schema. The
+source PO remains an input even when no source-language file is emitted. Adding
+or removing messages or changing their argument contract requires matching catalogs and an application build.
 
-A missing, corrupt, wrong-locale, or incompatible file returns an error. There is
-no automatic retry in English and no source-text substitution. The small example
+A missing, corrupt, wrong-locale, or incompatible file returns an error.
+`Catalog::load()` attaches the file path to all failures and distinguishes format
+version, locale, and contract-fingerprint mismatches. There is no automatic retry in English and no source-text substitution. The small example
 above exits through Rust's normal `Result` error reporting. A production host
 should choose its own bootstrap diagnostic and exit or request-error policy.
 

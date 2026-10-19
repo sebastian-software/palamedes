@@ -38,7 +38,8 @@ summary followed by Clap's original technical details. These are separate from
 the translated CLI presentation; their structured messages are not rewritten.
 
 Translations live in `crates/palamedes-cli/locales/*.po`. Cargo uses
-`palamedes-build` and Palamedes's canonical catalog compiler to produce
+`palamedes-build`, Ferrocat's catalog compiler, and Palamedes's shared message
+lowering to produce
 `<locale>.pmd.json` files. Platform packages install them in `bin/pmds-locales/`
 beside the executable. Only the selected locale is loaded, including English;
 no translation catalog or source-text rendering fallback is embedded.
@@ -46,15 +47,28 @@ Set `PALAMEDES_UI_CATALOG_DIR` to override the directory. Discovery does not
 depend on the project configuration or current working directory.
 
 A missing, corrupt, wrong-locale, or incompatible catalog fails before command
-execution with exit code 1 and a technical loader diagnostic on stderr. It does
-not load another language or substitute source text. Copying the native executable
+execution with exit code 1. A fixed English bootstrap diagnostic names the UI
+locale, every attempted file location, the cause, and a repair: reinstall the
+executable with matching `pmds-locales/` assets, or set
+`PALAMEDES_UI_CATALOG_DIR` to their directory. Decode and validation errors retain
+the file path; format-version, locale, and contract-fingerprint mismatches are
+reported separately. It does not load another language or substitute source text. Copying the native executable
 also requires copying `pmds-locales/`. No Node runtime is required.
 
-Missing or fuzzy translations, malformed ICU, placeholder mismatches, and
-unsupported Rust constructs fail the build. The Rust runtime decodes prepared
+The CLI opts into `.fail_on_missing(true)`, so its missing or fuzzy translations
+fail the build. The general Rust SDK defaults to build-time fallback resolution
+and reports incomplete translations. Malformed ICU, placeholder mismatches, and
+unsupported Rust constructs always fail compilation. The Rust runtime decodes prepared
 instructions without a PO/ICU parser. Its current subset is literal text, display
 arguments, and string selects. Plurals, number/date/time formatting, rich text,
 and translation contexts are rejected. JavaScript retains its broader feature set.
+
+For source builds, `build.rs` writes only inside Cargo's `OUT_DIR`. The native
+package builder reads the executable path and `out_dir` from Cargo's JSON messages,
+then installs catalogs with the binary. This supports separate `build.build-dir`
+and target directories. A bare `cargo build` does not install language assets;
+run the native package build or explicitly set `PALAMEDES_UI_CATALOG_DIR` to the
+reported `out_dir/catalogs` directory when launching an uninstalled executable.
 
 ## Rust Application Integration
 
@@ -418,6 +432,41 @@ The driver merges even where no data config is discoverable — including
 projects configured through `palamedes.config.ts` — because a registered driver
 runs wherever the conflicted worktree is. Configured PO output options and
 `source-locale` are then not applied, and the driver says so on stderr.
+
+## `pmds catalog compile`
+
+Compile PO translations into external Rust language files against an existing
+application contract. This experimental command requires an exported
+`schema.pmd.json` from the matching Rust application build; it does not build or
+rewrite the application.
+
+```sh
+pmds catalog compile --target rust --schema dist/schema.pmd.json \
+  --catalog-dir locales --locale de --output dist/translations
+```
+
+| Option                    | Meaning                                                                     |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `--target rust`           | Required compiled catalog target; Rust is the current target.               |
+| `--schema <path>`         | Existing application message contract, including its fingerprint.           |
+| `--catalog-dir <path>`    | Directory with the source PO and requested `<locale>.po` inputs.            |
+| `--locale <tag>`          | Output locale; repeat for multiple languages.                               |
+| `--output <directory>`    | Destination for selected `<locale>.pmd.json` files.                         |
+| `--fallback-locale <tag>` | Build-time fallback locale; repeat in resolution order.                     |
+| `--fail-on-missing`       | Reject missing or fuzzy target translations even if a fallback exists.      |
+| `--json`                  | Emit output paths and missing-translation diagnostics as one JSON document. |
+
+By default, missing and fuzzy target translations compile through the configured
+chain and source locale/message. The source PO defines the complete inventory;
+unknown source entries, changed contracts, invalid ICU, unsupported constructs,
+and placeholder mismatches fail before output files are touched. The schema's
+version and fingerprint are validated too. Successful output replaces each
+selected file atomically and preserves other installed languages. The JSON result
+contains `catalogs` and `missing`; missing records contain `locale`, `message`, and
+`resolvedLocale`. Failures exit 1 with a diagnostic on stderr.
+
+See the [Rust guide](./rust-applications.md#update-translations-without-building-the-application)
+for a complete update against an unchanged executable.
 
 ## `pmds catalog convert`
 

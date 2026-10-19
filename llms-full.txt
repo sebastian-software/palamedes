@@ -348,13 +348,30 @@ another-language or source-text recovery. See `docs/cli.md#output-language`.
 Experimental, unpublished workspace crates `palamedes-build` and `palamedes-i18n`
 expose the Rust application path. A Cargo build script uses `CatalogBuilder` to
 write generated `macro_rules!` definitions/schema and external catalogs. Rustc
-expands source-first calls into internal-ID lookups. The runtime decodes compiled
+expands source-first calls through one sorted const table and binary search into
+internal-ID lookups. Each call expands a small lookup, not the whole catalog.
+A source-free `schema.pmd.json` exports the immutable message contract. The runtime decodes compiled
 instructions without PO/ICU parsing, supports independent explicit locale
 contexts, and validates version, locale, inventory, arguments, and contract
 fingerprint. Literal text, display arguments, and string selects are supported;
 plurals, number/date/time formatting, rich text, and contexts fail compilation.
 `extract_messages()` provides token-based Rust source extraction; the CLI's
-existing extraction command has not gained a Rust frontend. The crates.io hold
+existing extraction command has not gained a Rust frontend. Build-time missing
+or fuzzy translations resolve through the configured fallback chain and source
+locale/message, with diagnostics; `.fail_on_missing(true)` is opt-in, enabled
+explicitly for the CLI UI. Runtime delivery errors never render fallback text.
+`pmds catalog compile --target rust --schema <schema.pmd.json> --catalog-dir <dir>
+--locale <tag> --output <dir>` compiles real PO updates against the exported schema
+without invoking Cargo or rustc for the application. Repeat `--locale` and
+`--fallback-locale`; `--fail-on-missing` rejects incomplete translations; `--json`
+returns `catalogs` paths and `missing` records (`locale`, `message`, `resolvedLocale`).
+All compatibility checks finish before writes; selected files are atomically
+replaced and other installed locales are preserved. `Catalog::load` preserves
+paths for all failures and distinguishes format, locale, and fingerprint errors.
+The CLI's fixed English bootstrap error names the UI locale, attempted locations,
+cause, and reinstall/PALAMEDES_UI_CATALOG_DIR repair. Native packaging uses Cargo
+JSON artifact and OUT_DIR paths, not an assumed target/profile layout.
+The crates.io hold
 remains in force. See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
 
 Core commands:

@@ -34,10 +34,10 @@ export function RustApplications() {
         </div>
         <div className="min-w-0 space-y-6 text-[17px] leading-relaxed text-ink/80">
           <p>
-            Keep translations in readable PO catalogs. Compile them during your Cargo build, then
-            deliver only the language files your installation needs. Compatible translation edits
-            and additional languages can ship without changing the executable; message contract
-            changes need matching catalogs.
+            Keep translations in readable PO catalogs. Your Cargo build exports a message contract.
+            Later, <code>pmds catalog compile --target rust</code> checks updated PO files against
+            it and produces new language files for the existing executable; message contract changes
+            need matching catalogs and an application build.
           </p>
           <p>
             This path is experimental and the crates are unpublished. Text, display arguments, and

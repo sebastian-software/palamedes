@@ -138,6 +138,12 @@ or exit statuses. Technical diagnostics and plugin messages keep their wording.
 Missing or incompatible UI catalogs fail explicitly. Experimental Rust workspace
 crates `palamedes-build` and `palamedes-i18n` provide Cargo generation and a
 parser-free external catalog runtime; see `docs/rust-applications.md`.
+`pmds catalog compile --target rust --schema <schema.pmd.json> --catalog-dir <dir>
+--locale <tag> --output <dir>` compiles compatible PO updates without an application
+build. Repeat `--locale` or `--fallback-locale` as needed; `--fail-on-missing`
+opts into completeness checks, and `--json` emits output paths and fallback diagnostics.
+Rust compilation defaults to build-time fallbacks; pmds UI builds explicitly opt into
+strict completeness. Runtime load failures remain explicit and path-qualified.
 
 - `pmds report --fail-if-below 90`: per-locale completeness gate for CI
 - `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, and MDX files. Use `pmds lint` rather than the Preview ESLint/Oxlint adapter for stable CI and MDX.

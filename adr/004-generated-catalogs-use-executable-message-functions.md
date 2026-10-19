@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-18
+**Last updated:** 2026-10-19
 
 Generated catalogs contain literal strings and executable message functions shared by Core, React, and Solid.
 
@@ -78,6 +78,19 @@ translations external avoids recompiling or growing every executable for each
 language. The cost is a versioned instruction format and a Rust evaluator.
 PO and ICU parsing still happen only at build time. This does not introduce an
 AST-map alternative to the existing JavaScript ABI.
+
+Rust compilation follows the same build-time fallback default: missing or fuzzy
+target translations resolve through the configured chain and source locale/message.
+The compiler reports those resolutions; `fail_on_missing(true)` opts into strict
+completeness. The native `pmds` UI explicitly enables strictness for its core
+languages. These are compiler policies; failed runtime catalog delivery still
+never substitutes a source message or another language.
+
+An application build exports a source-free message contract and fingerprint.
+`pmds catalog compile --target rust` compiles PO updates against that contract
+without invoking the application build. It validates all inputs and compatibility
+before replacing selected language files. Changed message identities, argument
+signatures, or literal/program shape require a matching application build.
 
 The experimental Rust target has an explicit compiler/runtime subset. It rejects
 unsupported constructs at compilation rather than interpreting ICU at runtime.
