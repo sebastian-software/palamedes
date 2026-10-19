@@ -137,10 +137,10 @@ if (selectExamples({ framework: "vite", strategy: "client" }).length !== 1) {
   throw new Error("the Vite selector must return the single client-only proof");
 }
 if (
-  selectBrowserExamples({}).length !== 22 ||
-  selectBrowserExamples({ framework: "remix" }).length !== 1
+  selectBrowserExamples({}).length !== 25 ||
+  selectBrowserExamples({ framework: "remix" }).length !== 4
 ) {
-  throw new Error("the browser selector must include Vite and the focused Remix cookie proof");
+  throw new Error("the browser selector must include Vite and all four Remix strategies");
 }
 if (
   selectScreenshotExamples({}).length !== 20 ||

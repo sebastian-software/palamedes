@@ -8,7 +8,14 @@ if (!container) {
 
 let count = 1;
 const root = createRoot(container);
-const render = () => root.render(<ClientProof audience="developer" count={count} />);
+const render = () =>
+  root.render(
+    <ClientProof
+      audience="developer"
+      count={count}
+      framesHref={container.dataset.remixFramesHref}
+    />,
+  );
 
 container.addEventListener("click", (event) => {
   const target = event.target;

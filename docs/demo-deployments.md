@@ -9,8 +9,8 @@ documented as the live reference surface where hosting exists, but reachability
 depends on the hosting and DNS notes in this document. The five publicly hosted
 framework families use the per-example wildcard DNS records described under
 Subdomain Locale Hosting. Their TLD rows link the 20 live public URLs across
-`.com`, `.de`, `.es`, and `.fr`. Remix v3 is verified locally and in CI, but is
-not a public demo deployment target.
+`.com`, `.de`, `.es`, and `.fr`. Remix v3 has local and CI verification; its four-strategy public rollout
+awaits external deployment verification.
 
 ## Current Policy
 
@@ -24,12 +24,12 @@ not a public demo deployment target.
 
 ## Remix Public Demo Readiness Gate
 
-`remix-cookie` is the repository's focused full-stack browser proof, but a live
-URL remains separate deployment work. Change a Remix matrix cell from source
+All four Remix strategies have full-stack browser proofs on stable Remix 3.0.0,
+but live URLs remain separate deployment work. Change a Remix matrix cell from source
 only to `live` only when:
 
 - the published examples image contains the exact pinned Remix version;
-- the four-strategy smoke matrix and focused Remix Chromium job are green;
+- the four-strategy smoke matrix and all four Remix Chromium runs are green;
 - the final HTTPS hostname is reachable through the production proxy;
 - Spanish SSR/hydration, browser interaction, rich messages, Frames, and the
   full-navigation German locale switch pass against that hostname;
@@ -37,6 +37,59 @@ only to `live` only when:
 
 This gate keeps repository readiness distinct from hosting availability. Do not
 publish a provisional live URL or infer readiness from container startup alone.
+
+### Run Each Strategy Against Its Deployed Host
+
+Run the same stable full-stack browser contracts against the final HTTPS origins.
+These are intended targets, not verified live links:
+
+```sh
+pnpm verify:examples:browser -- --id remix-cookie --base-url https://remix-cookie.examples.palamedes.dev
+pnpm verify:examples:browser -- --id remix-route --base-url https://remix-route.examples.palamedes.dev
+pnpm verify:examples:browser -- --id remix-subdomain --base-url https://en.remix-subdomain.examples.palamedes.dev
+pnpm verify:examples:browser -- --id remix-tld --base-url https://remix.examples.palamedes-i18n.com
+```
+
+External mode requires one explicit Remix example. It skips local build, startup,
+and port cleanup; Chromium uses normal TLS verification. Pass an origin without
+credentials, path, query, or fragment. Route mode adds the locale path itself.
+Subdomain mode starts at `en.` and visits `de.` and `es.`; TLD mode starts at
+`.com` and visits `.de`, `.es`, and `.fr`. HTTP is accepted only for cookie/route
+loopback rehearsal, which does not satisfy the public HTTPS gate.
+
+Each contract checks localized SSR and browser messages, interaction, actual
+locale switching, direct reloads, document/standalone Frames, and initial/lazy
+failure recovery under CSP. Cookie mode also checks explicit preference writes.
+The examples send a nonce-based script CSP on real server responses; failure
+injection stays inside the isolated browser context. Retain output,
+image digest and Git revision, origins, and the verification date. The existing
+local catalog-delivery benchmark receipts remain historical measurements; these
+hosted checks do not regenerate that benchmark or prove image identity.
+
+### External Rollout Checklist
+
+The repository includes all four servers and their fixed ports in the shared
+examples image. The external infrastructure still needs:
+
+1. A built and pushed image containing these changes and stable `remix@3.0.0`.
+   The shared `.release-policy.json` currently disables publication, including
+   forced container publication. Resolve the recorded v2 release prerequisites
+   and obtain explicit release authorization before enabling publication; this
+   Remix change does not lift that hold. Afterward, use the existing release or
+   `force_publish` workflow path. Deploy an immutable image digest and record
+   the corresponding Git revision.
+2. Proxy routes for cookie and route, `en`/`de`/`es` subdomain hosts, and the
+   `.com`/`.de`/`.es`/`.fr` TLD hosts. Add the
+   `*.remix-subdomain.examples.palamedes.dev` wildcard record and matching TLS
+   coverage. Reuse the existing TLD domains; no new domain purchase is needed.
+3. Original `Host` forwarding, HTTPS certificates, and correct locale-aware
+   caching. Keep `Host` in host-strategy cache keys and preserve the response's
+   `Vary` policy; respect `Cookie` and `Accept-Language` where applicable.
+4. All four external commands above passing on the deployed image. Only then
+   update live matrix links and reconsider the adapter's Preview tier.
+
+[#1261](https://github.com/sebastian-software/palamedes/issues/1261) remains open
+until deployment evidence is available. Local and loopback tests do not close it.
 
 ## Live Reference URLs
 
@@ -46,7 +99,7 @@ plural seat counts, currency, and dates change together. The demos are grouped b
 framework below, with every locale-specific URL linked directly where public
 hosting exists. Next.js, TanStack Start, Solid, Waku, and React Router have live
 public demos for all four strategies. Remix v3 rows link to source because that
-beta integration is currently a local/CI proof surface.
+stable integration is currently a local/CI proof surface.
 
 How each strategy encodes the locale:
 

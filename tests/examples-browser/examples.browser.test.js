@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -35,6 +34,23 @@ function activeExample() {
     subdomainUrl: process.env.PALAMEDES_VERIFY_SUBDOMAIN_URL ?? "",
     tldUrl: process.env.PALAMEDES_VERIFY_TLD_URL ?? "",
   };
+}
+
+function remixLocales(example) {
+  return example.strategy === "tld" ? ["en", "de", "es", "fr"] : ["en", "de", "es"];
+}
+
+function remixDocumentUrl(example, locale = "en") {
+  const url = new URL(example.subdomainUrl || example.tldUrl || example.baseUrl);
+  if (example.strategy === "route") url.pathname = `/${locale}`;
+  if (example.strategy === "subdomain") url.hostname = url.hostname.replace(/^[^.]+/u, locale);
+  if (example.strategy === "tld")
+    url.hostname = url.hostname.replace(/\.[^.]+$/u, locale === "en" ? ".com" : `.${locale}`);
+  return url.href;
+}
+
+function remixLaunchArgs(example) {
+  return example.strategy === "tld" ? tldHostResolverArgs() : [];
 }
 
 // The tld strategy derives the locale from a real top-level domain, so the
@@ -306,24 +322,36 @@ async function expectTanStackServerFunctionMessages(page, locale) {
 }
 
 async function expectRemixClientProof(page, locale, count) {
-  if (activeExample().id !== "remix-cookie") {
+  if (activeExample().framework !== "remix") {
     return;
   }
 
-  const messages =
-    locale === "de"
-      ? {
-          heading: "Palamedes ist im Browser aktiv",
-          plural: `${count} Browser-${count === 1 ? "Nachricht" : "Nachrichten"}`,
-          rich: "Öffne den Remix-Client-Leitfaden.",
-          select: "Für Entwickler gemacht",
-        }
-      : {
-          heading: "Palamedes está activo en el navegador",
-          plural: `${count} ${count === 1 ? "mensaje" : "mensajes"} del navegador`,
-          rich: "Abre la guía del cliente de Remix.",
-          select: "Creado para desarrolladores",
-        };
+  const messages = {
+    en: {
+      heading: "Palamedes is active in the browser",
+      plural: `${count} browser ${count === 1 ? "message" : "messages"}`,
+      rich: "Open the Remix client guide.",
+      select: "Built for developers",
+    },
+    de: {
+      heading: "Palamedes ist im Browser aktiv",
+      plural: `${count} Browser-${count === 1 ? "Nachricht" : "Nachrichten"}`,
+      rich: "Öffne den Remix-Client-Leitfaden.",
+      select: "Für Entwickler gemacht",
+    },
+    es: {
+      heading: "Palamedes está activo en el navegador",
+      plural: `${count} ${count === 1 ? "mensaje" : "mensajes"} del navegador`,
+      rich: "Abre la guía del cliente de Remix.",
+      select: "Creado para desarrolladores",
+    },
+    fr: {
+      heading: "Palamedes est actif dans le navigateur",
+      plural: `${count} ${count === 1 ? "message" : "messages"} du navigateur`,
+      rich: "Ouvrez le guide du client Remix.",
+      select: "Conçu pour les développeurs",
+    },
+  }[locale];
 
   await expect.poll(() => page.getByTestId("client-heading").textContent()).toBe(messages.heading);
   await expect
@@ -331,7 +359,7 @@ async function expectRemixClientProof(page, locale, count) {
     .toBe(messages.rich);
   await expect
     .poll(() => page.getByTestId("client-rich-message").locator("a").getAttribute("href"))
-    .toBe("/frames");
+    .toBe(activeExample().strategy === "route" ? `/${locale}/frames` : "/frames");
   await expect
     .poll(() => page.getByTestId("client-plural-message").textContent())
     .toBe(messages.plural);
@@ -370,55 +398,36 @@ async function captureScreenshot(page, example, state) {
 }
 
 async function rejectModuleEvaluation(route, message) {
-  const response = await route.fetch();
-  const headers = { ...response.headers(), "cache-control": "no-store" };
-  delete headers.etag;
-  delete headers["last-modified"];
+  // A standalone throwing module exercises evaluation failures without a Node-side
+  // fetch, which cannot use Chromium's local TLD host mappings.
   await route.fulfill({
-    response,
-    headers,
-    body: `${await response.text()}\nthrow new Error(${JSON.stringify(message)});`,
+    status: 200,
+    contentType: "text/javascript",
+    body: `throw new Error(${JSON.stringify(message)});`,
   });
 }
 
-// Stable Remix resolves browser imports through an inline import map. Permit
-// exactly that map by content hash while keeping executable inline scripts blocked.
-async function fulfillRemixDocumentWithCsp(route) {
-  const response = await route.fetch();
-  const body = await response.text();
-  const importMap = body.match(/<script type="importmap"[^>]*>(.*?)<\/script>/u)?.[1];
-  expect(importMap).toBeDefined();
-  const mapHash = createHash("sha256").update(importMap).digest("base64");
-  await route.fulfill({
-    response,
-    body,
-    headers: {
-      ...response.headers(),
-      "content-security-policy": `default-src 'self'; script-src 'self' 'sha256-${mapHash}'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'`,
-    },
-  });
+async function reloadRemixAfterFailure(page) {
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+    page.getByRole("button", { name: "Reload", exact: true }).click({ noWaitAfter: true }),
+  ]);
+  await waitForClientReady(page);
 }
 
 test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
   const example = activeExample();
-  if (example.id !== "remix-cookie") {
+  if (example.framework !== "remix") {
     return;
   }
 
-  const page = await launchPage([]);
+  const page = await launchPage(remixLaunchArgs(example));
   let failure = "entry-network";
   const cspViolations = [];
   page.on("console", (message) => {
     if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text())) {
       cspViolations.push(message.text());
     }
-  });
-  await page.route("**/*", async (route) => {
-    if (route.request().resourceType() !== "document") {
-      await route.continue();
-      return;
-    }
-    await fulfillRemixDocumentWithCsp(route);
   });
   await page.route("**/assets/app/public/client.tsx", async (route) => {
     if (failure === "entry-network") {
@@ -443,13 +452,12 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
     await route.continue();
   });
 
-  await page.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await page.goto(remixDocumentUrl(example), { waitUntil: "domcontentloaded" });
   await page.getByRole("alert").waitFor({ state: "visible" });
   expect(await page.getByRole("alert").textContent()).toContain("Something went wrong");
 
   failure = "ok";
-  await page.getByRole("button", { name: "Reload", exact: true }).click();
-  await waitForClientReady(page);
+  await reloadRemixAfterFailure(page);
 
   failure = "entry-evaluation";
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -457,33 +465,30 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
   await page.getByRole("button", { name: "Reload", exact: true }).waitFor({ state: "visible" });
 
   failure = "ok";
-  await page.getByRole("button", { name: "Reload", exact: true }).click();
-  await waitForClientReady(page);
+  await reloadRemixAfterFailure(page);
 
   failure = "fragment-network";
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("alert").waitFor({ state: "visible" });
 
   failure = "ok";
-  await page.getByRole("button", { name: "Reload", exact: true }).click();
-  await waitForClientReady(page);
+  await reloadRemixAfterFailure(page);
 
   failure = "fragment-evaluation";
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("alert").waitFor({ state: "visible" });
 
   failure = "ok";
-  await page.getByRole("button", { name: "Reload", exact: true }).click();
-  await waitForClientReady(page);
+  await reloadRemixAfterFailure(page);
   expect(cspViolations).toEqual([]);
 });
 
 test("Remix lazy catalog failures recover in all document locales under CSP", async () => {
   const example = activeExample();
-  if (example.id !== "remix-cookie") return;
-  for (const locale of ["en", "de", "es"]) {
+  if (example.framework !== "remix") return;
+  for (const locale of remixLocales(example)) {
     for (const mode of ["network", "evaluation"]) {
-      const page = await launchPage([]);
+      const page = await launchPage(remixLaunchArgs(example));
       await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
       let fail = false;
       const fragments = [];
@@ -492,17 +497,13 @@ test("Remix lazy catalog failures recover in all document locales under CSP", as
         if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text()))
           violations.push(message.text());
       });
-      await page.route("**/*", async (route) => {
-        if (route.request().resourceType() !== "document") return route.continue();
-        await fulfillRemixDocumentWithCsp(route);
-      });
       await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
         fragments.push(route.request().url());
         if (!fail) return route.continue();
         if (mode === "network") return route.abort("failed");
         await rejectModuleEvaluation(route, "injected catalog evaluation failure");
       });
-      await page.goto(example.baseUrl, { waitUntil: "domcontentloaded" });
+      await page.goto(remixDocumentUrl(example, locale), { waitUntil: "domcontentloaded" });
       await waitForClientReady(page);
       const initialCount = fragments.length;
       fail = true;
@@ -517,8 +518,7 @@ test("Remix lazy catalog failures recover in all document locales under CSP", as
       );
       expect(await page.locator("html").getAttribute("data-remix-lazy-body")).toBeNull();
       fail = false;
-      await page.getByRole("button", { name: "Reload", exact: true }).click();
-      await waitForClientReady(page);
+      await reloadRemixAfterFailure(page);
       await page.getByTestId("client-load-lazy").click();
       await page.getByTestId("client-lazy-message").waitFor();
       expect(await page.getByTestId("client-lazy-message").textContent()).toBe(
@@ -526,6 +526,7 @@ test("Remix lazy catalog failures recover in all document locales under CSP", as
           en: "This message arrived after the page was ready",
           de: "Diese Nachricht kam nach dem Laden der Seite an",
           es: "Este mensaje llegó después de que la página estuviera lista",
+          fr: "Ce message est arrivé après le chargement de la page",
         }[locale],
       );
       expect(violations).toEqual([]);
@@ -553,9 +554,91 @@ test("Waku initial HTML document uses the request locale", async () => {
   expect(documentLocale).toBe("de");
 });
 
+async function verifyRemixBrowserContract(example) {
+  const page = await launchPage(remixLaunchArgs(example));
+  verifyObservedArtifacts = observeBrowserArtifacts(page, example);
+  let firstDocument = true;
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  const fragments = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/catalog-fragments/")) fragments.push(request.url());
+  });
+  for (const locale of remixLocales(example)) {
+    if (example.strategy === "cookie")
+      await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
+    const response = await page.goto(remixDocumentUrl(example, locale), {
+      waitUntil: "domcontentloaded",
+    });
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-security-policy"]).toContain("script-src 'self' 'nonce-");
+    const html = await response.text();
+    expect(html).toContain(`<html lang="${locale}">`);
+    expect(html).toContain(`/assets/__palamedes/catalog/${locale}.js`);
+    expect(html).toContain("data-remix-client-proof");
+    expect(html).toContain(
+      {
+        en: "Palamedes is active in the browser",
+        de: "Palamedes ist im Browser aktiv",
+        es: "Palamedes está activo en el navegador",
+        fr: "Palamedes est actif dans le navigateur",
+      }[locale],
+    );
+    expect(html).not.toContain('data-testid="client-ready"');
+    await waitForClientReady(page);
+    await expectRemixClientProof(page, locale, 1);
+    if (firstDocument) {
+      await verifyObservedArtifacts.checkpoint();
+      firstDocument = false;
+    }
+    await page.getByTestId("client-increment").click();
+    await expectRemixClientProof(page, locale, 2);
+    const frameUrl = new URL(
+      await page.getByTestId("client-rich-message").locator("a").getAttribute("href"),
+      page.url(),
+    );
+    for (const path of [frameUrl.href, `${frameUrl.href}/locale-summary`]) {
+      const frame = await page.evaluate(async (url) => {
+        const response = await fetch(url);
+        return {
+          status: response.status,
+          locale: response.headers.get("x-palamedes-locale"),
+          body: await response.text(),
+        };
+      }, path);
+      expect(frame.status).toBe(200);
+      expect(frame.locale).toBe(locale);
+      expect(frame.body).toContain(`Frame locale code: ${locale}`);
+    }
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForClientReady(page);
+    await expectRemixClientProof(page, locale, 1);
+    await page.evaluate(() => {
+      window.__remixParityDocument = true;
+    });
+    const next = locale === "de" ? "es" : "de";
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+      page.getByTestId(`locale-switch-${next}`).click({ noWaitAfter: true }),
+    ]);
+    await waitForClientReady(page);
+    expect(await page.locator("html").getAttribute("lang")).toBe(next);
+    expect(page.url()).toBe(remixDocumentUrl(example, next));
+    expect(await page.evaluate(() => window.__remixParityDocument)).toBeUndefined();
+    await expectRemixClientProof(page, next, 1);
+  }
+  await page.waitForLoadState("networkidle");
+  expect(fragments.length).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+}
+
 test("matrix example browser contract", async () => {
   const example = activeExample();
   expect(example.id).not.toBe("");
+  if (example.framework === "remix") return verifyRemixBrowserContract(example);
 
   const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
     // The browser sends es-ES to SSR, while client code sees en-US. A client
@@ -607,18 +690,6 @@ test("matrix example browser contract", async () => {
           : `${example.baseUrl}/`;
   const initialResponse = await page.goto(initialUrl, { waitUntil: "domcontentloaded" });
 
-  if (example.id === "remix-cookie") {
-    expect(initialResponse).not.toBeNull();
-    const initialHtml = await initialResponse.text();
-    expect(initialHtml).toContain("Palamedes está activo en el navegador");
-    expect(initialHtml).toContain("Abre la ");
-    expect(initialHtml).toContain("guía del cliente de Remix");
-    expect(initialHtml).toContain("/assets/__palamedes/catalog/es.js");
-    expect(initialHtml).not.toContain('id="palamedes-i18n-bootstrap"');
-    expect(initialHtml).toContain('src="/assets/__palamedes/entry/');
-    expect(initialHtml).not.toContain('data-testid="client-ready"');
-  }
-
   if (example.strategy === "client") {
     const mdxPage = page.getByTestId("mdx-page");
     await expect
@@ -660,12 +731,7 @@ test("matrix example browser contract", async () => {
       .poll(() => page.getByTestId("client-locale-value").textContent())
       .toBe("Añadir al carrito");
   }
-  await expectRemixClientProof(page, "es", 1);
   await verifyObservedArtifacts.checkpoint();
-  if (example.id === "remix-cookie") {
-    await page.getByTestId("client-increment").click();
-    await expectRemixClientProof(page, "es", 2);
-  }
   await captureScreenshot(page, example, "initial");
 
   if (example.strategy === "cookie") {
@@ -679,15 +745,6 @@ test("matrix example browser contract", async () => {
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
     await expectSettledDocumentLocale(page, "de");
-    if (example.id === "remix-cookie") {
-      await expectRemixClientProof(page, "de", 1);
-      await page.getByTestId("client-increment").click();
-      await expectRemixClientProof(page, "de", 2);
-      await expectSettledDocumentLocale(page, "de");
-      expectNoRuntimeErrors(pageErrors, hydrationErrors);
-      await captureScreenshot(page, example, "interactive");
-      return;
-    }
     if (example.id === "nextjs-cookie") {
       await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("In den Warenkorb");
       await expect

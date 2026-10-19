@@ -5,6 +5,7 @@ import type { Handle, RemixNode } from "remix/component";
 export type ClientProofProps = {
   audience: "developer" | "other";
   count: number;
+  framesHref?: string;
 };
 
 /** Shared by SSR and the browser so Remix UI exercises its hydration path. */
@@ -21,7 +22,7 @@ export function ClientProof(handle: Handle<ClientProofProps>): () => RemixNode {
         </h2>
         <p data-testid="client-rich-message">
           <Trans>
-            Open the <a href="/frames">Remix client guide</a>.
+            Open the <a href={handle.props.framesHref ?? "/frames"}>Remix client guide</a>.
           </Trans>
         </p>
         <p data-testid="client-plural-message">

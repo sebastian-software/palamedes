@@ -1,0 +1,48 @@
+import { createRoot } from "remix/component";
+
+const { ClientProof } = await import("./interactive.tsx");
+const container = document.querySelector<HTMLElement>("[data-remix-client-proof]");
+if (!container) {
+  throw new Error("Missing the server-rendered Remix client proof root.");
+}
+
+let count = 1;
+const root = createRoot(container);
+const render = () =>
+  root.render(
+    <ClientProof
+      audience="developer"
+      count={count}
+      framesHref={container.dataset.remixFramesHref}
+    />,
+  );
+
+container.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element) || !target.closest('[data-testid="client-increment"]')) {
+    return;
+  }
+
+  count += 1;
+  render();
+});
+
+render();
+
+const ready = document.createElement("span");
+ready.dataset.testid = "client-ready";
+ready.hidden = true;
+document.body.append(ready);
+
+const lazyButton = document.createElement("button");
+lazyButton.type = "button";
+lazyButton.dataset.testid = "client-load-lazy";
+lazyButton.textContent = "Load more";
+lazyButton.addEventListener("click", async () => {
+  const { lazyMessage } = await import("./lazy-message.ts");
+  const result = document.createElement("p");
+  result.dataset.testid = "client-lazy-message";
+  result.textContent = lazyMessage();
+  lazyButton.replaceWith(result);
+});
+container.append(lazyButton);

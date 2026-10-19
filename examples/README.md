@@ -21,10 +21,10 @@ Every count on this page is derived from that file and enforced by
 
 The matrix is intended to be run locally and validated in CI — that remains the
 canonical verification path. The `Example Verification` workflow smoke-tests
-all 25 matrix examples on relevant pull requests and `main` pushes. Its weekly run
-(and an opt-in manual dispatch) also exercises 22 browser-capable examples with
-Playwright, including the focused full-stack `remix-cookie` proof. The other
-three Remix locale-strategy examples remain smoke-only.
+all 25 matrix examples on relevant pull requests and `main` pushes. Those runs
+and the weekly run also exercise 25 browser-capable examples with Playwright,
+including all four full-stack Remix locale strategies. Manual dispatch can opt
+into browser verification with `run_browser`.
 Public demo URLs are documented as the live reference surface, but reachability
 depends on the hosting and DNS rows in
 [docs/demo-deployments.md](../docs/demo-deployments.md).
@@ -172,7 +172,7 @@ Remix v3 uses its own UI and asset runtime rather than the React-based shared
 `@palamedes/example-ui` package, so its examples intentionally do not visually
 match the React/Solid matrix. All four prove checked-in `.po` catalogs,
 request-local i18n, and locale navigation through Remix's default Node loader.
-`remix-cookie` additionally proves the post-compile browser asset loader,
+All four Remix examples also prove the post-compile browser asset loader,
 document catalog bootstrap, hydration, ordinary and rich Remix UI macros, and
 browser interaction through `@palamedes/remix`, `@palamedes/core`,
 `@palamedes/core-node`, and `@palamedes/runtime`.
@@ -189,8 +189,7 @@ the twenty established UI-adapter apps are visually identical regardless of
 framework. The whole visual layer is one shared stylesheet plus one shared
 content source, proving that only the markup and locale strategy differ across
 frameworks, not the design. Remix v3 proves the same locale strategies with a
-Remix-native UI; the focused cookie flow additionally covers the browser
-runtime:
+Remix-native UI and browser runtime:
 
 - [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by the twenty established UI-adapter apps
 
@@ -270,11 +269,11 @@ Together they cover:
 `Example Verification` runs the smoke layer across the complete 25-example
 matrix on relevant pull requests and `main` pushes, including the deterministic
 request-scope concurrency checks for React Router, Solid, TanStack Start,
-and Waku. It runs the Playwright layer for its 22 browser-capable examples on a
-weekly schedule or when a maintainer selects `run_browser` in manual dispatch.
-That set includes `remix-cookie`; the other three Remix v3 examples remain
-outside the browser layer while all four locale strategies retain smoke
-verification.
+and Waku. It runs the Playwright layer for its 25 browser-capable examples on
+relevant pull requests, `main` pushes, the weekly schedule, and manual dispatch
+when a maintainer selects `run_browser`.
+All four Remix strategies include SSR, browser interaction, Frames, full-document
+locale navigation, reloads, and initial/lazy catalog recovery under CSP.
 
 For the decision model behind cookie, route, subdomain, tld, and domain handling, see:
 

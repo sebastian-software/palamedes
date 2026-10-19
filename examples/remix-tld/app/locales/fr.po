@@ -4,15 +4,50 @@ msgstr ""
 "Content-Type: text/plain; charset=utf-8\n"
 "Language: fr\n"
 "MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
 
-#: examples/remix-cookie/app/page.ts#renderHomePage
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid ""
+"{audience, select, developer {Built for developers} other {Built for "
+"everyone}}"
+msgstr ""
+"{audience, select, developer {Conçu pour les développeurs} other {Conçu "
+"pour tout le monde}}"
+
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid "{count, plural, one {# browser message} other {# browser messages}}"
+msgstr ""
+"{count, plural, one {# message du navigateur} other {# messages du "
+"navigateur}}"
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "{seatCount, plural, one {# seat left} other {# seats left}}"
+msgstr "{seatCount, plural, one {# place restante} other {# places restantes}}"
+
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid "Add a browser message"
+msgstr "Ajouter un message du navigateur"
+
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid "Open the <0>Remix client guide</0>."
+msgstr "Ouvrez le <0>guide du client Remix</0>."
+
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid "Palamedes is active in the browser"
+msgstr "Palamedes est actif dans le navigateur"
+
+#: examples/remix-tld/app/frame-page.tsx#renderFrameDocument
+#: examples/remix-tld/app/page.ts#renderHomePage
 msgid "Remix v3 is rendering {locale} with Palamedes"
 msgstr "Remix v3 affiche {locale} avec Palamedes"
 
-#: examples/remix-cookie/app/page.ts#renderHomePage
-msgid "This response was translated inside a request-scoped Remix handler."
-msgstr "Cette réponse a été traduite dans un gestionnaire Remix limité à la requête."
+#: examples/remix-tld/app/public/lazy-message.ts#lazyMessage
+msgid "This message arrived after the page was ready"
+msgstr "Ce message est arrivé après le chargement de la page"
 
-#: examples/remix-cookie/app/page.ts#renderHomePage
-msgid "{seatCount, plural, one {# seat left} other {# seats left}}"
-msgstr "{seatCount, plural, one {# place restante} other {# places restantes}}"
+#: examples/remix-tld/app/frame-page.tsx#renderFrameContent
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "This response was translated inside a request-scoped Remix handler."
+msgstr ""
+"Cette réponse a été traduite dans un gestionnaire Remix limité à la "
+"requête."
