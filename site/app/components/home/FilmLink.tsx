@@ -1,37 +1,37 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FILM, FILM_CREDITS, FILM_TRANSCRIPT } from "~/data/film";
 
 /*
  * The film behind a link, as on dalo.sh: it takes no room on the page, so
  * the tour still reaches its first example early. The link opens a dialog and
- * starts the film; without JavaScript it leads to the video file itself.
- * Closing the dialog pauses playback. Captions are on by default and the
- * transcript sits below the player.
+ * only then loads the Bunny player, which starts because the reader asked for
+ * it; closing the dialog removes the player and stops playback. Without
+ * JavaScript the link opens the hosted player page.
  */
 export function FilmLink() {
   const dialog = useRef<HTMLDialogElement>(null);
-  const video = useRef<HTMLVideoElement>(null);
+  const [open, setOpen] = useState(false);
 
   // The native close event fires for the button, Escape, and form methods alike.
   useEffect(() => {
     const element = dialog.current;
     if (!element) return;
-    const pause = () => video.current?.pause();
-    element.addEventListener("close", pause);
-    return () => element.removeEventListener("close", pause);
+    const close = () => setOpen(false);
+    element.addEventListener("close", close);
+    return () => element.removeEventListener("close", close);
   }, []);
 
   return (
     <>
       <a
-        href={FILM.src}
+        href={FILM.page}
         onClick={(event) => {
           const element = dialog.current;
           if (!element || typeof element.showModal !== "function") return;
           event.preventDefault();
+          setOpen(true);
           element.showModal();
-          void video.current?.play().catch(() => null);
         }}
         className="mt-5 inline-flex min-h-11 items-center gap-3 text-[15px] font-semibold text-ink underline-offset-4 hover:text-accent hover:underline"
       >
@@ -63,19 +63,20 @@ export function FilmLink() {
           </svg>
         </button>
         <figure className="border border-ink/15 bg-paper">
-          <video
-            ref={video}
-            className="block aspect-video h-auto w-full bg-mist"
-            controls
-            preload="none"
-            playsInline
-            poster={FILM.poster}
-            width={FILM.width}
-            height={FILM.height}
-          >
-            <source src={FILM.src} type="video/mp4" />
-            <track kind="captions" srcLang="en" label="English" src={FILM.captions} default />
-          </video>
+          <div className="aspect-video w-full bg-mist">
+            {open ? (
+              // Bunny's player needs its own origin and scripts; a sandbox allowing
+              // both would be no sandbox at all, so the trusted player runs without one.
+              // oxlint-disable-next-line react/iframe-missing-sandbox
+              <iframe
+                src={FILM.embed}
+                title={FILM.title}
+                className="block size-full border-0"
+                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+              />
+            ) : null}
+          </div>
           <figcaption className="border-t border-hair px-5 py-3 text-[13px] leading-relaxed text-ink/70">
             {FILM_CREDITS}
           </figcaption>
