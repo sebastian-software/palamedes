@@ -23,6 +23,14 @@ fn real_rust_compilation_resolves_literal_values_and_checks_calls() {
             None,
         ),
         (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}", count = 2_usize)"#,
+            None,
+        ),
+        (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}")"#,
+            Some("translation argument count mismatch"),
+        ),
+        (
             r#"translate!(catalog, "Unknown source")"#,
             Some("source message is absent"),
         ),

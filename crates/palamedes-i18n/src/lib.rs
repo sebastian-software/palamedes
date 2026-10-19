@@ -3,13 +3,15 @@
 //! No catalogs, source-message fallback, or ICU parser are embedded here.
 //! `palamedes-build` generates the schema and author-facing translation macro.
 
+mod plural;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 /// Version of the external instruction format. Not an ICU or PO input format.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 /// Internal compile-time support for generated macros, including raw literals.
 #[doc(hidden)]
@@ -145,6 +147,25 @@ pub enum Instruction {
         name: String,
         options: BTreeMap<String, Vec<Instruction>>,
     },
+    /// Select an exact numeric branch before applying the locale's CLDR rules.
+    Plural {
+        name: String,
+        kind: PluralKind,
+        offset: u32,
+        options: BTreeMap<String, Vec<Instruction>>,
+    },
+    /// Append the innermost plural's offset-adjusted value as plain decimal text.
+    Pound,
+}
+
+/// CLDR rule family used by a compiled plural instruction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PluralKind {
+    /// Quantity categories, such as one file versus several files.
+    Cardinal,
+    /// Position categories, such as first, second, and third.
+    Ordinal,
 }
 
 /// Load or rendering errors. Hosts choose how to present them.
@@ -184,6 +205,14 @@ pub enum Error {
     /// Render arguments do not match the compiled message contract.
     #[error("invalid arguments for compiled message {0}")]
     Arguments(String),
+    /// A plural value or offset arithmetic exceeds the supported decimal domain.
+    #[error(
+        "invalid plural argument {name}: {value:?}; expected a plain decimal with at most 18 fractional digits and an i128 coefficient, including after offset subtraction"
+    )]
+    PluralArgument { name: String, value: String },
+    /// The selected locale cannot provide the required plural rules.
+    #[error("could not load plural rules for locale {locale}: {details}")]
+    PluralRules { locale: String, details: String },
 }
 
 /// An owned, validated catalog for one explicit locale.
@@ -194,6 +223,7 @@ pub enum Error {
 pub struct Catalog {
     artifact: CatalogArtifact,
     specifications: BTreeMap<&'static str, &'static MessageSpec>,
+    plural_rules: plural::Rules,
 }
 
 impl Catalog {
@@ -221,6 +251,7 @@ impl Catalog {
         if artifact.messages.len() != schema.messages.len() {
             return Err(Error::Incompatible("message inventory mismatch".into()));
         }
+        let mut plural_kinds = BTreeSet::new();
         for spec in schema.messages {
             let message = artifact
                 .messages
@@ -229,7 +260,9 @@ impl Catalog {
             let mut arguments = BTreeSet::new();
             match message {
                 Message::Literal(_) if spec.literal => {}
-                Message::Program(program) if !spec.literal => validate(program, &mut arguments)?,
+                Message::Program(program) if !spec.literal => {
+                    validate(program, &mut arguments, &mut plural_kinds, false)?
+                }
                 _ => {
                     return Err(Error::Incompatible(format!(
                         "message kind mismatch: {}",
@@ -254,9 +287,11 @@ impl Catalog {
                 "duplicate schema message identity".into(),
             ));
         }
+        let plural_rules = plural::Rules::new(locale, &plural_kinds)?;
         Ok(Self {
             artifact,
             specifications,
+            plural_rules,
         })
     }
 
@@ -306,16 +341,24 @@ impl Catalog {
             Message::Literal(value) => Ok(value.clone()),
             Message::Program(program) => {
                 let mut output = String::new();
-                execute(program, &arguments, &mut output);
+                execute(program, &arguments, &self.plural_rules, &mut output, None)?;
                 Ok(output)
             }
         }
     }
 }
 
+/// Internal compiler support: validate the prepared instruction contract.
+#[doc(hidden)]
+pub fn validate_program(program: &[Instruction]) -> Result<(), Error> {
+    validate(program, &mut BTreeSet::new(), &mut BTreeSet::new(), false)
+}
+
 fn validate<'a>(
     program: &'a [Instruction],
     arguments: &mut BTreeSet<&'a str>,
+    plural_kinds: &mut BTreeSet<PluralKind>,
+    in_plural: bool,
 ) -> Result<(), Error> {
     for instruction in program {
         match instruction {
@@ -331,15 +374,40 @@ fn validate<'a>(
                     ));
                 }
                 for branch in options.values() {
-                    validate(branch, arguments)?;
+                    validate(branch, arguments, plural_kinds, in_plural)?;
                 }
             }
+            Instruction::Plural {
+                name,
+                kind,
+                options,
+                ..
+            } => {
+                arguments.insert(name);
+                plural_kinds.insert(*kind);
+                plural::validate_options(options)?;
+                for branch in options.values() {
+                    validate(branch, arguments, plural_kinds, true)?;
+                }
+            }
+            Instruction::Pound if !in_plural => {
+                return Err(Error::Incompatible(
+                    "pound instruction requires an enclosing plural".into(),
+                ));
+            }
+            Instruction::Pound => {}
         }
     }
     Ok(())
 }
 
-fn execute(program: &[Instruction], values: &BTreeMap<&str, &str>, output: &mut String) {
+fn execute(
+    program: &[Instruction],
+    values: &BTreeMap<&str, &str>,
+    rules: &plural::Rules,
+    output: &mut String,
+    pound: Option<&str>,
+) -> Result<(), Error> {
     for instruction in program {
         match instruction {
             Instruction::Text { value } => output.push_str(value),
@@ -348,8 +416,38 @@ fn execute(program: &[Instruction], values: &BTreeMap<&str, &str>, output: &mut 
                 let branch = options
                     .get(values[name.as_str()])
                     .unwrap_or(&options["other"]);
-                execute(branch, values, output);
+                execute(branch, values, rules, output, pound)?;
+            }
+            Instruction::Plural {
+                name,
+                kind,
+                offset,
+                options,
+            } => {
+                let value = values[name.as_str()];
+                let invalid = || Error::PluralArgument {
+                    name: name.clone(),
+                    value: value.into(),
+                };
+                let number = plural::Number::parse(value).ok_or_else(invalid)?;
+                let adjusted = number.subtract(*offset).ok_or_else(invalid)?;
+                let exact = options.iter().find_map(|(selector, branch)| {
+                    let selector = selector.strip_prefix('=')?;
+                    (plural::Number::parse(selector)?.identity() == number.identity())
+                        .then_some(branch)
+                });
+                let branch = exact.unwrap_or_else(|| {
+                    options
+                        .get(rules.category(*kind, adjusted))
+                        .unwrap_or(&options["other"])
+                });
+                let adjusted = adjusted.decimal().to_string();
+                execute(branch, values, rules, output, Some(&adjusted))?;
+            }
+            Instruction::Pound => {
+                output.push_str(pound.expect("plural context validated before rendering"))
             }
         }
     }
+    Ok(())
 }

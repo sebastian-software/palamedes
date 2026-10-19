@@ -88,3 +88,49 @@ fn real_po_updates_run_in_a_copied_binary_and_changed_contracts_preserve_old_dat
     );
     assert_eq!(fs::read(output.join("de.pmd.json")).unwrap(), data);
 }
+
+#[test]
+fn cli_uses_real_plural_translations_for_compilation_summaries() {
+    let output = tempfile::tempdir().unwrap();
+    for (ui, singular, plural) in [
+        (
+            "en",
+            "Compiled 1 Rust language catalog.",
+            "Compiled 2 Rust language catalogs.",
+        ),
+        (
+            "de",
+            "1 Rust-Sprachkatalog kompiliert.",
+            "2 Rust-Sprachkataloge kompiliert.",
+        ),
+        (
+            "es",
+            "Se compiló 1 catálogo de idiomas para Rust.",
+            "Se compilaron 2 catálogos de idiomas para Rust.",
+        ),
+    ] {
+        for (locales, expected) in [(&["en"][..], singular), (&["en", "de"][..], plural)] {
+            let mut command = compiler();
+            command
+                .env("PALAMEDES_UI_LOCALE", ui)
+                .args([
+                    "catalog",
+                    "compile",
+                    "--target",
+                    "rust",
+                    "--schema",
+                    concat!(env!("OUT_DIR"), "/schema.pmd.json"),
+                    "--catalog-dir",
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/locales"),
+                    "--output",
+                ])
+                .arg(output.path());
+            for locale in locales {
+                command.args(["--locale", locale]);
+            }
+            let result = command.output().unwrap();
+            assert!(result.status.success(), "{result:?}");
+            assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), expected);
+        }
+    }
+}

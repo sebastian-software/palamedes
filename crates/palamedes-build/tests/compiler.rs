@@ -46,7 +46,9 @@ fn invalid_or_unsupported_translations_stop_the_build() {
         "Broken {",
         "Es ist {wrong}",
         "{name, number}",
-        "{name, plural, one {eins} other {viele}}",
+        "{name, date}",
+        "{name, time}",
+        "<strong>{name}</strong>",
         "",
     ] {
         let directory = catalogs(translation);
@@ -232,7 +234,7 @@ fn updates_use_the_exported_contract_and_do_not_touch_outputs_on_mismatch() {
     // Source-only ICU failures are fatal even when a translation hides them.
     fs::write(
         directory.path().join("en.po"),
-        "msgid \"{name, plural, one {one} other {many}}\"\nmsgstr \"Text\"\n",
+        "msgid \"{name, number}\"\nmsgstr \"Text\"\n",
     )
     .unwrap();
     assert!(
@@ -266,5 +268,85 @@ fn application_builds_remove_stale_output_locales_but_updates_keep_other_locales
     assert_eq!(
         fs::read_to_string(preserved).unwrap(),
         "previous compatible locale"
+    );
+}
+
+#[test]
+fn canonical_plural_lowering_preserves_quoting_offsets_and_nested_ordinal_scope() {
+    let source = "{count, plural, offset:1 =0 {Nobody} one {'#' # guest} other {{mode, select, short {# guests} other {{inner, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} and # guests}}}}";
+    let po = tempfile::tempdir().unwrap();
+    fs::write(
+        po.path().join("en.po"),
+        format!("msgid {source:?}\nmsgstr {source:?}\n"),
+    )
+    .unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let compiled = CatalogBuilder::new(po.path(), "en")
+        .locales(&["en"])
+        .compile_to(output.path())
+        .unwrap();
+    let bytes = fs::read(compiled.catalog_directory.join("en.pmd.json")).unwrap();
+    let artifact: palamedes_i18n::CatalogArtifact = serde_json::from_slice(&bytes).unwrap();
+    // Generated applications have static schemas. This test supplies the same
+    // public contract without compiling a second Rust process for each pattern.
+    let id: &'static str = Box::leak(
+        artifact
+            .messages
+            .keys()
+            .next()
+            .unwrap()
+            .clone()
+            .into_boxed_str(),
+    );
+    let schema = palamedes_i18n::Schema {
+        fingerprint: Box::leak(artifact.fingerprint.into_boxed_str()),
+        messages: Box::leak(Box::new([palamedes_i18n::MessageSpec {
+            id,
+            arguments: &["count", "inner", "mode"],
+            literal: false,
+        }])),
+    };
+    let catalog = palamedes_i18n::Catalog::from_bytes(&bytes, "en", schema).unwrap();
+    for (count, inner, mode, expected) in [
+        ("0", "2", "full", "Nobody"),
+        ("2", "2", "full", "# 1 guest"),
+        ("4", "2", "short", "3 guests"),
+        ("4", "2", "full", "2nd and 3 guests"),
+        ("5", "21", "full", "21st and 4 guests"),
+    ] {
+        assert_eq!(
+            catalog
+                .render(
+                    id,
+                    &[
+                        ("count", count.into()),
+                        ("inner", inner.into()),
+                        ("mode", mode.into())
+                    ]
+                )
+                .unwrap(),
+            expected
+        );
+    }
+    let contract = palamedes_build::CatalogContract::load(compiled.schema_file).unwrap();
+    fs::write(po.path().join("de.po"), "").unwrap();
+    let update = CatalogBuilder::new(po.path(), "en")
+        .locales(&["de"])
+        .compile_updates(&contract, output.path())
+        .unwrap();
+    assert_eq!(update.missing.len(), 1);
+    let catalog = palamedes_i18n::Catalog::load(&update.catalogs[0], "de", schema).unwrap();
+    assert_eq!(
+        catalog
+            .render(
+                id,
+                &[
+                    ("count", "2".into()),
+                    ("inner", "3".into()),
+                    ("mode", "full".into())
+                ]
+            )
+            .unwrap(),
+        "# 1 guest"
     );
 }
