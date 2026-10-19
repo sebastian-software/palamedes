@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { buildApplication } from "../tooling/build.mjs";
+import { createProductionDeployment } from "./production-deployment.mjs";
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -37,59 +38,31 @@ export async function runProbe(mode, locale = "en", id = "BK-1", cwd = root) {
 before(async () => {
   await buildApplication("unbundled");
   await buildApplication("rolldown");
-  productionDeployment = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-production-"));
-  scratch.push(productionDeployment);
-  // Legacy deploy writes workspace install metadata. Keep that state isolated.
-  const workspace = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-packaging-"));
-  scratch.push(workspace);
-  const repository = path.resolve(root, "../..");
-  for (const file of ["pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
-    await cp(path.join(repository, file), path.join(workspace, file));
-  }
-  await writeFile(path.join(workspace, "package.json"), JSON.stringify({ private: true }));
-  for (const directory of ["examples/node-applications", "packages/core", "packages/runtime"]) {
-    const source = path.join(repository, directory);
-    const target = path.join(workspace, directory);
-    await mkdir(target, { recursive: true });
-    const manifest = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
-    delete manifest.devDependencies;
-    await writeFile(path.join(target, "package.json"), JSON.stringify(manifest));
-    await cp(path.join(source, "dist"), path.join(target, "dist"), { recursive: true });
-  }
-  assert.ok(process.env.npm_execpath, "Run the fixture through pnpm test");
-  await run(
-    process.execPath,
-    [
-      process.env.npm_execpath,
-      "--config.verify-deps-before-run=false",
-      "--offline",
-      "--ignore-scripts",
-      "--filter",
-      "@palamedes/example-node-applications",
-      "deploy",
-      "--legacy",
-      "--prod",
-      productionDeployment,
-    ],
-    {
-      cwd: workspace,
-      timeout: 60_000,
-      maxBuffer: 2_000_000,
-    },
-  );
-  for (const file of [
-    "src",
-    "tooling",
-    "palamedes.yaml",
-    "node_modules/@palamedes/core-node",
-    "node_modules/@palamedes/config",
-    "node_modules/@palamedes/transform",
-    "node_modules/typescript",
-    "node_modules/rolldown",
-  ]) {
-    await assert.rejects(readFile(path.join(productionDeployment, file)), { code: "ENOENT" });
-  }
 });
+
+// Only the production tests need the deployment, so a packaging failure stays
+// with them instead of failing every build-path test in `before()`.
+function deployProduction() {
+  productionDeployment ??= (async () => {
+    const deployment = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-production-"));
+    scratch.push(deployment);
+    await createProductionDeployment(root, deployment);
+    for (const file of [
+      "src",
+      "tooling",
+      "palamedes.yaml",
+      "node_modules/@palamedes/core-node",
+      "node_modules/@palamedes/config",
+      "node_modules/@palamedes/transform",
+      "node_modules/typescript",
+      "node_modules/rolldown",
+    ]) {
+      await assert.rejects(stat(path.join(deployment, file)), { code: "ENOENT" });
+    }
+    return deployment;
+  })();
+  return productionDeployment;
+}
 after(async () => {
   for (const directory of scratch) await rm(directory, { recursive: true, force: true });
 });
@@ -320,7 +293,8 @@ for (const mode of modes) {
   for (const framework of ["express", "hono"]) {
     for (const deployed of mode === "direct" ? [false] : [false, true]) {
       test(`${mode}/${framework}${deployed ? "/production" : ""}: real HTTP requests isolate locales through async service calls`, async (t) => {
-        const server = await startHttp(t, mode, framework, deployed ? productionDeployment : root);
+        const cwd = deployed ? await deployProduction() : root;
+        const server = await startHttp(t, mode, framework, cwd);
         const cases = [
           ["de-DE,de;q=0.9,en;q=0.8", "de"],
           ["es-MX,en;q=0.5", "es"],
@@ -369,9 +343,10 @@ for (const mode of modes) {
 
 for (const framework of ["express", "hono"]) {
   test(`unbundled/${framework}: missing deployed catalogs fail visibly and recover`, async (t) => {
-    const catalog = path.join(productionDeployment, "dist/unbundled/.palamedes/es-0.mjs");
+    const deployment = await deployProduction();
+    const catalog = path.join(deployment, "dist/unbundled/.palamedes/es-0.mjs");
     const original = await readFile(catalog, "utf8");
-    const server = await startHttp(t, "unbundled", framework, productionDeployment);
+    const server = await startHttp(t, "unbundled", framework, deployment);
     await rm(catalog);
     try {
       const response = await fetch(`${server.base}/bookings/BK-1`, {
