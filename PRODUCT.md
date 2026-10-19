@@ -36,7 +36,9 @@ promise.
 The experimental Rust application path extends source-string authoring and PO
 catalog compilation to native CLIs and services. Its Cargo integration produces
 external language files; all languages, including English, stay outside the
-executable. Present it as an additional evaluation path with its own guide and
+executable. The application build exports a message contract; `pmds catalog
+compile --target rust` checks PO updates against it and produces compatible
+language files independently of the application build. Present it as an additional evaluation path with its own guide and
 example, not as full parity with the TypeScript workflow. The crates remain
 unpublished, and the current subset is text, display arguments, and string selects.
 Keep those limits beside the claim that compatible translations can ship without

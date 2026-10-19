@@ -9,7 +9,7 @@ export const HOME_FAQ = [
   },
   {
     q: "Can I translate a Rust CLI with Palamedes?",
-    a: "There is an experimental Cargo integration and runtime for Rust applications. Your executable loads an external language catalog, including for English; compatible translation updates can ship without rebuilding it. Text, display arguments, and string selects work today. Plurals, localized numbers and dates, rich text, and contexts are not supported yet. The crates are unpublished; the Rust applications guide includes a pinned Git dependency and a complete example.",
+    a: "There is an experimental Cargo integration and runtime for Rust applications. Your executable loads an external language catalog, including for English; Cargo exports a message contract, and pmds catalog compile checks compatible PO updates against it without building the application. Text, display arguments, and string selects work today. Plurals, localized numbers and dates, rich text, and contexts are not supported yet. The crates are unpublished; the Rust applications guide includes a pinned Git dependency and a complete example.",
   },
   {
     q: "Does Palamedes replace a translation management system or write translations with AI?",
