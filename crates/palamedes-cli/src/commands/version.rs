@@ -16,7 +16,7 @@ impl Command for VersionCommand {
 
     fn render(&self, _output: &Self::Output) -> Result<(), CliError> {
         println!("pmds (Palamedes) v{}", env!("CARGO_PKG_VERSION"));
-        println!("Fast i18n tooling for modern apps");
+        println!("{}", tr!("Fast i18n tooling for modern apps"));
         Ok(())
     }
 }

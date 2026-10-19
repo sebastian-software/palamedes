@@ -9,6 +9,11 @@ fn a_mistyped_builtin_is_a_usage_error_with_a_suggestion() {
     fs::create_dir_all(&fixture).expect("create fixture");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .arg("lnit")
         .current_dir(&fixture)
         .output()
@@ -31,6 +36,11 @@ fn an_explicit_config_still_reports_the_config_failure() {
     fs::create_dir_all(&fixture).expect("create fixture");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args([
             "acme",
             "inspect",
@@ -60,6 +70,11 @@ fn an_unreadable_config_still_reports_the_config_failure() {
     fs::write(fixture.join("palamedes.yaml"), "locales: []\n").expect("write invalid config");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args(["acme", "inspect"])
         .current_dir(&fixture)
         .output()
@@ -85,6 +100,11 @@ fn a_bare_namespace_reports_the_unknown_namespace_when_a_config_exists() {
     .expect("write config");
 
     let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .arg("lnit")
         .current_dir(&fixture)
         .output()

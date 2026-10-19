@@ -15,16 +15,16 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct AuditOptions {
-    /// Path to a Palamedes config file.
+    #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Only audit selected target locale(s).
+    #[arg(help = tr!("Only audit selected target locales."))]
     #[arg(long, num_args = 1..)]
     locale: Vec<String>,
-    /// Print the machine-readable audit result as JSON.
+    #[arg(help = tr!("Print the machine-readable audit result as JSON."))]
     #[arg(long)]
     json: bool,
-    /// Fail on error, warning, or info diagnostics.
+    #[arg(help = tr!("Fail on error, warning, or info diagnostics."))]
     #[arg(long, default_value = "error")]
     fail_on: FailOn,
 }
@@ -91,13 +91,19 @@ impl FailOn {
 
 fn print_audit_result(result: &CatalogAuditResult, fail_on: FailOn) {
     let status = if fail_on.should_fail(&result.summary) {
-        "failed"
+        tr!("failed")
     } else {
-        "passed"
+        tr!("passed")
     };
     println!(
-        "Catalog audit {status}: {} error(s), {} warning(s), {} info",
-        result.summary.errors, result.summary.warnings, result.summary.infos
+        "{}",
+        tr!(
+            "Catalog audit {status}: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}",
+            errors = result.summary.errors,
+            infos = result.summary.infos,
+            status = status,
+            warnings = result.summary.warnings
+        )
     );
 
     let mut grouped = BTreeMap::<&str, Vec<&CatalogAuditDiagnostic>>::new();
@@ -126,7 +132,7 @@ fn print_audit_result(result: &CatalogAuditResult, fail_on: FailOn) {
                     .as_ref()
                     .map(|context| format!(" [context: {context}]"))
                     .unwrap_or_default();
-                println!("    Source: {}{}", source_key.message, context);
+                println!("    {} {}{}", tr!("Source:"), source_key.message, context);
             }
         }
     }

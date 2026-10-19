@@ -31,13 +31,16 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
-The route example uses a dynamic `/$locale` segment; this is the canonical
-TanStack shape and remains under verification.
+The route example uses a dynamic `/$locale` segment and verifies locale
+redirects, SSR, and later server-function calls.
 
-These examples use React Start. Verification against the current React Start
-release and a separate Solid Start integration remain v2 release work in
-[#1252](https://github.com/sebastian-software/palamedes/issues/1252). The Solid
-examples below use Solid with Nitro and do not prove Solid Start support.
+These examples pin React Start 1.169.3 with TanStack Router 1.170.45.
+A separate Solid Start integration remains v2 release work in
+[#1252](https://github.com/sebastian-software/palamedes/issues/1252).
+Solid Start 2.0.0-rc.8 requires `@solidjs/web >=2.0.0-rc.6`, while the Solid
+examples below use Solid/Nitro and Solid 2.0.0-rc.3. They do not prove Solid
+Start support; see the [adapter notes](./api/tanstack.md) for the remaining
+version and host-build verification gaps.
 
 ## Solid
 

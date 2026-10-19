@@ -17,7 +17,7 @@ fn audit_error_threshold_exits_its_policy_code() {
 
     assert_eq!(output.status.code(), Some(5), "{output:?}");
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Catalog audit failed: 1 error(s)"),
+        String::from_utf8_lossy(&output.stdout).contains("Catalog audit failed: 1 error"),
         "{output:?}"
     );
 
@@ -38,7 +38,7 @@ fn audit_warning_threshold_prints_failed_status_and_exits_its_policy_code() {
     assert!(default.status.success(), "{default:?}");
     assert!(
         String::from_utf8_lossy(&default.stdout)
-            .contains("Catalog audit passed: 0 error(s), 1 warning(s), 0 info")
+            .contains("Catalog audit passed: 0 errors, 1 warning, 0 info messages")
     );
 
     let fail_on_warning = audit(&fixture, &["--fail-on", "warning"]);
@@ -49,7 +49,7 @@ fn audit_warning_threshold_prints_failed_status_and_exits_its_policy_code() {
     );
     assert!(
         String::from_utf8_lossy(&fail_on_warning.stdout)
-            .contains("Catalog audit failed: 0 error(s), 1 warning(s), 0 info")
+            .contains("Catalog audit failed: 0 errors, 1 warning, 0 info messages")
     );
 
     fs::remove_dir_all(fixture).expect("cleanup");
@@ -69,19 +69,19 @@ fn audit_info_threshold_prints_failed_status_and_exits_its_policy_code() {
     assert!(default.status.success(), "{default:?}");
     assert!(
         String::from_utf8_lossy(&default.stdout)
-            .contains("Catalog audit passed: 0 error(s), 0 warning(s), 1 info")
+            .contains("Catalog audit passed: 0 errors, 0 warnings, 1 info message")
     );
 
     let fail_on_info = audit(&fixture, &["--fail-on", "info"]);
     assert_eq!(fail_on_info.status.code(), Some(5), "{fail_on_info:?}");
     assert!(
         String::from_utf8_lossy(&fail_on_info.stdout)
-            .contains("Catalog audit failed: 0 error(s), 0 warning(s), 1 info"),
+            .contains("Catalog audit failed: 0 errors, 0 warnings, 1 info message"),
         "{fail_on_info:?}"
     );
     assert!(
         String::from_utf8_lossy(&fail_on_info.stderr)
-            .contains("Catalog audit failed with 0 error(s), 0 warning(s), and 1 info"),
+            .contains("Catalog audit failed with 0 errors, 0 warnings, and 1 info message"),
         "{fail_on_info:?}"
     );
 
@@ -121,6 +121,11 @@ fn audit_operational_failures_keep_the_generic_exit_code() {
 
 fn audit(cwd: &Path, arguments: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .arg("audit")
         .args(arguments)
         .current_dir(cwd)

@@ -212,7 +212,7 @@ Evidence:
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
 - [`@palamedes/tanstack`](https://www.npmjs.com/package/@palamedes/tanstack) for TanStack Start projects
-- [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku) for Preview ESM-only Waku server actions
+- [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku) for Preview ESM-only Waku server actions (verified Waku 1.0.0-rc.3; unstable request/nonce APIs keep the adapter Preview independently of the v2 publication preview)
 - [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix) for Preview full-stack Remix v3 projects
 - [`@palamedes/react-router-rsc`](https://www.npmjs.com/package/@palamedes/react-router-rsc) for Preview React Router RSC request scopes
 - [`@palamedes/config`](https://www.npmjs.com/package/@palamedes/config) for JavaScript host configuration

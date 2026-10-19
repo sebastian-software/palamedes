@@ -93,8 +93,12 @@ describe("createPalamedesRemixAssetLoader", () => {
 
         expect(compiled).toContain("getI18n()._(");
         expect(compiled).not.toContain("@palamedes/core/macro");
-        expect(compiled).not.toContain('from "@palamedes/runtime"');
-        expect(compiled).toMatch(/from ["']\/assets\/npm\/%40palamedes\/runtime\//u);
+        expect(compiled).toContain('from "@palamedes/runtime"');
+        const entry = await assetServer.getScriptEntry(fixture.modulePath);
+        const mappings = [entry.importMap.imports, ...Object.values(entry.importMap.scopes ?? {})];
+        expect(
+          mappings.some((imports) => imports["@palamedes/runtime"]?.startsWith("/assets/")),
+        ).toBe(true);
         if (fileName.endsWith(".ts")) {
           expect(compiled).not.toContain("name: string");
         }
@@ -398,19 +402,26 @@ describe("createPalamedesRemixAssetLoader", () => {
     }
   }, 10_000);
 
-  it("targets the Remix UI compiled runtime for lowered rich messages", () => {
+  it.each([
+    ["remix/component/jsx-runtime", "jsxs", ""],
+    ["remix/component/jsx-dev-runtime", "jsxDEV", ", void 0, true"],
+  ])("targets the Remix compiled runtime through %s", (runtime, helper, trailingArgs) => {
     const loader = createPalamedesRemixAssetLoader();
     const loaded = loader(pathToFileURL("/repo/app/public/rich.js").href, assetLoadContext, () => ({
       format: "module",
       source: [
         'import { Trans as Message } from "@palamedes/remix/macro"',
-        'import { jsxs } from "remix/ui/jsx-runtime"',
-        'export const view = jsxs(Message, { children: ["Hello ", name] })',
+        `import { ${helper} as render } from "${runtime}"`,
+        `export const view = render(Message, { children: ["Hello ", name] }${trailingArgs})`,
       ].join("\n"),
     }));
 
     expect(String(loaded.source)).toContain('import { Trans } from "@palamedes/remix/compiled"');
-    expect(String(loaded.source)).toContain('jsxs(Trans, { id: "');
+    expect(String(loaded.source)).toContain('render(Trans, { id: "');
+    expect(String(loaded.source)).toContain("values: { name }");
+    if (trailingArgs) {
+      expect(String(loaded.source)).toContain(trailingArgs);
+    }
     expect(String(loaded.source)).not.toContain("@palamedes/remix/macro");
   });
 

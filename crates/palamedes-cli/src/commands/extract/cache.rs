@@ -102,8 +102,12 @@ pub(super) fn persist_extract_cache_for_watch(
         }
         warnings.reported = true;
         eprintln!(
-            "Warning: could not write the extraction cache to {}: {error}",
-            extract_cache_path(config).display()
+            "{}",
+            tr!(
+                "Warning: could not write the extraction cache to {path}: {error}",
+                error = error,
+                path = extract_cache_path(config).display()
+            )
         );
         return true;
     }

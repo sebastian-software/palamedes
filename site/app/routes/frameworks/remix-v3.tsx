@@ -9,9 +9,9 @@ const page: FrameworkLanding = {
   eyebrow: "Remix v3 i18n · Server and browser",
   metaTitle: "Full-stack Remix v3 i18n | Palamedes",
   metaDescription:
-    "Add full-stack i18n to Remix v3 with server and browser macro transforms, request-local catalogs, rich Remix UI messages, and document-safe client bootstrap.",
+    "Add full-stack i18n to Remix v3 with server and browser macro transforms, request-local catalogs, rich Remix messages, and document-safe client bootstrap.",
   headline: "Remix v3 i18n, from the request to the browser.",
-  lede: "The new Remix v3 is not React Router Framework Mode and it is not a React framework. Palamedes composes with its Node TypeScript loader, browser asset server, Fetch request model, and Remix UI runtime so one locale reaches SSR, Frames, hydration, and interaction.",
+  lede: "The new Remix v3 is not React Router Framework Mode and it is not a React framework. Palamedes composes with its Node TypeScript loader, browser asset server, Fetch request model, and Remix component runtime so one locale reaches SSR, Frames, hydration, and interaction.",
   primary: {
     label: "Browse the full-stack example",
     href: repoHref("examples/remix-cookie", "tree"),
@@ -28,7 +28,7 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "Remix 3.0.0-rc.1",
+      value: "Remix 3.0.0",
       note: "Exact example pin with smoke and Chromium verification.",
     },
     {
@@ -108,7 +108,7 @@ const assets = createAssetServer({
 
 // Serve catalogAssets.serve(request) and remixI18n.serveClientCatalogAsset(request)
 // before assets.fetch(request) under the asset namespace.`,
-    note: "The full example renders remixI18n.renderClientCatalog(locale) and renderClientEntry() inside the request scope. The adapter loads dependencies and imports the application entry. Rich messages use @palamedes/remix/macro; initial and lazy delivery failures reach ordinary error UI.",
+    note: "The full example renders remixI18n.renderClientCatalog(locale) and await renderClientEntry(entryPath, { assetServer }) inside the request scope. The adapter loads dependencies and imports the application entry. Rich messages use @palamedes/remix/macro; initial and lazy delivery failures reach ordinary error UI.",
   },
   strategies: {
     matrixSlug: "remix",
@@ -129,7 +129,7 @@ const assets = createAssetServer({
         note: "Active-locale fragments and parser-free browser delivery are checked.",
       },
       {
-        label: "Remix UI",
+        label: "Remix components",
         value: "Rich + Frames",
         note: "Rich elements, streamed Frames, and direct frame requests are covered.",
       },
@@ -155,7 +155,7 @@ const assets = createAssetServer({
     },
     {
       q: "Does Palamedes support Remix v3 without React?",
-      a: "Yes. The integration uses Remix UI rather than React. It transforms ordinary core macros plus Remix-native Trans, Plural, Select, and SelectOrdinal components in server and browser modules.",
+      a: "Yes. The integration uses Remix components rather than React. It transforms ordinary core macros plus Remix-native Trans, Plural, Select, and SelectOrdinal components in server and browser modules.",
     },
     {
       q: "Can Remix v3 browser modules use Palamedes macros?",
@@ -163,7 +163,7 @@ const assets = createAssetServer({
     },
     {
       q: "Is Remix v3 support production-ready?",
-      a: "Treat it as a preview integration for the exact tested Remix 3.0.0-rc.1 contract. Full-stack behavior is CI-verified, including Chromium, but the upstream release is still a prerelease and no public hosted Palamedes demo has been verified yet.",
+      a: "Treat it as a preview integration for the exact tested Remix 3.0.0 contract. Full-stack behavior is CI-verified, including Chromium, with stable upstream Remix, while public hosted-demo verification is still pending.",
     },
   ],
   related: [

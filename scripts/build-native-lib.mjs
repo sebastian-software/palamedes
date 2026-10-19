@@ -113,7 +113,12 @@ export function buildNativePackage({
   copyLicenseFiles(packageDir, repoRoot);
 
   const profile = process.env.PALAMEDES_RUST_PROFILE === "release" ? "release" : "debug";
-  const cargoArgs = ["build", "--package", cargoPackage];
+  const cargoArgs = [
+    "build",
+    "--package",
+    cargoPackage,
+    "--message-format=json-render-diagnostics",
+  ];
   if (profile === "release") {
     cargoArgs.push("--release");
   }
@@ -123,13 +128,23 @@ export function buildNativePackage({
 
   const cargoEnv = { ...process.env };
   configureCargo?.({ cargoEnv, target });
-  execFileSync("cargo", cargoArgs, {
-    cwd: repoRoot,
-    env: cargoEnv,
-    stdio: "inherit",
-  });
+  let output;
+  try {
+    output = execFileSync("cargo", cargoArgs, {
+      cwd: repoRoot,
+      env: cargoEnv,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+  } catch (error) {
+    // Cargo emits compiler diagnostics as JSON on stdout in this mode.
+    // Preserve those details on failed builds as well as successful ones.
+    if (typeof error.stdout === "string") readCargoMessages(error.stdout);
+    throw error;
+  }
+  const cargoMessages = readCargoMessages(output);
 
-  postBuild({ packageDir, profile, repoRoot, target });
+  postBuild({ packageDir, profile, repoRoot, target, cargoMessages });
 }
 
 function incompatibleTarget({ packageJson, requirement, skipIncompatibleTarget }) {
@@ -143,4 +158,17 @@ function incompatibleTarget({ packageJson, requirement, skipIncompatibleTarget }
   throw new Error(
     `${message} Re-run on its target host, or use --if-compatible for a workspace-wide build.`,
   );
+}
+
+function readCargoMessages(output) {
+  const messages = output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  for (const message of messages) {
+    if (message.reason === "compiler-message" && message.message?.rendered) {
+      process.stderr.write(message.message.rendered);
+    }
+  }
+  return messages;
 }

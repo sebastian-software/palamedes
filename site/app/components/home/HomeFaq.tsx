@@ -8,6 +8,10 @@ export const HOME_FAQ = [
     a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite. Waku, Remix v3, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
   },
   {
+    q: "Can I translate a Rust CLI with Palamedes?",
+    a: "There is an experimental Cargo integration and runtime for Rust applications. Your executable loads an external language catalog, including for English; Cargo exports a message contract, and pmds catalog compile checks compatible PO updates against it without building the application. Text, display arguments, string selects, and cardinal and ordinal plurals work today. Localized number and date formatting, rich text, and contexts are not supported yet. The crates are unpublished; the Rust applications guide includes a pinned Git dependency and a complete example.",
+  },
+  {
     q: "Does Palamedes replace a translation management system or write translations with AI?",
     a: "No. Palamedes covers the complete local workflow for your source messages and the catalogs in your repository. It is not a hosted translation management system, and it does not machine-translate or AI-translate your text.",
   },

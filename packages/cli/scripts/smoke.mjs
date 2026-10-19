@@ -123,6 +123,23 @@ try {
   if (!/^pmds \d/u.test(nativeBinOutput)) {
     throw new Error(`Unexpected packed platform bin output: ${nativeBinOutput}`);
   }
+  for (const [locale, heading] of [
+    ["de", "Aufruf:"],
+    ["fr", "Utilisation :"],
+  ]) {
+    const localizedEnvironment = { ...process.env, PALAMEDES_UI_LOCALE: locale };
+    delete localizedEnvironment.PALAMEDES_UI_CATALOG_DIR;
+    const localizedOutput = execFileSync(nativeBinPath, ["--help"], {
+      cwd: fixtureRoot,
+      encoding: "utf8",
+      env: localizedEnvironment,
+    });
+    if (!localizedOutput.includes(heading)) {
+      throw new Error(
+        `Packed native CLI did not load its external ${locale} catalog: ${localizedOutput}`,
+      );
+    }
+  }
 
   const installedBin = path.join(cliInstallDir, "bin", "pmds");
   const installedCommand = process.platform === "win32" ? process.execPath : installedBin;
@@ -270,6 +287,11 @@ function assertPackedNativeLicense(archivePath) {
   for (const licenseFile of ["package/LICENSE-APACHE", "package/LICENSE-MIT"]) {
     if (!entries.includes(licenseFile)) {
       throw new Error(`The packed ${platformPackage} package ships no ${licenseFile}.`);
+    }
+  }
+  for (const locale of ["en", "de", "es", "fr"]) {
+    if (!entries.includes(`package/bin/pmds-locales/${locale}.pmd.json`)) {
+      throw new Error(`The packed ${platformPackage} package ships no ${locale} UI catalog.`);
     }
   }
 }

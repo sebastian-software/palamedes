@@ -1,0 +1,430 @@
+msgid ""
+msgstr ""
+"Language: fr\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Audit catalogs for translation and ICU authoring issues."
+msgstr "Auditer les catalogues pour détecter les problèmes de traduction et de rédaction ICU."
+
+msgid "Catalog conflict strategy."
+msgstr "Stratégie de résolution des conflits de catalogue."
+
+msgid "Catalog conflict strategy. `use-first` always means the logical branch being merged or rebased, even though Git swaps `%A`/`%B` during rebase."
+msgstr "Stratégie de résolution des conflits de catalogue. `use-first` désigne toujours la branche logique en cours de fusion ou de rebasage, même si Git échange `%A` et `%B` pendant le rebasage."
+
+msgid "Catalog format."
+msgstr "Format du catalogue."
+
+msgid "Check Palamedes source authoring without updating catalogs."
+msgstr "Vérifier les messages sources Palamedes sans modifier les catalogues."
+
+msgid "Common ancestor catalog path for a deletion-aware three-way merge."
+msgstr "Chemin du catalogue ancêtre commun pour une fusion à trois voies tenant compte des suppressions."
+
+msgid "Common ancestor supplied by Git as `%O`."
+msgstr "Ancêtre commun fourni par Git sous la forme `%O`."
+
+msgid "Convert configured PO catalogs to another Palamedes storage format."
+msgstr "Convertir les catalogues PO configurés vers un autre format de stockage Palamedes."
+
+msgid "Dispatch an explicitly configured binary plugin namespace."
+msgstr "Exécuter un espace de commandes de plugin binaire explicitement configuré."
+
+msgid "Extract messages from source files."
+msgstr "Extraire les messages des fichiers sources."
+
+msgid "Fail before updating catalogs when any catalog matches no source files."
+msgstr "Échouer avant toute modification si un catalogue ne correspond à aucun fichier source."
+
+msgid "Fail on error or warning diagnostics."
+msgstr "Échouer en présence de diagnostics d’erreur ou d’avertissement."
+
+msgid "Fail on error, warning, or info diagnostics."
+msgstr "Échouer en présence de diagnostics d’erreur, d’avertissement ou d’information."
+
+msgid "Fail when any reported locale is below this translated percentage."
+msgstr "Échouer si une langue signalée est traduite en dessous de ce pourcentage."
+
+msgid "Git operation role mapping. `auto` detects an active rebase."
+msgstr "Correspondance des rôles de l’opération Git. `auto` détecte un rebasage en cours."
+
+msgid "Git's `%A` file (stage 2 during conflicts)."
+msgstr "Fichier `%A` de Git (étape 2 lors des conflits)."
+
+msgid "Git's `%B` file (stage 3 during conflicts)."
+msgstr "Fichier `%B` de Git (étape 3 lors des conflits)."
+
+msgid "Ignore and do not write the extraction cache."
+msgstr "Ignorer le cache d’extraction et ne pas l’écrire."
+
+msgid "Ignore and do not write the shared source-analysis cache."
+msgstr "Ignorer le cache partagé d’analyse des sources et ne pas l’écrire."
+
+msgid "Input catalog file for single-file conversion."
+msgstr "Fichier catalogue d’entrée pour la conversion d’un seul fichier."
+
+msgid "Locale for single-file conversion."
+msgstr "Langue pour la conversion d’un seul fichier."
+
+msgid "Locale of the merged catalog."
+msgstr "Langue du catalogue fusionné."
+
+msgid "Merge two current catalogs, optionally against an explicit ancestor."
+msgstr "Fusionner deux catalogues actuels, éventuellement avec un ancêtre explicite."
+
+msgid "Only audit selected target locales."
+msgstr "Auditer uniquement les langues cibles sélectionnées."
+
+msgid "Only report selected target locales; comma-separated values are supported."
+msgstr "Afficher uniquement les langues cibles sélectionnées ; les valeurs séparées par des virgules sont acceptées."
+
+msgid "Output catalog path for single-file conversion."
+msgstr "Chemin du catalogue de sortie pour la conversion d’un seul fichier."
+
+msgid "Output catalog path."
+msgstr "Chemin du catalogue de sortie."
+
+msgid "Output catalog, normally `%A`."
+msgstr "Catalogue de sortie, généralement `%A`."
+
+msgid "Path to a Palamedes config file for config-wide conversion."
+msgstr "Chemin d’un fichier de configuration Palamedes pour convertir tous les catalogues configurés."
+
+msgid "Path to a Palamedes config file."
+msgstr "Chemin d’un fichier de configuration Palamedes."
+
+msgid "Print one deterministic machine-readable JSON document."
+msgstr "Afficher un document JSON déterministe exploitable par machine."
+
+msgid "Print the extraction check as one JSON document."
+msgstr "Afficher le résultat de la vérification d’extraction dans un document JSON."
+
+msgid "Print the machine-readable audit result as JSON."
+msgstr "Afficher le résultat de l’audit au format JSON exploitable par machine."
+
+msgid "Print the machine-readable report as JSON."
+msgstr "Afficher le rapport au format JSON exploitable par machine."
+
+msgid "Real catalog pathname supplied by Git as `%P`."
+msgstr "Chemin réel du catalogue fourni par Git sous la forme `%P`."
+
+msgid "Real catalog pathname. Git merge drivers hand the driver temporary files, so `--output` cannot identify which configured catalog is being merged; pass `%P` here. Defaults to `--output`."
+msgstr "Chemin réel du catalogue. Les pilotes de fusion Git reçoivent des fichiers temporaires ; `--output` ne permet donc pas d’identifier le catalogue configuré en cours de fusion. Transmettez `%P` ici. Par défaut : `--output`."
+
+msgid "Remove obsolete messages immediately, including entries without obsolete-since."
+msgstr "Supprimer immédiatement les messages obsolètes, y compris ceux sans marqueur obsolete-since."
+
+msgid "Remove obsolete messages whose obsolete-since marker is older than the 30-day grace period; undated entries are kept (use --force-clean to remove everything immediately)."
+msgstr "Supprimer les messages obsolètes dont le marqueur obsolete-since dépasse le délai de grâce de 30 jours ; les entrées sans date sont conservées (utilisez --force-clean pour tout supprimer immédiatement)."
+
+msgid "Report per-locale catalog translation completeness."
+msgstr "Afficher la complétude des traductions de chaque langue du catalogue."
+
+msgid "Run as a deletion-aware Git merge driver with merge/rebase role mapping."
+msgstr "Exécuter un pilote de fusion Git tenant compte des suppressions et des rôles de fusion ou de rebasage."
+
+msgid "Show verbose output."
+msgstr "Afficher les détails."
+
+msgid "Show version information."
+msgstr "Afficher les informations de version."
+
+msgid "Source locale for catalog semantics."
+msgstr "Langue source pour la sémantique du catalogue."
+
+msgid "Source locale for single-file conversion."
+msgstr "Langue source pour la conversion d’un seul fichier."
+
+msgid "Target catalog format."
+msgstr "Format du catalogue cible."
+
+msgid "Two current catalog files, ordered as ours and theirs when `--base` is set."
+msgstr "Deux fichiers catalogue actuels, dans l’ordre ours puis theirs lorsque `--base` est défini."
+
+msgid "Verify that extraction would leave every configured catalog unchanged."
+msgstr "Vérifier que l’extraction laisserait tous les catalogues configurés inchangés."
+
+msgid "Watch for file changes."
+msgstr "Surveiller les modifications de fichiers."
+
+msgid "Work with Palamedes catalog files."
+msgstr "Gérer les fichiers catalogue Palamedes."
+
+msgid "Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config file; 1 forces serial extraction."
+msgstr "Nombre de threads pour l’extraction parallèle. Remplace `extract-threads` dans la configuration ; 1 impose une extraction séquentielle."
+
+msgid "Worker threads for the parallel source-analysis pass."
+msgstr "Nombre de threads pour l’analyse parallèle des sources."
+
+msgid "Palamedes CLI for extraction, source lint, audits, reports, and catalogs"
+msgstr "CLI Palamedes pour l’extraction, la vérification des sources, les audits, les rapports et les catalogues"
+
+msgid "Usage:"
+msgstr "Utilisation :"
+
+msgid "Commands"
+msgstr "Commandes"
+
+msgid "Arguments"
+msgstr "Arguments"
+
+msgid "Options"
+msgstr "Options"
+
+msgid "Print help"
+msgstr "Afficher l’aide"
+
+msgid "Print version"
+msgstr "Afficher la version"
+
+msgid "Print this message or the help of the given subcommands"
+msgstr "Afficher ce message ou l’aide des sous-commandes indiquées"
+
+msgid "Invalid command-line arguments."
+msgstr "Arguments de ligne de commande invalides."
+
+msgid "Error:"
+msgstr "Erreur :"
+
+msgid "Fast i18n tooling for modern apps"
+msgstr "Outils i18n rapides pour les applications modernes"
+
+msgid "✓ Catalogs are up to date."
+msgstr "✓ Les catalogues sont à jour."
+
+msgid "Catalog drift detected:"
+msgstr "Écarts détectés dans les catalogues :"
+
+msgid "Watching for changes..."
+msgstr "Surveillance des modifications..."
+
+msgid "Source changed; extracting catalogs"
+msgstr "Sources modifiées ; extraction des catalogues"
+
+msgid "No target locales configured."
+msgstr "Aucune langue cible configurée."
+
+msgid "Locale"
+msgstr "Langue"
+
+msgid "Translated"
+msgstr "Traduits"
+
+msgid "Missing"
+msgstr "Manquants"
+
+msgid "Fuzzy"
+msgstr "À réviser"
+
+msgid "Complete"
+msgstr "Complétude"
+
+msgid "Source:"
+msgstr "Source :"
+
+msgid "help:"
+msgstr "aide :"
+
+msgid "Single-file input provided; --config was not used for catalog selection."
+msgstr "Fichier d’entrée unique fourni ; --config n’a pas été utilisé pour sélectionner les catalogues."
+
+msgid "Update Palamedes config catalogs to use `format: fcl` before switching workflows."
+msgstr "Configurez les catalogues Palamedes avec `format: fcl` avant de changer de méthode de travail."
+
+msgid "Config loaded from {path}"
+msgstr "Configuration chargée depuis {path}"
+
+msgid "✓ Extracted {messages, plural, one {# message} other {# messages}} from {files, plural, one {# file} other {# files}} ({milliseconds}ms)"
+msgstr "✓ {messages, plural, one {# message extrait} other {# messages extraits}} de {files, plural, one {# fichier} other {# fichiers}} ({milliseconds}ms)"
+
+msgid "Converted {input} -> {output}"
+msgstr "{input} converti vers {output}"
+
+msgid "{converted, plural, one {# catalog converted} other {# catalogs converted}}, {skipped, plural, one {# catalog skipped} other {# catalogs skipped}}."
+msgstr "{converted, plural, one {# catalogue converti} other {# catalogues convertis}}, {skipped, plural, one {# catalogue ignoré} other {# catalogues ignorés}}."
+
+msgid "Source lint: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}, {suppressed, plural, one {# suppressed diagnostic} other {# suppressed diagnostics}} across {files, plural, one {# file} other {# files}}"
+msgstr "Vérification des sources : {errors, plural, one {# erreur} other {# erreurs}}, {warnings, plural, one {# avertissement} other {# avertissements}}, {infos, plural, one {# message d’information} other {# messages d’information}}, {suppressed, plural, one {# diagnostic masqué} other {# diagnostics masqués}} dans {files, plural, one {# fichier} other {# fichiers}}"
+
+msgid "Catalog audit {status}: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}"
+msgstr "Audit des catalogues {status} : {errors, plural, one {# erreur} other {# erreurs}}, {warnings, plural, one {# avertissement} other {# avertissements}}, {infos, plural, one {# message d’information} other {# messages d’information}}"
+
+msgid "passed"
+msgstr "réussi"
+
+msgid "failed"
+msgstr "échoué"
+
+msgid "A new version of palamedes is available: {current} → {latest}"
+msgstr "Une nouvelle version de palamedes est disponible : {current} → {latest}"
+
+msgid "I/O error for {path}: {source}"
+msgstr "Erreur d’E/S pour {path} : {source}"
+
+msgid "Could not serialize JSON output: {source}"
+msgstr "Impossible de sérialiser la sortie JSON : {source}"
+
+msgid "Could not determine the current directory: {source}"
+msgstr "Impossible de déterminer le répertoire courant : {source}"
+
+msgid "Catalog merge requires exactly two input files, received {count}."
+msgstr "La fusion de catalogues nécessite exactement deux fichiers d’entrée ; nombre reçu : {count}."
+
+msgid "Catalog convert requires either an input file or --config."
+msgstr "La conversion de catalogues nécessite un fichier d’entrée ou --config."
+
+msgid "Catalog convert --output can only be used with a single input file."
+msgstr "L’option catalog convert --output nécessite un seul fichier d’entrée."
+
+msgid "Catalog convert --to=fcl only supports PO source catalogs."
+msgstr "L’option catalog convert --to=fcl accepte uniquement les catalogues sources PO."
+
+msgid "Invalid --fail-if-below value. Expected a percent from 0 to 100."
+msgstr "Valeur --fail-if-below invalide. Un pourcentage de 0 à 100 est attendu."
+
+msgid "Catalog audit failed with {errors, plural, one {# error} other {# errors}}."
+msgstr "L’audit des catalogues a échoué avec {errors, plural, one {# erreur} other {# erreurs}}."
+
+msgid "Catalog audit failed with {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}."
+msgstr "L’audit des catalogues a échoué avec {errors, plural, one {# erreur} other {# erreurs}} et {warnings, plural, one {# avertissement} other {# avertissements}}."
+
+msgid "Catalog audit failed with {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, and {infos, plural, one {# info message} other {# info messages}}."
+msgstr "L’audit des catalogues a échoué avec {errors, plural, one {# erreur} other {# erreurs}}, {warnings, plural, one {# avertissement} other {# avertissements}} et {infos, plural, one {# message d’information} other {# messages d’information}}."
+
+msgid "Catalog completeness below {threshold} for {locales}."
+msgstr "La complétude des catalogues est inférieure à {threshold} pour {locales}."
+
+msgid "Extraction failed for {failures, plural, one {# source file} other {# source files}}; catalogs were not updated."
+msgstr "L’extraction a échoué pour {failures, plural, one {# fichier source} other {# fichiers sources}} ; les catalogues n’ont pas été modifiés."
+
+msgid "Catalog extraction check found drift in {catalogs, plural, one {# catalog file} other {# catalog files}}."
+msgstr "La vérification d’extraction a détecté des écarts dans {catalogs, plural, one {# fichier catalogue} other {# fichiers catalogue}}."
+
+msgid "Source lint failed with {errors, plural, one {# error diagnostic} other {# error diagnostics}}."
+msgstr "La vérification des sources a échoué avec {errors, plural, one {# diagnostic d’erreur} other {# diagnostics d’erreur}}."
+
+msgid "Source lint failed with {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}."
+msgstr "La vérification des sources a échoué avec {errors, plural, one {# erreur} other {# erreurs}} et {warnings, plural, one {# avertissement} other {# avertissements}}."
+
+msgid "Source lint could not analyze {failures, plural, one {# source file} other {# source files}}."
+msgstr "Impossible d’analyser {failures, plural, one {# fichier source} other {# fichiers sources}} lors de la vérification."
+
+msgid "Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml."
+msgstr "Configuration Palamedes introuvable. Fichiers attendus : palamedes.yaml, palamedes.yml, palamedes.json ou palamedes.toml."
+
+msgid "Palamedes config does not exist: {path}"
+msgstr "La configuration Palamedes n’existe pas : {path}"
+
+msgid "Could not parse Palamedes config {path}: {source}"
+msgstr "Impossible d’analyser la configuration Palamedes {path} : {source}"
+
+msgid "Invalid Palamedes config in {path}: {message}"
+msgstr "Configuration Palamedes invalide dans {path} : {message}"
+
+msgid "Found {files, plural, one {# file} other {# files}} to extract from"
+msgstr "{files, plural, one {# fichier} other {# fichiers}} à analyser pour l’extraction"
+
+msgid "Config changed; reloaded {path}"
+msgstr "Configuration modifiée ; {path} rechargé"
+
+msgid "Warning: Failed to extract from {path}: {message}"
+msgstr "Avertissement : échec de l’extraction depuis {path} : {message}"
+
+msgid "Warning: {error} Continuing to watch for changes."
+msgstr "Avertissement : {error} La surveillance des modifications continue."
+
+msgid "Warning: Could not reload config: {error}. Keeping the previous configuration and continuing to watch for changes."
+msgstr "Avertissement : impossible de recharger la configuration : {error}. La configuration précédente est conservée et la surveillance continue."
+
+msgid "Warning: Could not watch config {path}: {error}. Changes to it will only be noticed through a watched parent directory."
+msgstr "Avertissement : impossible de surveiller la configuration {path} : {error}. Ses modifications ne seront détectées que via un répertoire parent surveillé."
+
+msgid "Warning: Could not watch {path}: {error}. Changes under this root will not trigger extraction until the watcher restarts."
+msgstr "Avertissement : impossible de surveiller {path} : {error}. Les modifications sous cette racine ne déclencheront pas d’extraction avant le redémarrage de la surveillance."
+
+msgid "Warning: Could not build watch patterns for catalog {catalog}{error}. Changes to its source files will not trigger extraction until the watcher restarts."
+msgstr "Avertissement : impossible de construire les motifs de surveillance du catalogue {catalog}{error}. Les modifications de ses fichiers sources ne déclencheront pas d’extraction avant le redémarrage de la surveillance."
+
+msgid "Warning: catalog {catalog} matched no source files (include: {include}); projecting an empty catalog."
+msgstr "Avertissement : le catalogue {catalog} ne correspond à aucun fichier source (include: {include}) ; un catalogue vide sera produit."
+
+msgid "Warning: could not write the extraction cache to {path}: {error}"
+msgstr "Avertissement : impossible d’écrire le cache d’extraction dans {path} : {error}"
+
+msgid "Note: pmds cannot read {path}, so configured PO output options and source-locale are not applied to this merge."
+msgstr "Remarque : pmds ne peut pas lire {path} ; les options de sortie PO configurées et source-locale ne sont donc pas appliquées à cette fusion."
+
+msgid "create"
+msgstr "création"
+
+msgid "modify"
+msgstr "modification"
+
+msgid "Warning: {code}: {message}"
+msgstr "Avertissement : {code} : {message}"
+
+msgid "  -> checked {path}"
+msgstr "  -> vérifié {path}"
+
+msgid "Could not build glob pattern {pattern}: {source}"
+msgstr "Impossible de construire le motif glob {pattern} : {source}"
+
+msgid "Could not use {pattern} for source discovery: {source}"
+msgstr "Impossible d’utiliser {pattern} pour rechercher les sources : {source}"
+
+msgid "Could not discover source files: {source}"
+msgstr "Impossible de rechercher les fichiers sources : {source}"
+
+msgid "Could not watch source files: {source}"
+msgstr "Impossible de surveiller les fichiers sources : {source}"
+
+msgid "Catalog extraction check failed: {message}"
+msgstr "Échec de la vérification d’extraction des catalogues : {message}"
+
+msgid "Found {path}, but pmds only loads data configs. Create palamedes.yaml, palamedes.yml, palamedes.json, or palamedes.toml; JavaScript and TypeScript configs are not executable CLI configuration."
+msgstr "{path} trouvé, mais pmds charge uniquement des configurations de données. Créez palamedes.yaml, palamedes.yml, palamedes.json ou palamedes.toml ; les configurations JavaScript et TypeScript ne sont pas exécutables par la CLI."
+
+msgid "Catalog path {path} matches multiple configured catalogs ({catalogs}); refusing to choose one."
+msgstr "Le chemin {path} correspond à plusieurs catalogues configurés ({catalogs}) ; aucun ne sera choisi."
+
+msgid "Could not infer catalog merge format from logical --path `{path}` or merge paths ({paths}). Git supplies extensionless temporary files for %O, %A, and %B; pass --format po or --format fcl."
+msgstr "Impossible de déduire le format de fusion du chemin logique --path `{path}` ou des chemins de fusion ({paths}). Git fournit des fichiers temporaires sans extension pour %O, %A et %B ; indiquez --format po ou --format fcl."
+
+msgid "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
+msgstr "Le catalogue {catalog} ne correspond à aucun fichier source (include: {include}) ; les catalogues n’ont pas été modifiés. Corrigez les motifs d’inclusion ou omettez --fail-on-empty-catalog pour conserver un simple avertissement."
+
+msgid "Compile external language catalogs against an existing Rust application schema."
+msgstr "Compiler des catalogues de langue externes à partir d’un schéma d’application Rust existant."
+
+msgid "Compiled catalog target."
+msgstr "Cible des catalogues compilés."
+
+msgid "Directory containing source and target PO catalogs."
+msgstr "Répertoire contenant les catalogues PO sources et cibles."
+
+msgid "Exported Rust application schema."
+msgstr "Schéma exporté de l’application Rust."
+
+msgid "Output locale; repeat for multiple languages."
+msgstr "Langue de sortie ; répétez l’option pour plusieurs langues."
+
+msgid "Directory for compiled language files."
+msgstr "Répertoire des fichiers de langue compilés."
+
+msgid "Fallback locale; repeat in resolution order."
+msgstr "Langue de repli ; répétez l’option dans l’ordre de résolution."
+
+msgid "Reject missing or fuzzy translations instead of compiling a fallback."
+msgstr "Refuser les traductions manquantes ou à réviser au lieu de compiler un repli."
+
+msgid "Write the compilation result as JSON."
+msgstr "Écrire le résultat de compilation au format JSON."
+
+msgid "{count, plural, one {Compiled # Rust language catalog.} other {Compiled # Rust language catalogs.}}"
+msgstr "{count, plural, one {# catalogue de langue Rust compilé.} other {# catalogues de langue Rust compilés.}}"
+
+msgid "{locale}: missing translation for {message}; compiled fallback from {resolved}."
+msgstr "{locale} : traduction manquante pour {message} ; repli compilé depuis {resolved}."
+
+msgid "Could not compile Rust language catalogs: {source}"
+msgstr "Impossible de compiler les catalogues de langue Rust : {source}"

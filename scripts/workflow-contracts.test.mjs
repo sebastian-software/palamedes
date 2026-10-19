@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -9,6 +9,7 @@ import { selectScreenshotExamples } from "./example-matrix.mjs";
 import {
   assertEnabledCacheContents,
   assertNetworkIsolation,
+  enabledBuildArtifacts,
 } from "./check-enabled-update-check.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -49,6 +50,31 @@ describe("workflow contracts", () => {
         expect(step).toContain("!inputs.dry_run");
       }
     }
+  });
+
+  it("finds enabled-proof catalogs independently of the Cargo executable directory", () => {
+    const artifact = {
+      reason: "compiler-artifact",
+      package_id: "cli",
+      target: { name: "pmds" },
+      executable: "/target/debug/pmds",
+    };
+    const messages = [
+      { reason: "build-script-executed", package_id: "other", out_dir: "/wrong" },
+      {
+        reason: "build-script-executed",
+        package_id: "cli",
+        out_dir: "/separate-build/debug/build/cli/out",
+      },
+      artifact,
+    ];
+    const json = (items) => items.map((item) => JSON.stringify(item)).join("\n");
+    expect(enabledBuildArtifacts(json(messages))).toEqual({
+      binary: "/target/debug/pmds",
+      catalogDirectory: join("/separate-build/debug/build/cli/out", "catalogs"),
+    });
+    expect(() => enabledBuildArtifacts(json([artifact]))).toThrow("catalog output directory");
+    expect(() => enabledBuildArtifacts(json([]))).toThrow("pmds executable");
   });
 
   it("validates the enabled control's newline-terminated Rust cache files", () => {

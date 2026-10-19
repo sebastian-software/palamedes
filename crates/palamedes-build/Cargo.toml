@@ -1,0 +1,23 @@
+[package]
+name = "palamedes-build"
+version = "1.25.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cargo build integration for external Palamedes Rust catalogs."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+palamedes = { version = "1.25.1", path = "../.." }
+palamedes-i18n = { version = "1.25.1", path = "../palamedes-i18n" }
+ferrocat = "=3.4.2"
+proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
+syn = { version = "2.0.119", features = ["full", "parsing"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11.0"
+
+tempfile = "3.27.0"

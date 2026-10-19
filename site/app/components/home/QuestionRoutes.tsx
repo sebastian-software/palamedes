@@ -13,6 +13,7 @@ const QUESTIONS = [
     resources: [
       { label: "Frontend and full-stack adapters", href: "/frameworks#frontend-frameworks" },
       { label: "Backend services", href: "/frameworks#backend-integrations" },
+      { label: "Rust applications (experimental)", href: "/docs/rust-applications" },
       { label: "Set up with your coding agent", href: "/docs/agent-skill" },
     ],
   },

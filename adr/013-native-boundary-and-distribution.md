@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-18
 
 Platform packages deliver the native engine and CLI behind small, platform-aware wrappers.
 
@@ -19,11 +19,17 @@ The boundary rules are:
 
 The package model is:
 
-- four Rust crates: the semantic core, Node binding, native CLI, and plugin SDK
+- Rust crates for the semantic core, Node binding, native CLI, plugin SDK, and
+  experimental Rust catalog build/runtime integration
 - two platform-aware TypeScript wrapper families: `@palamedes/core-node` and
   `@palamedes/cli`
 - six platform-specific packages for each family, carrying either the compiled
   Node addon or CLI binary artifacts
+
+Each CLI platform package also carries external compiled UI catalogs beside its
+executable. All languages, including English, are data assets. Copying the binary
+alone is insufficient; packaging and smoke tests cover the catalog directory.
+The generic Rust runtime loads only the catalog selected by its application host.
 
 ### Native Target Policy
 

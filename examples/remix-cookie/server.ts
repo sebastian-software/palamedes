@@ -1,27 +1,12 @@
 import * as http from "node:http";
 
-import { createPalamedesRemixAssetLoader, PALAMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix";
-import { createAssetServer } from "remix/assets";
 import { createRequestListener } from "remix/node-fetch-server";
 
+import { assetServer } from "./app/assets.ts";
 import { router } from "./app/router.ts";
 import { catalogAssetRegistry, remixI18n } from "./app/i18n.ts";
 
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 4060;
-const assetServer = createAssetServer({
-  rootDir: import.meta.dirname,
-  basePath: "/assets",
-  mounts: {
-    app: "app",
-    npm: "node_modules",
-    vendor: "../../node_modules",
-    workspace: "../../packages",
-  },
-  allowFiles: ["app/**/public/**"],
-  allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
-  sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
-  scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets: catalogAssetRegistry })] },
-});
 
 const server = http.createServer(
   createRequestListener(async (request) => {

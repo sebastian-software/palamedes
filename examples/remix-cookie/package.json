@@ -14,7 +14,7 @@
     "@palamedes/core-node": "workspace:^",
     "@palamedes/remix": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "remix": "3.0.0-rc.1"
+    "remix": "3.0.0"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",

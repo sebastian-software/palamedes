@@ -54,6 +54,19 @@ pub enum ConfigError {
     AmbiguousCatalogPath { path: PathBuf, catalogs: String },
 }
 
+impl ConfigError {
+    pub fn localized(&self) -> String {
+        match self {
+            Self::NotFound => tr!("Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml.").to_owned(),
+            Self::MissingExplicit { path } => tr!("Palamedes config does not exist: {path}", path = path.display()),
+            Self::Parse { path, source } => tr!("Could not parse Palamedes config {path}: {source}", path = path.display(), source = source),
+            Self::Invalid { path, message } => tr!("Invalid Palamedes config in {path}: {message}", message = message, path = path.display()),
+            Self::JsConfigUnsupported { path } => tr!("Found {path}, but pmds only loads data configs. Create palamedes.yaml, palamedes.yml, palamedes.json, or palamedes.toml; JavaScript and TypeScript configs are not executable CLI configuration.", path = path.display()),
+            Self::AmbiguousCatalogPath { path, catalogs } => tr!("Catalog path {path} matches multiple configured catalogs ({catalogs}); refusing to choose one.", catalogs = catalogs, path = path.display()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadedConfig {

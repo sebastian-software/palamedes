@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-19
 
 Generated catalogs contain literal strings and executable message functions shared by Core, React, and Solid.
 
@@ -13,7 +13,7 @@ Generated catalog modules export one branded message map:
 - constant messages are string values
 - dynamic messages are executable functions
 
-This representation is the public runtime contract on both server and client.
+This representation is the JavaScript runtime contract on both server and client.
 ICU parsing belongs to authoring, validation, and compilation, not application
 message rendering. Generated code must not defer unsupported or invalid ICU
 to a runtime parser. Invalid ICU and ICU constructs outside the supported
@@ -62,6 +62,40 @@ The native renderer is the single catalog-module generator. The public
 TypeScript `renderCatalogModule()` compatibility helper delegates to that
 renderer instead of parsing ICU and maintaining a second JavaScript generator.
 
+### External Rust catalogs
+
+Rust applications use externally delivered compiled instruction data. They do
+not embed a mandatory language, including English. Cargo build integration
+generates source-first macro definitions and a message schema; Rust itself
+expands the calls into internal-ID lookups. The same semantic compiler lowers
+catalogs into a Rust-specific data artifact, and a small parser-free runtime
+validates and evaluates those instructions. Application hosts own delivery and
+locale selection. Missing or incompatible assets reach host error handling.
+
+This deliberately differs from the JavaScript executable-module ABI: native
+Rust functions cannot be delivered as ordinary portable data files. Keeping
+translations external avoids recompiling or growing every executable for each
+language. The cost is a versioned instruction format and a Rust evaluator.
+PO and ICU parsing still happen only at build time. This does not introduce an
+AST-map alternative to the existing JavaScript ABI.
+
+Rust compilation follows the same build-time fallback default: missing or fuzzy
+target translations resolve through the configured chain and source locale/message.
+The compiler reports those resolutions; `fail_on_missing(true)` opts into strict
+completeness. The native `pmds` UI explicitly enables strictness for its core
+languages. These are compiler policies; failed runtime catalog delivery still
+never substitutes a source message or another language.
+
+An application build exports a source-free message contract and fingerprint.
+`pmds catalog compile --target rust` compiles PO updates against that contract
+without invoking the application build. It validates all inputs and compatibility
+before replacing selected language files. Changed message identities, argument
+signatures, or literal/program shape require a matching application build.
+
+The experimental Rust target has an explicit compiler/runtime subset. It rejects
+unsupported constructs at compilation rather than interpreting ICU at runtime.
+Integration and current limits belong in the [Rust applications guide](../docs/rust-applications.md).
+
 ## Context
 
 Raw ICU strings require parsing during execution. A parallel map of pre-parsed
@@ -85,7 +119,7 @@ renderer.
 
 ### 2. Replace message strings with serialized AST values
 
-Rejected because it still requires runtime interpretation and makes even
+Rejected for JavaScript because it still requires runtime interpretation and makes even
 constant messages structured data.
 
 ### 3. Generate framework-specific functions

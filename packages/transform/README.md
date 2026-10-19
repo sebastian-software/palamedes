@@ -96,7 +96,7 @@ delegates to the native generator; no runtime parser fallback is emitted.
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 - the equivalent `jsx`, `jsxs`, and `jsxDEV` calls emitted through
-  `remix/ui/jsx-runtime` or `remix/ui/jsx-dev-runtime`; helper and macro aliases
+  `remix/component/jsx-runtime` or `remix/component/jsx-dev-runtime`; helper and macro aliases
   are resolved by import binding identity
 
 The eager `t`, `plural`, `select`, and `selectOrdinal` macros, plus

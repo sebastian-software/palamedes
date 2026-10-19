@@ -187,10 +187,14 @@ for (const [name, version] of [
   ["palamedes-node", cargoManifestVersion("crates/palamedes-node/Cargo.toml")],
   ["palamedes-cli", cargoManifestVersion("crates/palamedes-cli/Cargo.toml")],
   ["palamedes-plugin", cargoManifestVersion("crates/palamedes-plugin/Cargo.toml")],
+  ["palamedes-build", cargoManifestVersion("crates/palamedes-build/Cargo.toml")],
+  ["palamedes-i18n", cargoManifestVersion("crates/palamedes-i18n/Cargo.toml")],
   ["Cargo.lock palamedes", cargoLockVersion("palamedes")],
   ["Cargo.lock palamedes-node", cargoLockVersion("palamedes-node")],
   ["Cargo.lock palamedes-cli", cargoLockVersion("palamedes-cli")],
   ["Cargo.lock palamedes-plugin", cargoLockVersion("palamedes-plugin")],
+  ["Cargo.lock palamedes-build", cargoLockVersion("palamedes-build")],
+  ["Cargo.lock palamedes-i18n", cargoLockVersion("palamedes-i18n")],
 ]) {
   if (version !== expectedVersion) {
     fail(`${name} has version ${version}, expected ${expectedVersion}`);

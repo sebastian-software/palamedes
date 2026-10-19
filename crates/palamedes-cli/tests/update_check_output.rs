@@ -5,6 +5,11 @@ use std::process::Command;
 fn release_endpoint_is_disabled_by_default_without_cache_or_output_side_effects() {
     let home = tempfile::tempdir().expect("temporary home");
     let output = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .arg("version")
         .env("HOME", home.path())
         .env("XDG_CACHE_HOME", home.path().join("cache"))

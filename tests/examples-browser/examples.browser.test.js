@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -380,6 +381,24 @@ async function rejectModuleEvaluation(route, message) {
   });
 }
 
+// Stable Remix resolves browser imports through an inline import map. Permit
+// exactly that map by content hash while keeping executable inline scripts blocked.
+async function fulfillRemixDocumentWithCsp(route) {
+  const response = await route.fetch();
+  const body = await response.text();
+  const importMap = body.match(/<script type="importmap"[^>]*>(.*?)<\/script>/u)?.[1];
+  expect(importMap).toBeDefined();
+  const mapHash = createHash("sha256").update(importMap).digest("base64");
+  await route.fulfill({
+    response,
+    body,
+    headers: {
+      ...response.headers(),
+      "content-security-policy": `default-src 'self'; script-src 'self' 'sha256-${mapHash}'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'`,
+    },
+  });
+}
+
 test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
   const example = activeExample();
   if (example.id !== "remix-cookie") {
@@ -399,15 +418,7 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
       await route.continue();
       return;
     }
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      headers: {
-        ...response.headers(),
-        "content-security-policy":
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'",
-      },
-    });
+    await fulfillRemixDocumentWithCsp(route);
   });
   await page.route("**/assets/app/public/client.tsx", async (route) => {
     if (failure === "entry-network") {
@@ -483,15 +494,7 @@ test("Remix lazy catalog failures recover in all document locales under CSP", as
       });
       await page.route("**/*", async (route) => {
         if (route.request().resourceType() !== "document") return route.continue();
-        const response = await route.fetch();
-        await route.fulfill({
-          response,
-          headers: {
-            ...response.headers(),
-            "content-security-policy":
-              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'",
-          },
-        });
+        await fulfillRemixDocumentWithCsp(route);
       });
       await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
         fragments.push(route.request().url());

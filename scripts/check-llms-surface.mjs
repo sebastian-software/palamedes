@@ -45,6 +45,11 @@ const commandSources = {
 };
 
 const catalogCommandSources = {
+  Compile: {
+    command: "pmds catalog compile",
+    file: "crates/palamedes-cli/src/commands/catalog/compile.rs",
+    type: "CompileOptions",
+  },
   Merge: {
     command: "pmds catalog merge",
     file: "crates/palamedes-cli/src/commands/catalog/merge.rs",

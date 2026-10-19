@@ -53,7 +53,7 @@ catalogs:
     assert_eq!(json_stdout(&cold), expected);
     assert!(
         String::from_utf8_lossy(&cold.stderr)
-            .contains("Catalog extraction check found drift in 2 catalog file(s)"),
+            .contains("Catalog extraction check found drift in 2 catalog files"),
         "{cold:?}"
     );
     assert_catalog_unchanged(&po, &po_before, fixed_mtime);
@@ -442,6 +442,11 @@ fn write_source(root: &Path, messages: &[&str]) {
 
 fn pmds(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
         .args(arguments)
         .current_dir(root)
         .output()

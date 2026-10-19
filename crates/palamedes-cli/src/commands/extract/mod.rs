@@ -31,37 +31,34 @@ const TIMING_MARKER: &str = "__PALAMEDES_TIMINGS__";
 
 #[derive(Debug, Args)]
 pub struct ExtractOptions {
-    /// Path to a Palamedes config file.
+    #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// Watch for file changes.
+    #[arg(help = tr!("Watch for file changes."))]
     #[arg(short, long)]
     watch: bool,
-    /// Verify that extraction would leave every configured catalog unchanged.
+    #[arg(help = tr!("Verify that extraction would leave every configured catalog unchanged."))]
     #[arg(long, conflicts_with = "watch")]
     check: bool,
-    /// Print the extraction check as one JSON document.
+    #[arg(help = tr!("Print the extraction check as one JSON document."))]
     #[arg(long, requires = "check")]
     json: bool,
-    /// Fail before updating catalogs when any catalog matches no source files.
+    #[arg(help = tr!("Fail before updating catalogs when any catalog matches no source files."))]
     #[arg(long)]
     fail_on_empty_catalog: bool,
-    /// Remove obsolete messages whose obsolete-since marker is older than the
-    /// 30-day grace period; undated entries are kept (use --force-clean to
-    /// remove everything immediately).
+    #[arg(help = tr!("Remove obsolete messages whose obsolete-since marker is older than the 30-day grace period; undated entries are kept (use --force-clean to remove everything immediately)."))]
     #[arg(long)]
     clean: bool,
-    /// Remove obsolete messages immediately, including entries without obsolete-since.
+    #[arg(help = tr!("Remove obsolete messages immediately, including entries without obsolete-since."))]
     #[arg(long)]
     force_clean: bool,
-    /// Worker threads for the parallel extraction pass. Overrides
-    /// `extract-threads` in the config file; 1 forces serial extraction.
+    #[arg(help = tr!("Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config file; 1 forces serial extraction."))]
     #[arg(long, value_name = "COUNT")]
     threads: Option<usize>,
-    /// Ignore and do not write the extraction cache.
+    #[arg(help = tr!("Ignore and do not write the extraction cache."))]
     #[arg(long)]
     no_cache: bool,
-    /// Show verbose output.
+    #[arg(help = tr!("Show verbose output."))]
     #[arg(short, long)]
     verbose: bool,
 }
@@ -117,7 +114,13 @@ impl ExtractOptions {
     fn run_configured(&self, context: &Context) -> Result<ExtractOutput, CliError> {
         let config = context.load_config(self.config.as_deref())?;
         if self.verbose {
-            eprintln!("Config loaded from {}", config.config_path.display());
+            eprintln!(
+                "{}",
+                tr!(
+                    "Config loaded from {path}",
+                    path = config.config_path.display()
+                )
+            );
         }
 
         if self.watch {
@@ -176,9 +179,9 @@ impl ExtractCheckReport {
 
     fn render_human(&self) {
         match self.status {
-            ExtractCheckStatus::Clean => println!("✓ Catalogs are up to date."),
+            ExtractCheckStatus::Clean => println!("{}", tr!("✓ Catalogs are up to date.")),
             ExtractCheckStatus::Drift => {
-                println!("Catalog drift detected:");
+                println!("{}", tr!("Catalog drift detected:"));
                 for catalog in &self.catalogs {
                     println!("  {} {}", catalog.change.human_verb(), catalog.path);
                 }
@@ -211,8 +214,8 @@ enum CatalogChangeKind {
 impl CatalogChangeKind {
     fn human_verb(self) -> &'static str {
         match self {
-            Self::Created => "create",
-            Self::Modified => "modify",
+            Self::Created => tr!("create"),
+            Self::Modified => tr!("modify"),
         }
     }
 }
@@ -294,7 +297,14 @@ fn run_extraction_with_cache(
     let total_files = unique_files.len();
 
     for (path, message) in &unique_failures {
-        eprintln!("Warning: Failed to extract from {path}: {message}");
+        eprintln!(
+            "{}",
+            tr!(
+                "Warning: Failed to extract from {path}: {message}",
+                message = message,
+                path = path
+            )
+        );
     }
     let total_failed_files = unique_failures.len();
 
@@ -341,7 +351,15 @@ fn run_extraction_with_cache(
     }
 
     let total_ms = started_at.elapsed().as_millis();
-    println!("✓ Extracted {total_messages} messages from {total_files} files ({total_ms}ms)");
+    println!(
+        "{}",
+        tr!(
+            "✓ Extracted {messages, plural, one {# message} other {# messages}} from {files, plural, one {# file} other {# files}} ({milliseconds}ms)",
+            files = total_files,
+            messages = total_messages,
+            milliseconds = total_ms
+        )
+    );
 
     if std::env::var("PALAMEDES_TIMING_JSON").ok().as_deref() == Some("1") {
         let report = TimingReport {
@@ -371,7 +389,13 @@ fn extract_from_catalog(
     let glob_ms = glob_started_at.elapsed().as_millis();
 
     if verbose {
-        eprintln!("Found {} files to extract from", files.len());
+        eprintln!(
+            "{}",
+            tr!(
+                "Found {files, plural, one {# file} other {# files}} to extract from",
+                files = files.len()
+            )
+        );
     }
 
     if files.is_empty() {
@@ -382,9 +406,12 @@ fn extract_from_catalog(
             });
         }
         eprintln!(
-            "Warning: catalog '{}' matched no source files (include: {}); projecting an empty catalog.",
-            catalog.path,
-            catalog.include.join(", ")
+            "{}",
+            tr!(
+                "Warning: catalog {catalog} matched no source files (include: {include}); projecting an empty catalog.",
+                catalog = format!("'{}'", catalog.path),
+                include = catalog.include.join(", ")
+            )
         );
     }
 
@@ -538,9 +565,10 @@ fn process_catalog(
             if options.verbose {
                 lines.push(format!("  -> {}", catalog_path.display()));
                 for diagnostic in result.diagnostics {
-                    lines.push(format!(
-                        "Warning: {}: {}",
-                        diagnostic.code, diagnostic.message
+                    lines.push(tr!(
+                        "Warning: {code}: {message}",
+                        code = diagnostic.code,
+                        message = diagnostic.message
                     ));
                 }
             }
@@ -549,11 +577,12 @@ fn process_catalog(
         CatalogOperation::Preview => {
             let result = preview_catalog_file_update(request)?;
             if options.verbose {
-                lines.push(format!("  -> checked {}", catalog_path.display()));
+                lines.push(tr!("  -> checked {path}", path = catalog_path.display()));
                 for diagnostic in result.diagnostics {
-                    lines.push(format!(
-                        "Warning: {}: {}",
-                        diagnostic.code, diagnostic.message
+                    lines.push(tr!(
+                        "Warning: {code}: {message}",
+                        code = diagnostic.code,
+                        message = diagnostic.message
                     ));
                 }
             }
