@@ -73,7 +73,8 @@ Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063 -p 4070:4070`.
 By default, the supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
 output with the example id (`[nextjs-cookie] …`), and intentionally exits the
 container with an error code as soon as a server dies unexpectedly (fail-fast).
-`podman stop` terminates the running servers via forwarded `SIGTERM`.
+`podman stop` terminates all 25 matrix servers by default, or the selected subset,
+via forwarded `SIGTERM`.
 
 ## Run only the Remix demos
 
