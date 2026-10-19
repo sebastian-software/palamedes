@@ -129,7 +129,7 @@ pnpm exec pmds report
 
 ## Catalog workflow commands
 
-`pmds` loads external en/de/es UI catalogs, including English, from adjacent
+`pmds` loads external en/de/es/fr UI catalogs, including English, from adjacent
 `pmds-locales/` files or `PALAMEDES_UI_CATALOG_DIR`. No language is embedded.
 `PALAMEDES_UI_LOCALE` overrides
 `LC_ALL > LC_MESSAGES > LANG`; unsupported/invalid/C/POSIX values fall back to

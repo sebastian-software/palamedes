@@ -108,6 +108,11 @@ fn cli_uses_real_plural_translations_for_compilation_summaries() {
             "Se compiló 1 catálogo de idiomas para Rust.",
             "Se compilaron 2 catálogos de idiomas para Rust.",
         ),
+        (
+            "fr",
+            "1 catalogue de langue Rust compilé.",
+            "2 catalogues de langue Rust compilés.",
+        ),
     ] {
         for (locales, expected) in [(&["en"][..], singular), (&["en", "de"][..], plural)] {
             let mut command = compiler();

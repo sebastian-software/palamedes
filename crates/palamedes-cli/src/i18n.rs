@@ -8,6 +8,7 @@ pub enum Language {
     English,
     German,
     Spanish,
+    French,
 }
 
 static LANGUAGE: OnceLock<Language> = OnceLock::new();
@@ -22,6 +23,7 @@ pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         Language::English => "en",
         Language::German => "de",
         Language::Spanish => "es",
+        Language::French => "fr",
     };
     let mut locations = Vec::new();
     let mut load = || -> Result<palamedes_i18n::Catalog, Box<dyn std::error::Error>> {
@@ -78,6 +80,7 @@ fn select_language<'a>(values: impl IntoIterator<Item = Option<&'a str>>) -> Lan
     match language.to_ascii_lowercase().as_str() {
         "de" => Language::German,
         "es" => Language::Spanish,
+        "fr" => Language::French,
         _ => Language::English,
     }
 }
@@ -137,8 +140,10 @@ mod tests {
                 [None, Some("POSIX"), Some("de_DE"), None],
                 Language::English,
             ),
+            ([None, Some("fr_FR"), Some("de_DE"), None], Language::French),
+            ([Some("fr-CA"), Some("de_DE"), None, None], Language::French),
             (
-                [None, Some("fr_FR"), Some("de_DE"), None],
+                [Some("it_IT"), Some("fr_FR"), None, None],
                 Language::English,
             ),
             ([None, Some("de_!"), Some("es_ES"), None], Language::English),

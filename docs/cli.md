@@ -6,7 +6,7 @@ command dispatch.
 
 ## Output Language
 
-The native CLI loads external English, German, and Spanish catalogs for its help,
+The native CLI loads external English, German, Spanish, and French catalogs for its help,
 command summaries, progress messages, and host-owned operational errors. It
 selects the first nonempty value in this order:
 
@@ -23,6 +23,7 @@ including Windows shells, use English unless an override is provided.
 
 ```sh
 LANG=de_DE.UTF-8 pmds --help
+LANG=fr_FR.UTF-8 pmds --help
 PALAMEDES_UI_LOCALE=es pmds report
 PALAMEDES_UI_LOCALE=en pmds extract --check --json
 ```
@@ -70,8 +71,8 @@ and target directories. A bare `cargo build` does not install language assets;
 run the native package build or explicitly set `PALAMEDES_UI_CATALOG_DIR` to the
 reported `out_dir/catalogs` directory when launching an uninstalled executable.
 
-The compilation summary itself uses plural messages in English, German, and
-Spanish. Plural categories follow ICU4X/CLDR rules; `#` emits plain decimal output.
+The compilation summary itself uses plural messages in English, German, Spanish, and
+French. Plural categories follow ICU4X/CLDR rules; `#` emits plain decimal output.
 See [Rust plural messages](./rust-applications.md#plural-messages) for numeric
 inputs, offsets, and the separate limits on number formatting.
 

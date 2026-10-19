@@ -4,7 +4,7 @@ mod update_endpoint;
 fn main() {
     update_endpoint::configure();
     palamedes_build::CatalogBuilder::new("locales", "en")
-        .locales(&["en", "de", "es"])
+        .locales(&["en", "de", "es", "fr"])
         .module_path("crate::i18n")
         .fail_on_missing(true)
         .build()

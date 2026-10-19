@@ -48,7 +48,15 @@ fn help_and_version_use_the_environment_without_needing_a_project() {
         ),
         (vec![("LC_ALL", "C.UTF-8"), ("LANG", "de_DE")], "Usage:"),
         (vec![("LC_ALL", "POSIX"), ("LANG", "de_DE")], "Usage:"),
-        (vec![("LC_ALL", "fr_FR"), ("LANG", "de_DE")], "Usage:"),
+        (
+            vec![("LC_ALL", "fr_FR.UTF-8"), ("LANG", "de_DE")],
+            "Utilisation :",
+        ),
+        (
+            vec![("PALAMEDES_UI_LOCALE", "fr-CA"), ("LC_ALL", "de_DE")],
+            "Utilisation :",
+        ),
+        (vec![("LC_ALL", "it_IT"), ("LANG", "fr_FR")], "Usage:"),
         (vec![("LC_ALL", "de_!"), ("LANG", "es_ES")], "Usage:"),
         (vec![], "Usage:"),
     ] {
@@ -79,19 +87,24 @@ fn help_and_version_use_the_environment_without_needing_a_project() {
 fn localized_errors_preserve_status_streams_and_argument_values() {
     let directory = tempfile::tempdir().unwrap();
     let missing = directory.path().join("missing-{source}.yaml");
-    let output = pmds(
-        &["report", "--config", missing.to_str().unwrap()],
-        &[("LANG", "de_DE")],
-        directory.path(),
-    );
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        error.contains("Fehler: Palamedes-Konfiguration existiert nicht:"),
-        "{error}"
-    );
-    assert!(error.contains("missing-{source}.yaml"), "{error}");
+    for (locale, prefix) in [
+        ("de_DE", "Fehler: Palamedes-Konfiguration existiert nicht:"),
+        (
+            "fr_FR",
+            "Erreur : La configuration Palamedes n’existe pas :",
+        ),
+    ] {
+        let output = pmds(
+            &["report", "--config", missing.to_str().unwrap()],
+            &[("LANG", locale)],
+            directory.path(),
+        );
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains(prefix), "{error}");
+        assert!(error.contains("missing-{source}.yaml"), "{error}");
+    }
     let syntax = pmds(
         &["report", "--unknown"],
         &[("LANG", "es_ES")],
@@ -134,7 +147,7 @@ fn catalog_selection_json_and_policy_codes_are_independent_of_ui_language() {
         "90",
     ];
     let english = pmds(&args, &[("LANG", "en_US")], directory.path());
-    for locale in ["de_DE", "es_ES"] {
+    for locale in ["de_DE", "es_ES", "fr_FR"] {
         let translated = pmds(&args, &[("LANG", locale)], directory.path());
         assert_eq!(translated.status.code(), Some(6));
         assert_eq!(english.stdout, translated.stdout);

@@ -330,7 +330,7 @@ caller coordination.
 
 ## CLI model
 
-The native CLI loads English, German, and Spanish UI translations compiled from
+The native CLI loads English, German, Spanish, and French UI translations compiled from
 its PO catalogs into external `<locale>.pmd.json` files. No language, including
 English, is embedded. It selects the first nonempty value in
 `PALAMEDES_UI_LOCALE > LC_ALL > LC_MESSAGES > LANG` order. POSIX encodings and
