@@ -132,6 +132,7 @@ impl PreparedCatalogs {
         for (path, bytes) in serialized {
             // Readers see either the old file or the complete replacement.
             let mut builder = tempfile::Builder::new();
+            builder.prefix(".pmd-");
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
