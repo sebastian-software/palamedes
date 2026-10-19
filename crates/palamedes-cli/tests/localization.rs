@@ -267,8 +267,65 @@ fn broken_catalog_bootstrap_names_the_locale_path_cause_and_repair() {
             cause,
             "Reinstall pmds",
             "PALAMEDES_UI_CATALOG_DIR",
+            "For source checkouts",
+            "cargo run does not refresh",
+            "out_dir/catalogs",
+            "cargo build -p palamedes-cli --message-format=json",
         ] {
             assert!(stderr.contains(required), "{required}: {stderr}");
+        }
+    }
+}
+
+#[test]
+fn audit_summaries_and_verdicts_pluralize_each_count_in_every_ui_language() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir(directory.path().join("locales")).unwrap();
+    fs::write(directory.path().join("palamedes.yaml"), "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\n").unwrap();
+    for count in [0, 1, 2] {
+        let mut source = String::new();
+        let mut target = String::new();
+        for index in 0..count {
+            source.push_str(&format!(
+                "msgid \"Message {index}\"\nmsgstr \"Message {index}\"\n\n"
+            ));
+            target.push_str(&format!("msgid \"Message {index}\"\nmsgstr \"\"\n\n"));
+        }
+        // A complete message keeps empty-inventory behavior out of this count test.
+        source.push_str("msgid \"Ready\"\nmsgstr \"Ready\"\n");
+        target.push_str("msgid \"Ready\"\nmsgstr \"Bereit\"\n");
+        fs::write(directory.path().join("locales/en.po"), source).unwrap();
+        fs::write(directory.path().join("locales/de.po"), target).unwrap();
+        for (locale, noun) in [
+            ("en", if count == 1 { "error" } else { "errors" }),
+            ("de", "Fehler"),
+            ("es", if count == 1 { "error" } else { "errores" }),
+            ("fr", if count <= 1 { "erreur" } else { "erreurs" }),
+        ] {
+            let output = pmds(
+                &["audit"],
+                &[("PALAMEDES_UI_LOCALE", locale)],
+                directory.path(),
+            );
+            assert_eq!(
+                output.status.code(),
+                Some(if count == 0 { 0 } else { 5 }),
+                "{output:?}"
+            );
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            assert!(
+                stdout.contains(&format!("{count} {noun}")),
+                "{locale}: {stdout}"
+            );
+            assert!(!stdout.contains("(s)"), "{stdout}");
+            if count != 0 {
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                assert!(
+                    stderr.contains(&format!("{count} {noun}")),
+                    "{locale}: {stderr}"
+                );
+                assert!(!stderr.contains("(s)"), "{stderr}");
+            }
         }
     }
 }

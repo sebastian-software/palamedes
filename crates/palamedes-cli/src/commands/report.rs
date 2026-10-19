@@ -15,7 +15,7 @@ pub struct ReportOptions {
     #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    #[arg(help = tr!("Only report selected target locale(s); comma-separated values are supported."))]
+    #[arg(help = tr!("Only report selected target locales; comma-separated values are supported."))]
     #[arg(long, num_args = 1..)]
     locale: Vec<String>,
     #[arg(help = tr!("Print the machine-readable report as JSON."))]

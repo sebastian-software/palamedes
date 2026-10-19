@@ -27,6 +27,26 @@ fn real_rust_compilation_resolves_literal_values_and_checks_calls() {
             None,
         ),
         (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}", count = &2_usize)"#,
+            None,
+        ),
+        (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}", count = "1.0".parse::<palamedes_i18n::PluralNumber>().unwrap())"#,
+            None,
+        ),
+        (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}", count = "drei")"#,
+            Some("MacroArgument<true>"),
+        ),
+        (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}", count = String::from("3"))"#,
+            Some("MacroArgument<true>"),
+        ),
+        (
+            r#"translate!(catalog, "{count, plural, one {# file} other {# files}}", count = true)"#,
+            Some("MacroArgument<true>"),
+        ),
+        (
             r#"translate!(catalog, "{count, plural, one {# file} other {# files}}")"#,
             Some("translation argument count mismatch"),
         ),

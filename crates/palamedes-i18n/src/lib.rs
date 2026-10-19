@@ -3,7 +3,10 @@
 //! No catalogs, source-message fallback, or ICU parser are embedded here.
 //! `palamedes-build` generates the schema and author-facing translation macro.
 
+mod arguments;
 mod plural;
+
+pub use arguments::{MacroArgument, ParsePluralNumberError, PluralNumber, format_argument};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -29,6 +32,19 @@ pub const fn source_eq(left: &str, right: &str) -> bool {
         index += 1;
     }
     true
+}
+
+/// Internal const argument-kind lookup used by generated macros.
+#[doc(hidden)]
+pub const fn is_plural_argument(arguments: &[&str], name: &str) -> bool {
+    let mut index = 0;
+    while index < arguments.len() {
+        if source_eq(arguments[index], name) {
+            return true;
+        }
+        index += 1;
+    }
+    false
 }
 
 /// Internal lexicographic comparison used by generated const binary searches.
@@ -101,6 +117,8 @@ pub struct MessageSpec {
     pub id: &'static str,
     /// Named arguments, sorted for deterministic comparison.
     pub arguments: &'static [&'static str],
+    /// Arguments that the source message requires to be numeric plural operands.
+    pub plural_arguments: &'static [&'static str],
     /// Whether this message is safe to borrow as literal text.
     pub literal: bool,
 }
@@ -276,6 +294,26 @@ impl Catalog {
                     spec.id
                 )));
             }
+            if spec
+                .plural_arguments
+                .iter()
+                .any(|name| !spec.arguments.contains(name))
+            {
+                return Err(Error::Incompatible(format!(
+                    "invalid plural signature: {}",
+                    spec.id
+                )));
+            }
+            if let Message::Program(program) = message
+                && plural_arguments(program)
+                    .iter()
+                    .any(|name| !spec.plural_arguments.contains(name))
+            {
+                return Err(Error::Incompatible(format!(
+                    "plural argument kind mismatch: {}",
+                    spec.id
+                )));
+            }
         }
         let specifications: BTreeMap<_, _> = schema
             .messages
@@ -352,6 +390,26 @@ impl Catalog {
 #[doc(hidden)]
 pub fn validate_program(program: &[Instruction]) -> Result<(), Error> {
     validate(program, &mut BTreeSet::new(), &mut BTreeSet::new(), false)
+}
+
+/// Internal compiler support: collect numeric requirements, including nested choices.
+#[doc(hidden)]
+pub fn plural_arguments(program: &[Instruction]) -> BTreeSet<&str> {
+    let mut arguments = BTreeSet::new();
+    for instruction in program {
+        match instruction {
+            Instruction::Select { options, .. } | Instruction::Plural { options, .. } => {
+                if let Instruction::Plural { name, .. } = instruction {
+                    arguments.insert(name.as_str());
+                }
+                for branch in options.values() {
+                    arguments.extend(plural_arguments(branch));
+                }
+            }
+            _ => {}
+        }
+    }
+    arguments
 }
 
 fn validate<'a>(

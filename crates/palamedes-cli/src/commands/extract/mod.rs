@@ -354,7 +354,7 @@ fn run_extraction_with_cache(
     println!(
         "{}",
         tr!(
-            "✓ Extracted {messages} messages from {files} files ({milliseconds}ms)",
+            "✓ Extracted {messages, plural, one {# message} other {# messages}} from {files, plural, one {# file} other {# files}} ({milliseconds}ms)",
             files = total_files,
             messages = total_messages,
             milliseconds = total_ms
@@ -391,7 +391,10 @@ fn extract_from_catalog(
     if verbose {
         eprintln!(
             "{}",
-            tr!("Found {files} files to extract from", files = files.len())
+            tr!(
+                "Found {files, plural, one {# file} other {# files}} to extract from",
+                files = files.len()
+            )
         );
     }
 

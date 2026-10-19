@@ -142,7 +142,7 @@ impl Command for ConvertOptions {
                 println!(
                     "{}",
                     tr!(
-                        "Converted {converted} catalog(s), skipped {skipped}.",
+                        "{converted, plural, one {# catalog converted} other {# catalogs converted}}, {skipped, plural, one {# catalog skipped} other {# catalogs skipped}}.",
                         converted = converted,
                         skipped = skipped
                     )

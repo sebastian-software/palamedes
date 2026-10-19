@@ -100,7 +100,7 @@ fn localize_help(command: clap::Command) -> clap::Command {
     if has_help_command {
         command = command.mut_subcommand("help", |command| {
             command.about(tr!(
-                "Print this message or the help of the given subcommand(s)"
+                "Print this message or the help of the given subcommands"
             ))
         });
     }

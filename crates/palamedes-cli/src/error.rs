@@ -47,12 +47,12 @@ pub enum CliError {
     UnsupportedConvertSource,
     #[error("Invalid --fail-if-below value. Expected a percent from 0 to 100.")]
     InvalidThreshold,
-    #[error("Catalog audit failed with {errors} error(s).")]
+    #[error("Catalog audit failed (errors: {errors}).")]
     AuditFailedOnError { errors: usize },
-    #[error("Catalog audit failed with {errors} error(s) and {warnings} warning(s).")]
+    #[error("Catalog audit failed (errors: {errors}, warnings: {warnings}).")]
     AuditFailedOnWarning { errors: usize, warnings: usize },
     #[error(
-        "Catalog audit failed with {errors} error(s), {warnings} warning(s), and {infos} info diagnostic(s)."
+        "Catalog audit failed (errors: {errors}, warnings: {warnings}, info diagnostics: {infos})."
     )]
     AuditFailedOnInfo {
         errors: usize,
@@ -61,21 +61,21 @@ pub enum CliError {
     },
     #[error("Catalog completeness below {threshold} for {locales}.")]
     CompletenessBelowThreshold { threshold: String, locales: String },
-    #[error("Extraction failed for {failures} source file(s); catalogs were not updated.")]
+    #[error("Extraction failed (source files: {failures}); catalogs were not updated.")]
     ExtractionFailed { failures: usize },
     #[error(
         "Catalog '{catalog}' matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
     )]
     EmptyCatalogSources { catalog: String, include: String },
-    #[error("Catalog extraction check found drift in {catalogs} catalog file(s).")]
+    #[error("Catalog extraction check found drift (catalog files: {catalogs}).")]
     CatalogDrift { catalogs: usize },
     #[error("{message}")]
     ExtractionCheckFailed { message: String },
-    #[error("Source lint failed with {errors} error diagnostic(s).")]
+    #[error("Source lint failed (error diagnostics: {errors}).")]
     LintFailedOnError { errors: usize },
-    #[error("Source lint failed with {errors} error(s) and {warnings} warning(s).")]
+    #[error("Source lint failed (errors: {errors}, warnings: {warnings}).")]
     LintFailedOnWarning { errors: usize, warnings: usize },
-    #[error("Source lint could not analyze {failures} source file(s).")]
+    #[error("Source lint could not analyze source files (count: {failures}).")]
     LintAnalysisFailed { failures: usize },
     #[error("Could not build glob pattern {pattern}: {source}")]
     GlobPattern {
@@ -135,11 +135,11 @@ impl CliError {
                 tr!("Invalid --fail-if-below value. Expected a percent from 0 to 100.").to_owned()
             }
             Self::AuditFailedOnError { errors } => tr!(
-                "Catalog audit failed with {errors} error(s).",
+                "Catalog audit failed with {errors, plural, one {# error} other {# errors}}.",
                 errors = errors
             ),
             Self::AuditFailedOnWarning { errors, warnings } => tr!(
-                "Catalog audit failed with {errors} error(s) and {warnings} warning(s).",
+                "Catalog audit failed with {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}.",
                 errors = errors,
                 warnings = warnings
             ),
@@ -148,7 +148,7 @@ impl CliError {
                 warnings,
                 infos,
             } => tr!(
-                "Catalog audit failed with {errors} error(s), {warnings} warning(s), and {infos} info diagnostic(s).",
+                "Catalog audit failed with {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, and {infos, plural, one {# info message} other {# info messages}}.",
                 errors = errors,
                 infos = infos,
                 warnings = warnings
@@ -159,24 +159,24 @@ impl CliError {
                 threshold = threshold
             ),
             Self::ExtractionFailed { failures } => tr!(
-                "Extraction failed for {failures} source file(s); catalogs were not updated.",
+                "Extraction failed for {failures, plural, one {# source file} other {# source files}}; catalogs were not updated.",
                 failures = failures
             ),
             Self::CatalogDrift { catalogs } => tr!(
-                "Catalog extraction check found drift in {catalogs} catalog file(s).",
+                "Catalog extraction check found drift in {catalogs, plural, one {# catalog file} other {# catalog files}}.",
                 catalogs = catalogs
             ),
             Self::LintFailedOnError { errors } => tr!(
-                "Source lint failed with {errors} error diagnostic(s).",
+                "Source lint failed with {errors, plural, one {# error diagnostic} other {# error diagnostics}}.",
                 errors = errors
             ),
             Self::LintFailedOnWarning { errors, warnings } => tr!(
-                "Source lint failed with {errors} error(s) and {warnings} warning(s).",
+                "Source lint failed with {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}.",
                 errors = errors,
                 warnings = warnings
             ),
             Self::LintAnalysisFailed { failures } => tr!(
-                "Source lint could not analyze {failures} source file(s).",
+                "Source lint could not analyze {failures, plural, one {# source file} other {# source files}}.",
                 failures = failures
             ),
             Self::GlobPattern { pattern, source } => tr!(

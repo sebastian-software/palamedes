@@ -72,10 +72,10 @@ msgstr "Sprache des zusammengeführten Katalogs."
 msgid "Merge two current catalogs, optionally against an explicit ancestor."
 msgstr "Zwei Kataloge zusammenführen, optional mit einem expliziten gemeinsamen Vorfahren."
 
-msgid "Only audit selected target locale(s)."
+msgid "Only audit selected target locales."
 msgstr "Nur ausgewählte Zielsprachen prüfen."
 
-msgid "Only report selected target locale(s); comma-separated values are supported."
+msgid "Only report selected target locales; comma-separated values are supported."
 msgstr "Nur ausgewählte Zielsprachen auswerten; kommagetrennte Werte sind erlaubt."
 
 msgid "Output catalog path for single-file conversion."
@@ -177,7 +177,7 @@ msgstr "Hilfe anzeigen"
 msgid "Print version"
 msgstr "Version anzeigen"
 
-msgid "Print this message or the help of the given subcommand(s)"
+msgid "Print this message or the help of the given subcommands"
 msgstr "Diese Hilfe oder die Hilfe zu einem Unterbefehl anzeigen"
 
 msgid "Invalid command-line arguments."
@@ -234,20 +234,20 @@ msgstr "Vor dem Wechsel die Kataloge in der Palamedes-Konfiguration auf `format:
 msgid "Config loaded from {path}"
 msgstr "Konfiguration aus {path} geladen"
 
-msgid "✓ Extracted {messages} messages from {files} files ({milliseconds}ms)"
-msgstr "✓ Extraktion abgeschlossen — Meldungen: {messages}, Dateien: {files} ({milliseconds}ms)"
+msgid "✓ Extracted {messages, plural, one {# message} other {# messages}} from {files, plural, one {# file} other {# files}} ({milliseconds}ms)"
+msgstr "✓ {messages, plural, one {# Nachricht} other {# Nachrichten}} aus {files, plural, one {# Datei} other {# Dateien}} extrahiert ({milliseconds}ms)"
 
 msgid "Converted {input} -> {output}"
 msgstr "{input} -> {output} umgewandelt"
 
-msgid "Converted {converted} catalog(s), skipped {skipped}."
-msgstr "Kataloge umgewandelt: {converted}, übersprungen: {skipped}."
+msgid "{converted, plural, one {# catalog converted} other {# catalogs converted}}, {skipped, plural, one {# catalog skipped} other {# catalogs skipped}}."
+msgstr "{converted, plural, one {# Katalog konvertiert} other {# Kataloge konvertiert}}, {skipped, plural, one {# Katalog übersprungen} other {# Kataloge übersprungen}}."
 
-msgid "Source lint: {errors} error(s), {warnings} warning(s), {infos} info, {suppressed} suppressed across {files} file(s)"
-msgstr "Quelltextprüfung: {errors} Fehler, {warnings} Warnungen, {infos} Hinweise, {suppressed} unterdrückt; Dateien: {files}"
+msgid "Source lint: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}, {suppressed, plural, one {# suppressed diagnostic} other {# suppressed diagnostics}} across {files, plural, one {# file} other {# files}}"
+msgstr "Quellprüfung: {errors, plural, one {# Fehler} other {# Fehler}}, {warnings, plural, one {# Warnung} other {# Warnungen}}, {infos, plural, one {# Information} other {# Informationen}}, {suppressed, plural, one {# unterdrückte Diagnose} other {# unterdrückte Diagnosen}} in {files, plural, one {# Datei} other {# Dateien}}"
 
-msgid "Catalog audit {status}: {errors} error(s), {warnings} warning(s), {infos} info"
-msgstr "Katalogprüfung {status}: {errors} Fehler, {warnings} Warnungen, {infos} Hinweise"
+msgid "Catalog audit {status}: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}"
+msgstr "Katalogprüfung {status}: {errors, plural, one {# Fehler} other {# Fehler}}, {warnings, plural, one {# Warnung} other {# Warnungen}}, {infos, plural, one {# Information} other {# Informationen}}"
 
 msgid "passed"
 msgstr "bestanden"
@@ -282,32 +282,32 @@ msgstr "Catalog convert --to=fcl unterstützt nur PO-Quellkataloge."
 msgid "Invalid --fail-if-below value. Expected a percent from 0 to 100."
 msgstr "Ungültiger Wert für --fail-if-below. Erwartet wird ein Prozentwert von 0 bis 100."
 
-msgid "Catalog audit failed with {errors} error(s)."
-msgstr "Katalogprüfung fehlgeschlagen. Fehler: {errors}."
+msgid "Catalog audit failed with {errors, plural, one {# error} other {# errors}}."
+msgstr "Katalogprüfung mit {errors, plural, one {# Fehler} other {# Fehlern}} fehlgeschlagen."
 
-msgid "Catalog audit failed with {errors} error(s) and {warnings} warning(s)."
-msgstr "Katalogprüfung fehlgeschlagen. Fehler: {errors}, Warnungen: {warnings}."
+msgid "Catalog audit failed with {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}."
+msgstr "Katalogprüfung mit {errors, plural, one {# Fehler} other {# Fehlern}} und {warnings, plural, one {# Warnung} other {# Warnungen}} fehlgeschlagen."
 
-msgid "Catalog audit failed with {errors} error(s), {warnings} warning(s), and {infos} info diagnostic(s)."
-msgstr "Katalogprüfung fehlgeschlagen. Fehler: {errors}, Warnungen: {warnings}, Hinweise: {infos}."
+msgid "Catalog audit failed with {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, and {infos, plural, one {# info message} other {# info messages}}."
+msgstr "Katalogprüfung mit {errors, plural, one {# Fehler} other {# Fehlern}}, {warnings, plural, one {# Warnung} other {# Warnungen}} und {infos, plural, one {# Information} other {# Informationen}} fehlgeschlagen."
 
 msgid "Catalog completeness below {threshold} for {locales}."
 msgstr "Übersetzungsstand unter {threshold} für {locales}."
 
-msgid "Extraction failed for {failures} source file(s); catalogs were not updated."
-msgstr "Extraktion fehlgeschlagen; betroffene Quelldateien: {failures}. Kataloge wurden nicht aktualisiert."
+msgid "Extraction failed for {failures, plural, one {# source file} other {# source files}}; catalogs were not updated."
+msgstr "Extraktion für {failures, plural, one {# Quelldatei} other {# Quelldateien}} fehlgeschlagen; Kataloge wurden nicht aktualisiert."
 
-msgid "Catalog extraction check found drift in {catalogs} catalog file(s)."
-msgstr "Extraktionsprüfung hat Katalogänderungen erkannt. Katalogdateien: {catalogs}."
+msgid "Catalog extraction check found drift in {catalogs, plural, one {# catalog file} other {# catalog files}}."
+msgstr "Extraktionsprüfung hat Abweichungen in {catalogs, plural, one {# Katalogdatei} other {# Katalogdateien}} gefunden."
 
-msgid "Source lint failed with {errors} error diagnostic(s)."
-msgstr "Quelltextprüfung fehlgeschlagen. Fehler: {errors}."
+msgid "Source lint failed with {errors, plural, one {# error diagnostic} other {# error diagnostics}}."
+msgstr "Quellprüfung mit {errors, plural, one {# Fehlerdiagnose} other {# Fehlerdiagnosen}} fehlgeschlagen."
 
-msgid "Source lint failed with {errors} error(s) and {warnings} warning(s)."
-msgstr "Quelltextprüfung fehlgeschlagen. Fehler: {errors}, Warnungen: {warnings}."
+msgid "Source lint failed with {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}."
+msgstr "Quellprüfung mit {errors, plural, one {# Fehler} other {# Fehlern}} und {warnings, plural, one {# Warnung} other {# Warnungen}} fehlgeschlagen."
 
-msgid "Source lint could not analyze {failures} source file(s)."
-msgstr "Quelltextprüfung fehlgeschlagen. Nicht analysierte Quelldateien: {failures}."
+msgid "Source lint could not analyze {failures, plural, one {# source file} other {# source files}}."
+msgstr "Quellprüfung konnte {failures, plural, one {# Quelldatei} other {# Quelldateien}} nicht analysieren."
 
 msgid "Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml."
 msgstr "Keine Palamedes-Konfiguration gefunden. Erwartet wird palamedes.yaml, palamedes.yml, palamedes.json oder palamedes.toml."
@@ -321,8 +321,8 @@ msgstr "Palamedes-Konfiguration {path} konnte nicht gelesen werden: {source}"
 msgid "Invalid Palamedes config in {path}: {message}"
 msgstr "Ungültige Palamedes-Konfiguration in {path}: {message}"
 
-msgid "Found {files} files to extract from"
-msgstr "Quelldateien für die Extraktion: {files}"
+msgid "Found {files, plural, one {# file} other {# files}} to extract from"
+msgstr "{files, plural, one {# Datei} other {# Dateien}} für die Extraktion gefunden"
 
 msgid "Config changed; reloaded {path}"
 msgstr "Konfiguration geändert; {path} neu geladen"

@@ -49,7 +49,7 @@ pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
             locations.iter().map(|path| format!("  {}", path.display())).collect::<Vec<_>>().join("\n")
         };
         // Catalog loading failed, so bootstrap diagnostics cannot use tr!.
-        format!("could not load the UI language catalog for locale '{locale}'.\nSearched locations:\n{searched}\nCause: {cause}\nReinstall pmds together with its pmds-locales directory, or set PALAMEDES_UI_CATALOG_DIR to the directory containing matching <locale>.pmd.json files.")
+        format!("could not load the UI language catalog for locale '{locale}'.\nSearched locations:\n{searched}\nCause: {cause}\nReinstall pmds together with its pmds-locales directory, or set PALAMEDES_UI_CATALOG_DIR to the directory containing matching <locale>.pmd.json files.\nFor source checkouts: cargo run does not refresh an older target/<profile>/pmds-locales directory. Rebuild the native platform package, or point PALAMEDES_UI_CATALOG_DIR at the current build-script out_dir/catalogs reported by cargo build -p palamedes-cli --message-format=json.")
     })?;
     let _ = CATALOG.set(catalog);
     let _ = LANGUAGE.set(language);

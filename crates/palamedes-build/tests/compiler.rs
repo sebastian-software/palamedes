@@ -303,6 +303,7 @@ fn canonical_plural_lowering_preserves_quoting_offsets_and_nested_ordinal_scope(
         messages: Box::leak(Box::new([palamedes_i18n::MessageSpec {
             id,
             arguments: &["count", "inner", "mode"],
+            plural_arguments: &["count", "inner"],
             literal: false,
         }])),
     };
@@ -348,5 +349,20 @@ fn canonical_plural_lowering_preserves_quoting_offsets_and_nested_ordinal_scope(
             )
             .unwrap(),
         "# 1 guest"
+    );
+}
+
+#[test]
+fn translations_cannot_add_numeric_requirements_to_display_arguments() {
+    let directory = catalogs("{name, plural, one {# Name} other {# Namen}}");
+    let output = tempfile::tempdir().unwrap();
+    let error = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "de"])
+        .compile_to(output.path())
+        .err()
+        .expect("reject changed argument kind");
+    assert!(
+        error.to_string().contains("nonnumeric source argument"),
+        "{error}"
     );
 }
