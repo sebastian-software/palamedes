@@ -1,17 +1,17 @@
 /*
- * The homepage film: PalamedesFilm from video/, 2:40. The poster and the
- * captions ship with the site; the captions come from video/audio/captions.py.
- * The MP4 is placed by hand until it moves to its streaming host, and only
- * `src` changes then.
+ * The homepage film: PalamedesFilm from video/, 2:40, streamed from Bunny
+ * Stream (library 783695) with adaptive playback and selectable English
+ * captions. The player loads only when someone asks for the film.
  */
+const PLAYER = "https://player.mediadelivery.net/embed/783695/df747a2a-efb7-414e-8e67-da6a3be9654f";
+
 export const FILM = {
-  title: "Palamedes in two minutes",
+  title: "Palamedes product film",
   duration: "2:40",
-  src: "/media/palamedes-film.mp4",
-  poster: "/media/palamedes-film-poster.webp",
-  captions: "/media/palamedes-film.en.vtt",
-  width: 1920,
-  height: 1080,
+  /** Opens the hosted player page; used as the link when JavaScript is off. */
+  page: `${PLAYER}?autoplay=false`,
+  /** Loaded into the dialog on click, so playback starts at the reader's request. */
+  embed: `${PLAYER}?autoplay=true&preload=true`,
 } as const;
 
 /** Credits the film carries wherever it is published (CC BY for the piano). */
