@@ -119,6 +119,7 @@ export function RustRace() {
           </p>
           {reducedMotion ? null : (
             <button
+              data-analytics-id="benchmark-race-replay"
               type="button"
               onClick={run}
               disabled={phase === "running"}

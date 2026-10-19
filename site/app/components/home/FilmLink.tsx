@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { FILM, FILM_CREDITS, FILM_TRANSCRIPT } from "~/data/film";
+import { trackEvent } from "~/lib/analytics";
+import { enableAnalytics } from "~/lib/analytics-bootstrap";
+import { observeBunnyPlayer, VideoCoverage } from "~/lib/video-analytics";
 
 /*
  * The film behind a link, as on dalo.sh: it takes no room on the page, so
@@ -11,7 +14,22 @@ import { FILM, FILM_CREDITS, FILM_TRANSCRIPT } from "~/data/film";
  */
 export function FilmLink() {
   const dialog = useRef<HTMLDialogElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const coverage = useRef<VideoCoverage | null>(null);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || !frame.current || !enableAnalytics()) return;
+    coverage.current ??= new VideoCoverage((name, properties) =>
+      trackEvent(name, {
+        ...properties,
+        video_id: FILM.id,
+        video_version: FILM.version,
+        placement: "homepage-film",
+      }),
+    );
+    return observeBunnyPlayer(frame.current, coverage.current);
+  }, [open]);
 
   // The native close event fires for the button, Escape, and form methods alike.
   useEffect(() => {
@@ -26,6 +44,8 @@ export function FilmLink() {
     <>
       <a
         href={FILM.page}
+        data-analytics-id="homepage-film-open"
+        data-analytics-event="film_open"
         onClick={(event) => {
           const element = dialog.current;
           if (!element || typeof element.showModal !== "function") return;
@@ -48,6 +68,7 @@ export function FilmLink() {
       >
         <button
           type="button"
+          data-analytics-id="homepage-film-close"
           aria-label="Close the film"
           onClick={() => dialog.current?.close()}
           className="absolute top-0 right-0 grid size-11 place-items-center border border-ink/20 bg-paper text-ink hover:bg-mist focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -69,11 +90,13 @@ export function FilmLink() {
               // both would be no sandbox at all, so the trusted player runs without one.
               // oxlint-disable-next-line react/iframe-missing-sandbox
               <iframe
+                ref={frame}
                 src={FILM.embed}
                 title={FILM.title}
                 className="block size-full border-0"
                 allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
                 allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
               />
             ) : null}
           </div>
@@ -82,7 +105,10 @@ export function FilmLink() {
           </figcaption>
         </figure>
         <details className="mt-4 border border-ink/15 bg-paper px-5 py-1">
-          <summary className="flex min-h-11 cursor-pointer items-center text-[15px] font-semibold text-ink">
+          <summary
+            data-analytics-id="film-transcript"
+            className="flex min-h-11 cursor-pointer items-center text-[15px] font-semibold text-ink"
+          >
             Read what the film says
           </summary>
           <div className="mt-2 mb-4 max-h-[40vh] space-y-3 overflow-y-auto text-[15px] leading-relaxed text-ink/85">

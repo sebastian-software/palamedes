@@ -6,6 +6,8 @@
 const PLAYER = "https://player.mediadelivery.net/embed/783695/df747a2a-efb7-414e-8e67-da6a3be9654f";
 
 export const FILM = {
+  id: "df747a2a-efb7-414e-8e67-da6a3be9654f",
+  version: "v6",
   title: "Palamedes product film",
   duration: "2:40",
   /** Opens the hosted player page; used as the link when JavaScript is off. */

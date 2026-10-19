@@ -77,6 +77,7 @@ export function HeroMorph() {
               </ul>
               <button
                 type="button"
+                data-analytics-id="hero-language-animation-toggle"
                 onClick={() => setPaused((value) => !value)}
                 className="micro min-h-11 px-2 text-[11px] tracking-label text-slate hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >

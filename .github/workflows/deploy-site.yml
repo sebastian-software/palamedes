@@ -63,6 +63,9 @@ jobs:
           done
 
       - name: Build site
+        env:
+          VITE_RYBBIT_SCRIPT_URL: ${{ vars.PALAMEDES_RYBBIT_SCRIPT_URL }}
+          VITE_RYBBIT_SITE_ID: ${{ vars.PALAMEDES_RYBBIT_SITE_ID }}
         run: pnpm build:site
 
       - name: Add SPA fallback as 404 page
@@ -80,6 +83,10 @@ jobs:
 
       - name: Verify built site accessibility
         run: pnpm verify:site-a11y
+
+      - name: Verify site analytics with an isolated sink
+        if: vars.PALAMEDES_RYBBIT_SCRIPT_URL != '' && vars.PALAMEDES_RYBBIT_SITE_ID != ''
+        run: pnpm verify:site-analytics
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
