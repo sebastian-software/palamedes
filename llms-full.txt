@@ -359,8 +359,13 @@ locale, including regional distinctions. Exact numeric branches precede category
 selection; offset-adjusted counts drive categories and `#`. Nested plural/select
 scopes and quoted pound signs retain ICU semantics. `#` emits plain decimal text;
 localized number/date/time formatting, rich text, and contexts fail compilation.
-Plural arguments use the Display value as a signed plain decimal, at most 18
-fractional digits with an i128 coefficient (also after offset subtraction).
+Generated signatures require built-in integer/float types or a validated
+PluralNumber for plural/ordinal arguments; bare strings and other Display values
+fail Rust compilation in those positions. Nonplural arguments retain Display.
+Parse decimal strings into PluralNumber to preserve visible fractional zeros.
+Translations and updates cannot turn a display-only source argument into a plural.
+Plural values render as signed plain decimals, at most 18 fractional digits with
+an i128 coefficient (also after offset subtraction).
 Invalid/non-finite/exponent values and overflow return Error::PluralArgument;
 visible fractional zeros matter to CLDR. Rule payloads keep Catalog Send + Sync.
 Instruction format version 2 requires regenerating version 1 catalogs and schemas
@@ -381,6 +386,11 @@ paths for all failures and distinguishes format, locale, and fingerprint errors.
 The CLI's fixed English bootstrap error names the UI locale, attempted locations,
 cause, and reinstall/PALAMEDES_UI_CATALOG_DIR repair. Native packaging uses Cargo
 JSON artifact and OUT_DIR paths, not an assumed target/profile layout.
+For source checkouts, bootstrap diagnostics explain that cargo run does not
+refresh old target/profile sidecars: rebuild the native platform package or point
+PALAMEDES_UI_CATALOG_DIR at the current CLI build-script out_dir/catalogs reported
+by cargo build -p palamedes-cli --message-format=json. Human fallback warnings
+quote source messages like build.rs; JSON keeps the raw message text.
 The crates.io hold
 remains in force. See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
 
