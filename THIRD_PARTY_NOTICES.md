@@ -16,9 +16,11 @@ the respective trademark owners. Retrieved 2026-08-13.
 | Vite         | `site/public/framework-logos/vite.svg`         | [Vite wordmark](https://vite.dev/vite-dark.svg)                                                                       | `1ed7fd2e8ab39a1cf1f37dae1e3e3bc7536d1ae86160987a81ff834279bbdd78` |
 | Hono         | `site/public/framework-logos/hono.svg`         | [Hono project logo](https://raw.githubusercontent.com/honojs/hono/main/docs/images/hono-logo.svg)                     | `9362f16d2faae430775434d204eb9032a8256ed913d50ad6b438a28395e97644` |
 | Express      | `site/public/framework-logos/express.svg`      | [Express wordmark](https://expressjs.com/images/logos/logo-express-black.svg)                                         | `7537b9a8e700f20f470cebd879e1df5565cfe43a97e809e51e687b561e2f1546` |
+| React        | `video/public/logos/react.svg`                 | [React logo, react.dev repository](https://github.com/reactjs/react.dev/blob/main/public/images/brand/logo_light.svg) | `ebdfad4916a4c4b5ec0bdf80fe9c8476a7cb8b7e925e502f78260098cd65a543` |
 
 Next.js is a trademark of Vercel, Inc. or its affiliates in the United States
-and other countries. React Router and Remix are trademarks of Shopify Inc.
+and other countries. React is a trademark of Meta Platforms, Inc. React Router and Remix
+are trademarks of Shopify Inc.
 Express is a project of the OpenJS Foundation. All other marks are trademarks
 of their respective owners.
 

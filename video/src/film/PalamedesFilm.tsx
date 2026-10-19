@@ -16,6 +16,7 @@ import { Complete } from "./Complete";
 import { Details } from "./Details";
 import { FilmClaim } from "./FilmClaim";
 import { Open } from "./Open";
+import { Problems } from "./Problems";
 import { Reveal } from "./Reveal";
 import { at, FILM_SCENES, type FilmSection, JOURNEY_WARP } from "./timeline";
 
@@ -28,6 +29,7 @@ import { at, FILM_SCENES, type FilmSection, JOURNEY_WARP } from "./timeline";
 const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
   ["open", <Open key="open" />],
   ["hook", <Details key="hook" />],
+  ["problems", <Problems key="problems" />],
   ["reveal", <Reveal key="reveal" />],
   ["journey", <JourneyFlight key="journey" anchors={JOURNEY_WARP} />],
   ["complete", <Complete key="complete" />],
@@ -36,8 +38,8 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
     <Wiring
       key="frameworks"
       cues={{
-        marks: [at(2.95), at(4.1), at(5.2), at(6.25), at(6.95), at(7.3), at(7.6)],
-        travel: [at(8.3), at(10.9)],
+        marks: [at(2.4), at(3), at(3.95), at(5.2), at(6.2), at(6.65), at(7.75)],
+        travel: [at(8.6), at(10.9)],
         bars: 4,
       }}
     />,

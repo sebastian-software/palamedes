@@ -45,12 +45,7 @@ const FORMATS = [`${money("en-US")} · ${day("en-US")}`, `${money("de-DE")} · $
 const ORDER = {
   en: "Your trip starts tomorrow.",
   de: "Morgen beginnt deine Reise.",
-  pairs: [
-    ["Your", "deine"],
-    ["trip", "Reise."],
-    ["starts", "beginnt"],
-    ["tomorrow.", "Morgen"],
-  ],
+  pairs: [["tomorrow.", "Morgen"]],
 } as const;
 
 const MONO = 24;

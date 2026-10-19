@@ -12,7 +12,11 @@ import { arrive, Display, sceneFade } from "../ui";
  * time. Numbers come from site/app/data/bench.ts, which the site build guards
  * against the checked report; scope stays beside every row.
  */
-const ROWS = [...BENCH_REALISTIC.rows].sort((left, right) => left.medianMs - right.medianMs);
+// React Intl's run covers extraction only, a narrower job than the others,
+// so the film leaves it out rather than race it against full catalog updates.
+const ROWS = BENCH_REALISTIC.rows
+  .filter((row) => row.tool !== "React Intl")
+  .sort((left, right) => left.medianMs - right.medianMs);
 const LONGEST = Math.max(...ROWS.map((row) => row.medianMs));
 const START = 14; // frames before the clock starts
 

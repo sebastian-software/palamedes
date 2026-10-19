@@ -2,13 +2,14 @@ import type { FlightWarp } from "../flight/JourneyFlight";
 import { BAR, FPS } from "../timeline";
 
 /*
- * The long cut: 49 bars at 84 BPM, the same grid as the promo. Scene
+ * The long cut: 56 bars at 84 BPM, the same grid as the promo. Scene
  * boundaries sit on downbeats; audio/cues/film.json holds the same plan for
  * the score and places Brian's takes on it, so change bars in both together.
  */
 const SECTIONS = [
   ["open", 2],
   ["hook", 6],
+  ["problems", 7],
   ["reveal", 5],
   ["journey", 14],
   ["complete", 6],

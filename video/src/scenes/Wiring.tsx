@@ -15,19 +15,21 @@ interface IntegrationMark {
   name?: string;
   label: string | null;
   h: number;
+  group: (typeof GROUPS)[number];
 }
 
 const MARKS: readonly IntegrationMark[] = [
-  { file: "nextjs", label: null, h: 30 },
-  { file: "react-router", label: null, h: 36 },
-  { file: "tanstack", label: null, h: 46 },
-  { file: "solid", label: "Solid", h: 40 },
-  // Waku's published SVG is drawn for dark surfaces; the ledger forbids
-  // recolouring a mark, so the film names it instead.
-  { file: null, name: "Waku", label: null, h: 32 },
-  { file: "remix", label: null, h: 26 },
-  { file: "vite", label: null, h: 30 },
+  { file: "react", label: "React", h: 40, group: "UI libraries" },
+  { file: "solid", label: "Solid", h: 40, group: "UI libraries" },
+  { file: "nextjs", label: null, h: 30, group: "Frameworks" },
+  { file: "tanstack", label: null, h: 46, group: "Frameworks" },
+  // Waku's published SVG is drawn for dark surfaces and its icon is an emoji
+  // image; the ledger forbids recolouring a mark, so the film names it instead.
+  { file: null, name: "Waku", label: null, h: 32, group: "Frameworks" },
+  { file: "remix", label: null, h: 26, group: "Frameworks" },
+  { file: "vite", label: null, h: 30, group: "Build tool" },
 ];
+const GROUPS = ["UI libraries", "Frameworks", "Build tool"] as const;
 
 const MOMENTS = [
   { where: "On the server", title: "The page is rendered" },
@@ -75,38 +77,71 @@ export function Wiring({ cues = PROMO_WIRING }: { cues?: WiringCues }) {
         />
       </Display>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 40, marginTop: 70, height: 70 }}>
-        {MARKS.map((mark, index) => (
+      <div style={{ display: "flex", alignItems: "flex-start", marginTop: 64 }}>
+        {GROUPS.map((group, groupIndex) => (
           <div
-            key={mark.file ?? mark.name}
+            key={group}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              ...arrive(frame, cues.marks[index] ?? 8, 10),
+              paddingLeft: groupIndex ? 48 : 0,
+              marginLeft: groupIndex ? 48 : 0,
+              borderLeft: groupIndex ? `1.5px solid ${C.hair}` : undefined,
             }}
           >
-            {mark.file ? (
-              <Img src={staticFile(`logos/${mark.file}.svg`)} style={{ height: mark.h }} />
-            ) : (
-              <span style={{ fontFamily: FONT.sans, fontSize: 34, fontWeight: 800, color: C.ink }}>
-                {mark.name}
-              </span>
-            )}
-            {mark.label ? (
-              <span
-                style={{
-                  fontFamily: mark.label === "preview" ? FONT.mono : FONT.sans,
-                  fontSize: mark.label === "preview" ? 16 : 26,
-                  fontWeight: mark.label === "preview" ? 400 : 700,
-                  letterSpacing: mark.label === "preview" ? "0.14em" : 0,
-                  textTransform: mark.label === "preview" ? "uppercase" : "none",
-                  color: mark.label === "preview" ? C.gray : C.ink,
-                }}
-              >
-                {mark.label}
-              </span>
-            ) : null}
+            <p
+              style={{
+                margin: 0,
+                fontFamily: FONT.sans,
+                fontSize: 22,
+                fontWeight: 600,
+                color: C.slate,
+              }}
+            >
+              {group}
+            </p>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 36, marginTop: 18, height: 56 }}
+            >
+              {MARKS.map((mark, index) =>
+                mark.group === group ? (
+                  <div
+                    key={mark.file ?? mark.name}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      ...arrive(frame, cues.marks[index] ?? 8, 10),
+                    }}
+                  >
+                    {mark.file ? (
+                      <Img src={staticFile(`logos/${mark.file}.svg`)} style={{ height: mark.h }} />
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: FONT.sans,
+                          fontSize: 34,
+                          fontWeight: 800,
+                          color: C.ink,
+                        }}
+                      >
+                        {mark.name}
+                      </span>
+                    )}
+                    {mark.label ? (
+                      <span
+                        style={{
+                          fontFamily: FONT.sans,
+                          fontSize: 26,
+                          fontWeight: 700,
+                          color: C.ink,
+                        }}
+                      >
+                        {mark.label}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null,
+              )}
+            </div>
           </div>
         ))}
       </div>

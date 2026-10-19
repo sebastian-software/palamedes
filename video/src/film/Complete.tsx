@@ -169,7 +169,7 @@ export function Complete() {
             Hydration keeps the words
           </Line>
           <Line frame={frame} cue={CUE.actions}>
-            Server actions reply in German
+            Server actions reply translated
           </Line>
         </Card>
         <Card
@@ -196,7 +196,7 @@ export function Complete() {
       </div>
 
       {/* one toolchain, from the first sentence to the last translation */}
-      <div style={{ position: "relative", marginTop: 54, height: 80 }}>
+      <div style={{ position: "relative", width: 372 * 4 + 32 * 3, marginTop: 54, height: 80 }}>
         <span
           style={{
             position: "absolute",

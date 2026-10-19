@@ -35,13 +35,17 @@ review by qualified counsel.
 
 ## Films
 
-The film sources in `video/` show the same unmodified Next.js, TanStack, Solid,
-React Router, Remix, and Vite files in one framework-integration scene. They
-serve the same purpose there: identifying first-party integrations. The films
-name no support levels, so a change in an adapter's status does not require a
-new render; the site states the levels. Waku appears as its name in text,
-because its published SVG is drawn for dark surfaces and must not be
-recoloured.
+The long cut in `video/` shows the unmodified React, Solid, Next.js, TanStack,
+Remix, and Vite files in one framework-integration scene, grouped as UI
+libraries, frameworks, and build tool; the 66-second promo still shows React
+Router in place of React. They serve the same purpose there: identifying
+first-party integrations. The React mark (retrieved 2026-10-19) is used only in
+the film, never recoloured, with Meta's trademark noted in
+`THIRD_PARTY_NOTICES.md`. The films name no support levels, so a change in an
+adapter's status does not require a new render; the site states the levels.
+Waku appears as its name in text, because its published SVG is drawn for dark
+surfaces and must not be recoloured, and its site icon is an emoji image rather
+than a mark.
 
 On 2026-10-17 the Product Owner decided to publish the long cut
 (`PalamedesFilm`) on the homepage, on the same trademark-risk position as the

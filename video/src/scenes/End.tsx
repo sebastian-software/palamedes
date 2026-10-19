@@ -80,7 +80,7 @@ export function End({ cues = PROMO_END }: { cues?: EndCues }) {
             ...arrive(frame, cues.note),
           }}
         >
-          Open source · MIT OR Apache-2.0 · React, Solid &amp; TypeScript
+          Open source · MIT OR Apache-2.0
         </p>
       </AbsoluteFill>
       {cues.company === undefined ? null : <CompanyBand frame={frame} at={cues.company} />}
@@ -111,9 +111,11 @@ function CompanyBand({ frame, at }: { frame: number; at: number }) {
           src={staticFile("company/sebastian-software.svg")}
           style={{ display: "block", width: 300, marginTop: 14 }}
         />
+        <p style={{ ...text, marginTop: 16 }}>oss.sebastian-software.com</p>
       </div>
       <div style={arrive(frame, at + 8, 18, 24)}>
-        <p style={text}>Consulting</p>
+        {/* No label here: the space keeps both logos on one line. */}
+        <p style={{ ...text, visibility: "hidden" }}>Made by</p>
         <Img
           src={staticFile("company/sebastian-consulting.svg")}
           style={{ display: "block", width: 300, marginTop: 14 }}
