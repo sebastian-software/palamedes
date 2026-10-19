@@ -1,13 +1,12 @@
 import { ButtonLink } from "@palamedes/site-ui";
 
 import { AgentStart } from "./AgentStart";
-import { FilmLink } from "./FilmLink";
-import { HeroMorph } from "./HeroMorph";
+import { HeroFilm } from "./HeroFilm";
 
 /*
  * The first screen states the whole idea in four words, offers two doors —
- * start now, or have it explained first — and proves the promise with the
- * sentence a developer writes turning into six languages.
+ * start now, or have it explained first — and shows the promise in a
+ * two-minute film that plays only when asked.
  */
 export function HomeHero() {
   return (
@@ -41,7 +40,6 @@ export function HomeHero() {
               Show me how it works
             </ButtonLink>
           </div>
-          <FilmLink />
           <p className="mt-6 max-w-[36rem] text-[13.5px] leading-relaxed text-ink/70">
             <strong className="font-semibold text-ink">2.0 preview.</strong> Try the upcoming
             release through the repository examples; the registry still supplies 1.x.{" "}
@@ -55,7 +53,7 @@ export function HomeHero() {
           </p>
         </div>
         <div>
-          <HeroMorph />
+          <HeroFilm />
           <AgentStart />
         </div>
       </div>
