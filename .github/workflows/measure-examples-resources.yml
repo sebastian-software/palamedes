@@ -27,11 +27,16 @@ jobs:
           rust: "false"
           rust-cache: "false"
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      - name: Prepare the exact application snapshot without host tooling
+        run: |
+          git fetch --depth=1 origin 62cf1e9af6b20519d2671bde3c23c610abecc0f8
+          mkdir -p /tmp/examples-image-context
+          git archive 62cf1e9af6b20519d2671bde3c23c610abecc0f8 | tar -x -C /tmp/examples-image-context
       - name: Build unchanged production examples image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
-          context: .
-          file: ./Containerfile
+          context: /tmp/examples-image-context
+          file: /tmp/examples-image-context/Containerfile
           platforms: linux/amd64
           load: true
           tags: examples-resources:measure

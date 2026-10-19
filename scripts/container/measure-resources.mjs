@@ -258,7 +258,7 @@ try {
       const deadline = performance.now() + 90_000;
       for (;;) {
         try {
-          const response = await request(example, example.smokeChecks[0]);
+          const response = await request(example, example.smokeChecks[0] ?? { path: "/" });
           assert.ok(response.status >= 200 && response.status < 400);
           break;
         } catch (error) {
