@@ -31,11 +31,10 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
-  it("holds release creation and real publication while retaining a non-publishing dry run", async () => {
-    const [release, publish, container, detection] = await Promise.all([
+  it("holds package release creation and publication while retaining a non-publishing dry run", async () => {
+    const [release, publish, detection] = await Promise.all([
       readRepositoryFile(".github/workflows/release-pr.yml"),
       readRepositoryFile(".github/workflows/publish.yml"),
-      readRepositoryFile(".github/workflows/publish-examples-container.yml"),
       readRepositoryFile("scripts/determine-release.mjs"),
     ]);
     expect(release).toContain("run: node ./scripts/release-policy.mjs");
@@ -43,7 +42,6 @@ describe("workflow contracts", () => {
     expect(publish).toContain(
       "DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}",
     );
-    expect(container).not.toContain("DRY_RUN:");
     expect(detection).toContain("publicationAllowed(policy, version)");
     for (const step of publish.split("- name:").slice(1)) {
       if (/run:.*publish-package-if-needed|run:.*check-published-versions/.test(step)) {
@@ -475,26 +473,32 @@ describe("workflow contracts", () => {
     expect(container).toContain("permissions:\n  contents: read");
   });
 
-  it("shares pinned release detection between package and container publishing", async () => {
-    const [publish, container, releaseDetection] = await Promise.all([
+  it("publishes main demo images independently while retaining the package release hold", async () => {
+    const [publish, container] = await Promise.all([
       readRepositoryFile(".github/workflows/publish.yml"),
       readRepositoryFile(".github/workflows/publish-examples-container.yml"),
-      readRepositoryFile("scripts/determine-release.mjs"),
     ]);
-
-    for (const [workflow, nextJob] of [
-      [publish, "validate-release"],
-      [container, "build-and-push"],
-    ]) {
-      const determineRelease = job(workflow, "determine-release", nextJob);
-      expect(determineRelease).toContain("fetch-depth: 0");
-      expect(determineRelease).toContain("ref: ${{ github.sha }}");
-      expect(determineRelease).toContain("run: node ./scripts/determine-release.mjs");
-      expect(determineRelease).toContain("BASE_REF: ${{ github.event.before }}");
-    }
-    expect(job(container, "build-and-push", "__missing__")).toContain("ref: ${{ github.sha }}");
-    expect(releaseDetection).toContain("chore: release ");
-    expect(releaseDetection).toContain("0000000000000000000000000000000000000000");
+    const detection = job(publish, "determine-release", "validate-release");
+    expect(detection).toContain("run: node ./scripts/determine-release.mjs");
+    expect(detection).toContain("ref: ${{ github.sha }}");
+    expect(container).not.toContain("determine-release");
+    expect(container).not.toContain("release-policy");
+    expect(container).toContain("branches:\n      - main");
+    expect(container).toContain(
+      "if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)",
+    );
+    expect(container).toContain("ref: ${{ github.sha }}");
+    expect(container).toContain("load: true");
+    expect(container).not.toContain("push: true");
+    expect(container).toContain(
+      "docker exec examples-smoke node scripts/container/verify-remix.mjs",
+    );
+    const push = container.split("- name: Publish verified image tags")[1];
+    expect(push).toContain("if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}");
+    expect(container.indexOf("docker exec examples-smoke")).toBeLessThan(
+      container.indexOf('docker push "$IMAGE:sha-$REVISION"'),
+    );
+    expect(container).toContain("Image: $digest");
   });
 
   it("lets the dependency audit exit code reach the tracking issue step", async () => {

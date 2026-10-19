@@ -2,7 +2,7 @@
 
 The Palamedes example matrix is verified primarily through local runs and CI.
 The matrix spans 25 runnable examples: six frameworks × four locale strategies,
-plus the Vite MDX example. Release CI publishes one shared examples container to
+plus the Vite MDX example. CI publishes one shared examples container to
 GitHub Container Registry; deployment from that image to the public demo
 infrastructure is managed outside this repository. Public demo URLs are
 documented as the live reference surface where hosting exists, but reachability
@@ -15,10 +15,11 @@ awaits external deployment verification.
 ## Current Policy
 
 - the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`
-- release commits publish the shared examples image through
+- image-relevant pushes to `main` publish the shared examples image independently
+  of the package release hold through
   [`publish-examples-container.yml`](../.github/workflows/publish-examples-container.yml)
-- the image contains the complete example matrix and starts every example on its
-  fixed port
+- the image contains the complete example matrix; by default it starts every
+  example on its fixed port, and `PALAMEDES_EXAMPLES` selects a smaller deployment
 - public routing, TLS, DNS, and image rollout belong to the external demo
   infrastructure
 
@@ -71,17 +72,19 @@ hosted checks do not regenerate that benchmark or prove image identity.
 The repository includes all four servers and their fixed ports in the shared
 examples image. The external infrastructure still needs:
 
-1. A built and pushed image containing these changes and stable `remix@3.0.0`.
-   The shared `.release-policy.json` currently disables publication, including
-   forced container publication. Resolve the recorded v2 release prerequisites
-   and obtain explicit release authorization before enabling publication; this
-   Remix change does not lift that hold. Afterward, use the existing release or
-   `force_publish` workflow path. Deploy an immutable image digest and record
-   the corresponding Git revision.
-2. Proxy routes for cookie and route, `en`/`de`/`es` subdomain hosts, and the
-   `.com`/`.de`/`.es`/`.fr` TLD hosts. Add the
-   `*.remix-subdomain.examples.palamedes.dev` wildcard record and matching TLS
-   coverage. Reuse the existing TLD domains; no new domain purchase is needed.
+1. A built and pushed image containing stable `remix@3.0.0`. The examples
+   workflow publishes independently of `.release-policy.json`; npm and crates
+   remain held. Use a main push or a manual dispatch on `main` to publish. A
+   `dry_run` dispatch also accepts a branch and does not publish. The workflow
+   builds the runtime image and runs all four Remix smoke contracts before
+   pushing. Record its immutable image digest and Git revision from the run
+   summary, then deploy that digest.
+2. Four HTTP endpoints, one per fixed port, with the final hostnames below.
+   Bunny Magic Containers can host one container with all four endpoints. Set
+   `PALAMEDES_EXAMPLES=remix-cookie,remix-route,remix-subdomain,remix-tld` to avoid
+   starting the other 21 demos. Start with one region and one replica, without
+   persistent volumes or an Anycast IP. Configure custom hostname TLS and DNS
+   only after the endpoints are healthy. See the rollout table below.
 3. Original `Host` forwarding, HTTPS certificates, and correct locale-aware
    caching. Keep `Host` in host-strategy cache keys and preserve the response's
    `Vary` policy; respect `Cookie` and `Accept-Language` where applicable.
@@ -90,6 +93,47 @@ examples image. The external infrastructure still needs:
 
 [#1261](https://github.com/sebastian-software/palamedes/issues/1261) remains open
 until deployment evidence is available. Local and loopback tests do not close it.
+
+### Bunny Rollout Plan
+
+As checked on October 19, 2026, Bunny manages the DNS zones but has no
+Palamedes Magic Containers app. The intended Remix origins currently resolve
+to the existing external demo server and fail TLS negotiation. DNS resolution
+alone does not establish an active proxy route or certificate. Create explicit
+Remix records pointing to the new Bunny endpoints; preserve the existing
+wildcards serving the other frameworks.
+
+| Endpoint          | Container port | Custom hostnames                                                                                                                      |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `remix-cookie`    | 4060           | `remix-cookie.examples.palamedes.dev`                                                                                                 |
+| `remix-route`     | 4061           | `remix-route.examples.palamedes.dev`                                                                                                  |
+| `remix-subdomain` | 4062           | `en.remix-subdomain.examples.palamedes.dev`, `de.remix-subdomain.examples.palamedes.dev`, `es.remix-subdomain.examples.palamedes.dev` |
+| `remix-tld`       | 4063           | `remix.examples.palamedes-i18n.com`, `.de`, `.es`, `.fr`                                                                              |
+
+Each hostname must reach its endpoint with the original request Host. Disable
+HTML caching for the first rollout, including responses that negotiate a cookie
+or Accept-Language. Do not cache nonce-bearing documents or mix locale hosts.
+Retain the app's CSP and Vary headers. Test the actual Bunny origin Host setting
+before switching DNS; the subdomain and TLD apps derive their locale from it.
+Review auto-detected ports in the Bunny deployment form: keep only CDN HTTP
+endpoints for 4060–4063 and remove the other image ports and any Anycast entries.
+DNS wildcards and TLS wildcard certificates have different matching rules;
+individual locale records and certificates are sufficient for these three
+subdomain hosts.
+
+Use the four HTTPS browser commands above after DNS and TLS are ready. Record
+the Bunny app/endpoint identifiers, image digest, Git revision, all nine origins,
+verification date, and all four browser results in #1261. Keep the previous DNS
+targets and image digest for rollback. Update live matrix entries and public
+links only after this evidence passes; #1261 remains open until then.
+
+Bunny bills consumed CPU time and RAM while a replica is running. One region
+with one replica avoids multiplying idle costs. At the published rates, 512 MB
+of average billed RAM for 744 hours costs about $1.86 and 1 GB about $3.72,
+plus CPU, traffic, and Bunny's workload-dependent system memory overhead. These
+are sizing scenarios, not measured usage or a spending cap. Measure the four-server runtime before choosing a memory limit.
+See [Bunny pricing](https://bunny.net/docs/magic-containers/pricing) and
+[deployment settings](https://bunny.net/docs/magic-containers/deploy).
 
 ## Live Reference URLs
 
@@ -173,11 +217,10 @@ has not passed the readiness gate above.
 ## Subdomain Locale Hosting (DNS And Reverse Proxy)
 
 The subdomain demos encode the locale in the leftmost DNS label
-(`de.nextjs-subdomain.examples.palamedes.dev` renders German). That label sits one
-level below the existing `*.examples.palamedes.dev` wildcard, which only covers a
-single label: it resolves `nextjs-subdomain.examples.palamedes.dev` but not
-`de.nextjs-subdomain.examples.palamedes.dev`. Each public subdomain example
-therefore needs its own wildcard record:
+(`de.nextjs-subdomain.examples.palamedes.dev` renders German). Check DNS and
+TLS coverage separately: a certificate for `*.examples.palamedes.dev` does not
+cover these deeper locale hosts. Explicit per-example DNS wildcards keep the
+routing records clear:
 
 - `*.nextjs-subdomain.examples.palamedes.dev`
 - `*.tanstack-subdomain.examples.palamedes.dev`
@@ -206,7 +249,7 @@ Waku, and React Router, so all five public subdomain rows are reachable and
 render the requested locale. The canonical verification path remains
 `pnpm verify:examples`, which exercises the subdomain strategy locally via
 `*.lvh.me` hosts. Remix subdomain support is verified the same way, but it is not
-included in the public DNS/proxy deployment plan.
+live yet; its Bunny deployment targets are listed above.
 
 ## TLD Locale Hosting (DNS And Reverse Proxy)
 
@@ -238,13 +281,16 @@ hosts across Next.js, TanStack Start, Solid, Waku, and React Router. The canonic
 verification path also runs locally via `pnpm verify:examples`, which exercises
 the tld strategy using Chromium's `--host-resolver-rules` flag to simulate the
 TLD hosts without real DNS. Remix TLD support is covered by the same local/CI
-verification path, not by public TLD deployment.
+verification path, not by public TLD deployment. The Bunny rollout above adds
+only the Remix hosts.
 
 ## Container Image Publication
 
 The repository publishes the examples image through
 [`publish-examples-container.yml`](../.github/workflows/publish-examples-container.yml).
-The workflow runs for release commits on `main` and can also be forced manually.
+The workflow runs on image-relevant pushes to `main` and manual dispatches.
+It is independent of package release authorization; only `main` can publish. Branch dispatches
+require `dry_run` and build/test without publishing.
 It builds the workspace and complete example matrix, then pushes
 `ghcr.io/sebastian-software/palamedes-examples` with `latest` and commit-SHA
 tags.
