@@ -365,26 +365,29 @@ async function checkRoutes(context, label, { expectHydration }) {
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
     const integrationLinks = await integrationSection.locator("ul a").count();
-    if (integrationLinks !== 9) {
-      fail(`home integration band: expected 9 linked entries, got ${integrationLinks}`);
+    if (integrationLinks !== 11) {
+      fail(`home integration band: expected 11 linked entries, got ${integrationLinks}`);
     }
-    const frontendIntegrations = await integrationSection
-      .getByRole("list", { name: "Frontend and full-stack adapters" })
-      .getByRole("listitem")
-      .count();
-    const backendIntegrations = await integrationSection
-      .getByRole("list", { name: "Backend integrations" })
-      .getByRole("listitem")
-      .count();
-    if (frontendIntegrations !== 7 || backendIntegrations !== 2) {
-      fail(
-        `home integration hierarchy: expected 7 frontend/full-stack and 2 backend entries, got ${frontendIntegrations} and ${backendIntegrations}`,
-      );
+    const expectedGroups = {
+      "UI libraries": 2,
+      Frameworks: 5,
+      "Build tools": 1,
+      Backends: 2,
+      Rust: 1,
+    };
+    for (const [group, expected] of Object.entries(expectedGroups)) {
+      const count = await integrationSection
+        .getByRole("list", { name: group, exact: true })
+        .getByRole("listitem")
+        .count();
+      if (count !== expected) {
+        fail(`home integration groups: expected ${expected} ${group} entries, got ${count}`);
+      }
     }
     const integrationLogos = integrationSection.locator("li img");
     const logoCount = await integrationLogos.count();
-    if (logoCount !== 9) {
-      fail(`home integration band: expected 9 marks, got ${logoCount}`);
+    if (logoCount !== 11) {
+      fail(`home integration band: expected 11 marks, got ${logoCount}`);
     } else {
       const unloadedLogos = await integrationLogos.evaluateAll((images) =>
         images
