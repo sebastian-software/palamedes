@@ -129,18 +129,14 @@ try {
   await player.evaluate(() => window.emit("timeupdate", { seconds: 0.05, duration: 100 }));
   await page.waitForFunction(() => window.__events.some(({ name }) => name === "video_start"));
   assert.equal((await events(page, "video_start")).length, 1);
-  await page.getByRole("button", { name: "Close the film" }).click();
-  await page.getByRole("link", { name: /Watch the film/ }).click();
-  await frame.getByText("Player protocol fixture").waitFor();
-  const reopened = page.frames().find((candidate) => candidate.url().includes("mediadelivery.net"));
-  await reopened.evaluate(() => window.emit("timeupdate", { seconds: 0, duration: 100 }));
+  // The hero player stays in place; more playback in the same visit is not a second start.
+  await player.evaluate(() => window.emit("timeupdate", { seconds: 0.1, duration: 100 }));
   await page.waitForTimeout(20);
-  await reopened.evaluate(() => window.emit("timeupdate", { seconds: 0.05, duration: 100 }));
-  await page.getByRole("button", { name: "Close the film" }).click();
+  await player.evaluate(() => window.emit("timeupdate", { seconds: 0.15, duration: 100 }));
   assert.equal(
     (await events(page, "video_start")).length,
     1,
-    "Reopening the dialog must preserve per-visit deduplication",
+    "Continued playback must preserve per-visit deduplication",
   );
 
   const search = page.getByRole("combobox").first();
@@ -216,8 +212,6 @@ try {
       .frameLocator('iframe[title="Palamedes product film"]')
       .getByText("Player protocol fixture")
       .waitFor();
-    await fixture.page.getByRole("button", { name: "Close the film" }).click();
-    assert.equal(await fixture.page.getByRole("dialog").count(), 0);
     assert.equal(fixture.requests(), options.blocked ? 1 : 0);
     await fixture.instance.close();
   }

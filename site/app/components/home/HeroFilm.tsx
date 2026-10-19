@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FILM, FILM_CREDITS, FILM_TRANSCRIPT } from "~/data/film";
+import { trackEvent } from "~/lib/analytics";
+import { enableAnalytics } from "~/lib/analytics-bootstrap";
+import { observeBunnyPlayer, VideoCoverage } from "~/lib/video-analytics";
 
 /*
  * The film in the hero, next to the promise it explains. Until someone presses
@@ -11,6 +14,21 @@ import { FILM, FILM_CREDITS, FILM_TRANSCRIPT } from "~/data/film";
  */
 export function HeroFilm() {
   const [playing, setPlaying] = useState(false);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const coverage = useRef<VideoCoverage | null>(null);
+
+  useEffect(() => {
+    if (!playing || !frame.current || !enableAnalytics()) return;
+    coverage.current ??= new VideoCoverage((name, properties) =>
+      trackEvent(name, {
+        ...properties,
+        video_id: FILM.id,
+        video_version: FILM.version,
+        placement: "homepage-film",
+      }),
+    );
+    return observeBunnyPlayer(frame.current, coverage.current);
+  }, [playing]);
 
   return (
     <figure className="border border-ink/15 bg-paper">
@@ -20,15 +38,19 @@ export function HeroFilm() {
           // both would be no sandbox at all, so the trusted player runs without one.
           // oxlint-disable-next-line react/iframe-missing-sandbox
           <iframe
+            ref={frame}
             src={FILM.embed}
             title={FILM.title}
             className="absolute inset-0 size-full border-0"
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
           />
         ) : (
           <a
             href={FILM.page}
+            data-analytics-id="homepage-film-open"
+            data-analytics-event="film_open"
             onClick={(event) => {
               event.preventDefault();
               setPlaying(true);
