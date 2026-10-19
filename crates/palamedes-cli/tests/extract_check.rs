@@ -53,7 +53,7 @@ catalogs:
     assert_eq!(json_stdout(&cold), expected);
     assert!(
         String::from_utf8_lossy(&cold.stderr)
-            .contains("Catalog extraction check found drift in 2 catalog file(s)"),
+            .contains("Catalog extraction check found drift in 2 catalog files"),
         "{cold:?}"
     );
     assert_catalog_unchanged(&po, &po_before, fixed_mtime);

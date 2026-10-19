@@ -139,3 +139,59 @@ fn cli_uses_real_plural_translations_for_compilation_summaries() {
         }
     }
 }
+
+#[test]
+fn fallback_diagnostics_quote_source_messages_and_leave_json_raw() {
+    let directory = tempfile::tempdir().unwrap();
+    let po = directory.path().join("po");
+    fs::create_dir(&po).unwrap();
+    fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/locales/en.po"),
+        po.join("en.po"),
+    )
+    .unwrap();
+    fs::write(po.join("de.po"), "").unwrap();
+    let compile = |json: bool| {
+        let mut command = compiler();
+        command
+            .args([
+                "catalog",
+                "compile",
+                "--target",
+                "rust",
+                "--schema",
+                concat!(env!("OUT_DIR"), "/schema.pmd.json"),
+                "--catalog-dir",
+            ])
+            .arg(&po)
+            .args(["--locale", "de", "--output"])
+            .arg(directory.path().join("out"));
+        if json {
+            command.arg("--json");
+        }
+        command.output().unwrap()
+    };
+    let output = compile(false);
+    assert!(output.status.success(), "{output:?}");
+    let warning = String::from_utf8(output.stderr).unwrap();
+    assert!(warning.contains("missing translation for \"Invalid command-line arguments.\"; compiled fallback from en."), "{warning}");
+    // Human-readable warnings use the same quoted Debug format as build.rs.
+    assert!(
+        warning
+            .lines()
+            .all(|line| line.contains("missing translation for \"")
+                && line.ends_with("\"; compiled fallback from en.")),
+        "{warning}"
+    );
+    let json = compile(true);
+    assert!(json.status.success());
+    assert!(json.stderr.is_empty());
+    let report: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert!(
+        report["missing"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["message"] == "Invalid command-line arguments.")
+    );
+}

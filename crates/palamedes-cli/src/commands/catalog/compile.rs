@@ -78,7 +78,7 @@ impl Command for CompileOptions {
                 tr!(
                     "{locale}: missing translation for {message}; compiled fallback from {resolved}.",
                     locale = missing.locale,
-                    message = missing.message,
+                    message = format!("{:?}", missing.message),
                     resolved = missing.resolved_locale
                 )
             );

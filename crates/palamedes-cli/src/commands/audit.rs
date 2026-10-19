@@ -18,7 +18,7 @@ pub struct AuditOptions {
     #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
-    #[arg(help = tr!("Only audit selected target locale(s)."))]
+    #[arg(help = tr!("Only audit selected target locales."))]
     #[arg(long, num_args = 1..)]
     locale: Vec<String>,
     #[arg(help = tr!("Print the machine-readable audit result as JSON."))]
@@ -98,7 +98,7 @@ fn print_audit_result(result: &CatalogAuditResult, fail_on: FailOn) {
     println!(
         "{}",
         tr!(
-            "Catalog audit {status}: {errors} error(s), {warnings} warning(s), {infos} info",
+            "Catalog audit {status}: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}",
             errors = result.summary.errors,
             infos = result.summary.infos,
             status = status,

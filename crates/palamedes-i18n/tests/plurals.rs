@@ -6,6 +6,7 @@ const SCHEMA: Schema = Schema {
     messages: &[MessageSpec {
         id: "message",
         arguments: &["count"],
+        plural_arguments: &["count"],
         literal: false,
     }],
 };
@@ -170,6 +171,7 @@ fn pound_tracks_the_innermost_plural_through_selects_and_restores_outer_scope() 
         messages: &[MessageSpec {
             id: "message",
             arguments: &["count", "inner", "mode"],
+            plural_arguments: &["count", "inner"],
             literal: false,
         }],
     };
@@ -263,4 +265,50 @@ fn cached_rules_remain_send_sync_and_independent_across_threads() {
         scope.spawn(|| assert_eq!(render(&english, "2").unwrap(), "other"));
         scope.spawn(|| assert_eq!(render(&russian, "2").unwrap(), "few"));
     });
+}
+
+#[test]
+fn validated_decimal_counts_preserve_visible_digits_and_reject_non_numbers() {
+    use palamedes_i18n::PluralNumber;
+    let catalog = load("en", category_program("cardinal"), SCHEMA).unwrap();
+    for (input, category) in [("1", "one"), ("1.0", "other"), ("1.00", "other")] {
+        let count: PluralNumber = input.parse().unwrap();
+        assert_eq!(count.to_string(), input);
+        assert_eq!(
+            catalog
+                .render("message", &[("count", count.to_string())])
+                .unwrap(),
+            category
+        );
+    }
+    for invalid in [
+        "drei",
+        "",
+        "NaN",
+        "inf",
+        "1e3",
+        "1.0000000000000000000",
+        "170141183460469231731687303715884105728",
+    ] {
+        assert!(invalid.parse::<PluralNumber>().is_err(), "{invalid}");
+    }
+}
+
+#[test]
+fn external_data_cannot_turn_a_display_argument_into_a_plural_operand() {
+    const DISPLAY: Schema = Schema {
+        fingerprint: "plural-fixture",
+        messages: &[MessageSpec {
+            id: "message",
+            arguments: &["count"],
+            plural_arguments: &[],
+            literal: false,
+        }],
+    };
+    assert!(
+        matches!(load("en", category_program("cardinal"), DISPLAY), Err(Error::Incompatible(message)) if message.contains("plural argument kind mismatch"))
+    );
+    // A translation may use a simpler form without weakening the caller's numeric contract.
+    let catalog = load("en", json!([{"op":"argument", "name":"count"}]), SCHEMA).unwrap();
+    assert_eq!(render(&catalog, "2").unwrap(), "2");
 }

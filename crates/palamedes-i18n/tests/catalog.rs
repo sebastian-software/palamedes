@@ -10,16 +10,19 @@ const SCHEMA: Schema = Schema {
         MessageSpec {
             id: "constant",
             arguments: &[],
+            plural_arguments: &[],
             literal: true,
         },
         MessageSpec {
             id: "greeting",
             arguments: &["name"],
+            plural_arguments: &[],
             literal: false,
         },
         MessageSpec {
             id: "selection",
             arguments: &["mode", "name"],
+            plural_arguments: &[],
             literal: false,
         },
     ],

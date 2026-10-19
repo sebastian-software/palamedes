@@ -88,6 +88,7 @@ pub(crate) struct Signature {
     pub id: String,
     pub arguments: BTreeSet<String>,
     pub literal: bool,
+    pub plural_arguments: BTreeSet<String>,
 }
 
 pub(crate) struct PreparedCatalogs {
@@ -244,7 +245,8 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
     let mut specifications = BTreeMap::new();
     for source in sources.keys() {
         let id = key(source);
-        let (_, arguments, literal) = compile_message(&id, &source_messages, &source_programs)?;
+        let (message, arguments, literal) =
+            compile_message(&id, &source_messages, &source_programs)?;
         specifications.insert(
             id.clone(),
             ContractMessage {
@@ -258,6 +260,7 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
                 id,
                 arguments,
                 literal,
+                plural_arguments: message_plural_arguments(&message),
             },
         );
     }
@@ -295,6 +298,9 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
                 compile_message(&spec.id, &artifact.messages, &programs)?;
             if arguments != spec.arguments || literal != spec.literal {
                 return Err(format!("{locale}: placeholder mismatch for {source:?}").into());
+            }
+            if !message_plural_arguments(&message).is_subset(&spec.plural_arguments) {
+                return Err(format!("{locale}: translation introduces a plural for a nonnumeric source argument in {source:?}").into());
             }
             if locale != &builder.source_locale
                 && !catalogs[locale].get(source).copied().unwrap_or(false)
@@ -386,6 +392,8 @@ fn compile_message(
 }
 
 fn fingerprint(messages: &BTreeMap<String, ContractMessage>) -> BuildResult<String> {
+    // IDs hash the full source ICU, including numeric argument requirements.
+    // Updates recompile that source PO before comparing the exported contract.
     let contract: BTreeMap<_, _> = messages
         .iter()
         .map(|(id, spec)| (id, (&spec.arguments, spec.literal)))
@@ -405,4 +413,14 @@ fn check_locale(locale: &str) -> BuildResult<()> {
         return Err(format!("invalid catalog locale: {locale}").into());
     }
     Ok(())
+}
+
+fn message_plural_arguments(message: &Message) -> BTreeSet<String> {
+    match message {
+        Message::Literal(_) => BTreeSet::new(),
+        Message::Program(program) => palamedes_i18n::plural_arguments(program)
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    }
 }

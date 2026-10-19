@@ -221,10 +221,12 @@ fn generate_module(name: &str, module_path: &str, prepared: &PreparedCatalogs) -
     let mut generated = format!(
         "pub const CATALOG_SCHEMA: ::palamedes_i18n::Schema = ::palamedes_i18n::Schema {{ fingerprint: {fingerprint:?}, messages: &[\n"
     );
-    for (id, spec) in &prepared.contract.messages {
+    for spec in prepared.signature.values() {
+        let id = &spec.id;
         generated.push_str(&format!(
-            "::palamedes_i18n::MessageSpec {{ id: {id:?}, arguments: &{:?}, literal: {} }},\n",
+            "::palamedes_i18n::MessageSpec {{ id: {id:?}, arguments: &{:?}, plural_arguments: &{:?}, literal: {} }},\n",
             spec.arguments.iter().collect::<Vec<_>>(),
+            spec.plural_arguments.iter().collect::<Vec<_>>(),
             spec.literal
         ));
     }
@@ -232,26 +234,28 @@ fn generate_module(name: &str, module_path: &str, prepared: &PreparedCatalogs) -
     // The source table is used only during const evaluation. Each call site
     // expands a small lookup, rather than another copy of the entire catalog.
     let lookup = format!("__palamedes_{name}_signature");
-    generated.push_str(&format!("pub(crate) const fn {lookup}(source: &str) -> (&'static str, &'static [&'static str], bool) {{\ntype Signature = (&'static str, &'static [&'static str], bool);\nconst MESSAGES: &[(&str, Signature)] = &[\n"));
+    generated.push_str(&format!("pub(crate) const fn {lookup}(source: &str) -> (&'static str, &'static [&'static str], bool, &'static [&'static str]) {{\ntype Signature = (&'static str, &'static [&'static str], bool, &'static [&'static str]);\nconst MESSAGES: &[(&str, Signature)] = &[\n"));
     for (
         source,
         Signature {
             id,
             arguments,
             literal,
+            plural_arguments,
         },
     ) in &prepared.signature
     {
         generated.push_str(&format!(
-            "({source:?}, ({id:?}, &{:?}, {literal})),\n",
-            arguments.iter().collect::<Vec<_>>()
+            "({source:?}, ({id:?}, &{:?}, {literal}, &{:?})),\n",
+            arguments.iter().collect::<Vec<_>>(),
+            plural_arguments.iter().collect::<Vec<_>>()
         ));
     }
     generated.push_str("];\nlet mut low = 0; let mut high = MESSAGES.len();\nwhile low < high { let mid = low + (high - low) / 2; let comparison = ::palamedes_i18n::source_cmp(source, MESSAGES[mid].0);\nif comparison == 0 { return MESSAGES[mid].1; }\nif comparison < 0 { high = mid; } else { low = mid + 1; }\n}\npanic!(\"source message is absent from compiled catalogs\")\n}\n");
     let lookup_path = format!("$crate{}::{lookup}", &module_path["crate".len()..]);
     generated.push_str(&format!("macro_rules! {name} {{\n(@signature $source:literal) => {{ const {{ {lookup_path}($source) }} }};\n"));
-    generated.push_str(&format!("($catalog:expr, $source:literal $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool) = {name}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[]); assert!(SIGNATURE.2); }};\n($catalog).literal(SIGNATURE.0)\n}}}};\n"));
-    generated.push_str(&format!("($catalog:expr, $source:literal, $($argument:ident = $value:expr),+ $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool) = {name}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[$(::std::stringify!($argument)),+]); assert!(!SIGNATURE.2); }};\n($catalog).render(SIGNATURE.0, &[$((::std::stringify!($argument), ::std::format!(\"{{}}\", $value)),)+])\n}}}};\n}}\n"));
+    generated.push_str(&format!("($catalog:expr, $source:literal $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool, &[&str]) = {name}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[]); assert!(SIGNATURE.2); }};\n($catalog).literal(SIGNATURE.0)\n}}}};\n"));
+    generated.push_str(&format!("($catalog:expr, $source:literal, $($argument:ident = $value:expr),+ $(,)?) => {{{{\nconst SIGNATURE: (&str, &[&str], bool, &[&str]) = {name}!(@signature $source);\nconst _: () = {{ ::palamedes_i18n::assert_arguments(SIGNATURE.1, &[$(::std::stringify!($argument)),+]); assert!(!SIGNATURE.2); }};\n($catalog).render(SIGNATURE.0, &[$((::std::stringify!($argument), ::palamedes_i18n::format_argument::<{{ ::palamedes_i18n::is_plural_argument(SIGNATURE.3, ::std::stringify!($argument)) }}, _>(&$value)),)+])\n}}}};\n}}\n"));
     generated
 }
 

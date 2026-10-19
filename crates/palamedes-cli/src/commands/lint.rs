@@ -188,7 +188,7 @@ impl Command for LintOptions {
         println!(
             "{}",
             tr!(
-                "Source lint: {errors} error(s), {warnings} warning(s), {infos} info, {suppressed} suppressed across {files} file(s)",
+                "Source lint: {errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}, {infos, plural, one {# info message} other {# info messages}}, {suppressed, plural, one {# suppressed diagnostic} other {# suppressed diagnostics}} across {files, plural, one {# file} other {# files}}",
                 errors = output.summary.errors,
                 files = output.summary.files,
                 infos = output.summary.infos,
