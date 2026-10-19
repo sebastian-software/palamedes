@@ -56,13 +56,40 @@ export function assertEnabledCacheContents(timestamp, cohort) {
   assert.match(cohort, /^\d{4}-\d{2}\n$/u);
 }
 
-function checkProcess(binary, version, optOut, dropOptOut) {
+export function enabledBuildArtifacts(stdout) {
+  const messages = stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const artifact = messages.find(
+    (message) =>
+      message.reason === "compiler-artifact" &&
+      message.target.name === "pmds" &&
+      message.executable,
+  );
+  assert.ok(artifact, "Cargo must report the pmds executable");
+  const build = messages.find(
+    (message) =>
+      message.reason === "build-script-executed" && message.package_id === artifact.package_id,
+  );
+  assert.ok(build?.out_dir, "Cargo must report the CLI catalog output directory");
+  return { binary: artifact.executable, catalogDirectory: join(build.out_dir, "catalogs") };
+}
+
+function checkProcess(binary, catalogDirectory, version, optOut, dropOptOut) {
   const fixture = mkdtempSync(join(tmpdir(), "palamedes-enabled-update-check-"));
   try {
     const roots = ["home", "xdg-cache", "local-app-data"].map((name) => join(fixture, name));
     for (const root of roots) mkdirSync(root);
     // Deliberately do not inherit ambient opt-outs, proxies, or cache roots.
-    const env = { HOME: roots[0], XDG_CACHE_HOME: roots[1], LOCALAPPDATA: roots[2] };
+    const env = {
+      HOME: roots[0],
+      XDG_CACHE_HOME: roots[1],
+      LOCALAPPDATA: roots[2],
+      PALAMEDES_UI_LOCALE: "en",
+      PALAMEDES_UI_CATALOG_DIR: catalogDirectory,
+    };
     if (!dropOptOut) env[optOut] = optOut === "DO_NOT_TRACK" ? "1" : "0";
     const result = spawnSync(binary, ["version"], {
       cwd: fixture,
@@ -104,27 +131,41 @@ function main() {
     "enabled-process proof requires Linux; no binary was executed",
   );
   if (process.argv[2] === "--isolated") {
-    const [binary, parentNamespace, version] = process.argv.slice(3);
+    const [binary, parentNamespace, version, catalogDirectory] = process.argv.slice(3);
+    assert.ok(catalogDirectory, "the isolated proof requires the built UI catalogs");
     verifyIsolation(parentNamespace);
     console.log("Verified separate network namespace, down loopback, and no forwarding routes.");
     for (const optOut of ["DO_NOT_TRACK", "PALAMEDES_UPDATE_CHECK"]) {
-      checkProcess(binary, version, optOut, false);
-      checkProcess(binary, version, optOut, true);
+      checkProcess(binary, catalogDirectory, version, optOut, false);
+      checkProcess(binary, catalogDirectory, version, optOut, true);
     }
     return;
   }
 
   assert.equal(process.argv.length, 2, "unexpected enabled-check harness arguments");
   const targetDir = join(repositoryRoot, "target", "update-check-enabled");
-  execFileSync(
+  const stdout = execFileSync(
     "cargo",
-    ["build", "-p", "palamedes-cli", "--bin", "pmds", "--locked", "--target-dir", targetDir],
+    [
+      "build",
+      "-p",
+      "palamedes-cli",
+      "--bin",
+      "pmds",
+      "--locked",
+      "--target-dir",
+      targetDir,
+      "--message-format=json-render-diagnostics",
+    ],
     {
       cwd: repositoryRoot,
       env: { ...process.env, PALAMEDES_UPDATE_ENDPOINT: endpoint },
-      stdio: "inherit",
+      stdio: ["inherit", "pipe", "inherit"],
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
     },
   );
+  const { binary, catalogDirectory } = enabledBuildArtifacts(stdout);
   const manifest = readFileSync(join(repositoryRoot, "crates/palamedes-cli/Cargo.toml"), "utf8");
   const version = manifest.match(/^version = "([^"]+)"$/mu)?.[1];
   assert.ok(version, "CLI version must come from its Cargo manifest");
@@ -137,9 +178,10 @@ function main() {
       process.execPath,
       import.meta.filename,
       "--isolated",
-      join(targetDir, "debug", "pmds"),
+      binary,
       readlinkSync("/proc/self/ns/net"),
       version,
+      catalogDirectory,
     ],
     {
       cwd: repositoryRoot,
