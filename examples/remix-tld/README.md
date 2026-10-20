@@ -19,4 +19,4 @@ pnpm verify:examples:browser -- --id remix-tld
 
 The browser contract covers supported locales, interaction, locale switches,
 reloads, document and standalone Frames, and catalog failure recovery under CSP.
-Public hosting remains pending; see [deployment verification](../../docs/demo-deployments.md).
+[Open the live HTTPS demo](https://remix.examples.palamedes-i18n.com); see [deployment evidence](../../docs/demo-deployments.md).

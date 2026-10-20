@@ -13,8 +13,8 @@ const page: FrameworkLanding = {
   headline: "Remix v3 i18n, from the request to the browser.",
   lede: "The new Remix v3 is not React Router Framework Mode and it is not a React framework. Palamedes composes with its Node TypeScript loader, browser asset server, Fetch request model, and Remix component runtime so one locale reaches SSR, Frames, hydration, and interaction.",
   primary: {
-    label: "Browse the full-stack example",
-    href: repoHref("examples/remix-cookie", "tree"),
+    label: "Open the live cookie demo",
+    href: "https://remix-cookie.examples.palamedes.dev",
   },
   secondary: {
     label: "Read the complete setup",
@@ -135,14 +135,14 @@ const assets = createAssetServer({
       },
       {
         label: "Hosting",
-        value: "Local / CI",
-        note: "No public Remix v3 demo is claimed yet.",
+        value: "Live HTTPS",
+        note: "All four strategies pass their public browser contracts.",
       },
     ],
   },
   boundary: {
-    title: "The browser locale is document-scoped, and public hosting is still pending.",
-    body: "Locale changes intentionally perform a full document navigation; reactive same-document catalog replacement and browser PO imports are not supported. The Node integration requires Node.js 24.3 or newer. Source, smoke checks, and the Chromium proof are public, but no live URL is claimed until the separately managed HTTPS deployment passes the same locale, hydration, Frames, interaction, and console checks.",
+    title: "The browser locale is document-scoped; the adapter remains Preview.",
+    body: "Locale changes intentionally perform a full document navigation; reactive same-document catalog replacement and browser PO imports are not supported. The Node integration requires Node.js 24.3 or newer. All four public HTTPS demos pass locale, hydration, Frames, interaction, and catalog recovery checks. The adapter remains Preview for the exact tested Remix 3.0.0 contract; hosting completion does not broaden that version contract.",
     link: {
       label: "Read the Remix v3 package scope",
       href: docsHref("api/remix"),
@@ -163,7 +163,7 @@ const assets = createAssetServer({
     },
     {
       q: "Is Remix v3 support production-ready?",
-      a: "Treat it as a preview integration for the exact tested Remix 3.0.0 contract. Full-stack behavior is CI-verified, including Chromium, with stable upstream Remix, while public hosted-demo verification is still pending.",
+      a: "Treat it as a preview integration for the exact tested Remix 3.0.0 contract. All four strategies are verified in CI and on public HTTPS hosts, including Chromium interaction, Frames, and recovery. The adapter remains Preview for that exact upstream contract.",
     },
   ],
   related: [

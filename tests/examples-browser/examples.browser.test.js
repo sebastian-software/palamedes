@@ -261,26 +261,32 @@ test
       expect(summary.headers()["set-cookie"]).toBeUndefined();
       expect(summary.headers()["x-palamedes-locale"]).toBe("en");
     } else {
-      // Capture the actual wire headers before Chromium processes an RPC response.
-      const reads = [];
-      await page.route("**/*", async (route) => {
-        const request = route.request();
-        if (!["fetch", "xhr"].includes(request.resourceType())) return route.continue();
-        const response = await route.fetch();
-        reads.push({
-          method: request.method(),
-          path: new URL(request.url()).pathname,
-          headers: response.headers(),
-        });
-        await route.fulfill({ response });
-      });
-      const response = page.waitForResponse((result) =>
-        ["fetch", "xhr"].includes(result.request().resourceType()),
-      );
-      await page.getByTestId("server-proof-trigger").click();
-      expect((await response).ok()).toBe(true);
-      await page.waitForLoadState("networkidle");
-      await page.unrouteAll({ behavior: "wait" });
+      // Observe Chromium's real response, including Set-Cookie. Replaying with
+      // route.fetch() drops Fetch Metadata and can trip a same-origin RPC guard.
+      const pendingReads = [];
+      const observeRead = (response) => {
+        const request = response.request();
+        if (!["fetch", "xhr"].includes(request.resourceType())) return;
+        pendingReads.push(
+          response.allHeaders().then((headers) => ({
+            method: request.method(),
+            path: new URL(request.url()).pathname,
+            headers,
+          })),
+        );
+      };
+      page.on("response", observeRead);
+      try {
+        const response = page.waitForResponse((result) =>
+          ["fetch", "xhr"].includes(result.request().resourceType()),
+        );
+        await page.getByTestId("server-proof-trigger").click();
+        expect((await response).ok()).toBe(true);
+        await page.waitForLoadState("networkidle");
+      } finally {
+        page.off("response", observeRead);
+      }
+      const reads = await Promise.all(pendingReads);
       expect(reads.length).toBeGreaterThan(0);
       for (const read of reads) expect(read.headers["set-cookie"]).toBeUndefined();
       if (example.id === "react-router-cookie") {

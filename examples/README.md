@@ -82,7 +82,10 @@ ownership live in [Demo Deployments](../docs/demo-deployments.md). It is the
 source of truth for public URLs because DNS and deployment state can change
 without changing the local example contracts.
 
-Try a reachable cookie demo such as
+All six server framework families have live cookie, route, subdomain, and TLD demos.
+[Vite MDX](https://vite-mdx.examples.palamedes.dev) is also live.
+
+Try a cookie demo such as
 [nextjs-cookie](https://nextjs-cookie.examples.palamedes.dev), or a route demo
 such as [Waku in German](https://waku-route.examples.palamedes.dev/de). For how
 each strategy encodes and switches locale, see

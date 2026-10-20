@@ -108,7 +108,7 @@ their warm runs cost what their cold runs cost. That makes this a capability
 difference rather than a race, which is exactly why it is kept out of every
 speedup number we publish.
 
-**Try it live.** Next.js, TanStack Start, Solid, Waku, and React Router have live cookie, route, subdomain, and TLD demos; the TLD demos cover `.com`, `.de`, `.es`, and `.fr`. The full-stack Remix proof is available as repository source and CI output but is not publicly hosted. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
+**Try it live.** Next.js, TanStack Start, Solid, Waku, React Router, and Remix v3 have live cookie, route, subdomain, and TLD demos; the TLD demos cover `.com`, `.de`, `.es`, and `.fr`. All 25 demos run together on Bunny, including [Vite MDX](https://vite-mdx.examples.palamedes.dev). Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,

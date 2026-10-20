@@ -100,8 +100,8 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         </table>
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-        <span className="text-accent">●</span> public demo · ◌ public host pending · ✓ verified in
-        CI — Remix v3 has a focused browser proof; public hosting is pending.
+        <span className="text-accent">●</span> public demo · ✓ verified in CI. All six framework
+        families have public HTTPS browser proofs across all four strategies.
       </p>
     </div>
   );
