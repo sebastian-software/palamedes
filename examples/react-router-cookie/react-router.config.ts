@@ -1,7 +1,7 @@
 import type { Config } from "@react-router/dev/config";
 
 export default {
-  // Config options...
-  // Server-side render by default, to enable SPA mode set this to `false`
   ssr: true,
+  // The public HTTPS origin differs from the HTTP request behind the CDN.
+  allowedActionOrigins: ["react-router-cookie.examples.palamedes.dev"],
 } satisfies Config;

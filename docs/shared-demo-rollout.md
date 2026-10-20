@@ -94,6 +94,16 @@ Bunny supports [HTTP health checks](https://bunny.net/docs/magic-containers/heal
 and [multiple HTTP endpoints](https://bunny.net/docs/magic-containers/endpoints).
 The app itself exposes plain HTTP; terminate public TLS at Bunny.
 
+## React Router action origins
+
+React Router validates an action request against its public origin. The examples
+use the documented `allowedActionOrigins` setting with only their exact public
+demo hosts because TLS terminates at the CDN and the application hop is HTTP.
+Keep these lists aligned with the deployment inventory when changing hosts.
+Do not disable origin validation or use a catch-all pattern. Browser verification
+replays public HTTPS-origin POSTs over the local HTTP hop and requires foreign
+origins to return HTTP 400; hosted verification repeats both assertions.
+
 ## Host forwarding, DNS, and caching
 
 Register every custom hostname and its certificate on the correct endpoint.
