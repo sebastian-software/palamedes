@@ -28,27 +28,48 @@ function throwMacroError(): never {
   );
 }
 
+/**
+ * Opt-in runtime execution for unbundled Node code (ADR-006).
+ *
+ * `registerRuntimeMacros()` from `@palamedes/runtime/node-macros` publishes an
+ * implementation under this global symbol, so the ESM and CJS builds of this
+ * module see the same registration. Without it, every macro keeps throwing.
+ */
+type RuntimeMacros = {
+  t(...args: unknown[]): string;
+  plural(value: unknown, options: object): string;
+  select(value: unknown, options: object): string;
+  selectOrdinal(value: unknown, options: object): string;
+};
+
+const RUNTIME_MACROS_KEY = Symbol.for("palamedes.runtimeMacros");
+
+function runtimeMacros(): RuntimeMacros {
+  const runtime = (globalThis as Record<symbol, RuntimeMacros | undefined>)[RUNTIME_MACROS_KEY];
+  return runtime ?? throwMacroError();
+}
+
 export function t(strings: TemplateStringsArray, ...values: unknown[]): string;
 export function t(descriptor: MessageDescriptor, values?: MacroValues): string;
 export function t(
-  ..._args:
+  ...args:
     | [strings: TemplateStringsArray, ...values: unknown[]]
     | [descriptor: MessageDescriptor, values?: MacroValues]
 ): string {
-  return throwMacroError();
+  return runtimeMacros().t(...args);
 }
 
 export function plural(value: string | number, options: PluralOptions): string {
-  return throwMacroError();
+  return runtimeMacros().plural(value, options);
 }
 
 export function select<const Options extends { other: string } & Omit<SelectProps, "value">>(
   value: string | number,
   options: SelectOptions<Options>,
 ): string {
-  return throwMacroError();
+  return runtimeMacros().select(value, options);
 }
 
 export function selectOrdinal(value: string | number, options: SelectOrdinalOptions): string {
-  return throwMacroError();
+  return runtimeMacros().selectOrdinal(value, options);
 }

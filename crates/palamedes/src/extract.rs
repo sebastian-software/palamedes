@@ -157,8 +157,8 @@ struct AggregatedCatalogEntry {
     origins: Vec<CatalogUpdateOrigin>,
 }
 
-struct MacroCollector<'a> {
-    imported_macros: HashMap<String, ImportedMacro>,
+pub(crate) struct MacroCollector<'a> {
+    pub(crate) imported_macros: HashMap<String, ImportedMacro>,
     removed_macro_import: Option<(String, usize)>,
     /// Names bound outside the import declarations, which are never walked
     /// into. A macro local name appearing here is therefore a binding that can
@@ -167,7 +167,7 @@ struct MacroCollector<'a> {
 }
 
 impl MacroCollector<'_> {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             imported_macros: HashMap::new(),
             removed_macro_import: None,
@@ -192,7 +192,7 @@ impl<'a> Visit<'a> for MacroCollector<'a> {
 }
 
 /// How an identifier that spells a macro import is matched to that import.
-enum MacroResolution {
+pub(crate) enum MacroResolution {
     /// No binding shadows a macro import, so the name alone identifies the use.
     ByName,
     /// Spans of the uses that resolve to a macro import binding.
@@ -207,7 +207,7 @@ impl MacroResolution {
     /// only resolve to the import, so the pass is built for the files that do
     /// re-bind one — the same files where a name-only match would disagree with
     /// the transform.
-    fn resolve(program: &Program<'_>, collector: &MacroCollector<'_>) -> Self {
+    pub(crate) fn resolve(program: &Program<'_>, collector: &MacroCollector<'_>) -> Self {
         let shadowed = collector
             .binding_names
             .iter()
@@ -239,7 +239,7 @@ impl MacroResolution {
         Self::ByReference(spans)
     }
 
-    fn is_macro_use(&self, span: (u32, u32)) -> bool {
+    pub(crate) fn is_macro_use(&self, span: (u32, u32)) -> bool {
         match self {
             Self::ByName => true,
             Self::ByReference(spans) => spans.contains(&span),

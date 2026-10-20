@@ -42,7 +42,7 @@ When helping with Palamedes code:
 2. Keep examples source-string-first.
 3. Use `.po` catalog flows through Palamedes tooling.
 4. Avoid explicit message IDs unless a future Palamedes doc says otherwise.
-5. Avoid numeric placeholder fallback patterns. If an expression cannot be named cleanly, recommend extracting a stable named variable.
+5. Avoid numeric placeholder fallback patterns. If an expression cannot be named cleanly, recommend extracting a stable named variable. Never nest `plural()`, `select()`, or `selectOrdinal()` inside a `t` template; write the complete sentence in each branch instead.
 6. Use `getI18n()`/runtime wiring instead of inventing framework-global runtime APIs.
 7. Keep host adapter examples thin. Do not move catalog semantics into framework glue.
 8. Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
@@ -394,6 +394,19 @@ quote source messages like build.rs; JSON keeps the raw message text.
 The crates.io hold
 remains in force. See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
 
+Unbundled Node code (native type stripping, plain `tsc` output, scripts, tests)
+can keep the `t`, `plural`, `select`, and `selectOrdinal` macros from
+`@palamedes/core/macro`: `pmds extract --runtime-manifest .palamedes/macros.json`
+records each call's static text, compiled key, and placeholder names, and
+`pmds catalog compile --target js --output .palamedes/catalogs` writes one
+parser-free `<locale>.mjs` per locale. Call `registerRuntimeMacros(url)` from
+`@palamedes/runtime/node-macros` once at startup and `i18n.load(locale, messages)`
+from the compiled module. Unregistered macros keep throwing; unknown calls and
+missing catalogs throw instead of rendering source text. Runtime collisions and
+interpolated choice branches are extraction errors. Bundled code compiles
+macros with a plugin instead; Node load hooks, `tsc` preprocessing, and JSX
+macros are unsupported here. See `docs/backend-servers.md`.
+
 Core commands:
 
 ```bash
@@ -411,6 +424,8 @@ pnpm exec pmds extract --check --json
 pnpm exec pmds extract --fail-on-empty-catalog
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --verbose
+pnpm exec pmds extract --runtime-manifest .palamedes/macros.json
+pnpm exec pmds catalog compile --target js --output .palamedes/catalogs
 pnpm exec pmds lint --json
 pnpm exec pmds lint --fail-on warning
 pnpm exec pmds audit --json

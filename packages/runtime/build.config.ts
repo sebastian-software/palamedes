@@ -7,6 +7,8 @@ export default defineBuildConfig({
     "./src/server-test",
     "./src/server-test-unavailable",
     "./src/server-unavailable",
+    "./src/node-macros",
+    "./src/node-macros-unavailable",
   ],
   declaration: true,
   failOnWarn: false,

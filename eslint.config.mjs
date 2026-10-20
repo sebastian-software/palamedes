@@ -7,6 +7,7 @@ const generatedAndBuildIgnores = {
   ignores: [
     "**/dist/**",
     "**/node_modules/**",
+    "**/.palamedes/**",
     "**/.next/**",
     "**/.claude/**",
     "**/.nitro/**",

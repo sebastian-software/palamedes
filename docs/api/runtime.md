@@ -46,6 +46,14 @@ header. Browser and non-Node imports intentionally link against fallback
 exports so bundlers can resolve every binding; calling either function then
 throws a curated runtime error.
 
+The Node-only subpath `@palamedes/runtime/node-macros` exports
+`registerRuntimeMacros(manifest)` and `RuntimeMacroManifest`. It accepts the
+manifest written by `pmds extract --runtime-manifest`, as an object, a file
+path, or a `URL`. After registration, `t`, `plural`, `select`, and
+`selectOrdinal` from `@palamedes/core/macro` render through `getI18n()` instead
+of throwing. Calls missing from the manifest throw. See
+[Macros Without A Bundler](../backend-servers.md#macros-without-a-bundler).
+
 ## Client Runtime
 
 ```ts

@@ -14,7 +14,8 @@ use std::time::Instant;
 use clap::Args;
 use palamedes::{
     CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
-    extract_catalog_messages_cached, preview_catalog_file_update, update_catalog_file,
+    SourceFileAnalysisRequest, collect_runtime_macro_manifest, extract_catalog_messages_cached,
+    preview_catalog_file_update, update_catalog_file,
 };
 use serde::Serialize;
 
@@ -58,6 +59,9 @@ pub struct ExtractOptions {
     #[arg(help = tr!("Ignore and do not write the extraction cache."))]
     #[arg(long)]
     no_cache: bool,
+    #[arg(help = tr!("Also write the runtime macro manifest for code that runs without a bundler, relative to the config file."))]
+    #[arg(long, value_name = "PATH")]
+    runtime_manifest: Option<PathBuf>,
     #[arg(help = tr!("Show verbose output."))]
     #[arg(short, long)]
     verbose: bool,
@@ -342,6 +346,9 @@ fn run_extraction_with_cache(
         CatalogOperation::Write
     };
     let drift = process_catalogs(&write_jobs, config, options, operation)?;
+    if let Some(manifest_path) = &options.runtime_manifest {
+        write_runtime_manifest(config, manifest_path, &unique_files, options.check)?;
+    }
     let total_write_ms = write_started_at.elapsed().as_millis();
 
     if options.check {
@@ -375,6 +382,51 @@ fn run_extraction_with_cache(
     }
 
     Ok(ExtractOutput::Completed)
+}
+
+/// Writes the runtime macro manifest (ADR-006), or verifies it under `--check`.
+fn write_runtime_manifest(
+    config: &LoadedConfig,
+    manifest_path: &Path,
+    files: &[&Path],
+    check: bool,
+) -> Result<(), CliError> {
+    let requests = files
+        .iter()
+        .map(|path| SourceFileAnalysisRequest {
+            path: path.to_string_lossy().into_owned(),
+            filename: path
+                .strip_prefix(&config.root_dir)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/"),
+        })
+        .collect::<Vec<_>>();
+    let manifest = collect_runtime_macro_manifest(&requests)?;
+    let contents = format!("{}\n", serde_json::to_string_pretty(&manifest)?);
+    let target = config.root_dir.join(manifest_path);
+    let current = fs::read_to_string(&target).ok();
+    if current.as_deref() == Some(contents.as_str()) {
+        return Ok(());
+    }
+    if check {
+        return Err(CliError::ExtractionCheckFailed {
+            message: tr!(
+                "The runtime macro manifest {path} is out of date. Run pmds extract without --check.",
+                path = manifest_path.display()
+            ),
+        });
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|source| CliError::Io {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+    fs::write(&target, contents).map_err(|source| CliError::Io {
+        path: target.clone(),
+        source,
+    })
 }
 
 fn extract_from_catalog(

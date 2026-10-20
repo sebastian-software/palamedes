@@ -129,22 +129,24 @@ pmds extract --check --json
 pmds extract --fail-on-empty-catalog
 pmds extract --watch
 pmds extract --verbose
+pmds extract --runtime-manifest .palamedes/macros.json
 ```
 
 Options:
 
-| Option                    | Description                                                                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `-c, --config <path>`     | Use a specific config file.                                                                                                                                  |
-| `-w, --watch`             | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
-| `--clean`                 | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
-| `--force-clean`           | Remove all obsolete entries immediately, including undated entries.                                                                                          |
-| `--check`                 | Exit unsuccessfully when extraction would create or modify a catalog, without writing catalog files. Cannot be combined with `--watch`.                      |
-| `--json`                  | With `--check`, print one deterministic result document.                                                                                                     |
-| `--fail-on-empty-catalog` | Fail an extraction cycle before any catalog update when a configured catalog matches no source files.                                                        |
-| `--threads <COUNT>`       | Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config; defaults to `4`; `1` runs serial.                                |
-| `--no-cache`              | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
-| `-v, --verbose`           | Print verbose extraction details.                                                                                                                            |
+| Option                      | Description                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-c, --config <path>`       | Use a specific config file.                                                                                                                                  |
+| `-w, --watch`               | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
+| `--clean`                   | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
+| `--force-clean`             | Remove all obsolete entries immediately, including undated entries.                                                                                          |
+| `--check`                   | Exit unsuccessfully when extraction would create or modify a catalog, without writing catalog files. Cannot be combined with `--watch`.                      |
+| `--json`                    | With `--check`, print one deterministic result document.                                                                                                     |
+| `--fail-on-empty-catalog`   | Fail an extraction cycle before any catalog update when a configured catalog matches no source files.                                                        |
+| `--threads <COUNT>`         | Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config; defaults to `4`; `1` runs serial.                                |
+| `--no-cache`                | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
+| `--runtime-manifest <path>` | Also write the runtime macro manifest, relative to the config file. With `--check`, fail when it is stale.                                                   |
+| `-v, --verbose`             | Print verbose extraction details.                                                                                                                            |
 
 Watch mode resolves project and include-directory symlinks to the filesystem
 targets observed by the native watcher while continuing to apply include and
@@ -196,6 +198,15 @@ drift. A minimal CI check is:
 ```bash
 pnpm exec pmds extract --check --json --fail-on-empty-catalog
 ```
+
+`--runtime-manifest` serves Node code that runs macros without a bundler; see
+[Macros Without A Bundler](./backend-servers.md#macros-without-a-bundler). For
+each `t`, `plural`, `select`, and `selectOrdinal` call imported from
+`@palamedes/core/macro`, the manifest records the static text the runtime
+receives, the compiled key, and the placeholder names. Two calls with the same
+static text but different messages or placeholder names fail extraction, as do
+choice branches that interpolate values or descriptor messages built from
+template expressions.
 
 ## `pmds lint`
 
@@ -448,7 +459,21 @@ runs wherever the conflicted worktree is. Configured PO output options and
 
 ## `pmds catalog compile`
 
-Compile PO translations into external Rust language files against an existing
+With `--target js`, compile the catalogs from `palamedes.yaml` into
+parser-free JavaScript modules, one `<locale>.mjs` per locale, for Node code
+that runs without a bundler:
+
+```sh
+pmds catalog compile --target js --output .palamedes/catalogs
+```
+
+Each module exports `messages` for `i18n.load()`. Configured catalogs of the
+same locale are merged, fallbacks follow the configuration, and `--locale`
+limits the output. `--config`, `--fail-on-missing`, and `--json` work as
+below; `--schema`, `--catalog-dir`, and `--fallback-locale` apply to the Rust
+target only.
+
+With `--target rust`, compile PO translations into external Rust language files against an existing
 application contract. This experimental command requires an exported
 `schema.pmd.json` from the matching Rust application build; it does not build or
 rewrite the application.
@@ -460,7 +485,7 @@ pmds catalog compile --target rust --schema dist/schema.pmd.json \
 
 | Option                    | Meaning                                                                     |
 | ------------------------- | --------------------------------------------------------------------------- |
-| `--target rust`           | Required compiled catalog target; Rust is the current target.               |
+| `--target rust`           | Required compiled catalog target: `rust` or `js`.                           |
 | `--schema <path>`         | Existing application message contract, including its fingerprint.           |
 | `--catalog-dir <path>`    | Directory with the source PO and requested `<locale>.po` inputs.            |
 | `--locale <tag>`          | Output locale; repeat for multiple languages.                               |

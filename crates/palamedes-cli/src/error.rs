@@ -19,6 +19,8 @@ pub const REPORT_VERDICT_EXIT_CODE: u8 = 6;
 pub enum CliError {
     #[error("Could not compile Rust language catalogs: {message}")]
     CatalogCompilation { message: String },
+    #[error("Could not compile JavaScript catalog modules: {message}")]
+    JsCatalogCompilation { message: String },
     #[error(transparent)]
     Config(#[from] ConfigError),
     #[error(transparent)]
@@ -104,6 +106,10 @@ impl CliError {
         match self {
             Self::CatalogCompilation { message } => tr!(
                 "Could not compile Rust language catalogs: {source}",
+                source = message
+            ),
+            Self::JsCatalogCompilation { message } => tr!(
+                "Could not compile JavaScript catalog modules: {source}",
                 source = message
             ),
             Self::Config(error) => error.localized(),

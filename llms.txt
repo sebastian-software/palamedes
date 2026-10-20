@@ -151,6 +151,19 @@ opts into completeness checks, and `--json` emits output paths and fallback diag
 Rust compilation defaults to build-time fallbacks; pmds UI builds explicitly opt into
 strict completeness. Runtime load failures remain explicit and path-qualified.
 
+Unbundled Node code (native type stripping, plain `tsc` output, scripts, tests)
+can keep the `t`, `plural`, `select`, and `selectOrdinal` macros from
+`@palamedes/core/macro`: `pmds extract --runtime-manifest .palamedes/macros.json`
+records each call's static text, compiled key, and placeholder names, and
+`pmds catalog compile --target js --output .palamedes/catalogs` writes one
+parser-free `<locale>.mjs` per locale. Call `registerRuntimeMacros(url)` from
+`@palamedes/runtime/node-macros` once at startup and `i18n.load(locale, messages)`
+from the compiled module. Unregistered macros keep throwing; unknown calls and
+missing catalogs throw instead of rendering source text. Runtime collisions and
+interpolated choice branches are extraction errors. Bundled code compiles
+macros with a plugin instead; Node load hooks, `tsc` preprocessing, and JSX
+macros are unsupported here. See `docs/backend-servers.md`.
+
 - `pmds report --fail-if-below 90`: per-locale completeness gate for CI
 - `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, and MDX files. Use `pmds lint` rather than the Preview ESLint/Oxlint adapter for stable CI and MDX.
 - `pmds extract --check --json --fail-on-empty-catalog`: CI drift check with an empty-source guard. `--fail-on-empty-catalog` exits with code 1 before any configured catalog is written or marked obsolete when one catalog matches no source files. Without the flag, extraction warns and projects the empty catalog. Check JSON uses status `error`; watch mode leaves catalogs unchanged for the failed cycle and continues watching. The check can still update the extraction cache unless `--no-cache` is passed.

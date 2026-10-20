@@ -428,3 +428,15 @@ msgstr "{locale}: falta la traducción de {message}; se compiló el respaldo de 
 
 msgid "Could not compile Rust language catalogs: {source}"
 msgstr "No se pudieron compilar los catálogos de idiomas para Rust: {source}"
+
+msgid "Also write the runtime macro manifest for code that runs without a bundler, relative to the config file."
+msgstr "Escribir también el manifiesto de macros en tiempo de ejecución para código que se ejecuta sin bundler, relativo al archivo de configuración."
+
+msgid "The runtime macro manifest {path} is out of date. Run pmds extract without --check."
+msgstr "El manifiesto de macros en tiempo de ejecución {path} está desactualizado. Ejecute pmds extract sin --check."
+
+msgid "{count, plural, one {Compiled # JavaScript catalog module.} other {Compiled # JavaScript catalog modules.}}"
+msgstr "{count, plural, one {Se compiló # módulo de catálogo JavaScript.} other {Se compilaron # módulos de catálogo JavaScript.}}"
+
+msgid "Could not compile JavaScript catalog modules: {source}"
+msgstr "No se pudieron compilar los módulos de catálogo JavaScript: {source}"

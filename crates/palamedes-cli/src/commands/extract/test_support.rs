@@ -19,6 +19,7 @@ pub(super) fn extract_options() -> ExtractOptions {
         force_clean: false,
         threads: None,
         no_cache: true,
+        runtime_manifest: None,
         verbose: false,
     }
 }

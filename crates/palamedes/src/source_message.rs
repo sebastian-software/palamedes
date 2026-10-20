@@ -19,7 +19,7 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
-use crate::source::DiagnosticLocation;
+use crate::source::{DiagnosticLocation, SourceLocator};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceValue {
@@ -143,7 +143,8 @@ pub(crate) fn lower_template(
 
         if let Some(expr) = template.expressions.get(index) {
             let Some(preferred_name) = expression_name(expr) else {
-                return Err(PalamedesError::UnnamedPlaceholder { syntax });
+                return Err(nested_macro_placeholder(expr, source)
+                    .unwrap_or(PalamedesError::UnnamedPlaceholder { syntax }));
             };
             let expression =
                 expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
@@ -156,6 +157,36 @@ pub(crate) fn lower_template(
     }
 
     Ok((message, values))
+}
+
+/// Message macros that only make sense as complete sentences.
+const NESTABLE_MESSAGE_MACROS: [&str; 4] = ["t", "plural", "select", "selectOrdinal"];
+
+/// Explains a placeholder that is itself a message macro.
+///
+/// The generic unnamed-placeholder advice ("extract it into a variable")
+/// would turn `${plural(...)}` into a sentence fragment, so nested macros get
+/// their own error pointing at full-sentence branches. Matching the callee
+/// name is enough here: any call with arguments has no stable placeholder
+/// name, so only the wording of an existing error changes.
+fn nested_macro_placeholder(expr: &Expression<'_>, source: &str) -> Option<PalamedesError> {
+    let (name, start) = match expr.without_parentheses() {
+        Expression::CallExpression(call) => (call.callee_name()?, call.span.start),
+        Expression::TaggedTemplateExpression(tagged) => match tagged.tag.without_parentheses() {
+            Expression::Identifier(identifier) => (identifier.name.as_str(), tagged.span.start),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    if !NESTABLE_MESSAGE_MACROS.contains(&name) {
+        return None;
+    }
+    let (line, column) = SourceLocator::new(source).location(start as usize);
+    Some(PalamedesError::NestedMacroPlaceholder {
+        macro_name: name.to_owned(),
+        line,
+        column,
+    })
 }
 
 pub(crate) fn build_icu_message(
@@ -379,9 +410,12 @@ where
                 }
                 expr => {
                     let Some(preferred_name) = jsx_expression_name(expr) else {
-                        return Err(PalamedesError::UnnamedPlaceholder {
-                            syntax: "JSX expression",
-                        });
+                        return Err(expr
+                            .as_expression()
+                            .and_then(|expr| nested_macro_placeholder(expr, source))
+                            .unwrap_or(PalamedesError::UnnamedPlaceholder {
+                                syntax: "JSX expression",
+                            }));
                     };
                     let expression = jsx_expression_source(expr, source)
                         .unwrap_or_else(|| preferred_name.clone());

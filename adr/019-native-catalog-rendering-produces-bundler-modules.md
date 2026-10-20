@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-20
 
 One native renderer produces executable catalog modules for every bundler integration.
 
@@ -24,6 +24,9 @@ The rules are:
   rather than maintaining adapter-specific renderers
 - the public TypeScript `renderCatalogModule()` compatibility helper delegates
   to the same native renderer
+- `pmds catalog compile --target js` writes the same modules, one per locale,
+  for unbundled Node code (ADR-006); the renderer lives in the Rust core so the
+  CLI and `palamedes-node` share it
 
 The intended stack is:
 
