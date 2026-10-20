@@ -147,12 +147,12 @@ export async function loader({ params }: Route.LoaderArgs) {
       a: "The adapter loads active-document-locale fragments before hydration and lazy route execution. Language changes navigate to a new document so root locale data, server rendering, and browser messages remain aligned.",
     },
     {
-      q: "Is React Router Framework Mode the same as Remix v3?",
-      a: "No. React Router Framework Mode is a React framework built around route modules and a Vite plugin. The new Remix v3 is a separate server-first full-stack project with its own router, loaders, UI direction, and integration constraints.",
+      q: "Is React Router Framework Mode the same as Remix?",
+      a: "No. React Router Framework Mode is a React framework built around route modules and a Vite plugin. The new Remix is a separate server-first full-stack project with its own router, loaders, UI direction, and integration constraints.",
     },
   ],
   related: [
-    { label: "Full-stack Remix v3 i18n", href: "/frameworks/remix-v3" },
+    { label: "Full-stack Remix i18n", href: "/frameworks/remix-v3" },
     { label: "TanStack Start i18n", href: "/frameworks/tanstack-start" },
     { label: "Vite i18n for React and Solid", href: "/frameworks/vite" },
   ],

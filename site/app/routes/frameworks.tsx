@@ -17,7 +17,7 @@ export function meta() {
   return pageMeta({
     title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "Verified frontend and full-stack i18n adapters for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite, plus request-local backend integration guidance for Hono and Express.",
+      "Verified frontend and full-stack i18n adapters for Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite, plus request-local backend integration guidance for Hono and Express.",
     path: "/frameworks",
   });
 }
@@ -28,7 +28,7 @@ export default function Frameworks() {
       <PageHero
         kicker="Frameworks"
         title="Built for the framework you already use."
-        lede="Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite each get an integration made for them. The six server frameworks run as real example apps in four URL strategies; Hono and Express use the same runtime for backend messages."
+        lede="Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite each get an integration made for them. The six server frameworks run as real example apps in four URL strategies; Hono and Express use the same runtime for backend messages."
         actions={
           <>
             <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>
@@ -49,7 +49,7 @@ export default function Frameworks() {
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
           All {contentStats.smokeExampleCount} apps are smoke-checked on relevant pull requests and
           main pushes. All {contentStats.browserExampleCount} apps have Playwright browser
-          contracts, including the four full-stack Remix v3 strategies and the Vite MDX example. The
+          contracts, including the four full-stack Remix strategies and the Vite MDX example. The
           server examples cover SSR, locale switching, and localized server actions or functions;
           Remix also verifies Frames and catalog recovery. Versioned screenshots cover the{" "}
           {contentStats.screenshotExampleCount} established UI-adapter examples; Remix and Vite have

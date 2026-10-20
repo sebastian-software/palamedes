@@ -26,7 +26,7 @@ const OTHER_FRAMEWORKS = [
   { label: "TanStack Start", href: frameworkLandingHref("tanstack") },
   { label: "React Router", href: frameworkLandingHref("react-router") },
   { label: "Waku", href: frameworkLandingHref("waku") },
-  { label: "Remix v3", href: frameworkLandingHref("remix") },
+  { label: "Remix", href: frameworkLandingHref("remix") },
 ] as const;
 
 const WORDS = [
@@ -118,8 +118,8 @@ export default function GetStarted() {
       >
         <StackPicker />
         <p className="mt-6 max-w-[48rem] text-[16px] leading-relaxed text-ink/80">
-          Using another framework? TanStack Start, React Router, Waku, and Remix v3 each have their
-          own setup page:{" "}
+          Using another framework? TanStack Start, React Router, Waku, and Remix each have their own
+          setup page:{" "}
           {OTHER_FRAMEWORKS.map((framework, index) => (
             <span key={framework.href}>
               <a href={framework.href} className="text-accent underline underline-offset-4">

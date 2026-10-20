@@ -64,7 +64,7 @@ const GROUPS: readonly IntegrationGroup[] = [
         logoClass: "h-5 w-auto max-w-[5rem] brightness-0",
       },
       {
-        name: "Remix v3",
+        name: "Remix",
         href: frameworkLandingHref("remix"),
         logo: "/framework-logos/remix.svg",
         logoClass: "h-4 w-auto max-w-[5.5rem]",

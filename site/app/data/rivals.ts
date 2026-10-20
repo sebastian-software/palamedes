@@ -26,8 +26,7 @@ import { BENCH_REALISTIC } from "./bench";
  * prebuild. The generated content statistics are for page-level proof
  * surfaces; these named, supported hosts are the durable comparison fact.
  */
-const SUPPORTED_SERVER_FRAMEWORKS =
-  "Next.js, TanStack Start, Solid, Waku, React Router and Remix v3";
+const SUPPORTED_SERVER_FRAMEWORKS = "Next.js, TanStack Start, Solid, Waku, React Router and Remix";
 
 export interface RivalFact {
   label: string;
@@ -556,7 +555,7 @@ plural(seats, {
       {
         criterion: "Framework scope",
         rival: "Next.js, deeply",
-        palamedes: "Next.js, TanStack Start, Solid, Waku, React Router, Remix v3",
+        palamedes: "Next.js, TanStack Start, Solid, Waku, React Router, Remix",
       },
       {
         criterion: "Locale routing",

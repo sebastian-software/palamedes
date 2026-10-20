@@ -120,7 +120,7 @@ const ROUTE_EXPECTATIONS = [
   },
   {
     path: "/frameworks/remix-v3",
-    h1: "Remix v3 i18n, from the request to the browser.",
+    h1: "Remix i18n, from the request to the browser.",
   },
   {
     path: "/frameworks/vite",
@@ -312,6 +312,35 @@ async function checkRoutes(context, label, { expectHydration }) {
       }
       if (!metadata.ogTitle || !metadata.ogImage?.startsWith("https://palamedes.dev/")) {
         fail(`${label} ${route.path}: Open Graph title or image is missing`);
+      }
+    }
+    if (["/", "/frameworks", "/get-started", "/frameworks/remix-v3"].includes(route.path)) {
+      const branding = await routePage.evaluate(() =>
+        [
+          document.body.textContent,
+          document.title,
+          document.querySelector('meta[name="description"]')?.content,
+        ].join(" "),
+      );
+      if (/Remix v3/u.test(branding)) {
+        fail(`${label} ${route.path}: framework branding must use Remix without a version suffix`);
+      }
+    }
+    if (route.path === "/frameworks") {
+      const remixRow = routePage.getByRole("row").filter({
+        has: routePage.getByRole("rowheader", { name: "Remix", exact: true }),
+      });
+      const cells = remixRow.locator("td");
+      const linkCounts = await cells.evaluateAll((entries) =>
+        entries.map((cell) => cell.querySelectorAll('a[href^="https://"]').length),
+      );
+      if (JSON.stringify(linkCounts) !== JSON.stringify([1, 3, 3, 4])) {
+        fail(
+          `${label} /frameworks: Remix must expose all four demos and eleven locale links, got ${JSON.stringify(linkCounts)}`,
+        );
+      }
+      if ((await remixRow.getByText(/host pending/u).count()) !== 0) {
+        fail(`${label} /frameworks: the verified Remix demos must be marked live`);
       }
     }
     await routePage.close();

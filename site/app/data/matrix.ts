@@ -39,7 +39,7 @@ export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Solid", slug: "solid" },
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
-  { name: "Remix v3", slug: "remix" },
+  { name: "Remix", slug: "remix" },
 ];
 
 export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
