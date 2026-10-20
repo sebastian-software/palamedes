@@ -547,56 +547,50 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
   expect(cspViolations).toEqual([]);
 });
 
-test("Remix lazy catalog failures recover in all document locales under CSP", async () => {
+test
+  .runIf(activeExample().framework === "remix")
+  .each(
+    remixLocales().flatMap((locale) => ["network", "evaluation"].map((mode) => [locale, mode])),
+  )("Remix lazy catalog failure recovers under CSP (locale=%s, mode=%s)", async (locale, mode) => {
   const example = activeExample();
-  if (example.framework !== "remix") return;
-  for (const locale of remixLocales()) {
-    for (const mode of ["network", "evaluation"]) {
-      const page = await launchPage(remixLaunchArgs(example));
-      await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
-      let fail = false;
-      const fragments = [];
-      const violations = [];
-      page.on("console", (message) => {
-        if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text()))
-          violations.push(message.text());
-      });
-      await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
-        fragments.push(route.request().url());
-        if (!fail) return route.continue();
-        if (mode === "network") return route.abort("failed");
-        await rejectModuleEvaluation(route, "injected catalog evaluation failure");
-      });
-      await page.goto(remixDocumentUrl(example, locale), { waitUntil: "domcontentloaded" });
-      await waitForClientReady(page);
-      const initialCount = fragments.length;
-      fail = true;
-      await page.getByTestId("client-load-lazy").click();
-      await page.getByRole("alert").waitFor();
-      expect(fragments.length).toBeGreaterThan(initialCount);
-      expect(fragments.every((url) => new URL(url).searchParams.get("locale") === locale)).toBe(
-        true,
-      );
-      expect(await page.getByRole("alert").textContent()).not.toMatch(
-        /injected|Palamedes|catalog/iu,
-      );
-      expect(await page.locator("html").getAttribute("data-remix-lazy-body")).toBeNull();
-      fail = false;
-      await reloadRemixAfterFailure(page);
-      await page.getByTestId("client-load-lazy").click();
-      await page.getByTestId("client-lazy-message").waitFor();
-      expect(await page.getByTestId("client-lazy-message").textContent()).toBe(
-        {
-          en: "This message arrived after the page was ready",
-          de: "Diese Nachricht kam nach dem Laden der Seite an",
-          es: "Este mensaje llegó después de que la página estuviera lista",
-          fr: "Ce message est arrivé après le chargement de la page",
-        }[locale],
-      );
-      expect(violations).toEqual([]);
-      await page.context().browser()?.close();
-    }
-  }
+  const page = await launchPage(remixLaunchArgs(example));
+  await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
+  let fail = false;
+  const fragments = [];
+  const violations = [];
+  page.on("console", (message) => {
+    if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text()))
+      violations.push(message.text());
+  });
+  await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
+    fragments.push(route.request().url());
+    if (!fail) return route.continue();
+    if (mode === "network") return route.abort("failed");
+    await rejectModuleEvaluation(route, "injected catalog evaluation failure");
+  });
+  await page.goto(remixDocumentUrl(example, locale), { waitUntil: "domcontentloaded" });
+  await waitForClientReady(page);
+  const initialCount = fragments.length;
+  fail = true;
+  await page.getByTestId("client-load-lazy").click();
+  await page.getByRole("alert").waitFor();
+  expect(fragments.length).toBeGreaterThan(initialCount);
+  expect(fragments.every((url) => new URL(url).searchParams.get("locale") === locale)).toBe(true);
+  expect(await page.getByRole("alert").textContent()).not.toMatch(/injected|Palamedes|catalog/iu);
+  expect(await page.locator("html").getAttribute("data-remix-lazy-body")).toBeNull();
+  fail = false;
+  await reloadRemixAfterFailure(page);
+  await page.getByTestId("client-load-lazy").click();
+  await page.getByTestId("client-lazy-message").waitFor();
+  expect(await page.getByTestId("client-lazy-message").textContent()).toBe(
+    {
+      en: "This message arrived after the page was ready",
+      de: "Diese Nachricht kam nach dem Laden der Seite an",
+      es: "Este mensaje llegó después de que la página estuviera lista",
+      fr: "Ce message est arrivé après le chargement de la page",
+    }[locale],
+  );
+  expect(violations).toEqual([]);
 });
 
 test("Waku initial HTML document uses the request locale", async () => {
