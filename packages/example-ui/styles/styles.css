@@ -1,12 +1,10 @@
 /*
  * @palamedes/example-ui — shared design for the example matrix.
  *
- * One stylesheet, loaded by every framework demo, so all twenty apps are
+ * One stylesheet, shared by twenty framework demos, so those apps are
  * visually identical. Framework code only owns markup structure and the
  * locale strategy; every color, font, and spacing decision lives here.
  */
-
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
   --paper: oklch(97.5% 0.012 75);
@@ -23,9 +21,9 @@
   --focus: oklch(49% 0.18 32);
 
   --radius: 14px;
-  --sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --serif: "Fraunces", Georgia, serif;
-  --mono: "JetBrains Mono", ui-monospace, monospace;
+  /* System fonts keep the first render stable without a webfont download. */
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   color-scheme: light;
 }
@@ -143,7 +141,7 @@ a {
 }
 
 .brand b {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 1.4rem;
   letter-spacing: -0.02em;
@@ -243,7 +241,7 @@ a {
 }
 
 .hero h1 {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 500;
   font-optical-sizing: auto;
   font-size: clamp(2.4rem, 5.5vw, 4.1rem);
@@ -277,14 +275,14 @@ a {
 
 .grid {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
 
 @media (max-width: 860px) {
   .grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -337,7 +335,7 @@ a {
 }
 
 .ticket h2 {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 1.85rem;
   line-height: 1.05;
@@ -400,6 +398,7 @@ a {
 
 .qty-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -462,7 +461,7 @@ a {
 }
 
 .total-row .total-value {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 1.7rem;
   letter-spacing: -0.02em;
@@ -513,7 +512,7 @@ a {
 }
 
 .aside-head h3 {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 1.15rem;
   margin: 0;
@@ -593,7 +592,7 @@ a {
 }
 
 .foot .foot-badge {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 600;
   color: var(--ink-soft);
 }
@@ -602,7 +601,7 @@ a {
 
 @media (max-width: 520px) {
   .facts {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .total-row .total-value {
