@@ -1,134 +1,101 @@
-# Palamedes promo film
+# Palamedes product film
 
-The Remotion source in this directory renders two films built from the
-palamedes.dev homepage visuals: `PalamedesFilm`, a 2:20 explainer, and
-`PalamedesPromo`, a 66-second promo; `PalamedesPoster` is the promo's still. Remotion and React are build-time dependencies
-only; the site never ships them. This directory is its own pnpm project and
-is not part of the repository workspace.
+This standalone Remotion project contains the current v6 product film: 2:40
+at 1920 × 1080 and 30 fps. It is the version published on the homepage through
+Bunny Stream and [on YouTube](https://youtu.be/XBECHvmx2qQ).
+`PalamedesFilm` is the only film composition; `PalamedesPoster` renders its
+poster. The project is outside the repository workspace, and its Remotion and
+React dependencies are used only to produce the film.
+
+Run these commands from `video/`:
 
 ```sh
-pnpm install
-pnpm run studio          # preview and scrub the timeline
-pnpm run render:picture  # muted picture → audio/.work/out/picture.mp4
-pnpm run render:poster   # poster still → audio/.work/out/poster.png
+pnpm install --frozen-lockfile
+pnpm run studio          # preview the film and its poster
+pnpm run render:picture  # muted film → audio/.work/out/picture.mp4
+pnpm run render:poster   # poster → audio/.work/out/poster.png
+pnpm run render:film     # score, chosen voice takes, mix, picture, MP4 + SRT
 ```
 
 ## Story and timing
 
-Both films are cut to their score: 84 BPM in 4/4. A cut's scene table in
-`src/` and the `plan` in its cue sheet (`audio/cues/*.json`) list the same
-bars; `audio/compose.py` writes the score from that plan, and the cue sheet
-places the voice on it. Change a scene's length in both together.
+The film uses 56 bars at 84 BPM in 4/4. `src/film/timeline.ts` defines the
+scene boundaries, and `audio/cues/film.json` defines the matching score plan,
+voice placement, composition, and output name. Keep the two bar counts aligned.
+The shared clock constants live in `src/timeline.ts`.
 
-The promo has 23 bars (`src/timeline.ts`, `audio/cues/promo.json`):
+| Bars  | Scene      | Content                                                                |
+| ----- | ---------- | ---------------------------------------------------------------------- |
+| 1–2   | Open       | Your app speaks English. Most of the world doesn't.                    |
+| 3–8   | Hook       | Plurals, word order, prices, and dates                                 |
+| 9–15  | Problems   | Invented keys, whole catalogs, runtime parsing, glue code, slow tools  |
+| 16–20 | Reveal     | You write, translators add languages, visitors read                    |
+| 21–34 | Journey    | One sentence through extraction, translation, compilation, and loading |
+| 35–40 | Complete   | Plurals, formatting, server rendering, lint, and audit                 |
+| 41–44 | Frameworks | React and Solid; Next.js, TanStack, Waku, and Remix; Vite              |
+| 45–47 | Fast       | The checked extraction benchmark, played back in real time             |
+| 48–50 | Agent      | The skill command and setup prompt                                     |
+| 51–52 | Claim      | Clear, complete, and fast. Pick all three.                             |
+| 53–56 | End        | Palamedes, the website, Sebastian Software, and Sebastian Consulting   |
 
-| Bars  | Scene   | Beat                                                                 |
-| ----- | ------- | -------------------------------------------------------------------- |
-| 1–4   | Hook    | Keys, a file per language, glue files: the familiar mess             |
-| 5–6   | Meet    | The emblem and "Just write the sentence."                            |
-| 7–8   | Speak   | One `<Trans>` sentence, six languages                                |
-| 9–14  | Journey | Write, extract, translate, build, deliver, render — one stop per bar |
-| 15–16 | Wiring  | First-party adapters and the four moments they handle                |
-| 17–19 | Rust    | The checked extraction benchmark, played back in real time           |
-| 20–21 | Claim   | "Clear. Complete. Fast. Pick three."                                 |
-| 22–23 | End     | Emblem, promise, palamedes.dev                                       |
+`src/flight/JourneyFlight.tsx` supplies the camera flight inside the film.
+Its 12-bar choreography maps onto the journey's 14 bars through `JOURNEY_WARP`
+so each station meets its narration. Moving text folds into a spark, travels,
+and unfolds at its destination.
 
-## The long cut
+The scenes import the site's real transform/compiler output, specimen, and
+benchmark data from `site/app/data/`. The benchmark race excludes React Intl,
+whose recorded run covers extraction only. The visual system follows ADR-011:
+paper, parchment, and mist backgrounds, navy text, a bronze accent, Cinzel
+Hellenic, and light code listings. The sans and mono stacks use macOS system
+fonts, so render on macOS or supply equivalent font files before rendering
+elsewhere.
 
-`PalamedesFilm` (`src/film/`) has 49 bars (`src/film/timeline.ts`,
-`audio/cues/film.json`) and takes its time to explain each strength:
+## Motion components
 
-| Bars  | Scene      | Beat                                                                  |
-| ----- | ---------- | --------------------------------------------------------------------- |
-| 1–2   | Open       | "Your app speaks English. Most of the world doesn't."                 |
-| 3–8   | Hook       | Looks simple until the details: plurals, word order, prices and dates |
-| 9–13  | Reveal     | You write, your translators add the languages, your visitors read     |
-| 14–27 | Journey    | One sentence through extract, translate, build, split and load        |
-| 28–33 | Complete   | Plurals and formats, server rendering, `pmds lint`, `pmds audit`      |
-| 34–37 | Frameworks | The adapters, each arriving as its name is spoken                     |
-| 38–40 | Fast       | The checked extraction benchmark, played back in real time            |
-| 41–43 | Agent      | The skill command, then the homepage's prompt typed and sent below it |
-| 44–45 | Claim      | "Clear, complete, and fast. Pick all three."                          |
-| 46–49 | End        | Emblem, promise, palamedes.dev, then who makes it and who consults    |
+Some motion comes from [snapcn](https://snapcn.dev) (MIT). Its copied source is
+in `src/lib/snap-cn-ui/` and `src/components/snap-cn/`, excluded from lint and
+format. The marked `Palamedes:` edits in `prompt-send.tsx` keep its surfaces
+flat. `src/snapcn-theme.ts` supplies the site's palette and typography.
 
-The journey is `JourneyFlight` (`src/flight/`), one camera flight over a
-world in which the sentence is the protagonist. It also renders on its own
-over 12 bars; in the film, `JOURNEY_WARP` maps those bars onto 14 so every
-station meets its line. Text that moves collapses into a spark, travels, and
-unfolds where it lands (`src/flight/spark.tsx`), so nothing is dragged across
-the frame at full size.
+The `@/` alias is defined in both `tsconfig.json` and `remotion.config.ts`.
+Text Reveal introduces headlines, Text Swap changes the sentence, Cursor Track
+activates the language tab, and Prompt Send types and submits the agent prompt.
+Moving type uses `text-rendering: geometricPrecision` to avoid snapping while
+the camera scales it.
 
-`pnpm run render:film` builds the long cut, `pnpm run render:promo` the promo.
+## Voice, score, captions, and mix
 
-## snapcn components
-
-Some motion comes from [snapcn](https://snapcn.dev) (MIT), a shadcn-style
-registry of Remotion components. Like shadcn, its source is copied in and is
-ours to edit: the core in `src/lib/snap-cn-ui`, the components in
-`src/components/snap-cn` (Text Reveal, Text Swap, Cursor Track, Prompt Send,
-and Input and Caret for Prompt Send). Both folders stay as upstream ships them
-and are excluded from lint and format; the only edits are marked `Palamedes:`
-in `prompt-send.tsx` and keep its surfaces flat (ADR-011). `src/snapcn-theme.ts`
-re-skins every component with the site palette, zero radius and the brand
-faces. The `@/` import alias lives in both `tsconfig.json` and
-`remotion.config.ts`, because Remotion's bundler does not read tsconfig paths.
-
-- Headlines arrive on Text Reveal's `soft-blur-in` settings, applied inline in
-  the brand faces by `src/kinetic.tsx`.
-- In the browser, Text Swap turns the ID into the German sentence in one face,
-  and Cursor Track clicks the tab in screen space.
-- The agent scene hands over to Prompt Send, which types and sends the prompt.
-- All moving type renders with `text-rendering: geometricPrecision`, which
-  stops glyphs from snapping to the pixel grid while the camera scales them.
-
-The scenes import their content from the site: `site/app/data/journey.ts`
-(real transform and compiler output), `specimen.ts` (the rendered card), and
-`bench.ts` (benchmark numbers the site build guards against the checked
-report). The film therefore shows no artifact or number the site does not.
-
-The look follows ADR-011: paper, parchment, and mist grounds, navy as ink, one
-bronze accent, Cinzel Hellenic from `public/fonts`, and light code listings.
-The sans and mono stacks resolve to macOS system fonts (Helvetica Neue,
-Menlo), so render on macOS or swap in font files before rendering elsewhere.
-
-## Voice, score, and mix
-
-Remotion renders the picture only. Voice and score are built outside it, so no
-model weights or audio binaries live in Git:
+Remotion renders muted picture. Audio scripts write to the ignored
+`audio/.work/` directory, or `PALAMEDES_VIDEO_WORK` when set. Keep the chosen
+voice takes and final masters archived outside Git: generating new takes is
+not a bit-for-bit reproduction of the published narration.
 
 ```sh
-sh audio/setup.sh         # uv env (Chatterbox, Kokoro), soundfonts, once
-pnpm run render:promo     # score, voice track, mix, picture, MP4 + SRT
+sh audio/setup.sh
+# Generate narration only when new takes are needed; this calls ElevenLabs.
+audio/.work/venv/bin/python audio/eleven.py audio/.work audio/lines-film.json --env /path/to/.env
+# Select and clean takes with audio/clean.py, saving the names used by the cue sheet.
+pnpm run render:film
+# Generate short, word-timed WebVTT captions for the same cut.
+audio/.work/venv/bin/python audio/captions.py audio/.work audio/cues/film.json audio/.work/out/palamedes-film.en.vtt
 ```
 
-Both write to `audio/.work/` (ignored).
+- **Voice:** ElevenLabs Eleven v4, premade voice Brian, generated under a paid
+  plan. No real person's voice is cloned. `audio/eleven.py` writes seeded
+  takes; `audio/clean.py` removes stray speech between the selected lines.
+  `audio/lines-film.json` uses spoken spellings, while the cue sheet retains
+  the spelling used in captions.
+- **Score:** an original piano piece with strings, written as MIDI by
+  `audio/compose.py` and rendered with fluidsynth. The piano is Salamander
+  Grand Piano V3 by Alexander Holm (CC BY 3.0); strings use MuseScore General
+  (MIT). Credit the Salamander piano wherever the film is published.
+- **Captions:** `audio/captions.py` aligns the cue sheet to the chosen takes
+  using faster-whisper, caching word timings beside the audio. It produces
+  short WebVTT cues; `audio/assemble.py` also writes SRT during the film build.
+- **Mix:** music ducks under narration, with final loudness normalized to
+  -16 LUFS and a -1.5 dBTP ceiling.
 
-- **Voice, long cut:** ElevenLabs Eleven v4 with the premade voice "Brian",
-  generated under a paid plan, which grants commercial rights to what is
-  generated during the subscription; no real person's voice is cloned.
-  `audio/eleven.py <work> audio/lines-film.json --env <path-to-.env>` writes
-  seeded takes to `audio/.work/takes/eleven-brian/`. `lines-film.json` spells
-  names for the voice ("Pala-meedeez", "Veet"); the cue sheet carries the
-  correct spelling for captions. The model sometimes starts the next line after
-  a pause, so chosen takes go through `audio/clean.py`, which drops such stray
-  bursts, and are saved as `<line>.wav` for the cue sheet. Keep the chosen takes.
-- **Voice, promo:** Chatterbox (MIT), conditioned on a synthetic reference spoken by
-  one of Kokoro's (Apache-2.0) built-in voices; no real person's voice is
-  cloned. `audio/voice.py <work> audio/lines.json --voice <kokoro-voice>`
-  writes seeded takes to `audio/.work/takes/<voice>/`. Takes are chosen by ear
-  and named in the cue sheet. Generation is not reproducible bit for bit, so
-  keep the chosen takes when re-rendering. Kokoro's English pipeline needs the
-  spaCy model `en_core_web_sm` matching the installed spaCy version.
-- **Score:** an original piano piece with a string pad in D minor, turning to
-  F major at the reveal, written as MIDI by `audio/compose.py` and rendered with
-  fluidsynth. The piano is the Salamander Grand Piano V3 by Alexander Holm
-  (CC BY 3.0); the strings come from MuseScore General (MIT). Credit the
-  Salamander piano wherever the film is published.
-- **Captions:** `audio/captions.py <work> <cues.json> <out.vtt>` writes WebVTT
-  for the homepage: each line of the cue sheet is split at its punctuation into
-  cues of at most two short lines, timed to the words as spoken (faster-whisper,
-  cached as `words.json` next to the takes).
-- **Mix:** the music ducks under the voice and the result is normalised to
-  -16 LUFS with a -1.5 dBTP ceiling.
-
-The audio scripts follow the same pipeline as the Dalo promo film.
+`audio/setup.sh` installs the MIDI, audio-processing, and caption dependencies
+and downloads the two soundfonts. Narration uses the standard-library
+ElevenLabs client, so no local text-to-speech models are needed.

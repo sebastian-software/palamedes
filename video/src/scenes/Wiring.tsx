@@ -1,12 +1,12 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 
 import { C, FONT } from "../brand";
-import { BAR, BEAT } from "../timeline";
+import { BAR } from "../timeline";
 import { Revealed } from "../kinetic";
 import { arrive, Display, sceneFade } from "../ui";
 
 /*
- * Bars 15–16: framework integration. The marks of the first-party adapters
+ * Framework integration. The marks of the first-party adapters
  * arrive on the beat, then a message travels the four moments every adapter
  * has to get right. Support levels stay off screen, so the film outlives them.
  */
@@ -38,20 +38,14 @@ const MOMENTS = [
   { where: "Back on the server", title: "A server action replies" },
 ] as const;
 
-/** Scene frames for each mark and the travelling message; defaults follow the promo. */
+/** Scene frames for each mark and the travelling message. */
 export interface WiringCues {
   marks: readonly number[];
   travel: readonly [number, number];
   bars: number;
 }
 
-export const PROMO_WIRING: WiringCues = {
-  marks: MARKS.map((_, index) => 8 + index * (BEAT / 2.5)),
-  travel: [BAR * 0.9, BAR * 1.85],
-  bars: 2,
-};
-
-export function Wiring({ cues = PROMO_WIRING }: { cues?: WiringCues }) {
+export function Wiring({ cues }: { cues: WiringCues }) {
   const frame = useCurrentFrame();
   const travel = interpolate(frame, [...cues.travel], [0, 1], {
     extrapolateLeft: "clamp",

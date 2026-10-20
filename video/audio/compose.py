@@ -1,4 +1,4 @@
-"""The Palamedes promo score: an original, calm piano piece with a string pad.
+"""The Palamedes product film score: an original, calm piano piece with a string pad.
 
 usage: compose.py <out-dir> <cues.json>
 Writes piano.mid, strings.mid and bars.json (bar start times in seconds) into

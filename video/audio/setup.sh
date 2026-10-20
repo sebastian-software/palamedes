@@ -1,7 +1,7 @@
 #!/bin/sh
-# Prepare the promo's audio toolchain in a work directory outside Git:
-# a Python env with Chatterbox (MIT) and Kokoro (Apache-2.0) for the voice,
-# and the two soundfonts for the score. Needs uv, ffmpeg and fluidsynth.
+# Prepare the product film's audio tools outside Git. ElevenLabs narration uses
+# the standard-library client in eleven.py; no local TTS models are needed.
+# Needs uv, ffmpeg and fluidsynth.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${PALAMEDES_VIDEO_WORK:-$HERE/.work}
@@ -13,14 +13,9 @@ done
 
 if [ ! -x "$WORK/venv/bin/python" ]; then
   uv venv -q -p 3.11 "$WORK/venv"
-  uv pip install -q -p "$WORK/venv/bin/python" \
-    chatterbox-tts==0.1.7 kokoro==0.9.4 mido==1.3.3 soundfile scipy 'setuptools<81'
 fi
-
-# espeak-ng (used by Kokoro) truncates long data paths; keep a short copy.
-if [ ! -d "$WORK/espeak-ng-data" ]; then
-  cp -R "$("$WORK/venv/bin/python" -I -c 'import espeakng_loader as e; print(e.get_data_path())')" "$WORK/espeak-ng-data"
-fi
+uv pip install -q -p "$WORK/venv/bin/python" \
+  mido==1.3.3 soundfile scipy faster-whisper
 
 # Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0.
 if [ ! -f "$WORK/sf/piano.sf2" ]; then

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Build one cut of the promo from a cue sheet:
+# Build the product film from its cue sheet:
 #   score -> voice track -> ducked mix at -16 LUFS -> picture -> MP4 + SRT
-# usage: audio/build.sh audio/cues/team.json   (run from video/)
+# usage: audio/build.sh audio/cues/film.json   (run from video/)
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 VIDEO=$(dirname "$HERE")
@@ -46,8 +46,8 @@ ffmpeg -v error -y -i "$OUT/premix.wav" \
 
 # --- picture and mux --------------------------------------------------------
 PROPS=$(python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])).get('props', {})))" "$CUES")
-COMP=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('composition', 'PalamedesPromo'))" "$CUES")
-FILE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('output', 'palamedes-promo-' + sys.argv[2]))" "$CUES" "$NAME")
+COMP=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['composition'])" "$CUES")
+FILE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['output'])" "$CUES")
 (cd "$VIDEO" && ./node_modules/.bin/remotion render src/index.ts "$COMP" "$OUT/picture.mp4" --props="$PROPS" --codec=h264 --crf=18 --muted --log=error)
 ffmpeg -v error -y -i "$OUT/picture.mp4" -i "$OUT/audio.wav" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart "$WORK/out/$FILE.mp4"
 cp "$OUT/captions.srt" "$WORK/out/$FILE.srt"

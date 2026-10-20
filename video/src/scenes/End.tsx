@@ -5,7 +5,7 @@ import { BAR } from "../timeline";
 import { Revealed } from "../kinetic";
 import { arrive, Display, ease } from "../ui";
 
-/** Scene frames for the domain and the licence line; defaults follow the promo. */
+/** Scene frames for the domain and the license line. */
 export interface EndCues {
   domain: number;
   note: number;
@@ -14,14 +14,12 @@ export interface EndCues {
   company?: number;
 }
 
-export const PROMO_END: EndCues = { domain: 20, note: 24, bars: 2 };
-
 /*
- * The end card. It holds still and fades only at the very end. In the long
- * cut a company band follows, as on dalo.sh: who makes Palamedes, and who to
- * talk to when you want help with it.
+ * The end card holds still and fades only at the very end. The company band
+ * follows the same pattern as dalo.sh: who makes Palamedes, and who to talk
+ * to when you want help with it.
  */
-export function End({ cues = PROMO_END }: { cues?: EndCues }) {
+export function End({ cues }: { cues: EndCues }) {
   const frame = useCurrentFrame();
   const band = cues.company === undefined ? 0 : ease(frame, cues.company, 20);
   const out = interpolate(frame, [BAR * cues.bars - 18, BAR * cues.bars], [1, 0], {

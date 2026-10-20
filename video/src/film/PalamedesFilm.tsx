@@ -21,7 +21,7 @@ import { Reveal } from "./Reveal";
 import { at, FILM_SCENES, type FilmSection, JOURNEY_WARP } from "./timeline";
 
 /*
- * The long cut, muted: picture only. Brian's takes, the score and the mix are
+ * The product film, muted: picture only. Brian's takes, the score and the mix are
  * built outside Remotion from audio/cues/film.json and muxed afterwards. Scene
  * cues are seconds into each section, taken from the takes' word timings plus
  * the offset at which the cue sheet places each take.
