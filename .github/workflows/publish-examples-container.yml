@@ -96,6 +96,19 @@ jobs:
           docker exec examples-smoke node -e 'fetch("http://127.0.0.1:4080/ready").then(r => { if (!r.ok) process.exit(1); })'
           docker stats --no-stream examples-smoke
           test "$(docker inspect --format '{{.State.Running}}' examples-smoke)" = true
+          # A single backend failure must make the shared supervisor exit nonzero.
+          child_pid=$(docker logs examples-smoke 2>&1 | sed -n 's/.*started nextjs-cookie on port 4010 (pid \([0-9]*\)).*/\1/p' | head -1)
+          test -n "$child_pid"
+          docker exec examples-smoke node -e 'process.kill(Number(process.argv[1]), "SIGTERM")' "$child_pid"
+          test "$(timeout 30s docker wait examples-smoke)" = 1
+          # Normal platform shutdown should instead stop the group successfully.
+          docker logs examples-smoke
+          docker rm examples-smoke
+          docker run -d --name examples-smoke \
+            -e PALAMEDES_EXAMPLES=remix-cookie,remix-route,remix-subdomain,remix-tld "$IMAGE"
+          docker exec examples-smoke node scripts/container/verify-remix.mjs
+          docker stop --time 15 examples-smoke
+          test "$(docker inspect --format '{{.State.ExitCode}}' examples-smoke)" = 0
 
       - name: Log in to GitHub Container Registry
         if: ${{ !inputs.dry_run }}
