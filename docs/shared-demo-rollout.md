@@ -140,7 +140,9 @@ path, query, credentials, or fragment. Host strategies enter at `en.` or `.com`.
 HTTP loopback remains available for cookie/route rehearsal. Browser tests retain
 normal TLS validation; local TLD resolver mappings do not replace public hosts.
 
-The hosted batch checks uncached-by-client document language repeatedly across
+The hosted batch first checks that route-entry redirects preserve the public
+HTTPS origin, including when TLS terminates before the application. It then
+checks uncached-by-client document language repeatedly across
 locale changes, then executes each existing browser contract. It writes one log
 per example and `hosted-verification/receipt.json`, including all requested
 origins and document results. The route-host-mismatch alias remains a local

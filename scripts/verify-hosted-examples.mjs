@@ -17,6 +17,21 @@ try {
   for (const entry of plan) {
     const documents = [];
     try {
+      if (entry.strategy === "route") {
+        const response = await fetch(entry.origin, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(30_000),
+        });
+        assert.ok(response.status >= 300 && response.status < 400, `${entry.origin} root redirect`);
+        const location = response.headers.get("location");
+        assert.ok(location, `${entry.origin} redirect location`);
+        assert.equal(
+          new URL(location, entry.origin).origin,
+          entry.origin,
+          "Route entry must preserve its public HTTPS origin",
+        );
+        documents.push({ url: entry.origin, status: response.status, location });
+      }
       const locales =
         entry.strategy === "client"
           ? [null]
