@@ -44,6 +44,11 @@ entry using its public Host header. Vite's preview configuration explicitly
 allows `vite-mdx.examples.palamedes.dev`; keep host validation enabled. Package
 publication remains independently held.
 
+The hydrated framework demos format the Berlin event in `Europe/Berlin` on the
+server and expose the same policy through `data-palamedes-time-zone` for client
+bootstrap. Browser verification uses `America/Los_Angeles` so matching local host
+zones cannot hide date/time hydration errors.
+
 `node scripts/print-demo-deployment.mjs` emits the complete deployment inventory:
 25 endpoint names and ports, 55 hostnames, canonical HTTPS entry origins, and the
 internal health port. `scripts/example-matrix.mjs` owns identities and ports;
