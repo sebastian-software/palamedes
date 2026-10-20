@@ -145,7 +145,9 @@ route authority, browser negotiation, switching, and reloads remain tested.
 Create a GitHub environment named `bunny-demos`, restrict it to `main`, and
 configure a deployment reviewer. Add:
 
-- Environment secret `BUNNYNET_API_KEY` (never put the key in a PR or chat).
+- Organization secret `BUNNY_API_KEY`, with access granted to this repository.
+  The deploy job maps it to the script's `BUNNYNET_API_KEY` environment variable;
+  no duplicate environment secret is needed. Never put the key in a PR or chat.
 - Environment variables `BUNNY_DEMO_APP_ID` and `BUNNY_DEMO_CONTAINER`.
 
 The documented Bunny update API requires account-level credentials. Limit who
