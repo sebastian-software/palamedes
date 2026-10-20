@@ -16,6 +16,7 @@
     "hono": "4.13.7"
   },
   "devDependencies": {
+    "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
     "@types/express": "5.0.6",
     "@types/node": "^24.0.0",
