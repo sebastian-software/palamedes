@@ -43,6 +43,8 @@ const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
 const VIRTUAL_SERVER_CATALOGS = "virtual:palamedes/server-catalogs";
 const RESOLVED_SERVER_CATALOGS = "\0palamedes:server-catalogs";
+const NODE_I18N = "@palamedes/runtime/node";
+const BUNDLED_NODE_I18N = "@palamedes/runtime/server/bundled";
 const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/";
 const BARE_MESSAGES_PREFIX = "#pmds/";
 const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json";
@@ -1129,6 +1131,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           `<script type="module" data-palamedes-entry ${nonceAttribute} src="${resolvedBase}${fileName}"></script></body>`,
         );
       }
+    },
+  });
+
+  // Node backends import one i18n setup from @palamedes/runtime/node. Without
+  // a bundler it runs runtime macros on precompiled catalogs; a server build
+  // compiles the macros, so it gets the bundled catalog store instead.
+  plugins.push({
+    name: "palamedes:node-i18n",
+    enforce: "pre",
+    resolveId(id, importer, resolveOptions) {
+      if (id !== NODE_I18N) return null;
+      if (!isServerEnvironment(this, resolveOptions?.ssr === true, legacyBuildSsr)) return null;
+      return this.resolve(BUNDLED_NODE_I18N, importer, { skipSelf: true });
     },
   });
 

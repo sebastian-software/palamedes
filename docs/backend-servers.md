@@ -116,7 +116,8 @@ For unbundled output, set `output.preserveModules` in `rolldownOptions`.
 
 [`examples/node-backend`](https://github.com/sebastian-software/palamedes/tree/main/examples/node-backend)
 shows Express, Hono, and a localized CLI built this way. The same application
-code also runs without a bundler; see the next section.
+code also runs without a bundler; see
+[One Setup For Every Build](#one-setup-for-every-build).
 
 Ways to run backend code with macros:
 
@@ -139,7 +140,8 @@ pmds catalog compile --target js --output .palamedes/catalogs
 ```
 
 Register the manifest once at startup and load the compiled catalog for each
-request:
+request. [`defineNodeI18n`](#one-setup-for-every-build) does both and also
+works in a bundle; the lower-level calls are:
 
 ```ts
 import { createI18n } from "@palamedes/core";
@@ -169,11 +171,35 @@ async function createRequestI18n(locale: "en" | "de") {
   plugin still fails loudly. Bundled code must not register runtime macros.
 - JSX macros need the compiler.
 
-In `examples/node-backend`, `src/i18n.ts` is this runtime-macro variant and
-`vite.config.ts` aliases it to `src/i18n.vite.ts` for the bundle. The booking
-service, CLI, Express, and Hono code is the same on both paths, and one test
-suite runs against the Vite bundle, plain `node` type stripping, and plain
-`tsc` output.
+## One Setup For Every Build
+
+Code that runs both bundled and unbundled doesn't need two i18n modules.
+`defineNodeI18n` from `@palamedes/runtime/node` covers both:
+
+```ts
+import { defineNodeI18n } from "@palamedes/runtime/node";
+
+const createI18n = defineNodeI18n({
+  generated: new URL("../.palamedes/", import.meta.url),
+});
+
+const i18n = await createI18n({ locale: "de", timeZone: "UTC" });
+```
+
+Without a bundler, `defineNodeI18n` registers `macros.json` from the
+`generated` directory and loads `catalogs/<locale>.mjs` through a shared
+catalog store. A locale without a compiled catalog module rejects. In a server
+build, `@palamedes/vite-plugin` resolves `@palamedes/runtime/node` to the
+bundled catalog store from `@palamedes/runtime/server/bundled` instead. The
+bundle then contains no runtime-macro code, and `generated` is ignored. Call
+`defineNodeI18n` once per process; each call to the returned function creates
+a fresh instance.
+
+In `examples/node-backend`, `src/i18n.ts` is this module and needs no build
+configuration beyond `palamedes({ framework: "none" })`. The booking service,
+CLI, Express, and Hono code doesn't depend on the build, and one test suite
+runs against the Vite bundle, plain `node` type stripping, and plain `tsc`
+output.
 
 ## Hono Example
 

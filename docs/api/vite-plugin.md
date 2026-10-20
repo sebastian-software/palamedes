@@ -108,7 +108,9 @@ messages](../mdx.md) for authoring and configuration.
 `createViteServerI18n({ locale, timeZone?, ...options })`, an alias of
 `createBundledServerI18n` from `@palamedes/runtime/server/bundled`. Application
 code can import the runtime subpath so it does not depend on the build plugin
-at runtime. It awaits the shared,
+at runtime. In server builds the plugin also resolves `@palamedes/runtime/node`
+to that bundled store, so Node backends can share one i18n module with their
+unbundled runtime-macro path. It awaits the shared,
 immutable complete catalog for the active locale and returns fresh request
 state. Host request middleware keeps that state in its request scope across
 SSR, loaders and actions. Applications do not construct catalog import maps.
