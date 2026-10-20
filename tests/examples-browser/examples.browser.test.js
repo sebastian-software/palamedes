@@ -1,9 +1,12 @@
 import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 import { afterEach, expect, test } from "vitest";
 
+import { DEMO_DEPLOYMENT } from "../../scripts/demo-deployment.mjs";
 import { observeBrowserArtifacts } from "../../scripts/verify-browser-artifacts.mjs";
 
 let browser;
@@ -35,6 +38,51 @@ function activeExample() {
     tldUrl: process.env.PALAMEDES_VERIFY_TLD_URL ?? "",
   };
 }
+
+function postReactRouterAction(url, host, origin) {
+  const transport = url.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const request = transport.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          host,
+          origin,
+          "content-type": "application/x-www-form-urlencoded",
+          "accept-language": "en",
+        },
+        timeout: 10_000,
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode));
+        response.on("error", reject);
+      },
+    );
+    request.on("error", reject);
+    request.on("timeout", () => request.destroy(new Error("Action origin probe timed out")));
+    request.end("intent=probe");
+  });
+}
+
+test.runIf(activeExample().framework === "react-router")(
+  "React Router accepts public HTTPS action origins and rejects foreign origins",
+  async () => {
+    const example = activeExample();
+    const { hosts } = DEMO_DEPLOYMENT.find(({ id }) => id === example.id);
+    for (const host of hosts) {
+      const url = new URL(example.baseUrl);
+      // Local runs model the CDN's HTTP hop while keeping the real public Host
+      // and HTTPS Origin. Hosted runs exercise the same contract through TLS.
+      if (url.protocol === "https:") url.hostname = host;
+      url.pathname = example.strategy === "route" ? "/en.data" : "/_.data";
+      if (example.strategy !== "route") url.search = "?index";
+      expect(await postReactRouterAction(url, host, `https://${host}`), host).toBe(200);
+      expect(await postReactRouterAction(url, host, "https://untrusted.invalid"), host).toBe(400);
+    }
+  },
+);
 
 function remixLocales(example) {
   return example.strategy === "tld" ? ["en", "de", "es", "fr"] : ["en", "de", "es"];
