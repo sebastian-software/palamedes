@@ -56,7 +56,11 @@ async function context({ disabled = false, blocked = false, local = false } = {}
       return route.fulfill({ contentType: "application/javascript", body: sdkFixture });
     }
     if (url.hostname === "palamedes.dev") {
-      const response = await route.fetch({ url: `${server.baseUrl}${url.pathname}${url.search}` });
+      const response = await route.fetch({
+        url: `${server.baseUrl}${url.pathname}${url.search}`,
+        // Retry connection resets from the local fixture proxy, not HTTP failures.
+        maxRetries: 2,
+      });
       return route.fulfill({ response });
     }
     if (url.hostname === "player.mediadelivery.net") {
