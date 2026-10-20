@@ -64,6 +64,16 @@
         }
       }
     },
+    "./server/bundled": {
+      "import": {
+        "types": "./dist/server-bundled.d.mts",
+        "default": "./dist/server-bundled.mjs"
+      },
+      "require": {
+        "types": "./dist/server-bundled.d.cts",
+        "default": "./dist/server-bundled.cjs"
+      }
+    },
     "./server/test": {
       "node": {
         "import": {

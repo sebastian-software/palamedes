@@ -36,6 +36,14 @@ The server subpath `@palamedes/runtime/server` exports:
 - `ScopedI18nRunner`
 - `createScopedI18nRunner(resolveI18n, options)`
 
+The build-backed subpath `@palamedes/runtime/server/bundled` exports
+`createBundledServerI18n({ locale, timeZone?, ...options })` and
+`BundledServerI18nOptions`. It loads the active locale from the
+`virtual:palamedes/server-catalogs` module that `@palamedes/vite-plugin`
+generates for server builds and returns a fresh instance. Import it only from
+code built by that plugin; elsewhere it fails to resolve instead of falling
+back to source text.
+
 The Node-only test subpath `@palamedes/runtime/server/test` exports
 `waitForServerI18nTestBarrier(request)`,
 `markServerI18nTestBarrierReached(request, headers)`, and

@@ -105,7 +105,10 @@ messages](../mdx.md) for authoring and configuration.
 ## Server and document delivery
 
 `@palamedes/vite-plugin/server` exports
-`createViteServerI18n({ locale, timeZone?, ...options })`. It awaits the shared,
+`createViteServerI18n({ locale, timeZone?, ...options })`, an alias of
+`createBundledServerI18n` from `@palamedes/runtime/server/bundled`. Application
+code can import the runtime subpath so it does not depend on the build plugin
+at runtime. It awaits the shared,
 immutable complete catalog for the active locale and returns fresh request
 state. Host request middleware keeps that state in its request scope across
 SSR, loaders and actions. Applications do not construct catalog import maps.
