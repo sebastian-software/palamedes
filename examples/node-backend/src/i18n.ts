@@ -1,13 +1,12 @@
 // The unbundled path: plain `node` type stripping and plain `tsc` output.
-// Vite builds alias `./i18n.ts` to i18n.vite.ts instead, so application code
+// Vite builds redirect `./i18n.ts` to i18n.vite.ts instead, so application code
 // imports the same `locales`, `defaultLocale`, and `createNodeI18n` on both paths.
 import { createI18n } from "@palamedes/core";
 import { registerRuntimeMacros } from "@palamedes/runtime/node-macros";
 import { createServerCatalogStore } from "@palamedes/runtime/server";
+import { locales } from "./locales.ts";
 
-// Must match palamedes.yaml; test/backend.test.mjs fails when they disagree.
-export const locales = ["en", "de", "es"] as const;
-export const defaultLocale = "en";
+export { defaultLocale, locales } from "./locales.ts";
 
 // Written by `pnpm i18n`. `src/` and `build/` sit at the same depth, so this
 // URL works under type stripping and for `tsc` output.
