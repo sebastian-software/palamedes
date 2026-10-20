@@ -38,8 +38,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Locale models",
-      value: "4 + browser proof",
-      note: "Four smoke strategies and a focused full-stack cookie flow.",
+      value: "4 browser proofs",
+      note: "Cookie, route, subdomain, and TLD with browser verification.",
     },
   ],
   problem: {
@@ -112,11 +112,11 @@ const assets = createAssetServer({
   },
   strategies: {
     matrixSlug: "remix",
-    lede: "The same server helper supports cookie, route, subdomain, and TLD decisions. Every strategy is smoke-verified; the cookie example additionally proves Spanish SSR and hydration, browser macros and rich messages, interaction, and a full-navigation switch to German.",
+    lede: "The same server helper supports cookie, route, subdomain, and TLD decisions. Every strategy verifies SSR, browser macros and rich messages, interaction, Frames, locale navigation, reloads, and catalog failure recovery under CSP.",
   },
   proof: {
-    title: "Four server proofs and one focused full-stack browser proof.",
-    lede: "Remix v3 remains separate from React Router Framework Mode. CI starts all four locale-strategy servers and runs Chromium against the canonical cookie example with SSR, hydration, rich messages, interaction, and locale navigation.",
+    title: "Four complete server and browser proofs.",
+    lede: "Remix v3 remains separate from React Router Framework Mode. CI starts all four locale-strategy servers and runs Chromium against every strategy with SSR, hydration, rich messages, interaction, and locale navigation.",
     facts: [
       {
         label: "Transforms",

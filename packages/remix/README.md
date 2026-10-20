@@ -345,7 +345,7 @@ Run both integration checks when changing the pinned stable baseline:
 
 ```sh
 pnpm verify:examples:smoke -- --framework remix
-pnpm verify:examples:browser -- --id remix-cookie
+pnpm verify:examples:browser -- --framework remix
 ```
 
 A `remix@next` run is a non-blocking canary and does not expand the supported
@@ -370,3 +370,17 @@ Siblings: [ferroni](https://sebastian-software.github.io/ferroni/) — Oniguruma
 [![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
 
 MIT OR Apache-2.0 © 2026 Sebastian Software
+
+## Four-Strategy Browser Verification
+
+All four examples pin stable `remix@3.0.0` and use the same server-rendered
+interactive island, browser asset loader, executable catalog fragments, and
+rich-message runtime. Cookie, route, and subdomain cover English, German, and
+Spanish; TLD also covers French. Chromium verifies initial rendering,
+interaction, full-document locale switches, direct reloads, document and
+standalone Frame responses, and initial/lazy catalog failure recovery under CSP.
+Route Frame URLs retain the locale prefix (`/de/frames` and
+`/de/frames/locale-summary`); host strategies retain the locale host.
+
+Public deployment remains pending. See the [deployment guide](../../docs/demo-deployments.md)
+for external-host commands and the image, routing, DNS, TLS, and caching gates.

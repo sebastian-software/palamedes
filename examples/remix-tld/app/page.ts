@@ -11,18 +11,26 @@ export type RenderHomePageOptions = {
   banner?: string | null;
   locale: string | undefined;
   localeLabel: string;
+  hasLocaleChoice?: boolean;
+  clientCatalog?: string;
+  clientProof?: string;
+  clientEntry?: string;
+  framesHref?: string;
   strategyLabel?: string;
   switchLinks?: LocaleSwitchLink[];
-  clientCatalog?: string;
 };
 
 export function renderHomePage({
   banner,
   locale,
   localeLabel,
+  hasLocaleChoice = false,
+  clientCatalog,
+  clientProof,
+  clientEntry,
+  framesHref = "/frames",
   strategyLabel = "cookie",
   switchLinks,
-  clientCatalog,
 }: RenderHomePageOptions): string {
   const seatCount = 3;
   const title = t`Remix v3 is rendering ${locale ?? "en"} with Palamedes`;
@@ -33,7 +41,6 @@ export function renderHomePage({
   return `<!doctype html>
 <html lang="${escapeHtml(currentLocale)}">
   <head>
-    ${clientCatalog ?? ""}
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
@@ -52,12 +59,15 @@ export function renderHomePage({
       <p><code>@palamedes/remix</code></p>
       <p>Locale strategy: <strong>${escapeHtml(strategyLabel)}</strong></p>
       ${banner ? `<p role="status">${escapeHtml(banner)}</p>` : ""}
-      <nav aria-label="Locale">${renderLocaleSwitcher(currentLocale, switchLinks)}</nav>
+      <nav aria-label="Locale">${renderLocaleSwitcher(currentLocale, switchLinks, hasLocaleChoice)}</nav>
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(description)}</p>
       <p>${escapeHtml(seats)}</p>
-      <p>Active locale: <strong>${escapeHtml(localeLabel)}</strong></p>
+      <p>Active locale: <strong data-testid="server-locale-value">${escapeHtml(localeLabel)}</strong></p>
+      ${clientProof ? `<div data-remix-client-proof data-remix-frames-href="${escapeHtml(framesHref)}">${clientProof}</div>` : ""}
     </main>
+    ${clientCatalog ?? ""}
+    ${clientEntry ?? ""}
   </body>
 </html>`;
 }
@@ -69,6 +79,7 @@ function normalizePageLocale(locale: string | undefined): Locale {
 function renderLocaleSwitcher(
   currentLocale: Locale,
   switchLinks: LocaleSwitchLink[] | undefined,
+  hasLocaleChoice: boolean,
 ): string {
   const links: LocaleSwitchLink[] = switchLinks ?? LOCALES.map((locale) => ({ locale }));
   return links
@@ -78,14 +89,14 @@ function renderLocaleSwitcher(
       if (item.href) {
         return `<form action="/locale" method="post">
         <input name="redirect" type="hidden" value="${escapeHtml(item.href)}" />
-        <button aria-pressed="${active}" name="locale" type="submit" value="${escapeHtml(locale)}">
+        <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" name="locale" type="submit" value="${escapeHtml(locale)}">
           ${escapeHtml(LOCALE_LABELS[locale])}
         </button>
       </form>`;
       }
 
       return `<form action="/locale" method="post">
-        <button aria-pressed="${active}" name="locale" type="submit" value="${escapeHtml(locale)}">
+        <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" ${active && hasLocaleChoice ? "disabled" : ""} name="locale" type="submit" value="${escapeHtml(locale)}">
           ${escapeHtml(LOCALE_LABELS[locale])}
         </button>
       </form>`;

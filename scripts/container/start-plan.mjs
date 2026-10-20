@@ -47,3 +47,18 @@ export function buildStartEnv(example, baseEnv = {}) {
     PORT: String(example.port),
   };
 }
+
+// Default to the full matrix, but let low-traffic deployments run a bounded set.
+// Validate the entire selection before spawning any processes.
+export function selectContainerExamples(matrix, selection) {
+  if (selection === undefined) return matrix;
+  const ids = selection.split(",").map((id) => id.trim());
+  const known = new Set(matrix.map((example) => example.id));
+  if (ids.some((id) => !id || !known.has(id)) || new Set(ids).size !== ids.length) {
+    throw new Error(
+      "PALAMEDES_EXAMPLES must be a comma-separated list of distinct example IDs from the matrix.",
+    );
+  }
+  const selected = new Set(ids);
+  return matrix.filter((example) => selected.has(example.id));
+}

@@ -5,7 +5,7 @@ import type { Locale } from "./i18n";
 export const serverI18nScope = createServerI18nScope();
 
 export function createServerI18n(locale: Locale) {
-  return createViteServerI18n({ locale });
+  return createViteServerI18n({ locale, timeZone: "Europe/Berlin" });
 }
 
 export async function runServerI18n<Result>(

@@ -9,7 +9,7 @@ const tanStackI18nMiddleware = createIsomorphicFn().server(() =>
       const { resolveLocaleFromRequest } = await import("./lib/i18n.server");
       return await resolveLocaleFromRequest(request);
     },
-    undefined,
+    () => ({ timeZone: "Europe/Berlin" }),
     process.env.PALAMEDES_CSP_NONCE
       ? { catalogDelivery: { nonce: process.env.PALAMEDES_CSP_NONCE } }
       : undefined,

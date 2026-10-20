@@ -22,7 +22,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   const locale = Route.useLoaderData();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
       <head>
         <HeadContent />
       </head>

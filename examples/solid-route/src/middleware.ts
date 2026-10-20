@@ -21,7 +21,7 @@ export default [
   async (request: Request, next: () => Promise<Response>) => {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") {
-      return Response.redirect(new URL(`/${DEFAULT_LOCALE}`, url), 302);
+      return new Response(null, { status: 302, headers: { location: `/${DEFAULT_LOCALE}` } });
     }
 
     const locale = normalizeLocale(url.pathname.split("/").filter(Boolean)[0]);

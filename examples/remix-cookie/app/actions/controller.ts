@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { createController } from "remix/router";
 import { createElement } from "remix/component";
 import { renderToString } from "remix/component/server";
@@ -18,32 +20,33 @@ import { assetServer } from "../assets.ts";
 export default createController(routes, {
   actions: {
     home(context) {
-      return remixI18n.run(
-        context,
-        async ({ locale, source }) =>
-          new Response(
-            renderHomePage({
-              clientCatalog: remixI18n.renderClientCatalog(locale),
-              clientEntry: await remixI18n.renderClientEntry("app/public/client.tsx", {
-                assetServer,
-              }),
-              clientProof: await renderToString(
-                createElement(ClientProof, { audience: "developer", count: 1 }),
-              ),
-              locale,
-              hasLocaleChoice: source === "cookie",
-              localeLabel: getLocaleLabel(normalizeLocale(locale)),
-              strategyLabel: "cookie",
+      return remixI18n.run(context, async ({ locale, source }) => {
+        const nonce = randomBytes(18).toString("base64");
+        return new Response(
+          renderHomePage({
+            clientCatalog: remixI18n.renderClientCatalog(locale),
+            clientEntry: await remixI18n.renderClientEntry("app/public/client.tsx", {
+              assetServer,
+              nonce,
             }),
-            {
-              headers: {
-                "content-type": "text/html; charset=utf-8",
-                vary: "Cookie, Accept-Language",
-                "x-palamedes-locale": locale,
-              },
+            clientProof: await renderToString(
+              createElement(ClientProof, { audience: "developer", count: 1 }),
+            ),
+            locale,
+            hasLocaleChoice: source === "cookie",
+            localeLabel: getLocaleLabel(normalizeLocale(locale)),
+            strategyLabel: "cookie",
+          }),
+          {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "content-security-policy": `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'`,
+              vary: "Cookie, Accept-Language",
+              "x-palamedes-locale": locale,
             },
-          ),
-      );
+          },
+        );
+      });
     },
 
     frameDocument(context) {
@@ -59,6 +62,7 @@ export default createController(routes, {
             headers: {
               "content-type": "text/html; charset=utf-8",
               "x-palamedes-locale": normalizedLocale,
+              vary: "Host, Cookie, Accept-Language",
             },
           },
         );
@@ -77,6 +81,7 @@ export default createController(routes, {
             headers: {
               "content-type": "text/html; charset=utf-8",
               "x-palamedes-locale": normalizedLocale,
+              vary: "Host, Cookie, Accept-Language",
             },
           },
         );

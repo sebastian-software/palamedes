@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { enableAnalytics } from "~/lib/analytics-bootstrap";
+import { installInteractions, trackEvent } from "~/lib/analytics";
 
 export function FragmentDemo() {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -18,12 +20,33 @@ export function FragmentDemo() {
       if (event.data?.type !== "palamedes:demo-height") return;
       updateHeight(event.data.height);
     };
+    let uninstall = () => {};
+    const observe = () => {
+      uninstall();
+      const doc = frame.current?.contentDocument;
+      if (!doc || !enableAnalytics()) return;
+      uninstall = installInteractions(doc, (name, properties) =>
+        trackEvent("demo_interaction", {
+          ...properties,
+          action: name,
+          placement: "fragment-demo",
+          locale: doc.documentElement.lang,
+        }),
+      );
+    };
+    const element = frame.current;
+    element?.addEventListener("load", observe);
+    observe();
     window.addEventListener("message", resize);
     // Prerendered iframe content can finish before the parent hydrates.
     updateHeight(
       frame.current?.contentDocument?.getElementById("root")?.getBoundingClientRect().height,
     );
-    return () => window.removeEventListener("message", resize);
+    return () => {
+      uninstall();
+      element?.removeEventListener("load", observe);
+      window.removeEventListener("message", resize);
+    };
   }, []);
   return (
     <>

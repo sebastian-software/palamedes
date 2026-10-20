@@ -1,9 +1,10 @@
 # Example Screenshots
 
 These screenshots are generated from the Playwright-based browser verifier that
-checks 22 browser-capable examples weekly and on manual dispatch. The 20
+checks 25 browser-capable examples on relevant pull requests, `main` pushes,
+weekly runs, and opted-in manual dispatches. The 20
 UI-adapter examples represented here have versioned captures; Vite MDX and the
-focused Remix cookie browser proof have no capture artifact. All 25 matrix examples
+four Remix browser proofs have no capture artifact. All 25 matrix examples
 receive smoke verification on relevant pull requests and `main` pushes. They
 are versioned verification artifacts, not manually curated mockups.
 

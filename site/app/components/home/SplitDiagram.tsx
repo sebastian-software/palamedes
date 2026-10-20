@@ -34,6 +34,9 @@ export function SplitDiagram() {
             >
               <button
                 type="button"
+                data-analytics-id={`split-screen-${screen.id}`}
+                data-analytics-event="demo_screen"
+                data-analytics-value={screen.id}
                 aria-pressed={loaded}
                 disabled={screen.entry}
                 onClick={() => setOpened((current) => new Set([...current, screen.id]))}

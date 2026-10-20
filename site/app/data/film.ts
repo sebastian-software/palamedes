@@ -6,10 +6,14 @@
 const PLAYER = "https://player.mediadelivery.net/embed/783695/df747a2a-efb7-414e-8e67-da6a3be9654f";
 
 export const FILM = {
+  id: "df747a2a-efb7-414e-8e67-da6a3be9654f",
+  version: "v6",
   title: "Palamedes product film",
   duration: "2:40",
   /** Opens the hosted player page; used as the link when JavaScript is off. */
   page: `${PLAYER}?autoplay=false`,
+  /** A still from the film, shown until someone presses play. */
+  poster: "/media/palamedes-film-poster.webp",
   /** Loaded into the dialog on click, so playback starts at the reader's request. */
   embed: `${PLAYER}?autoplay=true&preload=true`,
 } as const;

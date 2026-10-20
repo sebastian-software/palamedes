@@ -10,6 +10,11 @@ import {
   type View,
 } from "./evidence";
 import "./styles.css";
+import { enableAnalytics } from "../../app/lib/analytics-bootstrap";
+import { installInteractions } from "../../app/lib/analytics";
+
+// Embedded visits are measured by the parent, without a second pageview/script.
+if (window.parent === window && enableAnalytics()) installInteractions(document);
 
 const locale = document.documentElement.lang;
 const loaders = {
@@ -95,6 +100,7 @@ function Demo({ evidence }: { evidence: Evidence }) {
             {VIEWS.map((name) => (
               <button
                 key={name}
+                data-analytics-id={`fragment-view-${name}`}
                 type="button"
                 disabled={loading}
                 aria-current={view === name ? "page" : undefined}

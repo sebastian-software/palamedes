@@ -21,16 +21,19 @@ brings Node, pnpm and the Rust toolchain itself and builds the native
 
 ## Pull the published image
 
-On every release (a release-please "release" PR merged to `main`), the
-`Publish Examples Container` workflow builds the image and pushes it to the GitHub
-Container Registry, so you can pull instead of build:
+On image-relevant pushes to `main`, the `Publish Examples Container` workflow
+builds and smoke-tests the image before pushing it to GitHub Container Registry. This lane
+is independent of the package publication hold. A manual `dry_run` dispatch
+builds and tests without pushing, including on a feature branch. Pull a verified
+image instead of building:
 
 ```bash
 podman pull ghcr.io/sebastian-software/palamedes-examples:latest
 ```
 
-The image is built for `linux/amd64`. To build it yourself (e.g. on arm64), use
-the next section.
+For deployment, use the immutable digest recorded in the workflow summary;
+`latest` is a moving convenience tag. The image is built for `linux/amd64`. To
+build it yourself (e.g. on arm64), use the next section.
 
 ## Build the image
 
@@ -67,10 +70,35 @@ Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063 -p 4070:4070`.
   `--rm` and add `--restart=on-failure`; for a one-off foreground run, use `--rm`
   and accept the shutdown.
 
-The supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
+By default, the supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
 output with the example id (`[nextjs-cookie] …`), and intentionally exits the
 container with an error code as soon as a server dies unexpectedly (fail-fast).
-`podman stop` terminates all 25 matrix servers via forwarded `SIGTERM`.
+`podman stop` terminates all 25 matrix servers by default, or the selected subset,
+via forwarded `SIGTERM`.
+
+## Run only the Remix demos
+
+For a low-traffic deployment, keep one image and run only the four Remix servers:
+
+```sh
+podman run --name palamedes-remix \
+  -e PALAMEDES_EXAMPLES=remix-cookie,remix-route,remix-subdomain,remix-tld \
+  -p 127.0.0.1:4060:4060 -p 127.0.0.1:4061:4061 \
+  -p 127.0.0.1:4062:4062 -p 127.0.0.1:4063:4063 \
+  ghcr.io/sebastian-software/palamedes-examples@sha256:<verified-digest>
+```
+
+Replace the digest placeholder with the workflow receipt. The same environment
+variable works in Bunny Magic Containers; configure four HTTP endpoints for
+ports 4060–4063 instead of host port mappings. Leave `PALAMEDES_EXAMPLES` unset
+to start the full matrix. Empty, unknown, and repeated IDs fail before any server
+starts. The image still contains all built examples; selecting fewer servers
+reduces runtime memory and CPU usage, not image size.
+
+The image publication workflow runs the shared Remix smoke contracts against
+this four-server runtime before pushing any tags. It does not prove public TLS,
+Host forwarding, caching, or browser behavior; the hosted readiness gate in
+[Demo Deployments](../demo-deployments.md) still applies.
 
 ## Port overview
 

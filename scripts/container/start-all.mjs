@@ -10,11 +10,14 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { EXAMPLE_MATRIX } from "../example-matrix.mjs";
-import { buildStartArgs, buildStartEnv } from "./start-plan.mjs";
+import { buildStartArgs, buildStartEnv, selectContainerExamples } from "./start-plan.mjs";
+
+import { createReadinessServer } from "./readiness.mjs";
 
 const FORCE_KILL_TIMEOUT_MS = 5000;
 const children = [];
 let shuttingDown = false;
+let readiness;
 
 function log(message) {
   process.stdout.write(`[supervisor] ${message}\n`);
@@ -77,6 +80,7 @@ function shutdown(reason, exitCode) {
     return;
   }
   shuttingDown = true;
+  readiness?.close();
   // Set the exit code up front so it holds however the event loop drains: the
   // children can die and release every active handle (stdio pipes reaching EOF)
   // before the unref'd poll below ever fires, which would otherwise let the
@@ -108,9 +112,13 @@ function shutdown(reason, exitCode) {
 }
 
 function main() {
-  log(`starting ${EXAMPLE_MATRIX.length} example servers`);
+  const selected = selectContainerExamples(EXAMPLE_MATRIX, process.env.PALAMEDES_EXAMPLES);
+  readiness = createReadinessServer(selected, { isStopping: () => shuttingDown });
+  readiness.on("error", (error) => shutdown(`readiness server: ${error.message}`, 1));
+  readiness.listen(4080, "0.0.0.0");
+  log(`starting ${selected.length} example servers`);
 
-  for (const example of EXAMPLE_MATRIX) {
+  for (const example of selected) {
     const child = startExample(example);
     children.push({ child, example });
     log(`started ${example.id} on port ${example.port} (pid ${child.pid ?? "unknown"})`);

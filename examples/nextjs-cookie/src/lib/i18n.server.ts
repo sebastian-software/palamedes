@@ -36,7 +36,7 @@ const resolveActiveServerI18n = cache(
   }> => {
     const resolved = locale ? { locale, source: "cookie" as const } : await getLocale();
     const resolvedLocale = resolved.locale;
-    const i18n = await createNextServerI18n({ locale: resolvedLocale });
+    const i18n = await createNextServerI18n({ locale: resolvedLocale, timeZone: "Europe/Berlin" });
 
     return {
       i18n,

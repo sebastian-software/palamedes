@@ -13,7 +13,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { locale } = await getTldLocale();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
       <body>{children}</body>
     </html>
   );

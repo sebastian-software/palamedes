@@ -44,7 +44,7 @@ export async function createActiveServerI18n(locale: Locale): Promise<{
   i18n: PalamedesI18n;
   locale: Locale;
 }> {
-  const i18n = await createNextServerI18n({ locale });
+  const i18n = await createNextServerI18n({ locale, timeZone: "Europe/Berlin" });
   serverI18nScope.activate(i18n);
 
   return {

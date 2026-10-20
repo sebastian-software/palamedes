@@ -30,7 +30,7 @@ export default function Document(props: ParentProps) {
   const locale = resolveDocumentLocale();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
       <head>
         <meta charset="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />

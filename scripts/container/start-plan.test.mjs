@@ -4,7 +4,12 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EXAMPLE_MATRIX } from "../example-matrix.mjs";
 import { buildPublishArgs } from "./port-plan.mjs";
-import { CONTAINER_HOST, buildStartArgs, buildStartEnv } from "./start-plan.mjs";
+import {
+  CONTAINER_HOST,
+  buildStartArgs,
+  buildStartEnv,
+  selectContainerExamples,
+} from "./start-plan.mjs";
 
 describe("buildStartArgs", () => {
   it("runs vite preview directly for tanstack with a single host/port", () => {
@@ -99,5 +104,41 @@ describe("container publish contract", () => {
       "utf8",
     );
     expect(containerfile).toMatch(/^EXPOSE .*\b4070\b/m);
+  });
+});
+
+describe("container example selection", () => {
+  it("retains all examples when no deployment selection is configured", () => {
+    expect(selectContainerExamples(EXAMPLE_MATRIX)).toBe(EXAMPLE_MATRIX);
+  });
+
+  it("runs exactly the four Remix strategies in the low-traffic deployment", () => {
+    const selection = "remix-cookie,remix-route,remix-subdomain,remix-tld";
+    const examples = selectContainerExamples(EXAMPLE_MATRIX, selection);
+    expect(examples.map((example) => example.id)).toEqual(selection.split(","));
+    expect(examples.map((example) => example.port)).toEqual([4060, 4061, 4062, 4063]);
+  });
+
+  it("rejects empty, unknown, and duplicated IDs before starting any server", () => {
+    for (const selection of [
+      "",
+      " ",
+      "remix-cookie,",
+      "remix",
+      "remix-cookie,unknown",
+      "remix-cookie,remix-cookie",
+    ]) {
+      expect(() => selectContainerExamples(EXAMPLE_MATRIX, selection)).toThrow(
+        "PALAMEDES_EXAMPLES",
+      );
+    }
+  });
+
+  it("accepts surrounding whitespace and retains matrix port assignments", () => {
+    expect(
+      selectContainerExamples(EXAMPLE_MATRIX, " remix-tld , remix-cookie ").map(
+        (example) => example.port,
+      ),
+    ).toEqual([4060, 4063]);
   });
 });

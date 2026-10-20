@@ -532,12 +532,17 @@ pmds --version
 
 ## Advisory update checks
 
-The release workflow configures the native CLI's privacy-bounded update check
-for the next release, following completed service readiness. The consuming
-release and its production-check evidence remain pending in
+Published native CLI packages enable privacy-bounded update checks starting
+with [1.24.0](https://github.com/sebastian-software/palamedes/releases/tag/palamedes-v1.24.0).
+The [1.25.0 release evidence](https://github.com/sebastian-software/palamedes/issues/1036#issuecomment-5599225464)
+confirms publication for all six CLI platforms. Service readiness is complete;
+the remaining rollout task is a matching Rybbit observation from an unmodified
+published client, tracked in
 [#1036](https://github.com/sebastian-software/palamedes/issues/1036) and
-[version-service #12](https://github.com/sebastian-software/version-service/issues/12);
-configuration alone does not mean that an enabled release has shipped.
+[version-service #12](https://github.com/sebastian-software/version-service/issues/12).
+The September 9, 2026 attempt could not establish ingestion because its test
+environment blocked external DNS. CLI success and cache files alone do not
+prove that an event reached Rybbit.
 Ordinary/local builds without `PALAMEDES_UPDATE_ENDPOINT` make no update-check
 request and write no update-check cache. A configured build fails unless the value is exactly the
 owned HTTPS route `https://version-service.sebastian-software.de/check`; malformed,
@@ -609,6 +614,34 @@ See
 [ADR-016](../adr/016-privacy-bounded-cli-update-check.md) for the data boundary
 and the [version-service](https://github.com/sebastian-software/version-service)
 repository for the service implementation and its deployment guide.
+
+### Interpreting usage counts
+
+An `update_check` event records an observed request. It does not identify a
+person or let us deduplicate an installation across days. One installation can
+produce several events over a week, fresh CI caches can produce additional
+events, and opt-outs or network failures leave usage unobserved. The
+`installedSince` month describes requests from an older cohort, not a count of
+retained users.
+
+The existing [oss-metrics service](https://github.com/sebastian-software/oss-metrics)
+publishes [cached public metrics](https://metrics.sebastian-software.com/v1/metrics.json)
+for GitHub and package registries. It does not yet include Rybbit data.
+A [planned server-side integration](https://github.com/sebastian-software/oss-metrics/issues/10)
+can publish aggregate update-check counts
+over complete UTC days, with explicit windows, source status, and freshness.
+Website visitors should read that public snapshot; Rybbit credentials and raw
+events stay private.
+
+Use labels such as "Update checks in the last 30 days" for these counts.
+Unique active users, weekly/monthly active installations, and user retention
+cannot be derived from this protocol. A Rybbit visitor or session count also
+cannot supply that identity: the version service deliberately neutralizes
+client transport metadata. Version/platform distributions are useful for
+internal analysis; public displays should use broad totals rather than small
+cohort or platform cells. Missing, failed, incomplete, or unverified data must
+not appear as zero users. General command-level telemetry remains separate in
+[#856](https://github.com/sebastian-software/palamedes/issues/856).
 
 ## Configuration Errors
 

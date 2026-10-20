@@ -467,24 +467,6 @@ header.ardo-header > div {
   text-wrap: balance;
 }
 
-/* The hero sentence settles into each language; JS only runs it without reduced motion. */
-.pmds-morph {
-  animation: pmds-morph-in 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-@keyframes pmds-morph-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.35em);
-    filter: blur(3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: none;
-  }
-}
-
 .pmds-page-hero {
   padding: clamp(3.5rem, 7vw, 6rem) max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2))
     clamp(3.5rem, 6vw, 5.5rem);

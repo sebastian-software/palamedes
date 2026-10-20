@@ -19,8 +19,14 @@ import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion";
  * the finished race. Scope stays beside every row, and the cached Palamedes
  * re-run is reported on its own because the other tools have no equivalent.
  */
-const ROWS = [...BENCH_REALISTIC.rows].sort((left, right) => left.medianMs - right.medianMs);
+// React Intl's run covers extraction only, a narrower job than the rest, so the
+// homepage race leaves it out; the proof page keeps it with its scope note.
+const ROWS = BENCH_REALISTIC.rows
+  .filter((row) => row.tool !== "React Intl")
+  .sort((left, right) => left.medianMs - right.medianMs);
 const LONGEST = Math.max(...ROWS.map((row) => row.medianMs));
+// The track spans ten seconds, so even the slowest run ends short of the edge.
+const TRACK_MS = Math.max(10_000, LONGEST);
 
 const REASONS = [
   {
@@ -108,7 +114,11 @@ export function RustRace() {
         <p className="pmds-lede">
           Your i18n tooling runs every time you save, commit, or open a pull request. Here is the
           same job — extract every message from a 1,500-file project and update the catalogs — in
-          six tools, played back in real time.
+          five tools, played back in real time. React Intl only extracts, so it runs on the{" "}
+          <a href="/proof" className="text-accent underline underline-offset-4 hover:text-ink">
+            proof page
+          </a>{" "}
+          with its narrower scope marked.
         </p>
       </Reveal>
 
@@ -119,6 +129,7 @@ export function RustRace() {
           </p>
           {reducedMotion ? null : (
             <button
+              data-analytics-id="benchmark-race-replay"
               type="button"
               onClick={run}
               disabled={phase === "running"}
@@ -158,7 +169,7 @@ export function RustRace() {
             </thead>
             <tbody>
               {ROWS.map((row) => {
-                const percent = (row.medianMs / LONGEST) * 100;
+                const percent = (row.medianMs / TRACK_MS) * 100;
                 const done = phase === "finished" || elapsed >= row.medianMs;
                 const width = phase === "ready" ? 0 : percent;
                 return (
@@ -199,7 +210,7 @@ export function RustRace() {
                       </span>
                     </td>
                     <td
-                      className={`mono-nums px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-30"} ${row.accent ? "text-accent" : "text-ink"}`}
+                      className={`mono-nums px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-0"} ${row.accent ? "text-accent" : "text-ink"}`}
                     >
                       {displayBenchmarkTime(row.medianMs)}
                     </td>

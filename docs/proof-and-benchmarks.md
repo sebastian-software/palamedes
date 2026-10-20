@@ -11,7 +11,7 @@ uses all of them. The goal is confidence, not hype.
 
 This repo can credibly prove five things:
 
-- all 25 examples of the verification matrix receive smoke verification on relevant pull requests and `main` pushes (the 26th app in `examples/`, the focused React Router RSC cookie fixture, has its own verifier); 22 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, Vite, and the focused Remix cookie flow) receive Playwright verification weekly and on manual dispatch
+- all 25 examples of the verification matrix receive smoke verification on relevant pull requests and `main` pushes (the 26th app in `examples/`, the focused React Router RSC cookie fixture, has its own verifier); 25 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, Vite, and all four Remix strategies) receive Playwright verification on relevant pull requests, `main` pushes, weekly runs, and opted-in manual dispatches
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, source analysis, catalog update, and catalog compile steps are measured locally and reproducibly
@@ -22,16 +22,16 @@ evidence easy to inspect.
 
 ## Current Maturity
 
-| Topic                 | Current state                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring                |
-| Supported frameworks  | See verification cadence above; Remix v3 has four smoke proofs plus one full-stack browser proof |
-| Runtime model         | `@palamedes/runtime` with `getI18n()`                                                            |
-| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                        |
-| Native core           | Rust + `napi-rs`                                                                                 |
-| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                     |
-| Node requirement      | Package-specific; see the [platform support table](./platform-support.md#nodejs-requirements)    |
-| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                       |
+| Topic                 | Current state                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring                 |
+| Supported frameworks  | See verification cadence above; Remix v3 has four smoke proofs and four full-stack browser proofs |
+| Runtime model         | `@palamedes/runtime` with `getI18n()`                                                             |
+| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                         |
+| Native core           | Rust + `napi-rs`                                                                                  |
+| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                      |
+| Node requirement      | Package-specific; see the [platform support table](./platform-support.md#nodejs-requirements)     |
+| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                        |
 
 ## What Counts As Proof In This Repo
 

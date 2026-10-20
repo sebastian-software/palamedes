@@ -170,11 +170,18 @@ jobs:
 
       - name: Build site
         if: ${{ matrix.full }}
+        env:
+          VITE_RYBBIT_SCRIPT_URL: https://analytics.example.test/api/script.js
+          VITE_RYBBIT_SITE_ID: palamedes-test
         run: pnpm build:site
 
       - name: Verify site accessibility
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm verify:site-a11y
+
+      - name: Verify site analytics with an isolated sink
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm verify:site-analytics
 
       - name: Verify cold-cache docs navigation
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24

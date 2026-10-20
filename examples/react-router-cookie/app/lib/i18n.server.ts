@@ -5,7 +5,11 @@ import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
 import { resolveLocaleFromRequest } from "./i18n";
 
 export const serverI18n = createScopedI18nRunner(
-  (request) => createViteServerI18n({ locale: resolveLocaleFromRequest(request).locale }),
+  (request) =>
+    createViteServerI18n({
+      locale: resolveLocaleFromRequest(request).locale,
+      timeZone: "Europe/Berlin",
+    }),
   { failureMessage: "The page catalog could not be loaded." },
 );
 

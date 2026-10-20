@@ -738,16 +738,13 @@ export const SERVER_EXAMPLES = EXAMPLE_MATRIX.filter((example) =>
   SERVER_FRAMEWORKS.includes(example.framework),
 );
 
-// The cookie example is Remix v3's focused full-stack browser proof. The other
-// three strategies retain smoke coverage until their UI variants need a client.
+// All four Remix strategies include server rendering, browser assets, and interaction.
 export function selectBrowserExamples(filters) {
-  return selectExamples(filters).filter(
-    (example) => example.framework !== "remix" || example.id === "remix-cookie",
-  );
+  return selectExamples(filters);
 }
 
 // The checked-in screenshot set records the established UI-adapter matrix.
-// Vite and the focused Remix proof have browser contracts but no capture artifact.
+// Vite and the four Remix proofs have browser contracts but no capture artifact.
 export function selectScreenshotExamples(filters) {
   return selectExamples(filters).filter(
     (example) => example.framework !== "remix" && example.framework !== "vite",
