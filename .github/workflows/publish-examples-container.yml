@@ -86,14 +86,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke-test Remix in the runtime image
+      - name: Smoke-test all 25 examples in the runtime image
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/palamedes-examples:sha-${{ github.sha }}
         run: |
-          docker run -d --name examples-smoke \
-            -e PALAMEDES_EXAMPLES=remix-cookie,remix-route,remix-subdomain,remix-tld "$IMAGE"
+          docker run -d --name examples-smoke "$IMAGE"
           trap 'docker logs examples-smoke; docker rm -f examples-smoke' EXIT
-          docker exec examples-smoke node scripts/container/verify-remix.mjs
+          docker exec examples-smoke node scripts/container/verify-all.mjs
+          docker exec examples-smoke node -e 'fetch("http://127.0.0.1:4080/ready").then(r => { if (!r.ok) process.exit(1); })'
           docker stats --no-stream examples-smoke
           test "$(docker inspect --format '{{.State.Running}}' examples-smoke)" = true
 
@@ -125,6 +125,6 @@ jobs:
             echo '## Verified examples image'
             echo "Git revision: $REVISION"
             echo "Image: $digest"
-            echo 'Remix runtime smoke checks passed for all four strategies.'
+            echo 'All 25 runtime examples passed their smoke checks.'
             echo 'Public HTTPS browser verification is still required before advertising live demos.'
           } >> "$GITHUB_STEP_SUMMARY"

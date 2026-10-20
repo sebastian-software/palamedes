@@ -12,6 +12,11 @@ Subdomain Locale Hosting. Their TLD rows link the 20 live public URLs across
 `.com`, `.de`, `.es`, and `.fr`. Remix v3 has local and CI verification; its four-strategy public rollout
 awaits external deployment verification.
 
+The planned migration of the complete matrix to one Bunny app is described in
+[Shared Bunny Demo Rollout](./shared-demo-rollout.md). That runbook includes the
+25-endpoint inventory, readiness, controlled image updates, hosted verification,
+and rollback. Its intended hosts are not deployment receipts.
+
 ## Current Policy
 
 - the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`

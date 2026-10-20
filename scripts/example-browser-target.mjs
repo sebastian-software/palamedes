@@ -1,4 +1,6 @@
-/** Resolve a hosted Remix strategy with a complete browser contract. */
+import { EXAMPLE_MATRIX } from "./example-matrix.mjs";
+
+/** Resolve one hosted example without changing the local build/start lifecycle. */
 export function resolveExternalBrowserTarget(argv, plan) {
   const indexes = argv.flatMap((value, index) =>
     value === "--base-url" || value.startsWith("--base-url=") ? [index] : [],
@@ -23,15 +25,10 @@ export function resolveExternalBrowserTarget(argv, plan) {
   ) {
     throw new Error("--base-url must be an origin without credentials, path, query, or fragment.");
   }
-  if (
-    plan.length !== 1 ||
-    !["remix-cookie", "remix-route", "remix-subdomain", "remix-tld"].includes(plan[0].example.id)
-  ) {
-    throw new Error(
-      "--base-url requires exactly one --id remix-cookie, remix-route, remix-subdomain, or remix-tld.",
-    );
+  if (plan.length !== 1 || !EXAMPLE_MATRIX.some((entry) => entry.id === plan[0].example.id)) {
+    throw new Error("--base-url requires exactly one explicit --id from the example matrix.");
   }
-  const strategy = plan[0].example.id.slice("remix-".length);
+  const strategy = EXAMPLE_MATRIX.find((entry) => entry.id === plan[0].example.id).strategy;
   if (strategy === "subdomain" && !target.hostname.startsWith("en.")) {
     throw new Error("The subdomain proof starts at the final en.<example-host> origin.");
   }
