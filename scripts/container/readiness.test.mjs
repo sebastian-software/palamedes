@@ -41,6 +41,10 @@ it("probes the backend host/path and handles refusal, timeout, and failure statu
   const origin = await listen(
     http.createServer((req, res) => {
       if (req.url === "/hang") return;
+      if (req.url === "/redirect") {
+        res.writeHead(302, { location: "/de" }).end();
+        return;
+      }
       if (req.url === "/de" && req.headers.host === "de.demo.com") res.writeHead(200).end();
       else res.writeHead(503).end();
     }),
@@ -49,6 +53,7 @@ it("probes the backend host/path and handles refusal, timeout, and failure statu
   expect(
     await probe({ port, smokeChecks: [{ path: "/de", headers: { host: "de.demo.com" } }] }),
   ).toBe(true);
+  expect(await probe({ port, smokeChecks: [{ path: "/redirect" }] })).toBe(true);
   expect(await probe({ port, smokeChecks: [] })).toBe(false);
   expect(await probe({ port, smokeChecks: [{ path: "/hang" }] }, 30)).toBe(false);
   const closed = http.createServer();
