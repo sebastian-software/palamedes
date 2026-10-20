@@ -29,6 +29,7 @@ const matches = config.containerTemplates.filter((entry) => entry.name === conta
 assert.equal(matches.length, 1, "Expected one configured demo container.");
 const previous = matches[0];
 assert.match(previous.id, /^[a-zA-Z0-9-]+$/u);
+assert.equal(previous.imageName, "palamedes-examples", "Expected the configured demo image name.");
 await mkdir("deployment-receipt", { recursive: true });
 // Preserve only image fields, never the API response's environment/secrets.
 const receipt = {
@@ -40,7 +41,7 @@ const receipt = {
     imageDigest: previous.imageDigest,
   },
   next: {
-    imageName: "ghcr.io/sebastian-software/palamedes-examples",
+    imageName: previous.imageName,
     imageTag: `sha-${revision}`,
     imageDigest: digest,
   },
@@ -49,7 +50,8 @@ const receipt = {
 await writeFile("deployment-receipt/image.json", JSON.stringify(receipt, null, 2));
 await call(`${root}/containers/${previous.id}`, {
   method: "PATCH",
-  body: JSON.stringify({ id: previous.id, ...receipt.next }),
+  // Bunny stores the registry and namespace separately. Only update the pinned version.
+  body: JSON.stringify({ id: previous.id, imageTag: receipt.next.imageTag, imageDigest: digest }),
 });
 receipt.submitted = true;
 receipt.submittedAt = new Date().toISOString();

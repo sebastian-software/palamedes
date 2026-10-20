@@ -154,6 +154,9 @@ The documented Bunny update API requires account-level credentials. Limit who
 can dispatch/review this environment; verification jobs do not receive the key.
 The updater only modifies the selected container image and records the prior
 image fields, never environment secrets or the complete app configuration.
+The update changes only the image tag and digest. Bunny stores the registry,
+namespace, and image name separately; replacing the image name with a full
+registry path breaks image pulls even when the update API accepts the request.
 
 Use the **Deploy Examples** workflow on `main` with the exact revision and digest:
 
