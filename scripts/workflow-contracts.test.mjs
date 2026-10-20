@@ -511,7 +511,7 @@ describe("workflow contracts", () => {
     expect(deploy).toContain("needs: verify-image");
     expect(deploy).toContain("if: inputs.operation == 'deploy'");
     expect(deploy).toContain("environment: bunny-demos");
-    expect(deploy).toContain("secrets.BUNNYNET_API_KEY");
+    expect(deploy).toContain("BUNNYNET_API_KEY: ${{ secrets.BUNNY_API_KEY }}");
     expect(job(source, "verify-image", "deploy")).not.toContain("BUNNYNET_API_KEY");
     expect(job(source, "verify-hosts", "__missing__")).not.toContain("BUNNYNET_API_KEY");
   });

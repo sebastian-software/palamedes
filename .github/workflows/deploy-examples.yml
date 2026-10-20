@@ -67,7 +67,7 @@ jobs:
           rust-cache: "false"
       - name: Submit the pinned image update
         env:
-          BUNNYNET_API_KEY: ${{ secrets.BUNNYNET_API_KEY }}
+          BUNNYNET_API_KEY: ${{ secrets.BUNNY_API_KEY }}
           BUNNY_DEMO_APP_ID: ${{ vars.BUNNY_DEMO_APP_ID }}
           BUNNY_DEMO_CONTAINER: ${{ vars.BUNNY_DEMO_CONTAINER }}
           IMAGE_REVISION: ${{ inputs.revision }}
