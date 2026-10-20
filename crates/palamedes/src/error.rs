@@ -241,6 +241,12 @@ pub enum PalamedesError {
         /// Source location of the nested macro.
         location: String,
     },
+    /// Rendering a compiled catalog as a JavaScript module failed.
+    #[error("{message}")]
+    RenderCatalogModule {
+        /// Human-readable failure including locale and resource path.
+        message: String,
+    },
 }
 
 impl PalamedesError {
