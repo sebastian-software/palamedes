@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-20
 
 Compiled lookup keys are compact execution artifacts, while message identity remains source-first.
 
@@ -19,6 +19,8 @@ This key:
 - is not an author-facing API concept
 
 The derivation strategy is fixed and not a configurable application-level feature. Palamedes follows Ferrocat's public `FerrocatV1` compiled-key contract for this purpose rather than owning a separate private algorithm.
+Unbundled runtime macros read these keys from the extraction manifest
+(ADR-006), so JavaScript never derives them.
 
 A missing translation is resolved during catalog compilation through the
 configured fallback locales and ultimately the source message. That fallback

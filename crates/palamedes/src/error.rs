@@ -241,6 +241,40 @@ pub enum PalamedesError {
         /// Source location of the nested macro.
         location: String,
     },
+    /// A message macro was used as a placeholder inside another message.
+    #[error(
+        "Nested `{macro_name}` macro at line {line}, column {column} splits one sentence into fragments that translators cannot reorder. Write the complete sentence in every branch of a single plural(), select(), or selectOrdinal() call instead, for example plural(count, {{ one: \"You have # file left.\", other: \"You have # files left.\" }})."
+    )]
+    NestedMacroPlaceholder {
+        /// Local name of the nested macro.
+        macro_name: String,
+        /// One-based source line of the nested macro.
+        line: usize,
+        /// One-based source column of the nested macro.
+        column: usize,
+    },
+    /// A macro call cannot be represented in the runtime macro manifest.
+    #[error("Runtime macros cannot execute `{macro_name}` at {location}: {detail}")]
+    RuntimeMacroUnsupported {
+        /// Public macro name used at the call site.
+        macro_name: String,
+        /// Source filename, line, and column.
+        location: String,
+        /// Why the runtime cannot recover the message from the call.
+        detail: String,
+    },
+    /// Two macro calls look identical at runtime but compile to different messages.
+    #[error(
+        "Runtime macro collision: {first} and {second} pass the same static text to `{macro_name}` but compile to different messages or placeholder names. Rename one placeholder or reword one message."
+    )]
+    RuntimeMacroCollision {
+        /// Public macro name used at both call sites.
+        macro_name: String,
+        /// Location of the first call site.
+        first: String,
+        /// Location of the conflicting call site.
+        second: String,
+    },
     /// Rendering a compiled catalog as a JavaScript module failed.
     #[error("{message}")]
     RenderCatalogModule {

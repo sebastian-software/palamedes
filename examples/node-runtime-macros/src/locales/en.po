@@ -1,0 +1,36 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/node-runtime-macros/src/booking.ts#getBooking
+msgid "{seats, plural, one {# seat available} other {# seats available}}"
+msgstr "{seats, plural, one {# seat available} other {# seats available}}"
+
+#: examples/node-runtime-macros/src/booking.ts#getBooking
+msgid "Booking {id} is confirmed."
+msgstr "Booking {id} is confirmed."
+
+#: examples/node-runtime-macros/src/booking.ts#getBooking
+msgid "Booking {id} was not found."
+msgstr "Booking {id} was not found."
+
+#: examples/node-runtime-macros/src/cli.ts
+#: examples/node-runtime-macros/src/server.ts#server
+msgid "Booking details."
+msgstr "Booking details."
+
+#: examples/node-runtime-macros/src/cli.ts
+msgid "Invalid arguments. Run with --help."
+msgstr "Invalid arguments. Run with --help."
+
+#: examples/node-runtime-macros/src/cli.ts
+msgid "Look up a booking."
+msgstr "Look up a booking."
+
+#: examples/node-runtime-macros/src/booking.ts#getBooking
+msgid "Your booking costs {price} on {date}."
+msgstr "Your booking costs {price} on {date}."

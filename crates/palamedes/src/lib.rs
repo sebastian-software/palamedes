@@ -38,6 +38,7 @@ mod jsx_message;
 mod mdx;
 mod message_metadata;
 mod placeholder_name;
+mod runtime_macro_manifest;
 mod runtime_message;
 mod source;
 mod source_macros;
@@ -107,6 +108,10 @@ pub use message_metadata::{
     MessageMetadataDiagnostic, MessageMetadataInput, MessageMetadataValidationReport,
     MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata, derive_message_metadata,
     normalize_message_metadata, validate_message_metadata,
+};
+pub use runtime_macro_manifest::{
+    RUNTIME_MACRO_MANIFEST_VERSION, RuntimeMacroChoice, RuntimeMacroDescriptor,
+    RuntimeMacroManifest, RuntimeMacroTemplate, collect_runtime_macro_manifest,
 };
 pub use runtime_message::{
     RuntimeCompiledMessage, RuntimeCompiledMessages, RuntimeMessageChoiceKind,

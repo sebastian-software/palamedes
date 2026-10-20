@@ -1,8 +1,8 @@
 //! Renders compiled catalog messages as executable JavaScript modules.
 //!
-//! Bundler plugins reach this renderer through the Node binding. It lives in
-//! the Rust core so hosts without the binding can share it, and every host
-//! receives the same parser-free module (ADR-005, ADR-019).
+//! Bundler plugins, `pmds catalog compile --target js`, and the Node binding
+//! share this renderer, so every host receives the same parser-free module
+//! (ADR-005, ADR-019).
 
 use std::collections::BTreeMap;
 

@@ -2,7 +2,7 @@ use super::{
     NativeTransformOptions, NativeTransformResult, ServerFunctionTransformOptions,
     transform_macros as transform_macros_raw,
 };
-use crate::error::PalamedesResult;
+use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract::extract_messages;
 use crate::icu_text::compiled_message_key;
 use crate::source::{diagnostic_location_metrics, reset_diagnostic_location_metrics};
@@ -2622,5 +2622,55 @@ fn accepts_defaulted_jsx_choice_values() {
         result
             .code
             .contains("{ locationCount: node.locationCount ?? 0 }")
+    );
+}
+
+#[test]
+fn rejects_nested_message_macros_with_full_sentence_guidance() {
+    for (source, macro_name) in [
+        (
+            "import { plural, t } from \"@palamedes/core/macro\";\nconst msg = () => t`You have ${plural(count, { one: \"# file\", other: \"# files\" })} left.`;\n",
+            "plural",
+        ),
+        (
+            "import { select, t } from \"@palamedes/core/macro\";\nconst msg = () => t`Hello ${select(role, { admin: \"boss\", other: \"friend\" })}.`;\n",
+            "select",
+        ),
+        (
+            "import { t } from \"@palamedes/core/macro\";\nconst msg = () => t`Hello ${t`world`}.`;\n",
+            "t",
+        ),
+    ] {
+        let error = transform_macros(source, "test.ts", None).expect_err("nested macro");
+        let message = error.to_string();
+
+        assert!(
+            matches!(&error, PalamedesError::NestedMacroPlaceholder { macro_name: name, line: 2, .. } if name == macro_name),
+            "{message}"
+        );
+        assert!(message.contains("complete sentence"), "{message}");
+        assert!(!message.contains("named variable"), "{message}");
+    }
+}
+
+#[test]
+fn rejects_nested_choice_macros_in_trans_children() {
+    let error = transform_macros(
+        "import { plural } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>You have {plural(count, { one: \"# file\", other: \"# files\" })} left.</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect_err("nested macro");
+
+    assert!(
+        matches!(
+            error,
+            PalamedesError::NestedMacroPlaceholder {
+                line: 3,
+                column: 29,
+                ..
+            }
+        ),
+        "{error:?}"
     );
 }

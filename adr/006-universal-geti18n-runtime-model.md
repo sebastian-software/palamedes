@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-20
 
 Application code reads the active runtime through one environment-independent getter.
 
@@ -26,6 +26,27 @@ Palamedes does not adopt a split public model like:
 
 - hook-shaped access for one environment
 - direct runtime access for another environment
+
+### Runtime macros for unbundled Node code
+
+Bundled code compiles macros into `getI18n()` calls. Node code that runs
+without a bundler (native type stripping, plain `tsc` output, scripts, tests)
+may opt in with `registerRuntimeMacros()` from
+`@palamedes/runtime/node-macros`. After registration, `t` (template and
+descriptor), `plural`, `select`, and `selectOrdinal` from
+`@palamedes/core/macro` render through the same `getI18n()` lookup, so
+application code is identical on both paths. Without registration the macros
+keep throwing, so a missing plugin in a bundled app still fails loudly.
+
+At runtime a macro only sees static text and values, not placeholder names.
+`pmds extract --runtime-manifest` therefore records, for every call, the
+compiled key and placeholder names the transform would produce. The runtime
+neither hashes nor parses: catalogs come from `pmds catalog compile --target js`
+(ADR-005, ADR-019, ADR-020). Extraction rejects calls the runtime cannot tell
+apart (same static text, different message) and shapes it cannot recover:
+interpolated choice branches, interpolated descriptor messages, and
+non-literal branches. JSX macros, Node load hooks, and `tsc` source
+preprocessing are not supported.
 
 ## Context
 
@@ -54,7 +75,18 @@ Rejected because it complicates transform output and makes the mental model hard
 
 Rejected because the core problem is active-instance lookup, not component hook semantics.
 
-### 3. Silent fallback behavior when no runtime is installed
+### 3. A JavaScript port of the compiled key, or the native addon at runtime
+
+Rejected for unbundled execution. A second key implementation can drift from
+Ferrocat, and a native addon on every production host undoes the small
+runtime footprint. The extraction manifest already knows every call site.
+
+### 4. A Node load hook or `tsc` source preprocessing
+
+Rejected because both need the compiler on the runtime host or a parallel
+source tree, and each host needs its own glue.
+
+### 5. Silent fallback behavior when no runtime is installed
 
 Rejected because returning the wrong locale or stale runtime state is a correctness bug, not a recoverable convenience path.
 
@@ -64,3 +96,5 @@ Rejected because returning the wrong locale or stale runtime state is a correctn
 - Framework adapters must install the active i18n instance correctly for their host environment.
 - Server-side correctness depends on explicit request-local runtime setup.
 - Palamedes stays closer to a portable runtime contract than to framework-specific runtime idioms.
+- Unbundled Node code needs two generated artifacts, the manifest and compiled catalog modules, and must regenerate them after changing translated source.
+- Runtime macros cost one map lookup per call; templates are cached per `TemplateStringsArray`.
