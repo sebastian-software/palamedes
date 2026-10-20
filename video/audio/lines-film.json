@@ -1,0 +1,17 @@
+{
+  "00-open": "Your app speaks English. Most of the world doesn't.",
+  "01-hook": "Translating an app looks simple, until you spend a minute on the details. One seat, but three seats. Words that change their order. Prices and dates that every language writes its own way. And that's with just two languages.",
+  "01b-problems": "And the usual setup makes it harder. You invent a key for every sentence. Every visitor downloads the whole language file. Message syntax gets parsed at runtime, in the browser. Every framework needs its own glue code. And the tools are too slow to run on every save.",
+  "02-reveal": "[excited] That's exactly why we built Pala-meedeez! You just write your sentences, right where they're used. Your translators bring the languages, and Pala-meedeez takes care of everything in between.",
+  "03-write": "Here's how it works. That little Trans tag around your sentence is a macro: it looks like plain JSX to you, and your build rewrites it later.",
+  "04-extract": "One command lifts every sentence out of your code and into catalog files your translators already know.",
+  "05-translate": "They add the translations, and your code stays exactly as it is.",
+  "06-build": "Then your build does the clever part: every sentence becomes a short ID, and every translation becomes ready-to-run code.",
+  "07-load": "The catalog is split into one piece per screen, so each screen loads only its own words, in your visitor's language.",
+  "08-complete": "And it doesn't stop there! Plurals, numbers and dates, server rendering and server actions, a linter for your messages and an audit that catches every missing translation: it's one complete toolchain, from the first sentence to the last translation.",
+  "09-frameworks": "The wiring is already built: for React and Solid, for Next JS, TanStack, Waku and Remix, and for Veet. Every one of them is tested as a real app.",
+  "10-fast": "[excited] And it's seriously fast! Its Rust core works through fifteen hundred files in just seventy-three milliseconds.",
+  "11-agent": "Working with a coding agent? Add the Pala-meedeez skill and simply ask it to set up translations for you.",
+  "12-claim": "Clear, complete, and fast. For once, you get to pick all three.",
+  "13-end": "Pala-meedeez is open source. Get started today at pala-meedeez dot dev."
+}

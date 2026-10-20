@@ -18,3 +18,7 @@ benchmarks/*/results/
 
 # Native mdtheme compares complete output; edit README.md.src and regenerate.
 /README.md
+
+# Vendored snapcn sources (MIT), kept as upstream ships them
+video/src/components/snap-cn/
+video/src/lib/snap-cn-ui/

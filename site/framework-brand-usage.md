@@ -35,6 +35,23 @@ review by qualified counsel.
 | React          | [React logo, react.dev repository](https://github.com/reactjs/react.dev/blob/main/public/images/brand/logo_light.svg) | Official emblem + name       | Retrieved 2026-10-19. The emblem is shown unmodified with the name beside it; do not imply an endorsement by Meta.                                                                                 |
 | Rust           | [Rust logo](https://www.rust-lang.org/logos/rust-logo-blk.svg)                                                        | Official emblem + name       | Retrieved 2026-10-19. Used unmodified to refer to Rust under the Rust Foundation's trademark policy; it identifies the Rust integration, not an endorsement.                                       |
 
+## Product film
+
+The product film in `video/` shows the unmodified React, Solid, Next.js, TanStack,
+Remix, and Vite files in one framework-integration scene, grouped as UI
+libraries, frameworks, and build tool. They identify first-party integrations.
+The film uses an unmodified copy of the React mark (retrieved 2026-10-19), with
+Meta's trademark noted in `THIRD_PARTY_NOTICES.md`. The film names no support
+levels, so a change in an adapter's status does not require a new render; the
+site states the levels.
+Waku appears as its name in text, because its published SVG is drawn for dark
+surfaces and must not be recoloured, and its site icon is an emoji image rather
+than a mark.
+
+On 2026-10-17 the Product Owner decided to publish the long cut
+(`PalamedesFilm`) on the homepage, on the same trademark-risk position as the
+integration band above. The Next.js confirmation request remains outstanding.
+
 ## Preconditions for a future logo change
 
 1. Reconfirm the concrete marketing use with any maintainer who asks for it;

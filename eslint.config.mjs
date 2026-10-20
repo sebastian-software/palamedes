@@ -22,6 +22,9 @@ const generatedAndBuildIgnores = {
     "**/*.d.ts",
     "**/*.tsbuildinfo",
     "docs/example-screenshots/**",
+    // Vendored snapcn sources (MIT), kept as upstream ships them.
+    "video/src/components/snap-cn/**",
+    "video/src/lib/snap-cn-ui/**",
   ],
 };
 

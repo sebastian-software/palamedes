@@ -795,6 +795,8 @@
     "**/*.d.ts",
     "**/*.tsbuildinfo",
     "docs/example-screenshots/**",
-    "packages/core-node/src/generated/**"
+    "packages/core-node/src/generated/**",
+    "video/src/components/snap-cn/**",
+    "video/src/lib/snap-cn-ui/**"
   ]
 }
