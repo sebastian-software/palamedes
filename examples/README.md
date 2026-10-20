@@ -12,10 +12,11 @@ The matrix is a verification surface, not an assumption that one application
 uses all six frameworks. Each example is independently useful as a reference
 for its own host and locale strategy.
 
-`examples/` holds 26 apps: the 25 of the verification matrix defined in
+`examples/` holds 27 apps: the 25 of the verification matrix defined in
 [`scripts/example-matrix.mjs`](../scripts/example-matrix.mjs) — 24 server
 framework/locale-strategy combinations plus the Vite MDX proof — and the
-focused React Router RSC fixture described below, which is verified on its own.
+focused React Router RSC and Node backend fixtures described below, which are
+verified on their own.
 Every count on this page is derived from that file and enforced by
 `pnpm check:example-matrix`.
 
@@ -73,6 +74,19 @@ concurrent English/German isolation, and post-action revalidation.
 
 ```bash
 pnpm verify:react-router-rsc
+```
+
+## Focused Node Backend Proof
+
+[examples/node-backend](./node-backend) is a plain Node backend without a UI
+framework: an async booking service with `t` and `plural` macros, a localized
+CLI, and the same endpoint in Express and Hono. `vite build` with
+`@palamedes/vite-plugin` compiles the macros and bundles the catalogs,
+frameworks, and runtime into `dist/`. The tests copy `dist/` to an empty
+directory and run it with plain `node`.
+
+```bash
+pnpm test:node-backend
 ```
 
 ## Live Reference URLs

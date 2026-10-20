@@ -70,8 +70,47 @@ instance.
 
 The examples below deliberately use `getI18n()._(...)` rather than a macro.
 That is a plain Node runtime call, so no Vite, SWC, or Babel transform is needed.
-Use a macro only after configuring the corresponding transform in your server
-build.
+To use macros in a backend, build it with a bundler, as described next.
+
+## Macros In A Bundled Backend
+
+Build the backend with Vite and `@palamedes/vite-plugin`, the same plugin the UI
+adapters use. A server build compiles the macros, and
+`createViteServerI18n` from `@palamedes/vite-plugin/server` loads the active
+locale's compiled catalog for each request or CLI run:
+
+```ts
+import { palamedes } from "@palamedes/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [palamedes({ framework: "none" })],
+  ssr: { noExternal: true },
+  build: {
+    ssr: true,
+    target: "node22",
+    rolldownOptions: { input: { server: "src/server.ts" } },
+  },
+});
+```
+
+`ssr.noExternal: true` bundles the server framework and the Palamedes runtime,
+so you deploy `dist/` and run it with plain `node`. The compiler packages and PO
+catalogs stay on the build machine. Each locale's catalog becomes a lazy chunk.
+If a chunk fails to load, the request fails, and the next request tries again.
+For unbundled output, set `output.preserveModules` in `rolldownOptions`.
+
+[`examples/node-backend`](https://github.com/sebastian-software/palamedes/tree/main/examples/node-backend)
+shows Express, Hono, and a localized CLI built this way.
+
+Ways to run backend code with macros:
+
+| Setup                                | Status                                                        |
+| ------------------------------------ | ------------------------------------------------------------- |
+| Vite build                           | Supported through `@palamedes/vite-plugin`                    |
+| Standalone Rolldown                  | Not yet: the plugin relies on Vite's server environment       |
+| Direct Node or plain `tsc`           | Planned as opt-in runtime macros in a separate change (#1270) |
+| Node load hooks, `tsc` preprocessing | Not supported: they need the compiler on the runtime host     |
 
 ## Hono Example
 
