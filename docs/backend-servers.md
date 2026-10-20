@@ -77,8 +77,21 @@ runtime macros. Both are described next.
 
 Build the backend with Vite and `@palamedes/vite-plugin`, the same plugin the UI
 adapters use. A server build compiles the macros, and
-`createViteServerI18n` from `@palamedes/vite-plugin/server` loads the active
-locale's compiled catalog for each request or CLI run:
+`createBundledServerI18n` from `@palamedes/runtime/server/bundled` loads the
+active locale's compiled catalog for each request or CLI run:
+
+```ts
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
+
+const i18n = await createBundledServerI18n({ locale: "de", timeZone: "UTC" });
+```
+
+Application code depends only on `@palamedes/runtime`; the plugin, a build-time
+dependency, supplies the `virtual:palamedes/server-catalogs` module behind that
+import. Outside a Palamedes build the import fails to resolve, and an
+unsupported locale or a failed chunk rejects rather than falling back to source
+text. `createViteServerI18n` from `@palamedes/vite-plugin/server` remains as an
+alias of the same function. Configure the build:
 
 ```ts
 import { palamedes } from "@palamedes/vite-plugin";

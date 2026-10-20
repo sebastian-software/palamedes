@@ -11,8 +11,9 @@ export `locales`, `defaultLocale`, and `createNodeI18n(locale)`:
 
 - [`src/i18n.ts`](./src/i18n.ts) registers runtime macros and loads catalogs
   compiled by `pmds catalog compile --target js`. Plain `node` and `tsc` use it.
-- [`src/i18n.vite.ts`](./src/i18n.vite.ts) uses `createViteServerI18n`.
-  `vite.config.ts` aliases `./i18n.ts` to it for the bundle.
+- [`src/i18n.vite.ts`](./src/i18n.vite.ts) uses `createBundledServerI18n` from
+  `@palamedes/runtime/server/bundled`. `vite.config.ts` aliases `./i18n.ts` to
+  it for the bundle.
 
 The rest of `src/` and the PO catalogs don't depend on how the backend runs.
 
