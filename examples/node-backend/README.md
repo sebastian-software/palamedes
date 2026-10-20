@@ -5,9 +5,11 @@ compiles the `t` and `plural` macros and turns the PO catalogs into lazy
 per-locale chunks. Express, Hono, and the Palamedes runtime are bundled too, so
 `dist/` runs with plain `node` and needs no `node_modules`, sources, or catalogs.
 
-The whole build integration is [`vite.config.ts`](./vite.config.ts). Application
-code gets request-scoped i18n from `createViteServerI18n` in
-[`src/i18n.ts`](./src/i18n.ts).
+The whole build integration is [`vite.config.ts`](./vite.config.ts). The only
+build-specific source file is [`src/i18n.ts`](./src/i18n.ts): it exports
+`locales`, `defaultLocale`, and `createNodeI18n(locale)`, here backed by
+`createViteServerI18n`. The rest of `src/` and the PO catalogs don't depend on
+how the backend is built.
 
 ```sh
 pnpm --filter @palamedes/example-node-backend build
@@ -33,4 +35,7 @@ booking returns 404. If a catalog chunk can't load, the response is a generic
 500 `INTERNAL_ERROR`, and the next request retries the load.
 
 `pnpm test:node-backend` runs every scenario as a real child process against a
-copy of `dist/` in an empty temporary directory.
+copy of `dist/` in an empty temporary directory. The suite only relies on the
+output contract (`cli.mjs`, `express.mjs`, `hono.mjs`, one module per locale
+catalog), so another build path runs it with
+`NODE_BACKEND_DIST=<output dir> node --test test/backend.test.mjs`.

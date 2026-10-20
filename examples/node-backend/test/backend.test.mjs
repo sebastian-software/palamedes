@@ -8,9 +8,14 @@ import { createInterface } from "node:readline";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { loadPalamedesConfigSync } from "@palamedes/config";
 
+// The suite only depends on the build output contract: cli.mjs, express.mjs,
+// and hono.mjs, with each locale's catalog in its own module. Another build
+// path reuses it with NODE_BACKEND_DIST=<its output directory>.
 const run = promisify(execFile);
-const dist = fileURLToPath(new URL("../dist/", import.meta.url));
+const root = fileURLToPath(new URL("../", import.meta.url));
+const dist = path.resolve(root, process.env.NODE_BACKEND_DIST ?? "dist");
 const confirmed = {
   en: "Booking BK-1 is confirmed.",
   de: "Buchung BK-1 ist bestätigt.",
@@ -33,8 +38,9 @@ after(() => rm(deployed, { recursive: true, force: true }));
 
 test("the deployed bundle contains no compiler, macro, or source catalog", async () => {
   const files = await readdir(deployed, { recursive: true });
-  assert.ok(files.includes("express.mjs") && files.includes("hono.mjs"));
-  assert.ok(!files.some((file) => file.includes("node_modules") || file.endsWith(".po")));
+  for (const entry of ["cli.mjs", "express.mjs", "hono.mjs"]) assert.ok(files.includes(entry));
+  // No installed packages (they always carry a package.json) and no PO sources.
+  assert.ok(!files.some((file) => /(?:^|[\\/])package\.json$|\.po$/u.test(file)));
   for (const file of files.filter((name) => name.endsWith(".mjs"))) {
     const source = await readFile(path.join(deployed, file), "utf8");
     assert.doesNotMatch(source, /@palamedes\/(?:core-node|transform|config|core\/macro)/u, file);
@@ -56,6 +62,18 @@ async function cli(args, environment = {}) {
     return error;
   }
 }
+
+test("supported and default locales match palamedes.yaml", async () => {
+  const config = loadPalamedesConfigSync({ cwd: root });
+  const unsupported = await cli(["--locale", "zz"]);
+  assert.equal(unsupported.code, 2);
+  assert.equal(
+    unsupported.stderr.trim(),
+    `Unsupported locale "zz". Use one of: ${config.locales.join(", ")}.`,
+  );
+  const help = await cli(["--help"]);
+  assert.equal(help.stdout, (await cli(["--help", "--locale", config.sourceLocale])).stdout);
+});
 
 test("CLI follows --locale, then LC_ALL > LC_MESSAGES > LANG", async () => {
   const cases = [
@@ -200,22 +218,33 @@ for (const framework of ["express", "hono"]) {
 }
 
 for (const framework of ["express", "hono"]) {
-  test(`${framework}: a missing catalog chunk returns a generic 500 and recovers`, async (t) => {
-    const chunks = path.join(deployed, "chunks");
-    const catalog = (await readdir(chunks)).find((name) => /^es-.*\.mjs$/u.test(name));
-    assert.ok(catalog, "expected a lazy Spanish catalog chunk");
+  test(`${framework}: a missing catalog module returns a generic 500 and recovers`, async (t) => {
+    const catalog = await findSpanishCatalog();
     const server = await startServer(t, framework);
-    await rename(path.join(chunks, catalog), path.join(chunks, `${catalog}.moved`));
+    await rename(catalog, `${catalog}.moved`);
     try {
       const failed = await server.get("BK-1", "es");
       assert.equal(failed.status, 500);
       assert.deepEqual(await failed.json(), { code: "INTERNAL_ERROR" });
     } finally {
-      await rename(path.join(chunks, `${catalog}.moved`), path.join(chunks, catalog));
+      await rename(`${catalog}.moved`, catalog);
     }
     const recovered = await server.get("BK-1", "es");
     assert.equal(recovered.status, 200);
     assert.equal((await recovered.json()).message, confirmed.es);
     assert.match(server.stderr(), /ERR_MODULE_NOT_FOUND/u);
   });
+}
+
+/** The one deployed module holding Spanish messages, found by content so any build layout works. */
+async function findSpanishCatalog() {
+  const matches = [];
+  for (const file of await readdir(deployed, { recursive: true })) {
+    if (!file.endsWith(".mjs")) continue;
+    const source = await readFile(path.join(deployed, file), "utf8");
+    if (source.includes("está confirmada")) matches.push(file);
+  }
+  assert.equal(matches.length, 1, `expected one Spanish catalog module, found ${matches}`);
+  assert.ok(!["cli.mjs", "express.mjs", "hono.mjs"].includes(matches[0]), "catalog must be lazy");
+  return path.join(deployed, matches[0]);
 }

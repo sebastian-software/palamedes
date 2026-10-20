@@ -365,6 +365,9 @@ importers:
         specifier: 4.13.7
         version: 4.13.7
     devDependencies:
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../../packages/config
       '@palamedes/vite-plugin':
         specifier: workspace:^
         version: link:../../packages/vite-plugin
