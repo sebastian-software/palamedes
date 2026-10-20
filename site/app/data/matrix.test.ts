@@ -23,13 +23,13 @@ describe("public framework matrix", () => {
         { label: "open", href: `https://${framework}-cookie.examples.palamedes.dev` },
       ]);
       expect(cellFor(framework, "route").demoLinks).toEqual(
-        ["en", "de", "es"].map((locale) => ({
+        ["en", "de", "es", "fr"].map((locale) => ({
           label: locale,
           href: `https://${framework}-route.examples.palamedes.dev/${locale}`,
         })),
       );
       expect(cellFor(framework, "subdomain").demoLinks).toEqual(
-        ["en", "de", "es"].map((locale) => ({
+        ["en", "de", "es", "fr"].map((locale) => ({
           label: locale,
           href: `https://${locale}.${framework}-subdomain.examples.palamedes.dev`,
         })),

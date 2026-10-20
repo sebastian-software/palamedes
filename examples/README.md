@@ -53,7 +53,7 @@ example needs local setup notes that do not belong in the shared matrix guide.
 application rather than another locale-routing matrix row. Its three linked
 MDX pages exercise rich text, expressions, JSX components, translated
 attributes, image alt text, code metadata, catalog extraction, production
-compilation, and an in-place English/German switch.
+compilation, and an English/German/French switch that navigates between documents.
 
 Run its full build and browser contract with:
 

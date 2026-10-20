@@ -108,7 +108,7 @@ export default function Frameworks() {
       </Section>
 
       <CtaBand
-        headline="See your framework speaking three languages — right now."
+        headline="See your framework speaking four languages — right now."
         lede="The live demos are the same applications CI checks. Switch the language and watch server and client stay in step."
         primary={{ label: "Open a live demo", href: DEMO_NEXTJS_COOKIE }}
         secondary={{ label: "Get started", href: "/get-started" }}
