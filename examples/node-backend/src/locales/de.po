@@ -34,7 +34,9 @@ msgstr "Eine Buchung nachschlagen."
 
 #: examples/node-backend/src/cli.ts
 msgid "Unsupported locale \"{requested}\". Use one of: {supported}."
-msgstr "Nicht unterstützte Sprache \"{requested}\". Verwenden Sie eine von: {supported}."
+msgstr ""
+"Nicht unterstützte Sprache \"{requested}\". Verwenden Sie eine von: "
+"{supported}."
 
 #: examples/node-backend/src/booking.ts#getBooking
 msgid "Your booking costs {price} on {date}."

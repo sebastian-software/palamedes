@@ -72,3 +72,6 @@ docs/plan/
 # LICENSE-MIT and LICENSE-APACHE.
 packages/*/LICENSE-APACHE
 packages/*/LICENSE-MIT
+
+# tsc output of the unbundled runtime-macro path
+examples/node-backend/build/

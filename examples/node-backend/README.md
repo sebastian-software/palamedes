@@ -6,10 +6,15 @@ per-locale chunks. Express, Hono, and the Palamedes runtime are bundled too, so
 `dist/` runs with plain `node` and needs no `node_modules`, sources, or catalogs.
 
 The whole build integration is [`vite.config.ts`](./vite.config.ts). The only
-build-specific source file is [`src/i18n.ts`](./src/i18n.ts): it exports
-`locales`, `defaultLocale`, and `createNodeI18n(locale)`, here backed by
-`createViteServerI18n`. The rest of `src/` and the PO catalogs don't depend on
-how the backend is built.
+build-specific source files are the two variants of the i18n module. Both
+export `locales`, `defaultLocale`, and `createNodeI18n(locale)`:
+
+- [`src/i18n.ts`](./src/i18n.ts) registers runtime macros and loads catalogs
+  compiled by `pmds catalog compile --target js`. Plain `node` and `tsc` use it.
+- [`src/i18n.vite.ts`](./src/i18n.vite.ts) uses `createViteServerI18n`.
+  `vite.config.ts` aliases `./i18n.ts` to it for the bundle.
+
+The rest of `src/` and the PO catalogs don't depend on how the backend runs.
 
 ```sh
 pnpm --filter @palamedes/example-node-backend build
@@ -18,6 +23,15 @@ node examples/node-backend/dist/cli.mjs show BK-2 --locale es --json
 PORT=3000 node examples/node-backend/dist/express.mjs
 PORT=3001 node examples/node-backend/dist/hono.mjs
 curl -H 'Accept-Language: de-DE,de;q=0.9' http://127.0.0.1:3000/bookings/BK-1
+```
+
+Without a bundler:
+
+```sh
+pnpm --filter @palamedes/example-node-backend i18n  # .palamedes/macros.json and catalogs
+node examples/node-backend/src/cli.ts show BK-1 --locale de
+pnpm --filter @palamedes/example-node-backend build:tsc
+node examples/node-backend/build/express-server.js
 ```
 
 **CLI.** The locale comes from `--locale`, then the first nonempty value of
@@ -38,4 +52,7 @@ booking returns 404. If a catalog chunk can't load, the response is a generic
 copy of `dist/` in an empty temporary directory. The suite only relies on the
 output contract (`cli.mjs`, `express.mjs`, `hono.mjs`, one module per locale
 catalog), so another build path runs it with
-`NODE_BACKEND_DIST=<output dir> node --test test/backend.test.mjs`.
+`NODE_BACKEND_DIST=<output dir> node --test test/backend.test.mjs`. The
+unbundled runs set `NODE_BACKEND_ENTRIES` through `test/type-stripping.env` and
+`test/tsc.env`; they run in place against the installed packages and skip the
+bundle-only check that `dist/` needs no `node_modules`.
