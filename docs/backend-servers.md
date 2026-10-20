@@ -119,14 +119,42 @@ shows Express, Hono, and a localized CLI built this way. The same application
 code also runs without a bundler; see
 [One Setup For Every Build](#one-setup-for-every-build).
 
+### tsdown
+
+[tsdown](https://tsdown.dev) runs the same plugin on Rolldown, without Vite.
+There is no Vite environment to say the build targets a server, so set
+`environment: "server"`:
+
+```ts
+import { palamedes } from "@palamedes/vite-plugin";
+import { defineConfig } from "tsdown";
+
+export default defineConfig({
+  entry: { server: "src/server.ts" },
+  platform: "node",
+  target: "node22",
+  plugins: [palamedes({ framework: "none", environment: "server" })],
+  deps: { alwaysBundle: [/./u], onlyBundle: false },
+});
+```
+
+`deps.alwaysBundle` plays the role of `ssr.noExternal: true`. The option is
+what tells the plugin it is building a server: it then loads
+`virtual:palamedes/server-catalogs` and resolves `@palamedes/runtime/node` to
+the bundled catalog store. Without it, the plugin treats the build as a browser
+build: the bundle silently keeps the runtime-macro path of
+`@palamedes/runtime/node`, and a direct `virtual:palamedes/server-catalogs`
+import fails.
+
 Ways to run backend code with macros:
 
-| Setup                                | Status                                                    |
-| ------------------------------------ | --------------------------------------------------------- |
-| Vite build                           | Supported through `@palamedes/vite-plugin`                |
-| Standalone Rolldown                  | Not yet: the plugin relies on Vite's server environment   |
-| Direct Node or plain `tsc`           | Supported through runtime macros and precompiled catalogs |
-| Node load hooks, `tsc` preprocessing | Not supported: they need the compiler on the runtime host |
+| Setup                                | Status                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| Vite build                           | Supported through `@palamedes/vite-plugin`                              |
+| tsdown                               | Supported through `@palamedes/vite-plugin` with `environment: "server"` |
+| Standalone Rolldown                  | Builds with `environment: "server"`; not covered by the example suite   |
+| Direct Node or plain `tsc`           | Supported through runtime macros and precompiled catalogs               |
+| Node load hooks, `tsc` preprocessing | Not supported: they need the compiler on the runtime host               |
 
 ## Macros Without A Bundler
 
@@ -196,10 +224,11 @@ bundle then contains no runtime-macro code, and `generated` is ignored. Call
 a fresh instance.
 
 In `examples/node-backend`, `src/i18n.ts` is this module and needs no build
-configuration beyond `palamedes({ framework: "none" })`. The booking service,
+configuration beyond `palamedes({ framework: "none" })`, plus
+`environment: "server"` under tsdown. The booking service,
 CLI, Express, and Hono code doesn't depend on the build, and one test suite
-runs against the Vite bundle, plain `node` type stripping, and plain `tsc`
-output.
+runs against the Vite bundle, the tsdown bundle, plain `node` type stripping,
+and plain `tsc` output.
 
 ## Hono Example
 

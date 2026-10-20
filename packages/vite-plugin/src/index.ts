@@ -327,6 +327,15 @@ export type PalamedesPluginOptions = {
    * Legacy enabled forms use active-locale delivery. `false` is rejected.
    */
   experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
+
+  /**
+   * Build target of every module this plugin sees. `"auto"` reads the Vite
+   * environment (or `build.ssr` on Vite 5 and older). Set `"server"` for
+   * bundlers without Vite environments, such as tsdown or Rolldown building a
+   * Node backend; there every build would otherwise count as a browser build.
+   * @default "auto"
+   */
+  environment?: "auto" | "server";
 };
 
 /**
@@ -344,9 +353,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     keepSourceFallbacks,
     mdx: mdxOverride,
     experimentalGraphSplitting,
+    environment = "auto",
     ...configLoaderOptions
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
+  if (environment !== "auto" && environment !== "server") {
+    throw new Error(
+      `Palamedes environment must be "auto" or "server", received ${JSON.stringify(environment)}.`,
+    );
+  }
+  const isServer = (context: unknown, ssr = false, legacy = false) =>
+    environment === "server" || isServerEnvironment(context, ssr, legacy);
   const transformIncludes = include == null ? [] : Array.isArray(include) ? include : [include];
   if (experimentalGraphSplitting === false) {
     throw new Error(
@@ -920,7 +937,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const locales = cfg.locales;
 
         if (locale === undefined) {
-          const ssr = isServerEnvironment(this, loadOptions?.ssr === true);
+          const ssr = isServer(this, loadOptions?.ssr === true);
 
           if (ssr) return { code: "export {};", map: null, moduleSideEffects: false };
 
@@ -977,7 +994,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       async generateBundle(_options, bundle) {
         if (
           !importMapBinding ||
-          isServerEnvironment(this, false, legacyBuildSsr) ||
+          isServer(this, false, legacyBuildSsr) ||
           sidecarModules.size === 0
         ) {
           return;
@@ -1142,7 +1159,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre",
     resolveId(id, importer, resolveOptions) {
       if (id !== NODE_I18N) return null;
-      if (!isServerEnvironment(this, resolveOptions?.ssr === true, legacyBuildSsr)) return null;
+      if (!isServer(this, resolveOptions?.ssr === true, legacyBuildSsr)) return null;
       return this.resolve(BUNDLED_NODE_I18N, importer, { skipSelf: true });
     },
   });
@@ -1155,7 +1172,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
     async load(id, loadOptions) {
       if (id !== RESOLVED_SERVER_CATALOGS) return null;
-      if (!isServerEnvironment(this, loadOptions?.ssr === true, legacyBuildSsr)) {
+      if (!isServer(this, loadOptions?.ssr === true, legacyBuildSsr)) {
         this.error(
           "virtual:palamedes/server-catalogs is server-only and cannot be loaded in a browser build.",
         );
