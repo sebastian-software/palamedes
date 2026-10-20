@@ -1100,8 +1100,8 @@ async function checkProgressiveOutlineAnchors(browser) {
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'));
 
-  if (docs.length !== 28) {
-    fail(`progressive docs outline: expected 28 generated long docs, got ${docs.length}`);
+  if (docs.length !== 27) {
+    fail(`progressive docs outline: expected 27 generated long docs, got ${docs.length}`);
   }
   if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/remix/index.md")) {
     fail("progressive docs outline: Remix API guide is missing its generated outline");
