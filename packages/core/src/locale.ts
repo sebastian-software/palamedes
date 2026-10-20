@@ -467,10 +467,9 @@ export type LocaleControls<TLocale extends string> = {
   serializeChoice(locale: TLocale): string;
 
   /**
-   * Decide whether to suggest another locale. Prefers a recorded choice over
-   * the raw Accept-Language, so a deliberate decision silences the hint while
-   * an unintended landing still gets informed once. Host mismatches are
-   * independent of intent.
+   * Suggest the browser's Accept-Language locale unless a recorded choice
+   * confirms the current locale. Earlier choices for another locale do not
+   * change the browser preference. Host mismatches are independent of intent.
    */
   suggest(options: {
     currentLocale: TLocale;
@@ -793,8 +792,8 @@ export function defineLocaleControls<TLocale extends string>(
     }
 
     const choice = readChoice(options.cookieHeader);
-    const preferred = choice ?? preferredLocale(options.acceptLanguageHeader);
-    if (preferred === options.currentLocale) {
+    const preferred = preferredLocale(options.acceptLanguageHeader);
+    if (choice === options.currentLocale || preferred === options.currentLocale) {
       return null;
     }
 

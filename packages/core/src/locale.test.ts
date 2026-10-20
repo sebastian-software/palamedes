@@ -163,6 +163,47 @@ describe("locale controls", () => {
     ).toBeNull();
   });
 
+  it.each(["es", "fr"])(
+    "does not report a previous %s choice as the browser preference",
+    (choice) => {
+      const preferenceControls = defineLocaleControls({
+        locales: ["en", "de", "es", "fr"] as const,
+        defaultLocale: "en",
+      });
+      expect(
+        preferenceControls.suggest({
+          acceptLanguageHeader: "de-DE,de;q=0.9,en;q=0.8",
+          cookieHeader: `locale-choice=${choice}`,
+          currentLocale: "de",
+          pathname: "/de",
+        }),
+      ).toBeNull();
+      const suggestion = preferenceControls.suggest({
+        acceptLanguageHeader: "de-DE,de;q=0.9,en;q=0.8",
+        cookieHeader: `locale-choice=${choice}`,
+        currentLocale: "en",
+        pathname: "/en",
+      });
+      expect(suggestion?.recommendedLocale).toBe("de");
+      expect(suggestion?.reason).toBe("accept-language");
+      expect(suggestion?.description).toBe(
+        "You prefer Deutsch, but this page is currently rendering English.",
+      );
+    },
+  );
+
+  it("keeps host mismatches independent of a deliberate locale choice", () => {
+    expect(
+      hosted.suggest({
+        acceptLanguageHeader: "en",
+        cookieHeader: "locale-choice=en",
+        currentLocale: "en",
+        pathname: "/en",
+        requestHost: "de.lvh.me:4100",
+      })?.reason,
+    ).toBe("host");
+  });
+
   it("builds headless switch items", () => {
     const items = controls.switchItems({ currentLocale: "de" });
     expect(items.map((item) => item.locale)).toStrictEqual(["en", "de", "es"]);
