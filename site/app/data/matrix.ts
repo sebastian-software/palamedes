@@ -69,7 +69,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     verified: true as const,
     status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
     demoLinks: HOSTED_FRAMEWORKS.has(framework)
-      ? ["en", "de", "es"].map((locale) => ({
+      ? ["en", "de", "es", "fr"].map((locale) => ({
           label: locale,
           href: `https://${framework}-route.examples.palamedes.dev/${locale}`,
         }))
@@ -82,7 +82,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     verified: true as const,
     status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
     demoLinks: HOSTED_FRAMEWORKS.has(framework)
-      ? ["en", "de", "es"].map((locale) => ({
+      ? ["en", "de", "es", "fr"].map((locale) => ({
           label: locale,
           href: `https://${locale}.${framework}-subdomain.examples.palamedes.dev`,
         }))

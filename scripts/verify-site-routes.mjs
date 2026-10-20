@@ -334,9 +334,9 @@ async function checkRoutes(context, label, { expectHydration }) {
       const linkCounts = await cells.evaluateAll((entries) =>
         entries.map((cell) => cell.querySelectorAll('a[href^="https://"]').length),
       );
-      if (JSON.stringify(linkCounts) !== JSON.stringify([1, 3, 3, 4])) {
+      if (JSON.stringify(linkCounts) !== JSON.stringify([1, 4, 4, 4])) {
         fail(
-          `${label} /frameworks: Remix must expose all four demos and eleven locale links, got ${JSON.stringify(linkCounts)}`,
+          `${label} /frameworks: Remix must expose all four demos and thirteen locale links, got ${JSON.stringify(linkCounts)}`,
         );
       }
       if ((await remixRow.getByText(/host pending/u).count()) !== 0) {

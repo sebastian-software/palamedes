@@ -1,10 +1,9 @@
 # Shared Bunny Demo Rollout
 
 All 25 matrix examples now run in one Bunny Magic Containers app. The final
-image passed all 25 hosted browser/document contracts and all 55 public hostname
+image passed all 25 hosted browser/document contracts and all 61 public hostname
 checks on October 20, 2026. [Demo Deployments](./demo-deployments.md) records the
-immutable image, source revision, workflow evidence, and live URLs. The remaining
-public-site acceptance is tracked in [#1261](https://github.com/sebastian-software/palamedes/issues/1261).
+immutable image, source revision, workflow evidence, and live URLs. Rollout history is recorded in [#1261](https://github.com/sebastian-software/palamedes/issues/1261).
 
 ## Provisioned configuration
 
@@ -16,7 +15,7 @@ public-site acceptance is tracked in [#1261](https://github.com/sebastian-softwa
   24 failures at five-second intervals with a five-second timeout. Readiness
   starts after ten seconds; liveness starts after 120 seconds with five allowed
   failures at 30-second intervals. Both cold image rollouts reached active.
-- All 55 custom hosts have TLS and forced HTTPS. Explicit CNAMEs point to their
+- All 61 custom hosts have TLS and forced HTTPS. Explicit CNAMEs point to their
   matching endpoints; old wildcards, unrelated DNS, and the old server remain.
 - Every endpoint preserves the original Host, forwards cookies, and bypasses
   CDN caching (`CacheControlMaxAgeOverride=0`,
@@ -75,7 +74,7 @@ bootstrap. Browser verification uses `America/Los_Angeles` so matching local hos
 zones cannot hide date/time hydration errors.
 
 `node scripts/print-demo-deployment.mjs` emits the complete deployment inventory:
-25 endpoint names and ports, 55 hostnames, canonical HTTPS entry origins, and the
+25 endpoint names and ports, 61 hostnames, canonical HTTPS entry origins, and the
 internal health port. `scripts/example-matrix.mjs` owns identities and ports;
 `scripts/demo-deployment.mjs` owns the intended domain mapping. This inventory is
 input for provisioning, not an automatic Bunny/DNS mutation.
@@ -91,7 +90,7 @@ input for provisioning, not an automatic Bunny/DNS mutation.
 
 Vite MDX uses 4070 and the intended new hostname
 `vite-mdx.examples.palamedes.dev`. Each family has one cookie hostname, one route
-hostname, three subdomain locale hosts, and four TLD hosts. Preserve the existing
+hostname, four subdomain locale hosts, and four TLD hosts. Preserve the existing
 public URL shapes; do not redirect them to provider-generated origins.
 
 ## Reprovisioning prerequisites
@@ -100,7 +99,7 @@ public URL shapes; do not redirect them to provider-generated origins.
    publishing run URL, and immutable `sha256:` digest from its summary. Do not
    deploy a branch dry run or infer image identity from `latest`.
 2. Confirm account billing, regular runtime limits, Frankfurt availability, and
-   that 25 CDN endpoints with 55 custom hosts fit the account's configuration.
+   that 25 CDN endpoints with 61 custom hosts fit the account's configuration.
    If they do not, stop and revise the endpoint topology before provisioning.
 3. Export the current DNS record values and TTLs for all affected zones and
    verify the existing server can still serve the five current framework
@@ -237,7 +236,7 @@ and tests, framework pages, example documentation, and README sources together;
 regenerate managed outputs. Other frameworks keep their existing public links.
 
 Before calling the full migration complete, require all 25 hosted contracts,
-all 55 hostname/TLS checks, successful recovery and rollback rehearsal, no locale
+all 61 hostname/TLS checks, successful recovery and rollback rehearsal, no locale
 cache leakage, and a stable first-day resource/billing observation. Keep the
 public matrix unchanged until its own hosted evidence passes.
 
