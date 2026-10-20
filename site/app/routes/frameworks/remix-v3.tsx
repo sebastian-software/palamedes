@@ -4,14 +4,14 @@ import { docsHref, NPM, repoHref } from "~/data/links";
 import { frameworkMeta } from "~/lib/meta";
 
 const page: FrameworkLanding = {
-  name: "Remix v3",
+  name: "Remix",
   path: "/frameworks/remix-v3",
-  eyebrow: "Remix v3 i18n · Server and browser",
-  metaTitle: "Full-stack Remix v3 i18n | Palamedes",
+  eyebrow: "Remix i18n · Server and browser",
+  metaTitle: "Full-stack Remix i18n | Palamedes",
   metaDescription:
-    "Add full-stack i18n to Remix v3 with server and browser macro transforms, request-local catalogs, rich Remix messages, and document-safe client bootstrap.",
-  headline: "Remix v3 i18n, from the request to the browser.",
-  lede: "The new Remix v3 is not React Router Framework Mode and it is not a React framework. Palamedes composes with its Node TypeScript loader, browser asset server, Fetch request model, and Remix component runtime so one locale reaches SSR, Frames, hydration, and interaction.",
+    "Add full-stack i18n to Remix with server and browser macro transforms, request-local catalogs, rich Remix messages, and document-safe client bootstrap.",
+  headline: "Remix i18n, from the request to the browser.",
+  lede: "The new Remix is not React Router Framework Mode and it is not a React framework. Palamedes composes with its Node TypeScript loader, browser asset server, Fetch request model, and Remix component runtime so one locale reaches SSR, Frames, hydration, and interaction.",
   primary: {
     label: "Open the live cookie demo",
     href: "https://remix-cookie.examples.palamedes.dev",
@@ -43,7 +43,7 @@ const page: FrameworkLanding = {
     },
   ],
   problem: {
-    title: "Remix v3 splits full-stack compilation across two post-compile loaders.",
+    title: "Remix splits full-stack compilation across two post-compile loaders.",
     lede: "Server TypeScript flows through Node while browser modules flow through the asset server. A complete integration must transform both outputs, keep request state isolated, and install the matching catalog before translated client code runs.",
     points: [
       "A transform hook must run after remix/node-tsx without allowing uncompiled macro stubs to reach runtime.",
@@ -116,7 +116,7 @@ const assets = createAssetServer({
   },
   proof: {
     title: "Four complete server and browser proofs.",
-    lede: "Remix v3 remains separate from React Router Framework Mode. CI starts all four locale-strategy servers and runs Chromium against every strategy with SSR, hydration, rich messages, interaction, and locale navigation.",
+    lede: "Remix remains separate from React Router Framework Mode. CI starts all four locale-strategy servers and runs Chromium against every strategy with SSR, hydration, rich messages, interaction, and locale navigation.",
     facts: [
       {
         label: "Transforms",
@@ -144,25 +144,25 @@ const assets = createAssetServer({
     title: "The browser locale is document-scoped; the adapter remains Preview.",
     body: "Locale changes intentionally perform a full document navigation; reactive same-document catalog replacement and browser PO imports are not supported. The Node integration requires Node.js 24.3 or newer. All four public HTTPS demos pass locale, hydration, Frames, interaction, and catalog recovery checks. The adapter remains Preview for the exact tested Remix 3.0.0 contract; hosting completion does not broaden that version contract.",
     link: {
-      label: "Read the Remix v3 package scope",
+      label: "Read the Remix package scope",
       href: docsHref("api/remix"),
     },
   },
   faq: [
     {
-      q: "Is Remix v3 the same thing as React Router Framework Mode?",
-      a: "No. React Router Framework Mode remains a React framework with a Vite plugin, route modules, loaders, and actions. Remix v3 is a separate server-first full-stack project with its own packages, router, loaders, UI direction, and runtime model.",
+      q: "Is Remix the same thing as React Router Framework Mode?",
+      a: "No. React Router Framework Mode remains a React framework with a Vite plugin, route modules, loaders, and actions. Remix is a separate server-first full-stack project with its own packages, router, loaders, UI direction, and runtime model.",
     },
     {
-      q: "Does Palamedes support Remix v3 without React?",
+      q: "Does Palamedes support Remix without React?",
       a: "Yes. The integration uses Remix components rather than React. It transforms ordinary core macros plus Remix-native Trans, Plural, Select, and SelectOrdinal components in server and browser modules.",
     },
     {
-      q: "Can Remix v3 browser modules use Palamedes macros?",
+      q: "Can Remix browser modules use Palamedes macros?",
       a: "Yes. Share one createPalamedesRemixCatalogAssetRegistry() between the server and asset loader, allow PALAMEDES_REMIX_ASSET_PACKAGES, and render the adapter's client entry. It loads active-locale fragments before translated modules run; browser PO imports remain unsupported.",
     },
     {
-      q: "Is Remix v3 support production-ready?",
+      q: "Is Remix support production-ready?",
       a: "Treat it as a preview integration for the exact tested Remix 3.0.0 contract. All four strategies are verified in CI and on public HTTPS hosts, including Chromium interaction, Frames, and recovery. The adapter remains Preview for that exact upstream contract.",
     },
   ],

@@ -1,11 +1,11 @@
 export const HOME_FAQ = [
   {
     q: "Is Palamedes ready for production use?",
-    a: "The registry currently ships 1.x. The 2.0 implementation is available in the repository while its publication is on hold — try it through the checked examples and release notes. Stable APIs follow SemVer; Waku, Remix v3, and React Router RSC keep Preview contracts. The stability guide lists exactly what each path guarantees.",
+    a: "The registry currently ships 1.x. The 2.0 implementation is available in the repository while its publication is on hold — try it through the checked examples and release notes. Stable APIs follow SemVer; Waku, Remix, and React Router RSC keep Preview contracts. The stability guide lists exactly what each path guarantees.",
   },
   {
     q: "Which frameworks does Palamedes support?",
-    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite. Waku, Remix v3, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
+    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite. Waku, Remix, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
   },
   {
     q: "Can I translate a Rust CLI with Palamedes?",

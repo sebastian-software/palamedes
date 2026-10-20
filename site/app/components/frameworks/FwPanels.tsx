@@ -51,7 +51,7 @@ const PANELS: FwPanel[] = [
     body: "Framework-mode React Router with loaders and actions. The classic SPA-plus-SSR shape, same catalogs, same runtime.",
   },
   {
-    name: "Remix v3",
+    name: "Remix",
     slug: "remix",
     matrixSlug: "remix",
     sourcePath: "examples/remix-cookie",
