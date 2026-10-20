@@ -36,10 +36,10 @@ try {
         entry.strategy === "client"
           ? [null]
           : entry.strategy === "cookie"
-            ? ["de", "en", "de"]
+            ? ["de", "en", "fr", "de"]
             : entry.strategy === "tld"
               ? ["en", "de", "es", "fr", "en"]
-              : ["en", "de", "es", "en"];
+              : ["en", "de", "es", "fr", "en"];
       for (const locale of locales) {
         const url = new URL(entry.origin);
         if (entry.strategy === "route") url.pathname = `/${locale}`;

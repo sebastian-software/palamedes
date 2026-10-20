@@ -75,6 +75,12 @@ async function context({ disabled = false, blocked = false, local = false } = {}
   return { instance, page, requests: () => sdkRequests };
 }
 
+async function closeContext(instance) {
+  // Finish fixture proxy responses before context shutdown disposes them.
+  await instance.unrouteAll({ behavior: "wait" });
+  await instance.close();
+}
+
 async function events(page, name) {
   return page.evaluate(
     (eventName) => (window.__events ?? []).filter((event) => event.name === eventName),
@@ -206,7 +212,7 @@ try {
   await demo.getByRole("link", { name: "Français" }).click();
   await demo.getByRole("button", { name: "Billing", exact: true }).click();
   assert.equal((await events(page, "demo_interaction")).at(-1).properties.locale, "fr");
-  await active.instance.close();
+  await closeContext(active.instance);
 
   for (const options of [{ disabled: true }, { local: true }, { blocked: true }]) {
     const fixture = await context(options);
@@ -217,12 +223,13 @@ try {
       .getByText("Player protocol fixture")
       .waitFor();
     assert.equal(fixture.requests(), options.blocked ? 1 : 0);
-    await fixture.instance.close();
+    await closeContext(fixture.instance);
   }
   console.log(
     "Site analytics: semantic events, SPA listener cleanup, iframe events, video deduplication, opt-out, local exclusion, and blocked SDK verified with an isolated sink.",
   );
 } finally {
+  for (const instance of browser.contexts()) await closeContext(instance);
   await browser.close();
   await server.close();
 }
