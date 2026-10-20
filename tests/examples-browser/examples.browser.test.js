@@ -1033,3 +1033,36 @@ test("French documents preserve translated UI, interaction, and reloads", async 
   expect(await page.locator("html").getAttribute("lang")).toBe("fr");
   expect(errors).toEqual([]);
 });
+
+test.runIf(["route", "subdomain", "tld"].includes(activeExample().strategy))(
+  "browser language stays independent of repeated locale choices",
+  async () => {
+    const example = activeExample();
+    const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
+      browserLocale: "de-DE",
+    });
+    await page.goto(germanDocumentUrl(example), { waitUntil: "domcontentloaded" });
+    await waitForClientReady(page);
+    for (const locale of ["fr", "de", "es", "de"]) {
+      const [response] = await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        page.getByTestId(`locale-switch-${locale}`).click({ noWaitAfter: true }),
+      ]);
+      await waitForClientReady(page);
+      expect(response?.status()).toBe(200);
+      expect((await response.request().allHeaders())["accept-language"]).toMatch(/^de(?:-|,|$)/u);
+      expect(await page.evaluate(() => navigator.language)).toBe("de-DE");
+      expect(await page.locator("html").getAttribute("lang")).toBe(locale);
+      const notice = (await page.locator(".notice").allTextContents()).join(" ");
+      if (locale === "de") {
+        expect(notice).toBe("");
+      } else if (notice) {
+        expect(notice).toContain("You prefer Deutsch");
+      }
+    }
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForClientReady(page);
+    expect(await page.locator("html").getAttribute("lang")).toBe("de");
+    expect(await page.locator(".notice").allTextContents()).toEqual([]);
+  },
+);

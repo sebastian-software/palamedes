@@ -185,6 +185,10 @@ matrix and reusable in apps:
   errors. Cookie names, protocols, configured hosts, and TLD labels are
   validated; locale identifiers must be DNS-safe only for the host-based
   `subdomain` and `tld` strategies.
+  `suggest()` derives browser-language hints from `Accept-Language`. A recorded
+  choice matching the current locale suppresses the hint. An earlier choice for
+  a different locale never replaces the browser preference; host mismatches
+  remain independent of that choice.
 - `createChoiceHandoffUrl({ url, locale, currentOrigin, parameterName? })`:
   adds the selected locale to a cross-origin URL using the
   `__palamedes_locale_choice` query parameter by default and returns an absolute
