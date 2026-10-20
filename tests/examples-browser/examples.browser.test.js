@@ -108,6 +108,8 @@ async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorL
   const context = await browser.newContext({
     colorScheme: "light",
     locale: browserLocale,
+    // Keep the browser away from both the UTC CI host and the Berlin event.
+    timezoneId: "America/Los_Angeles",
     viewport: {
       width: 1440,
       height: 1200,
@@ -777,7 +779,10 @@ test("matrix example browser contract", async () => {
         .poll(() => page.getByTestId("server-proof-default-parameter").textContent())
         .toBe("Parameterstandard bestätigte Sprache.");
 
-      const englishContext = await browser.newContext({ locale: "en-US" });
+      const englishContext = await browser.newContext({
+        locale: "en-US",
+        timezoneId: "America/Los_Angeles",
+      });
       const englishPage = await englishContext.newPage();
       await englishPage.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" });
       await waitForClientReady(englishPage);

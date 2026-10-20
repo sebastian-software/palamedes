@@ -9,7 +9,7 @@ export default function Root({ children }: { children: ReactNode }) {
   const locale = normalizeLocale(pathname.split("/").filter(Boolean)[0]);
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
       <head>
         <meta charSet="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />

@@ -6,7 +6,7 @@ export const serverI18nScope =
   createServerI18nScope<Awaited<ReturnType<typeof createViteServerI18n>>>();
 
 export async function createServerI18n(locale: Locale) {
-  return createViteServerI18n({ locale });
+  return createViteServerI18n({ locale, timeZone: "Europe/Berlin" });
 }
 
 export async function activateServerI18n(locale: Locale) {
