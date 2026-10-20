@@ -1,11 +1,36 @@
 # Shared Bunny Demo Rollout
 
-This runbook prepares all 25 matrix examples for one Bunny Magic Containers app.
-It does not claim that the app, DNS records, or final HTTPS proofs already exist.
-The Remix acceptance issue is [#1261](https://github.com/sebastian-software/palamedes/issues/1261).
-The publishing prerequisite is [#1283](https://github.com/sebastian-software/palamedes/pull/1283).
+All 25 matrix examples now run in one Bunny Magic Containers app. The final
+image passed all 25 hosted browser/document contracts and all 55 public hostname
+checks on October 20, 2026. [Demo Deployments](./demo-deployments.md) records the
+immutable image, source revision, workflow evidence, and live URLs. The remaining
+public-site acceptance is tracked in [#1261](https://github.com/sebastian-software/palamedes/issues/1261).
 
-## Target and cost evidence
+## Provisioned configuration
+
+- App `palamedes-demos` (`5DAx1z3T6GFLvSa`), container `palamedes-examples`,
+  one Frankfurt (`DE`) region, static provisioning, replicas fixed at 1.
+- Regular runtime limits; no persistent volumes or Anycast IP. Exactly 25 HTTP
+  CDN endpoints forward the fixed backend ports below. Port 4080 stays private.
+- Startup, readiness, and liveness use HTTP GET `:4080/ready`. Startup allows
+  24 failures at five-second intervals with a five-second timeout. Readiness
+  starts after ten seconds; liveness starts after 120 seconds with five allowed
+  failures at 30-second intervals. Both cold image rollouts reached active.
+- All 55 custom hosts have TLS and forced HTTPS. Explicit CNAMEs point to their
+  matching endpoints; old wildcards, unrelated DNS, and the old server remain.
+- Every endpoint preserves the original Host, forwards cookies, and bypasses
+  CDN caching (`CacheControlMaxAgeOverride=0`,
+  `CacheControlPublicMaxAgeOverride=-1`, `DisableCookies=false`).
+- GitHub environment `bunny-demos` is restricted to `main` with a deployment
+  reviewer. Its app/container variables and organization secret `BUNNY_API_KEY`
+  are configured and were exercised by the successful deployment workflow.
+
+The rollout and public functional checks are complete. First-day/week resource,
+restart, and billing observation remains open. Keep the old server available
+until operational acceptance and recovery verification; do not treat a short
+successful rollout as a long-term stability measurement.
+
+## Capacity and cost evidence
 
 Use one app named `palamedes-demos`, one Frankfurt region, and minimum and maximum
 replicas both set to 1. Leave `PALAMEDES_EXAMPLES` unset to start all 25 servers.
@@ -18,8 +43,8 @@ ran the production source from `62cf1e9a`, with all 25 servers in one Linux amd6
 container. All 25 browser contracts and 248 smoke requests passed. Warm idle RAM
 was 3.466 GiB, raw cgroup peak 3.982 GiB, and idle CPU averaged 0.000158 cores.
 There was no swap or OOM event. This was an eight-minute diagnostic run, not a
-long-term or Bunny billing measurement; the readiness changes require a fresh
-runtime check before deployment.
+long-term or Bunny billing measurement. The live image's readiness and full
+public browser checks have since passed; billed usage still needs observation.
 
 At Bunny's published RAM and CPU rates, that idle footprint estimates $13.02 per
 31 days; adding 1 GiB of assumed RAM reserve gives $16.74. Use $20 plus traffic as
@@ -69,7 +94,7 @@ Vite MDX uses 4070 and the intended new hostname
 hostname, three subdomain locale hosts, and four TLD hosts. Preserve the existing
 public URL shapes; do not redirect them to provider-generated origins.
 
-## Provisioning prerequisites
+## Reprovisioning prerequisites
 
 1. Merge the reviewed preparation, publish from `main`, and retain the Git SHA,
    publishing run URL, and immutable `sha256:` digest from its summary. Do not
@@ -161,8 +186,8 @@ route authority, browser negotiation, switching, and reloads remain tested.
 
 ## Controlled image updates
 
-Create a GitHub environment named `bunny-demos`, restrict it to `main`, and
-configure a deployment reviewer. Add:
+The existing GitHub environment `bunny-demos` restricts updates to `main` and
+requires a deployment reviewer. When reprovisioning, configure:
 
 - Organization secret `BUNNY_API_KEY`, with access granted to this repository.
   The deploy job maps it to the script's `BUNNYNET_API_KEY` environment variable;
@@ -216,8 +241,16 @@ all 55 hostname/TLS checks, successful recovery and rollback rehearsal, no local
 cache leakage, and a stable first-day resource/billing observation. Keep the
 public matrix unchanged until its own hosted evidence passes.
 
-Still external: app provisioning, account/budget authorization, environment
-credentials, custom host/TLS/cache settings, DNS changes, and live acceptance.
-Existing Helium access can cover the Bunny UI setup; old server access is needed
-only for recovery verification or subsequent route retirement. This preparation
-neither enables package publication nor retires the old server.
+Provisioning, deployment credentials, custom host/TLS/cache settings, DNS
+migration, and the first full live functional acceptance are complete. No
+additional account access is needed for controlled image updates. Still open:
+
+- Observe actual RAM, CPU, traffic, billing, and restart behavior after the first
+  day and week. The initial $20 plus traffic estimate remains a planning budget.
+- Retain a durable `verify-hosts` workflow receipt with the acceptance record;
+  publish the matching documentation and check deployed matrix navigation before
+  closing #1261.
+- Verify recovery and the observation window before retiring legacy routes.
+  Old server access is needed only for that later retirement or legacy recovery.
+
+This rollout neither enables package publication nor retires the old server.

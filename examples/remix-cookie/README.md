@@ -19,4 +19,4 @@ pnpm verify:examples:browser -- --id remix-cookie
 
 The browser contract covers supported locales, interaction, locale switches,
 reloads, document and standalone Frames, and catalog failure recovery under CSP.
-Public hosting remains pending; see [deployment verification](../../docs/demo-deployments.md).
+[Open the live HTTPS demo](https://remix-cookie.examples.palamedes.dev); see [deployment evidence](../../docs/demo-deployments.md).

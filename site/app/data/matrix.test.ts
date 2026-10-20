@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { cellFor, FRAMEWORKS, STRATEGIES } from "./matrix";
 
-const PUBLIC_FRAMEWORKS = ["nextjs", "tanstack", "solid", "waku", "react-router"];
+const PUBLIC_FRAMEWORKS = ["nextjs", "tanstack", "solid", "waku", "react-router", "remix"];
 const TLD_LINKS = [
   ["en", "com"],
   ["de", "de"],
@@ -11,7 +11,7 @@ const TLD_LINKS = [
 ] as const;
 
 describe("public framework matrix", () => {
-  it("publishes exactly five live framework families across every strategy", () => {
+  it("publishes exactly six live framework families across every strategy", () => {
     const liveFrameworks = FRAMEWORKS.filter(({ slug: framework }) =>
       STRATEGIES.every(({ slug: strategy }) => cellFor(framework, strategy).status === "live"),
     ).map(({ slug }) => slug);
@@ -43,17 +43,13 @@ describe("public framework matrix", () => {
     }
   });
 
-  it("keeps Remix as a source-only proof surface", () => {
-    expect(FRAMEWORKS.map(({ slug }) => slug)).toContain("remix");
-
-    for (const { slug: strategy } of STRATEGIES) {
-      const cell = cellFor("remix", strategy);
-
-      expect(cell.status).toBe("provisioning");
-      expect(cell.demoLinks).toBeUndefined();
-      expect(cell.sourceHref).toBe(
-        `https://github.com/sebastian-software/palamedes/tree/main/examples/remix-${strategy}`,
-      );
+  it("keeps source links alongside every live demo", () => {
+    for (const { slug: framework } of FRAMEWORKS) {
+      for (const { slug: strategy } of STRATEGIES) {
+        expect(cellFor(framework, strategy).sourceHref).toBe(
+          `https://github.com/sebastian-software/palamedes/tree/main/examples/${framework}-${strategy}`,
+        );
+      }
     }
   });
 });

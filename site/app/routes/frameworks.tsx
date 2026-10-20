@@ -48,15 +48,14 @@ export default function Frameworks() {
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
           All {contentStats.smokeExampleCount} apps are smoke-checked on relevant pull requests and
-          main pushes. The {contentStats.browserExampleCount} browser-capable examples — the{" "}
-          {contentStats.screenshotExampleCount} established UI-adapter matrix apps plus the Vite MDX
-          proof — cover SSR output, locale switching, and localized server actions or functions in
-          weekly or manual Playwright runs; the four Remix v3 apps cover server responses and locale
-          handling through smoke checks. Versioned screenshots cover the{" "}
-          {contentStats.screenshotExampleCount} UI-adapter examples; Vite has no capture artifact.
-          Cookie, route, subdomain, and TLD demos are publicly hosted for all five browser-verified
-          framework families. Every Remix v3 host remains a source-only proof surface and is still
-          provisioning. Hosting status is documented in the repo&apos;s demo-deployments guide.
+          main pushes. All {contentStats.browserExampleCount} apps have Playwright browser
+          contracts, including the four full-stack Remix v3 strategies and the Vite MDX example. The
+          server examples cover SSR, locale switching, and localized server actions or functions;
+          Remix also verifies Frames and catalog recovery. Versioned screenshots cover the{" "}
+          {contentStats.screenshotExampleCount} established UI-adapter examples; Remix and Vite have
+          no capture artifacts. All six framework families have live cookie, route, subdomain, and
+          TLD demos. The separate Vite MDX demo is also live. Hosting evidence is documented in the
+          repo&apos;s demo-deployments guide.
         </p>
       </Section>
 

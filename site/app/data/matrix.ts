@@ -6,8 +6,8 @@ import { repoHref } from "./links";
  * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
  * route (locale path), subdomain (locale host label), tld
  * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
- * all five hosted frameworks. Remix v3 has one focused browser proof and four
- * smoke proofs, but no public hosting.
+ * all six server frameworks. Every cell has a public HTTPS browser proof;
+ * Vite MDX is the separate client-only demo.
  */
 
 export type MatrixStatus = "live" | "provisioning";
@@ -49,8 +49,8 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
   { name: "TLD", slug: "tld" },
 ];
 
-const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"]);
-const TLD_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"]);
+const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router", "remix"]);
+const TLD_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router", "remix"]);
 
 export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework }) => [
   {
