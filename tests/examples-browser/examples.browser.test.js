@@ -272,6 +272,8 @@ test
     // Replay the real framework transport to exercise the server guard independently of the UI.
     const headers = await mutation.allHeaders();
     for (const name of ["cookie", "content-length", "host", "connection"]) delete headers[name];
+    // Chromium exposes HTTP/2 pseudoheaders on HTTPS requests; the replay client owns them.
+    for (const name of Object.keys(headers)) if (name.startsWith(":")) delete headers[name];
     const repeated = await context.request.fetch(mutation.url(), {
       method: mutation.method(),
       headers,
