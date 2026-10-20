@@ -416,11 +416,8 @@ fn check_locale(locale: &str) -> BuildResult<()> {
 }
 
 fn message_plural_arguments(message: &Message) -> BTreeSet<String> {
-    match message {
-        Message::Literal(_) => BTreeSet::new(),
-        Message::Program(program) => palamedes_i18n::plural_arguments(program)
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-    }
+    palamedes_i18n::message_plural_arguments(message)
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }

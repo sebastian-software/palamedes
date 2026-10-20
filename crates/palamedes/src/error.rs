@@ -9,6 +9,7 @@ pub type PalamedesResult<T> = Result<T, PalamedesError>;
 
 /// Error type for the Rust core.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PalamedesError {
     /// The low-level PO parser rejected the input.
     #[error(transparent)]

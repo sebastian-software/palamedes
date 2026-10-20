@@ -63,6 +63,7 @@ pub struct CatalogUpdateMessage {
 /// Automatic line folding applied when serializing PO string literals.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub enum PoLineBreaks {
     /// Preserve Ferrocat's default automatic width folding.
     #[default]

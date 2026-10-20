@@ -49,6 +49,7 @@ pub struct CatalogArtifactSelectedRequest {
 /// Fallback locale configuration.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum FallbackLocales {
     /// Shared fallback chain applied to every locale.
     Shared(Vec<String>),

@@ -145,6 +145,7 @@ pub struct CatalogArtifact {
     rename_all = "camelCase",
     deny_unknown_fields
 )]
+#[non_exhaustive]
 pub enum Message {
     /// Text which is already fully compiled.
     Literal(String),
@@ -155,6 +156,7 @@ pub enum Message {
 /// The supported Rust instruction set. Unsupported ICU fails at build time.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
 pub enum Instruction {
     /// Append literal text, including already-resolved ICU quoting.
     Text { value: String },
@@ -188,6 +190,7 @@ pub enum PluralKind {
 
 /// Load or rendering errors. Hosts choose how to present them.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// External artifact could not be read.
     #[error("could not read catalog {path}: {source}")]
@@ -410,6 +413,15 @@ pub fn plural_arguments(program: &[Instruction]) -> BTreeSet<&str> {
         }
     }
     arguments
+}
+
+/// Internal compiler support: collect numeric requirements of a compiled message.
+#[doc(hidden)]
+pub fn message_plural_arguments(message: &Message) -> BTreeSet<&str> {
+    match message {
+        Message::Literal(_) => BTreeSet::new(),
+        Message::Program(program) => plural_arguments(program),
+    }
 }
 
 fn validate<'a>(

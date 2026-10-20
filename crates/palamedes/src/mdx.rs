@@ -30,6 +30,7 @@ const SOLID_TRANS_MODULE: &str = "@palamedes/solid/compiled";
 /// Framework contract used for generated rich-text component bindings.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum MdxFramework {
     /// React elements are passed as rich-text component templates.
     #[default]

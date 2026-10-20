@@ -50,6 +50,7 @@ pub struct Request {
 /// The two request kinds a plugin must answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum RequestKind {
     /// Answer with exactly one manifest event.
     Describe,
@@ -94,6 +95,7 @@ pub struct LocaleCatalog {
 /// Diagnostic severities rendered consistently by the native CLI host.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Severity {
     /// Informational note.
     Info,

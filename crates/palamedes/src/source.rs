@@ -74,6 +74,7 @@ pub enum SourceDiagnosticSeverity {
 /// Configurable level for one source-authoring rule.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum SourceRuleLevel {
     /// Do not run the rule.
     Off,

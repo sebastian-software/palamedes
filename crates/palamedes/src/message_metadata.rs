@@ -101,6 +101,7 @@ pub struct MessageOriginMetadata {
 /// Progressive authoring input for one argument.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum MessageArgumentMetadataInput {
     /// Shorthand kind form, for example `"string"`.
     Kind(MessageArgumentKind),
