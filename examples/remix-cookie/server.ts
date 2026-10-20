@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import * as http from "node:http";
 
 import { createRequestListener } from "remix/node-fetch-server";
@@ -6,11 +7,19 @@ import { assetServer } from "./app/assets.ts";
 import { router } from "./app/router.ts";
 import { catalogAssetRegistry, remixI18n } from "./app/i18n.ts";
 
+const stylesheet = readFileSync(
+  new URL(import.meta.resolve("@palamedes/example-ui/styles.css")),
+  "utf8",
+);
+
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 4060;
 
 const server = http.createServer(
   createRequestListener(async (request) => {
     try {
+      if (new URL(request.url).pathname === "/demo.css") {
+        return new Response(stylesheet, { headers: { "content-type": "text/css; charset=utf-8" } });
+      }
       if (new URL(request.url).pathname.startsWith("/assets/")) {
         const fragment = catalogAssetRegistry.serve(request);
         if (fragment) return fragment;

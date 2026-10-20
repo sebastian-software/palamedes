@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Extraction from "./content/extraction.mdx";
 import Runtime from "./content/runtime.mdx";
 import Welcome from "./content/welcome.mdx";
-import type { Locale } from "./i18n";
+import { LOCALES, type Locale } from "./i18n";
 
 const pages = {
   extraction: Extraction,
@@ -43,20 +43,16 @@ export function App({ locale }: { locale: Locale }) {
           <span>Palamedes · MDX</span>
         </a>
         <div className="locale-switcher" role="group" aria-label="Language">
-          <a
-            aria-current={locale === "en" ? "true" : undefined}
-            data-testid="locale-switch-en"
-            href={localeHref("en")}
-          >
-            EN
-          </a>
-          <a
-            aria-current={locale === "de" ? "true" : undefined}
-            data-testid="locale-switch-de"
-            href={localeHref("de")}
-          >
-            DE
-          </a>
+          {LOCALES.map((choice) => (
+            <a
+              key={choice}
+              aria-current={locale === choice ? "true" : undefined}
+              data-testid={`locale-switch-${choice}`}
+              href={localeHref(choice)}
+            >
+              {choice.toUpperCase()}
+            </a>
+          ))}
         </div>
       </header>
 

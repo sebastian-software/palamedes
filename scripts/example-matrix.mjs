@@ -368,7 +368,7 @@ export const EXAMPLE_MATRIX = [
         headers: { host: "remix.example.fr:4063" },
         path: "/",
         htmlLang: "fr",
-        substrings: ["Remix v3 affiche", "places restantes"],
+        substrings: ["Réservez votre place", "places restantes"],
       },
       {
         headers: { host: "remix.example.com:4063", "accept-language": "de" },

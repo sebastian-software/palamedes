@@ -669,6 +669,9 @@ importers:
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../../packages/core-node
+      '@palamedes/example-ui':
+        specifier: workspace:^
+        version: link:../../packages/example-ui
       '@palamedes/remix':
         specifier: workspace:^
         version: link:../../packages/remix
@@ -697,6 +700,9 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@palamedes/example-ui':
+        specifier: workspace:^
+        version: link:../../packages/example-ui
       '@palamedes/remix':
         specifier: workspace:^
         version: link:../../packages/remix
@@ -725,6 +731,9 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@palamedes/example-ui':
+        specifier: workspace:^
+        version: link:../../packages/example-ui
       '@palamedes/remix':
         specifier: workspace:^
         version: link:../../packages/remix
@@ -753,6 +762,9 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@palamedes/example-ui':
+        specifier: workspace:^
+        version: link:../../packages/example-ui
       '@palamedes/remix':
         specifier: workspace:^
         version: link:../../packages/remix

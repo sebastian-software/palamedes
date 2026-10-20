@@ -248,7 +248,13 @@ export async function startRemixClient(
       "link[data-palamedes-catalog-locale]",
     );
     if (!catalogLink) throw new Error("Palamedes Remix document catalog is missing.");
-    await initializeRemixClientI18nAsync({ createI18n, catalogUrl: catalogLink.href });
+    await initializeRemixClientI18nAsync({
+      createI18n: () =>
+        createI18n({
+          timeZone: document.documentElement.dataset?.palamedesTimeZone,
+        }),
+      catalogUrl: catalogLink.href,
+    });
     await loadEntry();
   } catch {
     await renderFailure();

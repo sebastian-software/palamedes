@@ -1,6 +1,6 @@
 import { defineLocaleControls } from "@palamedes/core/locale";
 
-export const LOCALES = ["en", "de", "es"] as const;
+export const LOCALES = ["en", "de", "es", "fr"] as const;
 export const DEFAULT_LOCALE = "en";
 export const LOCALE_COOKIE = "locale";
 export type Locale = (typeof LOCALES)[number];

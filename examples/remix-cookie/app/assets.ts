@@ -15,7 +15,7 @@ export const assetServer = createAssetServer({
     workspace: "../../packages",
   },
   allowFiles: ["app/**/public/**"],
-  allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
+  allowPackages: ["remix", "@palamedes/example-ui", ...PALAMEDES_REMIX_ASSET_PACKAGES],
   sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets: catalogAssetRegistry })] },
 });

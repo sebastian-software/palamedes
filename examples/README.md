@@ -187,14 +187,18 @@ Those helpers stay headless on purpose. The examples still own routing, form
 submission, and locale policy, but they no longer need to reimplement the same
 frontend substrate in each app.
 
-Every non-Remix example also renders the same booking ("Frontend Stage 2026") so
-the twenty established UI-adapter apps are visually identical regardless of
-framework. The whole visual layer is one shared stylesheet plus one shared
-content source, proving that only the markup and locale strategy differ across
-frameworks, not the design. Remix v3 proves the same locale strategies with a
-Remix-native UI and browser runtime:
+All 24 server-framework examples render the same booking ("Frontend Stage
+2026"). They share one stylesheet and the same event data; Remix uses its native
+component runtime for the same ticket controls, ICU formatting, and server
+locale proof. Its additional browser, Frames, and recovery proofs stay intact.
+Vite MDX remains a separate handbook demo.
 
-- [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by the twenty established UI-adapter apps
+- [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by all 24 booking demos
+
+The booking demos support English, German, Spanish, and French in all four
+locale strategies. Vite MDX supports English, German, and French. Each language
+switch navigates to a new document, preserving the current MDX page where
+applicable.
 
 The booking surfaces every common i18n need in a real context: translated
 copy, plural seat counts, a personalized greeting variable, and locale-aware

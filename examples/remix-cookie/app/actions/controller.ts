@@ -1,3 +1,4 @@
+import { t } from "@palamedes/core/macro";
 import { randomBytes } from "node:crypto";
 
 import { createController } from "remix/router";
@@ -30,12 +31,11 @@ export default createController(routes, {
               nonce,
             }),
             clientProof: await renderToString(
-              createElement(ClientProof, { audience: "developer", count: 1 }),
+              createElement(ClientProof, { locale, audience: "developer", count: 1 }),
             ),
             locale,
             hasLocaleChoice: source === "cookie",
             localeLabel: getLocaleLabel(normalizeLocale(locale)),
-            strategyLabel: "cookie",
           }),
           {
             headers: {
@@ -47,6 +47,14 @@ export default createController(routes, {
           },
         );
       });
+    },
+
+    serverStatus(context) {
+      return remixI18n.run(context, ({ locale }) =>
+        Response.json({
+          message: t`Server handler confirmed locale ${locale}.`,
+        }),
+      );
     },
 
     frameDocument(context) {

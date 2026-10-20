@@ -1,7 +1,7 @@
 /*
  * @palamedes/example-ui — shared design for the example matrix.
  *
- * One stylesheet, shared by twenty framework demos, so those apps are
+ * One stylesheet, shared by twenty-four framework demos, so those apps are
  * visually identical. Framework code only owns markup structure and the
  * locale strategy; every color, font, and spacing decision lives here.
  */
@@ -17,7 +17,7 @@
   --accent: oklch(57% 0.19 32);
   --accent-press: oklch(49% 0.18 32);
   --accent-wash: oklch(94% 0.04 45);
-  --gold: oklch(58% 0.1 75);
+  --gold: oklch(55% 0.1 75);
   --focus: oklch(49% 0.18 32);
 
   --radius: 14px;
@@ -284,6 +284,10 @@ a {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.grid + details.feat {
+  margin-top: 1.5rem;
 }
 
 /* ---------- ticket (the hero object) ---------- */
@@ -567,8 +571,8 @@ a {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   padding: 0.5rem 0.6rem;
-  overflow-x: auto;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .feat code .tok-fn {
