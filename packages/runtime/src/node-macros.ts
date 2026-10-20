@@ -39,12 +39,18 @@ function missingEntry(macro: string, shape: string): never {
  * Executes `t`, `plural`, `select`, and `selectOrdinal` from
  * `@palamedes/core/macro` at runtime through the active i18n instance.
  *
- * Call this once at process start, before translated code runs. It is meant
+ * Call this once per process, before translated code runs; a second call
+ * throws instead of replacing the manifest other modules rely on. It is meant
  * for Node code that runs without a bundler (native type stripping, plain
  * `tsc` output, scripts, and tests). Bundled code compiles macros away and
  * must not register runtime macros.
  */
 export function registerRuntimeMacros(manifest: RuntimeMacroManifest | URL | string): void {
+  if ((globalThis as Record<symbol, unknown>)[RUNTIME_MACROS_KEY] !== undefined) {
+    throw new Error(
+      "Runtime macros are already registered in this process. Call registerRuntimeMacros() once, with the manifest that covers all translated code.",
+    );
+  }
   const data: RuntimeMacroManifest =
     typeof manifest === "string" || manifest instanceof URL
       ? JSON.parse(readFileSync(manifest, "utf8"))

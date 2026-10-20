@@ -10,12 +10,22 @@ const pmdsBin = path.join(root, "node_modules/@palamedes/cli/bin/pmds");
 const tscBin = path.join(root, "node_modules/typescript/bin/tsc");
 const temporary = [];
 
+const LOCALE_VARIABLES = /^(LANG|LANGUAGE|LC_.*|PALAMEDES_UI_LOCALE)$/iu;
+
+/** The host environment without locale settings, so each test chooses its own. */
+function environment(overrides = {}) {
+  const base = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !LOCALE_VARIABLES.test(name)),
+  );
+  return { ...base, PALAMEDES_UPDATE_CHECK: "0", ...overrides };
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: root,
     encoding: "utf8",
     ...options,
-    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...options.env },
+    env: environment(options.env),
   });
   if (result.error) throw result.error;
   return result;
@@ -38,7 +48,7 @@ function cli(entry, args, { cwd = root, env = {} } = {}) {
 async function withServer(entry, cwd, callback) {
   const child = spawn(process.execPath, [entry], {
     cwd,
-    env: { PATH: process.env.PATH, PORT: "0" },
+    env: environment({ PORT: "0" }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";
@@ -63,7 +73,13 @@ async function withServer(entry, cwd, callback) {
     };
     await callback(request, () => stderr);
   } finally {
-    child.kill("SIGTERM");
+    // Windows has no signals; kill() terminates the process there. Wait for
+    // the exit either way so temporary directories are no longer in use.
+    if (child.exitCode === null) {
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill("SIGTERM");
+      await exited;
+    }
   }
 }
 

@@ -90,6 +90,16 @@ describe("registerRuntimeMacros", () => {
     expect(() => t`Gone.`).toThrow(/compiled message is unavailable/);
   });
 
+  it("rejects a second registration instead of replacing the first", () => {
+    registerRuntimeMacros(manifest);
+    activate();
+
+    expect(() => registerRuntimeMacros({ ...manifest, templates: [] })).toThrow(
+      /already registered in this process/,
+    );
+    expect(t`Hello.`).toBe("Hallo.");
+  });
+
   it("rejects unknown manifest versions", () => {
     expect(() => registerRuntimeMacros({ ...manifest, version: 2 } as never)).toThrow(
       /Unsupported runtime macro manifest version/,

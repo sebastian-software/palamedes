@@ -51,7 +51,8 @@ The Node-only subpath `@palamedes/runtime/node-macros` exports
 manifest written by `pmds extract --runtime-manifest`, as an object, a file
 path, or a `URL`. After registration, `t`, `plural`, `select`, and
 `selectOrdinal` from `@palamedes/core/macro` render through `getI18n()` instead
-of throwing. Calls missing from the manifest throw. See
+of throwing. Calls missing from the manifest throw, and so does a second
+registration in the same process. See
 [Macros Without A Bundler](../backend-servers.md#macros-without-a-bundler).
 
 ## Client Runtime
