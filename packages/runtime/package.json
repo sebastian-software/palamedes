@@ -137,6 +137,38 @@
           "default": "./dist/node-macros-unavailable.cjs"
         }
       }
+    },
+    "./node": {
+      "node": {
+        "import": {
+          "types": "./dist/node.d.mts",
+          "default": "./dist/node.mjs"
+        },
+        "require": {
+          "types": "./dist/node.d.cts",
+          "default": "./dist/node.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/node-unavailable.d.mts",
+          "default": "./dist/node-unavailable.mjs"
+        },
+        "require": {
+          "types": "./dist/node-unavailable.d.cts",
+          "default": "./dist/node-unavailable.cjs"
+        }
+      },
+      "default": {
+        "import": {
+          "types": "./dist/node-unavailable.d.mts",
+          "default": "./dist/node-unavailable.mjs"
+        },
+        "require": {
+          "types": "./dist/node-unavailable.d.cts",
+          "default": "./dist/node-unavailable.cjs"
+        }
+      }
     }
   },
   "publishConfig": {
@@ -144,7 +176,7 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts src/node-macros.test.ts",
+    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts src/node-macros.test.ts src/node.test.ts",
     "stub": "unbuild --stub"
   },
   "dependencies": {

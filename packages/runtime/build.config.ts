@@ -10,6 +10,8 @@ export default defineBuildConfig({
     "./src/server-unavailable",
     "./src/node-macros",
     "./src/node-macros-unavailable",
+    "./src/node",
+    "./src/node-unavailable",
   ],
   declaration: true,
   externals: ["virtual:palamedes/server-catalogs"],

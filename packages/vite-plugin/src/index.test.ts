@@ -169,6 +169,28 @@ describe("palamedes vite plugin", () => {
     ).rejects.toThrow("server-only");
   });
 
+  it("resolves @palamedes/runtime/node to the bundled catalog store in server builds", async () => {
+    const plugin = palamedes().find((candidate) => candidate.name === "palamedes:node-i18n");
+    const resolveId = (plugin as any)?.resolveId as (
+      this: any,
+      id: string,
+      importer?: string,
+      options?: { ssr?: boolean },
+    ) => unknown;
+    const resolve = vi.fn(async (id: string) => ({ id: `/resolved/${id}` }));
+    const server = { environment: { config: { consumer: "server" } }, resolve };
+    const client = { environment: { config: { consumer: "client" } }, resolve };
+
+    await expect(
+      resolveId.call(server, "@palamedes/runtime/node", "/repo/src/i18n.ts", { ssr: true }),
+    ).resolves.toEqual({ id: "/resolved/@palamedes/runtime/server/bundled" });
+    expect(resolve).toHaveBeenCalledWith("@palamedes/runtime/server/bundled", "/repo/src/i18n.ts", {
+      skipSelf: true,
+    });
+    expect(resolveId.call(client, "@palamedes/runtime/node", "/repo/src/i18n.ts")).toBeNull();
+    expect(resolveId.call(server, "@palamedes/runtime/server", "/repo/src/i18n.ts")).toBeNull();
+  });
+
   it("hashes generated route facade output instead of a fixed marker", () => {
     const routePlugin = palamedes().find(
       (plugin) => plugin.name === "palamedes:react-router-route-boundaries",

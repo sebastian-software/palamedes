@@ -405,7 +405,10 @@ from the compiled module. Unregistered macros keep throwing; unknown calls and
 missing catalogs throw instead of rendering source text. Runtime collisions and
 interpolated choice branches are extraction errors. Bundled code compiles
 macros with a plugin instead; Node load hooks, `tsc` preprocessing, and JSX
-macros are unsupported here. See `docs/backend-servers.md`.
+macros are unsupported here. `defineNodeI18n({ generated })` from
+`@palamedes/runtime/node` wraps both steps, and server builds with
+`@palamedes/vite-plugin` resolve it to the bundled catalog store, so one module
+serves bundled and unbundled backends. See `docs/backend-servers.md`.
 
 Core commands:
 

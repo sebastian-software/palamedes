@@ -7,6 +7,5 @@
     "rootDir": "src",
     "outDir": "build"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/i18n.vite.ts"]
+  "include": ["src/**/*.ts"]
 }

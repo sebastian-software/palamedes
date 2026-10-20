@@ -63,6 +63,15 @@ of throwing. Calls missing from the manifest throw, and so does a second
 registration in the same process. See
 [Macros Without A Bundler](../backend-servers.md#macros-without-a-bundler).
 
+The Node subpath `@palamedes/runtime/node` exports `defineNodeI18n({ generated })`
+with `NodeI18nSetup`, `NodeI18nOptions`, and `CreateNodeI18n`. Without a
+bundler it registers `macros.json` from `generated` and loads
+`catalogs/<locale>.mjs` from there; it returns a function that creates a fresh
+instance per `{ locale, timeZone?, ...options }`. A server build with
+`@palamedes/vite-plugin` resolves the subpath to the bundled catalog store, so
+the same module runs bundled and unbundled. See
+[One Setup For Every Build](../backend-servers.md#one-setup-for-every-build).
+
 ## Client Runtime
 
 ```ts

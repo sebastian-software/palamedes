@@ -6,16 +6,13 @@ per-locale chunks. Express, Hono, and the Palamedes runtime are bundled too, so
 `dist/` runs with plain `node` and needs no `node_modules`, sources, or catalogs.
 
 The whole build integration is [`vite.config.ts`](./vite.config.ts). The only
-build-specific source files are the two variants of the i18n module. Both
-export `locales`, `defaultLocale`, and `createNodeI18n(locale)`:
+build-related source file is [`src/i18n.ts`](./src/i18n.ts), and it is the same
+for every path: `defineNodeI18n` from `@palamedes/runtime/node` registers
+runtime macros and loads catalogs compiled by `pmds catalog compile --target js`
+when plain `node` or `tsc` output runs it, and the plugin resolves it to the
+bundled catalog store in the Vite build.
 
-- [`src/i18n.ts`](./src/i18n.ts) registers runtime macros and loads catalogs
-  compiled by `pmds catalog compile --target js`. Plain `node` and `tsc` use it.
-- [`src/i18n.vite.ts`](./src/i18n.vite.ts) uses `createBundledServerI18n` from
-  `@palamedes/runtime/server/bundled`. `vite.config.ts` aliases `./i18n.ts` to
-  it for the bundle.
-
-The rest of `src/` and the PO catalogs don't depend on how the backend runs.
+The rest of `src/` and the PO catalogs don't depend on how the backend runs either.
 
 ```sh
 pnpm --filter @palamedes/example-node-backend build
