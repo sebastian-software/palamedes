@@ -40,7 +40,9 @@ Sources: [pricing](https://bunny.net/docs/magic-containers/pricing),
 The publisher builds Linux amd64, starts all 25 servers, and executes
 `scripts/container/verify-all.mjs` before pushing tags. It reuses every matrix
 smoke contract, including redirect and locale assertions, and probes Vite's HTML
-entry. Package publication remains independently held.
+entry using its public Host header. Vite's preview configuration explicitly
+allows `vite-mdx.examples.palamedes.dev`; keep host validation enabled. Package
+publication remains independently held.
 
 `node scripts/print-demo-deployment.mjs` emits the complete deployment inventory:
 25 endpoint names and ports, 55 hostnames, canonical HTTPS entry origins, and the
