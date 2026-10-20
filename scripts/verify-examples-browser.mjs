@@ -171,6 +171,9 @@ async function main() {
   for (const { example, options } of plan) {
     console.log(`\n[verify:browser] ${example.id} at ${baseUrl ?? `local port ${example.port}`}`);
     await verifyExample(example, { ...options, baseUrl });
+    // Development/build failure proofs are local-only; hosted checks must not
+    // start or stop replacement servers on the verification machine.
+    if (baseUrl) continue;
     if (example.id === "tanstack-cookie") {
       await runDeliveryProof("proof-tanstack-catalog-errors.mjs");
       await runDeliveryProof("proof-tanstack-development.mjs");

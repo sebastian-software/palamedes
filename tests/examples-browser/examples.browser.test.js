@@ -80,7 +80,9 @@ function germanDocumentUrl(example) {
     return example.subdomainUrl.replace("//en.", "//de.");
   }
   if (example.strategy === "tld") {
-    return example.tldUrl.replace(".com:", ".de:");
+    const url = new URL(example.tldUrl);
+    url.hostname = url.hostname.replace(/\.com$/u, ".de");
+    return url.href;
   }
   return `${example.baseUrl}/`;
 }
@@ -811,8 +813,7 @@ test("matrix example browser contract", async () => {
     await page
       .getByTestId("locale-switch-de")
       .click({ force: true, noWaitAfter: true, timeout: 15_000 });
-    await page.waitForURL(/de\.lvh\.me/);
-    expect(page.url()).toContain("de.lvh.me");
+    await page.waitForURL(germanDocumentUrl(example));
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
     await waitForClientReady(page);
@@ -836,8 +837,7 @@ test("matrix example browser contract", async () => {
     await page
       .getByTestId("locale-switch-de")
       .click({ force: true, noWaitAfter: true, timeout: 15_000 });
-    await page.waitForURL(/palamedes-i18n\.de/);
-    expect(page.url()).toContain("palamedes-i18n.de");
+    await page.waitForURL(germanDocumentUrl(example));
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
 
     await waitForClientReady(page);
@@ -881,7 +881,9 @@ test("matrix example browser contract", async () => {
   await captureScreenshot(page, example, "interactive");
 
   if (!example.hostMismatchUrl) {
-    throw new Error(`Missing host mismatch URL for route example ${example.id}`);
+    // Hosted route origins need not have a locale-mapped alias. The route
+    // authority and Accept-Language suggestion were checked above.
+    return;
   }
 
   await page.goto(example.hostMismatchUrl, { waitUntil: "domcontentloaded" });

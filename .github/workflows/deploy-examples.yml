@@ -1,0 +1,104 @@
+name: Deploy Examples
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Verify image; submit an update; or verify final hosts after rollout completes"
+        type: choice
+        options:
+          - verify-image
+          - deploy
+          - verify-hosts
+        default: verify-image
+      revision:
+        description: "Full main Git revision recorded by Publish Examples Container"
+        required: true
+        type: string
+      digest:
+        description: "Immutable sha256 image digest recorded by Publish Examples Container"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: bunny-demos
+  cancel-in-progress: false
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+jobs:
+  verify-image:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Validate revision and smoke-test the immutable image
+        env:
+          IMAGE_REVISION: ${{ inputs.revision }}
+          IMAGE_DIGEST: ${{ inputs.digest }}
+        run: |
+          [[ "$IMAGE_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          git merge-base --is-ancestor "$IMAGE_REVISION" origin/main
+          image="ghcr.io/sebastian-software/palamedes-examples@$IMAGE_DIGEST"
+          docker pull "$image"
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = "$IMAGE_REVISION"
+          docker run -d --name examples-smoke "$image"
+          trap 'docker logs examples-smoke; docker rm -f examples-smoke' EXIT
+          docker exec examples-smoke node scripts/container/verify-all.mjs
+          docker exec examples-smoke node -e 'fetch("http://127.0.0.1:4080/ready").then(r => { if (!r.ok) process.exit(1); })'
+          {
+            echo "Verified image: $image"
+            echo "Source revision: $IMAGE_REVISION"
+          } >> "$GITHUB_STEP_SUMMARY"
+  deploy:
+    needs: verify-image
+    if: inputs.operation == 'deploy'
+    environment: bunny-demos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup-workspace
+        with:
+          rust: "false"
+          rust-cache: "false"
+      - name: Submit the pinned image update
+        env:
+          BUNNYNET_API_KEY: ${{ secrets.BUNNYNET_API_KEY }}
+          BUNNY_DEMO_APP_ID: ${{ vars.BUNNY_DEMO_APP_ID }}
+          BUNNY_DEMO_CONTAINER: ${{ vars.BUNNY_DEMO_CONTAINER }}
+          IMAGE_REVISION: ${{ inputs.revision }}
+          IMAGE_DIGEST: ${{ inputs.digest }}
+        run: node scripts/deploy-demo-image.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: demo-image-update
+          path: deployment-receipt/
+          retention-days: 90
+  verify-hosts:
+    needs: verify-image
+    if: inputs.operation == 'verify-hosts'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup-workspace
+        with:
+          rust: "false"
+          rust-cache: "false"
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify all final HTTPS hosts
+        env:
+          DEPLOYED_IMAGE: ghcr.io/sebastian-software/palamedes-examples@${{ inputs.digest }}
+        run: node scripts/verify-hosted-examples.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: hosted-example-verification
+          path: hosted-verification/
+          retention-days: 90

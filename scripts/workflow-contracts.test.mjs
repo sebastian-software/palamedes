@@ -490,15 +490,30 @@ describe("workflow contracts", () => {
     expect(container).toContain("ref: ${{ github.sha }}");
     expect(container).toContain("load: true");
     expect(container).not.toContain("push: true");
-    expect(container).toContain(
-      "docker exec examples-smoke node scripts/container/verify-remix.mjs",
-    );
+    expect(container).toContain("docker exec examples-smoke node scripts/container/verify-all.mjs");
     const push = container.split("- name: Publish verified image tags")[1];
     expect(push).toContain("if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}");
     expect(container.indexOf("docker exec examples-smoke")).toBeLessThan(
       container.indexOf('docker push "$IMAGE:sha-$REVISION"'),
     );
     expect(container).toContain("Image: $digest");
+  });
+
+  it("requires an explicit main dispatch and verified digest before a Bunny mutation", async () => {
+    const source = await readRepositoryFile(".github/workflows/deploy-examples.yml");
+    expect(source).toContain("workflow_dispatch:");
+    expect(source).not.toMatch(/^ {2}(push|pull_request|schedule):/mu);
+    expect(source).toContain("default: verify-image");
+    expect(source).toContain("if: github.ref == 'refs/heads/main'");
+    expect(source).toContain("git merge-base --is-ancestor");
+    expect(source).toContain("org.opencontainers.image.revision");
+    const deploy = job(source, "deploy", "verify-hosts");
+    expect(deploy).toContain("needs: verify-image");
+    expect(deploy).toContain("if: inputs.operation == 'deploy'");
+    expect(deploy).toContain("environment: bunny-demos");
+    expect(deploy).toContain("secrets.BUNNYNET_API_KEY");
+    expect(job(source, "verify-image", "deploy")).not.toContain("BUNNYNET_API_KEY");
+    expect(job(source, "verify-hosts", "__missing__")).not.toContain("BUNNYNET_API_KEY");
   });
 
   it("lets the dependency audit exit code reach the tracking issue step", async () => {

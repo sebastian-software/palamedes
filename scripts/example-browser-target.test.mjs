@@ -4,6 +4,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { EXAMPLE_MATRIX } from "./example-matrix.mjs";
 import { resolveExternalBrowserTarget } from "./example-browser-target.mjs";
 
 const cookie = [{ example: { id: "remix-cookie" } }];
@@ -34,6 +35,11 @@ describe("external browser proof target", () => {
     ).toBe("https://en.demo.com");
   });
 
+  it.each(EXAMPLE_MATRIX)("accepts the hosted $id contract", (example) => {
+    const origin = example.strategy === "subdomain" ? "https://en.demo.com" : "https://demo.com";
+    expect(resolveExternalBrowserTarget(["--base-url", origin], [{ example }])).toBe(origin);
+  });
+
   it("rejects host strategies without their canonical entry locale", () => {
     expect(() =>
       resolveExternalBrowserTarget(
@@ -60,11 +66,11 @@ describe("external browser proof target", () => {
     expect(() => resolveExternalBrowserTarget(["--base-url", origin], cookie)).toThrow();
   });
 
-  it("requires one explicit Remix target rather than silently testing another app", () => {
-    for (const plan of [[], [{ example: { id: "waku-cookie" } }], [...cookie, ...cookie]]) {
+  it("requires one explicit known target rather than silently testing another app", () => {
+    for (const plan of [[], [{ example: { id: "unknown-cookie" } }], [...cookie, ...cookie]]) {
       expect(() =>
         resolveExternalBrowserTarget(["--base-url", "https://demo.example"], plan),
-      ).toThrow(/exactly one --id remix-cookie/);
+      ).toThrow(/exactly one explicit --id/);
     }
     expect(() => resolveExternalBrowserTarget(["--base-url"], cookie)).toThrow(
       /requires an origin/,
@@ -84,64 +90,64 @@ describe("external browser proof target", () => {
   });
 
   // The executable shim exercises the POSIX process boundary; target checks also run on Windows.
-  it.skipIf(process.platform === "win32").each([
-    ["cookie", "https://deployed.example"],
-    ["route", "https://deployed.example"],
-    ["subdomain", "https://en.deployed.example"],
-    ["tld", "https://deployed.com"],
-  ])("runs the external %s contract without starting a local app", (strategy, origin) => {
-    const directory = mkdtempSync(path.join(os.tmpdir(), "palamedes-host-runner-"));
-    const receipt = path.join(directory, "receipt.json");
-    const executable = path.join(directory, "pnpm");
-    try {
-      writeFileSync(
-        executable,
-        `#!${process.execPath}\n` +
-          `const fs = require("node:fs");\n` +
-          `fs.writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({\n` +
-          `  args: process.argv.slice(2),\n` +
-          `  id: process.env.PALAMEDES_VERIFY_EXAMPLE_ID,\n` +
-          `  baseUrl: process.env.PALAMEDES_VERIFY_BASE_URL,\n` +
-          `  framework: process.env.PALAMEDES_VERIFY_FRAMEWORK,\n` +
-          `  strategy: process.env.PALAMEDES_VERIFY_STRATEGY,\n` +
-          `  subdomainUrl: process.env.PALAMEDES_VERIFY_SUBDOMAIN_URL,\n` +
-          `  tldUrl: process.env.PALAMEDES_VERIFY_TLD_URL\n` +
-          `}));\n`,
-      );
-      chmodSync(executable, 0o755);
-      execFileSync(
-        process.execPath,
-        [
-          fileURLToPath(new URL("verify-examples-browser.mjs", import.meta.url)),
-          "--id",
-          `remix-${strategy}`,
-          "--base-url",
-          `${origin}/`,
-        ],
-        {
-          env: { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH}` },
-          timeout: 5000,
-          stdio: "pipe",
-        },
-      );
-      expect(JSON.parse(readFileSync(receipt, "utf8"))).toEqual({
-        args: [
-          "exec",
-          "vitest",
-          "--config",
-          "vitest.examples.config.mjs",
-          "--run",
-          "tests/examples-browser/examples.browser.test.js",
-        ],
-        id: `remix-${strategy}`,
-        baseUrl: origin,
-        framework: "remix",
-        strategy,
-        subdomainUrl: strategy === "subdomain" ? `${origin}/` : "",
-        tldUrl: strategy === "tld" ? `${origin}/` : "",
-      });
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(process.platform === "win32").each(EXAMPLE_MATRIX)(
+    "runs external $id without starting a local app",
+    (example) => {
+      const { id, framework, strategy } = example;
+      const origin = strategy === "subdomain" ? "https://en.deployed.com" : "https://deployed.com";
+      const directory = mkdtempSync(path.join(os.tmpdir(), "palamedes-host-runner-"));
+      const receipt = path.join(directory, "receipt.json");
+      const executable = path.join(directory, "pnpm");
+      try {
+        writeFileSync(
+          executable,
+          `#!${process.execPath}\n` +
+            `const fs = require("node:fs");\n` +
+            `fs.writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({\n` +
+            `  args: process.argv.slice(2),\n` +
+            `  id: process.env.PALAMEDES_VERIFY_EXAMPLE_ID,\n` +
+            `  baseUrl: process.env.PALAMEDES_VERIFY_BASE_URL,\n` +
+            `  framework: process.env.PALAMEDES_VERIFY_FRAMEWORK,\n` +
+            `  strategy: process.env.PALAMEDES_VERIFY_STRATEGY,\n` +
+            `  subdomainUrl: process.env.PALAMEDES_VERIFY_SUBDOMAIN_URL,\n` +
+            `  tldUrl: process.env.PALAMEDES_VERIFY_TLD_URL\n` +
+            `}));\n`,
+        );
+        chmodSync(executable, 0o755);
+        execFileSync(
+          process.execPath,
+          [
+            fileURLToPath(new URL("verify-examples-browser.mjs", import.meta.url)),
+            "--id",
+            id,
+            "--base-url",
+            `${origin}/`,
+          ],
+          {
+            env: { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH}` },
+            timeout: 5000,
+            stdio: "pipe",
+          },
+        );
+        expect(JSON.parse(readFileSync(receipt, "utf8"))).toEqual({
+          args: [
+            "exec",
+            "vitest",
+            "--config",
+            "vitest.examples.config.mjs",
+            "--run",
+            "tests/examples-browser/examples.browser.test.js",
+          ],
+          id,
+          baseUrl: origin,
+          framework,
+          strategy,
+          subdomainUrl: strategy === "subdomain" ? `${origin}/` : "",
+          tldUrl: strategy === "tld" ? `${origin}/` : "",
+        });
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });
