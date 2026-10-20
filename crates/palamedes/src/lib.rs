@@ -23,6 +23,7 @@ mod catalog_audit;
 mod catalog_combine;
 mod catalog_convert;
 mod catalog_coverage;
+mod catalog_module;
 mod catalog_three_way;
 mod catalog_update;
 mod choice;
@@ -74,6 +75,7 @@ pub use catalog_coverage::{
     CatalogCoverageRequest, CatalogCoverageResult, CatalogLocaleCoverageResult,
     measure_catalog_coverage,
 };
+pub use catalog_module::render_catalog_module;
 pub use catalog_three_way::{
     CATALOG_MODIFY_DELETE_RESOLVED, CatalogFileThreeWayMergeRequest, CatalogMergeSide,
     CatalogThreeWayMergeRequest, merge_catalog_files_three_way, merge_catalogs_three_way,
