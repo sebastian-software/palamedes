@@ -70,7 +70,8 @@ instance.
 
 The examples below deliberately use `getI18n()._(...)` rather than a macro.
 That is a plain Node runtime call, so no Vite, SWC, or Babel transform is needed.
-To use macros in a backend, build it with a bundler, as described next.
+To use macros in a backend, build it with a bundler or, without one, register
+runtime macros. Both are described next.
 
 ## Macros In A Bundled Backend
 
@@ -101,16 +102,65 @@ If a chunk fails to load, the request fails, and the next request tries again.
 For unbundled output, set `output.preserveModules` in `rolldownOptions`.
 
 [`examples/node-backend`](https://github.com/sebastian-software/palamedes/tree/main/examples/node-backend)
-shows Express, Hono, and a localized CLI built this way.
+shows Express, Hono, and a localized CLI built this way. The same application
+code also runs without a bundler; see the next section.
 
 Ways to run backend code with macros:
 
-| Setup                                | Status                                                        |
-| ------------------------------------ | ------------------------------------------------------------- |
-| Vite build                           | Supported through `@palamedes/vite-plugin`                    |
-| Standalone Rolldown                  | Not yet: the plugin relies on Vite's server environment       |
-| Direct Node or plain `tsc`           | Planned as opt-in runtime macros in a separate change (#1270) |
-| Node load hooks, `tsc` preprocessing | Not supported: they need the compiler on the runtime host     |
+| Setup                                | Status                                                    |
+| ------------------------------------ | --------------------------------------------------------- |
+| Vite build                           | Supported through `@palamedes/vite-plugin`                |
+| Standalone Rolldown                  | Not yet: the plugin relies on Vite's server environment   |
+| Direct Node or plain `tsc`           | Supported through runtime macros and precompiled catalogs |
+| Node load hooks, `tsc` preprocessing | Not supported: they need the compiler on the runtime host |
+
+## Macros Without A Bundler
+
+Node code that runs without a bundler (native type stripping, plain `tsc`
+output, scripts, tests) can keep using the `t`, `plural`, `select`, and
+`selectOrdinal` macros. Two generated files replace the compiler transform:
+
+```bash
+pmds extract --runtime-manifest .palamedes/macros.json
+pmds catalog compile --target js --output .palamedes/catalogs
+```
+
+Register the manifest once at startup and load the compiled catalog for each
+request:
+
+```ts
+import { createI18n } from "@palamedes/core";
+import { registerRuntimeMacros } from "@palamedes/runtime/node-macros";
+
+const generated = new URL("../.palamedes/", import.meta.url);
+registerRuntimeMacros(new URL("macros.json", generated));
+
+async function createRequestI18n(locale: "en" | "de") {
+  const { messages } = await import(new URL(`catalogs/${locale}.mjs`, generated).href);
+  const i18n = createI18n({ locale });
+  i18n.load(locale, messages);
+  return i18n;
+}
+```
+
+- The manifest maps each call's static text to its compiled key and placeholder
+  names, so the runtime neither hashes nor parses. Rerun both commands after
+  changing translated code; `pmds extract --check --runtime-manifest <path>`
+  fails when the manifest is stale.
+- Calls that look identical at runtime but compile to different messages, and
+  choice branches that interpolate values, are extraction errors.
+- An unknown call or a missing catalog throws to the host. Nothing renders
+  source text or internal keys.
+- Register once per process; a second registration throws. Without
+  registration the macros keep throwing, so a bundled app that is missing its
+  plugin still fails loudly. Bundled code must not register runtime macros.
+- JSX macros need the compiler.
+
+In `examples/node-backend`, `src/i18n.ts` is this runtime-macro variant and
+`vite.config.ts` aliases it to `src/i18n.vite.ts` for the bundle. The booking
+service, CLI, Express, and Hono code is the same on both paths, and one test
+suite runs against the Vite bundle, plain `node` type stripping, and plain
+`tsc` output.
 
 ## Hono Example
 

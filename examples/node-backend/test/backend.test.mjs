@@ -13,9 +13,18 @@ import { loadPalamedesConfigSync } from "@palamedes/config";
 // The suite only depends on the build output contract: cli.mjs, express.mjs,
 // and hono.mjs, with each locale's catalog in its own module. Another build
 // path reuses it with NODE_BACKEND_DIST=<its output directory>.
+//
+// Unbundled runtime macros (plain `node` type stripping or plain `tsc`
+// output) set NODE_BACKEND_ENTRIES to a JSON map from cli, express, and hono
+// to entry files. That code runs in place against the installed packages and
+// loads its catalogs from .palamedes/catalogs.
 const run = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
 const dist = path.resolve(root, process.env.NODE_BACKEND_DIST ?? "dist");
+const unbundled = process.env.NODE_BACKEND_ENTRIES !== undefined;
+const entries = unbundled
+  ? JSON.parse(process.env.NODE_BACKEND_ENTRIES)
+  : { cli: "cli.mjs", express: "express.mjs", hono: "hono.mjs" };
 const confirmed = {
   en: "Booking BK-1 is confirmed.",
   de: "Buchung BK-1 ist bestätigt.",
@@ -29,30 +38,46 @@ const seats = {
 };
 let deployed;
 
-// Every test runs the copied build output: no node_modules, sources, or PO catalogs.
+// Every bundled test runs the copied build output: no node_modules, sources, or PO catalogs.
 before(async () => {
+  if (unbundled) {
+    deployed = root;
+    return;
+  }
   deployed = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-backend-"));
   await cp(dist, deployed, { recursive: true });
 });
-after(() => rm(deployed, { recursive: true, force: true }));
+after(() => (unbundled ? undefined : rm(deployed, { recursive: true, force: true })));
 
-test("the deployed bundle contains no compiler, macro, or source catalog", async () => {
-  const files = await readdir(deployed, { recursive: true });
-  for (const entry of ["cli.mjs", "express.mjs", "hono.mjs"]) assert.ok(files.includes(entry));
-  // No installed packages (they always carry a package.json) and no PO sources.
-  assert.ok(!files.some((file) => /(?:^|[\\/])package\.json$|\.po$/u.test(file)));
-  for (const file of files.filter((name) => name.endsWith(".mjs"))) {
-    const source = await readFile(path.join(deployed, file), "utf8");
-    assert.doesNotMatch(source, /@palamedes\/(?:core-node|transform|config|core\/macro)/u, file);
+test("compiled catalogs carry no compiler", { skip: !unbundled }, async () => {
+  const catalogs = path.join(root, ".palamedes/catalogs");
+  for (const file of await readdir(catalogs)) {
+    const source = await readFile(path.join(catalogs, file), "utf8");
+    assert.doesNotMatch(source, /@palamedes\/(?:core-node|transform|config)/u, file);
   }
 });
+
+test(
+  "the deployed bundle contains no compiler, macro, or source catalog",
+  { skip: unbundled },
+  async () => {
+    const files = await readdir(deployed, { recursive: true });
+    for (const entry of ["cli.mjs", "express.mjs", "hono.mjs"]) assert.ok(files.includes(entry));
+    // No installed packages (they always carry a package.json) and no PO sources.
+    assert.ok(!files.some((file) => /(?:^|[\\/])package\.json$|\.po$/u.test(file)));
+    for (const file of files.filter((name) => name.endsWith(".mjs"))) {
+      const source = await readFile(path.join(deployed, file), "utf8");
+      assert.doesNotMatch(source, /@palamedes\/(?:core-node|transform|config|core\/macro)/u, file);
+    }
+  },
+);
 
 async function cli(args, environment = {}) {
   const env = { ...process.env, NODE_OPTIONS: "" };
   for (const name of ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"]) delete env[name];
   Object.assign(env, environment);
   try {
-    const result = await run(process.execPath, ["cli.mjs", ...args], {
+    const result = await run(process.execPath, [entries.cli, ...args], {
       cwd: deployed,
       env,
       timeout: 20_000,
@@ -147,7 +172,7 @@ test("CLI keeps exit codes and --json output stable across locales", async () =>
 });
 
 async function startServer(t, framework) {
-  const child = spawn(process.execPath, [`${framework}.mjs`], {
+  const child = spawn(process.execPath, [entries[framework]], {
     cwd: deployed,
     env: { ...process.env, PORT: "0", LANG: "de_DE.UTF-8", NODE_OPTIONS: "" },
     stdio: ["ignore", "pipe", "pipe"],
@@ -238,13 +263,14 @@ for (const framework of ["express", "hono"]) {
 
 /** The one deployed module holding Spanish messages, found by content so any build layout works. */
 async function findSpanishCatalog() {
+  const directory = unbundled ? path.join(root, ".palamedes/catalogs") : deployed;
   const matches = [];
-  for (const file of await readdir(deployed, { recursive: true })) {
+  for (const file of await readdir(directory, { recursive: true })) {
     if (!file.endsWith(".mjs")) continue;
-    const source = await readFile(path.join(deployed, file), "utf8");
+    const source = await readFile(path.join(directory, file), "utf8");
     if (source.includes("está confirmada")) matches.push(file);
   }
   assert.equal(matches.length, 1, `expected one Spanish catalog module, found ${matches}`);
-  assert.ok(!["cli.mjs", "express.mjs", "hono.mjs"].includes(matches[0]), "catalog must be lazy");
-  return path.join(deployed, matches[0]);
+  assert.ok(!Object.values(entries).includes(matches[0]), "catalog must be lazy");
+  return path.join(directory, matches[0]);
 }

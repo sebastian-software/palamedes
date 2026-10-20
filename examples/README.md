@@ -83,7 +83,9 @@ framework: an async booking service with `t` and `plural` macros, a localized
 CLI, and the same endpoint in Express and Hono. `vite build` with
 `@palamedes/vite-plugin` compiles the macros and bundles the catalogs,
 frameworks, and runtime into `dist/`. The tests copy `dist/` to an empty
-directory and run it with plain `node`.
+directory and run it with plain `node`. The same application code also runs
+without a bundler through runtime macros, and the same suite runs it under
+plain `node` type stripping and as plain `tsc` output.
 
 ```bash
 pnpm test:node-backend

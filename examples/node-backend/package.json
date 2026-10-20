@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "vite build && node --test test/*.test.mjs",
+    "i18n": "pmds extract --runtime-manifest .palamedes/macros.json && pmds catalog compile --target js --output .palamedes/catalogs",
+    "build:tsc": "pnpm i18n && tsc -p tsconfig.build.json",
+    "test": "vite build && node --test test/backend.test.mjs && pnpm test:runtime-macros",
+    "test:runtime-macros": "pnpm build:tsc && node --env-file=test/type-stripping.env --test test/backend.test.mjs && node --env-file=test/tsc.env --test test/backend.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +19,7 @@
     "hono": "4.13.7"
   },
   "devDependencies": {
+    "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
     "@types/express": "5.0.6",

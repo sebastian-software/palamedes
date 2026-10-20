@@ -33,7 +33,10 @@ export const BUDGETS = [
       label: "@palamedes/cli-linux-x64-gnu@1.17.3",
       bytes: 8_022_504,
     },
-    maxBytes: 9_500_000,
+    // 9.55 MB on Linux x64 once pmds compiled JavaScript catalog modules and
+    // wrote the runtime macro manifest (ferrocat's catalog compiler and the
+    // module renderer). 9.7 MB keeps ~150 KB for toolchain movement.
+    maxBytes: 9_700_000,
   },
   {
     label: "core-node addon (release)",

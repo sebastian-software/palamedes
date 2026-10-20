@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "rootDir": "src",
+    "outDir": "build"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/i18n.vite.ts"]
+}
