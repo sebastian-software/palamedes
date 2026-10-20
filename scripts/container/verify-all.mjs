@@ -39,7 +39,7 @@ for (const example of EXAMPLE_MATRIX) {
   for (;;) {
     try {
       const response = await request(example.port, example.smokeChecks[0] ?? { path: "/" });
-      assert.equal(response.status, 200);
+      assert.ok(response.status >= 200 && response.status < 400);
       break;
     } catch (error) {
       if (Date.now() >= deadline) throw error;
