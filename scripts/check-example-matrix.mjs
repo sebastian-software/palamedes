@@ -153,5 +153,5 @@ if (
 console.log(
   `Example matrix verified: ${MATRIX_COUNT} smoke examples; ${BROWSER_COUNT} browser examples; ` +
     `${SERVER_FRAMEWORKS.length} server families × ${LOCALE_STRATEGIES.length} strategies + Vite MDX; ` +
-    `${EXAMPLE_COUNT} directories including ${FOCUSED_EXAMPLES.length} focused fixture.`,
+    `${EXAMPLE_COUNT} directories including ${FOCUSED_EXAMPLES.length} focused fixtures.`,
 );

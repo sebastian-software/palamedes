@@ -1,0 +1,28 @@
+{
+  "name": "@palamedes/example-node-backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "vite build && node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@palamedes/core": "workspace:^",
+    "@palamedes/runtime": "workspace:^",
+    "express": "5.2.1",
+    "hono": "4.13.7"
+  },
+  "devDependencies": {
+    "@palamedes/vite-plugin": "workspace:^",
+    "@types/express": "5.0.6",
+    "@types/node": "^24.0.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}

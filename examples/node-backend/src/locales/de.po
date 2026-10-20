@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/node-backend/src/booking.ts#getBooking
+msgid "{seats, plural, one {# seat available} other {# seats available}}"
+msgstr "{seats, plural, one {# Platz verfügbar} other {# Plätze verfügbar}}"
+
+#: examples/node-backend/src/booking.ts#getBooking
+msgid "Booking {id} is confirmed."
+msgstr "Buchung {id} ist bestätigt."
+
+#: examples/node-backend/src/booking.ts#getBooking
+msgid "Booking {id} was not found."
+msgstr "Buchung {id} wurde nicht gefunden."
+
+#: examples/node-backend/src/cli.ts
+#: examples/node-backend/src/express-server.ts
+#: examples/node-backend/src/hono-server.ts
+msgid "Booking details."
+msgstr "Buchungsdetails."
+
+#: examples/node-backend/src/cli.ts
+msgid "Invalid arguments. Run with --help."
+msgstr "Ungültige Argumente. Verwenden Sie --help."
+
+#: examples/node-backend/src/cli.ts
+msgid "Look up a booking."
+msgstr "Eine Buchung nachschlagen."
+
+#: examples/node-backend/src/cli.ts
+msgid "Unsupported locale \"{requested}\". Use one of: {supported}."
+msgstr "Nicht unterstützte Sprache \"{requested}\". Verwenden Sie eine von: {supported}."
+
+#: examples/node-backend/src/booking.ts#getBooking
+msgid "Your booking costs {price} on {date}."
+msgstr "Ihre Buchung kostet {price} am {date}."
