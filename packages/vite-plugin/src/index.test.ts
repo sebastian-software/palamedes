@@ -288,6 +288,57 @@ describe("palamedes vite plugin", () => {
     expect(error).toHaveBeenCalledOnce();
   });
 
+  it("loads server catalogs without a Vite environment when configured for the server", async () => {
+    const serverCatalogsFor = (options?: Parameters<typeof palamedes>[0]) => {
+      const plugin = palamedes(options).find((entry) => entry.name === "palamedes:server-catalogs");
+      if (typeof plugin?.load !== "function") {
+        throw new TypeError("Expected server catalog virtual module hook");
+      }
+      return plugin.load;
+    };
+    const error = vi.fn((message: string) => {
+      throw new Error(message);
+    });
+    // tsdown and plain Rolldown call load() with neither an environment nor ssr.
+    const context = { addWatchFile: vi.fn(), error } as never;
+
+    await expect(
+      serverCatalogsFor().call(context, "\0palamedes:server-catalogs", {} as never),
+    ).rejects.toThrow("virtual:palamedes/server-catalogs is server-only");
+
+    const result = await serverCatalogsFor({ environment: "server" }).call(
+      context,
+      "\0palamedes:server-catalogs",
+      {} as never,
+    );
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).toContain("export const loadServerCatalog=(locale)=>store.load(locale);");
+  });
+
+  it("resolves the Node i18n setup to the bundled store without a Vite environment when configured for the server", async () => {
+    const resolveIdFor = (options?: Parameters<typeof palamedes>[0]) =>
+      (palamedes(options).find((candidate) => candidate.name === "palamedes:node-i18n") as any)
+        ?.resolveId as (this: any, id: string, importer?: string) => unknown;
+    const resolve = vi.fn(async (id: string) => ({ id: `/resolved/${id}` }));
+
+    expect(
+      resolveIdFor().call({ resolve }, "@palamedes/runtime/node", "/repo/src/i18n.ts"),
+    ).toBeNull();
+    await expect(
+      resolveIdFor({ environment: "server" }).call(
+        { resolve },
+        "@palamedes/runtime/node",
+        "/repo/src/i18n.ts",
+      ),
+    ).resolves.toEqual({ id: "/resolved/@palamedes/runtime/server/bundled" });
+  });
+
+  it("rejects an unknown environment", () => {
+    expect(() => palamedes({ environment: "client" as never })).toThrow(
+      'Palamedes environment must be "auto" or "server", received "client".',
+    );
+  });
+
   it.each(["label.mjs", "label.cjs", "label.mts", "label.cts"])(
     "transforms %s with the shared bundler default",
     (file) => {

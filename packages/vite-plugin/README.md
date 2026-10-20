@@ -126,6 +126,13 @@ apps must set `framework: "solid"`**; use `"none"` for a project that is
 neither. Macro and generated MDX runtime access is always hook-free. Locale
 changes require a document navigation.
 
+`environment` defaults to `"auto"`, which reads the Vite environment to tell
+server builds from browser builds. Bundlers without Vite environments, such as
+tsdown or standalone Rolldown building a Node backend, need
+`environment: "server"`. Otherwise the plugin treats the build as a browser
+build: `@palamedes/runtime/node` keeps its runtime-macro path, and
+`virtual:palamedes/server-catalogs` fails as a browser import. See [Backend servers](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md).
+
 The separate `runtimeModule` option overrides only the macro transform's module
 path. Override generated MDX independently through `mdx.runtimeModule`.
 

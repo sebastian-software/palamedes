@@ -34,6 +34,7 @@ interface PalamedesPluginOptions {
   keepSourceFallbacks?: boolean;
   mdx?: PalamedesMdxConfig | false;
   experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
+  environment?: "auto" | "server";
 }
 ```
 
@@ -50,6 +51,7 @@ Defaults:
 - `keepSourceFallbacks`: `false`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 - `experimentalGraphSplitting`: deprecated; delivery is automatic and `false` is rejected
+- `environment`: `"auto"`
 
 `framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set
@@ -58,6 +60,10 @@ component contract for generated MDX modules. Solid apps must set
 Macro and generated MDX runtime lookups always use the plain, hook-free getter.
 Locale changes require document navigation. `runtimeModule` is an advanced
 override for only the macro transform's module path.
+
+`environment: "auto"` reads the Vite environment to tell server builds from
+browser builds. Bundlers without Vite environments, such as tsdown or
+standalone Rolldown building a Node backend, need `environment: "server"`.
 
 `keepSourceFallbacks` defaults to `false` in every environment. Set
 `keepSourceFallbacks: true` to retain authored text for diagnostics. Missing

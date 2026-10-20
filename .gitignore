@@ -75,3 +75,4 @@ packages/*/LICENSE-MIT
 
 # tsc output of the unbundled runtime-macro path
 examples/node-backend/build/
+examples/node-backend/dist-tsdown/
