@@ -48,7 +48,13 @@ for (const example of EXAMPLE_MATRIX) {
   }
   for (const check of example.smokeChecks.length
     ? example.smokeChecks
-    : [{ path: "/", substrings: ["<html"] }]) {
+    : [
+        {
+          path: "/",
+          headers: { host: "vite-mdx.examples.palamedes.dev" },
+          substrings: ["<html"],
+        },
+      ]) {
     const { status, body, headers } = await request(example.port, check);
     if (check.redirectTo) {
       assert.ok(status >= 300 && status < 400, `${example.id} redirect status`);
