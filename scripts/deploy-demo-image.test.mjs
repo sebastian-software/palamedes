@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { expect, it } from "vitest";
-const script = new URL("deploy-demo-image.mjs", import.meta.url).pathname;
+const script = fileURLToPath(new URL("deploy-demo-image.mjs", import.meta.url));
 it.each([200, 403])("records rollback metadata and waits for PATCH status %s", (status) => {
   const root = mkdtempSync(path.join(os.tmpdir(), "demo-update-test-"));
   try {
