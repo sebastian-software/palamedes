@@ -51,7 +51,11 @@ it("probes the backend host/path and handles refusal, timeout, and failure statu
   ).toBe(true);
   expect(await probe({ port, smokeChecks: [] })).toBe(false);
   expect(await probe({ port, smokeChecks: [{ path: "/hang" }] }, 30)).toBe(false);
-  expect(await probe({ port: 0, smokeChecks: [] })).toBe(false);
+  const closed = http.createServer();
+  await new Promise((resolve) => closed.listen(0, "127.0.0.1", resolve));
+  const closedPort = closed.address().port;
+  await new Promise((resolve) => closed.close(resolve));
+  expect(await probe({ port: closedPort, smokeChecks: [] })).toBe(false);
 });
 it("coalesces overlapping readiness polls", async () => {
   let calls = 0;
