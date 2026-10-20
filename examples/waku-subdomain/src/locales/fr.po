@@ -1,0 +1,149 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# billet} other {# billets}}"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# place restante} other {# places restantes}}"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Ajouter au panier"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Participants"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Disponibilité"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Dans les coulisses"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Allemagne"
+
+#: examples/waku-subdomain/src/pages/index.tsx
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Réservez votre place à Frontend Stage 2026"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Pass conférence"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Devise"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "l'unité"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Moins de billets"
+
+#: examples/waku-subdomain/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Langue"
+
+#: examples/waku-subdomain/src/pages/index.tsx
+msgid "Localized for this document with Palamedes"
+msgstr "Localisé pour ce document avec Palamedes"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Plus de billets"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Nombre"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "un seul commutateur, tous les formats"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Pluriel"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Actualiser le résultat du serveur"
+
+#: examples/waku-subdomain/src/pages/index.tsx
+msgid "Rendered with Waku"
+msgstr "Rendu avec Waku"
+
+#: examples/waku-subdomain/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Serveur"
+
+#: examples/waku-subdomain/src/pages/index.tsx#runProbe
+msgid "Server action confirmed locale {currentLocale}."
+msgstr "L'action serveur a confirmé la langue {currentLocale}."
+
+#: examples/waku-subdomain/src/pages/index.tsx
+msgid "server locale"
+msgstr "langue du serveur"
+
+#: examples/waku-subdomain/src/components/SuggestionBanner.tsx#SuggestionBanner
+msgid "Switch to the recommended locale"
+msgstr "Passer à la langue recommandée"
+
+#: examples/waku-subdomain/src/pages/index.tsx
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr "Trois jours de conférences sur l'art de créer pour le web. Choisissez vos billets ci-dessous."
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/waku-subdomain/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Lieu"
+
+#: examples/waku-subdomain/src/pages/index.tsx
+msgid "Welcome back, {attendeeName}."
+msgstr "Bon retour, {attendeeName}."

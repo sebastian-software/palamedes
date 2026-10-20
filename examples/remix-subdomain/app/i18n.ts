@@ -1,9 +1,10 @@
+import { createI18n } from "@palamedes/core";
 import path from "node:path";
 
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale";
 import { createPalamedesRemixCatalogAssetRegistry } from "@palamedes/remix";
 import { createRemixI18nServer } from "@palamedes/remix/server";
-export const LOCALES = ["en", "de", "es"] as const;
+export const LOCALES = ["en", "de", "es", "fr"] as const;
 export const DEFAULT_LOCALE = "en";
 export const LOCALE_COOKIE = "locale";
 
@@ -33,6 +34,7 @@ export function getLocaleLabel(locale: Locale): string {
 }
 
 export const remixI18n = createRemixI18nServer({
+  createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
   locales,
   strategy: "subdomain",
   catalogAssets: { registry: catalogAssetRegistry },

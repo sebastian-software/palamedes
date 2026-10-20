@@ -7,7 +7,7 @@ export const DEMO_DEPLOYMENT = EXAMPLE_MATRIX.map((example) => {
     strategy === "tld"
       ? ["com", "de", "es", "fr"].map((tld) => `${framework}.examples.palamedes-i18n.${tld}`)
       : strategy === "subdomain"
-        ? ["en", "de", "es"].map((locale) => `${locale}.${id}.examples.palamedes.dev`)
+        ? ["en", "de", "es", "fr"].map((locale) => `${locale}.${id}.examples.palamedes.dev`)
         : [`${id}.examples.palamedes.dev`];
   return { id, framework, strategy, port, hosts, origin: `https://${hosts[0]}` };
 });

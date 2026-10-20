@@ -20,14 +20,15 @@ export function renderFrameDocument({ locale, localeLabel, request }: FramePageO
   const title = t`Remix v3 is rendering ${locale} with Palamedes`;
 
   return renderToStream(
-    <html lang={locale}>
+    <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
       <head>
         <meta charSet="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />
         <title>{title}</title>
+        <link rel="stylesheet" href="/demo.css" />
       </head>
       <body>
-        <main>
+        <main className="page-shell">
           <p>
             <code>@palamedes/remix</code>
           </p>

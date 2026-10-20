@@ -1,4 +1,4 @@
-import { createI18n, defineCompiledCatalog } from "@palamedes/core";
+import { createI18n, defineCompiledCatalog, type PalamedesI18n } from "@palamedes/core";
 import { getI18n, registerMessageLoaderGroup, resetI18nRuntime } from "@palamedes/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +16,26 @@ describe("Remix client i18n bootstrap", () => {
     resetI18nRuntime();
     vi.unstubAllGlobals();
   });
+
+  it.each([undefined, "Europe/Berlin"])(
+    "installs the document time zone before loading the entry (%s)",
+    async (timeZone) => {
+      vi.stubGlobal("window", new EventTarget());
+      vi.stubGlobal("document", {
+        documentElement: { lang: "en", dataset: { palamedesTimeZone: timeZone } },
+        body: {},
+        querySelector: () => ({
+          href: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="timezone",fragmentRegistry=true,messages={};')}`,
+        }),
+      });
+      const entry = vi.fn(() => {
+        expect(getI18n<PalamedesI18n>().timeZone).toBe(timeZone);
+        return Promise.resolve();
+      });
+      await startRemixClient(entry);
+      expect(entry).toHaveBeenCalledOnce();
+    },
+  );
 
   it("renders a dependency failure once when both its event and startup reject", async () => {
     const browser = new EventTarget();

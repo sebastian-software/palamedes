@@ -561,13 +561,16 @@ with a restrictive script CSP); serve registry and server catalog handlers
 before the Remix asset server. The adapter owns readiness, selected executable
 browser fragments and ordinary error-page recovery. Apps own locale selection
 and optional untranslated error markup. Inert ICU bootstrap payloads are rejected.
-Locale changes reload the document; only the active locale is requested.
+Locale changes reload the document; only the active locale is requested. For matching
+date/time output during hydration, set `data-palamedes-time-zone="Europe/Berlin"`
+on `<html>` and use `createI18n: () => createI18n({ timeZone: "Europe/Berlin" })`
+for the server instance. The adapter reads the document zone before browser modules run.
 Development watches catalog/config inputs; custom runners can use `watch: true`
 or `registry.invalidate()`. Node.js >=24.3 and remix@3.0.0 are the verified
 host. All four locale strategies have browser proofs, including Frames, interaction,
 reloads, and initial/lazy catalog recovery under CSP. External verification uses
 `pnpm verify:examples:browser -- --id remix-<strategy> --base-url <HTTPS-origin>`;
-public deployment remains pending. See /docs/api/remix.md.
+see /docs/api/remix.md and /docs/demo-deployments.md for public hosts and hosting evidence.
 
 
 ### React Router RSC

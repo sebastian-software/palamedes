@@ -6,7 +6,7 @@ import { parseAcceptLanguage } from "@palamedes/core/locale";
  * in the edge bundle, and importing the i18n module would pull the dynamic
  * .po catalog import context into it.
  */
-const LOCALES = ["en", "de", "es"] as const;
+const LOCALES = ["en", "de", "es", "fr"] as const;
 const DEFAULT_LOCALE = "en";
 
 /*

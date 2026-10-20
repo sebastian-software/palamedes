@@ -6,6 +6,11 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
 #: examples/remix-tld/app/public/interactive.tsx#ClientProof
 msgid ""
 "{audience, select, developer {Built for developers} other {Built for "
@@ -14,18 +19,110 @@ msgstr ""
 "{audience, select, developer {Für Entwickler gemacht} other {Für alle "
 "gemacht}}"
 
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
+
 #: examples/remix-tld/app/public/interactive.tsx#ClientProof
 msgid "{count, plural, one {# browser message} other {# browser messages}}"
 msgstr ""
 "{count, plural, one {# Browser-Nachricht} other {# Browser-Nachrichten}}"
 
-#: examples/remix-tld/app/page.ts#renderHomePage
-msgid "{seatCount, plural, one {# seat left} other {# seats left}}"
-msgstr "{seatCount, plural, one {# Platz frei} other {# Plätze frei}}"
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
 
 #: examples/remix-tld/app/public/interactive.tsx#ClientProof
 msgid "Add a browser message"
 msgstr "Browser-Nachricht hinzufügen"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "In den Warenkorb"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Teilnehmer"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Währung"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Date"
+msgstr "Datum"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "each"
+msgstr "pro Stück"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "Locale"
+msgstr "Sprache"
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "Number"
+msgstr "Zahl"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
+
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid "Open lazy feature"
+msgstr "Lazy-Funktion öffnen"
 
 #: examples/remix-tld/app/public/interactive.tsx#ClientProof
 msgid "Open the <0>Remix client guide</0>."
@@ -35,16 +132,63 @@ msgstr "Öffne den <0>Remix-Client-Leitfaden</0>."
 msgid "Palamedes is active in the browser"
 msgstr "Palamedes ist im Browser aktiv"
 
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
 #: examples/remix-tld/app/frame-page.tsx#renderFrameDocument
-#: examples/remix-tld/app/page.ts#renderHomePage
 msgid "Remix v3 is rendering {locale} with Palamedes"
 msgstr "Remix v3 rendert {locale} mit Palamedes"
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "Rendered with Remix"
+msgstr "Mit Remix gerendert"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/remix-tld/app/actions/controller.ts
+#: examples/remix-tld/app/public/interactive.tsx#ClientProof
+msgid "Server handler confirmed locale {locale}."
+msgstr "Server-Handler hat die Sprache {locale} bestätigt."
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "server locale"
+msgstr "Server-Sprache"
+
+#: examples/remix-tld/app/public/proof-panel.tsx#ProofPanel
+msgid "The server request failed. Try again."
+msgstr "Die Serveranfrage ist fehlgeschlagen. Versuche es erneut."
 
 #: examples/remix-tld/app/public/lazy-message.ts#lazyMessage
 msgid "This message arrived after the page was ready"
 msgstr "Diese Nachricht kam nach dem Laden der Seite an"
 
 #: examples/remix-tld/app/frame-page.tsx#renderFrameContent
-#: examples/remix-tld/app/page.ts#renderHomePage
 msgid "This response was translated inside a request-scoped Remix handler."
 msgstr "Diese Antwort wurde in einem request-lokalen Remix-Handler übersetzt."
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten "
+"deine Tickets."
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Total"
+msgstr "Gesamt"
+
+#: examples/remix-tld/app/public/ticket-panel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Ort"
+
+#: examples/remix-tld/app/page.ts#renderHomePage
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."

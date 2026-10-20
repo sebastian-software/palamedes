@@ -1,0 +1,197 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid ""
+"{audience, select, developer {Built for developers} other {Built for "
+"everyone}}"
+msgstr ""
+"{audience, select, developer {Conçu pour les développeurs} other {Conçu "
+"pour tout le monde}}"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid "{count, plural, one {# browser message} other {# browser messages}}"
+msgstr ""
+"{count, plural, one {# message du navigateur} other {# messages du "
+"navigateur}}"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# billet} other {# billets}}"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# place restante} other {# places restantes}}"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid "Add a browser message"
+msgstr "Ajouter un message du navigateur"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Ajouter au panier"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Participants"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Disponibilité"
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Dans les coulisses"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Allemagne"
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Réservez votre place à Frontend Stage 2026"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Pass conférence"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Devise"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "each"
+msgstr "l'unité"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Moins de billets"
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid "Locale"
+msgstr "Langue"
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid "Localized for this document with Palamedes"
+msgstr "Localisé pour ce document avec Palamedes"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Plus de billets"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "Number"
+msgstr "Nombre"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "un seul commutateur, tous les formats"
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid "Open lazy feature"
+msgstr "Ouvrir la fonctionnalité à la demande"
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid "Open the <0>Remix client guide</0>."
+msgstr "Ouvrez le <0>guide du client Remix</0>."
+
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid "Palamedes is active in the browser"
+msgstr "Palamedes est actif dans le navigateur"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Pluriel"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Actualiser le résultat du serveur"
+
+#: examples/remix-subdomain/app/frame-page.tsx#renderFrameDocument
+msgid "Remix v3 is rendering {locale} with Palamedes"
+msgstr "Remix v3 affiche {locale} avec Palamedes"
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid "Rendered with Remix"
+msgstr "Rendu avec Remix"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "Server"
+msgstr "Serveur"
+
+#: examples/remix-subdomain/app/actions/controller.ts
+#: examples/remix-subdomain/app/public/interactive.tsx#ClientProof
+msgid "Server handler confirmed locale {locale}."
+msgstr "Le gestionnaire serveur a confirmé la langue {locale}."
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid "server locale"
+msgstr "langue du serveur"
+
+#: examples/remix-subdomain/app/public/proof-panel.tsx#ProofPanel
+msgid "The server request failed. Try again."
+msgstr "La requête au serveur a échoué. Réessayez."
+
+#: examples/remix-subdomain/app/public/lazy-message.ts#lazyMessage
+msgid "This message arrived after the page was ready"
+msgstr "Ce message est arrivé après le chargement de la page"
+
+#: examples/remix-subdomain/app/frame-page.tsx#renderFrameContent
+msgid "This response was translated inside a request-scoped Remix handler."
+msgstr ""
+"Cette réponse a été traduite dans un gestionnaire Remix limité à la "
+"requête."
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Trois jours de conférences sur l'art de créer pour le web. Choisissez vos "
+"billets ci-dessous."
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/remix-subdomain/app/public/ticket-panel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Lieu"
+
+#: examples/remix-subdomain/app/page.ts#renderHomePage
+msgid "Welcome back, {attendeeName}."
+msgstr "Bon retour, {attendeeName}."

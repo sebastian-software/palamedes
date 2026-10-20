@@ -7,5 +7,6 @@ export default {
     "en.react-router-subdomain.examples.palamedes.dev",
     "de.react-router-subdomain.examples.palamedes.dev",
     "es.react-router-subdomain.examples.palamedes.dev",
+    "fr.react-router-subdomain.examples.palamedes.dev",
   ],
 } satisfies Config;

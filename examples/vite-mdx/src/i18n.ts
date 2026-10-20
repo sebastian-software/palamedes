@@ -1,6 +1,7 @@
-export const LOCALES = ["en", "de"] as const;
+export const LOCALES = ["en", "de", "fr"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export function resolveDocumentLocale(): Locale {
-  return document.documentElement.lang === "de" ? "de" : "en";
+  const locale = document.documentElement.lang;
+  return LOCALES.includes(locale as Locale) ? (locale as Locale) : "en";
 }

@@ -84,8 +84,8 @@ test.runIf(activeExample().framework === "react-router")(
   },
 );
 
-function remixLocales(example) {
-  return example.strategy === "tld" ? ["en", "de", "es", "fr"] : ["en", "de", "es"];
+function remixLocales() {
+  return ["en", "de", "es", "fr"];
 }
 
 function remixDocumentUrl(example, locale = "en") {
@@ -207,6 +207,10 @@ async function currentServerLocale(page) {
 
 async function waitForClientReady(page) {
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 });
+  const remixProof = page.getByTestId("remix-runtime-proof");
+  if ((await remixProof.count()) && (await remixProof.getAttribute("open")) === null) {
+    await page.getByTestId("remix-proof-toggle").click();
+  }
 }
 
 async function chooseCookieLocale(page, locale) {
@@ -546,7 +550,7 @@ test("Remix client entry shows a catalog-free error UI and recovers after reload
 test("Remix lazy catalog failures recover in all document locales under CSP", async () => {
   const example = activeExample();
   if (example.framework !== "remix") return;
-  for (const locale of remixLocales(example)) {
+  for (const locale of remixLocales()) {
     for (const mode of ["network", "evaluation"]) {
       const page = await launchPage(remixLaunchArgs(example));
       await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
@@ -627,7 +631,7 @@ async function verifyRemixBrowserContract(example) {
   page.on("request", (request) => {
     if (request.url().includes("/catalog-fragments/")) fragments.push(request.url());
   });
-  for (const locale of remixLocales(example)) {
+  for (const locale of remixLocales()) {
     if (example.strategy === "cookie")
       await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
     const response = await page.goto(remixDocumentUrl(example, locale), {
@@ -636,7 +640,7 @@ async function verifyRemixBrowserContract(example) {
     expect(response.status()).toBe(200);
     expect(response.headers()["content-security-policy"]).toContain("script-src 'self' 'nonce-");
     const html = await response.text();
-    expect(html).toContain(`<html lang="${locale}">`);
+    expect(html).toContain(`<html lang="${locale}" data-palamedes-time-zone="Europe/Berlin">`);
     expect(html).toContain(`/assets/__palamedes/catalog/${locale}.js`);
     expect(html).toContain("data-remix-client-proof");
     expect(html).toContain(
@@ -959,4 +963,73 @@ test("matrix example browser contract", async () => {
   await expect.poll(() => currentServerLocale(page)).toContain("Deutsch");
   await expectSettledDocumentLocale(page, "de");
   expectNoRuntimeErrors(pageErrors, hydrationErrors);
+});
+
+test("French documents preserve translated UI, interaction, and reloads", async () => {
+  const example = activeExample();
+  const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
+    browserLocale: "fr-FR",
+    navigatorLocale: "en-US",
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error" && isHydrationMismatch(message.text()))
+      errors.push(message.text());
+  });
+  const url = new URL(example.subdomainUrl || example.tldUrl || example.baseUrl);
+  if (example.strategy === "route") url.pathname = "/fr";
+  if (example.strategy === "subdomain") url.hostname = url.hostname.replace(/^[^.]+/u, "fr");
+  if (example.strategy === "tld") url.hostname = url.hostname.replace(/\.[^.]+$/u, ".fr");
+  if (example.strategy === "client") url.searchParams.set("locale", "fr");
+  const response = await page.goto(url.href, { waitUntil: "domcontentloaded" });
+  expect(response.status()).toBe(200);
+  await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("fr");
+  if (example.strategy === "client") {
+    await expect
+      .poll(() => page.getByTestId("mdx-page").textContent())
+      .toContain("Guide MDX de Palamedes");
+    await page.getByTestId("page-link-runtime").click();
+    await expect
+      .poll(() => page.getByTestId("mdx-page").textContent())
+      .toContain("Une langue par document");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect
+      .poll(() => page.getByTestId("mdx-page").textContent())
+      .toContain("Une langue par document");
+  } else {
+    expect(await response.text()).toContain("Ajouter au panier");
+    await waitForClientReady(page);
+    await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("Ajouter au panier");
+    await page.locator(".stepper button").last().click();
+    await expect.poll(() => page.locator(".stepper-num").textContent()).toBe("2");
+    await expect.poll(() => page.locator(".total-value").textContent()).toContain("298,00");
+    await page.getByTestId("server-proof-trigger").click();
+    await expect.poll(() => page.getByTestId("server-proof-message").textContent()).toContain("fr");
+    if (example.framework === "remix") {
+      const failServerRequest = (route) => route.abort("failed");
+      await page.route("**/server-status", failServerRequest);
+      await page.getByTestId("server-proof-trigger").click();
+      await expect
+        .poll(() => page.getByTestId("server-proof-message").textContent())
+        .toBe("La requête au serveur a échoué. Réessayez.");
+      await page.unroute("**/server-status", failServerRequest);
+      const retried = page.waitForResponse((response) =>
+        new URL(response.url()).pathname.endsWith("/server-status"),
+      );
+      await page.getByTestId("server-proof-trigger").click();
+      const result = await retried;
+      expect(result.status()).toBe(200);
+      expect((await result.json()).message).toContain("fr.");
+      await expect
+        .poll(() => page.getByTestId("server-proof-message").textContent())
+        .toContain("fr.");
+    }
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForClientReady(page);
+    await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("Ajouter au panier");
+    await expect.poll(() => page.locator(".stepper-num").textContent()).toBe("1");
+  }
+  expect(await page.locator("html").getAttribute("lang")).toBe("fr");
+  expect(errors).toEqual([]);
 });

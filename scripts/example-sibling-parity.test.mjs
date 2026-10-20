@@ -226,6 +226,25 @@ describe("example sibling byte parity", () => {
     );
   });
 
+  it("keeps Remix booking components identical across locale strategies", async () => {
+    for (const component of [
+      "public/interactive.tsx",
+      "public/ticket-panel.tsx",
+      "public/proof-panel.tsx",
+      "public/client.tsx",
+    ]) {
+      const [reference, ...siblings] = await Promise.all(
+        ["cookie", "route", "subdomain", "tld"].map((strategy) =>
+          readFile(
+            path.join(REPOSITORY_ROOT, "examples", `remix-${strategy}`, "app", component),
+            "utf8",
+          ),
+        ),
+      );
+      for (const sibling of siblings) expect(sibling, component).toBe(reference);
+    }
+  });
+
   it("allowlists Remix locale redirects against generated switch targets", async () => {
     for (const strategy of ["route", "subdomain", "tld"]) {
       const directory = path.join(REPOSITORY_ROOT, "examples", `remix-${strategy}`, "app");

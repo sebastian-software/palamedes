@@ -233,6 +233,13 @@ overrides the default deterministic content digest with a deployment version str
 Legacy message callbacks apply only to explicit `loadMessages` integrations;
 registry-backed catalogs reject them because browser assets do not carry raw messages.
 
+For matching date and time formatting during hydration, configure the server
+factory with `createI18n: () => createI18n({ timeZone: "Europe/Berlin" })` and render
+`data-palamedes-time-zone="Europe/Berlin"` on the document's `<html>` element.
+The adapter-owned browser entry reads that IANA time zone before translated
+modules execute. Omitting the attribute preserves the runtime's default time
+zone behavior.
+
 Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
 object exposes `resolveLocale(input)` for standalone locale resolution,
 `createI18n(locale)` for manual instance creation, and `get(context?)` — the

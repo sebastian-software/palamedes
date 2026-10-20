@@ -1,0 +1,150 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#QuantityLabel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# billet} other {# billets}}"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# place restante} other {# places restantes}}"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: examples/solid-cookie/src/components/ClientReady.tsx#ClientReady
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Ajouter au panier"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Participants"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Disponibilité"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Dans les coulisses"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Allemagne"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Réservez votre place à Frontend Stage 2026"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Pass conférence"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Devise"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "l'unité"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Moins de billets"
+
+#: examples/solid-cookie/src/components/LazyCatalogDetails.tsx
+msgid "Lazy catalog detail loaded."
+msgstr "Le détail du catalogue a été chargé à la demande."
+
+#: examples/solid-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Langue"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Localized for this document with Palamedes"
+msgstr "Localisé pour ce document avec Palamedes"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Plus de billets"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Nombre"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "un seul commutateur, tous les formats"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Pluriel"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Actualiser le résultat du serveur"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Rendered with Solid"
+msgstr "Rendu avec Solid"
+
+#: examples/solid-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Serveur"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "server locale"
+msgstr "langue du serveur"
+
+#: examples/solid-cookie/src/lib/server.ts#getLocalizedServerStatus
+msgid "Server query confirmed locale {locale}."
+msgstr "La requête serveur a confirmé la langue {locale}."
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr "Trois jours de conférences sur l'art de créer pour le web. Choisissez vos billets ci-dessous."
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/solid-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Lieu"
+
+#: examples/solid-cookie/src/routes/index.tsx#HomePageContent
+msgid "Welcome back, {attendeeName}."
+msgstr "Bon retour, {attendeeName}."

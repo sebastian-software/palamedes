@@ -1,6 +1,7 @@
-import { plural, t } from "@palamedes/core/macro";
+import { EVENT } from "@palamedes/example-ui";
+import { t } from "@palamedes/core/macro";
 
-import { LOCALES, LOCALE_LABELS, type Locale } from "./i18n.ts";
+import { LOCALES, type Locale } from "./i18n.ts";
 
 export type LocaleSwitchLink = {
   href?: string;
@@ -16,7 +17,6 @@ export type RenderHomePageOptions = {
   clientProof?: string;
   clientEntry?: string;
   framesHref?: string;
-  strategyLabel?: string;
   switchLinks?: LocaleSwitchLink[];
 };
 
@@ -29,42 +29,40 @@ export function renderHomePage({
   clientProof,
   clientEntry,
   framesHref = "/frames",
-  strategyLabel = "cookie",
   switchLinks,
 }: RenderHomePageOptions): string {
-  const seatCount = 3;
-  const title = t`Remix v3 is rendering ${locale ?? "en"} with Palamedes`;
-  const seats = plural(seatCount, { one: "# seat left", other: "# seats left" });
-  const description = t`This response was translated inside a request-scoped Remix handler.`;
+  const title = t`Book your seat at Frontend Stage 2026`;
+  const eyebrow = t`Localized for this document with Palamedes`;
+  const greeting = t`Welcome back, ${EVENT.attendeeName}.`;
+  const description = t`Three days of talks on the craft of building for the web. Choose your tickets below.`;
+  const renderedWith = t`Rendered with Remix`;
+  const serverLocale = t`server locale`;
+  const localeControlLabel = t`Locale`;
   const currentLocale = normalizePageLocale(locale);
 
   return `<!doctype html>
-<html lang="${escapeHtml(currentLocale)}">
+<html lang="${escapeHtml(currentLocale)}" data-palamedes-time-zone="Europe/Berlin">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
-    <style>
-      body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 3rem; line-height: 1.5; }
-      main { max-width: 42rem; }
-      code { background: #eef2f7; border-radius: 4px; padding: 0.125rem 0.25rem; }
-      form { display: inline; }
-      nav { display: flex; gap: 0.5rem; margin: 1.5rem 0; }
-      button { border: 1px solid #9ca3af; border-radius: 4px; background: #fff; padding: 0.375rem 0.75rem; }
-      button[aria-pressed="true"] { background: #111827; border-color: #111827; color: #fff; }
-    </style>
+    <link rel="stylesheet" href="/demo.css" />
   </head>
   <body>
-    <main>
-      <p><code>@palamedes/remix</code></p>
-      <p>Locale strategy: <strong>${escapeHtml(strategyLabel)}</strong></p>
-      ${banner ? `<p role="status">${escapeHtml(banner)}</p>` : ""}
-      <nav aria-label="Locale">${renderLocaleSwitcher(currentLocale, switchLinks, hasLocaleChoice)}</nav>
-      <h1>${escapeHtml(title)}</h1>
-      <p>${escapeHtml(description)}</p>
-      <p>${escapeHtml(seats)}</p>
-      <p>Active locale: <strong data-testid="server-locale-value">${escapeHtml(localeLabel)}</strong></p>
-      ${clientProof ? `<div data-remix-client-proof data-remix-frames-href="${escapeHtml(framesHref)}">${clientProof}</div>` : ""}
+    <main class="page-shell">
+      ${banner ? `<p class="notice" role="status">${escapeHtml(banner)}</p>` : ""}
+      <header class="topbar">
+        <div class="brand"><b>Frontend Stage</b><span class="brand-meta">Berlin · 2026</span></div>
+        <nav class="switcher" aria-label="Locale"><span class="switcher-label">${escapeHtml(localeControlLabel)}</span><div class="seg" role="group" aria-label="Language">${renderLocaleSwitcher(currentLocale, switchLinks, hasLocaleChoice)}</div></nav>
+      </header>
+      <section class="hero">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span>${escapeHtml(eyebrow)}</p>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="greet">${escapeHtml(greeting)}</p>
+        <p class="lede">${escapeHtml(description)}</p>
+      </section>
+      ${clientProof ? `<div data-remix-client-proof data-remix-locale="${escapeHtml(currentLocale)}" data-remix-frames-href="${escapeHtml(framesHref)}">${clientProof}</div>` : ""}
+      <footer class="foot"><span class="foot-badge">Palamedes</span>${escapeHtml(renderedWith)} · ${escapeHtml(serverLocale)} <strong data-testid="server-locale-value">${escapeHtml(localeLabel)}</strong></footer>
     </main>
     ${clientCatalog ?? ""}
     ${clientEntry ?? ""}
@@ -87,17 +85,17 @@ function renderLocaleSwitcher(
       const locale = item.locale;
       const active = locale === currentLocale;
       if (item.href) {
-        return `<form action="/locale" method="post">
+        return `<form style="display:contents" action="/locale" method="post">
         <input name="redirect" type="hidden" value="${escapeHtml(item.href)}" />
         <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" name="locale" type="submit" value="${escapeHtml(locale)}">
-          ${escapeHtml(LOCALE_LABELS[locale])}
+          ${escapeHtml(locale.toUpperCase())}
         </button>
       </form>`;
       }
 
-      return `<form action="/locale" method="post">
+      return `<form style="display:contents" action="/locale" method="post">
         <button aria-pressed="${active}" data-testid="locale-switch-${escapeHtml(locale)}" ${active && hasLocaleChoice ? "disabled" : ""} name="locale" type="submit" value="${escapeHtml(locale)}">
-          ${escapeHtml(LOCALE_LABELS[locale])}
+          ${escapeHtml(locale.toUpperCase())}
         </button>
       </form>`;
     })
