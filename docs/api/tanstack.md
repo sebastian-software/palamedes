@@ -25,9 +25,11 @@ Start to fail at module import because its serializer has no `isStream` export.
 
 Solid Start remains **under integration verification** in
 [#1252](https://github.com/sebastian-software/palamedes/issues/1252).
-The existing Solid/Nitro examples use Solid and `@solidjs/web@2.0.0-rc.3`.
+The existing Solid/Nitro examples use Solid and `@solidjs/web@2.0.0-rc.16`
+with the Solid Vite plugin's Start Mode.
 Solid Start's separate `2.0.0-rc.8` release requires
-`@solidjs/web >=2.0.0-rc.6 <3.0.0`. The stable 1.169.3 package declares
+`@solidjs/web >=2.0.0-rc.6 <3.0.0`, which the current Nitro baseline satisfies.
+That runtime peer match does not verify the separate Start host. The stable 1.169.3 package declares
 `solid-js >=1.0.0`; that broad peer range alone does not prove compatibility
 with Palamedes' Solid 2 baseline. Neither Start line is proven by the Nitro examples.
 

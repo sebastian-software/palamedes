@@ -15,17 +15,17 @@
     "@palamedes/example-ui": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/solid": "workspace:^",
-    "@solidjs/router": "2.0.0-next.18",
-    "@solidjs/web": "2.0.0-rc.3",
+    "@solidjs/router": "2.0.0-next.41",
+    "@solidjs/web": "2.0.0-rc.16",
     "nitro": "3.0.260610-beta",
-    "solid-js": "2.0.0-rc.3"
+    "solid-js": "2.0.0-rc.16"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "@solidjs/vite-plugin": "3.0.0-next.37",
-    "filesystem-routing": "0.2.1",
+    "@solidjs/vite-plugin": "3.0.0-next.50",
+    "filesystem-routing": "0.4.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   },

@@ -21,7 +21,11 @@ shares the same catalog model, runtime semantics, and Vite plugin path as the
 React integrations while swapping only the JSX adapter layer.
 
 The current adapter targets Solid 2, starting with `2.0.0-rc.3`. Solid 1 is no
-longer part of the supported surface.
+longer part of the supported surface. The verified app examples pin Solid and
+`@solidjs/web` to `2.0.0-rc.16`, `@solidjs/vite-plugin` to `3.0.0-next.50`,
+`@solidjs/router` to `2.0.0-next.41`, and `filesystem-routing` to `0.4.0`.
+They use the Vite plugin's **Start Mode** with Nitro v3, rather than the
+separate Solid Start host.
 
 > **Breaking minor release at `1.18.0`:** `@palamedes/solid` moved from Solid 1
 > to Solid 2 while Palamedes packages continued their lockstep `1.x` releases.
@@ -35,8 +39,8 @@ longer part of the supported surface.
 ## Install
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime solid-js@^2.0.0-rc.3
-pnpm add -D @palamedes/cli @palamedes/config @palamedes/vite-plugin @solidjs/vite-plugin
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime solid-js@2.0.0-rc.16 @solidjs/web@2.0.0-rc.16
+pnpm add -D @palamedes/cli @palamedes/config @palamedes/vite-plugin @solidjs/vite-plugin@3.0.0-next.50
 ```
 
 ## Example
@@ -150,17 +154,38 @@ the host's ordinary error UI responsible for lazy route failures:
 
 ```ts
 import path from "node:path";
+import type { StartMiddleware } from "@solidjs/vite-plugin";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
 import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 
+const serverI18nScope = createServerI18nScope();
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
   clientDirectory: path.resolve(process.cwd(), ".output/public"),
   resolveLocale: (request) => resolveLocale(request),
   nonce: (request) => serverRequestContext(request).cspNonce,
 });
 
-const i18n = await createViteServerI18n({ locale });
-return serverI18nScope.run(i18n, () => next());
+// Start Mode receives an event; the catalog helper receives its Request.
+export default [
+  (event, next) => catalogDelivery(event.request, next),
+  async (event, next) => {
+    event.nonce = serverRequestContext(event.request).cspNonce;
+    const locale = resolveLocale(event.request);
+    const i18n = await createViteServerI18n({ locale });
+    return serverI18nScope.run(i18n, next);
+  },
+] satisfies StartMiddleware[];
+```
+
+Keep `@palamedes/runtime` and `@palamedes/vite-plugin` in Vite's SSR module
+graph so their virtual catalog imports resolve during development:
+
+```ts
+// vite.config.ts
+export default {
+  ssr: { noExternal: ["@palamedes/runtime", "@palamedes/vite-plugin"] },
+};
 ```
 
 `createViteServerI18n` owns the lazy server catalog store and keeps request
@@ -173,7 +198,11 @@ from an arbitrary client-supplied header. The adapter's `nonce` applies only
 to its own import map and readiness/bootstrap delivery tags. Solid's
 `HydrationScript` and `renderToStream` own framework hydration scripts; pass
 the host request nonce to those Solid APIs as well when the document uses a
-nonce-based CSP. Avoid putting `integrity`, `crossorigin`, or `referrerpolicy` on the Solid client
+nonce-based CSP. In Start Mode, set `event.nonce` before calling `next()`;
+the generated server entry forwards it to Solid's renderer. A custom Document
+must pass the same script nonce from `getRequestEvent()?.nonce` to its
+`HydrationScript`. The cookie example exercises this native path without
+custom client or server entries. Avoid putting `integrity`, `crossorigin`, or `referrerpolicy` on the Solid client
 entry: the adapter rejects those entries because its dynamic import gate cannot
 preserve their fetch semantics. Keep such entries outside this delivery path.
 Also avoid importing `.po` files, the parser, or a catalog virtual module in

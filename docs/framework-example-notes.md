@@ -38,7 +38,8 @@ These examples pin React Start 1.169.3 with TanStack Router 1.170.45.
 A separate Solid Start integration remains v2 release work in
 [#1252](https://github.com/sebastian-software/palamedes/issues/1252).
 Solid Start 2.0.0-rc.8 requires `@solidjs/web >=2.0.0-rc.6`, while the Solid
-examples below use Solid/Nitro and Solid 2.0.0-rc.3. They do not prove Solid
+examples below use Solid 2.0.0-rc.16 with the Solid Vite plugin's Start Mode
+and Nitro. The runtime now satisfies that peer range, but the examples do not prove Solid
 Start support; see the [adapter notes](./api/tanstack.md) for the remaining
 version and host-build verification gaps.
 
@@ -48,7 +49,9 @@ The `solid-cookie`, `solid-route`, `solid-subdomain`, and
 `solid-tld` examples verify:
 
 - Vite-based Palamedes integration in Solid
-- Solid 2's Vite Environment API with Nitro v3 output
+- Solid 2.0.0-rc.16 and `@solidjs/web@2.0.0-rc.16`
+- `@solidjs/vite-plugin@3.0.0-next.50` Start Mode and Nitro v3 output
+- `@solidjs/router@2.0.0-next.41` with `filesystem-routing@0.4.0`
 - request-local SSR plus a hook-free, document-fixed client locale
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
