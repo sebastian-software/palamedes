@@ -3,6 +3,13 @@
 `@palamedes/transform` exposes the low-level macro transformer used by the
 plugins.
 
+`transformPalamedesMacros()` also accepts `.vue` source: it transforms macros
+inside inline `<script>` and `<script setup>` blocks, preserving the surrounding
+SFC and a source map to the original file. Setup blocks execute per component
+instance, so direct setup-level macro calls are valid. Normal script blocks
+retain the function-scope requirement. The shared default filter below remains
+JavaScript/TypeScript; the Vite adapter additionally includes `.vue` files.
+
 ## Exports
 
 - `transformPalamedesMacros(source, filename, options?)`

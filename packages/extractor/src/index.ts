@@ -14,7 +14,7 @@ import {
   type NativeExtractedMessage,
 } from "@palamedes/core-node";
 
-const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx|mdx)$/i;
+const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx|mdx|vue)$/i;
 
 export type ExtractedMessageInfo = NativeExtractedMessage;
 export type PalamedesExtractorOptions = {
@@ -22,7 +22,7 @@ export type PalamedesExtractorOptions = {
 };
 
 /**
- * Extract source-first messages from a JavaScript, TypeScript, or MDX module.
+ * Extract source-first messages from JavaScript, TypeScript, MDX, or Vue SFC scripts.
  */
 export function extractMessages(
   source: string,
@@ -39,6 +39,7 @@ export function extractMessages(
  * - JSX: <Trans>, <Plural>, <Select>, <SelectOrdinal>
  * - JS: t`...`, t({...}), plural(), select(), selectOrdinal()
  * - MDX: semantic Markdown blocks, rich inline markup, expressions, and JSX
+ * - Vue: inline script and script setup blocks, preserving SFC source origins
  *
  * @example
  * ```ts

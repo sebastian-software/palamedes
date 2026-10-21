@@ -40,7 +40,7 @@ interface PalamedesPluginOptions {
 
 Defaults:
 
-- `include`: `/\.([cm]?[jt]s|[jt]sx)$/`
+- `include`: JavaScript/TypeScript (`/\.([cm]?[jt]s|[jt]sx)$/`) and Vue SFCs (`/\.vue$/i`)
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
@@ -107,6 +107,40 @@ because the generated JSX module type needs Rolldown; plain Rollup-based Vite 7
 and older projects can set `mdx: false` while keeping macros and catalog loading.
 See [MDX
 messages](../mdx.md) for authoring and configuration.
+
+## Vue single-file components
+
+Use `plugins: [palamedes({ framework: "none", mdx: false }), vue()]`, where `vue`
+comes from `@vitejs/plugin-vue`. Keep Palamedes before the Vue plugin. Macros
+from `@palamedes/core/macro` work directly in inline `<script setup>` and
+`<script>` blocks, including TypeScript. The native CLI and
+`@palamedes/extractor` discover the same messages with `.vue` origins.
+Import macros in the script block that uses them.
+
+```vue
+<script setup lang="ts">
+import { computed, ref } from "vue";
+import { plural, t } from "@palamedes/core/macro";
+
+const title = t`Choose your tickets`;
+const quantity = ref(1);
+const label = computed(() => {
+  const count = quantity.value;
+  return plural(count, { one: "# ticket", other: "# tickets" });
+});
+</script>
+
+<template>
+  <h1>{{ title }}</h1>
+  <p>{{ label }}</p>
+</template>
+```
+
+Compiled active-locale messages are delivered before the component executes,
+including for async Vue components. Catalog imports and runtime initialization
+remain adapter-owned. Template expressions, automatic template-text extraction,
+and Vue rich-text components are not supported. See the runnable
+[Vue proof](../../proof/vue-vite/README.md).
 
 ## Server and document delivery
 

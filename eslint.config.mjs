@@ -6,6 +6,7 @@ import { disableRule, getEslintConfig, optionsToFilename } from "eslint-config-s
 const generatedAndBuildIgnores = {
   ignores: [
     "**/dist/**",
+    "examples/node-backend/dist-tsdown/**",
     "**/node_modules/**",
     "**/.palamedes/**",
     "**/.next/**",

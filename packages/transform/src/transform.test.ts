@@ -18,6 +18,18 @@ type SourceMapLike = {
 };
 
 describe("transformPalamedesMacros", () => {
+  it("transforms Vue setup macros in place with an SFC source map", () => {
+    const source =
+      '<template>😀 {{ label }}</template>\n<script setup lang="ts">\nimport { t } from "@palamedes/core/macro";\nconst label: string = t`Open`;\n</script>\n<style scoped>.x { color: red; }</style>';
+    const result = transformPalamedesMacros(source, "View.vue");
+    expect(result.hasChanged).toBe(true);
+    expect(result.compiledIds).toHaveLength(1);
+    expect(result.code).toContain("getI18n()._(");
+    expect(result.code).not.toContain("@palamedes/core/macro");
+    expect(result.code).toMatch(/^<template>😀 \{\{ label \}\}<\/template>/u);
+    expect(result.code).toMatch(/<style scoped>\.x \{ color: red; \}<\/style>$/u);
+    expect(result.map).toMatchObject({ sources: ["View.vue"], sourcesContent: [source] });
+  });
   it.each([
     [
       'import { t as translate } from "@palamedes/core/macro";\nconst value = translate`Hello`;',

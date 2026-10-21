@@ -167,7 +167,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Does this work outside Next.js?",
-        a: `Yes. The same model is verified across ${contentStats.serverFrameworkCount} server frameworks in CI, including the RSC-capable ones beyond Next.js. Palamedes ships React and Solid packages; there is no Vue or React Native support.`,
+        a: `Yes. The same model is verified across ${contentStats.serverFrameworkCount} server frameworks in CI, including the RSC-capable ones beyond Next.js. Palamedes ships React and Solid packages. Vue 3 + Vite has an experimental browser-only SFC integration; Nuxt, Vue SSR, and React Native are not supported yet.`,
       },
       {
         q: "Why can't React Intl support server components?",

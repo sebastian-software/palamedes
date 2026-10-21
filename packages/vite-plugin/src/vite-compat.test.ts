@@ -183,7 +183,7 @@ describe("declarative macro transform filters", () => {
     }
 
     expect(hook.filter?.id).toEqual({
-      include: [/\.([cm]?[jt]s|[jt]sx)$/, /\?/],
+      include: [/\.([cm]?[jt]s|[jt]sx)$/, /\.vue$/i, /\?/],
     });
     expect(hook.filter?.code).toEqual([
       "@palamedes/core/macro",

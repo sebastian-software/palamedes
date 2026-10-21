@@ -119,6 +119,10 @@ See the [configuration field](./configuration.md#cli-plugins) and the
 Extracts messages from configured source files and writes source-string-first
 catalogs.
 
+Bare source directories include `.vue` files. Inline `<script setup>` and
+`<script>` macros use the same native extraction as JavaScript and TypeScript,
+with references pointing to the original SFC. Template text is not extracted.
+
 ```bash
 pmds extract
 pmds extract --config ./palamedes.yaml
@@ -212,7 +216,7 @@ template expressions.
 
 Checks Palamedes source authoring without creating or updating catalogs. It
 uses the union of the configured `catalogs[].include` and `exclude` file sets,
-deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, and MDX.
+deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, MDX, and Vue scripts.
 
 ```bash
 pmds lint

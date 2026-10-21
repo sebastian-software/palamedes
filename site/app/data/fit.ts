@@ -1,9 +1,9 @@
 /* The cases where the answer is "use something else", stated plainly. */
 export const NOT_FOR_YOU = [
   {
-    case: "You build with Vue, Angular, or Svelte",
+    case: "You need Vue SSR, Angular, or Svelte",
     answer:
-      "Palamedes ships React and Solid packages only. Lingui covers Vue, i18next covers nearly everything, and vue-i18n is the idiomatic choice inside the Vue ecosystem.",
+      "React and Solid have established integrations. Vue + Vite has an experimental browser-only SFC path; Nuxt, Vue SSR, Angular, and Svelte are not supported. Check those boundaries before choosing the Vue preview.",
   },
   {
     case: "You ship React Native",

@@ -64,6 +64,19 @@ may change faster than Stable surfaces.
 | `palamedes-build` and `palamedes-i18n` Rust crates    | Preview  | Experimental, unpublished Cargo integration and external catalog runtime. Text, display arguments, string selects, and cardinal/ordinal plurals; see the [Rust guide](./rust-applications.md).      |
 | Other `crates/*` Rust APIs                            | Preview  | Primarily toolchain APIs; no separately stable public Rust SDK contract is promised.                                                                                                                |
 
+### Vue SFC Preview contract
+
+Vue 3 + Vite has an experimental, browser-only integration through
+`@palamedes/vite-plugin`. Core macros work inside inline `<script setup>` and
+`<script>` blocks, with native extraction, transforms, source maps, and automatic
+active-locale catalog delivery. The [Vue proof](../proof/vue-vite/README.md)
+verifies the shared booking demo in English, German, French, and Spanish.
+
+This SFC integration is **Preview**, even though the surrounding Vite plugin's
+existing APIs are Stable. Template-expression macros, automatic template-text
+extraction, Vue rich text, SSR, and Nuxt are not supported yet. The proof is
+separate from the supported server-framework example matrix.
+
 ### Waku Preview contract
 
 The examples verify Waku `1.0.0-rc.3` with React, React DOM, and

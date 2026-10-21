@@ -126,7 +126,7 @@ export default defineConfig({
   },
   boundary: {
     title: "Vite support does not mean every Vite renderer is supported.",
-    body: "Palamedes currently ships public UI packages for React and Solid. Vue, Svelte, Preact, Lit, and other Vite templates do not receive a renderer adapter merely because the build plugin can transform TypeScript. Direct application catalog imports currently use PO files.",
+    body: "Palamedes ships rich-message UI packages for React and Solid. Vue 3 has an experimental browser-only SFC integration through the Vite plugin, without Vue rich text or SSR. Svelte, Preact, Lit, and other Vite templates do not receive an adapter merely because the plugin transforms TypeScript. Direct application catalog imports use PO files.",
     link: {
       label: "Read the Vite plugin guide",
       href: docsHref("api/vite-plugin"),
@@ -147,12 +147,12 @@ export default defineConfig({
     },
     {
       q: "Can I use Palamedes with Vue or Svelte?",
-      a: "Not as a supported end-to-end UI integration today. The build plugin is Vite-based, but public authoring and client runtime packages currently target React and Solid.",
+      a: "Vue 3 + Vite has an experimental browser-only integration: core macros work directly in SFC script blocks, with native extraction and automatic catalog delivery. Vue rich text, Vue SSR, Nuxt, and Svelte are not supported yet. See the Vue framework page for the runnable proof and its boundaries.",
     },
   ],
   related: [
     { label: "TanStack Start i18n", href: "/frameworks/tanstack-start" },
-    { label: "Solid i18n", href: "/frameworks/solid" },
+    { label: "Vue 3 + Vite preview", href: "/frameworks/vue" },
     { label: "React Router i18n in Framework Mode", href: "/frameworks/react-router" },
   ],
   finalCta: {

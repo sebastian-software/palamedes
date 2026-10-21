@@ -1,0 +1,3 @@
+# Keep experimental Vue tooling outside the production workspace dependency graph.
+packages:
+  - .

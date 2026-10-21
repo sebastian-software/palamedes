@@ -1849,8 +1849,52 @@ fn analyze_source_in(
         });
     }
 
-    let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
-    let parsed = Parser::new(allocator, source, source_type).parse();
+    if crate::vue::is_vue(filename) {
+        let mut result = SourceAnalysisResult {
+            messages: Vec::new(),
+            diagnostics: Vec::new(),
+            comments: Vec::new(),
+        };
+        for script in crate::vue::script_blocks(source, filename)? {
+            let analyzed = analyze_javascript_in(
+                allocator,
+                source,
+                filename,
+                reference_scopes,
+                rules,
+                &script,
+            )?;
+            result.messages.extend(analyzed.messages);
+            result.diagnostics.extend(analyzed.diagnostics);
+            result.comments.extend(analyzed.comments);
+        }
+        return Ok(result);
+    }
+
+    analyze_javascript_in(
+        allocator,
+        source,
+        filename,
+        reference_scopes,
+        rules,
+        &crate::vue::ScriptBlock {
+            range: 0..source.len(),
+            source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
+            setup: false,
+        },
+    )
+}
+
+fn analyze_javascript_in(
+    allocator: &Allocator,
+    source: &str,
+    filename: &str,
+    reference_scopes: bool,
+    rules: &SourceRuleOptions,
+    script: &crate::vue::ScriptBlock,
+) -> PalamedesResult<SourceAnalysisResult> {
+    let parse_source = crate::vue::masked_source(source, &script.range);
+    let parsed = Parser::new(allocator, &parse_source, script.source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
         let filename = display_filename(filename).to_owned();
@@ -1913,19 +1957,22 @@ fn analyze_source_in(
 
     let macro_resolution = MacroResolution::resolve(&parsed.program, &collector);
 
-    validate_translation_macro_scopes(
-        &parsed.program,
-        filename,
-        source,
-        |local_name, span| {
-            collector
-                .imported_macros
-                .get(local_name)
-                .filter(|_| macro_resolution.is_macro_use(span))
-                .map(|macro_info| macro_info.imported_name.clone())
-        },
-        |_local_name, _span| false,
-    )?;
+    // Vue compiles the entire setup block into a per-instance function.
+    if !script.setup {
+        validate_translation_macro_scopes(
+            &parsed.program,
+            filename,
+            source,
+            |local_name, span| {
+                collector
+                    .imported_macros
+                    .get(local_name)
+                    .filter(|_| macro_resolution.is_macro_use(span))
+                    .map(|macro_info| macro_info.imported_name.clone())
+            },
+            |_local_name, _span| false,
+        )?;
+    }
 
     let mut extractor = ExtractionVisitor::new(
         filename,

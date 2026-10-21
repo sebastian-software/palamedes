@@ -126,6 +126,7 @@ const ROUTE_EXPECTATIONS = [
     path: "/frameworks/vite",
     h1: "Vite i18n for React and Solid, in one plugin.",
   },
+  { path: "/frameworks/vue", h1: "Vue i18n, directly in your components." },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "Your first working translation." },
   { path: "/compare", h1: "Choose the i18n model you can keep." },
@@ -394,11 +395,11 @@ async function checkRoutes(context, label, { expectHydration }) {
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
     const integrationLinks = await integrationSection.locator("ul a").count();
-    if (integrationLinks !== 14) {
-      fail(`home integration band: expected 14 linked entries, got ${integrationLinks}`);
+    if (integrationLinks !== 15) {
+      fail(`home integration band: expected 15 linked entries, got ${integrationLinks}`);
     }
     const expectedGroups = {
-      "UI & rendering": 3,
+      "UI & rendering": 4,
       "Verified app integrations": 6,
       "Build tools": 2,
       Backends: 2,

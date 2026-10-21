@@ -32,6 +32,7 @@ const paths = [
   "/proof",
   "/message-splitting",
   "/frameworks",
+  "/frameworks/vue",
   "/architecture",
   "/get-started",
   "/guides",

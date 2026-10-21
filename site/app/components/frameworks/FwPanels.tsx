@@ -63,6 +63,12 @@ const PANELS: FwPanel[] = [
     sourcePath: "packages/vite-plugin",
     body: "The shared build integration behind the TanStack Start, Solid, Waku, and React Router families. Use it directly with React or Solid for macro transforms, PO imports, and build diagnostics.",
   },
+  {
+    name: "Vue · Preview",
+    slug: "vue",
+    sourcePath: "proof/vue-vite",
+    body: "Vue 3 + Vite with macros directly in script setup and normal script blocks. Native extraction, source maps, active-locale catalogs, and async components run in the shared booking proof. This browser-only path does not yet cover Nuxt, SSR, or Vue rich text.",
+  },
 ];
 
 export function FwPanels() {
