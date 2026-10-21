@@ -67,7 +67,13 @@ const PANELS: FwPanel[] = [
     name: "Vue · Preview",
     slug: "vue",
     sourcePath: "proof/vue-vite",
-    body: "Vue 3 + Vite with macros directly in script setup and normal script blocks. Native extraction, source maps, active-locale catalogs, and async components run in the shared booking proof. This browser-only path does not yet cover Nuxt, SSR, or Vue rich text.",
+    body: "Vue 3 + Vite with macros directly in script setup and normal script blocks. Native extraction, source maps, active-locale catalogs, and async components run in the shared booking proof. This Vite proof is browser-only; the separate Nuxt proof covers Node SSR. Vue rich text remains unsupported.",
+  },
+  {
+    name: "Nuxt · Preview",
+    slug: "nuxt",
+    sourcePath: "proof/nuxt-ssr",
+    body: "A private Nuxt 4 + Nitro Node SSR proof reuses Vue SFC macros and the shared booking demo. It checks translated HTML, hydration, lazy catalogs and pages, localized API handlers, and parallel request isolation in four languages. This root-mounted proof is outside the four-strategy matrix.",
   },
 ];
 

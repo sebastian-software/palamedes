@@ -1,9 +1,9 @@
 /* The cases where the answer is "use something else", stated plainly. */
 export const NOT_FOR_YOU = [
   {
-    case: "You need Vue SSR, Angular, or Svelte",
+    case: "You need a stable Vue adapter, Angular, or Svelte",
     answer:
-      "React and Solid have established integrations. Vue + Vite has an experimental browser-only SFC path; Nuxt, Vue SSR, Angular, and Svelte are not supported. Check those boundaries before choosing the Vue preview.",
+      "React and Solid have established integrations. Vue + Vite and Nuxt 4 have separate experimental browser and Node SSR proofs, with no published Vue or Nuxt adapter package. Angular and Svelte remain unsupported. Check the preview boundaries before choosing either Vue path.",
   },
   {
     case: "You ship React Native",

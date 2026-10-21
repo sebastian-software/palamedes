@@ -222,9 +222,19 @@ blocks (`js`, `jsx`, `ts`, `tsx`). Configure
 into a per-instance function. Normal scripts keep module-scope restrictions.
 The native CLI and extractor report original `.vue` origins; the Vite adapter
 preserves SFC source maps and delivers active-locale fragments before initial
-or async components execute. Template expressions/text, Vue rich text, and Nuxt
-integration are not supported. `/proof/vue-vite/README.md` owns the runnable
+or async components execute. Template expressions/text and Vue rich text
+are not supported. `/proof/vue-vite/README.md` owns the runnable
 Frontend Stage booking proof and the isolated TypeScript 6 tooling requirement.
+
+A separate private Nuxt 4.6.2 + Nitro Node SSR proof in `/proof/nuxt-ssr/README.md`
+reuses the SFC compiler through a local Nuxt module. It verifies SSR without
+JavaScript, matching hydration, active-locale lazy components and pages, Nitro API
+macros, parallel request isolation, and full-document locale navigation in
+English, German, French, and Spanish. Nitro owns the production server catalog
+store and embeds browser locale bindings at build time. This root-mounted,
+same-origin, query-locale proof remains outside the six-family matrix; no Nuxt
+package is published. CDN/subpath assets, other Nitro presets, prerendering,
+streaming, islands, catalog HMR, and other locale URL strategies are not verified.
 
 But Palamedes intentionally avoids some historical Lingui surface area:
 

@@ -1,0 +1,198 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue#currency
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue#addToCart
+msgid ""
+"{count, plural, one {Added # ticket to your cart.} other {Added # tickets to "
+"your cart.}}"
+msgstr ""
+"{count, plural, one {# Ticket zum Warenkorb hinzugefügt.} other {# Tickets "
+"zum Warenkorb hinzugefügt.}}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue#ticketLabel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Add to cart"
+msgstr "In den Warenkorb"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Attendees"
+msgstr "Teilnehmer"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+#: proof/nuxt-ssr/app/pages/insights.vue
+msgid "Back to booking"
+msgstr "Zurück zur Buchung"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/ProofPanel.vue
+#~ msgid "Client"
+#~ msgstr "Client"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/App.vue
+#~ msgid "client locale"
+#~ msgstr "Client-Sprache"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/ProofPanel.vue
+#~ #: proof/vue-vite/src/ProofPanel.vue#refresh
+#~ msgid "Client runtime confirmed locale."
+#~ msgstr "Die Client-Laufzeit hat die Sprache bestätigt."
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Currency"
+msgstr "Währung"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Date"
+msgstr "Datum"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "each"
+msgstr "pro Stück"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+#: proof/nuxt-ssr/app/components/CatalogDetails.vue
+#: proof/nuxt-ssr/app/pages/insights.vue
+msgid "Lazy catalog detail loaded."
+msgstr "Katalogdetails wurden bei Bedarf geladen."
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Locale"
+msgstr "Sprache"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Number"
+msgstr "Zahl"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Open lazy page"
+msgstr "Zusätzliche Seite öffnen"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Plural"
+msgstr "Plural"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/ProofPanel.vue
+#~ msgid "Refresh client result"
+#~ msgstr "Client-Ergebnis aktualisieren"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Rendered with Nuxt"
+msgstr "Mit Nuxt gerendert"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/App.vue
+#~ msgid "Rendered with Vue"
+#~ msgstr "Gerendert mit Vue"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Server"
+msgstr "Server"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "server and client locale"
+msgstr "Sprache auf Server und Client"
+
+#: proof/nuxt-ssr/server/api/proof.get.ts
+msgid "Server query confirmed locale {locale}."
+msgstr "Server-Query bestätigte Sprache {locale}."
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Show lazy catalog details"
+msgstr "Katalogdetails nachladen"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten "
+"deine Tickets."
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Total"
+msgstr "Gesamt"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Venue"
+msgstr "Ort"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."

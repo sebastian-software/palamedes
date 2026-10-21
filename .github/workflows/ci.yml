@@ -201,6 +201,12 @@ jobs:
         if: ${{ !matrix.full }}
         run: pnpm test:platform
 
+      - name: Verify Nuxt SSR proof
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: |
+          pnpm --dir proof/nuxt-ssr install --frozen-lockfile
+          pnpm --dir proof/nuxt-ssr test
+
       - name: Run tests
         if: ${{ matrix.full }}
         run: pnpm test
