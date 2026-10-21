@@ -1,5 +1,23 @@
 import { createExtractor, extractMessages, extractor, type ExtractedMessageInfo } from "./index";
 
+it("extracts macros directly from Vue setup blocks through both public APIs", async () => {
+  const source =
+    '<template><p>{{ label }}</p></template>\n<script setup lang="ts">\nimport { t } from "@palamedes/core/macro";\nconst label = t({ message: "Open", context: "button", comment: "Main action" });\n</script>';
+  expect(extractor.match("src/View.vue")).toBe(true);
+  const messages = extractMessages(source, "src/View.vue");
+  expect(messages).toEqual([
+    expect.objectContaining({
+      message: "Open",
+      context: "button",
+      comment: "Main action",
+      origin: ["src/View.vue", 4, undefined],
+    }),
+  ]);
+  const collected: ExtractedMessageInfo[] = [];
+  await extractor.extract("src/View.vue", source, (message) => collected.push(message));
+  expect(collected).toEqual(messages);
+});
+
 it("matches MDX modules as first-class extraction inputs", () => {
   expect(extractor.match("content/guide.mdx")).toBe(true);
   expect(extractor.match("content/guide.md")).toBe(false);

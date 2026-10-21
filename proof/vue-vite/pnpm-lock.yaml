@@ -11,6 +11,9 @@ importers:
       '@palamedes/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@palamedes/example-ui':
+        specifier: link:../../packages/example-ui
+        version: link:../../packages/example-ui
       '@palamedes/runtime':
         specifier: link:../../packages/runtime
         version: link:../../packages/runtime

@@ -6,46 +6,213 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-#: proof/vue-vite/src/messages.ts#travelerCount
+#: proof/vue-vite/src/ProofPanel.vue
+#: proof/vue-vite/src/TicketPanel.vue#currency
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: proof/vue-vite/src/ProofPanel.vue
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#travelerCount
+#~ msgid ""
+#~ "{count, plural, =0 {No travelers yet} one {# traveler ready} other {# "
+#~ "travelers ready}}"
+#~ msgstr ""
+#~ "{count, plural, =0 {No travelers yet} one {# traveler ready} other {# "
+#~ "travelers ready}}"
+
+#: proof/vue-vite/src/TicketPanel.vue#addToCart
 msgid ""
-"{count, plural, =0 {No travelers yet} one {# traveler ready} other {# "
-"travelers ready}}"
+"{count, plural, one {Added # ticket to your cart.} other {Added # tickets to "
+"your cart.}}"
 msgstr ""
-"{count, plural, =0 {No travelers yet} one {# traveler ready} other {# "
-"travelers ready}}"
+"{count, plural, one {Added # ticket to your cart.} other {Added # tickets to "
+"your cart.}}"
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "A small Vue app, translated with Palamedes."
-msgstr "A small Vue app, translated with Palamedes."
+#: proof/vue-vite/src/TicketPanel.vue#ticketLabel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "Add traveler"
-msgstr "Add traveler"
+#: proof/vue-vite/src/ProofPanel.vue
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# seat left} other {# seats left}}"
 
-#: proof/vue-vite/src/packing.ts#packingTip
-msgid "Pack light. Leave room for memories."
-msgstr "Pack light. Leave room for memories."
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "Plan your next trip"
-msgstr "Plan your next trip"
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "Remove traveler"
-msgstr "Remove traveler"
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "Show packing tip"
-msgstr "Show packing tip"
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "A small Vue app, translated with Palamedes."
+#~ msgstr "A small Vue app, translated with Palamedes."
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "Traveler name"
-msgstr "Traveler name"
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Add to cart"
+msgstr "Add to cart"
 
-#: proof/vue-vite/src/messages.ts#labels
-msgid "Travelers"
-msgstr "Travelers"
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Add traveler"
+#~ msgstr "Add traveler"
 
-#: proof/vue-vite/src/messages.ts#greeting
-msgid "Welcome, {name}!"
-msgstr "Welcome, {name}!"
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Attendees"
+msgstr "Attendees"
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Availability"
+msgstr "Availability"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+#: proof/vue-vite/src/App.vue
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "Client"
+msgstr "Client"
+
+#: proof/vue-vite/src/App.vue
+msgid "client locale"
+msgstr "client locale"
+
+#: proof/vue-vite/src/ProofPanel.vue
+#: proof/vue-vite/src/ProofPanel.vue#refresh
+msgid "Client runtime confirmed locale."
+msgstr "Client runtime confirmed locale."
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Conference pass"
+msgstr "Conference pass"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "Currency"
+msgstr "Currency"
+
+#: proof/vue-vite/src/ProofPanel.vue
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Date"
+msgstr "Date"
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "each"
+msgstr "each"
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+#: proof/vue-vite/src/LazyCatalogDetails.vue
+msgid "Lazy catalog detail loaded."
+msgstr "Lazy catalog detail loaded."
+
+#: proof/vue-vite/src/App.vue
+msgid "Locale"
+msgstr "Locale"
+
+#: proof/vue-vite/src/App.vue
+msgid "Localized for this document with Palamedes"
+msgstr "Localized for this document with Palamedes"
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "More tickets"
+msgstr "More tickets"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "Number"
+msgstr "Number"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "one switch, every format"
+msgstr "one switch, every format"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/packing.ts#packingTip
+#~ msgid "Pack light. Leave room for memories."
+#~ msgstr "Pack light. Leave room for memories."
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Plan your next trip"
+#~ msgstr "Plan your next trip"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "Plural"
+msgstr "Plural"
+
+#: proof/vue-vite/src/ProofPanel.vue
+msgid "Refresh client result"
+msgstr "Refresh client result"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Remove traveler"
+#~ msgstr "Remove traveler"
+
+#: proof/vue-vite/src/App.vue
+msgid "Rendered with Vue"
+msgstr "Rendered with Vue"
+
+#: proof/vue-vite/src/App.vue
+msgid "Show lazy catalog details"
+msgstr "Show lazy catalog details"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Show packing tip"
+#~ msgstr "Show packing tip"
+
+#: proof/vue-vite/src/App.vue
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Total"
+msgstr "Total"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Traveler name"
+#~ msgstr "Traveler name"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Travelers"
+#~ msgstr "Travelers"
+
+#: proof/vue-vite/src/TicketPanel.vue
+msgid "Venue"
+msgstr "Venue"
+
+#: proof/vue-vite/src/App.vue
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#greeting
+#~ msgid "Welcome, {name}!"
+#~ msgstr "Welcome, {name}!"

@@ -48,6 +48,7 @@ mod test_support;
 mod transform;
 mod translation_candidates;
 mod translation_scope;
+mod vue;
 
 use ferrocat::{MsgStr, PoFile, PoItem, parse_po as ferrocat_parse_po};
 use serde::Serialize;

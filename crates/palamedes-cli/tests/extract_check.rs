@@ -6,6 +6,33 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::{Value, json};
 
 #[test]
+fn vue_scripts_are_discovered_extracted_and_checked_by_the_native_cli() {
+    let fixture = fixture_dir("vue-scripts");
+    write_project(
+        &fixture,
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\n",
+        &[],
+    );
+    let source = fixture.join("src/View.vue");
+    fs::write(&source, "<template><p>{{ label }}</p></template>\n<script setup lang='ts'>\nimport {t} from '@palamedes/core/macro';\nconst label = t`Vue source`;\n</script>").unwrap();
+    let output = pmds(&fixture, &["extract", "--no-cache"]);
+    assert!(output.status.success(), "{output:?}");
+    let catalog = fs::read_to_string(fixture.join("locales/en.po")).unwrap();
+    assert!(catalog.contains("msgid \"Vue source\""), "{catalog}");
+    assert!(catalog.contains("src/View.vue"), "{catalog}");
+    let check = pmds(&fixture, &["extract", "--check", "--no-cache"]);
+    assert!(check.status.success(), "{check:?}");
+    fs::write(&source, "<script setup>import {t} from '@palamedes/core/macro'; const label=t`Changed Vue source`;</script>").unwrap();
+    assert_eq!(
+        pmds(&fixture, &["extract", "--check", "--no-cache"])
+            .status
+            .code(),
+        Some(3)
+    );
+    fs::remove_dir_all(fixture).unwrap();
+}
+
+#[test]
 fn reports_po_and_fcl_drift_without_mutating_catalogs() {
     let fixture = fixture_dir("po-fcl-drift");
     write_project(

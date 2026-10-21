@@ -1,70 +1,82 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from "vue";
+import { defineAsyncComponent, h, ref } from "vue";
+import { t } from "@palamedes/core/macro";
+import { EVENT } from "@palamedes/example-ui";
 
-import { greeting, labels, travelerCount } from "./messages";
+import TicketPanel from "./TicketPanel.vue";
+import ProofPanel from "./ProofPanel.vue";
 
-const PackingTip = defineAsyncComponent(() => import("./PackingTip.vue"));
-const copy = labels();
-const name = ref("Alex");
-const count = ref(1);
-const showTip = ref(false);
-const welcome = computed(() => greeting(name.value));
-const summary = computed(() => travelerCount(count.value));
+const LazyCatalogDetails = defineAsyncComponent({
+  loader: () => import("./LazyCatalogDetails.vue"),
+  loadingComponent: { render: () => h("p", { role: "status" }, "Loading details…") },
+  errorComponent: {
+    render: () =>
+      h("p", { role: "alert", "data-testid": "lazy-catalog-error" }, [
+        "Details are temporarily unavailable. Reload the page to try again. ",
+        h("button", { type: "button", onClick: () => window.location.reload() }, "Reload page"),
+      ]),
+  },
+});
+const copy = {
+  locale: t`Locale`,
+  eyebrow: t`Localized for this document with Palamedes`,
+  title: t`Book your seat at Frontend Stage 2026`,
+  greeting: t`Welcome back, ${EVENT.attendeeName}.`,
+  description: t`Three days of talks on the craft of building for the web. Choose your tickets below.`,
+  lazy: t`Show lazy catalog details`,
+  rendered: t`Rendered with Vue`,
+  runtime: t`client locale`,
+};
 const locale = document.documentElement.lang;
-const languages = { en: "English", fr: "Français", es: "Español" };
+const languages = { en: "English", fr: "French", es: "Spanish" };
+const open = ref(false);
 
-function localeHref(nextLocale: string) {
+function switchLocale(nextLocale: string) {
   const url = new URL(window.location.href);
   url.searchParams.set("locale", nextLocale);
-  return `${url.pathname}${url.search}${url.hash}`;
+  window.location.assign(url);
 }
 </script>
 
 <template>
-  <main>
-    <header>
-      <a class="brand" href="/">Palamedes <span>× Vue</span></a>
-      <nav aria-label="Language">
-        <a
-          v-for="(label, code) in languages"
-          :key="code"
-          :href="localeHref(code)"
-          :lang="code"
-          :aria-current="locale === code ? 'page' : undefined"
-        >
-          {{ label }}
-        </a>
-      </nav>
-    </header>
-    <section>
-      <p class="eyebrow">Vue 3 + Vite · Integration spike</p>
-      <h1>{{ copy.title }}</h1>
-      <p class="description">{{ copy.description }}</p>
-      <div class="planner">
-        <label for="name">{{ copy.name }}</label>
-        <input id="name" v-model="name" autocomplete="given-name" />
-        <p class="welcome" data-testid="greeting">{{ welcome }}</p>
-        <div class="travelers">
-          <span>{{ copy.travelers }}</span>
-          <div class="stepper">
-            <button
-              type="button"
-              :aria-label="copy.remove"
-              :disabled="count === 0"
-              @click="count--"
-            >
-              −
-            </button>
-            <output>{{ count }}</output>
-            <button type="button" :aria-label="copy.add" @click="count++">+</button>
-          </div>
+  <main class="page-shell">
+    <header class="topbar">
+      <div class="brand"><b>Frontend Stage</b><span class="brand-meta">Berlin · 2026</span></div>
+      <div class="switcher">
+        <span class="switcher-label">{{ copy.locale }}</span>
+        <div class="seg" role="group" aria-label="Language">
+          <button
+            v-for="(label, code) in languages"
+            :key="code"
+            :data-testid="`locale-switch-${code}`"
+            :aria-label="label"
+            :aria-pressed="locale === code"
+            :disabled="locale === code"
+            type="button"
+            @click="switchLocale(code)"
+          >
+            {{ code.toUpperCase() }}
+          </button>
         </div>
-        <p aria-live="polite" data-testid="traveler-count">{{ summary }}</p>
-        <button v-if="!showTip" class="details" type="button" @click="showTip = true">
-          {{ copy.details }}
-        </button>
-        <PackingTip v-if="showTip" />
       </div>
+    </header>
+    <section class="hero">
+      <p class="eyebrow"><span class="dot" aria-hidden="true" />{{ copy.eyebrow }}</p>
+      <h1>{{ copy.title }}</h1>
+      <p class="greet" data-testid="greeting">{{ copy.greeting }}</p>
+      <p class="lede">{{ copy.description }}</p>
     </section>
+    <div class="grid"><TicketPanel /><ProofPanel /></div>
+    <section>
+      <button type="button" data-testid="lazy-catalog-trigger" @click="open = !open">
+        {{ copy.lazy }}
+      </button>
+      <LazyCatalogDetails v-if="open" />
+    </section>
+    <footer class="foot">
+      <span class="foot-badge">Palamedes</span>{{ copy.rendered }} · {{ copy.runtime }}
+      <strong data-testid="client-locale-value">{{ locale.toUpperCase() }}</strong>
+    </footer>
+    <span data-testid="client-ready" hidden>ready</span>
   </main>
 </template>

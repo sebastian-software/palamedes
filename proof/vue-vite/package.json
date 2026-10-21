@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@palamedes/core": "link:../../packages/core",
+    "@palamedes/example-ui": "link:../../packages/example-ui",
     "@palamedes/runtime": "link:../../packages/runtime",
     "vue": "3.5.44"
   },

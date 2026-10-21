@@ -34,7 +34,7 @@ pub(super) struct Replacement {
 }
 
 /// Options controlling how macro transforms emit runtime code.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct NativeTransformOptions {
     /// Runtime module path used for injected imports.
@@ -66,7 +66,7 @@ pub struct NativeTransformOptions {
 }
 
 /// Configuration for framework Server Function instrumentation.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct ServerFunctionTransformOptions {
     /// Module that exports the initializer.
     #[serde(rename = "initializerModule")]
@@ -149,6 +149,62 @@ pub fn transform_macros(
 ) -> PalamedesResult<NativeTransformResult> {
     let options = options.unwrap_or_default();
 
+    if crate::vue::is_vue(filename) {
+        let scripts = crate::vue::script_blocks(source, filename)?;
+        // Vue hoists imports from both script kinds into the same module.
+        // Reserve identifiers from the other block too, so an injected getter
+        // cannot collide with its module declarations or component bindings.
+        let allocator = Allocator::default();
+        let mut reserved_names = std::collections::HashSet::new();
+        for script in &scripts {
+            let masked = crate::vue::masked_source(source, &script.range);
+            let parsed = Parser::new(&allocator, &masked, script.source_type).parse();
+            let mut collector = ImportCollector::new("@palamedes/runtime", "getI18n");
+            collector.visit_program(&parsed.program);
+            reserved_names.extend(collector.used_identifier_names);
+        }
+        let mut replacements = Vec::new();
+        let mut compiled_ids = Vec::new();
+        for script in scripts {
+            let result = transform_javascript(
+                source,
+                filename,
+                options.clone(),
+                &script,
+                Some(&reserved_names),
+            )?;
+            replacements.extend(result.edits.into_iter().map(|edit| Replacement {
+                start: edit.start,
+                end: edit.end,
+                text: edit.text,
+            }));
+            compiled_ids.extend(result.compiled_ids);
+        }
+        compiled_ids.sort();
+        compiled_ids.dedup();
+        return render_transform(source, filename, replacements, compiled_ids);
+    }
+
+    transform_javascript(
+        source,
+        filename,
+        options,
+        &crate::vue::ScriptBlock {
+            range: 0..source.len(),
+            source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
+            setup: false,
+        },
+        None,
+    )
+}
+
+fn transform_javascript(
+    source: &str,
+    filename: &str,
+    options: NativeTransformOptions,
+    script: &crate::vue::ScriptBlock,
+    reserved_names: Option<&std::collections::HashSet<String>>,
+) -> PalamedesResult<NativeTransformResult> {
     if let Some(server_functions) = &options.server_functions
         && (server_functions.initializer_module.is_empty()
             || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export))
@@ -169,8 +225,8 @@ pub fn transform_macros(
         .unwrap_or_else(|| "getI18n".to_string());
 
     let allocator = Allocator::default();
-    let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
-    let parsed = Parser::new(&allocator, source, source_type).parse();
+    let parse_source = crate::vue::masked_source(source, &script.range);
+    let parsed = Parser::new(&allocator, &parse_source, script.source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
         let filename = display_filename(filename).to_owned();
@@ -188,6 +244,11 @@ pub fn transform_macros(
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
     collector.resolve_references(&semantic);
+    if let Some(names) = reserved_names {
+        collector
+            .used_identifier_names
+            .extend(names.iter().cloned());
+    }
 
     let runtime_import_name_is_unsafe = if collector.has_reusable_runtime_import {
         collector.runtime_import_binding_count > 1
@@ -216,7 +277,7 @@ pub fn transform_macros(
         return Ok(unchanged_result(source));
     }
 
-    if !collector.macro_imports.is_empty() {
+    if !collector.macro_imports.is_empty() && !script.setup {
         validate_translation_macro_scopes(
             &parsed.program,
             filename,
@@ -317,7 +378,7 @@ pub fn transform_macros(
     }
 
     if !prefix.is_empty() {
-        let insertion_offset = import_insertion_offset(&parsed.program);
+        let insertion_offset = import_insertion_offset(&parsed.program).max(script.range.start);
         let prefix = if insertion_offset == 0 {
             prefix
         } else {
@@ -331,6 +392,15 @@ pub fn transform_macros(
         });
     }
 
+    render_transform(source, filename, replacements, visitor.compiled_ids)
+}
+
+fn render_transform(
+    source: &str,
+    filename: &str,
+    mut replacements: Vec<Replacement>,
+    compiled_ids: Vec<String>,
+) -> PalamedesResult<NativeTransformResult> {
     replacements.sort_by(|a, b| b.start.cmp(&a.start).then(b.end.cmp(&a.end)));
     let edits = replacements
         .iter()
@@ -369,7 +439,7 @@ pub fn transform_macros(
     Ok(NativeTransformResult {
         has_changed,
         code,
-        compiled_ids: visitor.compiled_ids,
+        compiled_ids,
         edits,
         map,
         prepend_text: None,

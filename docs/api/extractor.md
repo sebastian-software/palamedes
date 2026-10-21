@@ -16,7 +16,10 @@ syntax.
 ## `extractMessages(source, filename, mdxOptions?)`
 
 Returns extracted source-string-first messages from a JavaScript, TypeScript,
-or MDX module.
+or MDX module, or from inline Vue SFC script blocks. `.vue` inputs support
+`<script setup>` and `<script>` with `js`, `jsx`, `ts`, or `tsx` languages.
+Template text and expressions are not extraction surfaces; author messages in
+the script and render the resulting values in the template.
 
 ```ts
 import { extractMessages } from "@palamedes/extractor";

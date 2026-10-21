@@ -38,6 +38,7 @@ import {
 
 const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
+const VUE_FILE_REGEX = /\.vue$/i;
 const MDX_HOOK_ID_REGEX = /\.mdx(?:\?.*)?$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
@@ -247,7 +248,7 @@ function catalogArtifactConfig(
 export type PalamedesPluginOptions = {
   /**
    * Pattern to include files for transformation.
-   * @default /\.([cm]?[jt]s|[jt]sx)$/
+   * @default JavaScript, TypeScript, and Vue SFC files
    */
   include?: FilterPattern;
 
@@ -343,7 +344,7 @@ export type PalamedesPluginOptions = {
  */
 export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const {
-    include = PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
+    include = [PALAMEDES_BUNDLER_TRANSFORM_INCLUDE, VUE_FILE_REGEX],
     exclude = /node_modules/,
     enablePoLoader = true,
     failOnMissing = false,
@@ -771,6 +772,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     transform(code, id) {
       const cleanId = stripQuery(id);
 
+      // Vue owns the generated template/style/script subrequests. This hook
+      // transforms the original SFC before @vitejs/plugin-vue compiles it.
+      const query = new URLSearchParams(id.split("?", 2)[1]);
+      if (VUE_FILE_REGEX.test(cleanId) && ["vue", "raw", "url"].some((key) => query.has(key))) {
+        return null;
+      }
+
       // Check file extension and filter
       if (!matchesTransformFilter(cleanId)) {
         return null;
@@ -781,6 +789,26 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       const hasAnyMacroImport = [...ids].some((macroId) => code.includes(macroId));
       if (!hasAnyMacroImport) {
         return null;
+      }
+
+      if (VUE_FILE_REGEX.test(cleanId)) {
+        // Import the runtime getter through the message dependency. This keeps
+        // the dependency inside the native-edited script block and preserves
+        // its source map, rather than appending JavaScript outside the SFC.
+        return sidecarKey(cleanId).then((key) => {
+          try {
+            const result = transformPalamedesMacros(code, cleanId, {
+              runtimeModule: `${VIRTUAL_MESSAGES_PREFIX}${key}`,
+              keepSourceFallbacks: resolvedKeepSourceFallbacks,
+              stripNonEssentialProps,
+            });
+            if (!result.hasChanged) return null;
+            sidecarModules.set(key, { sourceId: cleanId, compiledIds: result.compiledIds });
+            return { code: result.code, map: result.map as any };
+          } catch (error) {
+            return this.error(transformErrorMessage(cleanId, error));
+          }
+        });
       }
 
       try {
@@ -938,8 +966,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         if (locale === undefined) {
           const ssr = isServer(this, loadOptions?.ssr === true);
+          const runtimeExport = VUE_FILE_REGEX.test(entry.sourceId)
+            ? `export { getI18n } from ${JSON.stringify(macroRuntimeModule)};\n`
+            : "";
 
-          if (ssr) return { code: "export {};", map: null, moduleSideEffects: false };
+          if (ssr)
+            return { code: runtimeExport || "export {};", map: null, moduleSideEffects: false };
 
           const initialize =
             `import { createI18n } from "@palamedes/core";\n` +
@@ -953,7 +985,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n${
                 initialize
               }if (l !== locale) throw new Error("Compiled catalog locale does not match the document.");\n` +
-              `i18n.load(locale, defineCompiledCatalog(m));\n`;
+              `i18n.load(locale, defineCompiledCatalog(m));\n${runtimeExport}`;
             return { code: boundCode, map: null, moduleSideEffects: true };
           }
 
@@ -968,7 +1000,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return {
             code: `${
               initialize
-            }const loaders={${loaders}};\nconst fragment=await loaders[locale]().catch(error=>{const failure=new Error("Palamedes catalog dependency failed",{cause:error});if(typeof globalThis.dispatchEvent==="function")globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError",{detail:failure}));throw failure;});\ni18n.load(locale, fragment.messages);\n`,
+            }const loaders={${loaders}};\nconst fragment=await loaders[locale]().catch(error=>{const failure=new Error("Palamedes catalog dependency failed",{cause:error});if(typeof globalThis.dispatchEvent==="function")globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError",{detail:failure}));throw failure;});\ni18n.load(locale, fragment.messages);\n${runtimeExport}`,
             map: null,
             moduleSideEffects: true,
           };
