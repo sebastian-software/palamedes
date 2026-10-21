@@ -28,11 +28,11 @@ const GROUPS: readonly IntegrationGroup[] = [
         suffix: "React",
       },
       {
-        name: "Solid 2",
+        name: "Solid",
         href: frameworkLandingHref("solid"),
         logo: "/framework-logos/solid.svg",
         logoClass: "h-6 w-6",
-        suffix: "Solid 2",
+        suffix: "Solid",
       },
       {
         name: "Remix",
@@ -58,11 +58,11 @@ const GROUPS: readonly IntegrationGroup[] = [
         logoClass: "h-7 w-auto max-w-[5.25rem]",
       },
       {
-        name: "Solid 2 with Start Mode",
+        name: "Solid",
         href: frameworkLandingHref("solid"),
         logo: "/framework-logos/solid.svg",
         logoClass: "h-6 w-6",
-        suffix: "Solid 2 with Start Mode",
+        suffix: "Solid",
       },
       {
         name: "React Router",
