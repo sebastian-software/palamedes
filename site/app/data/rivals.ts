@@ -214,7 +214,7 @@ const RIVAL_SOURCE: RivalSource[] = [
       {
         criterion: "Framework coverage",
         rival: "React, React Native, Vue, Solid, vanilla",
-        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}; no Vue, no React Native`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}; Vue + Vite SFC preview; no React Native`,
       },
       {
         criterion: "Verified host coverage",
@@ -239,7 +239,7 @@ function checkoutLabel(seats) {
       note: "If your Lingui code already avoids explicit IDs, most of it reads identically after the import swap. Your components are not the migration — the catalogs and the runtime wiring are, and the playbook covers both.",
     },
     pickRival: [
-      "You need Vue or React Native. Palamedes has neither and will not fake it.",
+      "You need Vue features beyond our experimental browser-only SFC integration, or React Native.",
       "You depend on a Lingui plugin or TMS integration with no Palamedes equivalent yet.",
       "You want the option of explicit message IDs for part of your catalog.",
     ],
@@ -250,7 +250,7 @@ function checkoutLabel(seats) {
       "You are on React or Solid and expect to change meta-framework at some point.",
     ],
     honest:
-      "Lingui covers Vue and React Native while Palamedes does not, and its plugin surface is broader. Palamedes instead verifies supported React and Solid hosts around one runtime model and native catalog engine. If an unsupported UI framework or Lingui-specific plugin is required, Lingui is the technical fit.",
+      "Lingui covers Vue and React Native, and its plugin surface is broader. Palamedes has an experimental Vue + Vite SFC integration, with no Vue SSR or React Native support. Its established React and Solid hosts share one runtime model and native catalog engine. If an unsupported UI feature or Lingui-specific plugin is required, Lingui is the technical fit.",
     migration: {
       body: "Source-string-first .po catalogs usually survive a migration after one extraction pass. Explicit-ID-heavy projects need a cleanup pass first — the playbook covers both routes, including the runtime wiring and the macro scope rules that differ.",
       label: "Migration playbook",
@@ -492,7 +492,7 @@ plural(seats, {
       note: "With i18next the JSON file is the source of truth and the component points at it — two places, kept in sync by discipline. With Palamedes the component is the source of truth and the catalog is generated from it.",
     },
     pickRival: [
-      "You need i18n outside React and Solid — Angular, Vue, jQuery or plain Node.",
+      "You need Angular, jQuery, or a Vue integration beyond our experimental Vite SFC path.",
       "You depend on the plugin ecosystem: specific backends, detectors, or post-processors.",
       "You need an existing i18next-specific backend, detector or post-processor.",
     ],
@@ -955,7 +955,7 @@ function buyLabel(seats) {
       "You need checked React and Solid integrations across supported server and meta-framework hosts.",
     ],
     honest:
-      "The Tolgee JS SDK covers more client frameworks than Palamedes today: there are first-party Vue, Angular and Svelte bindings, while Palamedes supports React and Solid. If client-framework breadth is the deciding constraint, that difference matters. Tolgee's connected platform also offers contextual AI translation, prompt and model controls, MCP, in-context collaboration, content delivery and self-hosting. Those are meaningful product advantages, but they are deliberately outside this technical comparison of the MIT client SDK.",
+      "The Tolgee JS SDK covers more client frameworks than Palamedes today: there are first-party Vue, Angular and Svelte bindings. Palamedes has React and Solid packages plus an experimental, browser-only Vue + Vite SFC integration. If client-framework breadth is the deciding constraint, that difference matters. Tolgee's connected platform also offers contextual AI translation, prompt and model controls, MCP, in-context collaboration, content delivery and self-hosting. Those are meaningful product advantages, but they are deliberately outside this technical comparison of the MIT client SDK.",
   },
   {
     slug: "intlayer",
@@ -1070,7 +1070,7 @@ function buyLabel(seats) {
       note: "Intlayer's version is two files, one invented key and one locale map that grows sideways with every language you add. Neither project makes you maintain a central namespace — but only one of them makes you maintain anything at all.",
     },
     pickRival: [
-      "You need Vue, Angular, Svelte, Lit or React Native. Their adapter matrix is genuinely wider than ours.",
+      "You need Vue beyond our browser-only SFC preview, Angular, Svelte, Lit, or React Native. Their adapter matrix is wider than ours.",
       "You want no extraction step in your build under any circumstances.",
       "Co-located, hand-written dictionaries match how your team already thinks about component ownership.",
       "You need first-party bindings beyond React and Solid.",

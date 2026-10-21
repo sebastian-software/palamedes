@@ -25,6 +25,15 @@ const translations = {
     result: "Added 2 tickets to your cart.",
     tip: "Lazy catalog detail loaded.",
   },
+  de: {
+    title: "Sichere dir deinen Platz bei Frontend Stage 2026",
+    more: "Mehr Tickets",
+    fewer: "Weniger Tickets",
+    tickets: ["1 Ticket", "2 Tickets"],
+    cart: "In den Warenkorb",
+    result: "2 Tickets zum Warenkorb hinzugefügt.",
+    tip: "Katalogdetails wurden bei Bedarf geladen.",
+  },
   fr: {
     title: "Réservez votre place à Frontend Stage 2026",
     more: "Plus de billets",
@@ -66,7 +75,7 @@ for (const mode of ["development", "production"]) {
             if (
               mode === "production"
                 ? /palamedes-m-.*\.js/u.test(url)
-                : /palamedes:messages\/[^/]+\/(?:en|fr|es)$/u.test(url)
+                : /palamedes:messages\/[^/]+\/(?:en|de|fr|es)$/u.test(url)
             )
               catalogs.push(url);
           });
@@ -105,7 +114,8 @@ for (const mode of ["development", "production"]) {
           await page.getByTestId("lazy-catalog-trigger").click();
           await expect(page.getByTestId("lazy-catalog-details")).toHaveText(copy.tip);
           assert.equal(catalogs.length, 4, "Remounting should reuse the loaded SFC catalog");
-          const nextLocale = locale === "en" ? "fr" : "en";
+          const localeCodes = Object.keys(translations);
+          const nextLocale = localeCodes[(localeCodes.indexOf(locale) + 1) % localeCodes.length];
           await page.getByTestId(`locale-switch-${nextLocale}`).click();
           await expect(page.locator("html")).toHaveAttribute("lang", nextLocale);
           await expect(page.getByRole("heading", { level: 1 })).toHaveText(

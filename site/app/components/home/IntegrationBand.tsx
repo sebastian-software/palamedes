@@ -14,11 +14,11 @@ type Integration = {
 
 type IntegrationGroup = { label: string; integrations: readonly Integration[] };
 
-// Grouped by what each integration plugs into. Support levels live in the
-// stability guide, so the band does not change when a level does.
+// Grouped by what each integration plugs into. Preview paths link to their
+// scope; the stability guide owns the full compatibility contract.
 const GROUPS: readonly IntegrationGroup[] = [
   {
-    label: "UI libraries",
+    label: "UI frameworks",
     integrations: [
       {
         name: "React",
@@ -33,6 +33,12 @@ const GROUPS: readonly IntegrationGroup[] = [
         logo: "/framework-logos/solid.svg",
         logoClass: "h-6 w-6",
         suffix: "Solid",
+      },
+      {
+        name: "Vue",
+        href: frameworkLandingHref("vue"),
+        suffix: "Vue",
+        note: "preview",
       },
     ],
   },

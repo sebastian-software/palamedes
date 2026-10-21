@@ -215,7 +215,7 @@ Translation macros are eager: they must run inside a function or callback so
 the active locale is read at call time. A module-top-level `t` call is a
 compile error.
 
-Vue SFCs support core macros directly in inline `<script setup>` and `<script>`
+The Preview, browser-only Vue SFC integration supports core macros in inline `<script setup>` and `<script>`
 blocks (`js`, `jsx`, `ts`, `tsx`). Configure
 `plugins: [palamedes({ framework: "none", mdx: false }), vue()]` with
 `@vitejs/plugin-vue`. Setup-level calls are valid because Vue compiles setup

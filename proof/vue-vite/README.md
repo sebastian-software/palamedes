@@ -62,9 +62,9 @@ no catalog imports or manual runtime setup.
 
 ## Verified behavior
 
-The browser suite runs in development and production for English, French, and
-Spanish. It covers the shared booking layout, reactive ticket plurals and
-currency totals, a translated cart action, and client runtime calls.
+The browser suite runs in development and production for English, German,
+French, and Spanish. It covers the shared booking layout, reactive ticket plurals
+and currency totals, a translated cart action, and client runtime calls.
 
 The three initial SFCs load only their active-locale fragments. Opening the
 async details component fetches one additional fragment; closing and reopening
@@ -79,6 +79,21 @@ Native tests cover both script kinds, import aliases and shadowing, original
 Unicode source locations, invalid blocks, and script lookalikes in comments,
 templates, styles, and custom blocks. The CLI regression checks source
 discovery, extraction references, and catalog drift after editing a `.vue` file.
+
+## Nuxt follow-up
+
+The SFC extraction and transformation can be reused in a Nuxt module through
+[Nuxt Kit's Vite plugin integration](https://nuxt.com/docs/4.x/api/kit/builder#addviteplugin).
+Full Nuxt support still requires a host adapter: resolve the locale and activate
+the existing request-local runtime before rendering, load server catalogs, and
+initialize the browser with the same locale and catalogs before hydration.
+Nuxt's [server and client lifecycle](https://nuxt.com/docs/4.x/guide/concepts/nuxt-lifecycle)
+provides the integration points; a shared module-level locale is not sufficient.
+
+A Nuxt SSR proof should reuse this booking demo and verify translated HTML
+without JavaScript, concurrent requests in different locales, hydration,
+lazy-page catalog delivery, localized server endpoints, and document navigation
+when the locale changes. Nuxt is not implemented or verified by this Vite SPA.
 
 ## Remaining limits
 

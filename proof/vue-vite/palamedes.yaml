@@ -1,4 +1,4 @@
-locales: [en, fr, es]
+locales: [en, de, fr, es]
 source-locale: en
 catalogs:
   - path: src/locales/{locale}

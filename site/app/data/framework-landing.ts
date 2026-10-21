@@ -77,6 +77,7 @@ const FRAMEWORK_LANDING_PATHS: Record<string, string> = {
   "react-router": "/frameworks/react-router",
   remix: "/frameworks/remix-v3",
   vite: "/frameworks/vite",
+  vue: "/frameworks/vue",
 };
 
 export function frameworkLandingHref(slug: string): string {

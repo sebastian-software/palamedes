@@ -28,7 +28,7 @@ const copy = {
   runtime: t`client locale`,
 };
 const locale = document.documentElement.lang;
-const languages = { en: "English", fr: "French", es: "Spanish" };
+const languages = { en: "English", de: "Deutsch", fr: "Français", es: "Español" };
 const open = ref(false);
 
 function switchLocale(nextLocale: string) {
