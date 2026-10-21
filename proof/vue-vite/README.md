@@ -24,6 +24,9 @@ Open <http://127.0.0.1:4072>. If Chromium is missing, run
 `pnpm --dir proof/vue-vite exec playwright install chromium` before the test.
 The nested workspace isolates Vue tooling from the main dependency graph;
 local `link:` dependencies test the checked-out Palamedes source.
+The proof's TypeScript configuration resolves Vite types from its own host
+installation, so linked workspace packages do not introduce a second Vite
+Environment API type identity through optional peer dependencies.
 
 ## Author messages inside components
 
