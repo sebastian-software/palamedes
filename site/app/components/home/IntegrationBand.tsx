@@ -18,7 +18,7 @@ type IntegrationGroup = { label: string; integrations: readonly Integration[] };
 // stability guide, so the band does not change when a level does.
 const GROUPS: readonly IntegrationGroup[] = [
   {
-    label: "UI libraries",
+    label: "UI & rendering",
     integrations: [
       {
         name: "React",
@@ -34,10 +34,16 @@ const GROUPS: readonly IntegrationGroup[] = [
         logoClass: "h-6 w-6",
         suffix: "Solid",
       },
+      {
+        name: "Remix",
+        href: frameworkLandingHref("remix"),
+        logo: "/framework-logos/remix.svg",
+        logoClass: "h-4 w-auto max-w-[5.5rem]",
+      },
     ],
   },
   {
-    label: "Frameworks",
+    label: "Verified app integrations",
     integrations: [
       {
         name: "Next.js",
@@ -50,6 +56,13 @@ const GROUPS: readonly IntegrationGroup[] = [
         href: frameworkLandingHref("tanstack"),
         logo: "/framework-logos/tanstack.svg",
         logoClass: "h-7 w-auto max-w-[5.25rem]",
+      },
+      {
+        name: "Solid",
+        href: frameworkLandingHref("solid"),
+        logo: "/framework-logos/solid.svg",
+        logoClass: "h-6 w-6",
+        suffix: "Solid",
       },
       {
         name: "React Router",

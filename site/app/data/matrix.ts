@@ -36,7 +36,7 @@ export type StrategySlug = "cookie" | "route" | "subdomain" | "tld";
 export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Next.js", slug: "nextjs" },
   { name: "TanStack Start", slug: "tanstack" },
-  { name: "Solid", slug: "solid" },
+  { name: "Solid 2 with Start Mode", slug: "solid" },
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
   { name: "Remix", slug: "remix" },
