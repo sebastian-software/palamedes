@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { FetchMiddleware } from "@solidjs/web";
+import type { StartMiddleware } from "@solidjs/vite-plugin";
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
 import {
   markServerI18nTestBarrierReached,
@@ -17,8 +17,9 @@ const catalogDelivery = createSolidCatalogDeliveryMiddleware({
 });
 
 export default [
-  catalogDelivery,
-  async (request: Request, next: () => Promise<Response>) => {
+  (event, next) => catalogDelivery(event.request, next),
+  async (event, next) => {
+    const request = event.request;
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") {
       return new Response(null, { status: 302, headers: { location: `/${DEFAULT_LOCALE}` } });
@@ -32,4 +33,4 @@ export default [
       return response;
     });
   },
-] satisfies FetchMiddleware[];
+] satisfies StartMiddleware[];

@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { FetchMiddleware } from "@solidjs/web";
+import type { StartMiddleware } from "@solidjs/vite-plugin";
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
 import {
   markServerI18nTestBarrierReached,
@@ -21,8 +21,11 @@ const catalogDelivery = createSolidCatalogDeliveryMiddleware({
 });
 
 export default [
-  catalogDelivery,
-  async (request: Request, next: () => Promise<Response>) => {
+  (event, next) => catalogDelivery(event.request, next),
+  async (event, next) => {
+    const request = event.request;
+    const nonce = process.env.PALAMEDES_CSP_NONCE;
+    if (nonce) event.nonce ??= nonce;
     const { locale } = locales.resolve({
       strategy: "cookie",
       acceptLanguageHeader: request.headers.get("accept-language"),
@@ -35,4 +38,4 @@ export default [
       return response;
     });
   },
-] satisfies FetchMiddleware[];
+] satisfies StartMiddleware[];

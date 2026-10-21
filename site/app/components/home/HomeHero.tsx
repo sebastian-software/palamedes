@@ -24,7 +24,7 @@ export function HomeHero() {
       />
       <div className="relative mx-auto grid max-w-[var(--pmds-measure)] grid-cols-1 items-center gap-x-16 gap-y-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div>
-          <p className="pmds-kicker">Open-source i18n for React, Solid &amp; TypeScript</p>
+          <p className="pmds-kicker">Open-source i18n for React, Solid, Remix &amp; TypeScript</p>
           <h1 id="home-title" className="pmds-hero-title [--text-hero:clamp(2.45rem,5.6vw,4.4rem)]">
             Just write
             <span className="block text-accent">the sentence.</span>

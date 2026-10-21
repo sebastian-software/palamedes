@@ -5,7 +5,7 @@ export const HOME_FAQ = [
   },
   {
     q: "Which frameworks does Palamedes support?",
-    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite. Vue 3 + Vite has an experimental, browser-only SFC integration; Nuxt is not supported yet. Waku, Remix, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
+    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid 2 with Start Mode, Waku, React Router, Remix, and Vite. Vue 3 + Vite has an experimental, browser-only SFC integration; Nuxt is not supported yet. Waku, Remix, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
   },
   {
     q: "Can I translate a Rust CLI with Palamedes?",

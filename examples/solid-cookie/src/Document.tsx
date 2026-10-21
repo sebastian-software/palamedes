@@ -21,9 +21,8 @@ function resolveDocumentNonce(): string | undefined {
   if (typeof document !== "undefined") {
     return document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce || undefined;
   }
-  const requestNonce = getRequestEvent()?.request.headers.get("x-csp-nonce");
-  if (requestNonce) return requestNonce;
-  return typeof process !== "undefined" ? process.env.PALAMEDES_CSP_NONCE : undefined;
+  const nonce = getRequestEvent()?.nonce;
+  return typeof nonce === "string" ? nonce : nonce?.script || undefined;
 }
 
 export default function Document(props: ParentProps) {

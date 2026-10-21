@@ -4,15 +4,9 @@ import solid from "@solidjs/vite-plugin";
 import { fileRoutes } from "filesystem-routing/vite";
 import { palamedes } from "@palamedes/vite-plugin";
 
-const nativeProductionEntries =
-  process.env.NODE_ENV === "production"
-    ? {
-        entryServer: "./src/entry-server-csp.tsx",
-        entryClient: "./src/entry-client-csp.tsx",
-      }
-    : {};
-
 export default defineConfig({
+  // These server helpers import a Vite virtual catalog module.
+  ssr: { noExternal: ["@palamedes/runtime", "@palamedes/vite-plugin"] },
   plugins: [
     palamedes({ framework: "solid" }),
     solid({
@@ -22,7 +16,6 @@ export default defineConfig({
       start: {
         middleware: "./src/middleware.ts",
         document: "./src/Document.tsx",
-        ...nativeProductionEntries,
       },
     }),
     fileRoutes(),
