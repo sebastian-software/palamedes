@@ -1,0 +1,51 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: proof/vue-vite/src/messages.ts#travelerCount
+msgid ""
+"{count, plural, =0 {No travelers yet} one {# traveler ready} other {# "
+"travelers ready}}"
+msgstr ""
+"{count, plural, =0 {Aucun voyageur pour le moment} one {# voyageur prêt} "
+"other {# voyageurs prêts}}"
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "A small Vue app, translated with Palamedes."
+msgstr "Une petite application Vue, traduite avec Palamedes."
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "Add traveler"
+msgstr "Ajouter un voyageur"
+
+#: proof/vue-vite/src/packing.ts#packingTip
+msgid "Pack light. Leave room for memories."
+msgstr "Voyagez léger. Gardez de la place pour les souvenirs."
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "Plan your next trip"
+msgstr "Préparez votre prochain voyage"
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "Remove traveler"
+msgstr "Retirer un voyageur"
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "Show packing tip"
+msgstr "Voir le conseil de voyage"
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "Traveler name"
+msgstr "Nom du voyageur"
+
+#: proof/vue-vite/src/messages.ts#labels
+msgid "Travelers"
+msgstr "Voyageurs"
+
+#: proof/vue-vite/src/messages.ts#greeting
+msgid "Welcome, {name}!"
+msgstr "Bienvenue, {name} !"

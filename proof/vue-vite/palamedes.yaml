@@ -1,0 +1,5 @@
+locales: [en, fr, es]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]

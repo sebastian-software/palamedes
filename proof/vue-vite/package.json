@@ -1,0 +1,29 @@
+{
+  "name": "@palamedes/proof-vue-vite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4072",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4072",
+    "extract": "pmds extract",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "pnpm typecheck && pnpm build && node --test test/browser.test.mjs"
+  },
+  "dependencies": {
+    "@palamedes/core": "link:../../packages/core",
+    "@palamedes/runtime": "link:../../packages/runtime",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "@palamedes/cli": "link:../../packages/cli",
+    "@palamedes/vite-plugin": "link:../../packages/vite-plugin",
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.13.3",
+    "@vitejs/plugin-vue": "6.0.10",
+    "typescript": "6.0.3",
+    "vite": "8.2.2",
+    "vue-tsc": "3.3.13"
+  }
+}
