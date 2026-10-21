@@ -28,7 +28,7 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "Solid 2 RC.3+",
+      value: "Solid 2 RC.16",
       note: "Start Mode, Vite Environment API, Nitro v3, and Vite 8.",
     },
     {
@@ -80,6 +80,7 @@ import { fileRoutes } from "filesystem-routing/vite"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
+  ssr: { noExternal: ["@palamedes/runtime", "@palamedes/vite-plugin"] },
   plugins: [
     palamedes({ framework: "solid" }),
     solid({
@@ -133,7 +134,7 @@ export default function LocalePage() {
   },
   boundary: {
     title: "Current proof targets the Solid 2 release candidate.",
-    body: "All four checked examples pin Solid 2.0.0-rc.3 and use the Vite plugin's Start Mode with generated entries, file-system routes, server functions, request middleware, and Nitro v3 output. The matrix verifies the same Palamedes plugin across cookie, route, subdomain, and top-level-domain locale strategies.",
+    body: "All four checked examples pin Solid 2.0.0-rc.16 and use the Vite plugin's Start Mode with generated entries, file-system routes, server functions, request middleware, and Nitro v3 output. The matrix verifies the same Palamedes plugin across cookie, route, subdomain, and top-level-domain locale strategies.",
     link: {
       label: "Read the Solid API guide",
       href: docsHref("api/solid"),
@@ -154,7 +155,7 @@ export default function LocalePage() {
     },
     {
       q: "Is the Solid 2 release candidate verified?",
-      a: "Yes. The matrix pins Solid 2.0.0-rc.3 and exercises Start Mode plus Nitro v3 across all four locale strategies.",
+      a: "Yes. The matrix pins Solid 2.0.0-rc.16 and exercises Start Mode plus Nitro v3 across all four locale strategies.",
     },
   ],
   related: [

@@ -7,10 +7,11 @@ import { LocaleSwitcher } from "../components/LocaleSwitcher";
 import { LazyCatalogPanel } from "../components/LazyCatalogPanel";
 import { ProofPanel } from "../components/ProofPanel";
 import { TicketPanel } from "../components/TicketPanel";
+import type { Locale } from "../lib/i18n";
 import { loadHomePageData } from "../lib/server";
 
 type HomePageData = {
-  locale: "en" | "de" | "es";
+  locale: Locale;
   localeLabel: string;
   renderedAt: string;
   source: string;
@@ -68,12 +69,5 @@ function HomePageContent(props: { data: HomePageData }) {
 export default function HomePage() {
   const pageData = createMemo(() => loadHomePageData());
 
-  return (
-    <Show when={pageData()}>
-      {(page) => {
-        const data = page();
-        return <HomePageContent data={data} />;
-      }}
-    </Show>
-  );
+  return <Show when={pageData()}>{(page) => <HomePageContent data={page()} />}</Show>;
 }
