@@ -394,12 +394,12 @@ async function checkRoutes(context, label, { expectHydration }) {
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
     const integrationLinks = await integrationSection.locator("ul a").count();
-    if (integrationLinks !== 12) {
-      fail(`home integration band: expected 12 linked entries, got ${integrationLinks}`);
+    if (integrationLinks !== 14) {
+      fail(`home integration band: expected 14 linked entries, got ${integrationLinks}`);
     }
     const expectedGroups = {
-      "UI libraries": 2,
-      Frameworks: 5,
+      "UI & rendering": 3,
+      "Verified app integrations": 6,
       "Build tools": 2,
       Backends: 2,
       Rust: 1,
@@ -415,8 +415,8 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     const integrationLogos = integrationSection.locator("li img");
     const logoCount = await integrationLogos.count();
-    if (logoCount !== 11) {
-      fail(`home integration band: expected 11 marks, got ${logoCount}`);
+    if (logoCount !== 13) {
+      fail(`home integration band: expected 13 marks, got ${logoCount}`);
     } else {
       const unloadedLogos = await integrationLogos.evaluateAll((images) =>
         images

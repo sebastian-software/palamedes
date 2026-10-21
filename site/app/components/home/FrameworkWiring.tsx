@@ -61,7 +61,7 @@ export function FrameworkWiring() {
     <Band id="frameworks" labelledBy="wiring-title">
       <BandHeader
         id="wiring-title"
-        kicker="Framework integration"
+        kicker="Verified app integrations"
         title="The hard part isn’t translating. It’s the wiring."
         lede="Modern frameworks run your components in several places — on the server, in the browser, inside server actions. The right messages must be ready in each place, for each visitor, at the right moment. Palamedes ships that wiring as a first-party adapter for your framework, and tests it as a real app."
       />
@@ -103,8 +103,8 @@ export function FrameworkWiring() {
           </h3>
           <p className="mt-4 text-[16px] leading-relaxed text-ink/80">
             Your app decides; Palamedes doesn’t force a routing scheme. All four common answers run
-            as example apps — {FRAMEWORKS.length} frameworks × {contentStats.localeStrategyCount}{" "}
-            URL shapes, each checked in CI.
+            as example apps — {FRAMEWORKS.length} app integrations ×{" "}
+            {contentStats.localeStrategyCount} URL shapes, each checked in CI.
           </p>
           <Link to="/locale-routing" viewTransition className="pmds-arrow-link mt-3">
             Which one fits your product? →
