@@ -42,7 +42,9 @@ or replace the client runtime.
 
 A promising next experiment is a capability-specific renderer assembled by the
 build from statically imported operations. For example, a text-and-values
-application could omit date/time and number style handling. The compiler would
+application could omit date/time and number style handling. The selection must
+cover both Core's string renderer and any UI renderer retained by the application.
+The compiler would
 need to collect capabilities across all supported locales and lazy fragments,
 including fallback messages. Measuring only the initial English route would
 understate that requirement. The experiment needs production bundle comparisons,
