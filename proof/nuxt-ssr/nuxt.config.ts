@@ -4,6 +4,15 @@ export default defineNuxtConfig({
   telemetry: false,
   modules: ["./modules/palamedes/module.mjs"],
   css: ["@palamedes/example-ui/styles.css"],
+  hooks: {
+    "pages:extend": function (pages) {
+      for (const page of pages) {
+        page.alias = ["en", "de", "es", "fr"].map(
+          (locale) => `/${locale}${page.path === "/" ? "" : page.path}`,
+        );
+      }
+    },
+  },
   nitro: { preset: "node-server" },
   typescript: {
     tsConfig: {

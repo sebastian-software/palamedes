@@ -28,6 +28,9 @@ dist
 .lingui
 **/.lingui
 **/build/server
+**/.nuxt
+**/.svelte-kit
+proof/sveltekit-ssr/build
 
 # Plugin runtime state and local tooling
 .sf-plugin

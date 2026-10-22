@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { setTimeout } from "node:timers/promises";
 
-import { EXAMPLE_MATRIX } from "../example-matrix.mjs";
+import { CONTAINER_EXAMPLES } from "../component-demos.mjs";
 
 function request(port, check) {
   return new Promise((resolve, reject) => {
@@ -34,7 +34,7 @@ function request(port, check) {
   });
 }
 
-for (const example of EXAMPLE_MATRIX) {
+for (const example of CONTAINER_EXAMPLES) {
   const deadline = Date.now() + 90_000;
   for (;;) {
     try {

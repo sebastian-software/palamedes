@@ -1,4 +1,5 @@
 <script lang="ts">
+import { switchDemoLocale } from "@palamedes/example-ui";
 import { t } from "@palamedes/core/macro";
 import { EVENT } from "@palamedes/example-ui";
 
@@ -26,9 +27,7 @@ function toggleDetails() {
 }
 
 function switchLocale(nextLocale: string) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("locale", nextLocale);
-  window.location.assign(url);
+  switchDemoLocale(nextLocale);
 }
 </script>
 

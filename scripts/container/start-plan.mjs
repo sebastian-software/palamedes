@@ -26,7 +26,7 @@ export const CONTAINER_HOST = "0.0.0.0";
 // the HOST env (see buildStartEnv); appending a CLI host flag is unsafe (e.g.
 // `next start` treats a trailing `-H` as a positional project directory).
 export function buildStartArgs(example) {
-  if (example.framework === "tanstack" || example.framework === "vite") {
+  if (["tanstack", "vite", "vue", "svelte"].includes(example.framework)) {
     return ["exec", "vite", "preview", "--host", CONTAINER_HOST, "--port", String(example.port)];
   }
   return [...example.start];
@@ -45,6 +45,9 @@ export function buildStartEnv(example, baseEnv = {}) {
     ...example.startEnv,
     HOST: CONTAINER_HOST,
     PORT: String(example.port),
+    ...(example.framework === "nuxt"
+      ? { NITRO_HOST: CONTAINER_HOST, NITRO_PORT: String(example.port) }
+      : {}),
   };
 }
 

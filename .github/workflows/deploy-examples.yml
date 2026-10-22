@@ -6,6 +6,9 @@ on:
         description: "Verify image; submit an update; or verify final hosts after rollout completes"
         type: choice
         options:
+          - plan-hosts
+          - provision-hosts
+          - inspect-hosting
           - verify-image
           - deploy
           - verify-hosts
@@ -26,8 +29,30 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
+  inspect-hosting:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'inspect-hosting'
+    environment: bunny-demos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup-workspace
+        with:
+          rust: "false"
+          rust-cache: "false"
+      - name: Inspect existing endpoints and DNS without changing them
+        env:
+          BUNNYNET_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_DEMO_APP_ID: ${{ vars.BUNNY_DEMO_APP_ID }}
+        run: node scripts/inspect-demo-hosting.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: demo-hosting-inventory
+          path: deployment-receipt/
+          retention-days: 30
   verify-image:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.operation != 'inspect-hosting'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -77,6 +102,38 @@ jobs:
         if: always()
         with:
           name: demo-image-update
+          path: deployment-receipt/
+          retention-days: 90
+  component-hosts:
+    needs: verify-image
+    if: inputs.operation == 'plan-hosts' || inputs.operation == 'provision-hosts'
+    environment: bunny-demos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup-workspace
+        with:
+          rust: "false"
+          rust-cache: "false"
+      - name: Plan or add the component demo endpoints and hosts
+        env:
+          BUNNYNET_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_DEMO_APP_ID: ${{ vars.BUNNY_DEMO_APP_ID }}
+          BUNNY_DEMO_CONTAINER: ${{ vars.BUNNY_DEMO_CONTAINER }}
+          IMAGE_REVISION: ${{ inputs.revision }}
+          IMAGE_DIGEST: ${{ inputs.digest }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          if [ "$OPERATION" = "provision-hosts" ]; then
+            node scripts/provision-component-hosts.mjs --apply
+          else
+            node scripts/provision-component-hosts.mjs
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: component-demo-hosts
           path: deployment-receipt/
           retention-days: 90
   verify-hosts:

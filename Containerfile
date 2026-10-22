@@ -1,5 +1,5 @@
-# Run all 25 Palamedes matrix example apps side by side in a single container, each
-# on its fixed port from scripts/example-matrix.mjs. Built and run with Podman:
+# Run all 41 Palamedes example apps side by side in a single container, each
+# on its fixed port from the shared container inventory. Built and run with Podman:
 #
 #   podman build -f Containerfile -t palamedes-examples .
 #   podman run --rm --init \
@@ -10,6 +10,10 @@
 #     -p 4050:4050 -p 4051:4051 -p 4052:4052 -p 4053:4053 \
 #     -p 4060:4060 -p 4061:4061 -p 4062:4062 -p 4063:4063 \
 #     -p 4070:4070 \
+#     -p 4090:4090 -p 4091:4091 -p 4092:4092 -p 4093:4093 \
+#     -p 4100:4100 -p 4101:4101 -p 4102:4102 -p 4103:4103 \
+#     -p 4110:4110 -p 4111:4111 -p 4112:4112 -p 4113:4113 \
+#     -p 4120:4120 -p 4121:4121 -p 4122:4122 -p 4123:4123 \
 #     palamedes-examples
 #
 # (or let the matrix generate the flags: `podman run --init \
@@ -51,6 +55,7 @@ RUN pnpm install --frozen-lockfile
 # cargo; `pnpm build:examples` builds every app in `examples/`.
 RUN pnpm build
 RUN pnpm build:examples
+RUN node scripts/build-component-demos.mjs
 # Drop build-only artifacts before they reach the runtime image: the compiled
 # .node was already copied into the platform package (target/ is dead weight),
 # and the Next.js build caches are not needed by `next start`.
@@ -74,13 +79,13 @@ COPY --from=build --chown=node:node /app /app
 # Global pnpm at the version pinned in package.json (packageManager) so the
 # unprivileged `node` user can run the example start scripts.
 RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
-# Run all 25 matrix example servers as a non-root user (least privilege).
+# Run all 41 example servers as a non-root user (least privilege).
 USER node
 
 # Fixed ports — informational only; the authoritative list is
-# scripts/example-matrix.mjs. Publish them without drift via:
+# scripts/example-matrix.mjs and scripts/component-demos.mjs. Publish them without drift via:
 #   podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
-EXPOSE 4080 4010 4011 4012 4013 4020 4021 4022 4023 4030 4031 4032 4033 4040 4041 4042 4043 4050 4051 4052 4053 4060 4061 4062 4063 4070
+EXPOSE 4080 4010 4011 4012 4013 4020 4021 4022 4023 4030 4031 4032 4033 4040 4041 4042 4043 4050 4051 4052 4053 4060 4061 4062 4063 4070 4090 4091 4092 4093 4100 4101 4102 4103 4110 4111 4112 4113 4120 4121 4122 4123
 
 # tini is the init/reaper (no external `--init` needed). `-s` registers it as a
 # subreaper so reaping still works if it ends up not as PID 1 (e.g. when the
