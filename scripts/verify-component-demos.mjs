@@ -63,6 +63,11 @@ export async function verifyComponentDemo(browser, entry) {
       await expect(page.getByTestId("client-ready")).toHaveCount(1);
       await expect(page.locator("h1")).toHaveText(title);
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      const frameworkName = { vue: "Vue", nuxt: "Nuxt", svelte: "Svelte", sveltekit: "SvelteKit" }[
+        entry.framework
+      ];
+      assert.ok(frameworkName, `${entry.id}: unknown framework`);
+      await expect(page.locator("footer")).toContainText(new RegExp(`\\b${frameworkName}\\b`, "u"));
       await expect(page.getByTestId("client-locale-value")).toHaveText(locale.toUpperCase());
       await page.getByRole("button", { name: more, exact: true }).click();
       await expect(page.getByTestId("ticket-count")).toHaveText(plural);
