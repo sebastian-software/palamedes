@@ -60,6 +60,7 @@ export async function verifyComponentDemo(browser, entry) {
     const url = localeUrl(entry, locale);
     try {
       await page.goto(url.href);
+      await expect(page.getByTestId("client-ready")).toHaveCount(1);
       await expect(page.locator("h1")).toHaveText(title);
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
       await expect(page.getByTestId("client-locale-value")).toHaveText(locale.toUpperCase());
@@ -73,12 +74,24 @@ export async function verifyComponentDemo(browser, entry) {
         );
         await page.getByTestId("server-proof-trigger").click();
         assert.equal((await (await proofResponse).json()).locale, locale);
+        const documents = [];
+        const recordDocument = (request) => {
+          if (request.isNavigationRequest() && request.resourceType() === "document")
+            documents.push(request.url());
+        };
+        page.on("request", recordDocument);
         await page.getByTestId("insights-link").click();
         await expect(page.getByTestId("insights-title")).toHaveText(detail);
         if (entry.strategy === "route")
           assert.equal(new URL(page.url()).pathname, `/${locale}/insights`);
         await page.getByTestId("booking-link").click();
         await expect(page.locator("h1")).toHaveText(title);
+        assert.deepEqual(
+          documents,
+          [],
+          `${entry.id}: same-locale navigation must reuse the document`,
+        );
+        page.off("request", recordDocument);
       }
       const next = locale === "de" ? "fr" : "de";
       await page.getByTestId(`locale-switch-${next}`).click();
