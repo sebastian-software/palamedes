@@ -1,0 +1,17 @@
+{
+  "extends": "$app/tsconfig",
+  "compilerOptions": {
+    "strict": true,
+    "allowJs": true,
+    "checkJs": true,
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "paths": {
+      "vite": ["./node_modules/vite/dist/node/index.d.ts"]
+    }
+  },
+  "include": ["src", "integration", "vite.config.ts"],
+  "exclude": ["src/service-worker"]
+}

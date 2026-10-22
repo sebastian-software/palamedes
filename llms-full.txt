@@ -240,6 +240,18 @@ demo and isolated Svelte tooling. Template-expression macros, automatic template
 text extraction, Svelte rich text, catalog HMR, non-JS/TS preprocessors, and
 SvelteKit/SSR remain outside this proof and the supported server-framework matrix.
 
+A separate private SvelteKit 3.1.0 + Node adapter 6.0.0 proof in
+`/proof/sveltekit-ssr/README.md` reuses the native component compiler. Local
+Vite wiring and a server handle hook own request scopes, shared server catalogs,
+document metadata, and browser delivery before hydration. Development and
+production checks cover four-language SSR without JavaScript, hydration, lazy
+components/routes, endpoint macros, concurrent request isolation, catalog
+failure UI, and copied production output without source/build tooling. It uses
+root-mounted, same-origin query-locale deployment and `paths.relative: false`.
+It remains outside the six-family matrix; no SvelteKit package is published.
+Other adapters, CDN/subpath deployment, prerendering, deferred streaming loads,
+remote functions, alternate locale URL strategies, and catalog HMR are unverified.
+
 A separate private Nuxt 4.6.2 + Nitro Node SSR proof in `/proof/nuxt-ssr/README.md`
 reuses the SFC compiler through a local Nuxt module. It verifies SSR without
 JavaScript, matching hydration, active-locale lazy components and pages, Nitro API

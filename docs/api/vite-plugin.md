@@ -173,8 +173,16 @@ a new document, following [ADR-007](../../adr/007-locale-is-fixed-for-a-browser-
 The private [Svelte + Vite proof](../../proof/svelte-vite/README.md) uses the shared
 four-language booking demo. This Preview is browser-only. Template-expression
 macros, automatic template-text extraction, Svelte rich text, catalog HMR,
-preprocessors beyond JavaScript/TypeScript, and SvelteKit/SSR are outside its
-verified scope.
+and preprocessors beyond JavaScript/TypeScript are outside its verified scope.
+
+The separate [SvelteKit SSR proof](../../proof/sveltekit-ssr/README.md) reuses
+this compiler with SvelteKit 3.1 and its Node adapter. A local Vite integration
+and server hook own request-local runtimes, server catalog reuse, document
+locale metadata, and browser catalog delivery before hydration. The proof uses
+`paths: { relative: false }` because locale import maps require absolute asset
+URLs. Application components use macros directly, including on the server;
+they contain no catalog loaders. This Preview covers root-mounted, same-origin
+query-locale deployment and remains separate from the supported server matrix.
 
 ## Server and document delivery
 

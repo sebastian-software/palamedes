@@ -1,0 +1,172 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte#currency
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte#addToCart
+msgid ""
+"{count, plural, one {Added # ticket to your cart.} other {Added # tickets to "
+"your cart.}}"
+msgstr ""
+"{count, plural, one {Se ha añadido # entrada a tu carrito.} other {Se han "
+"añadido # entradas a tu carrito.}}"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte#ticketLabel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Add to cart"
+msgstr "Añadir al carrito"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Attendees"
+msgstr "Asistentes"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Availability"
+msgstr "Disponibilidad"
+
+#: proof/sveltekit-ssr/src/routes/insights/+page.svelte
+msgid "Back to booking"
+msgstr "Volver a la reserva"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "Behind the scenes"
+msgstr "Entre bastidores"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Berlin, Germany"
+msgstr "Berlín, Alemania"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Reserva tu plaza en Frontend Stage 2026"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Conference pass"
+msgstr "Pase de conferencia"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "Currency"
+msgstr "Moneda"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Date"
+msgstr "Fecha"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "each"
+msgstr "cada una"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Fewer tickets"
+msgstr "Menos entradas"
+
+#: proof/sveltekit-ssr/src/lib/LazyCatalogDetails.svelte
+#: proof/sveltekit-ssr/src/routes/insights/+page.svelte
+msgid "Lazy catalog detail loaded."
+msgstr "El detalle del catálogo se cargó bajo demanda."
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Locale"
+msgstr "Idioma"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Localized for this document with Palamedes"
+msgstr "Localizado para este documento con Palamedes"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "More tickets"
+msgstr "Más entradas"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "Number"
+msgstr "Número"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "one switch, every format"
+msgstr "un clic, todos los formatos"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Open lazy page"
+msgstr "Abrir página bajo demanda"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "Plural"
+msgstr "Plural"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "Refresh server result"
+msgstr "Actualizar resultado del servidor"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Rendered with SvelteKit"
+msgstr "Renderizado con SvelteKit"
+
+#: proof/sveltekit-ssr/src/lib/ProofPanel.svelte
+msgid "Server"
+msgstr "Servidor"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "server and client locale"
+msgstr "idioma del servidor y del cliente"
+
+#: proof/sveltekit-ssr/src/routes/api/proof/+server.ts#GET
+msgid "Server query confirmed locale {locale}."
+msgstr "La consulta de servidor confirmó el idioma {locale}."
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Show lazy catalog details"
+msgstr "Mostrar detalles del catálogo bajo demanda"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Tres días de charlas sobre el oficio de construir para la web. Elige tus "
+"entradas abajo."
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Total"
+msgstr "Total"
+
+#: proof/sveltekit-ssr/src/lib/TicketPanel.svelte
+msgid "Venue"
+msgstr "Lugar"
+
+#: proof/sveltekit-ssr/src/lib/BookingDemo.svelte
+msgid "Welcome back, {attendeeName}."
+msgstr "Hola de nuevo, {attendeeName}."

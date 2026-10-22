@@ -92,6 +92,6 @@ Svelte rich-text components, preprocessors beyond JS/TS, and catalog HMR are
 outside this proof. Author translations in scripts and render their values or
 functions in the markup.
 
-SvelteKit, SSR, hydration, deployment adapters, and server request isolation are
-reserved for a separate integration step. This Vite SPA does not simulate the
-server result shown by server-framework demos.
+The separate [SvelteKit SSR proof](../sveltekit-ssr/README.md) verifies server
+rendering, hydration, the Node adapter, and request isolation. This Vite SPA
+remains browser-only.
