@@ -1,13 +1,7 @@
 import { repoHref } from "./links";
 
-/*
- * Cells carry EXPLICIT links and a per-cell hosting status — never a generated
- * URL pattern. Hosting truth lives in docs/demo-deployments.md; keep this file
- * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
- * route (locale path), subdomain (locale host label), tld
- * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
- * all six server frameworks. Every cell has a public HTTPS browser proof;
- * Vite MDX is the separate client-only demo.
+/* Public links follow the accepted deployment manifest in docs/demo-deployments.md.
+ * Component demos share one source directory across their four locale strategies.
  */
 
 export type MatrixStatus = "live" | "provisioning";
@@ -40,6 +34,10 @@ export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
   { name: "Remix", slug: "remix" },
+  { name: "Vue + Vite", slug: "vue" },
+  { name: "Nuxt", slug: "nuxt" },
+  { name: "Svelte + Vite", slug: "svelte" },
+  { name: "SvelteKit", slug: "sveltekit" },
 ];
 
 export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
@@ -49,8 +47,27 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
   { name: "TLD", slug: "tld" },
 ];
 
-const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router", "remix"]);
-const TLD_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router", "remix"]);
+const HOSTED_FRAMEWORKS = new Set([
+  "nextjs",
+  "tanstack",
+  "solid",
+  "waku",
+  "react-router",
+  "remix",
+  "vue",
+  "nuxt",
+  "svelte",
+  "sveltekit",
+]);
+const COMPONENT_SOURCES: Partial<Record<string, string>> = {
+  vue: "proof/vue-vite",
+  nuxt: "proof/nuxt-ssr",
+  svelte: "proof/svelte-vite",
+  sveltekit: "proof/sveltekit-ssr",
+};
+function sourceHref(framework: string, strategy: StrategySlug) {
+  return repoHref(COMPONENT_SOURCES[framework] ?? `examples/${framework}-${strategy}`, "tree");
+}
 
 export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework }) => [
   {
@@ -61,7 +78,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     demoLinks: HOSTED_FRAMEWORKS.has(framework)
       ? [{ label: "open", href: `https://${framework}-cookie.examples.palamedes.dev` }]
       : undefined,
-    sourceHref: repoHref(`examples/${framework}-cookie`, "tree"),
+    sourceHref: sourceHref(framework, "cookie"),
   },
   {
     framework,
@@ -74,7 +91,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
           href: `https://${framework}-route.examples.palamedes.dev/${locale}`,
         }))
       : undefined,
-    sourceHref: repoHref(`examples/${framework}-route`, "tree"),
+    sourceHref: sourceHref(framework, "route"),
   },
   {
     framework,
@@ -87,14 +104,14 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
           href: `https://${locale}.${framework}-subdomain.examples.palamedes.dev`,
         }))
       : undefined,
-    sourceHref: repoHref(`examples/${framework}-subdomain`, "tree"),
+    sourceHref: sourceHref(framework, "subdomain"),
   },
   {
     framework,
     strategy: "tld",
     verified: true as const,
-    status: TLD_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
-    demoLinks: TLD_FRAMEWORKS.has(framework)
+    status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
+    demoLinks: HOSTED_FRAMEWORKS.has(framework)
       ? [
           { label: "en", href: `https://${framework}.examples.palamedes-i18n.com` },
           { label: "de", href: `https://${framework}.examples.palamedes-i18n.de` },
@@ -102,7 +119,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
           { label: "fr", href: `https://${framework}.examples.palamedes-i18n.fr` },
         ]
       : undefined,
-    sourceHref: repoHref(`examples/${framework}-tld`, "tree"),
+    sourceHref: sourceHref(framework, "tld"),
   },
 ]);
 

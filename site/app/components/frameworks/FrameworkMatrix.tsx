@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import contentStats from "~/data/generated/content-stats.json";
+import { FrameworkIdentity } from "./FrameworkIdentity";
 import { frameworkLandingHref } from "~/data/framework-landing";
 import { cellFor, FRAMEWORKS, STRATEGIES, type MatrixCell } from "~/data/matrix";
 
@@ -35,11 +35,8 @@ function CellContent({ cell }: { cell: MatrixCell }) {
 }
 
 /*
- * The 6×4 proof matrix. Cells are explicit data with per-cell hosting
- * status (never a generated URL pattern). Provisioning cells may expose their
- * configured target URLs before the public host becomes live. `scan` enables
- * the /frameworks style break: a one-shot accent scanline sweeping the table
- * on first view.
+ * The 10×4 proof matrix uses the public hosting state in the matrix data.
+ * `scan` adds the /frameworks accent scanline on first view.
  */
 export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
   return (
@@ -86,7 +83,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                     viewTransition
                     className="hover:text-accent"
                   >
-                    {framework.name}
+                    <FrameworkIdentity slug={framework.slug} name={framework.name} />
                   </Link>
                 </th>
                 {STRATEGIES.map((strategy) => (
@@ -100,8 +97,9 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         </table>
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-        <span className="text-accent">●</span> public demo · ✓ verified in CI. All six framework
-        families have public HTTPS browser proofs across all four strategies.
+        <span className="text-accent">●</span> public demo · ✓ verified in CI. All ten framework
+        families cover all four strategies. Vue and Svelte render in the browser; the other rows
+        include server rendering.
       </p>
     </div>
   );

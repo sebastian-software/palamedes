@@ -1,6 +1,6 @@
 # Third-Party Marks Used on the Website
 
-The homepage's first-party integration band uses the following unmodified
+The homepage integration band and framework demo index use the following unmodified
 framework marks solely to identify supported integrations. Their display does
 not imply sponsorship, partnership, endorsement, certification, or adoption by
 the respective trademark owners. Retrieved 2026-08-13.
@@ -19,6 +19,17 @@ the respective trademark owners. Retrieved 2026-08-13.
 | React        | `site/public/framework-logos/react.svg`        | [React logo, react.dev repository](https://github.com/reactjs/react.dev/blob/main/public/images/brand/logo_light.svg) | `ebdfad4916a4c4b5ec0bdf80fe9c8476a7cb8b7e925e502f78260098cd65a543` |
 | Rust         | `site/public/framework-logos/rust.svg`         | [Rust logo](https://www.rust-lang.org/logos/rust-logo-blk.svg)                                                        | `6d6e0fd29e2015bec5ca9bdbdc11ede1e84fb792c560599b58e564346825a229` |
 | React (film) | `video/public/logos/react.svg`                 | [React logo, react.dev repository](https://github.com/reactjs/react.dev/blob/main/public/images/brand/logo_light.svg) | `ebdfad4916a4c4b5ec0bdf80fe9c8476a7cb8b7e925e502f78260098cd65a543` |
+
+Additional framework marks, retrieved 2026-10-22:
+
+| Mark      | Local asset                                 | Source                                                                                                                             | SHA-256                                                            |
+| --------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| vue       | `site/public/framework-logos/vue.svg`       | [Official artwork](https://raw.githubusercontent.com/vuejs/art/master/logo.svg)                                                    | `2367ae20c4a1fe95fea9b03def3b11097bcebaf60ebb744eb96667990599153a` |
+| nuxt      | `site/public/framework-logos/nuxt.svg`      | [Official artwork](https://nuxt.com/assets/design-kit/icon-green.svg)                                                              | `98702951c2ceccbfb92bdfa4ba0257e18fd740fb9d147d6e0b54b2f7c08002be` |
+| svelte    | `site/public/framework-logos/svelte.svg`    | [Official artwork](https://raw.githubusercontent.com/sveltejs/branding/master/svelte-logo.svg)                                     | `87df40b8fbb4afb4d720b517c369f7e5f23fb818efc62ad581cb734765c54e1a` |
+| sveltekit | `site/public/framework-logos/sveltekit.svg` | [Official artwork](https://raw.githubusercontent.com/sveltejs/svelte.dev/main/apps/svelte.dev/src/routes/_home/sveltekit-logo.svg) | `7161a00893c9675a1f09e46ec374e922a84622a7b94df637c203c8865b44c0d7` |
+
+The Vue logo is designed by Evan You and used unchanged under the [Vue artwork license and its integration-marketing permission](https://github.com/vuejs/art#readme). The [Svelte branding guidelines](https://github.com/sveltejs/branding#readme) permit accurate compatibility identification without implying sponsorship. Nuxt artwork follows its [design kit](https://nuxt.com/design-kit).
 
 Next.js is a trademark of Vercel, Inc. or its affiliates in the United States
 and other countries. React is a trademark of Meta Platforms, Inc. React Router and Remix

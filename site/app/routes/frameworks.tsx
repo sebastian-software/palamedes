@@ -28,7 +28,7 @@ export default function Frameworks() {
       <PageHero
         kicker="Frameworks"
         title="Built for the framework you already use."
-        lede="React, Vue, Svelte, Solid, and Remix share the same message model. Connect Next.js, Nuxt, SvelteKit, TanStack Start, Waku, React Router, or Vite. Six server framework families cover four URL strategies; separate Vue, Nuxt, Svelte, and SvelteKit examples show their component and rendering integrations."
+        lede="React, Vue, Svelte, Solid, and Remix share the same message model. Connect Next.js, Nuxt, SvelteKit, TanStack Start, Waku, React Router, or Vite. Ten framework families cover all four locale strategies, with the same booking demo in four languages."
         actions={
           <>
             <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>
@@ -41,21 +41,31 @@ export default function Frameworks() {
 
       <Section
         num="01 — Matrix"
-        title="Every server framework, every URL strategy — running as an app."
-        lede={`${contentStats.serverFrameworkCount} frameworks × ${contentStats.localeStrategyCount} locale strategies. Open a live demo, or read the source of the exact app behind each cell.`}
+        title="Every framework, every URL strategy — running as an app."
+        lede={`${contentStats.demoFrameworkCount} frameworks × ${contentStats.localeStrategyCount} locale strategies. Open a live demo, or read the source of the exact app behind each cell.`}
         id="frontend-frameworks"
       >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
-          All {contentStats.smokeExampleCount} apps are smoke-checked on relevant pull requests and
-          main pushes. All {contentStats.browserExampleCount} apps have Playwright browser
-          contracts, including the four full-stack Remix strategies and the Vite MDX example. The
-          server examples cover SSR, locale switching, and localized server actions or functions;
-          Remix also verifies Frames and catalog recovery. Versioned screenshots cover the{" "}
-          {contentStats.screenshotExampleCount} established UI-adapter examples; Remix and Vite have
-          no capture artifacts. All six framework families have live cookie, route, subdomain, and
-          TLD demos. The separate Vite MDX demo is also live. Hosting evidence is documented in the
-          repo&apos;s demo-deployments guide.
+          All {contentStats.demoCount} demos are smoke-checked in the production image and have
+          Playwright browser contracts. Vue and Svelte render in the browser; Nuxt, SvelteKit, and
+          the six other app frameworks also check server rendering and hydration. Versioned
+          screenshots cover {contentStats.screenshotExampleCount} established UI-adapter examples.
+          The separate{" "}
+          <a
+            href="https://vite-mdx.examples.palamedes.dev"
+            className="text-accent underline underline-offset-2"
+          >
+            Vite MDX demo
+          </a>{" "}
+          is also live. See the{" "}
+          <a
+            href={docsHref("demo-deployments")}
+            className="text-accent underline underline-offset-2"
+          >
+            hosting evidence
+          </a>{" "}
+          for public verification.
         </p>
       </Section>
 

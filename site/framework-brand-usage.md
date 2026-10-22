@@ -1,7 +1,7 @@
 # Framework Brand Usage Ledger
 
 This record covers the framework names and logo assets considered for the
-Palamedes homepage integration band. It is implementation evidence, not legal
+Palamedes homepage integration band and framework demo index. It is implementation evidence, not legal
 advice. Recheck each upstream policy and involve qualified counsel before a
 new asset is added or this public marketing use changes.
 
@@ -34,6 +34,22 @@ review by qualified counsel.
 | Express        | [Express dark wordmark](https://expressjs.com/images/logos/logo-express-black.svg)                                    | Unmodified official wordmark | Express directs users to the OpenJS trademark policy. The mark is used only to identify the supported backend integration.                                                                         |
 | React          | [React logo, react.dev repository](https://github.com/reactjs/react.dev/blob/main/public/images/brand/logo_light.svg) | Official emblem + name       | Retrieved 2026-10-19. The emblem is shown unmodified with the name beside it; do not imply an endorsement by Meta.                                                                                 |
 | Rust           | [Rust logo](https://www.rust-lang.org/logos/rust-logo-blk.svg)                                                        | Official emblem + name       | Retrieved 2026-10-19. Used unmodified to refer to Rust under the Rust Foundation's trademark policy; it identifies the Rust integration, not an endorsement.                                       |
+
+## Framework demo index additions
+
+Retrieved 2026-10-22. These unmodified assets identify the corresponding live
+integration demos on `/frameworks`. Their display does not imply endorsement.
+
+| Framework | Asset source                                                                                                                  | Treatment and conditions                                                                                                                                                                  |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vue       | [Vue artwork](https://github.com/vuejs/art/blob/master/logo.svg)                                                              | Official emblem + name. Vue's artwork license expressly permits illustrating a commercial product's Vue integration; credit Evan You and retain the upstream license link in the notices. |
+| Nuxt      | [Nuxt design kit](https://nuxt.com/design-kit)                                                                                | Official green icon + name. The design kit permits the triangular mountains on their own as an icon; preserve its color and proportions.                                                  |
+| Svelte    | [Svelte branding](https://github.com/sveltejs/branding/blob/master/svelte-logo.svg)                                           | Official emblem + name. Accurate integration identification under the project's branding guidelines; no endorsement claim.                                                                |
+| SvelteKit | [Svelte website source](https://github.com/sveltejs/svelte.dev/blob/main/apps/svelte.dev/src/routes/_home/sveltekit-logo.svg) | Official SvelteKit mark, unchanged and identified by its accessible name.                                                                                                                 |
+
+The framework index reuses the existing marks listed above. Waku's white mark
+appears on a navy surface so the original artwork remains legible without
+recoloring. SHA-256 receipts are recorded in `THIRD_PARTY_NOTICES.md`.
 
 ## Product film
 

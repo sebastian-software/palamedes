@@ -24,6 +24,10 @@ export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
   { name: "Remix v3", slug: "remix" },
+  { name: "Vue", slug: "vue" },
+  { name: "Nuxt", slug: "nuxt" },
+  { name: "Svelte", slug: "svelte" },
+  { name: "SvelteKit", slug: "sveltekit" },
 ]
 export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
   { name: "Cookie", slug: "cookie" },
