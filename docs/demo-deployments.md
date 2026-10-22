@@ -1,10 +1,10 @@
 # Demo Deployments
 
-All 25 examples are live on one Bunny Magic Containers app: six server
-frameworks × four locale strategies, plus Vite MDX. The 61 custom HTTPS hostnames
-preserve the existing public URL shapes. All 25 hosted browser/document
-contracts and all 61 public DNS, TLS, locale, and HTTPS-redirect checks passed on
-October 20, 2026. This includes all four stable Remix 3.0.0 strategies.
+The live deployment contains 41 demos on one Bunny Magic Containers app:
+ten framework families × four locale strategies, plus Vite MDX. Its 101 custom
+HTTPS hostnames preserve the public URL shapes. The image identity, rollout,
+and public acceptance receipts are recorded below and in
+[the framework-demo rollout](https://github.com/sebastian-software/palamedes/pull/1326).
 
 The [shared rollout runbook](./shared-demo-rollout.md) owns endpoint ports,
 health checks, image updates, cache settings, rollback, and resource observation.
@@ -40,24 +40,24 @@ checks server HTML without JavaScript and same-locale detail navigation. CI runs
 this contract alongside the original framework proof suites. The image publisher
 smoke-tests all 41 running servers before publication.
 
-The 25-demo deployment receipt above remains the last public acceptance record.
-The additional endpoints, DNS records, TLS certificates, and public browser
-contracts must pass before these new links are advertised as live. The gated
-`Deploy Examples` workflow has an `inspect-hosting` operation that saves only a
-sanitized inventory of the existing app, endpoints, relevant DNS zones, and
-representative CDN settings; it does not change hosting configuration.
+The gated `Deploy Examples` workflow separates read-only inventory and planning
+from image updates and endpoint provisioning. Its sanitized receipts exclude
+API credentials, environment variables, registry credentials, and certificate
+keys. Public browser acceptance follows the completed rollout.
 
 ## Deployment Evidence
 
-| Evidence            | Verified value                                                                                                                                |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Source revision     | `14b14d1c2edf87572978642b3f1a1277517e72e8`                                                                                                    |
-| Verification source | [`860bcd415eafc934f08da58b68a893fc0817481d`](https://github.com/sebastian-software/palamedes/commit/860bcd415eafc934f08da58b68a893fc0817481d) |
-| Image               | `ghcr.io/sebastian-software/palamedes-examples@sha256:512e298c780d8e10efa8e1a166498dc46d51dae18add41734beb6a6cdbcbf7ce`                       |
-| Publisher           | [Successful build, all-25 smoke test, and publication](https://github.com/sebastian-software/palamedes/actions/runs/39427481210)              |
-| Deployment          | [Verified pinned image update](https://github.com/sebastian-software/palamedes/actions/runs/39430138888)                                      |
-| Runtime             | `palamedes-demos`, app `5DAx1z3T6GFLvSa`; one active Frankfurt instance, 25 HTTP CDN endpoints; readiness port 4080 remains private           |
-| Public acceptance   | 25/25 hosted contracts and 61/61 hostname checks; browser batch completed October 20, 2026 at 13:56 UTC                                       |
+| Evidence          | Verified value                                                                                                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source revision   | `a47efd3d416755f98de7ce8474a1b30efa23d459`                                                                                                                                   |
+| Verifier contract | [HTTP redirects, framework identity, and hosted browser contracts](https://github.com/sebastian-software/palamedes/commit/f00bf93e3fcefb689e05421b12de9d39880bae8b)          |
+| Image             | `ghcr.io/sebastian-software/palamedes-examples@sha256:925e3f3c62feb135deacd2b9a6772ecec375850f7c403a347bc299f71f0aa429`                                                      |
+| Publisher         | [Successful build, all-41 smoke test, and publication](https://github.com/sebastian-software/palamedes/actions/runs/39848523010)                                             |
+| Image update      | [Pinned image update and saved previous image](https://github.com/sebastian-software/palamedes/actions/runs/39850579025)                                                     |
+| Active rollout    | [Ready Frankfurt pod on the new digest, zero restarts](https://github.com/sebastian-software/palamedes/actions/runs/39851566668)                                             |
+| Runtime           | `palamedes-demos`, app `5DAx1z3T6GFLvSa`; one active Frankfurt instance, 41 HTTP CDN endpoints; readiness port 4080 remains private                                          |
+| Public acceptance | [41 hosted contracts and 101 hostname checks: receipts and completion time](https://github.com/sebastian-software/palamedes/pull/1326)                                       |
+| Previous image    | Source `99cb527b16e7874735512fe96926cbe89d4d5ca7`, digest `sha256:f626d067ba1224af62cbdc326200d4a7c7533b4bb17d9f404c3304af5fcb6101`; saved by the image updater for rollback |
 
 Bunny reported the final image active before browser verification began; the
 previous instance had retired. The browser batch checks repeated SSR language
@@ -69,8 +69,9 @@ Earlier Berlin and UTC browser reproductions of the reported React Router client
 also passed without page, console, or hydration errors. The shared browser suite
 uses `America/Los_Angeles` to detect server/browser time-zone disagreement.
 
-The final public acceptance run used the verification revision above against
-the pinned runtime image. French SSR requests are included for every server
+Public acceptance runs the verifier contract above against the pinned runtime
+image, with separate receipts for the original 25 demos and the 16 component
+demos. French SSR requests are included for every server
 strategy, followed by a repeated language to detect CDN locale leakage. Each
 Remix locale/failure pair has its own recovery test with the unchanged default
 time limit; all 32 lazy-catalog recovery scenarios passed across the four
@@ -111,7 +112,7 @@ tier; see [Stability and Versioning](./stability.md).
 ## Live Reference URLs
 
 Switch language to see copy, plural seat counts, currency, and dates change
-together. Each server framework has these four strategies:
+together. Each of the ten framework families has these four strategies:
 
 - **cookie** — one host; `Accept-Language` negotiates the initial locale and an
   explicit user choice persists it in a cookie.
@@ -178,6 +179,42 @@ Frames, lazy catalogs, and recovery available in “Behind the scenes.”
 | subdomain | [en](https://en.remix-subdomain.examples.palamedes.dev) · [de](https://de.remix-subdomain.examples.palamedes.dev) · [es](https://es.remix-subdomain.examples.palamedes.dev) · [fr](https://fr.remix-subdomain.examples.palamedes.dev) |
 | tld       | [en](https://remix.examples.palamedes-i18n.com) · [de](https://remix.examples.palamedes-i18n.de) · [es](https://remix.examples.palamedes-i18n.es) · [fr](https://remix.examples.palamedes-i18n.fr)                                    |
 
+### Vue + Vite
+
+| Strategy  | Live demos                                                                                                                                                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cookie    | [vue-cookie.examples.palamedes.dev](https://vue-cookie.examples.palamedes.dev)                                                                                                                                                |
+| route     | [en](https://vue-route.examples.palamedes.dev/en) · [de](https://vue-route.examples.palamedes.dev/de) · [es](https://vue-route.examples.palamedes.dev/es) · [fr](https://vue-route.examples.palamedes.dev/fr)                 |
+| subdomain | [en](https://en.vue-subdomain.examples.palamedes.dev) · [de](https://de.vue-subdomain.examples.palamedes.dev) · [es](https://es.vue-subdomain.examples.palamedes.dev) · [fr](https://fr.vue-subdomain.examples.palamedes.dev) |
+| tld       | [en](https://vue.examples.palamedes-i18n.com) · [de](https://vue.examples.palamedes-i18n.de) · [es](https://vue.examples.palamedes-i18n.es) · [fr](https://vue.examples.palamedes-i18n.fr)                                    |
+
+### Nuxt
+
+| Strategy  | Live demos                                                                                                                                                                                                                        |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cookie    | [nuxt-cookie.examples.palamedes.dev](https://nuxt-cookie.examples.palamedes.dev)                                                                                                                                                  |
+| route     | [en](https://nuxt-route.examples.palamedes.dev/en) · [de](https://nuxt-route.examples.palamedes.dev/de) · [es](https://nuxt-route.examples.palamedes.dev/es) · [fr](https://nuxt-route.examples.palamedes.dev/fr)                 |
+| subdomain | [en](https://en.nuxt-subdomain.examples.palamedes.dev) · [de](https://de.nuxt-subdomain.examples.palamedes.dev) · [es](https://es.nuxt-subdomain.examples.palamedes.dev) · [fr](https://fr.nuxt-subdomain.examples.palamedes.dev) |
+| tld       | [en](https://nuxt.examples.palamedes-i18n.com) · [de](https://nuxt.examples.palamedes-i18n.de) · [es](https://nuxt.examples.palamedes-i18n.es) · [fr](https://nuxt.examples.palamedes-i18n.fr)                                    |
+
+### Svelte + Vite
+
+| Strategy  | Live demos                                                                                                                                                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cookie    | [svelte-cookie.examples.palamedes.dev](https://svelte-cookie.examples.palamedes.dev)                                                                                                                                                      |
+| route     | [en](https://svelte-route.examples.palamedes.dev/en) · [de](https://svelte-route.examples.palamedes.dev/de) · [es](https://svelte-route.examples.palamedes.dev/es) · [fr](https://svelte-route.examples.palamedes.dev/fr)                 |
+| subdomain | [en](https://en.svelte-subdomain.examples.palamedes.dev) · [de](https://de.svelte-subdomain.examples.palamedes.dev) · [es](https://es.svelte-subdomain.examples.palamedes.dev) · [fr](https://fr.svelte-subdomain.examples.palamedes.dev) |
+| tld       | [en](https://svelte.examples.palamedes-i18n.com) · [de](https://svelte.examples.palamedes-i18n.de) · [es](https://svelte.examples.palamedes-i18n.es) · [fr](https://svelte.examples.palamedes-i18n.fr)                                    |
+
+### SvelteKit
+
+| Strategy  | Live demos                                                                                                                                                                                                                                            |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cookie    | [sveltekit-cookie.examples.palamedes.dev](https://sveltekit-cookie.examples.palamedes.dev)                                                                                                                                                            |
+| route     | [en](https://sveltekit-route.examples.palamedes.dev/en) · [de](https://sveltekit-route.examples.palamedes.dev/de) · [es](https://sveltekit-route.examples.palamedes.dev/es) · [fr](https://sveltekit-route.examples.palamedes.dev/fr)                 |
+| subdomain | [en](https://en.sveltekit-subdomain.examples.palamedes.dev) · [de](https://de.sveltekit-subdomain.examples.palamedes.dev) · [es](https://es.sveltekit-subdomain.examples.palamedes.dev) · [fr](https://fr.sveltekit-subdomain.examples.palamedes.dev) |
+| tld       | [en](https://sveltekit.examples.palamedes-i18n.com) · [de](https://sveltekit.examples.palamedes-i18n.de) · [es](https://sveltekit.examples.palamedes-i18n.es) · [fr](https://sveltekit.examples.palamedes-i18n.fr)                                    |
+
 ### Vite MDX
 
 [Open the client-side MDX demo](https://vite-mdx.examples.palamedes.dev).
@@ -186,8 +223,8 @@ MDX handbook supports English, German, and French with document navigation.
 
 ## DNS, TLS, Host Forwarding, and Caching
 
-All 61 hosts use explicit CNAME records to their matching Bunny CDN endpoints:
-12 cookie/route hosts, 24 locale subdomains, 24 TLD hosts, and Vite MDX. Generate
+All 101 hosts use explicit CNAME records to their matching Bunny CDN endpoints:
+20 cookie/route hosts, 40 locale subdomains, 40 TLD hosts, and Vite MDX. Generate
 the exact mapping with `node scripts/print-demo-deployment.mjs`; endpoint ports
 and identities come from the example matrix. Existing wildcards and unrelated
 DNS records remain intact for rollback and legacy routes.
@@ -213,7 +250,7 @@ rollback path. Do not retire the server during the first-day observation.
 ## Container Image Publication
 
 [`publish-examples-container.yml`](../.github/workflows/publish-examples-container.yml)
-builds Linux amd64, starts and smoke-tests all 25 servers, and publishes
+builds Linux amd64, starts and smoke-tests all 41 servers, and publishes
 `ghcr.io/sebastian-software/palamedes-examples` on image-relevant `main` pushes or
 manual dispatches. Publication is independent of the package release hold.
 Branch dispatches require `dry_run` and never publish. Deploy the immutable
