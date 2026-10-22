@@ -56,7 +56,6 @@ const safeFields = [
   "Id",
   "Name",
   "OriginUrl",
-  "Hostnames",
   "ForwardHostHeader",
   "EnableCookies",
   "CacheControlMaxAgeOverride",
@@ -68,18 +67,28 @@ const safeFields = [
   "CacheErrorResponses",
   "EnableQueryStringOrdering",
 ];
+const safePullZone = pullZone && {
+  ...Object.fromEntries(
+    safeFields
+      .filter((field) => Object.hasOwn(pullZone, field))
+      .map((field) => [field, pullZone[field]]),
+  ),
+  Hostnames: pullZone.Hostnames.map(
+    ({ Id, Value, HasCertificate, ForceSSL, IsSystemHostname }) => ({
+      Id,
+      Value,
+      HasCertificate,
+      ForceSSL,
+      IsSystemHostname,
+    }),
+  ),
+};
 const receipt = {
   app,
   inspectedAt: new Date().toISOString(),
   containers,
   dns,
-  pullZone:
-    pullZone &&
-    Object.fromEntries(
-      safeFields
-        .filter((field) => Object.hasOwn(pullZone, field))
-        .map((field) => [field, pullZone[field]]),
-    ),
+  pullZone: safePullZone,
 };
 await mkdir("deployment-receipt", { recursive: true });
 await writeFile(
