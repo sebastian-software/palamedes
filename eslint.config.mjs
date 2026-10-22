@@ -13,6 +13,7 @@ const generatedAndBuildIgnores = {
     "**/.claude/**",
     "**/.nitro/**",
     "**/.nuxt/**",
+    "**/.svelte-kit/**",
     "**/.output/**",
     "**/.tanstack/**",
     "**/.vinxi/**",

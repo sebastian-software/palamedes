@@ -1,0 +1,33 @@
+{
+  "name": "@palamedes/proof-sveltekit-ssr",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4075",
+    "build": "vite build",
+    "preview": "HOST=127.0.0.1 PORT=4075 node build/index.js",
+    "extract": "pmds extract",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "pnpm typecheck && pnpm build && node --test test/browser.test.mjs"
+  },
+  "dependencies": {
+    "@palamedes/core": "link:../../packages/core",
+    "@palamedes/example-ui": "link:../../packages/example-ui",
+    "@palamedes/runtime": "link:../../packages/runtime",
+    "svelte": "5.57.2"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@palamedes/cli": "link:../../packages/cli",
+    "@palamedes/vite-plugin": "link:../../packages/vite-plugin",
+    "@playwright/test": "1.62.1",
+    "@sveltejs/adapter-node": "6.0.0",
+    "@sveltejs/kit": "3.1.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@types/node": "24.13.3",
+    "svelte-check": "4.7.7",
+    "typescript": "6.0.3",
+    "vite": "8.2.2"
+  }
+}

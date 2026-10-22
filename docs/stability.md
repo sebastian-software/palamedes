@@ -87,8 +87,26 @@ fragments for initial and dynamically imported components.
 
 This integration is **Preview**, browser-only, and outside the supported
 server-framework example matrix. Template-expression macros, automatic template
-text extraction, Svelte rich text, catalog HMR, non-JS/TS preprocessors, and
-SvelteKit/SSR are not verified.
+text extraction, Svelte rich text, catalog HMR, and non-JS/TS preprocessors are
+not verified. SvelteKit SSR has a separate proof below.
+
+### SvelteKit SSR Preview contract
+
+The private [SvelteKit proof](../proof/sveltekit-ssr/README.md) verifies SvelteKit
+3.1.0 with Svelte 5.57.2, Vite 8.2.2, and the Node adapter 6.0.0. Its local
+integration reuses the native component compiler and existing Vite catalog
+delivery. Development and production checks cover the shared four-language
+booking demo, translated HTML without JavaScript, matching hydration, lazy
+components and routes, endpoint macros, overlapping request isolation, locale
+navigation, and production catalog failure UI. The production build runs from
+a separate directory without source catalogs, workspace packages, or native
+tooling.
+
+This is a **Preview** proof outside the six-family server example matrix. No
+SvelteKit package is published. It targets a root-mounted, same-origin Node
+deployment with query-selected locale, a fixed time zone, and absolute asset
+paths. Other adapters, CDN/subpath deployment, prerendering, streaming loads,
+remote functions, catalog HMR, and the four-strategy matrix remain unverified.
 
 ### Nuxt SSR Preview contract
 
