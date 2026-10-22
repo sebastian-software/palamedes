@@ -1,20 +1,27 @@
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import path from "node:path";
 import ts from "typescript";
-import { parsePo, renderCatalogModule } from "../packages/core-node/dist/index.mjs";
+import { loadPalamedesConfigSync } from "../packages/config/dist/index.mjs";
+import { compileCatalogArtifact, renderCatalogModule } from "../packages/core-node/dist/index.mjs";
 
 // Opportunity check for module-local deduplication of identical emitted functions.
-// Uses tracked example catalogs, excluding installed dependencies and build output.
-const files = execFileSync("git", ["ls-files", "--", "examples/**/*.po"], { encoding: "utf8" })
+// Optional arguments select project roots, for example examples proof/svelte-vite.
+// Compile through each project's configuration so fuzzy fallback and PO escaping
+// match the production module renderer rather than interpreting raw PO strings.
+const roots = process.argv.length > 2 ? process.argv.slice(2) : ["examples"];
+const files = execFileSync("git", ["ls-files", "--", ...roots], { encoding: "utf8" })
   .trim()
   .split("\n")
-  .filter(Boolean);
+  .filter((file) => file.endsWith(".po"));
 const catalogs = [];
+const configs = new Map();
 for (const file of files) {
-  const items = parsePo(await readFile(file, "utf8")).items.filter((item) => !item.obsolete);
-  const code = renderCatalogModule(
-    Object.fromEntries(items.map((item, index) => [`m${index}`, item.msgstr[0] || item.msgid])),
-  );
+  const project = file.split("/").slice(0, 2).join("/");
+  if (!configs.has(project)) configs.set(project, loadPalamedesConfigSync({ cwd: project }));
+  const artifact = compileCatalogArtifact(configs.get(project), path.resolve(file));
+  assert.deepEqual(artifact.diagnostics, [], `${file}: catalog compilation must succeed`);
+  const code = renderCatalogModule(artifact.messages);
   const source = ts.createSourceFile(
     "catalog.js",
     code,
@@ -35,11 +42,13 @@ for (const file of files) {
       else seen.add(expression);
     }
   }
-  catalogs.push({ file, messages: items.length, functions, duplicates });
+  catalogs.push({ file, messages: Object.keys(artifact.messages).length, functions, duplicates });
 }
 console.log(
   JSON.stringify(
     {
+      sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+      roots,
       summary: {
         catalogs: catalogs.length,
         messages: catalogs.reduce((total, entry) => total + entry.messages, 0),

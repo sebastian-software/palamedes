@@ -164,7 +164,7 @@ async function writeBrowserRuntimeStats() {
   // the site's browser graph. The homepage only needs the measured byte rows.
   const data = {
     measuredAt: report.measuredAt,
-    profiles: report.profiles.map(({ id, bytes }) => ({ id, bytes })),
+    profiles: report.treeShakenProfiles.map(({ id, bytes }) => ({ id, bytes })),
     catalog: { messages: report.catalog.messages, bytes: report.catalog.bytes },
   };
   await mkdir(generatedDataRoot, { recursive: true });

@@ -42,6 +42,8 @@ const inputPaths = [
   "pnpm-lock.yaml",
   "scripts/benchmark-browser-runtime.mjs",
   ...profiles.map((id) => `benchmarks/browser-runtime/${id}.mjs`),
+  ...profiles.map((id) => `benchmarks/browser-runtime/${id}-client.mjs`),
+  "benchmarks/browser-runtime/catalog-only.mjs",
   "proof/sveltekit-ssr/locales/en.po",
 ].sort();
 const sourceHash = createHash("sha256");
@@ -56,7 +58,7 @@ const sourceSha256 = sourceHash.digest("hex");
 
 if (process.argv.includes("--verify-report")) {
   const report = JSON.parse(await readFile(reportPath, "utf8"));
-  assert.equal(report.schemaVersion, 1);
+  assert.equal(report.schemaVersion, 2);
   assert.equal(
     report.sourceSha256,
     sourceSha256,
@@ -66,7 +68,18 @@ if (process.argv.includes("--verify-report")) {
     report.profiles.map(({ id }) => id),
     profiles,
   );
-  for (const profile of [...report.profiles, report.catalog]) {
+  assert.deepEqual(
+    report.treeShakenProfiles.map(({ id }) => id),
+    profiles,
+  );
+  assert.deepEqual(report.diagnostics.catalogOnly.exports, ["defineCompiledCatalog"]);
+  assert.deepEqual(report.diagnostics.catalogOnly.retainedIntl, []);
+  for (const profile of [
+    ...report.profiles,
+    ...report.treeShakenProfiles,
+    report.diagnostics.catalogOnly,
+    report.catalog,
+  ]) {
     assert(
       profile.bytes.raw > profile.bytes.gzip &&
         profile.bytes.gzip > profile.bytes.brotli &&
@@ -136,14 +149,13 @@ if (process.argv.includes("--verify-report")) {
     return chunks[0];
   }
 
-  const measurements = [];
-  for (const id of profiles) {
-    const entry = path.join(root, `benchmarks/browser-runtime/${id}.mjs`);
+  async function measure(id, filename) {
+    const entry = path.join(root, `benchmarks/browser-runtime/${filename}.mjs`);
     const chunk = await bundle(entry);
     assert.equal(
       (await bundle(entry)).code,
       chunk.code,
-      `${id}: repeated builds must be byte-identical`,
+      `${filename}: repeated builds must be byte-identical`,
     );
     const modules = Object.keys(chunk.modules)
       .map((filename) => path.relative(root, filename))
@@ -162,21 +174,48 @@ if (process.argv.includes("--verify-report")) {
       ),
       `${id}: build tools or ICU parser reached the browser`,
     );
-    assets.set(`/${id}.js`, chunk.code);
-    measurements.push({
+    assets.set(`/${filename}.js`, chunk.code);
+    return {
       id,
       bytes: sizes(chunk.code),
       sha256: sha256(chunk.code),
       exports: chunk.exports.sort(),
       imports: chunk.imports.sort(),
+      retainedIntl: ["NumberFormat", "DateTimeFormat", "PluralRules"].filter((name) =>
+        chunk.code.includes(`Intl.${name}`),
+      ),
       modules: await Promise.all(
         modules.map(async (filename) => ({
           path: filename,
           sha256: sha256(await readFile(path.join(root, filename))),
         })),
       ),
-    });
+    };
   }
+  const measurements = [];
+  const treeShakenMeasurements = [];
+  for (const id of profiles) {
+    measurements.push(await measure(id, id));
+    const client = await measure(id, `${id}-client`);
+    assert.deepEqual(
+      client.exports,
+      [
+        "createI18n",
+        "defineCompiledCatalog",
+        "getI18n",
+        "initializeClientI18n",
+        ...(id === "core" ? [] : ["Trans"]),
+      ].sort(),
+    );
+    assert(
+      client.bytes.raw < measurements.at(-1).bytes.raw,
+      `${id}: unused exports must be removed`,
+    );
+    treeShakenMeasurements.push(client);
+  }
+  const catalogOnly = await measure("catalog-only", "catalog-only");
+  assert.deepEqual(catalogOnly.exports, ["defineCompiledCatalog"]);
+  assert.deepEqual(catalogOnly.retainedIntl, [], "Catalog branding must not retain Intl helpers");
 
   const catalogPath = "proof/sveltekit-ssr/locales/en.po";
   const artifact = compileCatalogArtifact(
@@ -200,8 +239,9 @@ if (process.argv.includes("--verify-report")) {
   assets.set("/catalog.js", catalog.code);
 
   // Framework code is only supplied to the correctness probe, never counted in
-  // Palamedes bytes. Each production library entry keeps all its public exports.
-  const importMap = { "@palamedes/core/compiled": "/core.js" };
+  // Palamedes bytes. Catalogs import the measured profile itself, so no second
+  // Core entry can hide a missing dependency in a client profile.
+  const importMap = {};
   for (const [index, id] of externals.entries()) {
     if (!measurements.some((profile) => profile.imports.includes(id))) continue;
     const resolver = createRequire(
@@ -222,7 +262,8 @@ if (process.argv.includes("--verify-report")) {
   }
   const browser = await chromium.launch();
   try {
-    for (const id of profiles) {
+    for (const filename of profiles.flatMap((id) => [id, `${id}-client`])) {
+      const id = filename.replace(/-client$/u, "");
       const context = await browser.newContext();
       try {
         const errors = [];
@@ -231,7 +272,7 @@ if (process.argv.includes("--verify-report")) {
           if (pathname === "/")
             return route.fulfill({
               contentType: "text/html",
-              body: `<!doctype html><html lang="en"><script type="importmap">${JSON.stringify({ imports: importMap })}</script></html>`,
+              body: `<!doctype html><html lang="en"><script type="importmap">${JSON.stringify({ imports: { ...importMap, "@palamedes/core/compiled": `/${filename}.js` } })}</script></html>`,
             });
           assert(assets.has(pathname), `Unexpected browser request: ${pathname}`);
           await route.fulfill({ contentType: "text/javascript", body: assets.get(pathname) });
@@ -240,8 +281,8 @@ if (process.argv.includes("--verify-report")) {
         page.on("pageerror", (error) => errors.push(error.message));
         await page.goto("http://runtime-footprint.test/");
         const probe = await page.evaluate(
-          async ({ profile, ids }) => {
-            const runtime = await import(`/${profile}.js`);
+          async ({ profile, filename, ids }) => {
+            const runtime = await import(`/${filename}.js`);
             const { messages: compiled } = await import("/catalog.js");
             const i18n = runtime.initializeClientI18n("en", () =>
               runtime.createI18n({ timeZone: "Europe/Berlin" }),
@@ -257,7 +298,7 @@ if (process.argv.includes("--verify-report")) {
               renderer: profile === "core" || typeof runtime.Trans === "function",
             };
           },
-          { profile: id, ids },
+          { profile: id, filename, ids },
         );
         assert.deepEqual(probe, {
           text: "Add to cart",
@@ -272,7 +313,7 @@ if (process.argv.includes("--verify-report")) {
       }
     }
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       measuredAt: new Date().toISOString(),
       sourceCommit: git("rev-parse", "HEAD"),
       worktreeDirty: git("status", "--porcelain").length > 0,
@@ -294,8 +335,12 @@ if (process.argv.includes("--verify-report")) {
         repeatedBuilds: 2,
         scope:
           "All exports of compiled core + universal runtime, plus the selected compiled UI entry. Framework peers, host bootstrap, application code, catalogs, and Intl polyfills are excluded.",
+        treeShakenScope:
+          "Named client imports only: createI18n, defineCompiledCatalog, getI18n, initializeClientI18n, and Trans for UI profiles. Unused registration, server binding, reset, locale-switch, and standalone formatter exports can be removed. The complete default string runtime remains reachable through createI18n.",
       },
       profiles: measurements,
+      treeShakenProfiles: treeShakenMeasurements,
+      diagnostics: { catalogOnly },
       catalog: {
         source: catalogPath,
         locale: "en",
@@ -316,12 +361,20 @@ if (process.argv.includes("--verify-report")) {
       const previous = JSON.parse(await readFile(reportPath, "utf8"));
       assert.equal(previous.sourceSha256, sourceSha256);
       assert.deepEqual(previous.profiles, report.profiles);
+      assert.deepEqual(previous.treeShakenProfiles, report.treeShakenProfiles);
+      assert.deepEqual(previous.diagnostics, report.diagnostics);
       assert.deepEqual(previous.catalog, report.catalog);
     }
     console.log(
       JSON.stringify(
         {
           profiles: measurements.map(({ id, bytes }) => ({ id, ...bytes })),
+          treeShakenProfiles: treeShakenMeasurements.map(({ id, bytes, retainedIntl }) => ({
+            id,
+            ...bytes,
+            retainedIntl,
+          })),
+          diagnostics: { catalogOnly },
           catalog: report.catalog,
         },
         null,

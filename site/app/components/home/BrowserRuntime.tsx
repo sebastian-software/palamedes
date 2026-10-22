@@ -19,7 +19,8 @@ export function BrowserRuntime() {
       >
         <table className="w-full border-collapse text-left text-[15px]">
           <caption className="pb-4 text-left text-[13px] leading-relaxed text-gray-spec">
-            Complete compiled entry points · production minification · {browserRuntime.measuredAt}
+            Client imports after tree-shaking · production minification ·{" "}
+            {browserRuntime.measuredAt}
             <span className="mt-1 block">
               Excludes framework peers, host bootstrap and recovery code, catalogs, and Intl
               polyfills.
@@ -69,8 +70,9 @@ export function BrowserRuntime() {
         <p>
           <strong className="font-semibold text-ink">For a Next.js app, read the React row.</strong>{" "}
           It includes Palamedes&apos; runtime and rich-text renderer. React, Next.js, generated
-          client bootstrap, and catalogs are excluded. These reference bundles retain every
-          entry-point export; tree-shaking and your build determine the actual application increase.
+          client bootstrap, and catalogs are excluded. These reference bundles keep client
+          initialization, message lookup, and the compiled catalog factory. Your imports and build
+          determine the actual application increase.
         </p>
       </div>
       <a

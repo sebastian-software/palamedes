@@ -613,10 +613,10 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     const runtimeSection = page.locator("#browser-runtime");
     const runtimeRows = runtimeSection.locator("tbody tr");
-    if ((await runtimeRows.count()) !== browserRuntimeReport.profiles.length) {
+    if ((await runtimeRows.count()) !== browserRuntimeReport.treeShakenProfiles.length) {
       fail("home browser footprint: every measured runtime profile must be present");
     }
-    for (const [index, profile] of browserRuntimeReport.profiles.entries()) {
+    for (const [index, profile] of browserRuntimeReport.treeShakenProfiles.entries()) {
       const cells = await runtimeRows.nth(index).locator("td").allTextContents();
       const expected = [profile.bytes.gzip, profile.bytes.brotli].map(
         (bytes) => `${(bytes / 1000).toFixed(1)} kB`,
@@ -635,6 +635,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     if (
       !runtimeScope.includes("generated client bootstrap, and catalogs are excluded") ||
+      !runtimeScope.includes("Client imports after tree-shaking") ||
       !runtimeScope.includes("actual application increase")
     ) {
       fail(

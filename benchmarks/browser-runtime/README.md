@@ -4,8 +4,8 @@ This publication lane answers: how much JavaScript is in Palamedes' shared
 browser runtime and its compiled UI entry points? It does **not** measure the
 before/after size of a Next.js application or the total size of any demo.
 
-The homepage reads [results.json](./results.json) directly. Do not edit that
-generated report by hand.
+The homepage uses the client profiles in [results.json](./results.json), projected
+into its generated data during prebuild. Do not edit that report by hand.
 
 ## Reproduce
 
@@ -34,13 +34,22 @@ the runtime-size report.
 
 ## Measured boundary
 
-Vite builds one ES2022 production ESM file per profile, minified with Oxc. Every
-public export of each selected entry point is retained, rather than choosing
-one small message call that lets most features disappear. This includes the
-compiled engine's formatting helpers and the universal runtime's registration
-and bootstrap APIs. The UI profiles add their complete compiled entry point,
-including locale-switch helpers where exported. Read the four entry fixtures
-beside this file for the exact imports.
+Vite builds one ES2022 production ESM file per profile, minified with Oxc. The
+report retains two import selections for each UI runtime:
+
+- `treeShakenProfiles`: client imports for `createI18n`, `defineCompiledCatalog`,
+  `getI18n`, and `initializeClientI18n`, plus `Trans` for the UI profiles. Unused
+  public exports can disappear. The `*-client.mjs` fixtures define this boundary;
+  the homepage displays these rows.
+- `profiles`: every export of the compiled Core, universal runtime, and selected
+  compiled UI entry point. These full API references remain available for
+  comparison; they include registration, server binding, reset, locale-switch,
+  and standalone formatter APIs where exported.
+
+The selected client APIs still retain the complete default string runtime,
+including number, date/time, and plural formatting. These profiles do not assume
+an application with literal messages only. They retain the named APIs as exports
+so the bundler cannot optimize away the example's initialization or lookup result.
 
 | Profile | Browser entry points                             | Integrations using this UI runtime                                      |
 | ------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
@@ -50,8 +59,8 @@ beside this file for the exact imports.
 | Remix   | Core + `@palamedes/remix/compiled`               | Remix 3 with its own UI runtime                                         |
 
 These are shared runtime profiles, **not framework-by-framework application
-deltas or guaranteed size ceilings**. A real application can tree-shake unused
-exports, combine compression with other code, or add other Palamedes APIs.
+deltas or guaranteed size ceilings**. A real application can select different
+imports, combine compression with other code, or add other Palamedes APIs.
 React/Solid/Remix peer code is external because the host application already
 uses that UI framework. Bundled module inventories reject any other dependency
 outside the selected Palamedes runtime packages. Native tools, component-file
@@ -87,6 +96,13 @@ universal lookup, a literal message, a plural, number and date formatting, and
 the UI renderer export. It does not benchmark UI rendering speed; renderer
 semantics remain covered by the package suites.
 
+The catalog imports Core from the same measured profile in each fresh browser
+context; the probe does not supply an uncounted second Core bundle. A separate
+`catalog-only.mjs` diagnostic verifies that `defineCompiledCatalog` alone retains
+none of the three Intl constructors. Its bytes are not a complete i18n runtime.
+The report's `retainedIntl` arrays record static constructor references, not a
+measurement of per-feature size, execution, or formatter allocations.
+
 The report retains source revision and fingerprint, dirty-worktree status,
 Node/Vite/Rolldown/Chromium versions, each emitted file's SHA-256 and module
 inventory, and exact byte counts. Marketing-only worktree edits can coexist
@@ -98,3 +114,10 @@ network captures, and exclude HTTP headers, source maps, framework peers,
 generated host bootstrap, application code, and Intl polyfills. Browsers use
 their built-in `Intl`; applications targeting older engines may need extra
 polyfills. Homepage kB values use decimal kilobytes and one decimal place.
+
+## Further optimization
+
+See [optimization-notes.md](./optimization-notes.md) for the current findings,
+earlier compiler/runtime decisions, and the remaining opportunities. The client
+measurements change which APIs are retained; they do not change production
+runtime behavior or the compiled catalog ABI.
