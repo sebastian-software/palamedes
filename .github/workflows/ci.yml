@@ -201,6 +201,12 @@ jobs:
         if: ${{ !matrix.full }}
         run: pnpm test:platform
 
+      - name: Verify Svelte Vite proof
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: |
+          pnpm --dir proof/svelte-vite install --frozen-lockfile
+          pnpm --dir proof/svelte-vite test
+
       - name: Verify Nuxt SSR proof
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: |

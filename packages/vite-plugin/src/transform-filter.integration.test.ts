@@ -78,13 +78,16 @@ async function startServer(options: PalamedesPluginOptions = {}) {
 }
 
 describe("transform filters in the Vite dev server", () => {
-  it("leaves Vue raw imports to Vite without transforming the exported source string", async () => {
-    await writeFile(path.join(root, "page.vue"), `<script setup>${macroSource}</script>`);
-    await startServer({ mdx: false });
-    const result = await server!.transformRequest("/page.vue?raw");
-    expect(result?.code).toContain("export default");
-    expect(mocks.transformPalamedesMacros).not.toHaveBeenCalled();
-  });
+  it.each(["vue", "svelte"])(
+    "leaves %s raw imports to Vite without transforming the exported source string",
+    async (extension) => {
+      await writeFile(path.join(root, `page.${extension}`), `<script>${macroSource}</script>`);
+      await startServer({ mdx: false });
+      const result = await server!.transformRequest(`/page.${extension}?raw`);
+      expect(result?.code).toContain("export default");
+      expect(mocks.transformPalamedesMacros).not.toHaveBeenCalled();
+    },
+  );
   it.each(["", "?review=1", "?review=1&scope=node_modules"])(
     "transforms macro modules with suffix %j using their clean file path",
     async (suffix) => {

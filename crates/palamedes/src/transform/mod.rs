@@ -149,15 +149,15 @@ pub fn transform_macros(
 ) -> PalamedesResult<NativeTransformResult> {
     let options = options.unwrap_or_default();
 
-    if crate::vue::is_vue(filename) {
-        let scripts = crate::vue::script_blocks(source, filename)?;
-        // Vue hoists imports from both script kinds into the same module.
+    if crate::component::is_component(filename) {
+        let scripts = crate::component::script_blocks(source, filename)?;
+        // Component compilers hoist imports from both script kinds into one module.
         // Reserve identifiers from the other block too, so an injected getter
         // cannot collide with its module declarations or component bindings.
         let allocator = Allocator::default();
         let mut reserved_names = std::collections::HashSet::new();
         for script in &scripts {
-            let masked = crate::vue::masked_source(source, &script.range);
+            let masked = crate::component::masked_source(source, &script.range);
             let parsed = Parser::new(&allocator, &masked, script.source_type).parse();
             let mut collector = ImportCollector::new("@palamedes/runtime", "getI18n");
             collector.visit_program(&parsed.program);
@@ -171,7 +171,7 @@ pub fn transform_macros(
                 filename,
                 options.clone(),
                 &script,
-                Some(&reserved_names),
+                Some(&mut reserved_names),
             )?;
             replacements.extend(result.edits.into_iter().map(|edit| Replacement {
                 start: edit.start,
@@ -189,10 +189,10 @@ pub fn transform_macros(
         source,
         filename,
         options,
-        &crate::vue::ScriptBlock {
+        &crate::component::ScriptBlock {
             range: 0..source.len(),
             source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
-            setup: false,
+            instance: false,
         },
         None,
     )
@@ -202,8 +202,8 @@ fn transform_javascript(
     source: &str,
     filename: &str,
     options: NativeTransformOptions,
-    script: &crate::vue::ScriptBlock,
-    reserved_names: Option<&std::collections::HashSet<String>>,
+    script: &crate::component::ScriptBlock,
+    mut reserved_names: Option<&mut std::collections::HashSet<String>>,
 ) -> PalamedesResult<NativeTransformResult> {
     if let Some(server_functions) = &options.server_functions
         && (server_functions.initializer_module.is_empty()
@@ -225,7 +225,7 @@ fn transform_javascript(
         .unwrap_or_else(|| "getI18n".to_string());
 
     let allocator = Allocator::default();
-    let parse_source = crate::vue::masked_source(source, &script.range);
+    let parse_source = crate::component::masked_source(source, &script.range);
     let parsed = Parser::new(&allocator, &parse_source, script.source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
@@ -244,7 +244,7 @@ fn transform_javascript(
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
     collector.resolve_references(&semantic);
-    if let Some(names) = reserved_names {
+    if let Some(names) = reserved_names.as_deref() {
         collector
             .used_identifier_names
             .extend(names.iter().cloned());
@@ -277,7 +277,7 @@ fn transform_javascript(
         return Ok(unchanged_result(source));
     }
 
-    if !collector.macro_imports.is_empty() && !script.setup {
+    if !collector.macro_imports.is_empty() && !script.instance {
         validate_translation_macro_scopes(
             &parsed.program,
             filename,
@@ -344,6 +344,15 @@ fn transform_javascript(
             server_options,
             &transform.initializer_alias,
         ));
+    }
+
+    // Svelte shares imported bindings across module and instance scripts.
+    // Reserve generated names too, so the next script cannot inject the same
+    // local binding a second time when both contain macros.
+    if visitor.needs_runtime_import
+        && let Some(names) = reserved_names.as_mut()
+    {
+        names.insert(effective_runtime_import_name.clone());
     }
 
     let needs_runtime_import = !collector.has_reusable_runtime_import

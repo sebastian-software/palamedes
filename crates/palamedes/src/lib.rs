@@ -27,6 +27,7 @@ mod catalog_module;
 mod catalog_three_way;
 mod catalog_update;
 mod choice;
+mod component;
 mod descriptor;
 mod diagnostic;
 mod error;
@@ -43,6 +44,7 @@ mod runtime_message;
 mod source;
 mod source_macros;
 mod source_message;
+mod svelte;
 #[cfg(test)]
 mod test_support;
 mod transform;

@@ -1,0 +1,3 @@
+# Keep experimental Svelte tooling outside the production workspace dependency graph.
+packages:
+  - .

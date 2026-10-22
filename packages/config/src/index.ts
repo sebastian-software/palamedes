@@ -766,7 +766,7 @@ function catalogSourcePattern(
   if (expandBareDirectory) {
     try {
       if (statSync(absolute).isDirectory()) {
-        return `${normalizeCatalogPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx,vue}`;
+        return `${normalizeCatalogPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx,vue,svelte}`;
       }
     } catch {
       // Keep non-existent paths and explicit glob patterns unchanged.

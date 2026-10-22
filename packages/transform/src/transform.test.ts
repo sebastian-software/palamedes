@@ -18,6 +18,17 @@ type SourceMapLike = {
 };
 
 describe("transformPalamedesMacros", () => {
+  it("transforms Svelte instance macros in place with original source maps", () => {
+    const source =
+      '<p>😀</p>\n<script lang="ts">\nimport { t } from "@palamedes/core/macro";\nconst label = t`Open`;\n</script><h1>{label}</h1><style>h1{color:red}</style>';
+    const result = transformPalamedesMacros(source, "View.svelte");
+    expect(result.hasChanged).toBe(true);
+    expect(result.compiledIds).toHaveLength(1);
+    expect(result.code).toContain("getI18n()._(");
+    expect(result.code).not.toContain("@palamedes/core/macro");
+    expect(result.code).toContain("<h1>{label}</h1><style>h1{color:red}</style>");
+    expect(result.map).toMatchObject({ sources: ["View.svelte"], sourcesContent: [source] });
+  });
   it("transforms Vue setup macros in place with an SFC source map", () => {
     const source =
       '<template>😀 {{ label }}</template>\n<script setup lang="ts">\nimport { t } from "@palamedes/core/macro";\nconst label: string = t`Open`;\n</script>\n<style scoped>.x { color: red; }</style>';

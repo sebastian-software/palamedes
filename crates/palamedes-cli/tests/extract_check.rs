@@ -6,6 +6,36 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::{Value, json};
 
 #[test]
+fn svelte_scripts_are_discovered_extracted_and_checked_by_the_native_cli() {
+    let fixture = fixture_dir("svelte-scripts");
+    write_project(
+        &fixture,
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\n",
+        &[],
+    );
+    let source = fixture.join("src/View.svelte");
+    fs::write(&source, "<script lang='ts'>\nimport {t} from '@palamedes/core/macro';\nconst label=t`Svelte source`;\n</script><p>{label}</p><style>p{color:red}</style>").unwrap();
+    let output = pmds(&fixture, &["extract", "--no-cache"]);
+    assert!(output.status.success(), "{output:?}");
+    let catalog = fs::read_to_string(fixture.join("locales/en.po")).unwrap();
+    assert!(catalog.contains("msgid \"Svelte source\""), "{catalog}");
+    assert!(catalog.contains("src/View.svelte"), "{catalog}");
+    assert!(
+        pmds(&fixture, &["extract", "--check", "--no-cache"])
+            .status
+            .success()
+    );
+    fs::write(&source, "<script>import {t} from '@palamedes/core/macro';const label=t`Changed Svelte source`;</script>").unwrap();
+    assert_eq!(
+        pmds(&fixture, &["extract", "--check", "--no-cache"])
+            .status
+            .code(),
+        Some(3)
+    );
+    fs::remove_dir_all(fixture).unwrap();
+}
+
+#[test]
 fn vue_scripts_are_discovered_extracted_and_checked_by_the_native_cli() {
     let fixture = fixture_dir("vue-scripts");
     write_project(

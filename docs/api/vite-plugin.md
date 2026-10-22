@@ -40,7 +40,7 @@ interface PalamedesPluginOptions {
 
 Defaults:
 
-- `include`: JavaScript/TypeScript (`/\.([cm]?[jt]s|[jt]sx)$/`) and Vue SFCs (`/\.vue$/i`)
+- `include`: JavaScript/TypeScript (`/\.([cm]?[jt]s|[jt]sx)$/`) and Vue/Svelte components (`/\.(vue|svelte)$/i`)
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
@@ -141,6 +141,40 @@ including for async Vue components. Catalog imports and runtime initialization
 remain adapter-owned. Template expressions, automatic template-text extraction,
 and Vue rich-text components are not supported. See the runnable
 [Vue proof](../../proof/vue-vite/README.md).
+
+## Svelte components (Preview)
+
+Use `plugins: [palamedes({ framework: "none", mdx: false }), svelte()]`, where
+`svelte` comes from `@sveltejs/vite-plugin-svelte`. Palamedes must run first.
+Core macros work in inline JavaScript or TypeScript instance and module scripts.
+Instance-level calls are valid because Svelte runs that code per component;
+module-level calls must be inside functions. Import macros in the same script
+block as their calls. Native CLI extraction and transforms retain original
+`.svelte` references, markup, styles, and source maps.
+
+```svelte
+<script lang="ts">
+import { plural, t } from "@palamedes/core/macro";
+
+const title = t`Choose your tickets`;
+let quantity = $state(1);
+const label = $derived(plural(quantity, { one: "# ticket", other: "# tickets" }));
+</script>
+
+<h1>{title}</h1>
+<button onclick={() => quantity++}>{label}</button>
+```
+
+The existing Vite adapter delivers only the active locale's component fragments
+before initial and dynamically imported components execute. Applications do not
+import catalogs or initialize the runtime manually. Locale controls navigate to
+a new document, following [ADR-007](../../adr/007-locale-is-fixed-for-a-browser-document.md).
+
+The private [Svelte + Vite proof](../../proof/svelte-vite/README.md) uses the shared
+four-language booking demo. This Preview is browser-only. Template-expression
+macros, automatic template-text extraction, Svelte rich text, catalog HMR,
+preprocessors beyond JavaScript/TypeScript, and SvelteKit/SSR are outside its
+verified scope.
 
 ## Server and document delivery
 
