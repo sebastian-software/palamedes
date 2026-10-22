@@ -77,6 +77,19 @@ existing APIs are Stable. Template-expression macros, automatic template-text
 extraction, and Vue rich text are not supported. The Vite proof is browser-only
 and separate from the supported server-framework example matrix.
 
+### Svelte component Preview contract
+
+The private [Svelte + Vite proof](../proof/svelte-vite/README.md) verifies Svelte 5
+with the shared booking demo in English, German, French, and Spanish. Inline
+instance and module scripts support core macros through native extraction and
+transforms, with original source maps and automatic active-locale catalog
+fragments for initial and dynamically imported components.
+
+This integration is **Preview**, browser-only, and outside the supported
+server-framework example matrix. Template-expression macros, automatic template
+text extraction, Svelte rich text, catalog HMR, non-JS/TS preprocessors, and
+SvelteKit/SSR are not verified.
+
 ### Nuxt SSR Preview contract
 
 The private [Nuxt proof](../proof/nuxt-ssr/README.md) verifies Nuxt 4.6.2 with

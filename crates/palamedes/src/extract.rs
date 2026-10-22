@@ -1849,13 +1849,13 @@ fn analyze_source_in(
         });
     }
 
-    if crate::vue::is_vue(filename) {
+    if crate::component::is_component(filename) {
         let mut result = SourceAnalysisResult {
             messages: Vec::new(),
             diagnostics: Vec::new(),
             comments: Vec::new(),
         };
-        for script in crate::vue::script_blocks(source, filename)? {
+        for script in crate::component::script_blocks(source, filename)? {
             let analyzed = analyze_javascript_in(
                 allocator,
                 source,
@@ -1877,10 +1877,10 @@ fn analyze_source_in(
         filename,
         reference_scopes,
         rules,
-        &crate::vue::ScriptBlock {
+        &crate::component::ScriptBlock {
             range: 0..source.len(),
             source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
-            setup: false,
+            instance: false,
         },
     )
 }
@@ -1891,9 +1891,9 @@ fn analyze_javascript_in(
     filename: &str,
     reference_scopes: bool,
     rules: &SourceRuleOptions,
-    script: &crate::vue::ScriptBlock,
+    script: &crate::component::ScriptBlock,
 ) -> PalamedesResult<SourceAnalysisResult> {
-    let parse_source = crate::vue::masked_source(source, &script.range);
+    let parse_source = crate::component::masked_source(source, &script.range);
     let parsed = Parser::new(allocator, &parse_source, script.source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
@@ -1957,8 +1957,8 @@ fn analyze_javascript_in(
 
     let macro_resolution = MacroResolution::resolve(&parsed.program, &collector);
 
-    // Vue compiles the entire setup block into a per-instance function.
-    if !script.setup {
+    // Vue setup and Svelte instance scripts execute per component instance.
+    if !script.instance {
         validate_translation_macro_scopes(
             &parsed.program,
             filename,

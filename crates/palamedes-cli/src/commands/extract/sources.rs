@@ -204,7 +204,7 @@ pub(super) fn normalized_include_patterns(
             let resolved: PathBuf = config.resolve_pattern(pattern).components().collect();
             if resolved.is_dir() {
                 format!(
-                    "{}/**/*.{{js,jsx,ts,tsx,mdx,vue}}",
+                    "{}/**/*.{{js,jsx,ts,tsx,mdx,vue,svelte}}",
                     escape_root_for_glob(&resolved)
                 )
             } else {

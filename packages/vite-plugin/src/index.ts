@@ -38,7 +38,7 @@ import {
 
 const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
-const VUE_FILE_REGEX = /\.vue$/i;
+const COMPONENT_FILE_REGEX = /\.(vue|svelte)$/i;
 const MDX_HOOK_ID_REGEX = /\.mdx(?:\?.*)?$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
@@ -248,7 +248,7 @@ function catalogArtifactConfig(
 export type PalamedesPluginOptions = {
   /**
    * Pattern to include files for transformation.
-   * @default JavaScript, TypeScript, and Vue SFC files
+   * @default JavaScript, TypeScript, Vue, and Svelte component files
    */
   include?: FilterPattern;
 
@@ -344,7 +344,7 @@ export type PalamedesPluginOptions = {
  */
 export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const {
-    include = [PALAMEDES_BUNDLER_TRANSFORM_INCLUDE, VUE_FILE_REGEX],
+    include = [PALAMEDES_BUNDLER_TRANSFORM_INCLUDE, COMPONENT_FILE_REGEX],
     exclude = /node_modules/,
     enablePoLoader = true,
     failOnMissing = false,
@@ -772,10 +772,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     transform(code, id) {
       const cleanId = stripQuery(id);
 
-      // Vue owns the generated template/style/script subrequests. This hook
-      // transforms the original SFC before @vitejs/plugin-vue compiles it.
+      // Host compilers own component subrequests. Transform only the original
+      // component before the Vue or Svelte Vite plugin compiles it.
       const query = new URLSearchParams(id.split("?", 2)[1]);
-      if (VUE_FILE_REGEX.test(cleanId) && ["vue", "raw", "url"].some((key) => query.has(key))) {
+      if (
+        COMPONENT_FILE_REGEX.test(cleanId) &&
+        ["vue", "svelte", "raw", "url"].some((key) => query.has(key))
+      ) {
         return null;
       }
 
@@ -791,7 +794,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         return null;
       }
 
-      if (VUE_FILE_REGEX.test(cleanId)) {
+      if (COMPONENT_FILE_REGEX.test(cleanId)) {
         // Import the runtime getter through the message dependency. This keeps
         // the dependency inside the native-edited script block and preserves
         // its source map, rather than appending JavaScript outside the SFC.
@@ -966,7 +969,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         if (locale === undefined) {
           const ssr = isServer(this, loadOptions?.ssr === true);
-          const runtimeExport = VUE_FILE_REGEX.test(entry.sourceId)
+          const runtimeExport = COMPONENT_FILE_REGEX.test(entry.sourceId)
             ? `export { getI18n } from ${JSON.stringify(macroRuntimeModule)};\n`
             : "";
 

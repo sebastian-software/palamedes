@@ -4,39 +4,17 @@
 //! Masking everything else preserves UTF-8 spans; diagnostics and edits still
 //! use the original SFC, including Unicode before a script on the same line.
 
-use std::borrow::Cow;
-use std::ops::Range;
 use std::path::Path;
 
 use oxc_span::SourceType;
 
+use crate::component::ScriptBlock;
 use crate::{PalamedesError, PalamedesResult};
-
-pub(crate) struct ScriptBlock {
-    pub range: Range<usize>,
-    pub source_type: SourceType,
-    pub setup: bool,
-}
 
 pub(crate) fn is_vue(filename: &str) -> bool {
     Path::new(filename)
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("vue"))
-}
-
-pub(crate) fn masked_source<'a>(source: &'a str, range: &Range<usize>) -> Cow<'a, str> {
-    if range.start == 0 && range.end == source.len() {
-        return Cow::Borrowed(source);
-    }
-    let mut bytes = source.as_bytes().to_vec();
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        if !range.contains(&index) && !matches!(byte, b'\n' | b'\r') {
-            *byte = b' ';
-        }
-    }
-    // Replaced regions contain only ASCII; the retained range follows tag
-    // boundaries, so it contains complete UTF-8 code points.
-    Cow::Owned(String::from_utf8(bytes).expect("masked SFC is valid UTF-8"))
 }
 
 struct Tag<'a> {
@@ -115,7 +93,7 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
         scripts.push(ScriptBlock {
             range: tag.end..end.start,
             source_type,
-            setup: setup == 1,
+            instance: setup == 1,
         });
     }
     Ok(scripts)

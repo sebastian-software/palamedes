@@ -1,0 +1,163 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+#: proof/svelte-vite/src/TicketPanel.svelte#currency
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#: proof/svelte-vite/src/TicketPanel.svelte#addToCart
+msgid ""
+"{count, plural, one {Added # ticket to your cart.} other {Added # tickets to "
+"your cart.}}"
+msgstr ""
+"{count, plural, one {Se ha añadido # entrada a tu carrito.} other {Se han "
+"añadido # entradas a tu carrito.}}"
+
+#: proof/svelte-vite/src/TicketPanel.svelte#ticketLabel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Add to cart"
+msgstr "Añadir al carrito"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Attendees"
+msgstr "Asistentes"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Availability"
+msgstr "Disponibilidad"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "Behind the scenes"
+msgstr "Entre bastidores"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Berlin, Germany"
+msgstr "Berlín, Alemania"
+
+#: proof/svelte-vite/src/App.svelte
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Reserva tu plaza en Frontend Stage 2026"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "Client"
+msgstr "Cliente"
+
+#: proof/svelte-vite/src/App.svelte
+msgid "client locale"
+msgstr "idioma del cliente"
+
+#: proof/svelte-vite/src/ProofPanel.svelte#clientProofMessage
+msgid "Client runtime confirmed locale."
+msgstr "El runtime del cliente confirmó el idioma."
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Conference pass"
+msgstr "Pase de conferencia"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "Currency"
+msgstr "Moneda"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Date"
+msgstr "Fecha"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "each"
+msgstr "cada una"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Fewer tickets"
+msgstr "Menos entradas"
+
+#: proof/svelte-vite/src/LazyCatalogDetails.svelte
+msgid "Lazy catalog detail loaded."
+msgstr "El detalle del catálogo se cargó bajo demanda."
+
+#: proof/svelte-vite/src/App.svelte
+msgid "Locale"
+msgstr "Idioma"
+
+#: proof/svelte-vite/src/App.svelte
+msgid "Localized for this document with Palamedes"
+msgstr "Localizado para este documento con Palamedes"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "More tickets"
+msgstr "Más entradas"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "Number"
+msgstr "Número"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "one switch, every format"
+msgstr "un clic, todos los formatos"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "Plural"
+msgstr "Plural"
+
+#: proof/svelte-vite/src/ProofPanel.svelte
+msgid "Refresh client result"
+msgstr "Actualizar el resultado del cliente"
+
+#: proof/svelte-vite/src/App.svelte
+msgid "Rendered with Svelte"
+msgstr "Renderizado con Svelte"
+
+#: proof/svelte-vite/src/App.svelte
+msgid "Show lazy catalog details"
+msgstr "Mostrar detalles del catálogo bajo demanda"
+
+#: proof/svelte-vite/src/App.svelte
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Tres días de charlas sobre el oficio de construir para la web. Elige tus "
+"entradas abajo."
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Total"
+msgstr "Total"
+
+#: proof/svelte-vite/src/TicketPanel.svelte
+msgid "Venue"
+msgstr "Lugar"
+
+#: proof/svelte-vite/src/App.svelte
+msgid "Welcome back, {attendeeName}."
+msgstr "Hola de nuevo, {attendeeName}."

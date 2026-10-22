@@ -1,5 +1,17 @@
 import { createExtractor, extractMessages, extractor, type ExtractedMessageInfo } from "./index";
 
+it("extracts Svelte instance macros through both public APIs", async () => {
+  const source =
+    '<p>😀</p>\n<script lang="ts">\nimport {t} from "@palamedes/core/macro";\nconst title = t`Open`;\n</script><h1>{title}</h1>';
+  const componentExtractor = createExtractor();
+  expect(componentExtractor.match("src/View.svelte")).toBe(true);
+  const messages = extractMessages(source, "src/View.svelte");
+  expect(messages).toMatchObject([{ message: "Open", origin: ["src/View.svelte", 4, undefined] }]);
+  const collected: unknown[] = [];
+  await componentExtractor.extract("src/View.svelte", source, (message) => collected.push(message));
+  expect(collected).toEqual(messages);
+});
+
 it("extracts macros directly from Vue setup blocks through both public APIs", async () => {
   const source =
     '<template><p>{{ label }}</p></template>\n<script setup lang="ts">\nimport { t } from "@palamedes/core/macro";\nconst label = t({ message: "Open", context: "button", comment: "Main action" });\n</script>';

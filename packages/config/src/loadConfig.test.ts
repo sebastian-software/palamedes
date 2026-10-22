@@ -948,22 +948,24 @@ describe("catalog source matching", () => {
   const config = { rootDir: "/repo" };
   const catalog = { path: "locales/{locale}", include: ["src/**/*.tsx"] };
 
-  it("includes Vue SFCs when a catalog uses a bare source directory", async () => {
-    const rootDir = await createTempDir();
-    await mkdir(path.join(rootDir, "src"));
-    await writeFile(path.join(rootDir, "src/View.vue"), "<template>Hello</template>");
-    const vueCatalog = { path: "locales/{locale}", include: ["src"] };
-    expect(catalogMatchesSource({ rootDir }, vueCatalog, path.join(rootDir, "src/View.vue"))).toBe(
-      true,
-    );
-    expect(
-      catalogMatchesSource(
-        { rootDir },
-        { ...vueCatalog, exclude: ["**/*.vue"] },
-        path.join(rootDir, "src/View.vue"),
-      ),
-    ).toBe(false);
-  });
+  it.each(["vue", "svelte"])(
+    "includes %s components when a catalog uses a bare source directory",
+    async (extension) => {
+      const rootDir = await createTempDir();
+      await mkdir(path.join(rootDir, "src"));
+      const source = path.join(rootDir, `src/View.${extension}`);
+      await writeFile(source, "<p>Hello</p>");
+      const componentCatalog = { path: "locales/{locale}", include: ["src"] };
+      expect(catalogMatchesSource({ rootDir }, componentCatalog, source)).toBe(true);
+      expect(
+        catalogMatchesSource(
+          { rootDir },
+          { ...componentCatalog, exclude: [`**/*.${extension}`] },
+          source,
+        ),
+      ).toBe(false);
+    },
+  );
 
   it("includes dot-prefixed source paths consistently", () => {
     expect(catalogMatchesSource(config, catalog, "/repo/src/.generated/page.tsx")).toBe(true);
