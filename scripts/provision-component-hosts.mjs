@@ -54,6 +54,9 @@ export async function provisionComponentHosts({
   revision,
   apply,
   fetchApi = fetch,
+  resolveHost = resolveCname,
+  wait = setTimeout,
+  now = Date.now,
   receiptDirectory = "deployment-receipt",
 }) {
   assert.ok(key && /^[a-zA-Z0-9-]+$/u.test(app ?? "") && containerName);
@@ -228,28 +231,49 @@ export async function provisionComponentHosts({
         if (!zone.Hostnames.some(({ Value }) => Value === host))
           await call(`${pull}/addHostname`, "POST", { Hostname: host });
         await save();
-        const deadline = Date.now() + 300_000;
-        for (;;) {
-          try {
-            assert.ok(
-              (await resolveCname(host)).some((value) => value.replace(/\.$/u, "") === target),
-            );
-            break;
-          } catch (error) {
-            if (Date.now() > deadline) throw error;
-            await setTimeout(10_000);
-          }
-        }
-        const current = await call(pull);
-        if (!current.Hostnames.find(({ Value }) => Value === host)?.HasCertificate)
-          await call(`pullzone/loadFreeCertificate?hostname=${encodeURIComponent(host)}`);
-        await call(`${pull}/setForceSSL`, "POST", { Hostname: host, ForceSSL: true });
-        dns.tlsRequested = true;
-        await save();
       }
-      result.applied = true;
+      result.prepared = true;
       await save();
-      console.log(`${entry.id}: endpoint and ${entry.hosts.length} HTTPS hostnames configured`);
+    }
+    if (apply) {
+      const hosts = receipt.results.flatMap(({ target, dns }) =>
+        dns.map(({ host }) => ({ host, target })),
+      );
+      console.log(
+        `Prepared ${receipt.results.length} endpoints and ${hosts.length} DNS records; waiting for propagation.`,
+      );
+      // Cached wildcard responses must expire together, rather than once per host.
+      await Promise.all(
+        hosts.map(async ({ host, target }) => {
+          const deadline = now() + 600_000;
+          for (;;) {
+            try {
+              assert.ok(
+                (await resolveHost(host)).some((value) => value.replace(/\.$/u, "") === target),
+                `${host}: DNS has not reached ${target}`,
+              );
+              return;
+            } catch (error) {
+              if (now() > deadline) throw error;
+              await wait(10_000);
+            }
+          }
+        }),
+      );
+      for (const result of receipt.results) {
+        const pull = `pullzone/${result.pullZoneId}`;
+        for (const dns of result.dns) {
+          const current = await call(pull);
+          if (!current.Hostnames.find(({ Value }) => Value === dns.host)?.HasCertificate)
+            await call(`pullzone/loadFreeCertificate?hostname=${encodeURIComponent(dns.host)}`);
+          await call(`${pull}/setForceSSL`, "POST", { Hostname: dns.host, ForceSSL: true });
+          dns.tlsRequested = true;
+          await save();
+        }
+        result.applied = true;
+        await save();
+        console.log(`${result.id}: endpoint and ${result.hosts.length} HTTPS hostnames configured`);
+      }
     }
     if (apply) {
       const after = await call(root);
