@@ -27,17 +27,21 @@ export interface MatrixAxis<TSlug extends string = string> {
 
 export type StrategySlug = "cookie" | "route" | "subdomain" | "tld";
 
-export const FRAMEWORKS: MatrixAxis[] = [
-  { name: "Next.js", slug: "nextjs" },
-  { name: "TanStack Start", slug: "tanstack" },
-  { name: "Solid 2 with Start Mode", slug: "solid" },
-  { name: "Waku", slug: "waku" },
-  { name: "React Router", slug: "react-router" },
-  { name: "Remix", slug: "remix" },
-  { name: "Vue + Vite", slug: "vue" },
-  { name: "Nuxt", slug: "nuxt" },
-  { name: "Svelte + Vite", slug: "svelte" },
-  { name: "SvelteKit", slug: "sveltekit" },
+interface FrameworkAxis extends MatrixAxis {
+  rendering: "ssr" | "client";
+}
+
+export const FRAMEWORKS: FrameworkAxis[] = [
+  { name: "Next.js", slug: "nextjs", rendering: "ssr" },
+  { name: "TanStack Start", slug: "tanstack", rendering: "ssr" },
+  { name: "Solid 2 with Start Mode", slug: "solid", rendering: "ssr" },
+  { name: "Waku", slug: "waku", rendering: "ssr" },
+  { name: "React Router", slug: "react-router", rendering: "ssr" },
+  { name: "Remix", slug: "remix", rendering: "ssr" },
+  { name: "Vue + Vite", slug: "vue", rendering: "client" },
+  { name: "Nuxt", slug: "nuxt", rendering: "ssr" },
+  { name: "Svelte + Vite", slug: "svelte", rendering: "client" },
+  { name: "SvelteKit", slug: "sveltekit", rendering: "ssr" },
 ];
 
 export const STRATEGIES: MatrixAxis<StrategySlug>[] = [

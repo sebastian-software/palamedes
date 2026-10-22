@@ -335,7 +335,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     if (route.path === "/frameworks") {
       const remixRow = routePage.getByRole("row").filter({
-        has: routePage.getByRole("rowheader", { name: "Remix", exact: true }),
+        has: routePage.getByRole("link", { name: "Remix", exact: true }),
       });
       const cells = remixRow.locator("td");
       const linkCounts = await cells.evaluateAll((entries) =>

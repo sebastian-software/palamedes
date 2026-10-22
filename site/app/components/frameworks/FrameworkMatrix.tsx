@@ -85,6 +85,18 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                   >
                     <FrameworkIdentity slug={framework.slug} name={framework.name} />
                   </Link>
+                  <div className="mt-2">
+                    <abbr
+                      title={
+                        framework.rendering === "ssr"
+                          ? "Server-side rendering"
+                          : "Client-side rendering"
+                      }
+                      className="mono-nums inline-block border border-hair px-1.5 py-0.5 text-[10px] leading-4 font-normal tracking-label text-ink no-underline"
+                    >
+                      {framework.rendering === "ssr" ? "SSR" : "CSR"}
+                    </abbr>
+                  </div>
                 </th>
                 {STRATEGIES.map((strategy) => (
                   <td key={strategy.slug} className="border border-hair px-4 py-4 align-top">
@@ -97,9 +109,12 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         </table>
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-        <span className="text-accent">●</span> public demo · ✓ verified in CI. All ten framework
-        families cover all four strategies. Vue and Svelte render in the browser; the other rows
-        include server rendering.
+        <span className="text-accent">●</span> public demo · ✓ verified in CI.
+      </p>
+      <p className="mono-nums mt-2 max-w-[68em] text-[11px] text-gray-spec">
+        <span className="text-ink">SSR</span> = server-rendered HTML with hydration.{" "}
+        <span className="text-ink">CSR</span> = client-side rendering in the browser. Labels
+        describe these demos across all four locale strategies.
       </p>
     </div>
   );
