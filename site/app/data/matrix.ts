@@ -34,13 +34,13 @@ interface FrameworkAxis extends MatrixAxis {
 export const FRAMEWORKS: FrameworkAxis[] = [
   { name: "Next.js", slug: "nextjs", rendering: "ssr" },
   { name: "TanStack Start", slug: "tanstack", rendering: "ssr" },
-  { name: "Solid 2 with Start Mode", slug: "solid", rendering: "ssr" },
+  { name: "Solid", slug: "solid", rendering: "ssr" },
   { name: "Waku", slug: "waku", rendering: "ssr" },
   { name: "React Router", slug: "react-router", rendering: "ssr" },
   { name: "Remix", slug: "remix", rendering: "ssr" },
-  { name: "Vue + Vite", slug: "vue", rendering: "client" },
+  { name: "Vue", slug: "vue", rendering: "client" },
   { name: "Nuxt", slug: "nuxt", rendering: "ssr" },
-  { name: "Svelte + Vite", slug: "svelte", rendering: "client" },
+  { name: "Svelte", slug: "svelte", rendering: "client" },
   { name: "SvelteKit", slug: "sveltekit", rendering: "ssr" },
 ];
 
