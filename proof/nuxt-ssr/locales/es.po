@@ -1,0 +1,252 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue#currency
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{count, number}"
+msgstr "{count, number}"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#travelerCount
+#~ msgid ""
+#~ "{count, plural, =0 {No travelers yet} one {# traveler ready} other {# "
+#~ "travelers ready}}"
+#~ msgstr ""
+#~ "{count, plural, =0 {Todavía no hay viajeros} one {# viajero listo} other {# "
+#~ "viajeros listos}}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue#addToCart
+msgid ""
+"{count, plural, one {Added # ticket to your cart.} other {Added # tickets to "
+"your cart.}}"
+msgstr ""
+"{count, plural, one {Se ha añadido # entrada a tu carrito.} other {Se han "
+"añadido # entradas a tu carrito.}}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue#ticketLabel
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "A small Vue app, translated with Palamedes."
+#~ msgstr "Una pequeña aplicación Vue, traducida con Palamedes."
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Add to cart"
+msgstr "Añadir al carrito"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Add traveler"
+#~ msgstr "Añadir viajero"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Attendees"
+msgstr "Asistentes"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Availability"
+msgstr "Disponibilidad"
+
+#: proof/nuxt-ssr/app/pages/insights.vue
+msgid "Back to booking"
+msgstr "Volver a la reserva"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Behind the scenes"
+msgstr "Entre bastidores"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Berlin, Germany"
+msgstr "Berlín, Alemania"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Reserva tu plaza en Frontend Stage 2026"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/ProofPanel.vue
+#~ msgid "Client"
+#~ msgstr "Cliente"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/App.vue
+#~ msgid "client locale"
+#~ msgstr "idioma del cliente"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/ProofPanel.vue
+#~ #: proof/vue-vite/src/ProofPanel.vue#refresh
+#~ msgid "Client runtime confirmed locale."
+#~ msgstr "El runtime del cliente confirmó el idioma."
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Conference pass"
+msgstr "Pase de conferencia"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Currency"
+msgstr "Moneda"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Date"
+msgstr "Fecha"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "each"
+msgstr "cada una"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Fewer tickets"
+msgstr "Menos entradas"
+
+#: proof/nuxt-ssr/app/components/CatalogDetails.vue
+#: proof/nuxt-ssr/app/pages/insights.vue
+msgid "Lazy catalog detail loaded."
+msgstr "El detalle del catálogo se cargó bajo demanda."
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Locale"
+msgstr "Idioma"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Localized for this document with Palamedes"
+msgstr "Localizado para este documento con Palamedes"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "More tickets"
+msgstr "Más entradas"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Number"
+msgstr "Número"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "one switch, every format"
+msgstr "un clic, todos los formatos"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Open lazy page"
+msgstr "Abrir página bajo demanda"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/packing.ts#packingTip
+#~ msgid "Pack light. Leave room for memories."
+#~ msgstr "Viaja ligero. Deja espacio para los recuerdos."
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Plan your next trip"
+#~ msgstr "Prepara tu próximo viaje"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Plural"
+msgstr "Plural"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/ProofPanel.vue
+#~ msgid "Refresh client result"
+#~ msgstr "Actualizar el resultado del cliente"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Refresh server result"
+msgstr "Actualizar resultado del servidor"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Remove traveler"
+#~ msgstr "Quitar viajero"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Rendered with Nuxt"
+msgstr "Renderizado con Nuxt"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/App.vue
+#~ msgid "Rendered with Vue"
+#~ msgstr "Renderizado con Vue"
+
+#: proof/nuxt-ssr/app/components/ProofPanel.vue
+msgid "Server"
+msgstr "Servidor"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "server and client locale"
+msgstr "idioma del servidor y del cliente"
+
+#: proof/nuxt-ssr/server/api/proof.get.ts
+msgid "Server query confirmed locale {locale}."
+msgstr "La consulta de servidor confirmó el idioma {locale}."
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Show lazy catalog details"
+msgstr "Mostrar detalles del catálogo bajo demanda"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Show packing tip"
+#~ msgstr "Ver consejo de viaje"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Tres días de charlas sobre el oficio de construir para la web. Elige tus "
+"entradas abajo."
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Total"
+msgstr "Total"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Traveler name"
+#~ msgstr "Nombre del viajero"
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#labels
+#~ msgid "Travelers"
+#~ msgstr "Viajeros"
+
+#: proof/nuxt-ssr/app/components/TicketPanel.vue
+msgid "Venue"
+msgstr "Lugar"
+
+#: proof/nuxt-ssr/app/components/BookingDemo.vue
+msgid "Welcome back, {attendeeName}."
+msgstr "Hola de nuevo, {attendeeName}."
+
+#~ #@ obsolete-since: 2026-10-21
+#~ #: proof/vue-vite/src/messages.ts#greeting
+#~ msgid "Welcome, {name}!"
+#~ msgstr "¡Bienvenido, {name}!"

@@ -52,6 +52,12 @@ const GROUPS: readonly IntegrationGroup[] = [
     label: "Verified app integrations",
     integrations: [
       {
+        name: "Nuxt",
+        href: frameworkLandingHref("nuxt"),
+        suffix: "Nuxt",
+        note: "preview",
+      },
+      {
         name: "Next.js",
         href: frameworkLandingHref("nextjs"),
         logo: "/framework-logos/nextjs.svg",

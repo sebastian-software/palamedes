@@ -126,7 +126,7 @@ export default defineConfig({
   },
   boundary: {
     title: "Vite support does not mean every Vite renderer is supported.",
-    body: "Palamedes ships rich-message UI packages for React and Solid. Vue 3 has an experimental browser-only SFC integration through the Vite plugin, without Vue rich text or SSR. Svelte, Preact, Lit, and other Vite templates do not receive an adapter merely because the plugin transforms TypeScript. Direct application catalog imports use PO files.",
+    body: "Palamedes ships rich-message UI packages for React and Solid. Vue 3 has an experimental browser-only SFC integration through the Vite plugin, without Vue rich text. A separate private Nuxt 4 proof covers Node SSR and hydration. Svelte, Preact, Lit, and other Vite templates do not receive an adapter merely because the plugin transforms TypeScript. Direct application catalog imports use PO files.",
     link: {
       label: "Read the Vite plugin guide",
       href: docsHref("api/vite-plugin"),
@@ -147,7 +147,7 @@ export default defineConfig({
     },
     {
       q: "Can I use Palamedes with Vue or Svelte?",
-      a: "Vue 3 + Vite has an experimental browser-only integration: core macros work directly in SFC script blocks, with native extraction and automatic catalog delivery. Vue rich text, Vue SSR, Nuxt, and Svelte are not supported yet. See the Vue framework page for the runnable proof and its boundaries.",
+      a: "Vue 3 + Vite has an experimental browser-only integration: core macros work directly in SFC script blocks, with native extraction and automatic catalog delivery. A separate Nuxt 4 Node SSR proof reuses that compiler. Vue rich text and Svelte remain unsupported. See the Vue and Nuxt framework pages for the runnable proofs and their boundaries.",
     },
   ],
   related: [

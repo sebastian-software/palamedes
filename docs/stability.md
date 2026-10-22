@@ -74,8 +74,24 @@ verifies the shared booking demo in English, German, French, and Spanish.
 
 This SFC integration is **Preview**, even though the surrounding Vite plugin's
 existing APIs are Stable. Template-expression macros, automatic template-text
-extraction, Vue rich text, SSR, and Nuxt are not supported yet. The proof is
-separate from the supported server-framework example matrix.
+extraction, and Vue rich text are not supported. The Vite proof is browser-only
+and separate from the supported server-framework example matrix.
+
+### Nuxt SSR Preview contract
+
+The private [Nuxt proof](../proof/nuxt-ssr/README.md) verifies Nuxt 4.6.2 with
+Vue 3.5.44, Vite 8.3.4, and Nitro 2.13.5 on Node.js. The local module reuses SFC
+macros and native extraction. Its development and production browser checks
+cover four-language SSR HTML without JavaScript, hydration, lazy components and
+pages, Nitro API handlers, parallel request isolation, and document locale
+navigation. Production initial and async-component catalog failures have
+catalog-independent recovery paths.
+
+There is no published Nuxt package. This **Preview** proof targets a root-mounted,
+same-origin Node deployment with query-selected locale and a fixed time zone.
+Other Nitro presets, CDN or subpath deployment, prerendering, streaming, islands,
+catalog HMR, and the four-strategy example matrix are not verified. It does not
+establish support for arbitrary Vue SSR hosts.
 
 ### Waku Preview contract
 

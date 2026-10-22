@@ -83,20 +83,18 @@ Unicode source locations, invalid blocks, and script lookalikes in comments,
 templates, styles, and custom blocks. The CLI regression checks source
 discovery, extraction references, and catalog drift after editing a `.vue` file.
 
-## Nuxt follow-up
+## Nuxt SSR proof
 
-The SFC extraction and transformation can be reused in a Nuxt module through
-[Nuxt Kit's Vite plugin integration](https://nuxt.com/docs/4.x/api/kit/builder#addviteplugin).
-Full Nuxt support still requires a host adapter: resolve the locale and activate
-the existing request-local runtime before rendering, load server catalogs, and
-initialize the browser with the same locale and catalogs before hydration.
-Nuxt's [server and client lifecycle](https://nuxt.com/docs/4.x/guide/concepts/nuxt-lifecycle)
-provides the integration points; a shared module-level locale is not sufficient.
+The separate [Nuxt 4 SSR proof](../nuxt-ssr/README.md) reuses this SFC compiler
+and booking demo. Its local module adds request-local initialization, shared
+production server catalogs, Nitro API macro compilation, and locale-bound
+browser delivery. Development and production checks cover translated HTML
+without JavaScript, hydration, lazy pages, concurrent request isolation, and
+full document locale navigation in all four languages.
 
-A Nuxt SSR proof should reuse this booking demo and verify translated HTML
-without JavaScript, concurrent requests in different locales, hydration,
-lazy-page catalog delivery, localized server endpoints, and document navigation
-when the locale changes. Nuxt is not implemented or verified by this Vite SPA.
+That private proof targets root-mounted Node/Nitro deployment and remains
+outside the supported server-framework matrix. This Vite SPA itself remains
+browser-only; the Nuxt README records the additional adapter and scope limits.
 
 ## Remaining limits
 

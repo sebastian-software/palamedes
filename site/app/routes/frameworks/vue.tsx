@@ -81,13 +81,17 @@ export default function VueFramework() {
       <Section
         num="03 — Nuxt boundary"
         id="nuxt"
-        title="Nuxt needs its own server integration."
-        lede="The SFC macro compiler can be reused. A Nuxt module still needs to connect request-local locale resolution, server catalog loading, and client initialization before hydration. That integration has not been implemented or verified yet."
+        title="Nuxt has a separate SSR proof."
+        lede="The Nuxt 4 proof reuses the same SFC compiler and adds request-local server initialization, Nitro catalog delivery, and matching browser initialization before hydration. It targets a root-mounted Node deployment."
       >
         <p className="max-w-[48em] text-[16px] leading-relaxed text-ink/80">
-          The next proof must check translated HTML before JavaScript, concurrent requests in
-          different languages, hydration, lazy pages, server endpoints, and locale navigation. Until
-          those pass, this page describes Vue + Vite browser support only.
+          Its development and production checks cover translated HTML without JavaScript, concurrent
+          requests, hydration, lazy pages, server endpoints, and document locale navigation. It
+          remains a private Preview proof outside the supported example matrix.
+          <a className="text-accent underline" href="/frameworks/nuxt">
+            {" "}
+            Explore the Nuxt proof.
+          </a>
         </p>
       </Section>
     </Page>

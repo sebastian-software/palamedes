@@ -17,7 +17,7 @@ export function meta() {
   return pageMeta({
     title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "Verified frontend and full-stack i18n adapters, an experimental Vue 3 + Vite SFC integration, and request-local backend guidance for Hono and Express.",
+      "Verified frontend and full-stack i18n adapters, experimental Vue + Vite and Nuxt 4 SSR proofs, and request-local backend guidance for Hono and Express.",
     path: "/frameworks",
   });
 }
@@ -28,7 +28,7 @@ export default function Frameworks() {
       <PageHero
         kicker="Frameworks"
         title="Built for the framework you already use."
-        lede="Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite each get an integration made for them. Vue 3 + Vite has an experimental SFC integration. The six server frameworks run in four URL strategies; Hono and Express use the same runtime for backend messages."
+        lede="Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite each get an integration made for them. Vue 3 + Vite and Nuxt 4 have separate experimental browser and Node SSR proofs. The six server frameworks run in four URL strategies; Hono and Express use the same runtime for backend messages."
         actions={
           <>
             <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>

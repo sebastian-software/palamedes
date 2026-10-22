@@ -12,6 +12,7 @@ const generatedAndBuildIgnores = {
     "**/.next/**",
     "**/.claude/**",
     "**/.nitro/**",
+    "**/.nuxt/**",
     "**/.output/**",
     "**/.tanstack/**",
     "**/.vinxi/**",

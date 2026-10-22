@@ -1,0 +1,9 @@
+# Keep the Nuxt proof outside the supported example workspace graph.
+packages:
+  - .
+onlyBuiltDependencies:
+  - "@parcel/watcher"
+  - esbuild
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true
