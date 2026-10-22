@@ -15,7 +15,7 @@ import {
 } from "./example-matrix.mjs";
 import { assertExampleMatrix } from "./example-matrix-guard.mjs";
 
-import { CONTAINER_EXAMPLES } from "./component-demos.mjs";
+import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "./component-demos.mjs";
 
 const CONTAINER_COUNT = CONTAINER_EXAMPLES.length;
 const MATRIX_COUNT = EXAMPLE_MATRIX.length;
@@ -110,7 +110,7 @@ function axisSlugs(source, name) {
 export function assertSiteMatrixAxes(source) {
   assert.deepEqual(
     axisSlugs(source, "FRAMEWORKS"),
-    [...SERVER_FRAMEWORKS].sort(),
+    [...SERVER_FRAMEWORKS, ...COMPONENT_FRAMEWORKS.map(({ framework }) => framework)].sort(),
     "site framework axes must match the canonical example matrix",
   );
   assert.deepEqual(

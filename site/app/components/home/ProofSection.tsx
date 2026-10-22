@@ -10,12 +10,12 @@ import { decisionHref, REPO } from "~/data/links";
  */
 const FIGURES = [
   {
-    value: contentStats.smokeExampleCount,
-    label: "example applications, built and smoke-checked when relevant code changes",
+    value: contentStats.demoCount,
+    label: "example applications, built and smoke-checked in the production image",
   },
   {
-    value: contentStats.browserExampleCount,
-    label: "of them driven in a real browser: server rendering, language switching, server actions",
+    value: contentStats.demoCount,
+    label: "of them checked in a real browser: language switching, formatting, and lazy catalogs",
   },
   {
     value: contentStats.adrCount,

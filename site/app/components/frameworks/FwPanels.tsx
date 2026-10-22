@@ -1,10 +1,11 @@
 import { Link } from "react-router";
+import { FrameworkIdentity } from "./FrameworkIdentity";
 
 import { frameworkLandingHref } from "~/data/framework-landing";
 import { cellFor } from "~/data/matrix";
 import { repoHref } from "~/data/links";
 
-/* Per-framework panels — copy verbatim from FrameworksPage.jsx. */
+/* Setup guides and live variants for each integration. */
 
 interface FwPanel {
   name: string;
@@ -66,26 +67,30 @@ const PANELS: FwPanel[] = [
   {
     name: "Vue",
     slug: "vue",
+    matrixSlug: "vue",
     sourcePath: "proof/vue-vite",
     body: "Vue 3 + Vite with macros directly in script setup and normal script blocks. Native extraction, source maps, active-locale catalogs, and async components run in the shared booking proof. This Vite proof is browser-only; the separate Nuxt proof covers Node SSR. Vue rich text remains unsupported.",
   },
   {
     name: "Nuxt",
     slug: "nuxt",
+    matrixSlug: "nuxt",
     sourcePath: "proof/nuxt-ssr",
-    body: "A private Nuxt 4 + Nitro Node SSR proof reuses Vue SFC macros and the shared booking demo. It checks translated HTML, hydration, lazy catalogs and pages, localized API handlers, and parallel request isolation in four languages. This root-mounted proof is outside the four-strategy matrix.",
+    body: "Nuxt 4 + Nitro Node SSR reuses Vue SFC macros and the shared booking demo. It checks translated HTML, hydration, lazy catalogs and pages, localized API handlers, and parallel request isolation in four languages. Cookie, route, subdomain, and TLD demos share the same app.",
   },
   {
     name: "Svelte",
     slug: "svelte",
+    matrixSlug: "svelte",
     sourcePath: "proof/svelte-vite",
     body: "Svelte 5 + Vite with macros directly in component scripts. Native extraction and transformation preserve source locations and source maps. The shared four-language booking example checks reactive plurals, formatting, interactions, and lazy component catalogs in development and production.",
   },
   {
     name: "SvelteKit",
     slug: "sveltekit",
+    matrixSlug: "sveltekit",
     sourcePath: "proof/sveltekit-ssr",
-    body: "SvelteKit 3 + adapter-node reuses the Svelte compiler path and shared booking demo. The proof checks translated SSR, hydration, lazy components and routes, request isolation, and catalog failures in four languages. Its query-locale setup is separate from the four-strategy matrix.",
+    body: "SvelteKit 3 + adapter-node reuses the Svelte compiler path and shared booking demo. The proof checks translated SSR, hydration, lazy components and routes, request isolation, and catalog failures in four languages. All four locale strategies use the same app.",
   },
 ];
 
@@ -112,16 +117,26 @@ export function FwPanels() {
                   viewTransition
                   className="hover:text-accent"
                 >
-                  {panel.name}
+                  <FrameworkIdentity slug={panel.slug} name={panel.name} />
                 </Link>
               </h3>
               <p className="mono-nums mt-1 text-[10px] text-gray-spec">
-                {panel.matrixSlug ? `examples/${panel.matrixSlug}-*` : panel.sourcePath}
+                {panel.sourcePath.startsWith("examples/")
+                  ? `examples/${panel.matrixSlug}-*`
+                  : panel.sourcePath}
               </p>
             </div>
             <div>
               <p className="max-w-[52em] text-[15.5px] leading-relaxed text-ink/85">{panel.body}</p>
               <p className="mono-nums mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
+                {panel.slug === "vite" ? (
+                  <a
+                    href="https://vite-mdx.examples.palamedes.dev"
+                    className="text-accent hover:text-ink"
+                  >
+                    <span aria-hidden>● </span>MDX demo
+                  </a>
+                ) : null}
                 {cookie?.demoLinks?.map((link) => (
                   <a key={link.href} href={link.href} className="text-accent hover:text-ink">
                     <span aria-hidden>● </span>cookie

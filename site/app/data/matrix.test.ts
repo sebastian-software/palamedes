@@ -2,7 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import { cellFor, FRAMEWORKS, STRATEGIES } from "./matrix";
 
-const PUBLIC_FRAMEWORKS = ["nextjs", "tanstack", "solid", "waku", "react-router", "remix"];
+const PUBLIC_FRAMEWORKS = [
+  "nextjs",
+  "tanstack",
+  "solid",
+  "waku",
+  "react-router",
+  "remix",
+  "vue",
+  "nuxt",
+  "svelte",
+  "sveltekit",
+];
+const COMPONENT_SOURCES: Partial<Record<string, string>> = {
+  vue: "proof/vue-vite",
+  nuxt: "proof/nuxt-ssr",
+  svelte: "proof/svelte-vite",
+  sveltekit: "proof/sveltekit-ssr",
+};
 const TLD_LINKS = [
   ["en", "com"],
   ["de", "de"],
@@ -11,7 +28,7 @@ const TLD_LINKS = [
 ] as const;
 
 describe("public framework matrix", () => {
-  it("publishes exactly six live framework families across every strategy", () => {
+  it("publishes exactly ten live framework families across every strategy", () => {
     const liveFrameworks = FRAMEWORKS.filter(({ slug: framework }) =>
       STRATEGIES.every(({ slug: strategy }) => cellFor(framework, strategy).status === "live"),
     ).map(({ slug }) => slug);
@@ -47,7 +64,7 @@ describe("public framework matrix", () => {
     for (const { slug: framework } of FRAMEWORKS) {
       for (const { slug: strategy } of STRATEGIES) {
         expect(cellFor(framework, strategy).sourceHref).toBe(
-          `https://github.com/sebastian-software/palamedes/tree/main/examples/${framework}-${strategy}`,
+          `https://github.com/sebastian-software/palamedes/tree/main/${COMPONENT_SOURCES[framework] ?? `examples/${framework}-${strategy}`}`,
         );
       }
     }

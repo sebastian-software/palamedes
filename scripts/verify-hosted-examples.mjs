@@ -17,6 +17,24 @@ try {
   for (const entry of plan) {
     const documents = [];
     try {
+      for (const host of entry.hosts) {
+        const url = `http://${host}/`;
+        const response = await fetch(url, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(30_000),
+        });
+        const location = response.headers.get("location");
+        assert.ok(
+          response.status >= 300 && response.status < 400 && location,
+          `${host}: HTTP must redirect to HTTPS`,
+        );
+        assert.equal(
+          new URL(location, url).origin,
+          `https://${host}`,
+          `${host}: HTTPS redirect must preserve the public hostname`,
+        );
+        documents.push({ url, status: response.status, location });
+      }
       if (entry.strategy === "route" && entry.rendering !== "client") {
         const response = await fetch(entry.origin, {
           redirect: "manual",

@@ -669,12 +669,12 @@ async function checkRoutes(context, label, { expectHydration }) {
     if ((await germanCard.getByText("1 Platz frei").count()) !== 1) {
       fail("tour card: the seat stepper did not select the German singular form");
     }
-    // The verified framework matrix on /frameworks renders all 24 cells.
+    // The verified framework matrix on /frameworks renders all 40 cells.
     currentPath = "/frameworks";
     await gotoAndSettle(page, "/frameworks", { settleMs: 1000 });
     const cells = await page.locator("table").first().locator("tbody td").count();
-    if (cells !== 24) {
-      fail(`framework matrix: expected 24 cells, got ${cells}`);
+    if (cells !== 40) {
+      fail(`framework matrix: expected 40 cells, got ${cells}`);
     }
     // Get-started keeps the diagram, stack picker, and forward route as distinct
     // numbered sections. Each stack gives the package caveat its own numbered
@@ -770,7 +770,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     currentPath = "/";
     await gotoAndSettle(page, "/", { settleMs: 100 });
     const statText = await page
-      .getByText("example applications, built and smoke-checked when relevant code changes")
+      .getByText("example applications, built and smoke-checked in the production image")
       .isVisible();
     const stat = await page.getByText(linguiRatio, { exact: false }).first().isVisible();
     if (!statText || !stat) {

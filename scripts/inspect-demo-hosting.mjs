@@ -83,9 +83,43 @@ const safePullZone = pullZone && {
     }),
   ),
 };
+const overview = await get(`mc/apps/${app}/overview`);
+const runtime = {
+  status: overview.status,
+  regions: overview.regions.map(({ region, status, pods }) => ({
+    region,
+    status,
+    pods: pods.map(
+      ({
+        name,
+        status,
+        ramUsageBytes,
+        cpuUsageCores,
+        ephemeralStorageUsageBytes,
+        containers: runningContainers,
+      }) => ({
+        name,
+        status,
+        ramUsageBytes,
+        cpuUsageCores,
+        ephemeralStorageUsageBytes,
+        containers: runningContainers.map(
+          ({ name, status, image, imageDisplay, numberOfRestarts }) => ({
+            name,
+            status,
+            image,
+            imageDisplay,
+            numberOfRestarts,
+          }),
+        ),
+      }),
+    ),
+  })),
+};
 const receipt = {
   app,
   inspectedAt: new Date().toISOString(),
+  runtime,
   containers,
   dns,
   pullZone: safePullZone,

@@ -13,6 +13,7 @@ import {
   selectBrowserExamples,
   selectScreenshotExamples,
 } from "../../scripts/example-matrix.mjs";
+import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "../../scripts/component-demos.mjs";
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
 
@@ -234,6 +235,8 @@ async function writeContentStats(adrEntries) {
   const stats = {
     adrCount: adrEntries.length,
     exampleCount: exampleDirs.length,
+    demoCount: CONTAINER_EXAMPLES.length,
+    demoFrameworkCount: SERVER_FRAMEWORKS.length + COMPONENT_FRAMEWORKS.length,
     smokeExampleCount: EXAMPLE_MATRIX.length,
     browserExampleCount: selectBrowserExamples({}).length,
     screenshotExampleCount: selectScreenshotExamples({}).length,
