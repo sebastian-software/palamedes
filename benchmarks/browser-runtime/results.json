@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-10-22T10:44:44.036Z",
-  "sourceCommit": "01142fb4069606d2d701442435433ac5ac33bb74",
-  "worktreeDirty": true,
+  "measuredAt": "2026-10-22T10:46:39.533Z",
+  "sourceCommit": "9c1da7e8e2ec0802486f5a6a6d062f588d5e79dd",
+  "worktreeDirty": false,
   "sourceSha256": "e758c963460f413c294f9e91885b1beaefcfe716a15e4c69e3e31163b9e77260",
   "environment": {
     "node": "v24.22.0",
