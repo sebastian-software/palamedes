@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-22T10:44:44.036Z",
+  "sourceCommit": "01142fb4069606d2d701442435433ac5ac33bb74",
+  "worktreeDirty": true,
+  "sourceSha256": "e758c963460f413c294f9e91885b1beaefcfe716a15e4c69e3e31163b9e77260",
+  "environment": {
+    "node": "v24.22.0",
+    "vite": "8.2.2",
+    "rolldown": "1.2.14",
+    "browser": "151.0.7922.34",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "methodology": {
+    "target": "es2022",
+    "minifier": "oxc",
+    "gzipLevel": 9,
+    "brotliQuality": 11,
+    "repeatedBuilds": 2,
+    "scope": "All exports of compiled core + universal runtime, plus the selected compiled UI entry. Framework peers, host bootstrap, application code, catalogs, and Intl polyfills are excluded."
+  },
+  "profiles": [
+    {
+      "id": "core",
+      "bytes": {
+        "raw": 12720,
+        "gzip": 4343,
+        "brotli": 3847
+      },
+      "sha256": "6ead32aac41b86591441f5c9b8f7d700fb739e4f50f1352e766103e0e857db4d",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "MissingCompiledMessageError",
+        "activateServerI18n",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": [],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/core.mjs",
+          "sha256": "95391b352ab8c53d1b937847ae5ba0c266e8b372d4cb17ddfa57fe2e44853dba"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    },
+    {
+      "id": "react",
+      "bytes": {
+        "raw": 15026,
+        "gzip": 5122,
+        "brotli": 4548
+      },
+      "sha256": "6934cab7561a2135f1de75c4195b652f4bb282eebe82b1593751a21bc5484b4f",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "Fragment",
+        "MissingCompiledMessageError",
+        "Trans",
+        "activateServerI18n",
+        "buildLocaleSwitchItems",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": ["react"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/react.mjs",
+          "sha256": "3c0298a213399209a32fb99f9492d6acc7c880ab328e9ab627619b71f32b10af"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/core/dist/locale.mjs",
+          "sha256": "b3402271db2dd8677ca3c578b1b201a720c13dd6d212a0bcb3e1a80321965402"
+        },
+        {
+          "path": "packages/react/dist/compiled.mjs",
+          "sha256": "5dae3a888f62b319f9b571748e9b6a279a38b683710687d351a84bab3f78de5e"
+        },
+        {
+          "path": "packages/react/dist/shared/react.CY_g8y11.mjs",
+          "sha256": "74a4b8de1abe816bf63f59cdcdf005fd54a2cb0118d9067272f427b6cfdee485"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    },
+    {
+      "id": "solid",
+      "bytes": {
+        "raw": 14346,
+        "gzip": 4835,
+        "brotli": 4292
+      },
+      "sha256": "09796fed50c987b5fef02e830db36b70b5b634452ae300890c9a5d3e2e944bbc",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "MissingCompiledMessageError",
+        "Trans",
+        "activateServerI18n",
+        "buildLocaleSwitchItems",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": ["solid-js"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/solid.mjs",
+          "sha256": "018b6460729142b30872e16cd91da40866efcc2e045210480ede686f6167d655"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/core/dist/locale.mjs",
+          "sha256": "b3402271db2dd8677ca3c578b1b201a720c13dd6d212a0bcb3e1a80321965402"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        },
+        {
+          "path": "packages/solid/dist/compiled.mjs",
+          "sha256": "fbc85b3c97ddcbc9a84e7aafe1507dadf40bd6484a25cb267832da13f179c34d"
+        }
+      ]
+    },
+    {
+      "id": "remix",
+      "bytes": {
+        "raw": 14718,
+        "gzip": 4950,
+        "brotli": 4407
+      },
+      "sha256": "1c635cb690fa9f056cfa13ae38a5f4d88fecdf0373cdad27c931154b9426a1ef",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "Fragment",
+        "MissingCompiledMessageError",
+        "Trans",
+        "activateServerI18n",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": ["remix/component"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/remix.mjs",
+          "sha256": "5776e45433afd80ff299833b6b660054dddac2f957697099c9d561197d422caa"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/remix/dist/compiled.mjs",
+          "sha256": "8c2b3c054b097872c1990718260a019a834ab4ad196732bdd7941c96729ac855"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    }
+  ],
+  "catalog": {
+    "source": "proof/sveltekit-ssr/locales/en.po",
+    "locale": "en",
+    "messages": 38,
+    "bytes": {
+      "raw": 2393,
+      "gzip": 1286,
+      "brotli": 1119
+    },
+    "sha256": "d4641f244587326fbcc819978454078025299963899be6f6ef8cc795d70ec146",
+    "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
+  }
+}

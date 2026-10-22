@@ -24,7 +24,7 @@ export function HomeHero() {
       />
       <div className="relative mx-auto grid max-w-[var(--pmds-measure)] grid-cols-1 items-center gap-x-16 gap-y-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div>
-          <p className="pmds-kicker">Open-source i18n for React, Solid, Remix &amp; TypeScript</p>
+          <p className="pmds-kicker">Open-source i18n for TypeScript &amp; Rust</p>
           <h1 id="home-title" className="pmds-hero-title [--text-hero:clamp(2.45rem,5.6vw,4.4rem)]">
             Just write
             <span className="block text-accent">the sentence.</span>
@@ -41,8 +41,8 @@ export function HomeHero() {
             </ButtonLink>
           </div>
           <p className="mt-6 max-w-[36rem] text-[13.5px] leading-relaxed text-ink/70">
-            <strong className="font-semibold text-ink">2.0 preview.</strong> Try the upcoming
-            release through the repository examples; the registry still supplies 1.x.{" "}
+            Try the current implementation through the repository examples. npm currently supplies
+            1.x.{" "}
             <a
               href="/docs/release-notes-v2"
               className="text-accent underline underline-offset-4 hover:text-ink"

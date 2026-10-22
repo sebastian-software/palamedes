@@ -36,6 +36,9 @@ function portFromEnv(name, fallback) {
 
 const PORT = portFromEnv("SITE_VERIFY_PORT", 4102);
 const packageScripts = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).scripts;
+const browserRuntimeReport = JSON.parse(
+  readFileSync(join(repoRoot, "benchmarks/browser-runtime/results.json"), "utf8"),
+);
 const legacySolidRedirect = readFileSync(
   join(clientDir, "frameworks/solidstart/index.html"),
   "utf8",
@@ -128,6 +131,8 @@ const ROUTE_EXPECTATIONS = [
   },
   { path: "/frameworks/vue", h1: "Vue i18n, directly in your components." },
   { path: "/frameworks/nuxt", h1: "The same Vue messages, from server to browser." },
+  { path: "/frameworks/svelte", h1: "Svelte i18n, directly in your components." },
+  { path: "/frameworks/sveltekit", h1: "The same Svelte messages, from server to browser." },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "Your first working translation." },
   { path: "/compare", h1: "Choose the i18n model you can keep." },
@@ -396,12 +401,12 @@ async function checkRoutes(context, label, { expectHydration }) {
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
     const integrationLinks = await integrationSection.locator("ul a").count();
-    if (integrationLinks !== 16) {
-      fail(`home integration band: expected 16 linked entries, got ${integrationLinks}`);
+    if (integrationLinks !== 18) {
+      fail(`home integration band: expected 18 linked entries, got ${integrationLinks}`);
     }
     const expectedGroups = {
-      "UI & rendering": 4,
-      "Verified app integrations": 7,
+      "UI frameworks": 5,
+      "App frameworks": 8,
       "Build tools": 2,
       Backends: 2,
       Rust: 1,
@@ -413,6 +418,12 @@ async function checkRoutes(context, label, { expectHydration }) {
         .count();
       if (count !== expected) {
         fail(`home integration groups: expected ${expected} ${group} entries, got ${count}`);
+      }
+    }
+    for (const name of ["Svelte", "SvelteKit"]) {
+      const link = integrationSection.getByRole("link", { name, exact: true });
+      if ((await link.getAttribute("href")) !== `/frameworks/${name.toLowerCase()}`) {
+        fail(`home integration band: ${name} must link to its own guide`);
       }
     }
     const integrationLogos = integrationSection.locator("li img");
@@ -586,13 +597,49 @@ async function checkRoutes(context, label, { expectHydration }) {
     const rustApplications = page.locator("#rust-applications");
     const rustCopy = (await rustApplications.innerText()).replaceAll(/\s+/gu, " ").toLowerCase();
     if (
-      !rustCopy.includes("experimental") ||
-      !rustCopy.includes("crates are unpublished") ||
       !rustCopy.includes("message contract changes need matching catalogs") ||
-      !rustCopy.includes("not supported yet") ||
+      !rustCopy.includes("cardinal and ordinal plurals") ||
       (await rustApplications.locator('a[href="/docs/rust-applications"]').count()) !== 1
     ) {
-      fail("home Rust applications: experimental limits and guide link must accompany the claim");
+      fail(
+        "home Rust applications: supported messages, catalog contract, and guide link must accompany the claim",
+      );
+    }
+    const homeCopy = await page.locator("main").textContent();
+    if (/\b(?:beta|preview|experimental)\b/iu.test(homeCopy)) {
+      fail(
+        "home integration presentation: release-tier labels must stay in the integration references",
+      );
+    }
+    const runtimeSection = page.locator("#browser-runtime");
+    const runtimeRows = runtimeSection.locator("tbody tr");
+    if ((await runtimeRows.count()) !== browserRuntimeReport.profiles.length) {
+      fail("home browser footprint: every measured runtime profile must be present");
+    }
+    for (const [index, profile] of browserRuntimeReport.profiles.entries()) {
+      const cells = await runtimeRows.nth(index).locator("td").allTextContents();
+      const expected = [profile.bytes.gzip, profile.bytes.brotli].map(
+        (bytes) => `${(bytes / 1000).toFixed(1)} kB`,
+      );
+      if (JSON.stringify(cells) !== JSON.stringify(expected)) {
+        fail(`home browser footprint: ${profile.id} must match the retained byte report`);
+      }
+    }
+    const runtimeScope = (await runtimeSection.textContent()).replaceAll(/\s+/gu, " ");
+    const catalog = browserRuntimeReport.catalog;
+    const catalogReceipt = `${catalog.messages} messages: ${(catalog.bytes.gzip / 1000).toFixed(1)} kB gzip, ${(catalog.bytes.brotli / 1000).toFixed(1)} kB Brotli`;
+    if (!runtimeScope.includes(catalogReceipt)) {
+      fail(
+        "home browser footprint: catalog message count and bytes must match the retained report",
+      );
+    }
+    if (
+      !runtimeScope.includes("generated client bootstrap, and catalogs are excluded") ||
+      !runtimeScope.includes("actual application increase")
+    ) {
+      fail(
+        "home browser footprint: exclusions and application-delta limits must accompany the numbers",
+      );
     }
     const faqEntries = await page.locator("[data-faq-list] details").count();
     if (faqEntries !== 7) {

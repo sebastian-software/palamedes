@@ -79,6 +79,8 @@ const FRAMEWORK_LANDING_PATHS: Record<string, string> = {
   vite: "/frameworks/vite",
   vue: "/frameworks/vue",
   nuxt: "/frameworks/nuxt",
+  svelte: "/frameworks/svelte",
+  sveltekit: "/frameworks/sveltekit",
 };
 
 export function frameworkLandingHref(slug: string): string {

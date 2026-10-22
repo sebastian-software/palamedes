@@ -1,5 +1,6 @@
 import { Page } from "@palamedes/site-ui";
 import { BeforeAfter } from "~/components/home/BeforeAfter";
+import { BrowserRuntime } from "~/components/home/BrowserRuntime";
 import { Chooser } from "~/components/home/Chooser";
 import { CtaBand } from "~/components/home/CtaBand";
 import { FrameworkWiring } from "~/components/home/FrameworkWiring";
@@ -21,7 +22,7 @@ export const handle = { layout: "bare" };
 export function meta() {
   const title = "Palamedes — just write the sentence";
   const description =
-    "Open-source i18n for React, Solid, Remix, and TypeScript: write plain sentences in your components, give translators standard .po files, ship compiled messages per screen, and keep tooling fast with a Rust core. Verified app integrations for Next.js, React Router, TanStack Start, Solid 2 with Start Mode, Waku, and Remix, plus Vite, Hono, Express, and Rust.";
+    "Open-source i18n for React, Vue, Svelte, Solid, Remix, TypeScript, and Rust. Native tools compile your messages; integrations connect Next.js, Nuxt, SvelteKit, React Router, and more. Keep readable PO catalogs and deliver translations per screen.";
 
   return [
     ...pageMeta({ title, description, path: "/" }),
@@ -55,6 +56,7 @@ export default function Home() {
       <Journey />
       <RustRace />
       <FrameworkWiring />
+      <BrowserRuntime />
       <RustApplications />
       <Chooser />
       <ProofSection />
