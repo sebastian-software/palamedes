@@ -17,7 +17,7 @@ export function meta() {
   return pageMeta({
     title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "Verified frontend and full-stack i18n adapters, experimental Vue + Vite and Nuxt 4 SSR proofs, and request-local backend guidance for Hono and Express.",
+      "i18n integrations for React, Vue, Svelte, Solid, and Remix, including Next.js, Nuxt, and SvelteKit. Shared catalogs also connect Hono, Express, and Rust applications.",
     path: "/frameworks",
   });
 }
@@ -28,7 +28,7 @@ export default function Frameworks() {
       <PageHero
         kicker="Frameworks"
         title="Built for the framework you already use."
-        lede="Next.js, TanStack Start, Solid, Waku, React Router, Remix, and Vite each get an integration made for them. Vue 3 + Vite and Nuxt 4 have separate experimental browser and Node SSR proofs. The six server frameworks run in four URL strategies; Hono and Express use the same runtime for backend messages."
+        lede="React, Vue, Svelte, Solid, and Remix share the same message model. Connect Next.js, Nuxt, SvelteKit, TanStack Start, Waku, React Router, or Vite. Six server framework families cover four URL strategies; separate Vue, Nuxt, Svelte, and SvelteKit examples show their component and rendering integrations."
         actions={
           <>
             <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>
@@ -97,10 +97,10 @@ export default function Frameworks() {
       </Section>
 
       <Section
-        num="05 — Rust · Experimental"
+        num="05 — Rust"
         id="rust-applications"
         title="Your Rust app can load translations separately."
-        lede="The experimental Cargo integration prepares external language catalogs for native CLIs and services. Text, display arguments, and string selects work today; broader ICU formatting is not supported yet. The crates are unpublished. Start with the guide and its complete example."
+        lede="Cargo prepares external language catalogs for native CLIs and services. Translate text, display arguments, string selects, and cardinal and ordinal plurals. The guide includes the Cargo dependency, supported message forms, and a complete example you can run."
       >
         <ButtonLink variant="outline" href={docsHref("rust-applications")}>
           Rust applications guide

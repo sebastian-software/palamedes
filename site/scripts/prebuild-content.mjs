@@ -149,11 +149,30 @@ await dedupeTypedocLedes();
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
 
 await writeContentStats(adrs);
+await writeBrowserRuntimeStats();
 await writeNpmStats();
 
 console.log(
   `prebuild-content: generated ${docs.length} docs, ${adrs.length} ADRs, ${posts.length} posts, and TypeDoc API routes`,
 );
+
+async function writeBrowserRuntimeStats() {
+  const report = JSON.parse(
+    await readFile(join(repoRoot, "benchmarks/browser-runtime/results.json"), "utf8"),
+  );
+  // Keep the module inventory and provenance in the retained report, outside
+  // the site's browser graph. The homepage only needs the measured byte rows.
+  const data = {
+    measuredAt: report.measuredAt,
+    profiles: report.treeShakenProfiles.map(({ id, bytes }) => ({ id, bytes })),
+    catalog: { messages: report.catalog.messages, bytes: report.catalog.bytes },
+  };
+  await mkdir(generatedDataRoot, { recursive: true });
+  await writeFile(
+    join(generatedDataRoot, "browser-runtime.json"),
+    `${JSON.stringify(data, null, 2)}\n`,
+  );
+}
 
 function buildTypedocPackages() {
   const packages = typedocPackages();

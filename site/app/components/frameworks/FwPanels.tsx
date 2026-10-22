@@ -61,19 +61,31 @@ const PANELS: FwPanel[] = [
     name: "Vite",
     slug: "vite",
     sourcePath: "packages/vite-plugin",
-    body: "The shared build integration behind the TanStack Start, Solid, Waku, and React Router families. Use it directly with React or Solid for macro transforms, PO imports, and build diagnostics.",
+    body: "The shared build integration behind TanStack Start, Solid, Waku, and React Router. Use it directly with React, Solid, Vue, or Svelte for macro transforms, PO imports, and build diagnostics.",
   },
   {
-    name: "Vue · Preview",
+    name: "Vue",
     slug: "vue",
     sourcePath: "proof/vue-vite",
     body: "Vue 3 + Vite with macros directly in script setup and normal script blocks. Native extraction, source maps, active-locale catalogs, and async components run in the shared booking proof. This Vite proof is browser-only; the separate Nuxt proof covers Node SSR. Vue rich text remains unsupported.",
   },
   {
-    name: "Nuxt · Preview",
+    name: "Nuxt",
     slug: "nuxt",
     sourcePath: "proof/nuxt-ssr",
     body: "A private Nuxt 4 + Nitro Node SSR proof reuses Vue SFC macros and the shared booking demo. It checks translated HTML, hydration, lazy catalogs and pages, localized API handlers, and parallel request isolation in four languages. This root-mounted proof is outside the four-strategy matrix.",
+  },
+  {
+    name: "Svelte",
+    slug: "svelte",
+    sourcePath: "proof/svelte-vite",
+    body: "Svelte 5 + Vite with macros directly in component scripts. Native extraction and transformation preserve source locations and source maps. The shared four-language booking example checks reactive plurals, formatting, interactions, and lazy component catalogs in development and production.",
+  },
+  {
+    name: "SvelteKit",
+    slug: "sveltekit",
+    sourcePath: "proof/sveltekit-ssr",
+    body: "SvelteKit 3 + adapter-node reuses the Svelte compiler path and shared booking demo. The proof checks translated SSR, hydration, lazy components and routes, request isolation, and catalog failures in four languages. Its query-locale setup is separate from the four-strategy matrix.",
   },
 ];
 

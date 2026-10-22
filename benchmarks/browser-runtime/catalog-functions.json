@@ -1,0 +1,738 @@
+{
+  "sourceCommit": "7c0536ff3668b96a336c33fa80b630fc19adef48",
+  "roots": [
+    "examples",
+    "proof/vue-vite",
+    "proof/nuxt-ssr",
+    "proof/svelte-vite",
+    "proof/sveltekit-ssr"
+  ],
+  "summary": {
+    "catalogs": 120,
+    "messages": 4182,
+    "functions": 1737,
+    "duplicates": 0
+  },
+  "catalogs": [
+    {
+      "file": "examples/nextjs-cookie/src/locales/de.po",
+      "messages": 35,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-cookie/src/locales/en.po",
+      "messages": 35,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-cookie/src/locales/es.po",
+      "messages": 35,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-cookie/src/locales/fr.po",
+      "messages": 35,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-route/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-route/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-route/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-route/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-subdomain/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-subdomain/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-subdomain/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-subdomain/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-tld/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-tld/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-tld/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/nextjs-tld/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/node-backend/src/locales/de.po",
+      "messages": 8,
+      "functions": 7,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/node-backend/src/locales/en.po",
+      "messages": 8,
+      "functions": 7,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/node-backend/src/locales/es.po",
+      "messages": 8,
+      "functions": 7,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-cookie/app/locales/de.po",
+      "messages": 42,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-cookie/app/locales/en.po",
+      "messages": 42,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-cookie/app/locales/es.po",
+      "messages": 42,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-cookie/app/locales/fr.po",
+      "messages": 42,
+      "functions": 18,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-route/app/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-route/app/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-route/app/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-route/app/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-rsc-cookie/app/locales/de.po",
+      "messages": 8,
+      "functions": 0,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-rsc-cookie/app/locales/en.po",
+      "messages": 8,
+      "functions": 0,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-subdomain/app/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-subdomain/app/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-subdomain/app/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-subdomain/app/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-tld/app/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-tld/app/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-tld/app/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/react-router-tld/app/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-cookie/app/locales/de.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-cookie/app/locales/en.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-cookie/app/locales/es.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-cookie/app/locales/fr.po",
+      "messages": 43,
+      "functions": 23,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-route/app/locales/de.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-route/app/locales/en.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-route/app/locales/es.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-route/app/locales/fr.po",
+      "messages": 43,
+      "functions": 23,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-subdomain/app/locales/de.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-subdomain/app/locales/en.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-subdomain/app/locales/es.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-subdomain/app/locales/fr.po",
+      "messages": 43,
+      "functions": 23,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-tld/app/locales/de.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-tld/app/locales/en.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-tld/app/locales/es.po",
+      "messages": 43,
+      "functions": 21,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/remix-tld/app/locales/fr.po",
+      "messages": 43,
+      "functions": 23,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-cookie/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-cookie/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-cookie/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-cookie/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-route/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-route/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-route/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-route/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-subdomain/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-subdomain/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-subdomain/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-subdomain/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-tld/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-tld/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-tld/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/solid-tld/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-cookie/src/locales/de.po",
+      "messages": 40,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-cookie/src/locales/en.po",
+      "messages": 40,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-cookie/src/locales/es.po",
+      "messages": 40,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-cookie/src/locales/fr.po",
+      "messages": 40,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-route/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-route/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-route/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-route/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-subdomain/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-subdomain/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-subdomain/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-subdomain/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-tld/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-tld/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-tld/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/tanstack-tld/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/vite-mdx/src/locales/de.po",
+      "messages": 22,
+      "functions": 8,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/vite-mdx/src/locales/en.po",
+      "messages": 22,
+      "functions": 8,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/vite-mdx/src/locales/fr.po",
+      "messages": 22,
+      "functions": 8,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-cookie/src/locales/de.po",
+      "messages": 38,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-cookie/src/locales/en.po",
+      "messages": 38,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-cookie/src/locales/es.po",
+      "messages": 38,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-cookie/src/locales/fr.po",
+      "messages": 38,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-route/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-route/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-route/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-route/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-subdomain/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-subdomain/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-subdomain/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-subdomain/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-tld/src/locales/de.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-tld/src/locales/en.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-tld/src/locales/es.po",
+      "messages": 34,
+      "functions": 13,
+      "duplicates": 0
+    },
+    {
+      "file": "examples/waku-tld/src/locales/fr.po",
+      "messages": 34,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/nuxt-ssr/locales/de.po",
+      "messages": 38,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/nuxt-ssr/locales/en.po",
+      "messages": 38,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/nuxt-ssr/locales/es.po",
+      "messages": 38,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/nuxt-ssr/locales/fr.po",
+      "messages": 38,
+      "functions": 18,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/svelte-vite/src/locales/de.po",
+      "messages": 36,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/svelte-vite/src/locales/en.po",
+      "messages": 36,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/svelte-vite/src/locales/es.po",
+      "messages": 36,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/svelte-vite/src/locales/fr.po",
+      "messages": 36,
+      "functions": 17,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/sveltekit-ssr/locales/de.po",
+      "messages": 38,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/sveltekit-ssr/locales/en.po",
+      "messages": 38,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/sveltekit-ssr/locales/es.po",
+      "messages": 38,
+      "functions": 16,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/sveltekit-ssr/locales/fr.po",
+      "messages": 38,
+      "functions": 18,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/vue-vite/src/locales/de.po",
+      "messages": 36,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/vue-vite/src/locales/en.po",
+      "messages": 36,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/vue-vite/src/locales/es.po",
+      "messages": 36,
+      "functions": 15,
+      "duplicates": 0
+    },
+    {
+      "file": "proof/vue-vite/src/locales/fr.po",
+      "messages": 36,
+      "functions": 17,
+      "duplicates": 0
+    }
+  ]
+}

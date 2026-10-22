@@ -1,0 +1,421 @@
+{
+  "schemaVersion": 2,
+  "measuredAt": "2026-10-22T12:04:20.146Z",
+  "sourceCommit": "7c0536ff3668b96a336c33fa80b630fc19adef48",
+  "worktreeDirty": false,
+  "sourceSha256": "bddbef5ca4e722d8498acfdf741bfb218e5d8ac22d8b3d26283997411f28e3ce",
+  "environment": {
+    "node": "v24.22.0",
+    "vite": "8.2.2",
+    "rolldown": "1.2.14",
+    "browser": "151.0.7922.34",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "methodology": {
+    "target": "es2022",
+    "minifier": "oxc",
+    "gzipLevel": 9,
+    "brotliQuality": 11,
+    "repeatedBuilds": 2,
+    "scope": "All exports of compiled core + universal runtime, plus the selected compiled UI entry. Framework peers, host bootstrap, application code, catalogs, and Intl polyfills are excluded.",
+    "treeShakenScope": "Named client imports only: createI18n, defineCompiledCatalog, getI18n, initializeClientI18n, and Trans for UI profiles. Unused registration, server binding, reset, locale-switch, and standalone formatter exports can be removed. The complete default string runtime remains reachable through createI18n."
+  },
+  "profiles": [
+    {
+      "id": "core",
+      "bytes": {
+        "raw": 12720,
+        "gzip": 4343,
+        "brotli": 3847
+      },
+      "sha256": "6ead32aac41b86591441f5c9b8f7d700fb739e4f50f1352e766103e0e857db4d",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "MissingCompiledMessageError",
+        "activateServerI18n",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": [],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/core.mjs",
+          "sha256": "95391b352ab8c53d1b937847ae5ba0c266e8b372d4cb17ddfa57fe2e44853dba"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    },
+    {
+      "id": "react",
+      "bytes": {
+        "raw": 15026,
+        "gzip": 5122,
+        "brotli": 4548
+      },
+      "sha256": "6934cab7561a2135f1de75c4195b652f4bb282eebe82b1593751a21bc5484b4f",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "Fragment",
+        "MissingCompiledMessageError",
+        "Trans",
+        "activateServerI18n",
+        "buildLocaleSwitchItems",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": ["react"],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/react.mjs",
+          "sha256": "3c0298a213399209a32fb99f9492d6acc7c880ab328e9ab627619b71f32b10af"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/core/dist/locale.mjs",
+          "sha256": "b3402271db2dd8677ca3c578b1b201a720c13dd6d212a0bcb3e1a80321965402"
+        },
+        {
+          "path": "packages/react/dist/compiled.mjs",
+          "sha256": "5dae3a888f62b319f9b571748e9b6a279a38b683710687d351a84bab3f78de5e"
+        },
+        {
+          "path": "packages/react/dist/shared/react.CY_g8y11.mjs",
+          "sha256": "74a4b8de1abe816bf63f59cdcdf005fd54a2cb0118d9067272f427b6cfdee485"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    },
+    {
+      "id": "solid",
+      "bytes": {
+        "raw": 14346,
+        "gzip": 4835,
+        "brotli": 4292
+      },
+      "sha256": "09796fed50c987b5fef02e830db36b70b5b634452ae300890c9a5d3e2e944bbc",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "MissingCompiledMessageError",
+        "Trans",
+        "activateServerI18n",
+        "buildLocaleSwitchItems",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": ["solid-js"],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/solid.mjs",
+          "sha256": "018b6460729142b30872e16cd91da40866efcc2e045210480ede686f6167d655"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/core/dist/locale.mjs",
+          "sha256": "b3402271db2dd8677ca3c578b1b201a720c13dd6d212a0bcb3e1a80321965402"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        },
+        {
+          "path": "packages/solid/dist/compiled.mjs",
+          "sha256": "fbc85b3c97ddcbc9a84e7aafe1507dadf40bd6484a25cb267832da13f179c34d"
+        }
+      ]
+    },
+    {
+      "id": "remix",
+      "bytes": {
+        "raw": 14718,
+        "gzip": 4950,
+        "brotli": 4407
+      },
+      "sha256": "1c635cb690fa9f056cfa13ae38a5f4d88fecdf0373cdad27c931154b9426a1ef",
+      "exports": [
+        "DEFAULT_LOCALE",
+        "Fragment",
+        "MissingCompiledMessageError",
+        "Trans",
+        "activateServerI18n",
+        "createCompiledMessageRuntime",
+        "createI18n",
+        "defineCompiledCatalog",
+        "formatMessageArgument",
+        "getI18n",
+        "initializeClientI18n",
+        "isCompiledCatalog",
+        "isServerEnvironment",
+        "loadRegisteredMessages",
+        "registerMessageLoaderGroup",
+        "registerMessageLoaders",
+        "registerMessages",
+        "replacePoundPlaceholders",
+        "resetI18nRuntime",
+        "setClientI18n",
+        "setServerI18nGetter",
+        "stringifyValue"
+      ],
+      "imports": ["remix/component"],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/remix.mjs",
+          "sha256": "5776e45433afd80ff299833b6b660054dddac2f957697099c9d561197d422caa"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/remix/dist/compiled.mjs",
+          "sha256": "8c2b3c054b097872c1990718260a019a834ab4ad196732bdd7941c96729ac855"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    }
+  ],
+  "treeShakenProfiles": [
+    {
+      "id": "core",
+      "bytes": {
+        "raw": 9605,
+        "gzip": 3474,
+        "brotli": 3088
+      },
+      "sha256": "90ac914de8dbf2b6cee61ca1565442cbf9cd084aedf2449b4efe568a43726e90",
+      "exports": ["createI18n", "defineCompiledCatalog", "getI18n", "initializeClientI18n"],
+      "imports": [],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/core-client.mjs",
+          "sha256": "41db1778a3323c332ec68933198ed0e7ef191a4cd31ca4d6aa4bd13e637821a2"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    },
+    {
+      "id": "react",
+      "bytes": {
+        "raw": 11582,
+        "gzip": 4130,
+        "brotli": 3671
+      },
+      "sha256": "a2418e6627b93cc88ad16ce530597100aeaa0d3258e0580cce4c5e8def86ef03",
+      "exports": [
+        "Trans",
+        "createI18n",
+        "defineCompiledCatalog",
+        "getI18n",
+        "initializeClientI18n"
+      ],
+      "imports": ["react"],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/react-client.mjs",
+          "sha256": "00a490a5f8583c8bcbb54c1014e81849fe30286a71d9bf7b97ae1d5605787134"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/react/dist/compiled.mjs",
+          "sha256": "5dae3a888f62b319f9b571748e9b6a279a38b683710687d351a84bab3f78de5e"
+        },
+        {
+          "path": "packages/react/dist/shared/react.CY_g8y11.mjs",
+          "sha256": "74a4b8de1abe816bf63f59cdcdf005fd54a2cb0118d9067272f427b6cfdee485"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    },
+    {
+      "id": "solid",
+      "bytes": {
+        "raw": 10934,
+        "gzip": 3852,
+        "brotli": 3415
+      },
+      "sha256": "f48db3d963f37c3b0cede73b8ae13625ac42490ab928fc4c7f348b9d46635c52",
+      "exports": [
+        "Trans",
+        "createI18n",
+        "defineCompiledCatalog",
+        "getI18n",
+        "initializeClientI18n"
+      ],
+      "imports": ["solid-js"],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/solid-client.mjs",
+          "sha256": "b54b7a543f88a5762b08ecb91863b42dae84adfd5098ca2a28385b5e662fb4e7"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        },
+        {
+          "path": "packages/solid/dist/compiled.mjs",
+          "sha256": "fbc85b3c97ddcbc9a84e7aafe1507dadf40bd6484a25cb267832da13f179c34d"
+        }
+      ]
+    },
+    {
+      "id": "remix",
+      "bytes": {
+        "raw": 11559,
+        "gzip": 4072,
+        "brotli": 3615
+      },
+      "sha256": "8a3ee39518cdd2642d3238b09482b8c4d64d3d1cf3b6afd15254d0f1514e77f1",
+      "exports": [
+        "Trans",
+        "createI18n",
+        "defineCompiledCatalog",
+        "getI18n",
+        "initializeClientI18n"
+      ],
+      "imports": ["remix/component"],
+      "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/remix-client.mjs",
+          "sha256": "e5a71a12b4d813f6e56ff856b3da6fd6610a515bb963f2889a7bd05b47b2e4c6"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        },
+        {
+          "path": "packages/remix/dist/compiled.mjs",
+          "sha256": "8c2b3c054b097872c1990718260a019a834ab4ad196732bdd7941c96729ac855"
+        },
+        {
+          "path": "packages/runtime/dist/index.mjs",
+          "sha256": "04406d18619c50d181aa5ebffe9f8959212c30a9beb89ea43ec4e1e0e2cad5a9"
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "catalogOnly": {
+      "id": "catalog-only",
+      "bytes": {
+        "raw": 692,
+        "gzip": 424,
+        "brotli": 356
+      },
+      "sha256": "6c98e04af5679e3d2f057c3b603b4fd450c925e82258d392ecede3dea5e24095",
+      "exports": ["defineCompiledCatalog"],
+      "imports": [],
+      "retainedIntl": [],
+      "modules": [
+        {
+          "path": "benchmarks/browser-runtime/catalog-only.mjs",
+          "sha256": "f223935884db73454d3bec0a52f0d4843f04b4d987fe65cd4ea29e8dd82d0e5c"
+        },
+        {
+          "path": "packages/core/dist/compiled.mjs",
+          "sha256": "42d280044860a54ed4648cb51c759a871726a7b99ecb8e66d51197c1e4ebd846"
+        }
+      ]
+    }
+  },
+  "catalog": {
+    "source": "proof/sveltekit-ssr/locales/en.po",
+    "locale": "en",
+    "messages": 38,
+    "bytes": {
+      "raw": 2380,
+      "gzip": 1273,
+      "brotli": 1104
+    },
+    "sha256": "aeadfb6a504e663202562a18fc19dacb13f01e6192176ec73d4c75c7af227dff",
+    "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
+  }
+}

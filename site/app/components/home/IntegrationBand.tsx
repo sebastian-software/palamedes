@@ -9,16 +9,14 @@ type Integration = {
   logo?: string;
   logoClass?: string;
   suffix?: string;
-  note?: string;
 };
 
 type IntegrationGroup = { label: string; integrations: readonly Integration[] };
 
-// Grouped by what each integration plugs into. Preview paths link to their
-// scope; the stability guide owns the full compatibility contract.
+// Grouped by what each integration plugs into. Detail pages own setup and scope.
 const GROUPS: readonly IntegrationGroup[] = [
   {
-    label: "UI & rendering",
+    label: "UI frameworks",
     integrations: [
       {
         name: "React",
@@ -44,18 +42,18 @@ const GROUPS: readonly IntegrationGroup[] = [
         name: "Vue",
         href: frameworkLandingHref("vue"),
         suffix: "Vue",
-        note: "preview",
       },
+      { name: "Svelte", href: frameworkLandingHref("svelte"), suffix: "Svelte" },
     ],
   },
   {
-    label: "Verified app integrations",
+    label: "App frameworks",
     integrations: [
+      { name: "SvelteKit", href: frameworkLandingHref("sveltekit"), suffix: "SvelteKit" },
       {
         name: "Nuxt",
         href: frameworkLandingHref("nuxt"),
         suffix: "Nuxt",
-        note: "preview",
       },
       {
         name: "Next.js",
@@ -137,7 +135,6 @@ const GROUPS: readonly IntegrationGroup[] = [
         logo: "/framework-logos/rust.svg",
         logoClass: "h-7 w-7",
         suffix: "Rust",
-        note: "new",
       },
     ],
   },
@@ -155,9 +152,7 @@ function IntegrationList({ group }: { group: IntegrationGroup }) {
           <li key={integration.name}>
             <a
               href={integration.href}
-              aria-label={
-                integration.note ? `${integration.name} (${integration.note})` : integration.name
-              }
+              aria-label={integration.name}
               className="group flex min-h-14 items-center gap-2.5 px-4 py-2 transition-colors hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
             >
               {integration.logo ? (
@@ -171,11 +166,6 @@ function IntegrationList({ group }: { group: IntegrationGroup }) {
               {integration.suffix ? (
                 <span className="text-[15px] font-semibold tracking-[-0.01em] group-hover:text-accent">
                   {integration.suffix}
-                </span>
-              ) : null}
-              {integration.note ? (
-                <span className="border border-accent/60 px-1.5 py-px text-[11px] font-semibold text-accent">
-                  {integration.note}
                 </span>
               ) : null}
             </a>

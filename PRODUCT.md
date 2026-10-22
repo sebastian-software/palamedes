@@ -103,10 +103,11 @@ item. Comparisons do not define the homepage's identity.
   will never migrate again. Setup guides do not promise a completion time.
 - Keep framework integration, locale architecture, verification depth, and live
   demo availability distinct. Example counts describe evidence, not additional
-  framework support. Preserve Preview qualifications beside the relevant claim.
+  framework support. The homepage lists implemented integrations without release-tier badges.
+  Framework guides and reference docs own API stability and exact verification limits.
 - Distinguish the implementation on `main` from available registry releases.
-  During the v2 publication hold, identify upcoming behavior as a preview and
-  direct evaluators to repository examples and the migration guide.
+  During the v2 publication hold, explain that the current implementation runs
+  through repository examples while npm supplies 1.x, and link to the release notes.
 - Bound performance claims by the measured workflow, corpus, environment, and
   report date. Keep extraction, browser delivery, and server memory evidence
   separate. Use the presentation policy in

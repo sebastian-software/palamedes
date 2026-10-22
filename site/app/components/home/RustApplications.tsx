@@ -19,7 +19,7 @@ export function RustApplications() {
     <Band id="rust-applications" tone="parchment" labelledBy="rust-applications-title">
       <BandHeader
         id="rust-applications-title"
-        kicker="Rust applications · Experimental"
+        kicker="Rust applications"
         title="Ship another language without rebuilding your Rust app."
         lede="Cargo prepares your PO catalogs as language files. Your executable loads the selected catalog when it runs. All languages, including English, stay outside the binary."
       />
@@ -40,9 +40,9 @@ export function RustApplications() {
             need matching catalogs and an application build.
           </p>
           <p>
-            This path is experimental and the crates are unpublished. Text, display arguments,
-            string selects, and cardinal and ordinal plurals work today. Localized number, date and
-            time formatting, rich text, and translation contexts are not supported yet.
+            Translate text, display arguments, string selects, and cardinal and ordinal plurals. The
+            Rust guide includes the Cargo dependency, supported message forms, and a complete
+            example you can run.
           </p>
           <div className="flex flex-wrap items-center gap-5">
             <ButtonLink href="/docs/rust-applications">Try the Rust guide</ButtonLink>

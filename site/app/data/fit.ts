@@ -1,9 +1,9 @@
 /* The cases where the answer is "use something else", stated plainly. */
 export const NOT_FOR_YOU = [
   {
-    case: "You need a stable Vue adapter, Angular, or Svelte",
+    case: "You build with Angular",
     answer:
-      "React and Solid have established integrations. Vue + Vite and Nuxt 4 have separate experimental browser and Node SSR proofs, with no published Vue or Nuxt adapter package. Angular and Svelte remain unsupported. Check the preview boundaries before choosing either Vue path.",
+      "There is no Angular adapter here. React, Solid, Remix, Vue, and Svelte have working integration examples; the framework guides describe the setup for each host.",
   },
   {
     case: "You ship React Native",
@@ -11,9 +11,9 @@ export const NOT_FOR_YOU = [
       "There is no React Native adapter here. fbtee has an explicit Expo path, while Lingui and i18next also support React Native today.",
   },
   {
-    case: "Kilobytes are your hard constraint",
+    case: "You require no browser i18n runtime",
     answer:
-      "Paraglide's zero-runtime compilation beats a runtime layer on bundle size by construction. If that is the number you are judged on, start there.",
+      "Palamedes uses a runtime when translated components execute in the browser. If your architecture requires zero client i18n JavaScript, keep translation on the server or choose a compilation model that removes the runtime entirely.",
   },
   {
     case: "You want the i18n library to own routing",

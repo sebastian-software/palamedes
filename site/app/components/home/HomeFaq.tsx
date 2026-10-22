@@ -1,15 +1,15 @@
 export const HOME_FAQ = [
   {
     q: "Is Palamedes ready for production use?",
-    a: "The registry currently ships 1.x. The 2.0 implementation is available in the repository while its publication is on hold — try it through the checked examples and release notes. Stable APIs follow SemVer; Waku, Remix, and React Router RSC keep Preview contracts. The stability guide lists exactly what each path guarantees.",
+    a: "The repository contains the current implementation and runnable examples. npm currently ships 1.x while 2.0 publication is on hold. Start with your framework guide and its checked example; the release notes explain the package versions, and the stability guide documents the API contracts.",
   },
   {
     q: "Which frameworks does Palamedes support?",
-    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid 2 with Start Mode, Waku, React Router, Remix, and Vite. Vue 3 + Vite has an experimental browser SFC integration, and a separate Nuxt 4 proof covers Node SSR and hydration. Both remain Preview paths outside the six-family matrix. Waku, Remix, and the separate React Router RSC adapter are Preview surfaces. The framework matrix shows application verification; the stability guide describes API guarantees.",
+    a: "Palamedes integrates with React, Solid, Remix, Vue, and Svelte. App integrations cover Next.js, Nuxt, SvelteKit, TanStack Start, Solid Start Mode, Waku, and React Router; Vite connects the browser builds. Hono and Express use the shared backend runtime, and Cargo connects Rust applications. Each framework guide links to its working example and describes the integration scope.",
   },
   {
     q: "Can I translate a Rust CLI with Palamedes?",
-    a: "There is an experimental Cargo integration and runtime for Rust applications. Your executable loads an external language catalog, including for English; Cargo exports a message contract, and pmds catalog compile checks compatible PO updates against it without building the application. Text, display arguments, string selects, and cardinal and ordinal plurals work today. Localized number and date formatting, rich text, and contexts are not supported yet. The crates are unpublished; the Rust applications guide includes a pinned Git dependency and a complete example.",
+    a: "Yes. The Cargo integration prepares external language catalogs for Rust CLIs and services, including English. Cargo exports a message contract; pmds catalog compile checks compatible PO updates against it without rebuilding your app. Text, display arguments, string selects, and cardinal and ordinal plurals work today. The Rust applications guide covers the Cargo dependency and a complete example.",
   },
   {
     q: "Does Palamedes replace a translation management system or write translations with AI?",

@@ -167,7 +167,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Does this work outside Next.js?",
-        a: `Yes. The same model is verified across ${contentStats.serverFrameworkCount} server frameworks in CI, including the RSC-capable ones beyond Next.js. Palamedes ships React and Solid packages. Vue 3 + Vite and Nuxt 4 have separate experimental browser and Node SSR proofs, outside that matrix. React Native remains unsupported.`,
+        a: `Yes. The same model is verified across ${contentStats.serverFrameworkCount} server frameworks in CI, including the RSC-capable ones beyond Next.js. React, Solid, and Remix have UI packages. Vue, Nuxt, Svelte, and SvelteKit have separate component and rendering examples, outside that matrix. React Native remains unsupported.`,
       },
       {
         q: "Why can't React Intl support server components?",

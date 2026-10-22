@@ -89,8 +89,9 @@ export function FrameworkWiring() {
       </div>
       <p className="mt-6 max-w-[46rem] text-[16px] leading-relaxed text-ink/80">
         Without an adapter, every one of these moments is glue code you write and maintain. With
-        Palamedes it is a package for {FRAMEWORKS.map((framework) => framework.name).join(", ")},
-        and Vite — Hono and Express use the same runtime for backend messages.{" "}
+        Palamedes the same model connects {FRAMEWORKS.map((framework) => framework.name).join(", ")}
+        , Vue, Nuxt, Svelte, SvelteKit, and Vite. Hono and Express use the shared runtime for
+        backend messages.{" "}
         <Link to="/frameworks" viewTransition className="pmds-arrow-link">
           Find your framework →
         </Link>
