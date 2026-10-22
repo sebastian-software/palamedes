@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { useDemoHref } from "../composables/useDemoHref";
+const demoHref = useDemoHref();
 import { t } from "@palamedes/core/macro";
-import { useState as nuxtState } from "#app";
-const locale = nuxtState<string>("palamedes.locale").value;
 const title = t`Lazy catalog detail loaded.`;
 const back = t`Back to booking`;
 </script>
@@ -9,8 +9,6 @@ const back = t`Back to booking`;
 <template>
   <main class="page-shell">
     <h1 data-testid="insights-title">{{ title }}</h1>
-    <NuxtLink :to="{ path: '/', query: { locale } }" no-prefetch data-testid="booking-link">{{
-      back
-    }}</NuxtLink>
+    <NuxtLink :to="demoHref('/')" no-prefetch data-testid="booking-link">{{ back }}</NuxtLink>
   </main>
 </template>

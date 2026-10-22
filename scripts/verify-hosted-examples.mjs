@@ -17,7 +17,7 @@ try {
   for (const entry of plan) {
     const documents = [];
     try {
-      if (entry.strategy === "route") {
+      if (entry.strategy === "route" && entry.rendering !== "client") {
         const response = await fetch(entry.origin, {
           redirect: "manual",
           signal: AbortSignal.timeout(30_000),
@@ -54,7 +54,8 @@ try {
         assert.equal(response.status, 200, `${url} HTTP status`);
         const html = await response.text();
         const lang = html.match(/<html\b[^>]*\blang=["']([^"']+)["']/iu)?.[1];
-        if (locale) assert.equal(lang, locale, `${url} document language / CDN isolation`);
+        if (locale && entry.rendering !== "client")
+          assert.equal(lang, locale, `${url} document language / CDN isolation`);
         documents.push({ url: url.href, status: response.status, lang });
       }
     } catch (error) {
@@ -64,7 +65,9 @@ try {
     }
     const result = spawnSync(
       process.execPath,
-      ["scripts/verify-examples-browser.mjs", "--id", entry.id, "--base-url", entry.origin],
+      entry.rendering
+        ? ["scripts/verify-component-demos.mjs", "--id", entry.id]
+        : ["scripts/verify-examples-browser.mjs", "--id", entry.id, "--base-url", entry.origin],
       { encoding: "utf8", timeout: 15 * 60_000 },
     );
     await writeFile(

@@ -1,15 +1,23 @@
-import { EXAMPLE_MATRIX } from "./example-matrix.mjs";
+import { CONTAINER_EXAMPLES } from "./component-demos.mjs";
 
 // Domain policy lives here; ports and supported identities remain matrix-owned.
-export const DEMO_DEPLOYMENT = EXAMPLE_MATRIX.map((example) => {
-  const { id, framework, strategy, port } = example;
+export const DEMO_DEPLOYMENT = CONTAINER_EXAMPLES.map((example) => {
+  const { id, framework, strategy, port, rendering } = example;
   const hosts =
     strategy === "tld"
       ? ["com", "de", "es", "fr"].map((tld) => `${framework}.examples.palamedes-i18n.${tld}`)
       : strategy === "subdomain"
         ? ["en", "de", "es", "fr"].map((locale) => `${locale}.${id}.examples.palamedes.dev`)
         : [`${id}.examples.palamedes.dev`];
-  return { id, framework, strategy, port, hosts, origin: `https://${hosts[0]}` };
+  return {
+    id,
+    framework,
+    strategy,
+    port,
+    ...(rendering ? { rendering } : {}),
+    hosts,
+    origin: `https://${hosts[0]}`,
+  };
 });
 
 export function selectDeployment(ids = DEMO_DEPLOYMENT.map(({ id }) => id)) {

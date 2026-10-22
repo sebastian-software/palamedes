@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useDemoHref } from "../composables/useDemoHref";
+const demoHref = useDemoHref();
+import { switchDemoLocale } from "@palamedes/example-ui";
 import { defineAsyncComponent, h, ref, onMounted } from "vue";
 import { useState as nuxtState, useRoute } from "#app";
 import { useHead } from "#imports";
@@ -47,9 +50,7 @@ const languages = { en: "English", de: "Deutsch", fr: "Français", es: "Español
 const open = ref(false);
 
 function switchLocale(nextLocale: string) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("locale", nextLocale);
-  window.location.assign(url);
+  switchDemoLocale(nextLocale);
 }
 </script>
 
@@ -87,12 +88,9 @@ function switchLocale(nextLocale: string) {
         {{ copy.lazy }}
       </button>
       <LazyCatalogDetails v-if="open" />
-      <NuxtLink
-        :to="{ path: '/insights', query: { locale } }"
-        no-prefetch
-        data-testid="insights-link"
-        >{{ copy.insights }}</NuxtLink
-      >
+      <NuxtLink :to="demoHref('/insights')" no-prefetch data-testid="insights-link">{{
+        copy.insights
+      }}</NuxtLink>
     </section>
     <footer class="foot">
       <span class="foot-badge">Palamedes</span>{{ copy.rendered }} · {{ copy.runtime }}

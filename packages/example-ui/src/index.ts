@@ -7,6 +7,9 @@
  * the locale-independent facts below live here, once.
  */
 
+export { createDemoLocalePolicy, switchDemoLocale } from "./demo-locale";
+export type { DemoLocale, DemoStrategy } from "./demo-locale";
+
 export interface EventContent {
   /** Attendee name used in the personalized greeting variable. */
   attendeeName: string;

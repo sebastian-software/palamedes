@@ -1,4 +1,7 @@
 <script lang="ts">
+import { page } from "$app/state";
+import { createDemoLocalePolicy } from "@palamedes/example-ui";
+import { switchDemoLocale } from "@palamedes/example-ui";
 import { onMount } from "svelte";
 import { getI18n } from "@palamedes/runtime";
 import { t } from "@palamedes/core/macro";
@@ -33,9 +36,7 @@ function toggleDetails() {
 }
 
 function switchLocale(nextLocale: string) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("locale", nextLocale);
-  window.location.assign(url);
+  switchDemoLocale(nextLocale);
 }
 </script>
 
@@ -68,7 +69,7 @@ function switchLocale(nextLocale: string) {
   </section>
   <div class="grid"><TicketPanel /><ProofPanel {proof} /></div>
   <section>
-    <a data-testid="insights-link" href={`/insights?locale=${locale}`} data-sveltekit-preload-data="false">{copy.insights}</a>
+    <a data-testid="insights-link" href={createDemoLocalePolicy(new URL(page.url.href)).href(locale, "/insights")} data-sveltekit-preload-data="false">{copy.insights}</a>
     <button type="button" data-testid="lazy-catalog-trigger" onclick={toggleDetails}>
       {copy.lazy}
     </button>

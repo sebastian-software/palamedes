@@ -1,6 +1,6 @@
 # Running all examples together in one container
 
-This document describes how to run all 25 Palamedes matrix example apps together in
+This document describes how to run all 41 Palamedes example apps together in
 **one** Podman container – each on its own fixed port. It builds on the
 `Containerfile` in the repo root and the supervisor
 `scripts/container/start-all.mjs`.
@@ -60,7 +60,7 @@ from the ports the servers actually bind:
 podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 ```
 
-Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063 -p 4070:4070`.
+The generated flags cover ports 4010–4063, 4070, 4090–4093, 4100–4103, 4110–4113, and 4120–4123. Readiness port 4080 stays private.
 
 - **Init/reaping:** the image ships `tini` as its entrypoint, so reparented child
   processes are reaped cleanly with no extra flag (also works later via
@@ -70,10 +70,10 @@ Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063 -p 4070:4070`.
   `--rm` and add `--restart=on-failure`; for a one-off foreground run, use `--rm`
   and accept the shutdown.
 
-By default, the supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
+By default, the supervisor starts all apps from `scripts/component-demos.mjs`, prefixes their
 output with the example id (`[nextjs-cookie] …`), and intentionally exits the
 container with an error code as soon as a server dies unexpectedly (fail-fast).
-`podman stop` terminates all 25 matrix servers by default, or the selected subset,
+`podman stop` terminates all 41 demo servers by default, or the selected subset,
 via forwarded `SIGTERM`.
 
 ## Run only the Remix demos
@@ -102,36 +102,40 @@ Host forwarding, caching, or browser behavior; the hosted readiness gate in
 
 ## Port overview
 
-| Port | Example                     | Strategy          |
-| ---- | --------------------------- | ----------------- |
-| 4010 | `nextjs-cookie`             | cookie            |
-| 4011 | `nextjs-route`              | route             |
-| 4012 | `nextjs-subdomain`          | subdomain         |
-| 4013 | `nextjs-tld`                | tld               |
-| 4020 | `tanstack-cookie`           | cookie            |
-| 4021 | `tanstack-route`            | route             |
-| 4022 | `tanstack-subdomain`        | subdomain         |
-| 4023 | `tanstack-tld`              | tld               |
-| 4030 | `waku-cookie`               | cookie            |
-| 4031 | `waku-route`                | route             |
-| 4032 | `waku-subdomain`            | subdomain         |
-| 4033 | `waku-tld`                  | tld               |
-| 4040 | `react-router-cookie`       | cookie            |
-| 4041 | `react-router-route`        | route             |
-| 4042 | `react-router-subdomain`    | subdomain         |
-| 4043 | `react-router-tld`          | tld               |
-| 4050 | `solid-cookie`              | cookie            |
-| 4051 | `solid-route`               | route             |
-| 4052 | `solid-subdomain`           | subdomain         |
-| 4053 | `solid-tld`                 | tld               |
-| 4060 | `remix-cookie`              | cookie            |
-| 4061 | `remix-route`               | route             |
-| 4062 | `remix-subdomain`           | subdomain         |
-| 4063 | `remix-tld`                 | tld               |
-| 4070 | `vite-mdx`                  | client            |
-| 4071 | `react-router-rsc` verifier | verifier-assigned |
+| Port      | Example                     | Strategy                      |
+| --------- | --------------------------- | ----------------------------- |
+| 4010      | `nextjs-cookie`             | cookie                        |
+| 4011      | `nextjs-route`              | route                         |
+| 4012      | `nextjs-subdomain`          | subdomain                     |
+| 4013      | `nextjs-tld`                | tld                           |
+| 4020      | `tanstack-cookie`           | cookie                        |
+| 4021      | `tanstack-route`            | route                         |
+| 4022      | `tanstack-subdomain`        | subdomain                     |
+| 4023      | `tanstack-tld`              | tld                           |
+| 4030      | `waku-cookie`               | cookie                        |
+| 4031      | `waku-route`                | route                         |
+| 4032      | `waku-subdomain`            | subdomain                     |
+| 4033      | `waku-tld`                  | tld                           |
+| 4040      | `react-router-cookie`       | cookie                        |
+| 4041      | `react-router-route`        | route                         |
+| 4042      | `react-router-subdomain`    | subdomain                     |
+| 4043      | `react-router-tld`          | tld                           |
+| 4050      | `solid-cookie`              | cookie                        |
+| 4051      | `solid-route`               | route                         |
+| 4052      | `solid-subdomain`           | subdomain                     |
+| 4053      | `solid-tld`                 | tld                           |
+| 4060      | `remix-cookie`              | cookie                        |
+| 4061      | `remix-route`               | route                         |
+| 4062      | `remix-subdomain`           | subdomain                     |
+| 4063      | `remix-tld`                 | tld                           |
+| 4070      | `vite-mdx`                  | client                        |
+| 4071      | `react-router-rsc` verifier | verifier-assigned             |
+| 4090–4093 | Vue + Vite                  | cookie, route, subdomain, TLD |
+| 4100–4103 | Nuxt                        | cookie, route, subdomain, TLD |
+| 4110–4113 | Svelte + Vite               | cookie, route, subdomain, TLD |
+| 4120–4123 | SvelteKit                   | cookie, route, subdomain, TLD |
 
-`scripts/example-matrix.mjs` is the single source of truth for the ports. The
+`scripts/component-demos.mjs` combines the existing matrix with the 16 component-framework variants and is the container source of truth for the ports. The
 supervisor binds according to it automatically, and the `print-podman-ports.mjs`
 call shown above generates the `-p` flags from it too – both follow along with no
 manual step. Only the static `EXPOSE` line in the `Containerfile` is purely

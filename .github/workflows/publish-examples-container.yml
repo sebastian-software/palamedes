@@ -21,6 +21,11 @@ on:
       - "packages/**"
       - "crates/**"
       - "examples/**"
+      - "proof/shared-demo/**"
+      - "proof/vue-vite/**"
+      - "proof/nuxt-ssr/**"
+      - "proof/svelte-vite/**"
+      - "proof/sveltekit-ssr/**"
       - "scripts/**"
       - ".github/workflows/publish-examples-container.yml"
   workflow_dispatch:
@@ -86,7 +91,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke-test all 25 examples in the runtime image
+      - name: Smoke-test all 41 demos in the runtime image
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/palamedes-examples:sha-${{ github.sha }}
         run: |
@@ -138,6 +143,6 @@ jobs:
             echo '## Verified examples image'
             echo "Git revision: $REVISION"
             echo "Image: $digest"
-            echo 'All 25 runtime examples passed their smoke checks.'
+            echo 'All 41 runtime examples passed their smoke checks.'
             echo 'Public HTTPS browser verification is still required before advertising live demos.'
           } >> "$GITHUB_STEP_SUMMARY"

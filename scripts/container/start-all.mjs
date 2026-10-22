@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Container supervisor: start every example app from the shared EXAMPLE_MATRIX on
+// Container supervisor: start every example app from the shared container inventory on
 // its fixed port, bound to 0.0.0.0, and supervise them side by side. The image
 // build already ran `pnpm build` + `pnpm build:examples`; this script only runs
 // the production start scripts at container runtime.
@@ -9,7 +9,7 @@
 
 import { spawn } from "node:child_process";
 import process from "node:process";
-import { EXAMPLE_MATRIX } from "../example-matrix.mjs";
+import { CONTAINER_EXAMPLES } from "../component-demos.mjs";
 import { buildStartArgs, buildStartEnv, selectContainerExamples } from "./start-plan.mjs";
 
 import { createReadinessServer } from "./readiness.mjs";
@@ -112,7 +112,7 @@ function shutdown(reason, exitCode) {
 }
 
 function main() {
-  const selected = selectContainerExamples(EXAMPLE_MATRIX, process.env.PALAMEDES_EXAMPLES);
+  const selected = selectContainerExamples(CONTAINER_EXAMPLES, process.env.PALAMEDES_EXAMPLES);
   readiness = createReadinessServer(selected, { isStopping: () => shuttingDown });
   readiness.on("error", (error) => shutdown(`readiness server: ${error.message}`, 1));
   readiness.listen(4080, "0.0.0.0");

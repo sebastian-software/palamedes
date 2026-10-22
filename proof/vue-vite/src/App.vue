@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { switchDemoLocale } from "@palamedes/example-ui";
 import { defineAsyncComponent, h, ref } from "vue";
 import { t } from "@palamedes/core/macro";
 import { EVENT } from "@palamedes/example-ui";
@@ -32,9 +33,7 @@ const languages = { en: "English", de: "Deutsch", fr: "Français", es: "Español
 const open = ref(false);
 
 function switchLocale(nextLocale: string) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("locale", nextLocale);
-  window.location.assign(url);
+  switchDemoLocale(nextLocale);
 }
 </script>
 

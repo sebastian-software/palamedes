@@ -15,6 +15,9 @@ import {
 } from "./example-matrix.mjs";
 import { assertExampleMatrix } from "./example-matrix-guard.mjs";
 
+import { CONTAINER_EXAMPLES } from "./component-demos.mjs";
+
+const CONTAINER_COUNT = CONTAINER_EXAMPLES.length;
 const MATRIX_COUNT = EXAMPLE_MATRIX.length;
 const EXAMPLE_COUNT = MATRIX_COUNT + FOCUSED_EXAMPLES.length;
 const BROWSER_COUNT = selectBrowserExamples({}).length;
@@ -54,13 +57,13 @@ const DOCUMENTED_COUNTS = [
   ["docs/proof-and-benchmarks.md", [`all ${MATRIX_COUNT} examples of the verification matrix`]],
   [
     "docs/operations/run-examples-container.md",
-    [`all ${MATRIX_COUNT} Palamedes matrix example apps`, `all ${MATRIX_COUNT} matrix servers`],
+    [`all ${CONTAINER_COUNT} Palamedes example apps`, `all ${CONTAINER_COUNT} demo servers`],
   ],
   [
     "Containerfile",
     [
-      `Run all ${MATRIX_COUNT} Palamedes matrix example apps`,
-      `Run all ${MATRIX_COUNT} matrix example servers`,
+      `Run all ${CONTAINER_COUNT} Palamedes example apps`,
+      `Run all ${CONTAINER_COUNT} example servers`,
     ],
   ],
 ];

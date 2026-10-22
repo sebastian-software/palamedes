@@ -11,6 +11,42 @@ health checks, image updates, cache settings, rollback, and resource observation
 The public URLs below are the live reference surface; local and CI contracts
 remain independently reproducible.
 
+## Component Framework Expansion
+
+Vue + Vite, Nuxt, Svelte + Vite, and SvelteKit now share the same booking
+application across cookie, route, subdomain, and TLD locale selection. Each
+framework builds once and runs four production instances. The container inventory
+in `scripts/component-demos.mjs` adds 16 demos on ports 4090–4093, 4100–4103,
+4110–4113, and 4120–4123. Together with the existing matrix, the image contains
+41 demos; the complete deployment manifest describes 101 HTTPS hostnames.
+
+Vue and Svelte render in the browser. Their blocking locale bootstrap runs
+before translated modules load. Nuxt and SvelteKit resolve the locale per server
+request and preserve it through hydration and lazy page navigation. A language
+switch always navigates to a new document. Cookie selection uses an explicit
+`locale` cookie before browser preferences; path, subdomain, and TLD selection
+are authoritative. Standalone local spikes retain their `?locale=de` entry.
+
+After `pnpm build`, build the four shared apps and exercise all 16 variants:
+
+```sh
+node scripts/build-component-demos.mjs
+node scripts/verify-component-demos.mjs --local
+```
+
+The verifier checks all four languages, locale authority, language switches and
+reloads, ticket interaction, and lazy catalogs. For Nuxt and SvelteKit it also
+checks server HTML without JavaScript and same-locale detail navigation. CI runs
+this contract alongside the original framework proof suites. The image publisher
+smoke-tests all 41 running servers before publication.
+
+The 25-demo deployment receipt above remains the last public acceptance record.
+The additional endpoints, DNS records, TLS certificates, and public browser
+contracts must pass before these new links are advertised as live. The gated
+`Deploy Examples` workflow has an `inspect-hosting` operation that saves only a
+sanitized inventory of the existing app, endpoints, relevant DNS zones, and
+representative CDN settings; it does not change hosting configuration.
+
 ## Deployment Evidence
 
 | Evidence            | Verified value                                                                                                                                |
