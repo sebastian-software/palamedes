@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { loadBlacksmithBenchData } from "../../scripts/blacksmith-bench-data.mjs";
 
 export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
   const report = JSON.parse(
@@ -10,12 +11,14 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
     ),
   );
   const realistic = report.profiles.find((profile) => profile.profile === "realistic");
+  const blacksmith = await loadBlacksmithBenchData(repoRoot);
   const artifacts = join(repoRoot, ".vitest-attachments");
   await mkdir(artifacts, { recursive: true });
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 390, 320]) {
     const context = await browser.newContext({
       viewport: { width, height: 1000 },
       reducedMotion: "reduce",
+      hasTouch: width < 640,
     });
     try {
       const page = await context.newPage();
@@ -24,9 +27,21 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
       const local = chart.locator("[data-local-benchmark]");
       if ((await local.getAttribute("open")) === null) await local.locator("summary").click();
       const platforms = chart.locator("#platform-benchmarks");
-      assert.equal(await platforms.getByRole("columnheader").count(), 3);
-      assert.equal(await platforms.getByRole("columnheader", { name: "Linux x86-64" }).count(), 1);
-      assert.equal(await platforms.getByRole("columnheader", { name: "macOS ARM64" }).count(), 1);
+      await checkPlatform(page, platforms, blacksmith, "react", "linux-x86-64");
+      await checkPickerRows(chart, width);
+      await platforms.getByRole("radio", { name: "Linux", exact: true }).focus();
+      await page.keyboard.press("ArrowRight");
+      await checkPlatform(page, platforms, blacksmith, "react", "macos-arm64");
+      await page.keyboard.press("ArrowLeft");
+      await checkPlatform(page, platforms, blacksmith, "react", "linux-x86-64");
+      await chart
+        .getByRole("group", { name: "Benchmark framework", exact: true })
+        .evaluate((group) => group.scrollIntoView({ block: "start" }));
+      await page.screenshot({
+        path: join(artifacts, `benchmark-platform-controls-${width}.png`),
+        animations: "disabled",
+        style: "header { visibility: hidden !important; }",
+      });
       // Native radios must work from the keyboard and replace the whole report:
       // values, rows, command, provenance, and broader-scope note travel together.
       await chart.getByRole("radio", { name: "React", exact: true }).focus();
@@ -38,6 +53,24 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
           true,
         );
         assert.ok((await platforms.innerText()).includes(`${label} ·`));
+        await checkPlatform(
+          page,
+          platforms,
+          blacksmith,
+          framework,
+          framework === "vue" ? "linux-x86-64" : "macos-arm64",
+        );
+        // The platform selection and its machine metadata must survive framework changes.
+        for (const platform of blacksmith.platforms) {
+          const control = platforms.getByRole("radio", { name: platform.label, exact: true });
+          if (width < 640) {
+            await platforms.getByText(platform.label, { exact: true }).tap();
+          } else {
+            await control.focus();
+            await page.keyboard.press("Space");
+          }
+          await checkPlatform(page, platforms, blacksmith, framework, platform.id);
+        }
         const rows = realistic.results.filter(
           (row) => row.framework === framework && row.status === "validated",
         );
@@ -58,6 +91,7 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
           0,
           "Reduced motion must not animate the chart",
         );
+        await chart.getByRole("radio", { name: label, exact: true }).focus();
       }
       // Rapid changes must not retain a previous framework's data.
       for (const name of ["Svelte", "Vue"]) {
@@ -145,7 +179,8 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
   try {
     const home = await noJs.newPage();
     await home.goto(`${baseUrl}/#why-rust`, { waitUntil: "networkidle" });
-    assert.equal(await home.locator("#platform-benchmarks").getByRole("columnheader").count(), 3);
+    assert.equal(await home.locator("#platform-benchmarks").getByRole("columnheader").count(), 2);
+    assert.ok((await home.locator("#platform-benchmarks").innerText()).includes("Showing Linux"));
     const local = home.locator("[data-local-benchmark]");
     const wasOpen = (await local.getAttribute("open")) !== null;
     await local.locator("summary").click();
@@ -160,6 +195,72 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
   console.log(
     "  framework benchmarks: keyboard selection, report values, scope, mobile, reduced motion, and no-JS tables passed",
   );
+}
+
+async function checkPickerRows(chart, width) {
+  for (const name of ["Benchmark framework", "Benchmark platform"]) {
+    const group = chart.getByRole("group", { name, exact: true });
+    const boxes = await group.locator("label").evaluateAll((labels) =>
+      labels.map((label) => {
+        const box = label.getBoundingClientRect();
+        const text = label.querySelector("span");
+        return {
+          top: box.top,
+          left: box.left,
+          right: box.right,
+          height: box.height,
+          fits: text.scrollWidth <= text.clientWidth,
+        };
+      }),
+    );
+    assert.ok(
+      boxes.every((box) => Math.abs(box.top - boxes[0].top) < 1),
+      `${name} wraps at ${width}px`,
+    );
+    assert.ok(
+      boxes.every((box) => box.left >= 0 && box.right <= width && box.height >= 44 && box.fits),
+    );
+  }
+}
+
+async function checkPlatform(page, region, data, framework, platformId) {
+  const platform = data.platforms.find((item) => item.id === platformId);
+  assert.equal(
+    await region.getByRole("radio", { name: platform.label, exact: true }).isChecked(),
+    true,
+  );
+  assert.equal(await region.getByRole("columnheader").count(), 2);
+  assert.equal(
+    await region
+      .getByRole("columnheader", {
+        name: `Median ${platform.label} · ${platform.arch}`,
+        exact: true,
+      })
+      .count(),
+    1,
+  );
+  if (data.status === "pending") return;
+  const rows = data.profiles
+    .find((item) => item.id === "realistic")
+    .frameworks.find((item) => item.id === framework).rows;
+  assert.equal(await region.locator("tbody tr").count(), rows.length);
+  for (const row of rows) {
+    const rendered = region.getByRole("row").filter({
+      has: page.getByRole("rowheader", { name: `${row.tool} ${row.scope}`, exact: true }),
+    });
+    const cell = rendered.getByRole("cell");
+    assert.equal(await cell.count(), 1);
+    assert.equal(await cell.getAttribute("data-platform"), platformId);
+    const value = row.values[platformId];
+    assert.equal(
+      await cell.getAttribute("data-median-ms"),
+      value.status === "validated" ? String(value.medianMs) : null,
+    );
+    if (value.status !== "validated") assert.ok((await cell.innerText()).includes("Not timed"));
+  }
+  assert.ok((await region.innerText()).includes(platform.cpu));
+  const other = data.platforms.find((item) => item.id !== platformId);
+  assert.ok(!(await region.innerText()).includes(other.cpu));
 }
 
 async function checkTables(page, report) {

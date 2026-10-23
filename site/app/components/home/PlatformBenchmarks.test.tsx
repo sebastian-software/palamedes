@@ -50,7 +50,7 @@ const measured: PlatformBenchmarkData = {
 };
 
 describe("platform benchmark table", () => {
-  it("prerenders both platform columns and explicit missing results without timing placeholders", () => {
+  it("prerenders platform controls and explicit missing results without timing placeholders", () => {
     const html = renderToStaticMarkup(
       createElement(PlatformBenchmarks, { framework: "react", data: pending }),
     );
@@ -58,20 +58,21 @@ describe("platform benchmark table", () => {
     expect(html).toContain("macOS");
     expect(html).toContain("have not been published yet");
     expect(html).not.toContain("data-median-ms");
-    expect(html.match(/scope="col"/gu)).toHaveLength(3);
+    expect(html.match(/scope="col"/gu)).toHaveLength(2);
+    expect(html.match(/type="radio"/gu)).toHaveLength(2);
     expect(html).toContain("<caption");
   });
 
-  it("keeps each median under its platform header and failed checks untimed", () => {
+  it("shows only the selected platform's median and keeps failed checks untimed", () => {
     const html = renderToStaticMarkup(
       createElement(PlatformBenchmarks, { framework: "vue", data: measured }),
     );
     expect(html).toContain('data-platform="linux-x86-64" data-median-ms="31.2"');
-    expect(html).toContain('data-platform="macos-arm64" data-median-ms="47.8"');
+    expect(html).not.toContain('data-platform="macos-arm64"');
     expect(html).toContain("31 ms");
-    expect(html).toContain("48 ms");
-    expect(html.match(/data-median-ms=/gu)).toHaveLength(2);
-    expect(html.match(/Not timed/gu)).toHaveLength(2);
+    expect(html).not.toContain("48 ms");
+    expect(html.match(/data-median-ms=/gu)).toHaveLength(1);
+    expect(html.match(/Not timed/gu)).toHaveLength(1);
     expect(html).toContain("extract + update + compile");
     expect(html).toContain(`/tree/${measured.revision}`);
     expect(html).not.toMatch(/min.?max/iu);
