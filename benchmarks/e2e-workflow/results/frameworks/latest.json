@@ -28,7 +28,6 @@
       "palamedes",
       "lingui",
       "i18next",
-      "gettext",
       "wuchale",
       "intlayer"
     ],
@@ -53,7 +52,6 @@
     "wuchale": "0.26.7",
     "@wuchale/jsx": "0.13.0",
     "@wuchale/svelte": "0.21.4",
-    "vue3-gettext": "4.0.1",
     "intlayer-cli": "9.7.0",
     "@intlayer/babel": "9.7.0",
     "@intlayer/vue-compiler": "9.7.0",
@@ -61,8 +59,7 @@
     "vue": "3.5.44",
     "svelte": "5.57.2",
     "solid-js": "1.9.17",
-    "palamedes": "pmds (Palamedes) v1.25.1\nFast i18n tooling for modern apps",
-    "gettext": "msgmerge (GNU gettext-tools) 1.0"
+    "palamedes": "pmds (Palamedes) v1.25.1\nFast i18n tooling for modern apps"
   },
   "command": "pnpm --dir benchmarks/e2e-workflow/frameworks benchmark",
   "profiles": [
@@ -222,54 +219,6 @@
             420.780583,
             408.022083,
             418.766542
-          ]
-        },
-        {
-          "id": "vue-gettext",
-          "framework": "vue",
-          "tool": "gettext",
-          "scope": "extract-update",
-          "status": "validated",
-          "fileCount": 80,
-          "sourceBytes": 63295,
-          "sourceSha256": "0e51cb56e20d9cd5f4f2f70bb2e8cd667f0f70ba0780a933b61937e541ccbb50",
-          "validation": {
-            "activeMessagesPerLocale": 640,
-            "observed": {
-              "en": {
-                "total": 640,
-                "missingCount": 0,
-                "unexpectedCount": 0,
-                "duplicateCount": 0,
-                "missing": [],
-                "unexpected": []
-              },
-              "de": {
-                "total": 640,
-                "missingCount": 0,
-                "unexpectedCount": 0,
-                "duplicateCount": 0,
-                "missing": [],
-                "unexpected": []
-              }
-            },
-            "expectedPreservedTranslations": 528,
-            "preservedTranslations": 528,
-            "lostTranslations": [],
-            "retainedChangedTranslations": 0
-          },
-          "medianMs": 154.445209,
-          "minMs": 152.279417,
-          "maxMs": 159.829916,
-          "medianAbsoluteDeviationMs": 2.1657920000000104,
-          "samplesMs": [
-            154.022334,
-            154.374208,
-            154.445209,
-            152.279417,
-            156.87325,
-            157.365875,
-            159.829916
           ]
         },
         {
@@ -979,54 +928,6 @@
           ]
         },
         {
-          "id": "vue-gettext",
-          "framework": "vue",
-          "tool": "gettext",
-          "scope": "extract-update",
-          "status": "validated",
-          "fileCount": 240,
-          "sourceBytes": 189781,
-          "sourceSha256": "b234508e511e14befc9f4e03edd0f521bb9cf23fbcc202ec52b90b0f3c3f6029",
-          "validation": {
-            "activeMessagesPerLocale": 1920,
-            "observed": {
-              "en": {
-                "total": 1920,
-                "missingCount": 0,
-                "unexpectedCount": 0,
-                "duplicateCount": 0,
-                "missing": [],
-                "unexpected": []
-              },
-              "de": {
-                "total": 1920,
-                "missingCount": 0,
-                "unexpectedCount": 0,
-                "duplicateCount": 0,
-                "missing": [],
-                "unexpected": []
-              }
-            },
-            "expectedPreservedTranslations": 1584,
-            "preservedTranslations": 1584,
-            "lostTranslations": [],
-            "retainedChangedTranslations": 0
-          },
-          "medianMs": 261.899625,
-          "minMs": 260.341833,
-          "maxMs": 267.86,
-          "medianAbsoluteDeviationMs": 1.4563329999999723,
-          "samplesMs": [
-            267.86,
-            265.914583,
-            261.237917,
-            263.355958,
-            260.341833,
-            261.899625,
-            260.5165
-          ]
-        },
-        {
           "id": "svelte-palamedes",
           "framework": "svelte",
           "tool": "palamedes",
@@ -1733,54 +1634,6 @@
           ]
         },
         {
-          "id": "vue-gettext",
-          "framework": "vue",
-          "tool": "gettext",
-          "scope": "extract-update",
-          "status": "validated",
-          "fileCount": 1500,
-          "sourceBytes": 11422443,
-          "sourceSha256": "88497493cec9f0a5709cfff8a16f1c3dead29377ea2b407d056bd6b585dbac98",
-          "validation": {
-            "activeMessagesPerLocale": 6000,
-            "observed": {
-              "en": {
-                "total": 6000,
-                "missingCount": 0,
-                "unexpectedCount": 0,
-                "duplicateCount": 0,
-                "missing": [],
-                "unexpected": []
-              },
-              "de": {
-                "total": 6000,
-                "missingCount": 0,
-                "unexpectedCount": 0,
-                "duplicateCount": 0,
-                "missing": [],
-                "unexpected": []
-              }
-            },
-            "expectedPreservedTranslations": 4950,
-            "preservedTranslations": 4950,
-            "lostTranslations": [],
-            "retainedChangedTranslations": 0
-          },
-          "medianMs": 1492.355209,
-          "minMs": 1439.23325,
-          "maxMs": 1513.486,
-          "medianAbsoluteDeviationMs": 12.626917000000049,
-          "samplesMs": [
-            1496.01375,
-            1479.728292,
-            1513.486,
-            1448.777041,
-            1492.355209,
-            1439.23325,
-            1502.424666
-          ]
-        },
-        {
           "id": "svelte-palamedes",
           "framework": "svelte",
           "tool": "palamedes",
@@ -2328,5 +2181,11 @@
         }
       ]
     }
-  ]
+  ],
+  "selection": {
+    "sourceReport": "2026-10-23T10-31-32-634Z.json",
+    "excludedTools": [
+      "gettext"
+    ]
+  }
 }

@@ -61,7 +61,12 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
       assert.equal(await chart.getByRole("radio", { name: "Vue", exact: true }).isChecked(), true);
       assert.equal(
         await chart.getByRole("table").getByText("vue3-gettext", { exact: true }).count(),
-        1,
+        0,
+      );
+      assert.equal(
+        await chart.getByRole("table").getByText("Wuchale", { exact: true }).count(),
+        0,
+        "Switching to Vue must discard Svelte-only rows",
       );
       const command = chart.getByRole("button", {
         name: "Copy command: pnpm benchmark:framework-workflow",

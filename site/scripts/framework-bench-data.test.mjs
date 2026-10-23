@@ -21,8 +21,8 @@ test("publication projects every measured case and excludes failed timings and r
   const rows = data.profiles.flatMap((profile) =>
     profile.frameworks.flatMap((framework) => framework.rows),
   );
-  assert.equal(rows.length, 45);
-  assert.equal(rows.filter((row) => row.medianMs !== undefined).length, 36);
+  assert.equal(rows.length, 42);
+  assert.equal(rows.filter((row) => row.medianMs !== undefined).length, 33);
   assert.ok(
     rows
       .filter((row) => row.status === "not-equivalent")
@@ -68,4 +68,24 @@ test("publication rejects quick/dirty reports and mislabeled broader Wuchale wor
   const scope = structuredClone(report);
   scope.profiles[0].results.find((row) => row.tool === "wuchale").scope = "extract-update";
   assert.throws(() => frameworkBenchData(scope, diagnostic));
+});
+
+test("selected reports preserve the original measurements and receipts", async (t) => {
+  if (!report.selection) return t.skip("The current report is a complete measured run");
+  const original = JSON.parse(
+    await readFile(
+      resolve(root, "benchmarks/e2e-workflow/results/frameworks", report.selection.sourceReport),
+      "utf8",
+    ),
+  );
+  const expected = structuredClone(original);
+  const excluded = new Set(report.selection.excludedTools);
+  expected.options.tools = expected.options.tools.filter((tool) => !excluded.has(tool));
+  delete expected.versions["vue3-gettext"];
+  delete expected.versions.gettext;
+  for (const profile of expected.profiles)
+    profile.results = profile.results.filter((row) => !excluded.has(row.tool));
+  expected.selection = report.selection;
+  assert.deepEqual(report, expected);
+  assert.ok(!JSON.stringify(frameworkBenchData(report, diagnostic)).includes("vue3-gettext"));
 });
