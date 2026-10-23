@@ -3,6 +3,7 @@ import {
   BENCH_META,
   BENCH_REALISTIC,
   BENCH_REALISTIC_WARM,
+  BENCH_TOOL_VERSIONS,
   type BenchRow,
   type BenchWarm,
 } from "./bench";
@@ -20,7 +21,7 @@ export interface BenchmarkView {
   framework: BenchmarkFramework;
   label: string;
   corpus: string;
-  rows: BenchRow[];
+  rows: (BenchRow & { version: string })[];
   warm?: BenchWarm;
   meta: { generated: string; node: string; platform: string; runs: number; cpu?: string };
   command: string;
@@ -33,7 +34,9 @@ export function benchmarkView(framework: BenchmarkFramework): BenchmarkView {
       framework,
       label: "React",
       corpus: BENCH_REALISTIC.corpus,
-      rows: BENCH_REALISTIC.rows.filter((row) => row.tool !== "React Intl"),
+      rows: BENCH_REALISTIC.rows
+        .filter((row) => row.tool !== "React Intl")
+        .map((row) => ({ ...row, version: BENCH_TOOL_VERSIONS[row.tool] })),
       warm: BENCH_REALISTIC_WARM,
       meta: BENCH_META,
       command: "pnpm benchmark:e2e-workflow",
@@ -48,6 +51,7 @@ export function benchmarkView(framework: BenchmarkFramework): BenchmarkView {
           {
             tool: row.tool,
             displayName: row.tool,
+            version: row.version,
             medianMs: row.medianMs,
             scope: row.scope,
             sameScope: row.scope === "extract + catalog update" && row.tool !== "Palamedes",

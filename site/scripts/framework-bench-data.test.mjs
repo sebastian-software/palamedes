@@ -22,6 +22,8 @@ test("publication projects every measured case and excludes failed timings and r
     profile.frameworks.flatMap((framework) => framework.rows),
   );
   assert.equal(rows.length, 45);
+  assert.ok(rows.every((row) => /^\d+\.\d+\.\d+/u.test(row.version)));
+  assert.equal(rows.find((row) => row.tool === "Wuchale").version, report.versions.wuchale);
   assert.equal(rows.filter((row) => row.medianMs !== undefined).length, 36);
   assert.ok(
     rows

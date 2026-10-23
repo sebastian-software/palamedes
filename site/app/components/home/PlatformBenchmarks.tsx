@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { BenchmarkVersion } from "~/components/proof/BenchmarkVersion";
 import { displayBenchmarkTime } from "~/data/bench";
 import { blacksmithBench, type PlatformBenchmarkData } from "~/data/blacksmith-bench";
 import type { BenchmarkFramework } from "~/data/framework-bench";
@@ -99,7 +100,7 @@ export function PlatformBenchmarks({
                     <span
                       className={`block text-[14px] font-semibold sm:text-[16px] ${row.tool === "Palamedes" ? "text-accent" : "text-ink"}`}
                     >
-                      {row.tool}
+                      <span>{row.tool}</span> <BenchmarkVersion version={row.version} />
                     </span>
                     <span className="mt-1 block text-[12px] font-normal text-gray-spec">
                       {row.scope}
@@ -130,7 +131,8 @@ export function PlatformBenchmarks({
         <div className="border-t border-hair px-4 py-4 text-[13px] leading-relaxed text-ink/75 sm:px-5">
           <p>
             Three fresh Blacksmith VMs per platform. Three warmups and seven samples per VM. Values
-            are medians of the three VM medians; platforms are reported separately.
+            are medians of the three VM medians; platforms are reported separately. Versions
+            identify the measured CLI or tool package.
           </p>
           <p className="mt-3">
             <strong>{platform.label}:</strong> {platform.cpu} · Node {platform.node} ·{" "}

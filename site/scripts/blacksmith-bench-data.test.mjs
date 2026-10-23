@@ -10,7 +10,11 @@ import {
   importBlacksmithBenchmarks,
   loadBlacksmithBenchData,
 } from "../../scripts/blacksmith-bench-data.mjs";
-import { campaign, expected } from "../../benchmarks/e2e-workflow/test-fixtures/blacksmith.mjs";
+import {
+  campaign,
+  expected,
+  original,
+} from "../../benchmarks/e2e-workflow/test-fixtures/blacksmith.mjs";
 import { mergeShards, sha256 } from "../../benchmarks/e2e-workflow/src/blacksmith-report.mjs";
 
 function publication() {
@@ -51,6 +55,30 @@ test("publishes all cold cases as paired platform medians with honest exclusions
   );
   assert.equal(rows.find((row) => row.tool === "Wuchale").scope, "extract + update + compile");
   assert.equal(rows.find((row) => row.tool === "React Intl").scope, "extract + write");
+  const react = data.profiles[0].frameworks.find((framework) => framework.id === "react");
+  for (const [label, tool] of [
+    ["fbtee", "fbtee"],
+    ["React Intl", "formatjs"],
+    ["General Translation", "gt"],
+  ]) {
+    assert.equal(
+      react.rows.find((row) => row.tool === label).version,
+      original.react.versions[tool].cli,
+    );
+  }
+  assert.equal(
+    react.rows.find((row) => row.tool === "Palamedes").version,
+    original.react.versions.palamedes.cli.split(" v")[1],
+  );
+  assert.equal(
+    rows.find((row) => row.tool === "Wuchale").version,
+    original.frameworks.versions.wuchale,
+  );
+  assert.equal(
+    rows.find((row) => row.tool === "vue3-gettext").version,
+    original.frameworks.versions["vue3-gettext"],
+  );
+  assert.ok(rows.every((row) => /^\d+\.\d+\.\d+/u.test(row.version)));
   assert.ok(
     !/samplesMs|rawSamplesMs|pmdsBin|catalogDirectory|sourceSha256|vmMediansMs/u.test(
       JSON.stringify(data),

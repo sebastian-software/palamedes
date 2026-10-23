@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { benchmarkToolVersion } from "./benchmark-tool-versions.mjs";
 
 export const FRAMEWORK_REPORT = "benchmarks/e2e-workflow/results/frameworks/latest.json";
 export const INTLAYER_REPORT =
@@ -50,6 +51,7 @@ export function frameworkBenchData(report, diagnostic) {
           assert.equal(row.scope, broader ? "extract-update-compile" : "extract-update");
           const base = {
             tool: LABELS[row.tool],
+            version: benchmarkToolVersion(report.versions, row.tool, id),
             scope: broader ? "extract + update + compile" : "extract + catalog update",
             status: row.status,
             preserved: row.validation.preservedTranslations,

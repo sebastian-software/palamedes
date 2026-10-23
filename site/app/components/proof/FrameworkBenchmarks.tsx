@@ -2,6 +2,7 @@ import { CopyCommand } from "~/components/CopyCommand";
 import { displayBenchmarkTime } from "~/data/bench";
 import { frameworkBench } from "~/data/framework-bench";
 import { repoHref } from "~/data/links";
+import { BenchmarkVersion } from "./BenchmarkVersion";
 
 type Profile = (typeof frameworkBench.profiles)[number];
 type Framework = Profile["frameworks"][number];
@@ -44,7 +45,7 @@ function FrameworkTable({ profile, framework }: { profile: Profile; framework: F
                 className={`border-b border-hair last:border-b-0 ${row.tool === "Palamedes" ? "bg-hover-fill" : ""}`}
               >
                 <th scope="row" className="px-4 py-4 text-[14px] font-semibold">
-                  {row.tool}
+                  <span>{row.tool}</span> <BenchmarkVersion version={row.version} />
                   <span className="mt-1 block text-[11px] font-normal text-gray-spec">
                     {row.scope}
                   </span>

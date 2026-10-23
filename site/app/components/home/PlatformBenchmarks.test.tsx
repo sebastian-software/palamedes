@@ -28,6 +28,7 @@ const measured: PlatformBenchmarkData = {
           rows: [
             {
               tool: "Palamedes",
+              version: "1.25.1",
               scope: "extract + catalog update",
               values: {
                 "linux-x86-64": { status: "validated", medianMs: 31.2 },
@@ -36,6 +37,7 @@ const measured: PlatformBenchmarkData = {
             },
             {
               tool: "Intlayer",
+              version: "9.7.0",
               scope: "extract + update + compile",
               values: {
                 "linux-x86-64": { status: "not-equivalent" },
@@ -70,6 +72,9 @@ describe("platform benchmark table", () => {
     expect(html).toContain('data-platform="linux-x86-64" data-median-ms="31.2"');
     expect(html).not.toContain('data-platform="macos-arm64"');
     expect(html).toContain("31 ms");
+    expect(html).toContain('data-tool-version="1.25.1"');
+    expect(html).toContain("v1.25.1");
+    expect(html).toContain("v9.7.0");
     expect(html).not.toContain("48 ms");
     expect(html.match(/data-median-ms=/gu)).toHaveLength(1);
     expect(html.match(/Not timed/gu)).toHaveLength(1);

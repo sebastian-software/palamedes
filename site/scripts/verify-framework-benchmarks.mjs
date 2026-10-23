@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadBlacksmithBenchData } from "../../scripts/blacksmith-bench-data.mjs";
+import {
+  reactBenchmarkVersions,
+  benchmarkToolVersion,
+} from "../../scripts/benchmark-tool-versions.mjs";
 
 export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
   const report = JSON.parse(
@@ -12,6 +16,9 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
   );
   const realistic = report.profiles.find((profile) => profile.profile === "realistic");
   const blacksmith = await loadBlacksmithBenchData(repoRoot);
+  const localReact = JSON.parse(
+    await readFile(join(repoRoot, "benchmarks/e2e-workflow/results/latest.json"), "utf8"),
+  );
   const artifacts = join(repoRoot, ".vitest-attachments");
   await mkdir(artifacts, { recursive: true });
   for (const width of [1440, 390, 320]) {
@@ -26,6 +33,13 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
       const chart = page.locator("#why-rust");
       const local = chart.locator("[data-local-benchmark]");
       if ((await local.getAttribute("open")) === null) await local.locator("summary").click();
+      const localFbtee = local
+        .getByRole("row")
+        .filter({ has: page.getByText("fbtee", { exact: true }) });
+      assert.equal(
+        await localFbtee.locator("[data-tool-version]").getAttribute("data-tool-version"),
+        reactBenchmarkVersions(localReact).fbtee,
+      );
       const platforms = chart.locator("#platform-benchmarks");
       await checkPlatform(page, platforms, blacksmith, "react", "linux-x86-64");
       await checkPickerRows(chart, width);
@@ -78,6 +92,22 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
         assert.equal(await table.getByRole("row").count(), rows.length + 1);
         for (const row of rows)
           assert.equal(await table.locator(`[data-median-ms="${row.medianMs}"]`).count(), 1);
+        const versionLabels = {
+          palamedes: "Palamedes",
+          lingui: "Lingui",
+          i18next: "i18next-cli",
+          gettext: "vue3-gettext",
+          wuchale: "Wuchale",
+        };
+        for (const row of rows) {
+          const rendered = table
+            .getByRole("row")
+            .filter({ has: page.getByText(versionLabels[row.tool], { exact: true }) });
+          assert.equal(
+            await rendered.locator("[data-tool-version]").getAttribute("data-tool-version"),
+            benchmarkToolVersion(report.versions, row.tool, framework),
+          );
+        }
         assert.equal(await table.getByText("Intlayer", { exact: true }).count(), 0);
         assert.ok((await chart.innerText()).includes("pnpm benchmark:framework-workflow"));
         assert.ok((await chart.innerText()).includes(report.environment.node));
@@ -246,8 +276,15 @@ async function checkPlatform(page, region, data, framework, platformId) {
   assert.equal(await region.locator("tbody tr").count(), rows.length);
   for (const row of rows) {
     const rendered = region.getByRole("row").filter({
-      has: page.getByRole("rowheader", { name: `${row.tool} ${row.scope}`, exact: true }),
+      has: page.getByRole("rowheader", {
+        name: `${row.tool} v${row.version} ${row.scope}`,
+        exact: true,
+      }),
     });
+    assert.equal(
+      await rendered.locator("[data-tool-version]").getAttribute("data-tool-version"),
+      row.version,
+    );
     const cell = rendered.getByRole("cell");
     assert.equal(await cell.count(), 1);
     assert.equal(await cell.getAttribute("data-platform"), platformId);
@@ -283,6 +320,7 @@ async function checkTables(page, report) {
         1,
       );
       assert.equal(await region.getByRole("columnheader").count(), 2);
+      assert.equal(await region.locator("[data-tool-version]").count(), rows.length);
       assert.equal(await region.getByText("Not timed", { exact: false }).count(), 1);
     }
   const conformance = section.getByRole("region", {

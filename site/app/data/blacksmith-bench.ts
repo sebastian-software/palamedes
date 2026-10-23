@@ -23,6 +23,7 @@ export interface PlatformBenchmarkData {
       id: string;
       rows: {
         tool: string;
+        version: string;
         scope: string;
         values: Record<
           BenchmarkPlatform,
