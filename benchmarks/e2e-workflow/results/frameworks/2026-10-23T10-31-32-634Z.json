@@ -1,0 +1,2332 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "framework-extract-update-workflows",
+  "machineLocal": true,
+  "generatedAt": "2026-10-23T10:31:32.634Z",
+  "environment": {
+    "revision": "a061f66e7f4030d22962166d926f331ee57412c4",
+    "dirty": false,
+    "node": "v24.22.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Ultra",
+    "cpuCount": 20,
+    "memoryBytes": 68719476736
+  },
+  "options": {
+    "profiles": [
+      "small",
+      "medium",
+      "realistic"
+    ],
+    "frameworks": [
+      "vue",
+      "svelte",
+      "solid"
+    ],
+    "tools": [
+      "palamedes",
+      "lingui",
+      "i18next",
+      "gettext",
+      "wuchale",
+      "intlayer"
+    ],
+    "seed": 20260703,
+    "runs": 7,
+    "warmup": 3,
+    "pmdsBin": "/private/tmp/palamedes-framework-extraction-benchmarks-20261023/target/release/pmds",
+    "validateOnly": false,
+    "keepTemp": false,
+    "strict": false,
+    "uiCatalogDir": "/private/tmp/palamedes-framework-extraction-benchmarks-20261023/target/release/build/palamedes-cli-3ee3c14f439ebbcc/out/catalogs"
+  },
+  "versions": {
+    "@lingui/cli": "6.6.0",
+    "@lingui/core": "6.6.0",
+    "@lingui/extractor-vue": "6.6.0",
+    "@lingui/solid": "6.6.0",
+    "lingui-for-svelte": "0.7.1",
+    "i18next-cli": "1.72.1",
+    "i18next-cli-vue": "1.0.4",
+    "i18next-cli-plugin-svelte": "2.4.1",
+    "wuchale": "0.26.7",
+    "@wuchale/jsx": "0.13.0",
+    "@wuchale/svelte": "0.21.4",
+    "vue3-gettext": "4.0.1",
+    "intlayer-cli": "9.7.0",
+    "@intlayer/babel": "9.7.0",
+    "@intlayer/vue-compiler": "9.7.0",
+    "@intlayer/svelte-compiler": "9.7.0",
+    "vue": "3.5.44",
+    "svelte": "5.57.2",
+    "solid-js": "1.9.17",
+    "palamedes": "pmds (Palamedes) v1.25.1\nFast i18n tooling for modern apps",
+    "gettext": "msgmerge (GNU gettext-tools) 1.0"
+  },
+  "command": "pnpm --dir benchmarks/e2e-workflow/frameworks benchmark",
+  "profiles": [
+    {
+      "profile": "small",
+      "corpus": {
+        "seed": 20260703,
+        "sourceMessages": 640,
+        "baselineMessages": 624,
+        "changed": 48,
+        "added": 64,
+        "removed": 48,
+        "interpolationMessages": 105,
+        "interpolation": "one named variable; message indices 0–14 modulo 100",
+        "plurals": false
+      },
+      "results": [
+        {
+          "id": "vue-palamedes",
+          "framework": "vue",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 71430,
+          "sourceSha256": "2ef305ec6e12e30906ba1757cf947eacf114d4bbbdeda604182352e8beeac773",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 11.938458,
+          "minMs": 11.175167,
+          "maxMs": 12.536292,
+          "medianAbsoluteDeviationMs": 0.12399999999999878,
+          "samplesMs": [
+            11.663584,
+            12.041625,
+            11.824875,
+            11.175167,
+            11.938458,
+            12.536292,
+            12.062458
+          ]
+        },
+        {
+          "id": "vue-lingui",
+          "framework": "vue",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 100780,
+          "sourceSha256": "6629f304d52728d9267d4f728ccbeab3f0235b98a7a0e0087ca59c9a0e1c9ce6",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 767.057125,
+          "minMs": 761.317208,
+          "maxMs": 774.502833,
+          "medianAbsoluteDeviationMs": 5.551832999999988,
+          "samplesMs": [
+            761.317208,
+            768.66725,
+            762.865875,
+            773.852375,
+            767.057125,
+            761.505292,
+            774.502833
+          ]
+        },
+        {
+          "id": "vue-i18next",
+          "framework": "vue",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 67480,
+          "sourceSha256": "9643f2c9f6f8e716d00c7e6f98483da6a7d1899ee9cccde62e35698679c8d49b",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 418.766542,
+          "minMs": 408.022083,
+          "maxMs": 421.159958,
+          "medianAbsoluteDeviationMs": 2.393416000000002,
+          "samplesMs": [
+            410.404792,
+            421.159958,
+            419.082084,
+            411.32725,
+            420.780583,
+            408.022083,
+            418.766542
+          ]
+        },
+        {
+          "id": "vue-gettext",
+          "framework": "vue",
+          "tool": "gettext",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 63295,
+          "sourceSha256": "0e51cb56e20d9cd5f4f2f70bb2e8cd667f0f70ba0780a933b61937e541ccbb50",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 154.445209,
+          "minMs": 152.279417,
+          "maxMs": 159.829916,
+          "medianAbsoluteDeviationMs": 2.1657920000000104,
+          "samplesMs": [
+            154.022334,
+            154.374208,
+            154.445209,
+            152.279417,
+            156.87325,
+            157.365875,
+            159.829916
+          ]
+        },
+        {
+          "id": "svelte-palamedes",
+          "framework": "svelte",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 65990,
+          "sourceSha256": "a4b0f493a7ff3eb0472c385b0781999ccc3e52cc98731774d6d9164d70b92eb6",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 11.792167,
+          "minMs": 10.751583,
+          "maxMs": 12.302,
+          "medianAbsoluteDeviationMs": 0.2569999999999997,
+          "samplesMs": [
+            12.302,
+            11.614667,
+            11.535167,
+            10.751583,
+            11.9295,
+            11.792167,
+            12.232709
+          ]
+        },
+        {
+          "id": "svelte-lingui",
+          "framework": "svelte",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 49670,
+          "sourceSha256": "aff257a2837883a75b878b526528fd0c608925ed8aaa479a078cf9a822d884fb",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 946.094209,
+          "minMs": 926.894834,
+          "maxMs": 979.430292,
+          "medianAbsoluteDeviationMs": 1.998958000000016,
+          "samplesMs": [
+            926.894834,
+            933.425583,
+            945.287334,
+            979.430292,
+            948.093167,
+            947.504083,
+            946.094209
+          ]
+        },
+        {
+          "id": "svelte-i18next",
+          "framework": "svelte",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 54840,
+          "sourceSha256": "467d2573a3a5a38e70cfc42655b1e7aa1cf4dd506435fad79f66f5434824c627",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 552.335209,
+          "minMs": 547.071833,
+          "maxMs": 567.076375,
+          "medianAbsoluteDeviationMs": 4.405499999999961,
+          "samplesMs": [
+            547.071833,
+            550.126208,
+            552.335209,
+            567.076375,
+            554.198333,
+            563.136541,
+            547.929709
+          ]
+        },
+        {
+          "id": "svelte-wuchale",
+          "framework": "svelte",
+          "tool": "wuchale",
+          "scope": "extract-update-compile",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 36150,
+          "sourceSha256": "9afba744074a010f0a010e17e9fbc6f46198fae5f421af0bc234742447cefebf",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 304.884333,
+          "minMs": 302.684084,
+          "maxMs": 313.417584,
+          "medianAbsoluteDeviationMs": 2.200249000000042,
+          "samplesMs": [
+            310.139625,
+            304.316292,
+            304.884333,
+            302.848541,
+            311.833167,
+            313.417584,
+            302.684084
+          ]
+        },
+        {
+          "id": "solid-palamedes",
+          "framework": "solid",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 60060,
+          "sourceSha256": "2664038a16bf4aab2e16a7f27e53af4a13a3775a242e39a695500177692251a5",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 12.697375,
+          "minMs": 11.987375,
+          "maxMs": 13.026334,
+          "medianAbsoluteDeviationMs": 0.3289590000000011,
+          "samplesMs": [
+            13.026334,
+            12.978291,
+            12.926625,
+            12.275084,
+            12.094834,
+            11.987375,
+            12.697375
+          ]
+        },
+        {
+          "id": "solid-lingui",
+          "framework": "solid",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 50620,
+          "sourceSha256": "7c8e8a306846a58ae0c89a80fada01c80d0de792d8594c55cdbaf362cec4e7f6",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 556.869209,
+          "minMs": 548.64225,
+          "maxMs": 567.495875,
+          "medianAbsoluteDeviationMs": 5.414416999999958,
+          "samplesMs": [
+            560.193458,
+            548.64225,
+            567.495875,
+            555.500792,
+            551.454792,
+            556.869209,
+            565.747334
+          ]
+        },
+        {
+          "id": "solid-i18next",
+          "framework": "solid",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 56110,
+          "sourceSha256": "24ee3a9becde1169bd0461a56662499663b03fb59e17199fd86ab495cc8b2ca2",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 357.631375,
+          "minMs": 349.9705,
+          "maxMs": 368.934458,
+          "medianAbsoluteDeviationMs": 4.081000000000017,
+          "samplesMs": [
+            357.631375,
+            349.9705,
+            357.139334,
+            360.138292,
+            368.934458,
+            353.172334,
+            361.712375
+          ]
+        },
+        {
+          "id": "solid-wuchale",
+          "framework": "solid",
+          "tool": "wuchale",
+          "scope": "extract-update-compile",
+          "status": "validated",
+          "fileCount": 80,
+          "sourceBytes": 37420,
+          "sourceSha256": "83bbe50007079e51c417751b499178da27d3119301239a1046f894412ae334e1",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 640,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 528,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 187.00075,
+          "minMs": 184.749041,
+          "maxMs": 200.31075,
+          "medianAbsoluteDeviationMs": 1.2491249999999923,
+          "samplesMs": [
+            200.31075,
+            184.749041,
+            186.673875,
+            188.249875,
+            187.00075,
+            192.792542,
+            186.785833
+          ]
+        },
+        {
+          "id": "vue-intlayer",
+          "framework": "vue",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "vue-intlayer: en: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; de: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; 78 existing translations lost, including \"Archive billing overview for {name} 00112-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 688,
+                "missingCount": 0,
+                "unexpectedCount": 48,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              },
+              "de": {
+                "total": 688,
+                "missingCount": 0,
+                "unexpectedCount": 48,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 450,
+            "lostTranslations": [
+              {
+                "source": "Archive billing overview for {name} 00112-now",
+                "translation": ""
+              },
+              {
+                "source": "Sync portal toolbar for {name} 00113-now",
+                "translation": ""
+              },
+              {
+                "source": "Route audit header for {name} 00114-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 33
+          }
+        },
+        {
+          "id": "svelte-intlayer",
+          "framework": "svelte",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "svelte-intlayer: en: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; de: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; 78 existing translations lost, including \"Archive billing overview for {name} 00112-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 688,
+                "missingCount": 0,
+                "unexpectedCount": 48,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              },
+              "de": {
+                "total": 688,
+                "missingCount": 0,
+                "unexpectedCount": 48,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 450,
+            "lostTranslations": [
+              {
+                "source": "Archive billing overview for {name} 00112-now",
+                "translation": ""
+              },
+              {
+                "source": "Sync portal toolbar for {name} 00113-now",
+                "translation": ""
+              },
+              {
+                "source": "Route audit header for {name} 00114-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 33
+          }
+        },
+        {
+          "id": "solid-intlayer",
+          "framework": "solid",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "solid-intlayer: en: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; de: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; 78 existing translations lost, including \"Archive billing overview for {name} 00112-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 640,
+            "observed": {
+              "en": {
+                "total": 688,
+                "missingCount": 0,
+                "unexpectedCount": 48,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              },
+              "de": {
+                "total": 688,
+                "missingCount": 0,
+                "unexpectedCount": 48,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 528,
+            "preservedTranslations": 450,
+            "lostTranslations": [
+              {
+                "source": "Archive billing overview for {name} 00112-now",
+                "translation": ""
+              },
+              {
+                "source": "Sync portal toolbar for {name} 00113-now",
+                "translation": ""
+              },
+              {
+                "source": "Route audit header for {name} 00114-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 33
+          }
+        }
+      ]
+    },
+    {
+      "profile": "medium",
+      "corpus": {
+        "seed": 20260703,
+        "sourceMessages": 1920,
+        "baselineMessages": 1872,
+        "changed": 144,
+        "added": 192,
+        "removed": 144,
+        "interpolationMessages": 300,
+        "interpolation": "one named variable; message indices 0–14 modulo 100",
+        "plurals": false
+      },
+      "results": [
+        {
+          "id": "vue-palamedes",
+          "framework": "vue",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 214201,
+          "sourceSha256": "d442a0da5f67695a8182cf6d540e01afafc60c2dc67dd97647eeabd6f9f3af7a",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 18.619416,
+          "minMs": 16.826667,
+          "maxMs": 20.865208,
+          "medianAbsoluteDeviationMs": 1.3846670000000003,
+          "samplesMs": [
+            20.865208,
+            17.543541,
+            20.004083,
+            16.826667,
+            20.076125,
+            18.017958,
+            18.619416
+          ]
+        },
+        {
+          "id": "vue-lingui",
+          "framework": "vue",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 302162,
+          "sourceSha256": "3d734667c9f1fa8ed94bf6c0655f21f41c57928517a8cd08c5e5e81fec20ae92",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 906.149083,
+          "minMs": 893.847125,
+          "maxMs": 929.887291,
+          "medianAbsoluteDeviationMs": 9.250333999999953,
+          "samplesMs": [
+            929.887291,
+            900.488,
+            906.149083,
+            915.399417,
+            894.624625,
+            908.116584,
+            893.847125
+          ]
+        },
+        {
+          "id": "vue-i18next",
+          "framework": "vue",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 202321,
+          "sourceSha256": "3f03b82bc1d9acf426c39232fa8056b3fd2eabf455ec676e996a1d5a67f0a744",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 623.292458,
+          "minMs": 612.216834,
+          "maxMs": 637.016833,
+          "medianAbsoluteDeviationMs": 4.928957999999966,
+          "samplesMs": [
+            626.052,
+            623.292458,
+            627.446709,
+            637.016833,
+            618.3635,
+            617.102917,
+            612.216834
+          ]
+        },
+        {
+          "id": "vue-gettext",
+          "framework": "vue",
+          "tool": "gettext",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 189781,
+          "sourceSha256": "b234508e511e14befc9f4e03edd0f521bb9cf23fbcc202ec52b90b0f3c3f6029",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 261.899625,
+          "minMs": 260.341833,
+          "maxMs": 267.86,
+          "medianAbsoluteDeviationMs": 1.4563329999999723,
+          "samplesMs": [
+            267.86,
+            265.914583,
+            261.237917,
+            263.355958,
+            260.341833,
+            261.899625,
+            260.5165
+          ]
+        },
+        {
+          "id": "svelte-palamedes",
+          "framework": "svelte",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 197881,
+          "sourceSha256": "e6b80fe697584070814a393f4903f597a3c8d1e9d9bfbab452b2fcbdfeb4cf1c",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 18.082958,
+          "minMs": 16.589125,
+          "maxMs": 19.947792,
+          "medianAbsoluteDeviationMs": 1.3168330000000026,
+          "samplesMs": [
+            18.28825,
+            16.731125,
+            19.373459,
+            19.947792,
+            18.082958,
+            16.766125,
+            16.589125
+          ]
+        },
+        {
+          "id": "svelte-lingui",
+          "framework": "svelte",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 148921,
+          "sourceSha256": "888bb3132696dea34c058caae3ec66dfe1fa572f9b879f5737fea14552ca1a25",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 1096.043209,
+          "minMs": 1083.623917,
+          "maxMs": 1102.697708,
+          "medianAbsoluteDeviationMs": 6.630791000000045,
+          "samplesMs": [
+            1090.625792,
+            1102.674,
+            1096.043209,
+            1098.405583,
+            1084.128291,
+            1083.623917,
+            1102.697708
+          ]
+        },
+        {
+          "id": "svelte-i18next",
+          "framework": "svelte",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 164401,
+          "sourceSha256": "9cbd857f1b6e407c9308f5b38d2740b342090d5a216fd2917f031f7dd28b60ba",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 810.999666,
+          "minMs": 794.058875,
+          "maxMs": 834.00575,
+          "medianAbsoluteDeviationMs": 6.323249999999916,
+          "samplesMs": [
+            817.322916,
+            809.721583,
+            810.999666,
+            794.058875,
+            804.3305,
+            834.00575,
+            812.584792
+          ]
+        },
+        {
+          "id": "svelte-wuchale",
+          "framework": "svelte",
+          "tool": "wuchale",
+          "scope": "extract-update-compile",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 108361,
+          "sourceSha256": "761bf14c37698f897f28a385a716692539cce10a664f3dc90717d6ff401cbee1",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 407.114375,
+          "minMs": 398.001208,
+          "maxMs": 418.566375,
+          "medianAbsoluteDeviationMs": 3.9535000000000196,
+          "samplesMs": [
+            406.825333,
+            412.845625,
+            407.114375,
+            403.160875,
+            407.404834,
+            418.566375,
+            398.001208
+          ]
+        },
+        {
+          "id": "solid-palamedes",
+          "framework": "solid",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 180251,
+          "sourceSha256": "f4a9dd13da621a75141182f7435cedded1e895f0342ac92de5c923d0a29efb7d",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 20.49525,
+          "minMs": 19.389708,
+          "maxMs": 22.651708,
+          "medianAbsoluteDeviationMs": 0.908332999999999,
+          "samplesMs": [
+            19.586917,
+            22.2835,
+            19.389708,
+            20.49525,
+            20.45425,
+            22.651708,
+            20.832083
+          ]
+        },
+        {
+          "id": "solid-lingui",
+          "framework": "solid",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 151931,
+          "sourceSha256": "25f5acac3c8d2091724c37baa28cb457ddca93da7111807c3e241b9b9944f4a4",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 643.01975,
+          "minMs": 636.54625,
+          "maxMs": 652.426542,
+          "medianAbsoluteDeviationMs": 4.207666999999901,
+          "samplesMs": [
+            647.227417,
+            636.54625,
+            652.426542,
+            638.405375,
+            643.01975,
+            642.7545,
+            643.371916
+          ]
+        },
+        {
+          "id": "solid-i18next",
+          "framework": "solid",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 168371,
+          "sourceSha256": "215d4f805ac66b45a7e34fab149c172bb6e8d800bff1ab3a823f46db8747ff99",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 566.964166,
+          "minMs": 561.617667,
+          "maxMs": 584.181875,
+          "medianAbsoluteDeviationMs": 5.346498999999994,
+          "samplesMs": [
+            577.464125,
+            584.181875,
+            574.313208,
+            566.964166,
+            564.814209,
+            561.617667,
+            563.681834
+          ]
+        },
+        {
+          "id": "solid-wuchale",
+          "framework": "solid",
+          "tool": "wuchale",
+          "scope": "extract-update-compile",
+          "status": "validated",
+          "fileCount": 240,
+          "sourceBytes": 112331,
+          "sourceSha256": "57d35c7e566bebe54f7ac0f4aa01276e41948e5f8934b2c4e41425bd57385c3e",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 1920,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1584,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 267.929666,
+          "minMs": 263.958625,
+          "maxMs": 286.052625,
+          "medianAbsoluteDeviationMs": 2.562708999999984,
+          "samplesMs": [
+            286.052625,
+            270.492375,
+            267.929666,
+            266.423959,
+            267.186584,
+            263.958625,
+            272.278208
+          ]
+        },
+        {
+          "id": "vue-intlayer",
+          "framework": "vue",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "vue-intlayer: en: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; de: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; 240 existing translations lost, including \"Approve billing overview for {name} 00400-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 2064,
+                "missingCount": 0,
+                "unexpectedCount": 144,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              },
+              "de": {
+                "total": 2064,
+                "missingCount": 0,
+                "unexpectedCount": 144,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1344,
+            "lostTranslations": [
+              {
+                "source": "Approve billing overview for {name} 00400-now",
+                "translation": ""
+              },
+              {
+                "source": "Sync settings detail for {name} 00401-now",
+                "translation": ""
+              },
+              {
+                "source": "Archive audit header for {name} 00402-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 114
+          }
+        },
+        {
+          "id": "svelte-intlayer",
+          "framework": "svelte",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "svelte-intlayer: en: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; de: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; 240 existing translations lost, including \"Approve billing overview for {name} 00400-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 2064,
+                "missingCount": 0,
+                "unexpectedCount": 144,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              },
+              "de": {
+                "total": 2064,
+                "missingCount": 0,
+                "unexpectedCount": 144,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1344,
+            "lostTranslations": [
+              {
+                "source": "Approve billing overview for {name} 00400-now",
+                "translation": ""
+              },
+              {
+                "source": "Sync settings detail for {name} 00401-now",
+                "translation": ""
+              },
+              {
+                "source": "Archive audit header for {name} 00402-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 114
+          }
+        },
+        {
+          "id": "solid-intlayer",
+          "framework": "solid",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "solid-intlayer: en: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; de: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; 240 existing translations lost, including \"Approve billing overview for {name} 00400-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 1920,
+            "observed": {
+              "en": {
+                "total": 2064,
+                "missingCount": 0,
+                "unexpectedCount": 144,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              },
+              "de": {
+                "total": 2064,
+                "missingCount": 0,
+                "unexpectedCount": 144,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit modal item 00000",
+                  "Remove stale audit modal item 00008",
+                  "Remove stale audit modal item 00030"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 1584,
+            "preservedTranslations": 1344,
+            "lostTranslations": [
+              {
+                "source": "Approve billing overview for {name} 00400-now",
+                "translation": ""
+              },
+              {
+                "source": "Sync settings detail for {name} 00401-now",
+                "translation": ""
+              },
+              {
+                "source": "Archive audit header for {name} 00402-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 114
+          }
+        }
+      ]
+    },
+    {
+      "profile": "realistic",
+      "corpus": {
+        "seed": 20260703,
+        "sourceMessages": 6000,
+        "baselineMessages": 5850,
+        "changed": 450,
+        "added": 600,
+        "removed": 450,
+        "interpolationMessages": 900,
+        "interpolation": "one named variable; message indices 0–14 modulo 100",
+        "plurals": false
+      },
+      "results": [
+        {
+          "id": "vue-palamedes",
+          "framework": "vue",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11280763,
+          "sourceSha256": "87e8b228707c616af737d0408eb032daef1615e0dd6df3a58cc3db9f384a34e2",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 103.361,
+          "minMs": 78.978,
+          "maxMs": 110.497,
+          "medianAbsoluteDeviationMs": 7.135999999999996,
+          "samplesMs": [
+            103.361,
+            110.497,
+            108.772958,
+            78.978,
+            92.13325,
+            105.495917,
+            84.11625
+          ]
+        },
+        {
+          "id": "vue-lingui",
+          "framework": "vue",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11787696,
+          "sourceSha256": "62b1ea1fc8cdd684b818d0d85ba5cfd83f72beeac3b0882dd312cfb0d37c775b",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 2798.297292,
+          "minMs": 2750.350959,
+          "maxMs": 2986.751375,
+          "medianAbsoluteDeviationMs": 25.21466700000019,
+          "samplesMs": [
+            2986.751375,
+            2793.281208,
+            2750.350959,
+            2891.1745,
+            2773.082625,
+            2804.326666,
+            2798.297292
+          ]
+        },
+        {
+          "id": "vue-i18next",
+          "framework": "vue",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11234563,
+          "sourceSha256": "3e7ab06ca1cb4ff19385db6280f89f34306289e4544296af138e60366edbb2bf",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 4340.66225,
+          "minMs": 4232.13925,
+          "maxMs": 4535.952459,
+          "medianAbsoluteDeviationMs": 88.91120899999987,
+          "samplesMs": [
+            4535.952459,
+            4390.832042,
+            4320.900542,
+            4239.56925,
+            4232.13925,
+            4429.573459,
+            4340.66225
+          ]
+        },
+        {
+          "id": "vue-gettext",
+          "framework": "vue",
+          "tool": "gettext",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11422443,
+          "sourceSha256": "88497493cec9f0a5709cfff8a16f1c3dead29377ea2b407d056bd6b585dbac98",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 1492.355209,
+          "minMs": 1439.23325,
+          "maxMs": 1513.486,
+          "medianAbsoluteDeviationMs": 12.626917000000049,
+          "samplesMs": [
+            1496.01375,
+            1479.728292,
+            1513.486,
+            1448.777041,
+            1492.355209,
+            1439.23325,
+            1502.424666
+          ]
+        },
+        {
+          "id": "svelte-palamedes",
+          "framework": "svelte",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11282903,
+          "sourceSha256": "cf0655fd610ede721ab76a6f214d6556fa8051952e3e4a196686a415e87a37e3",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 106.896666,
+          "minMs": 74.556666,
+          "maxMs": 120.640791,
+          "medianAbsoluteDeviationMs": 10.227333999999999,
+          "samplesMs": [
+            112.7505,
+            103.821209,
+            117.124,
+            74.556666,
+            120.640791,
+            82.496417,
+            106.896666
+          ]
+        },
+        {
+          "id": "svelte-lingui",
+          "framework": "svelte",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11371793,
+          "sourceSha256": "8bb699ce81e7652735ba140d7e9e8493a1709f1ab5d862050a1d86fa1be7f134",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 2253.189291,
+          "minMs": 2185.581666,
+          "maxMs": 2332.519542,
+          "medianAbsoluteDeviationMs": 27.750792999999703,
+          "samplesMs": [
+            2253.189291,
+            2332.519542,
+            2220.956583,
+            2251.758041,
+            2262.216209,
+            2185.581666,
+            2280.940084
+          ]
+        },
+        {
+          "id": "svelte-i18next",
+          "framework": "svelte",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11406593,
+          "sourceSha256": "5bec45cceef527b899d831a100b7b57a3f0b673a99f132376b45daf93f3b29ab",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 11884.861833,
+          "minMs": 11453.698375,
+          "maxMs": 12149.653917,
+          "medianAbsoluteDeviationMs": 112.93937599999845,
+          "samplesMs": [
+            11829.443167,
+            12149.653917,
+            11453.698375,
+            11997.801209,
+            11884.861833,
+            11782.530167,
+            12079.398084
+          ]
+        },
+        {
+          "id": "svelte-wuchale",
+          "framework": "svelte",
+          "tool": "wuchale",
+          "scope": "extract-update-compile",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11253293,
+          "sourceSha256": "039bcd6622cc28ea511f8eb26a9309ab0a468eba1b6c0c4da8a084052961d9f1",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 5597.344209,
+          "minMs": 5469.028417,
+          "maxMs": 5921.339958,
+          "medianAbsoluteDeviationMs": 78.68058199999996,
+          "samplesMs": [
+            5469.028417,
+            5921.339958,
+            5551.167833,
+            5597.344209,
+            5843.738583,
+            5676.024791,
+            5519.380584
+          ]
+        },
+        {
+          "id": "solid-palamedes",
+          "framework": "solid",
+          "tool": "palamedes",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11478683,
+          "sourceSha256": "7314296ca92fcd358bf34ff08245b58c2e0e0189021c0253d4689d4b08ce0ea1",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 109.069209,
+          "minMs": 83.809791,
+          "maxMs": 132.788,
+          "medianAbsoluteDeviationMs": 18.95595800000001,
+          "samplesMs": [
+            120.468125,
+            128.025167,
+            89.513666,
+            132.788,
+            97.795917,
+            83.809791,
+            109.069209
+          ]
+        },
+        {
+          "id": "solid-lingui",
+          "framework": "solid",
+          "tool": "lingui",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11391683,
+          "sourceSha256": "bf96b17071a579203925223eace3c86d692756d4d5422b799b2fb5a5d7bd84b0",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 2614.734459,
+          "minMs": 2551.620083,
+          "maxMs": 2671.436958,
+          "medianAbsoluteDeviationMs": 32.3998330000004,
+          "samplesMs": [
+            2551.620083,
+            2671.436958,
+            2614.734459,
+            2584.096333,
+            2647.134292,
+            2665.198833,
+            2597.312375
+          ]
+        },
+        {
+          "id": "solid-i18next",
+          "framework": "solid",
+          "tool": "i18next",
+          "scope": "extract-update",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11432483,
+          "sourceSha256": "001fe83656970e311b2e5cc509288415309b32272d997fbfca5c00647760bcd0",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 6777.627625,
+          "minMs": 6599.457459,
+          "maxMs": 7074.021917,
+          "medianAbsoluteDeviationMs": 76.02808400000049,
+          "samplesMs": [
+            6777.627625,
+            7002.031375,
+            6749.965042,
+            6599.457459,
+            6701.599541,
+            7074.021917,
+            6843.786625
+          ]
+        },
+        {
+          "id": "solid-wuchale",
+          "framework": "solid",
+          "tool": "wuchale",
+          "scope": "extract-update-compile",
+          "status": "validated",
+          "fileCount": 1500,
+          "sourceBytes": 11279183,
+          "sourceSha256": "c1deb74295274bc91bd5865ff721ed2778b3386c2fb4a9b81dda4d1a60c1f169",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              },
+              "de": {
+                "total": 6000,
+                "missingCount": 0,
+                "unexpectedCount": 0,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": []
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4950,
+            "lostTranslations": [],
+            "retainedChangedTranslations": 0
+          },
+          "medianMs": 4173.701958,
+          "minMs": 4078.994917,
+          "maxMs": 4316.440667,
+          "medianAbsoluteDeviationMs": 56.225374999999985,
+          "samplesMs": [
+            4316.440667,
+            4173.701958,
+            4229.927333,
+            4131.585042,
+            4078.994917,
+            4234.343583,
+            4165.736375
+          ]
+        },
+        {
+          "id": "vue-intlayer",
+          "framework": "vue",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "vue-intlayer: en: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; de: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; 735 existing translations lost, including \"Publish portal toolbar for {name} 01100-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6450,
+                "missingCount": 0,
+                "unexpectedCount": 450,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit detail item 00181",
+                  "Remove stale audit detail item 00241",
+                  "Remove stale audit detail item 00249"
+                ]
+              },
+              "de": {
+                "total": 6450,
+                "missingCount": 0,
+                "unexpectedCount": 450,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit detail item 00181",
+                  "Remove stale audit detail item 00241",
+                  "Remove stale audit detail item 00249"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4215,
+            "lostTranslations": [
+              {
+                "source": "Publish portal toolbar for {name} 01100-now",
+                "translation": ""
+              },
+              {
+                "source": "Route timeline summary for {name} 01101-now",
+                "translation": ""
+              },
+              {
+                "source": "Close queue summary for {name} 01102-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 375
+          }
+        },
+        {
+          "id": "svelte-intlayer",
+          "framework": "svelte",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "svelte-intlayer: en: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; de: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; 735 existing translations lost, including \"Publish portal toolbar for {name} 01100-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6450,
+                "missingCount": 0,
+                "unexpectedCount": 450,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit detail item 00181",
+                  "Remove stale audit detail item 00241",
+                  "Remove stale audit detail item 00249"
+                ]
+              },
+              "de": {
+                "total": 6450,
+                "missingCount": 0,
+                "unexpectedCount": 450,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit detail item 00181",
+                  "Remove stale audit detail item 00241",
+                  "Remove stale audit detail item 00249"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4215,
+            "lostTranslations": [
+              {
+                "source": "Publish portal toolbar for {name} 01100-now",
+                "translation": ""
+              },
+              {
+                "source": "Route timeline summary for {name} 01101-now",
+                "translation": ""
+              },
+              {
+                "source": "Close queue summary for {name} 01102-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 375
+          }
+        },
+        {
+          "id": "solid-intlayer",
+          "framework": "solid",
+          "tool": "intlayer",
+          "scope": "extract-update-compile",
+          "status": "not-equivalent",
+          "reason": "solid-intlayer: en: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; de: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; 735 existing translations lost, including \"Publish portal toolbar for {name} 01100-now\"",
+          "validation": {
+            "activeMessagesPerLocale": 6000,
+            "observed": {
+              "en": {
+                "total": 6450,
+                "missingCount": 0,
+                "unexpectedCount": 450,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit detail item 00181",
+                  "Remove stale audit detail item 00241",
+                  "Remove stale audit detail item 00249"
+                ]
+              },
+              "de": {
+                "total": 6450,
+                "missingCount": 0,
+                "unexpectedCount": 450,
+                "duplicateCount": 0,
+                "missing": [],
+                "unexpected": [
+                  "Remove stale audit detail item 00181",
+                  "Remove stale audit detail item 00241",
+                  "Remove stale audit detail item 00249"
+                ]
+              }
+            },
+            "expectedPreservedTranslations": 4950,
+            "preservedTranslations": 4215,
+            "lostTranslations": [
+              {
+                "source": "Publish portal toolbar for {name} 01100-now",
+                "translation": ""
+              },
+              {
+                "source": "Route timeline summary for {name} 01101-now",
+                "translation": ""
+              },
+              {
+                "source": "Close queue summary for {name} 01102-now",
+                "translation": ""
+              }
+            ],
+            "retainedChangedTranslations": 375
+          }
+        }
+      ]
+    }
+  ]
+}

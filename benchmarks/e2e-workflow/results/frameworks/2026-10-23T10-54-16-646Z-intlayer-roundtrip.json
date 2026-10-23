@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "intlayer-catalog-roundtrip-conformance",
+  "timings": false,
+  "generatedAt": "2026-10-23T10:54:16.646Z",
+  "version": "9.7.0",
+  "probeSha256": "5eb0dd311798d7f86bde1bee4a3be38a96376ed0a9f3c5dcbdcb3bf5e48fd320",
+  "corpus": {
+    "profile": "smoke",
+    "current": 32,
+    "baseline": 31,
+    "changed": 3,
+    "added": 4,
+    "removed": 3
+  },
+  "command": "pnpm --dir benchmarks/e2e-workflow/frameworks diagnose:intlayer",
+  "cases": [
+    {
+      "id": "vue-intlayer-json",
+      "framework": "vue",
+      "tool": "intlayer",
+      "status": "not-equivalent",
+      "reason": "vue-intlayer-json: en: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; de: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; 8 existing translations lost, including \"Archive audit header for {name} 00007-now\"",
+      "validation": {
+        "activeMessagesPerLocale": 32,
+        "observed": {
+          "en": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          },
+          "de": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          }
+        },
+        "expectedPreservedTranslations": 25,
+        "preservedTranslations": 17,
+        "lostTranslations": [
+          {
+            "source": "Archive audit header for {name} 00007-now",
+            "translation": ""
+          },
+          {
+            "source": "Publish portal toolbar for {name} 00008-now",
+            "translation": ""
+          },
+          {
+            "source": "Route timeline summary for {name} 00009-now",
+            "translation": ""
+          }
+        ],
+        "retainedChangedTranslations": 0
+      }
+    },
+    {
+      "id": "vue-intlayer-ts",
+      "framework": "vue",
+      "tool": "intlayer",
+      "status": "not-equivalent",
+      "reason": "vue-intlayer-ts: en: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; de: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates",
+      "validation": {
+        "activeMessagesPerLocale": 32,
+        "observed": {
+          "en": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          },
+          "de": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          }
+        },
+        "expectedPreservedTranslations": 25,
+        "preservedTranslations": 25,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 3
+      }
+    },
+    {
+      "id": "svelte-intlayer-json",
+      "framework": "svelte",
+      "tool": "intlayer",
+      "status": "not-equivalent",
+      "reason": "svelte-intlayer-json: en: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; de: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; 8 existing translations lost, including \"Archive audit header for {name} 00007-now\"",
+      "validation": {
+        "activeMessagesPerLocale": 32,
+        "observed": {
+          "en": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          },
+          "de": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          }
+        },
+        "expectedPreservedTranslations": 25,
+        "preservedTranslations": 17,
+        "lostTranslations": [
+          {
+            "source": "Archive audit header for {name} 00007-now",
+            "translation": ""
+          },
+          {
+            "source": "Publish portal toolbar for {name} 00008-now",
+            "translation": ""
+          },
+          {
+            "source": "Route timeline summary for {name} 00009-now",
+            "translation": ""
+          }
+        ],
+        "retainedChangedTranslations": 0
+      }
+    },
+    {
+      "id": "svelte-intlayer-ts",
+      "framework": "svelte",
+      "tool": "intlayer",
+      "status": "not-equivalent",
+      "reason": "svelte-intlayer-ts: en: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; de: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates",
+      "validation": {
+        "activeMessagesPerLocale": 32,
+        "observed": {
+          "en": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          },
+          "de": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          }
+        },
+        "expectedPreservedTranslations": 25,
+        "preservedTranslations": 25,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 3
+      }
+    },
+    {
+      "id": "solid-intlayer-json",
+      "framework": "solid",
+      "tool": "intlayer",
+      "status": "not-equivalent",
+      "reason": "solid-intlayer-json: en: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; de: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; 8 existing translations lost, including \"Archive audit header for {name} 00007-now\"",
+      "validation": {
+        "activeMessagesPerLocale": 32,
+        "observed": {
+          "en": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          },
+          "de": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          }
+        },
+        "expectedPreservedTranslations": 25,
+        "preservedTranslations": 17,
+        "lostTranslations": [
+          {
+            "source": "Archive audit header for {name} 00007-now",
+            "translation": ""
+          },
+          {
+            "source": "Publish portal toolbar for {name} 00008-now",
+            "translation": ""
+          },
+          {
+            "source": "Route timeline summary for {name} 00009-now",
+            "translation": ""
+          }
+        ],
+        "retainedChangedTranslations": 0
+      }
+    },
+    {
+      "id": "solid-intlayer-ts",
+      "framework": "solid",
+      "tool": "intlayer",
+      "status": "not-equivalent",
+      "reason": "solid-intlayer-ts: en: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates; de: 35 messages, expected 32; 0 missing, 3 unexpected, 0 duplicates",
+      "validation": {
+        "activeMessagesPerLocale": 32,
+        "observed": {
+          "en": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          },
+          "de": {
+            "total": 35,
+            "missingCount": 0,
+            "unexpectedCount": 3,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": [
+              "Remove stale audit modal item 00000",
+              "Remove stale portal panel item 00001",
+              "Remove stale timeline sidebar item 00002"
+            ]
+          }
+        },
+        "expectedPreservedTranslations": 25,
+        "preservedTranslations": 25,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 3
+      }
+    }
+  ]
+}
