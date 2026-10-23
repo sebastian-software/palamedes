@@ -61,8 +61,11 @@ export function parseFrameworkArgs(argv) {
   }
   const runs = Number(value("runs", "7"));
   const warmup = Number(value("warmup", "3"));
+  const orderOffset = Number(value("order-offset", "0"));
   if (!Number.isInteger(runs) || runs < 1 || !Number.isInteger(warmup) || warmup < 0)
     throw new Error("runs must be a positive integer; warmup must be a nonnegative integer");
+  if (!Number.isInteger(orderOffset) || orderOffset < 0)
+    throw new Error("Invalid tool order offset");
   return {
     profiles: list("profile", "small,medium,realistic", Object.keys(FRAMEWORK_PROFILES)),
     frameworks: list("framework", FRAMEWORKS.join(","), FRAMEWORKS),
@@ -71,6 +74,8 @@ export function parseFrameworkArgs(argv) {
     runs,
     warmup,
     pmdsBin: path.resolve(value("pmds-bin", path.join(repoRoot, "target/release/pmds"))),
+    outputDir: path.resolve(value("output-dir", outputRoot)),
+    orderOffset,
     validateOnly: argv.includes("--validate-only"),
     keepTemp: argv.includes("--keep-temp"),
     strict: argv.includes("--strict"),
@@ -224,7 +229,8 @@ export async function benchmarkFrameworkProfile(tempRoot, profileName, lanes, op
     // Measurements are serial: no competing extractor or corpus generation.
     for (let round = 0; round < options.warmup + options.runs; round++) {
       for (let offset = 0; offset < workspaces.length; offset++) {
-        const workspace = workspaces[(round + offset) % workspaces.length];
+        const workspace =
+          workspaces[(round + offset + (options.orderOffset ?? 0)) % workspaces.length];
         console.log(
           `${profileName}/${workspace.lane.id}: ${round < options.warmup ? "warmup" : "sample"} ${round + 1}`,
         );
@@ -417,7 +423,9 @@ async function main() {
     };
     for (const profile of options.profiles)
       report.profiles.push(await benchmarkFrameworkProfile(tempRoot, profile, lanes, options));
-    const destination = options.validateOnly ? path.join(outputRoot, "validation") : outputRoot;
+    const destination = options.validateOnly
+      ? path.join(options.outputDir, "validation")
+      : options.outputDir;
     await mkdir(destination, { recursive: true });
     const stamp = report.generatedAt.replaceAll(/[:.]/gu, "-");
     const names = [stamp, ...(!options.validateOnly ? ["latest"] : [])];

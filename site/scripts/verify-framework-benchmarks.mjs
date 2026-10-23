@@ -21,6 +21,12 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
       const page = await context.newPage();
       await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
       const chart = page.locator("#why-rust");
+      const local = chart.locator("[data-local-benchmark]");
+      if ((await local.getAttribute("open")) === null) await local.locator("summary").click();
+      const platforms = chart.locator("#platform-benchmarks");
+      assert.equal(await platforms.getByRole("columnheader").count(), 3);
+      assert.equal(await platforms.getByRole("columnheader", { name: "Linux x86-64" }).count(), 1);
+      assert.equal(await platforms.getByRole("columnheader", { name: "macOS ARM64" }).count(), 1);
       // Native radios must work from the keyboard and replace the whole report:
       // values, rows, command, provenance, and broader-scope note travel together.
       await chart.getByRole("radio", { name: "React", exact: true }).focus();
@@ -31,10 +37,11 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
           await chart.getByRole("radio", { name: label, exact: true }).isChecked(),
           true,
         );
+        assert.ok((await platforms.innerText()).includes(`${label} ·`));
         const rows = realistic.results.filter(
           (row) => row.framework === framework && row.status === "validated",
         );
-        const table = chart.getByRole("table");
+        const table = chart.locator("[data-local-benchmark]").getByRole("table");
         assert.equal(await table.getByRole("row").count(), rows.length + 1);
         for (const row of rows)
           assert.equal(await table.locator(`[data-median-ms="${row.medianMs}"]`).count(), 1);
@@ -60,11 +67,12 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
       }
       assert.equal(await chart.getByRole("radio", { name: "Vue", exact: true }).isChecked(), true);
       assert.equal(
-        await chart.getByRole("table").getByText("vue3-gettext", { exact: true }).count(),
+        await local.getByRole("table").getByText("vue3-gettext", { exact: true }).count(),
         0,
       );
+      assert.equal(await platforms.getByText("vue3-gettext", { exact: true }).count(), 0);
       assert.equal(
-        await chart.getByRole("table").getByText("Wuchale", { exact: true }).count(),
+        await local.getByRole("table").getByText("Wuchale", { exact: true }).count(),
         0,
         "Switching to Vue must discard Svelte-only rows",
       );
@@ -106,9 +114,12 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
     const page = await animated.newPage();
     await page.goto(`${baseUrl}/#why-rust`, { waitUntil: "networkidle" });
     const chart = page.locator("#why-rust");
+    const local = chart.locator("[data-local-benchmark]");
+    if ((await local.getAttribute("open")) === null) await local.locator("summary").click();
     for (const label of ["Svelte", "Vue"]) {
       await chart.getByRole("radio", { name: label, exact: true }).focus();
       await page.keyboard.press("Space");
+      await local.getByRole("table").scrollIntoViewIfNeeded();
       await chart.getByRole("button", { name: "Running…", exact: true }).waitFor();
     }
     await chart
@@ -134,6 +145,14 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
     viewport: { width: 390, height: 844 },
   });
   try {
+    const home = await noJs.newPage();
+    await home.goto(`${baseUrl}/#why-rust`, { waitUntil: "networkidle" });
+    assert.equal(await home.locator("#platform-benchmarks").getByRole("columnheader").count(), 3);
+    const local = home.locator("[data-local-benchmark]");
+    const wasOpen = (await local.getAttribute("open")) !== null;
+    await local.locator("summary").click();
+    assert.equal((await local.getAttribute("open")) !== null, !wasOpen);
+    await home.close();
     const page = await noJs.newPage();
     await page.goto(`${baseUrl}/proof#framework-benchmarks`, { waitUntil: "networkidle" });
     await checkTables(page, report);

@@ -31,6 +31,28 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
+  it("keeps paid benchmark VMs manual and retains separate, paired Linux/macOS evidence", async () => {
+    const workflow = await readRepositoryFile(".github/workflows/blacksmith-benchmarks.yml");
+    const triggers = workflow.slice(workflow.indexOf("on:"), workflow.indexOf("permissions:"));
+    expect(triggers).toContain("workflow_dispatch:");
+    expect(triggers).not.toMatch(/pull_request:|push:|schedule:/u);
+    expect(workflow).toContain("contents: read");
+    const compare = job(workflow, "compare", "merge");
+    expect(compare).toContain("blacksmith-6vcpu-macos-26");
+    expect(compare).toContain("blacksmith-4vcpu-ubuntu-2404");
+    expect(compare).toContain("run: [1, 2, 3]");
+    expect(compare).toContain("if: always()");
+    expect(compare).toContain("persist-credentials: false");
+    const merge = job(workflow, "merge", "missing");
+    expect(merge).toContain("!cancelled()");
+    expect(merge).toContain(
+      "shard-benchmarks-${{ matrix.profile }}-run*-${{ github.run_id }}-${{ github.run_attempt }}",
+    );
+    for (const repetition of [1, 2, 3])
+      expect(merge).toContain(`$PROFILE-run${repetition}-$SUFFIX`);
+    expect(merge).toContain('--revision "$GITHUB_SHA"');
+  });
+
   it("holds package release creation and publication while retaining a non-publishing dry run", async () => {
     const [release, publish, detection] = await Promise.all([
       readRepositoryFile(".github/workflows/release-pr.yml"),

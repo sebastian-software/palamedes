@@ -588,13 +588,17 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!benchmarkCommand) {
       fail("home benchmark: reproducible command missing");
     }
-    const warmLaneCopy = await page
+    const localBenchmark = page.locator("#why-rust [data-local-benchmark]");
+    const localWasOpen = (await localBenchmark.getAttribute("open")) !== null;
+    if (!localWasOpen) await localBenchmark.locator("summary").click();
+    const warmLaneCopy = await localBenchmark
       .getByText(/cached re-run after 5 changed source files/u)
       .first()
       .isVisible();
     if (!warmLaneCopy) {
       fail("home benchmark: changed-source-files copy collapsed or missing");
     }
+    if (!localWasOpen) await localBenchmark.locator("summary").click();
     const rustApplications = page.locator("#rust-applications");
     const rustCopy = (await rustApplications.innerText()).replaceAll(/\s+/gu, " ").toLowerCase();
     if (
@@ -777,11 +781,16 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!statText || !stat) {
       fail("no-JS: proof figures and benchmark factors missing from prerendered HTML");
     }
+    const localRecording = page.locator("#why-rust [data-local-benchmark]");
+    const recordingWasOpen = (await localRecording.getAttribute("open")) !== null;
+    if (!recordingWasOpen) await localRecording.locator("summary").click();
     const ledger = await page
       .getByRole("table", { name: /Extract and catalog update/u })
       .isVisible();
-    if (!ledger) {
-      fail("no-JS: benchmark playback table missing from prerendered HTML");
+    if (!recordingWasOpen) await localRecording.locator("summary").click();
+    const referenceLedger = await page.locator("#platform-benchmarks table").isVisible();
+    if (!ledger || !referenceLedger) {
+      fail("no-JS: reference table or native benchmark recording is inaccessible");
     }
     const integrationBand = await page
       .getByRole("region", { name: "First-party integrations" })

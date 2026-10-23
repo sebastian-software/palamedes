@@ -1,0 +1,131 @@
+name: Blacksmith extraction benchmarks
+
+# Manual only. Each repetition gets a fresh provider VM; all comparators share
+# that VM. Linux and macOS results never enter one cross-platform aggregate.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Runner profile
+        type: choice
+        options: [both, linux-x86-64, macos-arm64]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blacksmith-benchmarks-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: never
+  PALAMEDES_UPDATE_CHECK: "0"
+
+jobs:
+  compare:
+    if: github.repository == 'sebastian-software/palamedes'
+    name: ${{ matrix.profile }} run ${{ matrix.run }}
+    runs-on: ${{ matrix.profile == 'macos-arm64' && 'blacksmith-6vcpu-macos-26' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(inputs.platform == 'macos-arm64' && '["macos-arm64"]' || inputs.platform == 'linux-x86-64' && '["linux-x86-64"]' || '["linux-x86-64","macos-arm64"]') }}
+        run: [1, 2, 3]
+    env:
+      PROFILE: ${{ matrix.profile }}
+      REPETITION: ${{ matrix.run }}
+    steps:
+      - name: Check out measured revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node and pnpm
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: "24.22.0"
+          rust: "false"
+      # Cargo uses rust-toolchain.toml, derived from the workspace rust-version.
+      # Build and dependency caches are restored before any measured command.
+      - name: Read workspace Rust version
+        id: rust
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const version = readFileSync('Cargo.toml', 'utf8').match(/^rust-version\s*=\s*"([^"]+)"/m)?.[1];
+          if (!version) throw new Error('Missing workspace rust-version');
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
+      - name: Set up workspace Rust toolchain
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: blacksmith-benchmarks-${{ matrix.profile }}
+      - name: Install pinned comparator dependencies
+        run: |
+          pnpm --filter @palamedes/benchmark-e2e-workflow install --frozen-lockfile
+          pnpm --dir benchmarks/e2e-workflow/frameworks install --frozen-lockfile
+      - name: Check benchmark contracts
+        run: |
+          pnpm --filter @palamedes/benchmark-e2e-workflow test
+          pnpm --dir benchmarks/e2e-workflow/frameworks test
+      - name: Build, validate and measure one VM repetition
+        run: node benchmarks/e2e-workflow/src/blacksmith.mjs run --platform "$PROFILE" --repetition "$REPETITION" --output "$RUNNER_TEMP/palamedes-benchmarks"
+      - name: Retain evidence including unsuccessful repetitions
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: shard-benchmarks-${{ matrix.profile }}-run${{ matrix.run }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/palamedes-benchmarks/
+          retention-days: 7
+
+  merge:
+    if: ${{ !cancelled() && github.repository == 'sebastian-software/palamedes' }}
+    name: Aggregate ${{ matrix.profile }}
+    needs: compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(inputs.platform == 'macos-arm64' && '["macos-arm64"]' || inputs.platform == 'linux-x86-64' && '["linux-x86-64"]' || '["linux-x86-64","macos-arm64"]') }}
+    env:
+      PROFILE: ${{ matrix.profile }}
+      SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out reporting code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.22.0"
+      - name: Download this platform's repetitions from this attempt
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: shard-benchmarks-${{ matrix.profile }}-run*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/shards
+      - name: Validate and aggregate three complete repetitions
+        run: |
+          node benchmarks/e2e-workflow/src/blacksmith.mjs merge \
+            --platform "$PROFILE" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --revision "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/benchmarks" \
+            "$RUNNER_TEMP/shards/shard-benchmarks-$PROFILE-run1-$SUFFIX" \
+            "$RUNNER_TEMP/shards/shard-benchmarks-$PROFILE-run2-$SUFFIX" \
+            "$RUNNER_TEMP/shards/shard-benchmarks-$PROFILE-run3-$SUFFIX"
+          cat "$RUNNER_TEMP/benchmarks/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain complete platform evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: benchmarks-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/benchmarks/
+          retention-days: 30
