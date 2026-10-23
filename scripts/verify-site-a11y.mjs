@@ -89,6 +89,14 @@ try {
     for (const path of paths) {
       runtimeErrors.length = 0;
       await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle" });
+      if (path === "/") {
+        await page.getByRole("radio", { name: "Svelte", exact: true }).focus();
+        await page.keyboard.press("Space");
+      }
+      if (path === "/proof") {
+        for (const summary of await page.locator("#framework-benchmarks details > summary").all())
+          await summary.click();
+      }
       await page.addScriptTag({ content: axe.source });
       const result = await page.evaluate(async () =>
         globalThis.axe.run(document, {

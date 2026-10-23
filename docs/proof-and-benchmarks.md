@@ -256,14 +256,22 @@ memory shape are easy to verify.
 ## End-To-End Workflow Baseline
 
 The end-to-end extract/update comparison numbers are deliberately **not**
-repeated on this page. They live in exactly one place — the checked report
+repeated on this page. The React suite uses the checked report
 [`benchmarks/e2e-workflow/results/latest.md`](../benchmarks/e2e-workflow/results/latest.md)
 (with machine-readable data in
-[`latest.json`](../benchmarks/e2e-workflow/results/latest.json)) — and the
+[`latest.json`](../benchmarks/e2e-workflow/results/latest.json)), and the
 methodology is documented in
 [End-to-end workflow benchmark](./benchmark-e2e-workflow.md). The website
-charts quote the same report and a build-time guard
+charts quote that report and a build-time guard
 (`scripts/verify-site-bench-data.mjs`) fails the site build if they drift.
+
+Vue, Svelte, and Solid use their own [checked framework report](../benchmarks/e2e-workflow/results/frameworks/latest.md).
+The [proof page](/proof#framework-benchmarks) presents all three corpus sizes,
+medians and catalog-conformance receipts. The homepage chart switches
+between framework reports, preserving each run's environment and measured
+scope. Wuchale includes transformation and compilation; Intlayer's failed
+catalog checks are reported without timings. A build-time guard validates the
+framework samples and semantic receipts before generating the display data.
 
 The harness validates that all tools write the same active source-message set
 before publishing timings. Treat the results as machine-local workflow

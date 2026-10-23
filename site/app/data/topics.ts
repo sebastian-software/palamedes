@@ -240,7 +240,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Which tools are covered?",
-        a: "Lingui, React Intl, fbtee, i18next-cli and General Translation. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
+        a: "The React suite covers Lingui, React Intl, fbtee, i18next-cli and General Translation. Separate Vue, Svelte, and Solid runs add framework-specific Lingui/i18next adapters, vue3-gettext, and Wuchale. Wuchale's command also transforms and compiles. Intlayer has catalog-conformance receipts instead of timings. The proof page keeps each framework and scope separate.",
       },
       {
         q: "Does faster extraction mean a smaller bundle?",
