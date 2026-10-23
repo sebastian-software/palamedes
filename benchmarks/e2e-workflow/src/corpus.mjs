@@ -69,7 +69,6 @@ const SURFACES = [
   "detail",
   "overview",
 ];
-const linguiFormatPoImport = JSON.stringify(import.meta.resolve("@lingui/format-po"));
 const FBTEE_DESCRIPTION = "Workflow benchmark message";
 
 export async function createWorkflowCorpus({
@@ -189,6 +188,7 @@ async function writePalamedesWorkspace(rootDir, inventory, profile) {
 }
 
 async function writeLinguiWorkspace(rootDir, inventory, profile) {
+  const linguiFormatPoImport = JSON.stringify(import.meta.resolve("@lingui/format-po"));
   await writeFile(
     path.join(rootDir, "lingui.config.mjs"),
     [

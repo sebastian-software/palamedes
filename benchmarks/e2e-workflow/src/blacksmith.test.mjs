@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,67 @@ import { parseArgs, toolOrder, writeOutputs } from "./run.mjs";
 import { campaign, expected, original } from "../test-fixtures/blacksmith.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../..");
+
+test("aggregates retained evidence in a Node-only checkout without comparator dependencies", async () => {
+  const parent = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "palamedes-node-only-merge-")),
+  );
+  try {
+    const source = path.join(parent, "source/benchmarks/e2e-workflow/src");
+    await mkdir(source, { recursive: true });
+    for (const name of ["blacksmith.mjs", "blacksmith-report.mjs", "corpus.mjs", "exec.mjs"])
+      await cp(path.join(import.meta.dirname, name), path.join(source, name));
+    const roots = [];
+    for (const shard of campaign()) {
+      const directory = path.join(parent, `shard${shard.manifest.repetition}`);
+      roots.push(directory);
+      const files = {
+        "react/latest.json": JSON.stringify(shard.react),
+        "frameworks/latest.json": JSON.stringify(shard.frameworks),
+        "source.tar.gz": "fixture source snapshot",
+      };
+      shard.manifest.evidenceHashes = {};
+      for (const [name, bytes] of Object.entries(files)) {
+        await mkdir(path.dirname(path.join(directory, name)), { recursive: true });
+        await writeFile(path.join(directory, name), bytes);
+        shard.manifest.evidenceHashes[name] = sha256(bytes);
+      }
+      await writeFile(path.join(directory, "manifest.json"), JSON.stringify(shard.manifest));
+    }
+    const output = path.join(parent, "aggregate");
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(source, "blacksmith.mjs"),
+        "merge",
+        "--platform",
+        expected.platform,
+        "--run-id",
+        expected.runId,
+        "--attempt",
+        expected.attempt,
+        "--revision",
+        expected.revision,
+        "--output",
+        output,
+        ...roots,
+      ],
+      { cwd: parent, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(await readFile(path.join(output, "report.json"), "utf8"));
+    assert.equal(report.results.length, 81);
+    assert.equal(report.revision, expected.revision);
+    assert.match(await readFile(path.join(output, "summary.md"), "utf8"), /macos-arm64/u);
+    for (const repetition of [1, 2, 3])
+      assert.equal(
+        (await readShard(path.join(output, `run${repetition}`))).manifest.repetition,
+        repetition,
+      );
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
 
 test("aggregates three VM medians without pooling samples or mixing workflow scopes", () => {
   const shards = campaign();

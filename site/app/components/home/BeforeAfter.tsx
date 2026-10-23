@@ -2,6 +2,7 @@ import { Reveal } from "@palamedes/site-ui";
 
 import { Band, BandHeader } from "~/components/marketing/Band";
 import { BENCH_REALISTIC, displayBenchmarkTime } from "~/data/bench";
+import { blacksmithBench } from "~/data/blacksmith-bench";
 
 /*
  * The chooser's first question: what actually changes? Each row contrasts a
@@ -15,6 +16,18 @@ if (!palamedes || sameScope.length === 0) {
 }
 const palamedesTime = displayBenchmarkTime(palamedes.medianMs);
 const othersRange = `${displayBenchmarkTime(Math.min(...sameScope))}–${displayBenchmarkTime(Math.max(...sameScope))}`;
+const reference = blacksmithBench.profiles
+  .find((profile) => profile.id === "realistic")
+  ?.frameworks.find((framework) => framework.id === "react")
+  ?.rows.find((row) => row.tool === "Palamedes");
+const referenceTimes = reference
+  ? blacksmithBench.platforms.map((platform) => {
+      const value = reference.values[platform.id];
+      if (value.status !== "validated" || value.medianMs === undefined)
+        throw new Error("Palamedes reference benchmark must have validated medians");
+      return `${displayBenchmarkTime(value.medianMs)} on ${platform.label}`;
+    })
+  : null;
 
 const ROWS = [
   {
@@ -44,8 +57,12 @@ const ROWS = [
   },
   {
     topic: "Tooling speed",
-    typical: `${othersRange} per extraction run for four popular tools on a 1,500-file project.`,
-    palamedes: `${palamedesTime} on the same project — fast enough to run on every save.`,
+    typical: referenceTimes
+      ? "Compare each tool’s measured median in the framework and platform table below."
+      : `${othersRange} per extraction run for four popular tools in the local Mac recording.`,
+    palamedes: referenceTimes
+      ? `${referenceTimes.join(" and ")} for the 1,500-file React reference workload.`
+      : `${palamedesTime} on the same project in the local Mac recording.`,
   },
 ] as const;
 
