@@ -156,9 +156,10 @@ async function checkTables(page, report) {
       for (const row of rows.filter((row) => row.status === "validated"))
         assert.equal(await region.locator(`[data-median-ms="${row.medianMs}"]`).count(), 1);
       assert.equal(
-        await region.getByRole("columnheader", { name: "Min–max", exact: true }).count(),
+        await region.getByRole("columnheader", { name: "Median", exact: true }).count(),
         1,
       );
+      assert.equal(await region.getByRole("columnheader").count(), 2);
       assert.equal(await region.getByText("Not timed", { exact: false }).count(), 1);
     }
   const conformance = section.getByRole("region", {

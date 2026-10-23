@@ -250,7 +250,7 @@ export function RustRace() {
                 : ""}
               Intlayer is excluded from timings after catalog checks failed.
               <a href="/proof#framework-benchmarks" className="ml-1 text-accent underline">
-                Inspect the receipts and min–max ranges →
+                Inspect catalog checks and methodology →
               </a>
             </p>
           )}

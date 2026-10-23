@@ -61,7 +61,7 @@ pnpm benchmark:framework-workflow:quick
 
 Its [reports](../benchmarks/e2e-workflow/results/frameworks/) are published separately
 from the React result below. The website's [framework tables](/proof#framework-benchmarks)
-show all three corpus sizes, medians, and min–max ranges. The homepage chart lets
+show all three corpus sizes and their medians. The homepage chart lets
 readers select a framework and uses that report's own environment and command.
 The reports were captured separately and do not establish a cross-framework ranking.
 Wuchale's CLI also transforms and compiles, so its

@@ -267,7 +267,7 @@ charts quote that report and a build-time guard
 
 Vue, Svelte, and Solid use their own [checked framework report](../benchmarks/e2e-workflow/results/frameworks/latest.md).
 The [proof page](/proof#framework-benchmarks) presents all three corpus sizes,
-medians, ranges, and catalog-conformance receipts. The homepage chart switches
+medians and catalog-conformance receipts. The homepage chart switches
 between framework reports, preserving each run's environment and measured
 scope. Wuchale includes transformation and compilation; Intlayer's failed
 catalog checks are reported without timings. A build-time guard validates the

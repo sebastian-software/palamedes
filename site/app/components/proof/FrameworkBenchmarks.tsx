@@ -1,5 +1,5 @@
 import { CopyCommand } from "~/components/CopyCommand";
-import { displayBenchmarkRange, displayBenchmarkTime } from "~/data/bench";
+import { displayBenchmarkTime } from "~/data/bench";
 import { frameworkBench } from "~/data/framework-bench";
 import { repoHref } from "~/data/links";
 
@@ -25,21 +25,15 @@ function FrameworkTable({ profile, framework }: { profile: Profile; framework: F
             <tr className="border-y border-hair">
               <th
                 scope="col"
-                className="micro w-[42%] px-4 py-3 text-[10px] tracking-th text-gray-spec"
+                className="micro w-[65%] px-4 py-3 text-[10px] tracking-th text-gray-spec"
               >
                 Workflow
               </th>
               <th
                 scope="col"
-                className="micro w-[27%] px-1 py-3 text-right text-[10px] tracking-th text-gray-spec sm:px-2"
+                className="micro px-4 py-3 text-right text-[10px] tracking-th text-gray-spec"
               >
                 Median
-              </th>
-              <th
-                scope="col"
-                className="micro px-2 py-3 text-right text-[10px] tracking-th text-gray-spec sm:px-4"
-              >
-                Min–max
               </th>
             </tr>
           </thead>
@@ -56,26 +50,18 @@ function FrameworkTable({ profile, framework }: { profile: Profile; framework: F
                   </span>
                 </th>
                 {row.medianMs === undefined ? (
-                  <td
-                    colSpan={2}
-                    className="px-4 py-4 text-right text-[12px] leading-relaxed text-gray-spec"
-                  >
+                  <td className="px-4 py-4 text-right text-[12px] leading-relaxed text-gray-spec">
                     Not timed
                     <br />
                     Catalog checks failed
                   </td>
                 ) : (
-                  <>
-                    <td
-                      data-median-ms={row.medianMs}
-                      className={`mono-nums px-1 py-4 text-right text-[16px] whitespace-nowrap sm:px-2 sm:text-[18px] ${row.tool === "Palamedes" ? "font-semibold text-ink" : ""}`}
-                    >
-                      {displayBenchmarkTime(row.medianMs)}
-                    </td>
-                    <td className="mono-nums px-2 py-4 text-right text-[12px] whitespace-nowrap text-gray-spec sm:px-4">
-                      {displayBenchmarkRange(row.minMs!, row.maxMs!)}
-                    </td>
-                  </>
+                  <td
+                    data-median-ms={row.medianMs}
+                    className={`mono-nums px-4 py-4 text-right text-[16px] whitespace-nowrap sm:text-[18px] ${row.tool === "Palamedes" ? "font-semibold text-ink" : ""}`}
+                  >
+                    {displayBenchmarkTime(row.medianMs)}
+                  </td>
                 )}
               </tr>
             ))}

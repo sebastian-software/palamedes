@@ -94,8 +94,6 @@ export function frameworkBenchData(report, diagnostic) {
           return {
             ...base,
             medianMs: row.medianMs,
-            minMs: row.minMs,
-            maxMs: row.maxMs,
             files: row.fileCount,
           };
         }),
