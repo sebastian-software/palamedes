@@ -214,7 +214,7 @@ test("locates CLI catalogs by Cargo package identity rather than executable dire
     .join("\n");
   assert.deepEqual(cliArtifacts(messages), {
     binary: "/target/release/pmds",
-    catalogDirectory: "/build/cli/out/catalogs",
+    catalogDirectory: path.join("/build/cli/out", "catalogs"),
   });
   assert.throws(() => cliArtifacts(""), /Cargo must report/u);
 });
