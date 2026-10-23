@@ -108,11 +108,31 @@ over physical-host contention, power, or thermal state. These are reproducible
 project-run measurements, not an independent third-party audit.
 
 Results are written outside the source checkout and never update the checked
-`latest` reports or website figures automatically. To publish a campaign,
-verify the successful run's exact source revision and download both platform
-artifacts. Retain the evidence durably in a reviewed change, then update the
-site's report selection and provenance together. Never promote a partial run,
-a local diagnostic, or an excluded candidate's timing.
+`latest` reports or website figures automatically. The homepage has separate
+Linux and macOS columns. Until a complete reference campaign is checked in,
+both are explicitly pending; the earlier local recording stays available in
+its own disclosure. No local measurement fills a reference-runner column.
+
+To publish a campaign, verify the successful run's exact source revision and
+download both complete platform artifacts. Import their extracted directories:
+
+```sh
+node scripts/blacksmith-bench-data.mjs \
+  --linux /path/to/benchmarks-linux-x86-64-RUN-ATTEMPT \
+  --macos /path/to/benchmarks-macos-arm64-RUN-ATTEMPT
+```
+
+The importer verifies the retained file hashes and rebuilds both aggregates
+from all six raw VM reports. It rejects mixed runs, revisions, dependencies,
+corpora, scopes, incomplete samples and failed semantic gates. The output is
+`benchmarks/e2e-workflow/results/blacksmith/latest.json`, retaining raw samples
+and catalog receipts in Git after CI artifacts expire. Review that file before
+committing it. The site build validates it again and emits only display data,
+provenance, and evidence links into the browser bundle. The four framework
+views then use the new values without a UI change. Source archives and full
+logs remain separate artifacts; retain them durably if they will be linked as
+publication evidence. Never promote a partial run, a local diagnostic, or an
+excluded candidate's timing.
 
 For a local orchestration smoke check after installing both workspaces:
 

@@ -17,6 +17,7 @@ import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "../../scripts/componen
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
 import { loadFrameworkBenchData } from "../../scripts/framework-bench-data.mjs";
+import { loadBlacksmithBenchData } from "../../scripts/blacksmith-bench-data.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -153,6 +154,11 @@ await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
 await writeContentStats(adrs);
 await writeBrowserRuntimeStats();
 await writeFrameworkBenchmarks();
+await mkdir(generatedDataRoot, { recursive: true });
+await writeFile(
+  join(generatedDataRoot, "blacksmith-bench.json"),
+  `${JSON.stringify(await loadBlacksmithBenchData(repoRoot))}\n`,
+);
 await writeNpmStats();
 
 console.log(
