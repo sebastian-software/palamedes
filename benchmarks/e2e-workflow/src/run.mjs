@@ -77,7 +77,7 @@ async function main() {
       const profileResults = [];
 
       if (!args.validateOnly) {
-        for (const tool of TOOL_ORDER) {
+        for (const tool of toolOrder(args.orderOffset)) {
           const measurement = await benchmarkTool({
             tool,
             corpus,
@@ -128,6 +128,7 @@ async function main() {
       environment,
       versions,
       methodology: {
+        toolOrder: toolOrder(args.orderOffset),
         scope: "scan sources, extract messages, update catalogs, and write catalog files",
         corpus:
           "same generated logical message inventory rendered into each tool's idiomatic source shape",
@@ -150,7 +151,7 @@ async function main() {
       comparisons,
     };
 
-    const outputPaths = await writeOutputs(report);
+    const outputPaths = await writeOutputs(report, args.outputDir);
     printConsoleSummary(report, outputPaths);
   } finally {
     if (!args.keepTemp) {
@@ -159,7 +160,12 @@ async function main() {
   }
 }
 
-function parseArgs(argv) {
+export function toolOrder(offset = 0) {
+  if (!Number.isInteger(offset) || offset < 0) throw new Error("Invalid tool order offset");
+  return TOOL_ORDER.map((_, index) => TOOL_ORDER[(index + offset) % TOOL_ORDER.length]);
+}
+
+export function parseArgs(argv) {
   return {
     warmup: readNumberArg(argv, "warmup", 3),
     runs: readNumberArg(argv, "runs", 7),
@@ -168,6 +174,8 @@ function parseArgs(argv) {
     validateOnly: argv.includes("--validate-only"),
     keepTemp: argv.includes("--keep-temp"),
     pmdsBin: readStringArg(argv, "pmds-bin", null),
+    outputDir: path.resolve(readStringArg(argv, "output-dir", resultsDir)),
+    orderOffset: readNumberArg(argv, "order-offset", 0),
   };
 }
 
@@ -283,30 +291,32 @@ async function validateCorpus(corpus, toolPaths) {
   for (const tool of TOOL_ORDER) {
     await resetWorkspace(corpus.roots[tool]);
     await runTool(tool, corpus.roots[tool], toolPaths);
-    const activeMessagesByTarget = {};
-    for (const target of validationTargets(tool)) {
-      const activeMessages = await readActiveMessages(tool, corpus.roots[tool], target);
-      assertMessageSet(
-        `${corpus.profileName}/${tool}/${target}`,
-        corpus.currentMessages,
-        activeMessages,
-      );
-      activeMessagesByTarget[target] = activeMessages.length;
-    }
-    tools[tool] = {
-      activeMessagesByTarget,
-      ...(tool === "fbtee"
-        ? { preservedTranslations: await readFbteePreservedTranslations(corpus) }
-        : {}),
-      ...(tool === "gt"
-        ? { preservedTranslations: await readGtPreservedTranslations(corpus) }
-        : {}),
-    };
+    tools[tool] = await validateToolResult(tool, corpus);
   }
 
   return {
     expectedActiveMessages: corpus.currentMessages.length,
     tools,
+  };
+}
+
+async function validateToolResult(tool, corpus) {
+  const activeMessagesByTarget = {};
+  for (const target of validationTargets(tool)) {
+    const activeMessages = await readActiveMessages(tool, corpus.roots[tool], target);
+    assertMessageSet(
+      `${corpus.profileName}/${tool}/${target}`,
+      corpus.currentMessages,
+      activeMessages,
+    );
+    activeMessagesByTarget[target] = activeMessages.length;
+  }
+  return {
+    activeMessagesByTarget,
+    ...(tool === "fbtee"
+      ? { preservedTranslations: await readFbteePreservedTranslations(corpus) }
+      : {}),
+    ...(tool === "gt" ? { preservedTranslations: await readGtPreservedTranslations(corpus) } : {}),
   };
 }
 
@@ -362,12 +372,14 @@ async function benchmarkToolWarm({ tool, corpus, toolPaths, warmup, runs }) {
   const root = corpus.roots[tool];
   await resetWorkspace(root);
   await runTool(tool, root, toolPaths);
+  await validateToolResult(tool, corpus);
 
   let touchedFiles = 0;
   for (let index = 0; index < warmup; index += 1) {
     await resetCatalogs(root);
     touchedFiles = await touchSources(root, WARM_TOUCHED_FILES);
     await runTool(tool, root, toolPaths);
+    await validateToolResult(tool, corpus);
   }
 
   const samplesMs = [];
@@ -380,6 +392,7 @@ async function benchmarkToolWarm({ tool, corpus, toolPaths, warmup, runs }) {
     const startedAt = process.hrtime.bigint();
     lastOutcome = await runTool(tool, root, toolPaths);
     const finishedAt = process.hrtime.bigint();
+    await validateToolResult(tool, corpus);
     samplesMs.push(Number(finishedAt - startedAt) / 1_000_000);
     if (lastOutcome.palamedesTiming) {
       toolTimings.push(lastOutcome.palamedesTiming);
@@ -401,6 +414,7 @@ async function benchmarkTool({ tool, corpus, toolPaths, warmup, runs }) {
   for (let index = 0; index < warmup; index += 1) {
     await resetWorkspace(corpus.roots[tool]);
     await runTool(tool, corpus.roots[tool], toolPaths);
+    await validateToolResult(tool, corpus);
   }
 
   const samplesMs = [];
@@ -412,6 +426,7 @@ async function benchmarkTool({ tool, corpus, toolPaths, warmup, runs }) {
     const startedAt = process.hrtime.bigint();
     lastOutcome = await runTool(tool, corpus.roots[tool], toolPaths);
     const finishedAt = process.hrtime.bigint();
+    await validateToolResult(tool, corpus);
     samplesMs.push(Number(finishedAt - startedAt) / 1_000_000);
     if (lastOutcome.palamedesTiming) {
       toolTimings.push(lastOutcome.palamedesTiming);
@@ -715,7 +730,7 @@ function summarizeCorpus(corpus) {
   };
 }
 
-async function writeOutputs(report) {
+export async function writeOutputs(report, resultsDir = path.join(benchmarkRoot, "results")) {
   await mkdir(resultsDir, { recursive: true });
 
   const stamp = report.generatedAt.replaceAll(/[:.]/g, "-");
