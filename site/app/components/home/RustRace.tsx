@@ -117,9 +117,9 @@ export function RustRace() {
         </h2>
         <p className="pmds-lede">
           Your i18n tooling runs every time you save, commit, or open a pull request. Choose a
-          framework to compare the CLI workflows on 1,500 files and 6,000 messages. The reference
-          table keeps Linux and macOS side by side. The local recording replays each tool's measured
-          median.
+          framework and platform to compare the CLI workflows on 1,500 files and 6,000 messages.
+          Each table compares tools on the same platform. The local recording replays each tool's
+          measured median.
         </p>
       </Reveal>
 
