@@ -134,6 +134,28 @@ logs remain separate artifacts; retain them durably if they will be linked as
 publication evidence. Never promote a partial run, a local diagnostic, or an
 excluded candidate's timing.
 
+### Published campaign
+
+The [October 23, 2026 campaign](https://github.com/sebastian-software/palamedes/actions/runs/39977069712/attempts/1)
+measured revision `88bd86d3229778969dd70d21ff84c1911c6b15b1` on three
+Linux x86-64 VMs (four AMD EPYC vCPUs each) and three macOS ARM64 VMs (six
+Apple M4 Pro virtual CPUs each), with Node.js 24.22.0. The
+[checked evidence bundle](results/blacksmith/latest.json) retains all six
+manifests, raw samples, and catalog receipts. Each platform has 72 validated
+case rows and nine untimed Intlayer exclusions, across all three inventories
+and the separately retained React cold/warm lanes.
+
+All six measurement jobs succeeded. Both CI reporting jobs failed because
+importing the corpus metadata eagerly resolved `@lingui/format-po`, which the
+Node-only reporting jobs do not install. The complete retained shards were
+downloaded, hash-checked, and combined locally with the same `blacksmith.mjs
+merge` command. Every one of the 81 aggregate rows per platform was checked
+against the original aggregator before import. The fix defers Lingui resolution
+until corpus generation; a regression test now runs the full merge command in
+a checkout without comparator dependencies. No measurement or aggregation
+formula changed during recovery. The workflow link retains the failed
+reporting jobs as part of this campaign's provenance.
+
 For a local orchestration smoke check after installing both workspaces:
 
 ```sh
