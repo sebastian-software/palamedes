@@ -428,8 +428,8 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     const integrationLogos = integrationSection.locator("li img");
     const logoCount = await integrationLogos.count();
-    if (logoCount !== 13) {
-      fail(`home integration band: expected 13 marks, got ${logoCount}`);
+    if (logoCount !== 17) {
+      fail(`home integration band: expected 17 marks, got ${logoCount}`);
     } else {
       const unloadedLogos = await integrationLogos.evaluateAll((images) =>
         images

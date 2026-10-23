@@ -31,6 +31,23 @@ Additional framework marks, retrieved 2026-10-22:
 
 The Vue logo is designed by Evan You and used unchanged under the [Vue artwork license and its integration-marketing permission](https://github.com/vuejs/art#readme). The [Svelte branding guidelines](https://github.com/sveltejs/branding#readme) permit accurate compatibility identification without implying sponsorship. Nuxt artwork follows its [design kit](https://nuxt.com/design-kit).
 
+Compact identity assets, retrieved 2026-10-23:
+
+| Mark         | Local asset                                         | Source                                                                                                                           | SHA-256                                                            |
+| ------------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Next.js      | `site/public/framework-logos/nextjs-icon.svg`       | [Official archive, light-background icon](https://k2mkucxia43oc7fa.public.blob.vercel-storage.com/front/press/nextjs-assets.zip) | `44b2a36d8c1e608e14e56f8757e9e710143460bc83c9450b55e6995f80120a3d` |
+| TanStack     | `site/public/framework-logos/tanstack-icon.svg`     | [Official light-surface favicon](https://tanstack.com/favicon-light.svg)                                                         | `2b301b3958e0013798fbbfe971238b80b351f4c6b34e03c786c56648da1b7737` |
+| Waku         | `site/public/framework-logos/waku-icon.png`         | [Official starter icon](https://raw.githubusercontent.com/wakujs/waku/main/templates/01_basic/public/images/favicon.png)         | `4ec926d579c8540e4eb8e4eff3d0fc9060410ce5218293ddebd9ddb36e76b7e6` |
+| React Router | `site/public/framework-logos/react-router-icon.svg` | [Official light-surface logo](https://reactrouter.com/_brand/react-router-brand-assets/logo/Light.svg)                           | `3ef91265432410e3eab96bb6bf5b9a628b3fa6e8132d51c10411594f23b2b3be` |
+| Remix        | `site/public/framework-logos/remix-icon.svg`        | [Official light-mode logo](https://remix.run/_brand/remix-logo-light-mode.svg)                                                   | `98bdcecb6f18e31a9171fe0d481e22107de6e9298b23db0e69dd13ee5e34e16b` |
+| Vite         | `site/public/framework-logos/vite-icon.svg`         | [Official site icon](https://vite.dev/logo-without-border.svg)                                                                   | `64d973a3a997902bd7c89923e29fb165460cbf4e396cc45bdf454c9ded362ef3` |
+| Express      | `site/public/framework-logos/express-icon.svg`      | [Official site favicon](https://expressjs.com/favicon.svg)                                                                       | `aa2a703c4d0f5564771b093d097c67c09ac5a7bd6e68c39a7eb7f18d853924df` |
+
+The homepage, framework matrix, and setup overview pair these unmodified icons
+with visible names. SvelteKit reuses the unmodified Svelte emblem with the
+visible name “SvelteKit.” The original wordmark files above remain recorded
+separately.
+
 Next.js is a trademark of Vercel, Inc. or its affiliates in the United States
 and other countries. React is a trademark of Meta Platforms, Inc. React Router and Remix
 are trademarks of Shopify Inc. Rust and the Rust logo are trademarks of the Rust Foundation.

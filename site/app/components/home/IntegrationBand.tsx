@@ -1,14 +1,12 @@
 import { Fragment } from "react";
 
+import { FrameworkIdentity } from "~/components/FrameworkIdentity";
 import { frameworkLandingHref } from "~/data/framework-landing";
 
 type Integration = {
+  slug: string;
   name: string;
   href: string;
-  /** Shown as a mark when set; otherwise the name is set as text. */
-  logo?: string;
-  logoClass?: string;
-  suffix?: string;
 };
 
 type IntegrationGroup = { label: string; integrations: readonly Integration[] };
@@ -19,78 +17,66 @@ const GROUPS: readonly IntegrationGroup[] = [
     label: "UI frameworks",
     integrations: [
       {
+        slug: "react",
         name: "React",
         href: "/get-started",
-        logo: "/framework-logos/react.svg",
-        logoClass: "h-6 w-auto",
-        suffix: "React",
       },
       {
+        slug: "solid",
         name: "Solid",
         href: frameworkLandingHref("solid"),
-        logo: "/framework-logos/solid.svg",
-        logoClass: "h-6 w-6",
-        suffix: "Solid",
       },
       {
+        slug: "remix",
         name: "Remix",
         href: frameworkLandingHref("remix"),
-        logo: "/framework-logos/remix.svg",
-        logoClass: "h-4 w-auto max-w-[5.5rem]",
       },
       {
+        slug: "vue",
         name: "Vue",
         href: frameworkLandingHref("vue"),
-        suffix: "Vue",
       },
-      { name: "Svelte", href: frameworkLandingHref("svelte"), suffix: "Svelte" },
+      { slug: "svelte", name: "Svelte", href: frameworkLandingHref("svelte") },
     ],
   },
   {
     label: "App frameworks",
     integrations: [
-      { name: "SvelteKit", href: frameworkLandingHref("sveltekit"), suffix: "SvelteKit" },
+      { slug: "sveltekit", name: "SvelteKit", href: frameworkLandingHref("sveltekit") },
       {
+        slug: "nuxt",
         name: "Nuxt",
         href: frameworkLandingHref("nuxt"),
-        suffix: "Nuxt",
       },
       {
+        slug: "nextjs",
         name: "Next.js",
         href: frameworkLandingHref("nextjs"),
-        logo: "/framework-logos/nextjs.svg",
-        logoClass: "h-4 w-auto max-w-[5.25rem]",
       },
       {
+        slug: "tanstack",
         name: "TanStack Start",
         href: frameworkLandingHref("tanstack"),
-        logo: "/framework-logos/tanstack.svg",
-        logoClass: "h-7 w-auto max-w-[5.25rem]",
       },
       {
+        slug: "solid",
         name: "Solid",
         href: frameworkLandingHref("solid"),
-        logo: "/framework-logos/solid.svg",
-        logoClass: "h-6 w-6",
-        suffix: "Solid",
       },
       {
+        slug: "react-router",
         name: "React Router",
         href: frameworkLandingHref("react-router"),
-        logo: "/framework-logos/react-router.svg",
-        logoClass: "h-5 w-auto max-w-[6.5rem]",
       },
       {
+        slug: "waku",
         name: "Waku",
         href: frameworkLandingHref("waku"),
-        logo: "/framework-logos/waku.svg",
-        logoClass: "h-5 w-auto max-w-[5rem] brightness-0",
       },
       {
+        slug: "remix",
         name: "Remix",
         href: frameworkLandingHref("remix"),
-        logo: "/framework-logos/remix.svg",
-        logoClass: "h-4 w-auto max-w-[5.5rem]",
       },
     ],
   },
@@ -98,31 +84,27 @@ const GROUPS: readonly IntegrationGroup[] = [
     label: "Build tools",
     integrations: [
       {
+        slug: "vite",
         name: "Vite",
         href: frameworkLandingHref("vite"),
-        logo: "/framework-logos/vite.svg",
-        logoClass: "h-4 w-auto max-w-[5rem]",
       },
       // Set as text: Turbopack's mark belongs to Vercel, whose permission for
       // product marketing is still outstanding (framework-brand-usage.md).
-      { name: "Turbopack", href: frameworkLandingHref("nextjs"), suffix: "Turbopack" },
+      { slug: "turbopack", name: "Turbopack", href: frameworkLandingHref("nextjs") },
     ],
   },
   {
     label: "Backends",
     integrations: [
       {
+        slug: "hono",
         name: "Hono",
         href: "/docs/backend-servers",
-        logo: "/framework-logos/hono.svg",
-        logoClass: "h-6 w-5",
-        suffix: "Hono",
       },
       {
+        slug: "express",
         name: "Express",
         href: "/docs/backend-servers",
-        logo: "/framework-logos/express.svg",
-        logoClass: "h-5 w-auto max-w-[6rem]",
       },
     ],
   },
@@ -130,11 +112,9 @@ const GROUPS: readonly IntegrationGroup[] = [
     label: "Rust",
     integrations: [
       {
+        slug: "rust",
         name: "Rust",
         href: "/docs/rust-applications",
-        logo: "/framework-logos/rust.svg",
-        logoClass: "h-7 w-7",
-        suffix: "Rust",
       },
     ],
   },
@@ -152,22 +132,9 @@ function IntegrationList({ group }: { group: IntegrationGroup }) {
           <li key={integration.name}>
             <a
               href={integration.href}
-              aria-label={integration.name}
               className="group flex min-h-14 items-center gap-2.5 px-4 py-2 transition-colors hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
             >
-              {integration.logo ? (
-                <img
-                  src={integration.logo}
-                  alt=""
-                  aria-hidden
-                  className={`${integration.logoClass ?? ""} shrink-0 object-contain`}
-                />
-              ) : null}
-              {integration.suffix ? (
-                <span className="text-[15px] font-semibold tracking-[-0.01em] group-hover:text-accent">
-                  {integration.suffix}
-                </span>
-              ) : null}
+              <FrameworkIdentity slug={integration.slug} name={integration.name} />
             </a>
           </li>
         ))}
@@ -183,8 +150,8 @@ const ASSURANCES = [
 ];
 
 // Assets are downloaded unmodified from the project-controlled sources recorded
-// in framework-brand-usage.md and THIRD_PARTY_NOTICES.md. The label beside an
-// icon covers projects that publish an emblem but no separate wordmark asset.
+// in framework-brand-usage.md and THIRD_PARTY_NOTICES.md. Shared identities keep
+// names and marks consistent with the framework matrix and setup overview.
 // Marks identify first-party integrations, not customers or adoption.
 export function IntegrationBand() {
   return (
