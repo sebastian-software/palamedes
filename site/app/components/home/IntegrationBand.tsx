@@ -88,8 +88,6 @@ const GROUPS: readonly IntegrationGroup[] = [
         name: "Vite",
         href: frameworkLandingHref("vite"),
       },
-      // Set as text: Turbopack's mark belongs to Vercel, whose permission for
-      // product marketing is still outstanding (framework-brand-usage.md).
       { slug: "turbopack", name: "Turbopack", href: frameworkLandingHref("nextjs") },
     ],
   },
