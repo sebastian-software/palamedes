@@ -133,7 +133,7 @@ export async function createWorkflowCorpus({
   };
 }
 
-function createMessageInventory({ messageCount, profile, seed }) {
+export function createMessageInventory({ messageCount, profile, seed }) {
   const sourceMessages = [];
   const baselineMessages = [];
   const newStart = profile.changedCount;

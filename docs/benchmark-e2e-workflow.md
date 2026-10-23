@@ -49,6 +49,23 @@ command overhead remain part of the workflow measurement.
 
 ## Commands
 
+The [framework workflow extension](../benchmarks/e2e-workflow/frameworks/README.md)
+uses the same deterministic inventory with Vue SFCs, Svelte components, and Solid
+TSX. It adds framework-specific Lingui/i18next extractors, vue3-gettext, Wuchale,
+and an Intlayer conformance check:
+
+```sh
+pnpm benchmark:framework-workflow
+pnpm benchmark:framework-workflow:quick
+```
+
+Its [reports](../benchmarks/e2e-workflow/results/frameworks/) are separate from the
+website-backed result below. Wuchale's CLI also transforms and compiles, so its
+whole-command times are labeled as a broader scope. Candidates that lose
+translations or fail the catalog inventory check receive a diagnostic receipt
+instead of a timing. The extension records actual source sizes and validates
+both catalogs and translation preservation after every sample.
+
 Build the release `pmds` binary and run the full default benchmark:
 
 ```bash

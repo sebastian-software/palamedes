@@ -54,6 +54,12 @@ benchmarks/*/results/*
 !benchmarks/*/results/latest.md
 !benchmarks/*/results/[0-9][0-9][0-9][0-9]-*.json
 !benchmarks/*/results/[0-9][0-9][0-9][0-9]-*.md
+!benchmarks/e2e-workflow/results/frameworks/
+benchmarks/e2e-workflow/results/frameworks/*
+!benchmarks/e2e-workflow/results/frameworks/latest.json
+!benchmarks/e2e-workflow/results/frameworks/latest.md
+!benchmarks/e2e-workflow/results/frameworks/[0-9][0-9][0-9][0-9]-*.json
+!benchmarks/e2e-workflow/results/frameworks/[0-9][0-9][0-9][0-9]-*.md
 benchmarks/*/.swc/
 
 # Browser verification artifacts

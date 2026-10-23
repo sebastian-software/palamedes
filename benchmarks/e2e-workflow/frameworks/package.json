@@ -1,0 +1,42 @@
+{
+  "name": "@palamedes/benchmark-framework-workflow",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "benchmark": "node src/framework-workflow.mjs",
+    "benchmark:quick": "node src/framework-workflow.mjs --warmup 1 --runs 3 --profile small",
+    "validate": "node src/framework-workflow.mjs --validate-only --profile small",
+    "test": "node --test src/*.test.mjs"
+  },
+  "dependencies": {
+    "@intlayer/babel": "9.7.0",
+    "@intlayer/svelte-compiler": "9.7.0",
+    "@intlayer/vue-compiler": "9.7.0",
+    "@lingui/cli": "6.6.0",
+    "@lingui/conf": "6.6.0",
+    "@lingui/core": "6.6.0",
+    "@lingui/extractor-vue": "6.6.0",
+    "@lingui/format-po": "6.6.0",
+    "@lingui/solid": "6.6.0",
+    "@wuchale/jsx": "0.13.0",
+    "@wuchale/svelte": "0.21.4",
+    "estree-walker": "3.0.3",
+    "i18next-cli": "1.72.1",
+    "i18next-cli-plugin-svelte": "2.4.1",
+    "i18next-cli-vue": "1.0.4",
+    "intlayer": "9.7.0",
+    "intlayer-cli": "9.7.0",
+    "lingui-for-svelte": "0.7.1",
+    "pofile": "1.1.4",
+    "solid-js": "1.9.17",
+    "svelte": "5.57.2",
+    "typescript": "6.0.3",
+    "vue": "3.5.44",
+    "vue3-gettext": "4.0.1",
+    "wuchale": "0.26.7"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

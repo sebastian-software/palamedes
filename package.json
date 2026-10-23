@@ -81,7 +81,9 @@
     "check:runtime": "node ./scripts/check-public-runtime.mjs",
     "test:adoption-skill": "node --test ./scripts/adoption-skill.test.mjs",
     "verify:adoption-skill": "node ./scripts/verify-adoption-skill.mjs",
-    "benchmark:browser-runtime": "node ./scripts/benchmark-browser-runtime.mjs"
+    "benchmark:browser-runtime": "node ./scripts/benchmark-browser-runtime.mjs",
+    "benchmark:framework-workflow": "pnpm --filter @palamedes/benchmark-e2e-workflow benchmark:frameworks",
+    "benchmark:framework-workflow:quick": "pnpm --filter @palamedes/benchmark-e2e-workflow benchmark:frameworks:quick"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
