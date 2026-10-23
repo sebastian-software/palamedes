@@ -33,7 +33,6 @@
     "svelte": "5.57.2",
     "typescript": "6.0.3",
     "vue": "3.5.44",
-    "vue3-gettext": "4.0.1",
     "wuchale": "0.26.7"
   },
   "engines": {

@@ -23,9 +23,9 @@ import { seedTypeScriptDictionary } from "./intlayer-roundtrip.mjs";
 
 test("the framework matrix only includes supported adapters and distinguishes extra build work", () => {
   const lanes = frameworkLanes();
-  assert.equal(lanes.length, 15);
+  assert.equal(lanes.length, 14);
   assert.ok(!lanes.some((lane) => lane.framework === "vue" && lane.tool === "wuchale"));
-  assert.ok(!lanes.some((lane) => lane.framework !== "vue" && lane.tool === "gettext"));
+  assert.ok(!lanes.some((lane) => lane.tool === "gettext"));
   assert.deepEqual(
     [
       ...new Set(
@@ -62,7 +62,6 @@ test("generated fixtures parse as real Vue, Svelte and TSX, including realistic 
 });
 
 test("placeholder normalization only unifies the corpus's one variable", () => {
-  assert.equal(normalizeMessage("Hello %{ name }"), "Hello {name}");
   assert.equal(normalizeMessage("Hello {{name}}"), "Hello {name}");
   assert.equal(normalizeMessage("Hello {0}"), "Hello {name}");
   assert.equal(normalizeMessage("{other}"), "{other}");
@@ -118,6 +117,7 @@ test("benchmark selection rejects unknown scopes and invalid sample counts", () 
   assert.throws(() => parseFrameworkArgs(["--runs", "0"]));
   assert.throws(() => parseFrameworkArgs(["--warmup", "-1"]));
   assert.throws(() => parseFrameworkArgs(["--tools"]));
+  assert.throws(() => parseFrameworkArgs(["--tools", "gettext"]), /Unknown --tools/u);
   assert.deepEqual(
     parseFrameworkArgs(["--framework", "svelte", "--tools", "wuchale,palamedes"]).tools,
     ["wuchale", "palamedes"],

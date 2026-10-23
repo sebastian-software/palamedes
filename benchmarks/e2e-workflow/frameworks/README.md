@@ -19,9 +19,7 @@ pnpm benchmark:framework-workflow:quick
 
 The runner builds the release CLI before measurements and uses Cargo's reported
 executable and UI catalog directory. A fresh source checkout therefore does not
-need a separately packaged `pmds-locales` directory. GNU gettext's `msgmerge`,
-`msginit`, and `msgattrib` must be installed for vue3-gettext; all its subprocess
-costs remain inside the measured extraction command.
+need a separately packaged `pmds-locales` directory.
 
 After installing this subproject, narrower runs are available from the root:
 
@@ -54,14 +52,16 @@ format-specific observations, not a claim about every Intlayer workflow.
 
 ## Matrix and authoring
 
-| Tool         | Vue                         | Svelte                                  | Solid                                             | Authoring                                                                |
-| ------------ | --------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
-| Palamedes    | Yes                         | Yes                                     | Yes                                               | `t({ message }, values)` in SFC script blocks or TSX expressions         |
-| Lingui 6.6   | Official Vue extractor      | Community `lingui-for-svelte` extractor | Official `@lingui/solid` configuration and macros | Vue message descriptors; native `Trans` component macros in Svelte/Solid |
-| i18next-cli  | Community `i18next-cli-vue` | Community `i18next-cli-plugin-svelte`   | Built-in TSX parser                               | Natural-language keys with native interpolation syntax                   |
-| vue3-gettext | Yes                         | —                                       | —                                                 | `$gettext` in `.vue` templates; native `%{name}` interpolation           |
-| Wuchale      | —                           | Official Svelte adapter                 | Official JSX adapter in Solid mode                | Implicitly extracted markup with real `{name}` expressions               |
-| Intlayer     | Vue compiler                | Svelte compiler                         | TSX compiler                                      | Implicitly extracted markup; multilingual JSON dictionaries              |
+The matrix focuses on alternatives relevant to Palamedes adoption decisions.
+A tool does not need a benchmark lane just because it supports a tested framework.
+
+| Tool        | Vue                         | Svelte                                  | Solid                                             | Authoring                                                                |
+| ----------- | --------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
+| Palamedes   | Yes                         | Yes                                     | Yes                                               | `t({ message }, values)` in SFC script blocks or TSX expressions         |
+| Lingui 6.6  | Official Vue extractor      | Community `lingui-for-svelte` extractor | Official `@lingui/solid` configuration and macros | Vue message descriptors; native `Trans` component macros in Svelte/Solid |
+| i18next-cli | Community `i18next-cli-vue` | Community `i18next-cli-plugin-svelte`   | Built-in TSX parser                               | Natural-language keys with native interpolation syntax                   |
+| Wuchale     | —                           | Official Svelte adapter                 | Official JSX adapter in Solid mode                | Implicitly extracted markup with real `{name}` expressions               |
+| Intlayer    | Vue compiler                | Svelte compiler                         | TSX compiler                                      | Implicitly extracted markup; multilingual JSON dictionaries              |
 
 SFC macro placement follows the supported Palamedes demo pattern: script-block
 macros with ordinary template bindings. Vue i18next calls also live in script
@@ -90,8 +90,7 @@ not cover plurals, rich text, or context disambiguation.
 4. Reset catalogs and tool state, run extraction/update, and check the result.
 
 The gate checks both locale inventories, missing/duplicate/stale entries, and
-every unchanged German translation. Native `%{name}`, `{{name}}`, and indexed
-`{0}` placeholders normalize only for this one-variable correctness comparison.
+every unchanged German translation. Native `{{name}}` and indexed `{0}` placeholders normalize only for this one-variable correctness comparison.
 Changed source text retained under a stable identifier is counted separately.
 The application sources must remain unchanged. Every timed sample repeats these
 checks outside the timer; an incorrect result never earns a reported timing.
@@ -113,10 +112,6 @@ Fixture generation, initial extraction, translation seeding, native builds,
 dependency installation, environment probes, and correctness checks are outside
 the timer. The OS page cache is not flushed. There is no warm/incremental lane.
 
-vue3-gettext's fuzzy matching is disabled so a changed source identity does not
-silently inherit a previous translation. Its normal GNU catalog-update processes
-still run and are timed.
-
 Wuchale's normal CLI also transforms components in memory and compiles catalogs.
 Intlayer additionally builds dictionaries and project artifacts; its external
 format command is configured as a shell no-op, whose invocation cost remains
@@ -128,7 +123,10 @@ No application bundling or runtime rendering is included.
 
 The [latest checked report](../results/frameworks/latest.md) and its
 [raw samples](../results/frameworks/latest.json) live in `../results/frameworks/`, separate from the original suite's
-website-backed `latest` result. JSON retains all samples in observation order,
+website-backed `latest` result. When the comparison set changes, `latest` may
+select fewer tools from a dated run; its selection metadata links to the unchanged
+original report. Retained measurements keep their original timestamps, environment,
+samples, and semantic receipts. JSON retains all samples in observation order,
 median/min/max/MAD, revision and dirty state, machine information, package
 versions, corpus parameters, source hashes, and semantic receipts. Validation-only
 runs produce timestamped reports without replacing `latest`.

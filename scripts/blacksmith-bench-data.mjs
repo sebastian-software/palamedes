@@ -20,7 +20,6 @@ const LABELS = {
   i18nextCli: "i18next-cli",
   gt: "General Translation",
   i18next: "i18next-cli",
-  gettext: "vue3-gettext",
   wuchale: "Wuchale",
   intlayer: "Intlayer",
 };
@@ -84,7 +83,13 @@ export function blacksmithBenchData(publication) {
         id: framework,
         rows: reports[0].results
           .filter(
-            (row) => row.framework === framework && row.profile === profile && row.lane === "cold",
+            // Retain and validate the complete historical campaign above, but
+            // keep retired comparators out of the active public comparison.
+            (row) =>
+              row.framework === framework &&
+              row.profile === profile &&
+              row.lane === "cold" &&
+              row.tool !== "gettext",
           )
           .map((row) => {
             const peers = reports.map((report) =>

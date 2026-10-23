@@ -11,7 +11,6 @@ const LABELS = {
   palamedes: "Palamedes",
   lingui: "Lingui",
   i18next: "i18next-cli",
-  gettext: "vue3-gettext",
   wuchale: "Wuchale",
   intlayer: "Intlayer",
 };
@@ -39,7 +38,7 @@ export function frameworkBenchData(report, diagnostic) {
         "palamedes",
         "lingui",
         "i18next",
-        id === "vue" ? "gettext" : "wuchale",
+        ...(id === "vue" ? [] : ["wuchale"]),
         "intlayer",
       ];
       assert.deepEqual(results.map((row) => row.tool).sort(), [...tools].sort());

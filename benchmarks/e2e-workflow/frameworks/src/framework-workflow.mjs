@@ -36,7 +36,6 @@ const PACKAGE_NAMES = [
   "wuchale",
   "@wuchale/jsx",
   "@wuchale/svelte",
-  "vue3-gettext",
   "intlayer-cli",
   "@intlayer/babel",
   "@intlayer/vue-compiler",
@@ -106,8 +105,6 @@ export async function runFrameworkTool(root, lane, options) {
         "--trust-derived",
         "--quiet",
       ]);
-    case "gettext":
-      return run(cli("vue-gettext-extract"), ["--config", "gettext.config.js"]);
     case "wuchale":
       return run(cli("wuchale"), ["--config", "wuchale.config.mjs", "--clean"]);
     case "intlayer": {
@@ -137,10 +134,6 @@ async function versions(options) {
       env: options.uiCatalogDir ? { PALAMEDES_UI_CATALOG_DIR: options.uiCatalogDir } : {},
     })
   ).stdout.trim();
-  if (options.tools.includes("gettext") && options.frameworks.includes("vue"))
-    result.gettext = (await runCommand("msgmerge", ["--version"], { cwd: repoRoot })).stdout.split(
-      "\n",
-    )[0];
   return result;
 }
 
@@ -295,6 +288,12 @@ export function renderFrameworkReport(report) {
     `Warmup: ${report.options.warmup}`,
     `Samples: ${report.options.runs}`,
     "",
+    ...(report.selection
+      ? [
+          `This report selects the current comparison set from [the original measured run](${report.selection.sourceReport}). Only the selected tools and their version entries changed; measurement timestamps, environment, samples, and semantic receipts are unchanged.`,
+          "",
+        ]
+      : []),
     "These are machine-local cold CLI workflow measurements. Every sample resets existing catalogs and local tool state. Fixture generation, baseline extraction, correctness checks, and report writing are outside the timer. Source discovery, process startup, parsing, catalog merge and writes are inside. Every measured result passes catalog and translation-preservation checks.",
     "",
     "Wuchale additionally transforms components in memory and compiles catalogs. Intlayer additionally generates/builds dictionaries and prepares its project artifacts. Their timings cover more work than extract/update-only lanes. No speedup ratios are generated across these different scopes. Application bundling and runtime rendering are not measured. The corpus contains plain strings and one-variable interpolation, without plurals, rich text or context disambiguation.",

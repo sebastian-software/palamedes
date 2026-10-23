@@ -51,7 +51,7 @@ command overhead remain part of the workflow measurement.
 
 The [framework workflow extension](../benchmarks/e2e-workflow/frameworks/README.md)
 uses the same deterministic inventory with Vue SFCs, Svelte components, and Solid
-TSX. It adds framework-specific Lingui/i18next extractors, vue3-gettext, Wuchale,
+TSX. It adds framework-specific Lingui/i18next extractors, Wuchale,
 and an Intlayer conformance check:
 
 ```sh

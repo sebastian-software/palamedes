@@ -4,7 +4,6 @@ const FRAMEWORK_VERSION_KEYS = {
   palamedes: "palamedes",
   lingui: "@lingui/cli",
   i18next: "i18next-cli",
-  gettext: "vue3-gettext",
   wuchale: "wuchale",
   intlayer: "intlayer-cli",
 };

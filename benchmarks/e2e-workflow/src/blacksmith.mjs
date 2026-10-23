@@ -151,7 +151,6 @@ async function runRepetition(options) {
       ["pnpm", "pnpm", ["--version"]],
       ["rustc", "rustc", ["--version", "--verbose"]],
       ["cargo", "cargo", ["--version"]],
-      ["gettext", "msgmerge", ["--version"]],
     ])
       manifest.toolchain[name] = await run(name, command, args);
     await run("source", "git", [

@@ -57,7 +57,7 @@ export function campaign(platform = expected.platform) {
             (file) => [file, "b".repeat(64)],
           ),
         ),
-        toolchain: { rustc: "fixture", cargo: "fixture", pnpm: "fixture", gettext: "fixture" },
+        toolchain: { rustc: "fixture", cargo: "fixture", pnpm: "fixture" },
         build: { profile: "release", locked: true, rustflags: "", encodedRustflags: "" },
       },
     };

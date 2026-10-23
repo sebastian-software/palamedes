@@ -38,11 +38,11 @@ test("keeps both columns pending without borrowing local timings", () => {
   assert.ok(!JSON.stringify(data).includes("medianMs"));
 });
 
-test("publishes all cold cases as paired platform medians with honest exclusions", () => {
+test("publishes active cold cases as paired platform medians with honest exclusions", () => {
   const data = blacksmithBenchData(publication());
   const rows = data.profiles.flatMap((p) => p.frameworks.flatMap((f) => f.rows));
   assert.equal(data.status, "measured");
-  assert.equal(rows.length, 63);
+  assert.equal(rows.length, 60);
   assert.equal(rows.filter((row) => row.tool === "Intlayer").length, 9);
   assert.ok(
     rows
@@ -74,10 +74,7 @@ test("publishes all cold cases as paired platform medians with honest exclusions
     rows.find((row) => row.tool === "Wuchale").version,
     original.frameworks.versions.wuchale,
   );
-  assert.equal(
-    rows.find((row) => row.tool === "vue3-gettext").version,
-    original.frameworks.versions["vue3-gettext"],
-  );
+  assert.ok(!rows.some((row) => row.tool === "vue3-gettext"));
   assert.ok(rows.every((row) => /^\d+\.\d+\.\d+/u.test(row.version)));
   assert.ok(
     !/samplesMs|rawSamplesMs|pmdsBin|catalogDirectory|sourceSha256|vmMediansMs/u.test(
@@ -178,4 +175,16 @@ test("imports complete platform artifacts and refuses a summary that disagrees w
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("validates the retained historical campaign without publishing its retired comparator", async () => {
+  const root = path.resolve(import.meta.dirname, "../..");
+  const retained = JSON.parse(await readFile(path.join(root, BLACKSMITH_REPORT), "utf8"));
+  const original = structuredClone(retained);
+  const data = blacksmithBenchData(retained);
+  const rows = data.profiles.flatMap((p) => p.frameworks.flatMap((f) => f.rows));
+  assert.equal(rows.length, 60);
+  assert.ok(!rows.some((row) => row.tool === "vue3-gettext"));
+  assert.ok(!rows.some((row) => row.tool === undefined));
+  assert.deepEqual(retained, original);
 });

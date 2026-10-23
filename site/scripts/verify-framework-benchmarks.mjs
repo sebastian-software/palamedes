@@ -96,7 +96,6 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
           palamedes: "Palamedes",
           lingui: "Lingui",
           i18next: "i18next-cli",
-          gettext: "vue3-gettext",
           wuchale: "Wuchale",
         };
         for (const row of rows) {
@@ -131,12 +130,14 @@ export async function verifyFrameworkBenchmarks(browser, baseUrl, repoRoot) {
       }
       assert.equal(await chart.getByRole("radio", { name: "Vue", exact: true }).isChecked(), true);
       assert.equal(
-        await chart
-          .locator("[data-local-benchmark]")
-          .getByRole("table")
-          .getByText("vue3-gettext", { exact: true })
-          .count(),
-        1,
+        await local.getByRole("table").getByText("vue3-gettext", { exact: true }).count(),
+        0,
+      );
+      assert.equal(await platforms.getByText("vue3-gettext", { exact: true }).count(), 0);
+      assert.equal(
+        await local.getByRole("table").getByText("Wuchale", { exact: true }).count(),
+        0,
+        "Switching to Vue must discard Svelte-only rows",
       );
       const command = chart.getByRole("button", {
         name: "Copy command: pnpm benchmark:framework-workflow",

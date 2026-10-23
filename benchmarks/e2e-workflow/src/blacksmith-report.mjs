@@ -11,7 +11,7 @@ export const RUNNERS = {
 };
 const REACT_TOOLS = ["palamedes", "lingui", "formatjs", "fbtee", "i18nextCli", "gt"];
 const FRAMEWORK_TOOLS = {
-  vue: ["palamedes", "lingui", "i18next", "gettext", "intlayer"],
+  vue: ["palamedes", "lingui", "i18next", "intlayer"],
   svelte: ["palamedes", "lingui", "i18next", "wuchale", "intlayer"],
   solid: ["palamedes", "lingui", "i18next", "wuchale", "intlayer"],
 };
@@ -67,6 +67,19 @@ export function reportCases(manifest, react, frameworks) {
     frameworks.profiles.map((p) => p.profile),
     profiles,
   );
+  // Archived campaigns still contain the retired Vue comparator. Require its
+  // declared tool and pinned version before accepting that historical lane;
+  // current campaigns must contain the complete remaining matrix.
+  const legacyGettext = frameworks.options.tools.includes("gettext");
+  assert.equal(legacyGettext, typeof frameworks.versions["vue3-gettext"] === "string");
+  sameMembers(frameworks.options.tools, [
+    "palamedes",
+    "lingui",
+    "i18next",
+    "wuchale",
+    "intlayer",
+    ...(legacyGettext ? ["gettext"] : []),
+  ]);
   const cases = [];
   for (const profile of react.profiles) {
     const definition = PROFILE_DEFINITIONS[profile.profile];
@@ -136,7 +149,9 @@ export function reportCases(manifest, react, frameworks) {
     sameMembers(
       profile.results.map((r) => r.id),
       Object.entries(FRAMEWORK_TOOLS).flatMap(([framework, tools]) =>
-        tools.map((tool) => `${framework}-${tool}`),
+        [...tools, ...(framework === "vue" && legacyGettext ? ["gettext"] : [])].map(
+          (tool) => `${framework}-${tool}`,
+        ),
       ),
     );
     for (const row of profile.results) {
@@ -256,7 +271,12 @@ export function mergeShards(shards, expected) {
       "benchmarks/e2e-workflow/frameworks/pnpm-lock.yaml",
     ])
       assert.match(m.locks[file], /^[a-f0-9]{64}$/u);
-    for (const tool of ["pnpm", "rustc", "cargo", "gettext"])
+    for (const tool of [
+      "pnpm",
+      "rustc",
+      "cargo",
+      ...(frameworks.options.tools.includes("gettext") ? ["gettext"] : []),
+    ])
       assert.ok(m.toolchain[tool], `missing ${tool} version`);
     assert.equal(m.measurement.seed, DEFAULT_SEED);
     assert.equal(m.build.profile, "release");

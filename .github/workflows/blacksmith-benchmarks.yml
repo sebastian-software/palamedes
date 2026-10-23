@@ -69,14 +69,6 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: blacksmith-benchmarks-${{ matrix.profile }}
-      - name: Install GNU gettext on Linux
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y gettext
-      - name: Install GNU gettext on macOS
-        if: runner.os == 'macOS'
-        run: |
-          brew list gettext >/dev/null 2>&1 || brew install gettext
-          echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
       - name: Install pinned comparator dependencies
         run: |
           pnpm --filter @palamedes/benchmark-e2e-workflow install --frozen-lockfile

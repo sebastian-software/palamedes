@@ -15,7 +15,6 @@ export const TOOL_LABELS = {
   palamedes: "Palamedes",
   lingui: "Lingui",
   i18next: "i18next-cli",
-  gettext: "vue3-gettext",
   wuchale: "Wuchale",
   intlayer: "Intlayer",
 };
@@ -23,7 +22,6 @@ export const TOOL_LABELS = {
 export function frameworkLanes(frameworks = FRAMEWORKS, tools = Object.keys(TOOL_LABELS)) {
   return frameworks.flatMap((framework) =>
     tools
-      .filter((tool) => tool !== "gettext" || framework === "vue")
       .filter((tool) => tool !== "wuchale" || framework !== "vue")
       .map((tool) => ({
         id: `${framework}-${tool}`,
@@ -61,10 +59,7 @@ export function inventoryForProfile(profileName, seed = DEFAULT_SEED) {
 export function normalizeMessage(message) {
   // One named interpolation is shared by this corpus. Each library keeps its
   // own native placeholder syntax on disk; only the correctness check normalizes it.
-  return message
-    .replaceAll(/%\{\s*name\s*\}/gu, "{name}")
-    .replaceAll(/\{\{\s*name\s*\}\}/gu, "{name}")
-    .replaceAll("{0}", "{name}");
+  return message.replaceAll(/\{\{\s*name\s*\}\}/gu, "{name}").replaceAll("{0}", "{name}");
 }
 
 const quote = JSON.stringify;
@@ -79,11 +74,6 @@ export function renderFrameworkComponent(
 ) {
   const imports = [];
   if (tool === "palamedes") imports.push('import { t } from "@palamedes/core/macro";');
-  if (tool === "gettext")
-    imports.push(
-      'import { useGettext } from "vue3-gettext";',
-      "const { $gettext } = useGettext();",
-    );
   if (tool === "i18next") imports.push('import i18next from "i18next";');
   if (tool === "lingui") {
     imports.push(
@@ -111,8 +101,6 @@ export function renderFrameworkComponent(
     let expression;
     if (tool === "palamedes")
       expression = scriptMacros ? `copy[${index}]` : `t({ message: ${quote(current)} }, { name })`;
-    if (tool === "gettext")
-      expression = `$gettext(${quote(current.replaceAll("{name}", "%{name}"))}, { name })`;
     if (tool === "i18next")
       expression = scriptMacros
         ? `copy[${index}]`
@@ -277,10 +265,6 @@ export async function prepareFrameworkWorkspace(root, lane) {
   await writeFile(
     path.join(root, "i18next.config.mjs"),
     `${i18nextImports}export default {locales: ['en','de'], ${plugins} extract: { input: ['src/generated/**/*.${lane.framework === "solid" ? "tsx" : lane.framework}'], output: 'src/locales/{{language}}/translation.json', primaryLanguage: 'en', defaultNS: 'translation', keySeparator: false, nsSeparator: false, sort: true, removeUnusedKeys: true}};\n`,
-  );
-  await writeFile(
-    path.join(root, "gettext.config.js"),
-    "export default {input: {path: './src/generated', include: ['**/*.vue']}, output: {path: './src/locales', locales: ['en','de'], fuzzyMatching: false}};\n",
   );
   if (lane.framework !== "vue") {
     await writeFile(

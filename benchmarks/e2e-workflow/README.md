@@ -51,7 +51,7 @@ The latest checked report is summarized in
 [`docs/benchmark-e2e-workflow.md`](../../docs/benchmark-e2e-workflow.md).
 
 The [framework workflow extension](frameworks/README.md) adds Vue, Svelte, and
-Solid component sources, Wuchale, vue3-gettext, and an Intlayer conformance lane.
+Solid component sources, Wuchale, and an Intlayer conformance lane.
 Run it with `pnpm benchmark:framework-workflow`. It reuses this suite's message
 inventory and stores its reports separately from the existing website evidence.
 
@@ -145,6 +145,11 @@ Apple M4 Pro virtual CPUs each), with Node.js 24.22.0. The
 manifests, raw samples, and catalog receipts. Each platform has 72 validated
 case rows and nine untimed Intlayer exclusions, across all three inventories
 and the separately retained React cold/warm lanes.
+
+The campaign predates the removal of vue3-gettext from the active comparison.
+Its raw evidence stays intact and fully validated; the website omits that
+retired comparator. Future campaigns use the reduced framework matrix and no
+longer require GNU gettext tools.
 
 All six measurement jobs succeeded. Both CI reporting jobs failed because
 importing the corpus metadata eagerly resolved `@lingui/format-po`, which the

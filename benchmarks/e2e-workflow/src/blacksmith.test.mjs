@@ -60,7 +60,7 @@ test("aggregates retained evidence in a Node-only checkout without comparator de
     );
     assert.equal(result.status, 0, result.stderr);
     const report = JSON.parse(await readFile(path.join(output, "report.json"), "utf8"));
-    assert.equal(report.results.length, 81);
+    assert.equal(report.results.length, 78);
     assert.equal(report.revision, expected.revision);
     assert.match(await readFile(path.join(output, "summary.md"), "utf8"), /macos-arm64/u);
     for (const repetition of [1, 2, 3])
@@ -84,7 +84,7 @@ test("aggregates three VM medians without pooling samples or mixing workflow sco
   const report = mergeShards(shards, expected);
   const row = report.results.find((r) => r.id === "react/small/cold/palamedes");
   assert.equal(row.medianMs, first.medianMs + 10);
-  assert.equal(report.results.length, 81);
+  assert.equal(report.results.length, 78);
   assert.equal(
     report.results.find((r) => r.id === "react/small/cold/formatjs").scope,
     "extract-write",
@@ -157,6 +157,12 @@ test("rejects incomplete timings, semantic failures and changed corpora instead 
     },
     (s) => {
       s.frameworks.profiles[0].results[0].scope = "less-work";
+    },
+    (s) => {
+      s.frameworks.options.tools.push("gettext");
+    },
+    (s) => {
+      s.frameworks.options.tools = s.frameworks.options.tools.filter((tool) => tool !== "lingui");
     },
     (s) => {
       s.frameworks.profiles[0].corpus.sourceMessages = 1;

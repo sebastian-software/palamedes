@@ -9,6 +9,8 @@ CPU: Apple M1 Ultra
 Warmup: 3
 Samples: 7
 
+This report selects the current comparison set from [the original measured run](2026-10-23T10-31-32-634Z.json). Only the selected tools and their version entries changed; measurement timestamps, environment, samples, and semantic receipts are unchanged.
+
 These are machine-local cold CLI workflow measurements. Every sample resets existing catalogs and local tool state. Fixture generation, baseline extraction, correctness checks, and report writing are outside the timer. Source discovery, process startup, parsing, catalog merge and writes are inside. Every measured result passes catalog and translation-preservation checks.
 
 Wuchale additionally transforms components in memory and compiles catalogs. Intlayer additionally generates/builds dictionaries and prepares its project artifacts. Their timings cover more work than extract/update-only lanes. No speedup ratios are generated across these different scopes. Application bundling and runtime rendering are not measured. The corpus contains plain strings and one-variable interpolation, without plurals, rich text or context disambiguation.
@@ -30,7 +32,6 @@ Solid sources target the Solid 1.9 versions supported by these comparator adapte
 - wuchale: 0.26.7
 - @wuchale/jsx: 0.13.0
 - @wuchale/svelte: 0.21.4
-- vue3-gettext: 4.0.1
 - intlayer-cli: 9.7.0
 - @intlayer/babel: 9.7.0
 - @intlayer/vue-compiler: 9.7.0
@@ -40,7 +41,6 @@ Solid sources target the Solid 1.9 versions supported by these comparator adapte
 - solid-js: 1.9.17
 - palamedes: pmds (Palamedes) v1.25.1
 Fast i18n tooling for modern apps
-- gettext: msgmerge (GNU gettext-tools) 1.0
 
 ## small
 
@@ -53,7 +53,6 @@ Inventory: 640 current, 624 baseline; 48 changed, 64 new, 48 removed.
 | Palamedes | extract-update | 80 | 71430 | 11.94 ms | 11.18–12.54 ms | 528 |
 | Lingui | extract-update | 80 | 100780 | 767.06 ms | 761.32–774.50 ms | 528 |
 | i18next-cli | extract-update | 80 | 67480 | 418.77 ms | 408.02–421.16 ms | 528 |
-| vue3-gettext | extract-update | 80 | 63295 | 154.45 ms | 152.28–159.83 ms | 528 |
 | Intlayer | catalog validation failed | — | — | excluded | — | 450/528 |
 
 Intlayer is excluded from timings: vue-intlayer: en: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; de: 688 messages, expected 640; 0 missing, 48 unexpected, 0 duplicates; 78 existing translations lost, including "Archive billing overview for {name} 00112-now".
@@ -94,7 +93,6 @@ Inventory: 1920 current, 1872 baseline; 144 changed, 192 new, 144 removed.
 | Palamedes | extract-update | 240 | 214201 | 18.62 ms | 16.83–20.87 ms | 1584 |
 | Lingui | extract-update | 240 | 302162 | 906.15 ms | 893.85–929.89 ms | 1584 |
 | i18next-cli | extract-update | 240 | 202321 | 623.29 ms | 612.22–637.02 ms | 1584 |
-| vue3-gettext | extract-update | 240 | 189781 | 261.90 ms | 260.34–267.86 ms | 1584 |
 | Intlayer | catalog validation failed | — | — | excluded | — | 1344/1584 |
 
 Intlayer is excluded from timings: vue-intlayer: en: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; de: 2064 messages, expected 1920; 0 missing, 144 unexpected, 0 duplicates; 240 existing translations lost, including "Approve billing overview for {name} 00400-now".
@@ -135,7 +133,6 @@ Inventory: 6000 current, 5850 baseline; 450 changed, 600 new, 450 removed.
 | Palamedes | extract-update | 1500 | 11280763 | 103.36 ms | 78.98–110.50 ms | 4950 |
 | Lingui | extract-update | 1500 | 11787696 | 2798.30 ms | 2750.35–2986.75 ms | 4950 |
 | i18next-cli | extract-update | 1500 | 11234563 | 4340.66 ms | 4232.14–4535.95 ms | 4950 |
-| vue3-gettext | extract-update | 1500 | 11422443 | 1492.36 ms | 1439.23–1513.49 ms | 4950 |
 | Intlayer | catalog validation failed | — | — | excluded | — | 4215/4950 |
 
 Intlayer is excluded from timings: vue-intlayer: en: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; de: 6450 messages, expected 6000; 0 missing, 450 unexpected, 0 duplicates; 735 existing translations lost, including "Publish portal toolbar for {name} 01100-now".
