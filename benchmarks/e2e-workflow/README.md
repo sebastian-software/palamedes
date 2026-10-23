@@ -49,3 +49,8 @@ Outputs are written to `benchmarks/e2e-workflow/results/`.
 
 The latest checked report is summarized in
 [`docs/benchmark-e2e-workflow.md`](../../docs/benchmark-e2e-workflow.md).
+
+The [framework workflow extension](frameworks/README.md) adds Vue, Svelte, and
+Solid component sources, Wuchale, vue3-gettext, and an Intlayer conformance lane.
+Run it with `pnpm benchmark:framework-workflow`. It reuses this suite's message
+inventory and stores its reports separately from the existing website evidence.
