@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { FrameworkIdentity } from "./FrameworkIdentity";
+import { FrameworkIdentity } from "~/components/FrameworkIdentity";
 
 import { frameworkLandingHref } from "~/data/framework-landing";
 import { cellFor } from "~/data/matrix";
