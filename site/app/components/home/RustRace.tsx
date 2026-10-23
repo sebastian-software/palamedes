@@ -8,6 +8,7 @@ import { blacksmithBench } from "~/data/blacksmith-bench";
 import { displayBenchmarkTime } from "~/data/bench";
 import { benchmarkView, type BenchmarkFramework } from "~/data/framework-bench";
 import { BenchmarkFrameworkPicker } from "~/components/proof/BenchmarkFrameworkPicker";
+import { BenchmarkVersion } from "~/components/proof/BenchmarkVersion";
 import { docsHref, repoHref } from "~/data/links";
 import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion";
 
@@ -203,7 +204,7 @@ export function RustRace() {
                         <span
                           className={`block text-[16px] font-semibold ${row.accent ? "text-accent" : "text-ink"}`}
                         >
-                          {row.displayName}
+                          <span>{row.displayName}</span> <BenchmarkVersion version={row.version} />
                         </span>
                         <span className="block text-[12.5px] font-normal whitespace-normal text-gray-spec">
                           {row.scope}

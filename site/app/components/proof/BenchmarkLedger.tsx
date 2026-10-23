@@ -1,11 +1,13 @@
 import {
   BENCH_META,
+  BENCH_TOOL_VERSIONS,
   displayBenchmarkFactor,
   displayBenchmarkTime,
   type BenchCorpus,
   type BenchWarm,
 } from "~/data/bench";
 import { decisionHref, docsHref } from "~/data/links";
+import { BenchmarkVersion } from "./BenchmarkVersion";
 
 const COMPARISON_HREFS: Readonly<Partial<Record<string, string>>> = {
   Lingui: "/compare/lingui",
@@ -92,7 +94,8 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
                       </a>
                     ) : (
                       row.displayName
-                    )}
+                    )}{" "}
+                    <BenchmarkVersion version={BENCH_TOOL_VERSIONS[row.tool]} />
                     <span className="mt-1 block text-[10px] font-normal text-gray-spec">
                       {row.scope}
                     </span>
