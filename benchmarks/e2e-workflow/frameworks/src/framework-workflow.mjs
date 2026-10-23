@@ -293,6 +293,8 @@ export function renderFrameworkReport(report) {
     "",
     "Wuchale additionally transforms components in memory and compiles catalogs. Intlayer additionally generates/builds dictionaries and prepares its project artifacts. Their timings cover more work than extract/update-only lanes. No speedup ratios are generated across these different scopes. Application bundling and runtime rendering are not measured. The corpus contains plain strings and one-variable interpolation, without plurals, rich text or context disambiguation.",
     "",
+    "The Intlayer candidate uses multilingual .content.json dictionaries. Its failed conformance receipt is specific to that configuration. The separate untimed `diagnose:intlayer` command compares .content.json and .content.ts roundtrips; TypeScript preserves the unchanged translations in the pinned smoke fixture, while both formats retain removed entries.",
+    "",
     "Solid sources target the Solid 1.9 versions supported by these comparator adapters. This is an extraction workload, not evidence of Solid 2 or application/SSR compatibility.",
     "",
     "## Versions",

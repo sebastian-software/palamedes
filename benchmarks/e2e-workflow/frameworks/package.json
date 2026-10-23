@@ -6,7 +6,8 @@
     "benchmark": "node src/framework-workflow.mjs",
     "benchmark:quick": "node src/framework-workflow.mjs --warmup 1 --runs 3 --profile small",
     "validate": "node src/framework-workflow.mjs --validate-only --profile small",
-    "test": "node --test src/*.test.mjs"
+    "test": "node --test src/*.test.mjs",
+    "diagnose:intlayer": "node src/intlayer-roundtrip.mjs"
   },
   "dependencies": {
     "@intlayer/babel": "9.7.0",

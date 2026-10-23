@@ -28,6 +28,7 @@ After installing this subproject, narrower runs are available from the root:
 ```sh
 pnpm --dir benchmarks/e2e-workflow/frameworks validate
 pnpm --dir benchmarks/e2e-workflow/frameworks test
+pnpm --dir benchmarks/e2e-workflow/frameworks diagnose:intlayer
 pnpm --dir benchmarks/e2e-workflow/frameworks benchmark --profile small --framework svelte --tools palamedes,wuchale
 pnpm --dir benchmarks/e2e-workflow/frameworks benchmark --validate-only --profile smoke --tools intlayer --strict --keep-temp
 ```
@@ -42,6 +43,14 @@ The runner records non-equivalent Intlayer results without timings and continues
 the matrix. `--strict` returns a nonzero exit status when any selected candidate
 is ineligible. Configuration errors, process failures, and regressions in other
 candidates always fail the run. No vendor code or catalog merge is patched.
+
+`diagnose:intlayer` performs a separate, untimed roundtrip with both
+`.content.json` and `.content.ts` dictionaries in all three frameworks. It uses
+TypeScript AST positions to seed the generated TypeScript source, then inspects
+Intlayer's own built unmerged dictionaries. In the pinned 9.7.0 fixture, both
+formats retain removed entries. TypeScript preserves the unchanged translations;
+JSON additionally loses the interpolated translations. These are separate
+format-specific observations, not a claim about every Intlayer workflow.
 
 ## Matrix and authoring
 
@@ -104,6 +113,10 @@ Fixture generation, initial extraction, translation seeding, native builds,
 dependency installation, environment probes, and correctness checks are outside
 the timer. The OS page cache is not flushed. There is no warm/incremental lane.
 
+vue3-gettext's fuzzy matching is disabled so a changed source identity does not
+silently inherit a previous translation. Its normal GNU catalog-update processes
+still run and are timed.
+
 Wuchale's normal CLI also transforms components in memory and compiles catalogs.
 Intlayer additionally builds dictionaries and project artifacts; its external
 format command is configured as a shell no-op, whose invocation cost remains
@@ -113,7 +126,8 @@ No application bundling or runtime rendering is included.
 
 ## Evidence
 
-Reports live in `../results/frameworks/`, separate from the original suite's
+The [latest checked report](../results/frameworks/latest.md) and its
+[raw samples](../results/frameworks/latest.json) live in `../results/frameworks/`, separate from the original suite's
 website-backed `latest` result. JSON retains all samples in observation order,
 median/min/max/MAD, revision and dirty state, machine information, package
 versions, corpus parameters, source hashes, and semantic receipts. Validation-only

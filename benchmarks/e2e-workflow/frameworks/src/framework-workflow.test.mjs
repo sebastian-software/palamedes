@@ -19,6 +19,7 @@ import {
   writeFrameworkSources,
 } from "./framework-corpus.mjs";
 import { parseFrameworkArgs, summarizeSamples } from "./framework-workflow.mjs";
+import { seedTypeScriptDictionary } from "./intlayer-roundtrip.mjs";
 
 test("the framework matrix only includes supported adapters and distinguishes extra build work", () => {
   const lanes = frameworkLanes();
@@ -131,6 +132,23 @@ test("statistics preserve observation order and expose dispersion", () => {
     medianAbsoluteDeviationMs: 2,
     samplesMs: [5, 1, 3],
   });
+});
+
+test("the TypeScript roundtrip probe seeds locale literals without rewriting message syntax", () => {
+  const code =
+    'const content = {content: {plain: t({en: "Pay now"}), named: insert(t({en: "Hello {{name}}"}))}};';
+  const result = seedTypeScriptDictionary(code);
+  assert.equal(result.seeded, 2);
+  const ast = ts.createSourceFile("dictionary.ts", result.source, ts.ScriptTarget.Latest, true);
+  assert.deepEqual(ast.parseDiagnostics, []);
+  const german = [];
+  function visit(node) {
+    if (ts.isPropertyAssignment(node) && node.name.getText(ast) === "de")
+      german.push(node.initializer.text);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.deepEqual(german, ["[de] Pay now", "[de] Hello {{name}}"]);
 });
 
 test("adding messages preserves the component location of existing copy", async (t) => {
