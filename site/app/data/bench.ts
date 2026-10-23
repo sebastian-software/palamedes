@@ -8,6 +8,10 @@
  * build and fails when these constants no longer match the report.
  */
 
+import versions from "./generated/benchmark-versions.json";
+
+export const BENCH_TOOL_VERSIONS: Readonly<Record<string, string>> = versions;
+
 export interface BenchRow {
   tool: string;
   medianMs: number;

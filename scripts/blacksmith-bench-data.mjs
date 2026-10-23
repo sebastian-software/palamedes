@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { mergeShards, readShard } from "../benchmarks/e2e-workflow/src/blacksmith-report.mjs";
+import { benchmarkToolVersion } from "./benchmark-tool-versions.mjs";
 
 export const BLACKSMITH_REPORT = "benchmarks/e2e-workflow/results/blacksmith/latest.json";
 const PLATFORMS = [
@@ -101,6 +102,11 @@ export function blacksmithBenchData(publication) {
             }
             return {
               tool: LABELS[row.tool],
+              version: benchmarkToolVersion(
+                framework === "react" ? baseline.react.versions : baseline.frameworks.versions,
+                row.tool,
+                framework,
+              ),
               scope: SCOPES[row.scope],
               values: Object.fromEntries(
                 PLATFORMS.map(({ id }, index) => [

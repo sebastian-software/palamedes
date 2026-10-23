@@ -18,6 +18,7 @@ import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
 import { loadFrameworkBenchData } from "../../scripts/framework-bench-data.mjs";
 import { loadBlacksmithBenchData } from "../../scripts/blacksmith-bench-data.mjs";
+import { reactBenchmarkVersions } from "../../scripts/benchmark-tool-versions.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -154,6 +155,7 @@ await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
 await writeContentStats(adrs);
 await writeBrowserRuntimeStats();
 await writeFrameworkBenchmarks();
+await writeReactBenchmarkVersions();
 await mkdir(generatedDataRoot, { recursive: true });
 await writeFile(
   join(generatedDataRoot, "blacksmith-bench.json"),
@@ -180,6 +182,17 @@ async function writeBrowserRuntimeStats() {
   await writeFile(
     join(generatedDataRoot, "browser-runtime.json"),
     `${JSON.stringify(data, null, 2)}\n`,
+  );
+}
+
+async function writeReactBenchmarkVersions() {
+  const report = JSON.parse(
+    await readFile(join(repoRoot, "benchmarks/e2e-workflow/results/latest.json"), "utf8"),
+  );
+  await mkdir(generatedDataRoot, { recursive: true });
+  await writeFile(
+    join(generatedDataRoot, "benchmark-versions.json"),
+    `${JSON.stringify(reactBenchmarkVersions(report))}\n`,
   );
 }
 

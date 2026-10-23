@@ -108,10 +108,11 @@ over physical-host contention, power, or thermal state. These are reproducible
 project-run measurements, not an independent third-party audit.
 
 Results are written outside the source checkout and never update the checked
-`latest` reports or website figures automatically. The homepage has separate
-Linux and macOS columns. Until a complete reference campaign is checked in,
-both are explicitly pending; the earlier local recording stays available in
-its own disclosure. No local measurement fills a reference-runner column.
+`latest` reports or website figures automatically. The homepage uses a Linux
+and macOS selector to compare tools on one platform at a time. Until a complete
+reference campaign is checked in, both platforms are explicitly pending; the
+earlier local recording stays available in its own disclosure. No local
+measurement fills a reference-runner result.
 
 To publish a campaign, verify the successful run's exact source revision and
 download both complete platform artifacts. Import their extracted directories:
