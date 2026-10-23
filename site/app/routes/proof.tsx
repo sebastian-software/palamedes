@@ -8,6 +8,7 @@ import { CtaBand } from "~/components/home/CtaBand";
 import { FeatureGrid } from "~/components/home/FeatureGrid";
 import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon";
 import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger";
+import { FrameworkBenchmarks } from "~/components/proof/FrameworkBenchmarks";
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip";
 import {
   BENCH_MEDIUM,
@@ -77,7 +78,9 @@ function CorpusLedger() {
           <p className="micro text-[10px] tracking-label text-ink/70">
             End-to-end extract + catalog update
           </p>
-          <h3 className="display-serif mt-2 text-[20px] uppercase">Three checked corpora</h3>
+          <h3 className="display-serif mt-2 text-[20px] uppercase">
+            React · Three checked corpora
+          </h3>
         </div>
         <p className="mono-nums text-[10px] text-gray-spec">
           {BENCH_META.generated} · Node {BENCH_META.node} · {BENCH_META.platform} · median of{" "}
@@ -197,7 +200,7 @@ export default function Proof() {
 
       <Section
         num="01 — Benchmarks"
-        title="How fast is extraction? Measured three ways."
+        title="Extraction, measured in the frameworks you use."
         lede="The benchmark times the whole job: scanning source, extracting messages, writing output. Tools that also update catalogs are compared like for like; React Intl only extracts, so it is marked as narrower scope. Every run is checked for the same messages, not just timed. Palamedes’ cached re-run is shown on its own — a capability, not a race."
       >
         <div className="space-y-8">
@@ -219,6 +222,7 @@ export default function Proof() {
               .
             </p>
           </EditorialRail>
+          <FrameworkBenchmarks />
         </div>
       </Section>
 

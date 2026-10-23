@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 import { startSiteStaticServer } from "./site-static-server.mjs";
+import { verifyFrameworkBenchmarks } from "../site/scripts/verify-framework-benchmarks.mjs";
 import {
   isExpectedSkippedViewTransitionError,
   isKnownArdoBreadcrumbHydrationWarning,
@@ -1304,6 +1305,7 @@ async function checkDecisionRedirects() {
 }
 
 await checkDecisionRedirects();
+await verifyFrameworkBenchmarks(browser, baseUrl, repoRoot);
 await checkRoutes(await browser.newContext(), "default", {
   expectHydration: true,
 });

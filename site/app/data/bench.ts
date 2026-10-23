@@ -305,3 +305,9 @@ export function displayBenchmarkTime(ms: number): string {
 export function displayBenchmarkFactor(row: BenchRow, baselineMs: number): string {
   return row.accent ? "1×" : `${Math.floor(row.medianMs / baselineMs)}×`;
 }
+
+export function displayBenchmarkRange(minMs: number, maxMs: number): string {
+  const [min, minUnit] = displayBenchmarkTime(minMs).split(" ");
+  const [max, maxUnit] = displayBenchmarkTime(maxMs).split(" ");
+  return minUnit === maxUnit ? `${min}–${max} ${maxUnit}` : `${min} ${minUnit}–${max} ${maxUnit}`;
+}

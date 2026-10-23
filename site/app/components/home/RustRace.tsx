@@ -3,13 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { CopyCommand } from "~/components/CopyCommand";
-import {
-  BENCH_META,
-  BENCH_REALISTIC,
-  BENCH_REALISTIC_WARM,
-  displayBenchmarkTime,
-} from "~/data/bench";
-import { docsHref } from "~/data/links";
+import { displayBenchmarkTime } from "~/data/bench";
+import { benchmarkView, type BenchmarkFramework } from "~/data/framework-bench";
+import { BenchmarkFrameworkPicker } from "~/components/proof/BenchmarkFrameworkPicker";
+import { docsHref, repoHref } from "~/data/links";
 import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion";
 
 /*
@@ -19,14 +16,6 @@ import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion";
  * the finished race. Scope stays beside every row, and the cached Palamedes
  * re-run is reported on its own because the other tools have no equivalent.
  */
-// React Intl's run covers extraction only, a narrower job than the rest, so the
-// homepage race leaves it out; the proof page keeps it with its scope note.
-const ROWS = BENCH_REALISTIC.rows
-  .filter((row) => row.tool !== "React Intl")
-  .sort((left, right) => left.medianMs - right.medianMs);
-const LONGEST = Math.max(...ROWS.map((row) => row.medianMs));
-// The track spans ten seconds, so even the slowest run ends short of the edge.
-const TRACK_MS = Math.max(10_000, LONGEST);
 
 const REASONS = [
   {
@@ -46,10 +35,15 @@ const REASONS = [
 type Phase = "finished" | "ready" | "running";
 
 export function RustRace() {
+  const [framework, setFramework] = useState<BenchmarkFramework>("react");
+  const view = benchmarkView(framework);
+  const rows = [...view.rows].sort((left, right) => left.medianMs - right.medianMs);
+  const longest = Math.max(...rows.map((row) => row.medianMs));
+  const trackMs = Math.max(10_000, longest);
   const ref = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [phase, setPhase] = useState<Phase>("finished");
-  const [elapsed, setElapsed] = useState(LONGEST);
+  const [elapsed, setElapsed] = useState(longest);
   const frame = useRef<number | null>(null);
 
   const run = useCallback(() => {
@@ -61,9 +55,9 @@ export function RustRace() {
       frame.current = requestAnimationFrame((start) => {
         setPhase("running");
         const tick = (now: number) => {
-          const value = Math.min(now - start, LONGEST);
+          const value = Math.min(now - start, longest);
           setElapsed(value);
-          if (value < LONGEST) {
+          if (value < longest) {
             frame.current = requestAnimationFrame(tick);
           } else {
             frame.current = null;
@@ -73,7 +67,15 @@ export function RustRace() {
         frame.current = requestAnimationFrame(tick);
       });
     });
-  }, []);
+  }, [longest]);
+
+  function selectFramework(selected: BenchmarkFramework) {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    setPhase("finished");
+    setElapsed(Math.max(...benchmarkView(selected).rows.map((row) => row.medianMs)));
+    setFramework(selected);
+  }
 
   /* Play once when the race scrolls into view; never off-screen or under reduced motion. */
   useEffect(() => {
@@ -112,17 +114,29 @@ export function RustRace() {
           Because nobody likes waiting for their tools.
         </h2>
         <p className="pmds-lede">
-          Your i18n tooling runs every time you save, commit, or open a pull request. Here is the
-          same job — extract every message from a 1,500-file project and update the catalogs — in
-          five tools, played back in real time. React Intl only extracts, so it runs on the{" "}
-          <a href="/proof" className="text-accent underline underline-offset-4 hover:text-ink">
-            proof page
-          </a>{" "}
-          with its narrower scope marked.
+          Your i18n tooling runs every time you save, commit, or open a pull request. Choose a
+          framework to replay the checked CLI workflows on 1,500 files and 6,000 messages. Each bar
+          takes its measured median to finish; the scope stays beside the tool.
         </p>
       </Reveal>
 
-      <div ref={ref} className="mt-12 border border-hair bg-paper">
+      <BenchmarkFrameworkPicker value={framework} onChange={selectFramework} />
+      <noscript>
+        <p className="mt-4 text-[14px]">
+          Framework switching needs JavaScript.{" "}
+          <a href="/proof#framework-benchmarks" className="text-accent underline">
+            Read all framework tables →
+          </a>
+        </p>
+      </noscript>
+
+      <div ref={ref} className="mt-6 border border-hair bg-paper">
+        <p
+          className="border-b border-hair px-5 py-4 text-[14px] leading-relaxed"
+          aria-live="polite"
+        >
+          <strong>{view.label}</strong> · {view.corpus} · cold CLI workflow
+        </p>
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hair px-5 py-4">
           <p className="mono-nums text-[15px] text-ink" aria-hidden>
             {(elapsed / 1000).toFixed(2)} s
@@ -142,8 +156,8 @@ export function RustRace() {
         <div>
           <table className="w-full border-collapse">
             <caption className="sr-only">
-              Extract and catalog update on {BENCH_REALISTIC.corpus}, median of {BENCH_META.runs}{" "}
-              runs. Times are rounded.
+              Extract and catalog update for {view.label} on {view.corpus}, median of{" "}
+              {view.meta.runs} runs. Times are rounded.
             </caption>
             <thead>
               <tr className="border-b border-hair text-left">
@@ -168,8 +182,8 @@ export function RustRace() {
               </tr>
             </thead>
             <tbody>
-              {ROWS.map((row) => {
-                const percent = (row.medianMs / TRACK_MS) * 100;
+              {rows.map((row) => {
+                const percent = (row.medianMs / trackMs) * 100;
                 const done = phase === "finished" || elapsed >= row.medianMs;
                 const width = phase === "ready" ? 0 : percent;
                 return (
@@ -210,6 +224,7 @@ export function RustRace() {
                       </span>
                     </td>
                     <td
+                      data-median-ms={row.medianMs}
                       className={`mono-nums px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-0"} ${row.accent ? "text-accent" : "text-ink"}`}
                     >
                       {displayBenchmarkTime(row.medianMs)}
@@ -220,13 +235,34 @@ export function RustRace() {
             </tbody>
           </table>
         </div>
-        <p className="border-t border-hair px-5 py-4 text-[13.5px] leading-relaxed text-ink/75">
-          {displayBenchmarkTime(BENCH_REALISTIC_WARM.warmMs)} on a cached re-run after{" "}
-          {BENCH_REALISTIC_WARM.touchedFiles} changed source files — Palamedes keeps an extraction
-          cache, the other tools re-read everything, so no speedup is claimed for it. Median of{" "}
-          {BENCH_META.runs} runs on {BENCH_META.platform}, {BENCH_META.generated}. Your hardware
-          will differ; the ratios are the signal.
-        </p>
+        <div className="border-t border-hair px-5 py-4 text-[13.5px] leading-relaxed text-ink/75">
+          {view.warm ? (
+            <p>
+              {displayBenchmarkTime(view.warm.warmMs)} on a cached re-run after{" "}
+              {view.warm.touchedFiles} changed source files — Palamedes keeps an extraction cache,
+              the other tools re-read everything, so no speedup is claimed for it. React Intl's
+              narrower extraction-only lane is on the proof page.
+            </p>
+          ) : (
+            <p>
+              {framework !== "vue"
+                ? "Wuchale also transforms components and compiles catalogs; its command covers more work. "
+                : ""}
+              Intlayer is excluded from timings after catalog checks failed.
+              <a href="/proof#framework-benchmarks" className="ml-1 text-accent underline">
+                Inspect the receipts and min–max ranges →
+              </a>
+            </p>
+          )}
+          <p className="mt-2">
+            Median of {view.meta.runs} runs · {view.meta.cpu ? `${view.meta.cpu} · ` : ""}
+            {view.meta.platform} · Node {view.meta.node} · {view.meta.generated}. Machine-local
+            measurements. Framework reports were captured separately.
+            <a href={repoHref(view.reportPath)} className="ml-1 text-accent underline">
+              Checked report →
+            </a>
+          </p>
+        </div>
       </div>
 
       <ul className="mt-14 grid grid-cols-1 gap-x-10 gap-y-10 md:grid-cols-3">
@@ -240,7 +276,7 @@ export function RustRace() {
 
       <div className="mt-12 flex flex-wrap items-end gap-x-10 gap-y-4">
         <CopyCommand
-          command="pnpm benchmark:e2e-workflow"
+          command={view.command}
           label="Re-run it yourself"
           className="w-full max-w-[26rem]"
         />

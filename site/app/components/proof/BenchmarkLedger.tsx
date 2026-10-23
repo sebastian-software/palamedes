@@ -33,7 +33,9 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
     <div className="border border-hair">
       <div className="grid grid-cols-[1fr_auto] items-end gap-6 border-b border-hair px-6 py-5 max-tight:grid-cols-1">
         <div>
-          <p className="micro text-[10px] tracking-label text-ink/70">Checked result ledger</p>
+          <p className="micro text-[10px] tracking-label text-ink/70">
+            Checked result ledger · React
+          </p>
           <h3 className="display-serif mt-2 text-[20px] uppercase">{corpus.title}</h3>
         </div>
         <a href={docsHref("benchmark-e2e-workflow")} className="mono-nums text-[11px] text-accent">

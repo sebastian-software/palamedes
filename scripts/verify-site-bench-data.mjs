@@ -18,8 +18,10 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadFrameworkBenchData } from "./framework-bench-data.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+await loadFrameworkBenchData(repoRoot);
 const reportPath = join(repoRoot, "benchmarks/e2e-workflow/results/latest.md");
 const benchTsPath = join(repoRoot, "site/app/data/bench.ts");
 const readmePath = join(repoRoot, "README.md");

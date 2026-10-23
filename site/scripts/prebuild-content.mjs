@@ -16,6 +16,7 @@ import {
 import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "../../scripts/component-demos.mjs";
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
+import { loadFrameworkBenchData } from "../../scripts/framework-bench-data.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -151,6 +152,7 @@ await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
 
 await writeContentStats(adrs);
 await writeBrowserRuntimeStats();
+await writeFrameworkBenchmarks();
 await writeNpmStats();
 
 console.log(
@@ -171,6 +173,15 @@ async function writeBrowserRuntimeStats() {
   await mkdir(generatedDataRoot, { recursive: true });
   await writeFile(
     join(generatedDataRoot, "browser-runtime.json"),
+    `${JSON.stringify(data, null, 2)}\n`,
+  );
+}
+
+async function writeFrameworkBenchmarks() {
+  const data = await loadFrameworkBenchData(repoRoot);
+  await mkdir(generatedDataRoot, { recursive: true });
+  await writeFile(
+    join(generatedDataRoot, "framework-bench.json"),
     `${JSON.stringify(data, null, 2)}\n`,
   );
 }

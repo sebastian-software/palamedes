@@ -59,12 +59,27 @@ pnpm benchmark:framework-workflow
 pnpm benchmark:framework-workflow:quick
 ```
 
-Its [reports](../benchmarks/e2e-workflow/results/frameworks/) are separate from the
-website-backed result below. Wuchale's CLI also transforms and compiles, so its
+Its [reports](../benchmarks/e2e-workflow/results/frameworks/) are published separately
+from the React result below. The website's [framework tables](/proof#framework-benchmarks)
+show all three corpus sizes, medians, and min–max ranges. The homepage chart lets
+readers select a framework and uses that report's own environment and command.
+The reports were captured separately and do not establish a cross-framework ranking.
+Wuchale's CLI also transforms and compiles, so its
 whole-command times are labeled as a broader scope. Candidates that lose
 translations or fail the catalog inventory check receive a diagnostic receipt
 instead of a timing. The extension records actual source sizes and validates
 both catalogs and translation preservation after every sample.
+
+The pinned Intlayer 9.7.0 JSON configuration retains removed entries and loses
+unchanged interpolated translations in this fixture, so it has no published
+timing. A separate untimed TypeScript/JSON countercheck in all three frameworks
+shows that TypeScript preserves those translations, while both formats retain
+removed entries. The proof page links the format-specific receipts. These
+observations apply to the recorded version and configurations.
+
+The site build validates the framework report's samples and semantic receipts
+before generating a compact display payload. Raw timings, source hashes, and
+local executable paths remain in the checked report, outside the browser bundle.
 
 Build the release `pmds` binary and run the full default benchmark:
 
