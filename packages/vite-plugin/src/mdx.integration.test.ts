@@ -121,7 +121,7 @@ describe("Palamedes MDX Vite integration", () => {
       expect(updated?.code).not.toContain("Hello <0>world</0>.");
       await edit("# Good\n\nText {value +} after.\n");
       await expect(server.transformRequest("/page.mdx")).rejects.toThrow(
-        /page\.mdx:3:.*InvalidMdx/su,
+        /page\.mdx:3:.*InvalidExpression/su,
       );
       const recoveredSource =
         'import { t } from "@palamedes/core/macro"\n\nexport const label = () => t`Recovered macro`;\n\n# Recovered **world**.\n';

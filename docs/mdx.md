@@ -203,12 +203,13 @@ Markdown heuristics.
 
 ## Ferromark 3 Migration
 
-The native adapter uses Ferromark 3.5.1 with its `jsx` feature and both `mdx`
-and `mdx_compatible` parser options. This adopts the public arena AST in place
+The native adapter uses Ferromark 3.6.0 with its `jsx` feature and both `mdx`
+and `mdx_compatible` parser options. Structured image-alt analysis is enabled
+for source provenance. This adopts the public arena AST in place
 of the retired 0.7 event API. Its MIT license, Rust requirement, and OXC version
 are compatible with the workspace. See the upstream
-[v2 migration guide](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v2.md)
-and [v3 upgrade notes](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v3.md).
+[v2 migration guide](https://github.com/sebastian-software/ferromark/blob/v3.6.0/docs/migration-v2.md)
+and [v3 upgrade notes](https://github.com/sebastian-software/ferromark/blob/v3.6.0/docs/migration-v3.md).
 
 This migration happens before Palamedes v2. Translation units follow the
 current parsed semantics rather than reproducing old parser quirks. Re-run
@@ -217,18 +218,27 @@ The MDX extraction cache stamp changes so previous analysis is discarded.
 
 - Image alt text is the complete normalized accessible description. For
   ``![Code `sample`](./sample.png)``, the message is `Code sample`, including
-  words authored as inline code. Its source reference points to the image;
-  Ferromark currently exposes the whole image span rather than alt child spans.
+  words authored as inline code. Its source reference points to the original
+  bracket contents using Ferromark's structured alt metadata, including inside
+  lists, quotes, and reference-style images.
 - Multiple paragraphs inside JSX stay separate translation units inside their
   authored container. They are never concatenated across a blank line.
 - Callout markers such as `[!NOTE]` remain structural; the body is translatable.
+  Ferromark's public callout metadata owns marker recognition and body selection,
+  including escaped or entity-encoded markers.
 - GFM strikethrough follows the parser, including single-tilde `~text~`.
   Optional Ferromark writing extensions remain disabled.
 - Code fences retain MDX-looking source verbatim as code. Escaped and decoded
   text is not entity-decoded a second time.
 
-Parser failures now return the first `InvalidMdx` or `NestingTooDeep`
-diagnostic, with an original byte range and no related tag range. Invalid
+Parser failures return typed diagnostics such as `InvalidExpression`,
+`InvalidOpeningTag`, `InvalidModule`, `MismatchedClosingTag`, and
+`UnexpectedClosingTag`. Tag mismatches include the complete offending tag range
+and a related opening-tag range in the original source. Nesting limits still
+produce `NestingTooDeep`; unknown future MDX categories fall back to `InvalidMdx`.
+The adapter collects up to 16 independent errors. Recovery is limited to complete,
+standalone unmatched closing tags at the root block boundary; ambiguous,
+container-local, and JavaScript failures stop collection. Invalid
 JavaScript in expressions, attributes, and import/export blocks fails analysis;
 TypeScript declarations belong in imported TypeScript modules. Failed analysis
 returns no messages, compiled IDs, JSX, or source map. Recognized footnotes still
@@ -237,5 +247,6 @@ return `UnsupportedFootnote`; unresolved footnote-like text remains literal.
 [Ferromark #563](https://github.com/sebastian-software/ferromark/issues/563),
 [#564](https://github.com/sebastian-software/ferromark/issues/564), and
 [#565](https://github.com/sebastian-software/ferromark/issues/565) track richer
-image provenance, diagnostic details, and public callout metadata. They are
-follow-up API improvements; this adapter uses the available AST deliberately.
+image provenance, diagnostic details, and public callout metadata. All three
+shipped in [Ferromark 3.6.0](https://github.com/sebastian-software/ferromark/releases/tag/v3.6.0)
+and are used by the native adapter.
