@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import * as viteModule from "vite";
-import type { Plugin, FilterPattern } from "vite";
+import type { Plugin, FilterPattern, ResolvedConfig } from "vite";
 import { createFilter, version as viteVersion } from "vite";
 import {
   loadPalamedesConfig,
@@ -876,6 +876,51 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           };
   }
   plugins.push(transformPlugin);
+
+  if (mdxOverride !== false) {
+    let developmentConfig: ResolvedConfig;
+    plugins.push({
+      name: "palamedes:mdx-react-development",
+      apply: "serve",
+      enforce: "pre",
+      configResolved(resolvedConfig) {
+        developmentConfig = resolvedConfig;
+      },
+      async transform(code, id) {
+        const cleanId = stripQuery(id);
+        if (!mdxModuleIds.has(cleanId)) return null;
+        const cfg = await getConfigLazy();
+        const mdx = resolveMdxOptions(cfg);
+        if ((mdx.framework ?? "react") !== "react") return null;
+
+        // Run after native macro lowering and before Vite's import analysis.
+        // Vite's dev JSX transform filters by extension and skips .mdx even
+        // when the previous transform returned moduleType: "jsx".
+        const transformWithOxc = Reflect.get(viteModule, "transformWithOxc") as
+          | typeof viteModule.transformWithOxc
+          | undefined;
+        if (typeof transformWithOxc === "function") {
+          if (developmentConfig.oxc === false) return null;
+          const configured = developmentConfig.oxc?.jsx;
+          const jsx = typeof configured === "object" ? configured : {};
+          const oxcResult = await transformWithOxc(code, cleanId, {
+            lang: "jsx",
+            jsx: { runtime: "automatic", ...jsx, development: true, refresh: false },
+            sourcemap: true,
+          });
+          return { code: oxcResult.code, map: oxcResult.map, moduleType: "js" };
+        }
+        // rolldown-vite on Vite 7 still exposes the esbuild host transform.
+        const esbuildResult = await viteModule.transformWithEsbuild(code, cleanId, {
+          loader: "jsx",
+          jsx: "automatic",
+          jsxDev: true,
+          sourcemap: true,
+        });
+        return { code: esbuildResult.code, map: esbuildResult.map, moduleType: "js" };
+      },
+    });
+  }
 
   // Plugin 4b: message sidecar modules for experimental graph splitting.
   // Per message-bearing source file, one per-locale module rendered by the

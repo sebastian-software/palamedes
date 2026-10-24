@@ -1,7 +1,7 @@
 # MDX Messages
 
 Palamedes treats `.mdx` as a first-class source format. The native extractor
-and the Vite compiler consume the same FerroMark semantic event stream, so a
+and the Vite compiler consume the same Ferromark source-ranged AST, so a
 message extracted by `pmds extract` is the same message rendered by the
 compiled module.
 
@@ -168,7 +168,7 @@ recognized and are omitted from rendered content.
 
 ## Diagnostics, Maps, and HMR
 
-Malformed MDX produces structured, source-ranged diagnostics from FerroMark.
+Malformed MDX produces structured, source-ranged diagnostics from Ferromark.
 Footnotes currently produce an `UnsupportedFootnote` diagnostic instead of
 silently compiling incorrect links. The Vite adapter reports diagnostic
 locations as build errors and returns the native v3 source map for valid
@@ -189,7 +189,8 @@ and a document-level locale switch. It is part of `pnpm verify:examples`.
 
 ## Architecture Boundary
 
-FerroMark owns MDX recognition and the versioned semantic event stream.
+Ferromark owns Markdown/MDX recognition, JavaScript syntax validation, and
+the source-ranged AST.
 `crates/palamedes` owns translation-unit selection, rich/value placeholder
 construction, message identity, diagnostics conversion, and JSX module
 lowering. The native CLI and typed N-API binding both call that core workflow.
@@ -200,59 +201,41 @@ native code and source map.
 This boundary prevents extraction and compilation from developing separate
 Markdown heuristics.
 
-## Dependency Upgrade Assessment
+## Ferromark 3 Migration
 
-The `ferromark = 0.7.0` pin is intentional. The assessment for
-[#1313](https://github.com/sebastian-software/palamedes/issues/1313), performed
-on October 24, 2026 against Palamedes `8b90186e` and Ferromark `3.5.1`, found
-that a direct AST migration does not yet preserve the extraction contract.
+The native adapter uses Ferromark 3.5.1 with its `jsx` feature and both `mdx`
+and `mdx_compatible` parser options. This adopts the public arena AST in place
+of the retired 0.7 event API. Its MIT license, Rust requirement, and OXC version
+are compatible with the workspace. See the upstream
+[v2 migration guide](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v2.md)
+and [v3 upgrade notes](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v3.md).
 
-Ferromark 3.5.1 is released on crates.io and uses the MIT license, Rust 1.95,
-and OXC 0.146, all compatible with this workspace. It replaces the old MDX
-event API with an arena AST. MDX compilation needs the `jsx` Cargo feature and
-both `ParserOptions::mdx` and `mdx_compatible`; enabling only `mdx` leaves
-lowercase HTML outside the JSX path and permits recovery instead of strict
-JavaScript validation. See the upstream
-[v2 migration guide](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v2.md),
-[v3 upgrade notes](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v3.md),
-and [parser options](https://github.com/sebastian-software/ferromark/blob/v3.5.1/src/parser/options.rs).
+This migration happens before Palamedes v2. Translation units follow the
+current parsed semantics rather than reproducing old parser quirks. Re-run
+`pmds extract` and review changed source messages and IDs when upgrading.
+The MDX extraction cache stamp changes so previous analysis is discarded.
 
-The AST supplies JSX elements and attributes, expressions, ESM, resolved
-reference links, frontmatter payload ranges, and byte spans. A local adapter
-spike preserved extraction records, IDs, comments, JSX, and source maps for the
-three maintained Vite MDX pages and five additional valid fixtures. A ninth
-fixture exposed a useful upstream correction: MDX-looking content stays inside
-its code fence. That success does not establish compatibility for the complete
-supported syntax.
+- Image alt text is the complete normalized accessible description. For
+  ``![Code `sample`](./sample.png)``, the message is `Code sample`, including
+  words authored as inline code. Its source reference points to the image;
+  Ferromark currently exposes the whole image span rather than alt child spans.
+- Multiple paragraphs inside JSX stay separate translation units inside their
+  authored container. They are never concatenated across a blank line.
+- Callout markers such as `[!NOTE]` remain structural; the body is translatable.
+- GFM strikethrough follows the parser, including single-tilde `~text~`.
+  Optional Ferromark writing extensions remain disabled.
+- Code fences retain MDX-looking source verbatim as code. Escaped and decoded
+  text is not entity-decoded a second time.
 
-Two upstream API gaps remain:
+Parser failures now return the first `InvalidMdx` or `NestingTooDeep`
+diagnostic, with an original byte range and no related tag range. Invalid
+JavaScript in expressions, attributes, and import/export blocks fails analysis;
+TypeScript declarations belong in imported TypeScript modules. Failed analysis
+returns no messages, compiled IDs, JSX, or source map. Recognized footnotes still
+return `UnsupportedFootnote`; unresolved footnote-like text remains literal.
 
-- [`Image`](https://github.com/sebastian-software/ferromark/blob/v3.5.1/src/ast/nodes.rs)
-  carries a flattened `alt` string and the whole image span, without the alt
-  text's inline children or their individual spans. For
-  ``![Code `sample`](./sample.png)``, the existing adapter extracts `Code ` and
-  protects the inline code; the direct AST adapter extracted `Code sample`,
-  changing the message ID. Preserving the distinction requires structured alt
-  content from upstream or an explicitly justified second parse of the authored
-  Markdown. Treating the flattened string as equivalent silently changes the
-  translation boundary.
-- [`ParseErrorKind`](https://github.com/sebastian-software/ferromark/blob/v3.5.1/src/parser/error.rs)
-  returns the first error with a primary span. The old specific structural
-  codes, multiple-error collection, and related opening-tag range have no
-  direct equivalent. Strict mode also rejects invalid JavaScript and
-  TypeScript module syntax that the old delimiter validator did not validate.
-  These are diagnostic compatibility decisions, not a mechanical type rename.
-
-The broader corpus also caught adapter work that remains necessary: callout
-markers must stay outside messages, single tildes must keep the old literal
-behavior, and blank lines inside same-line JSX must not concatenate separate
-messages. Those differences do not establish additional upstream API gaps.
-Native regression tests retain representative image-alt, callout, and paragraph
-identity cases so another upgrade attempt has an executable baseline.
-
-Keep the existing pin until structured image-alt extraction and diagnostic
-compatibility have an agreed implementation. A follow-up migration must repeat
-the native corpus comparison, rebuild the native binding, and prove the Vite
-example, invalid input, and rebuild recovery with the new parser. The current
-pin does not imply that those checks have passed for 3.5.1. A shared crate or
-segmentation extraction has no demonstrated need from this assessment.
+[Ferromark #563](https://github.com/sebastian-software/ferromark/issues/563),
+[#564](https://github.com/sebastian-software/ferromark/issues/564), and
+[#565](https://github.com/sebastian-software/ferromark/issues/565) track richer
+image provenance, diagnostic details, and public callout metadata. They are
+follow-up API improvements; this adapter uses the available AST deliberately.
