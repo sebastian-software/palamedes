@@ -199,3 +199,60 @@ native code and source map.
 
 This boundary prevents extraction and compilation from developing separate
 Markdown heuristics.
+
+## Dependency Upgrade Assessment
+
+The `ferromark = 0.7.0` pin is intentional. The assessment for
+[#1313](https://github.com/sebastian-software/palamedes/issues/1313), performed
+on October 24, 2026 against Palamedes `8b90186e` and Ferromark `3.5.1`, found
+that a direct AST migration does not yet preserve the extraction contract.
+
+Ferromark 3.5.1 is released on crates.io and uses the MIT license, Rust 1.95,
+and OXC 0.146, all compatible with this workspace. It replaces the old MDX
+event API with an arena AST. MDX compilation needs the `jsx` Cargo feature and
+both `ParserOptions::mdx` and `mdx_compatible`; enabling only `mdx` leaves
+lowercase HTML outside the JSX path and permits recovery instead of strict
+JavaScript validation. See the upstream
+[v2 migration guide](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v2.md),
+[v3 upgrade notes](https://github.com/sebastian-software/ferromark/blob/v3.5.1/docs/migration-v3.md),
+and [parser options](https://github.com/sebastian-software/ferromark/blob/v3.5.1/src/parser/options.rs).
+
+The AST supplies JSX elements and attributes, expressions, ESM, resolved
+reference links, frontmatter payload ranges, and byte spans. A local adapter
+spike preserved extraction records, IDs, comments, JSX, and source maps for the
+three maintained Vite MDX pages and five additional valid fixtures. A ninth
+fixture exposed a useful upstream correction: MDX-looking content stays inside
+its code fence. That success does not establish compatibility for the complete
+supported syntax.
+
+Two upstream API gaps remain:
+
+- [`Image`](https://github.com/sebastian-software/ferromark/blob/v3.5.1/src/ast/nodes.rs)
+  carries a flattened `alt` string and the whole image span, without the alt
+  text's inline children or their individual spans. For
+  ``![Code `sample`](./sample.png)``, the existing adapter extracts `Code ` and
+  protects the inline code; the direct AST adapter extracted `Code sample`,
+  changing the message ID. Preserving the distinction requires structured alt
+  content from upstream or an explicitly justified second parse of the authored
+  Markdown. Treating the flattened string as equivalent silently changes the
+  translation boundary.
+- [`ParseErrorKind`](https://github.com/sebastian-software/ferromark/blob/v3.5.1/src/parser/error.rs)
+  returns the first error with a primary span. The old specific structural
+  codes, multiple-error collection, and related opening-tag range have no
+  direct equivalent. Strict mode also rejects invalid JavaScript and
+  TypeScript module syntax that the old delimiter validator did not validate.
+  These are diagnostic compatibility decisions, not a mechanical type rename.
+
+The broader corpus also caught adapter work that remains necessary: callout
+markers must stay outside messages, single tildes must keep the old literal
+behavior, and blank lines inside same-line JSX must not concatenate separate
+messages. Those differences do not establish additional upstream API gaps.
+Native regression tests retain representative image-alt, callout, and paragraph
+identity cases so another upgrade attempt has an executable baseline.
+
+Keep the existing pin until structured image-alt extraction and diagnostic
+compatibility have an agreed implementation. A follow-up migration must repeat
+the native corpus comparison, rebuild the native binding, and prove the Vite
+example, invalid input, and rebuild recovery with the new parser. The current
+pin does not imply that those checks have passed for 3.5.1. A shared crate or
+segmentation extraction has no demonstrated need from this assessment.
