@@ -2229,6 +2229,78 @@ mod tests {
         result
     }
 
+    // These cases constrain a parser upgrade (#1313): source-first identity
+    // includes the distinction between authored prose and protected code.
+    #[test]
+    fn image_alt_extraction_excludes_inline_code_and_keeps_identity() {
+        let source = "![Code `sample`](./sample.png)";
+        let result = analyze_valid(
+            source,
+            MdxOptions {
+                keep_source_fallbacks: true,
+                ..MdxOptions::default()
+            },
+        );
+        assert_eq!(result.messages.len(), 1);
+        assert_eq!(result.messages[0].message, "Code ");
+        assert_eq!(
+            result.messages[0].origin,
+            ("guide.mdx".to_owned(), 1, Some(3))
+        );
+        assert_eq!(result.compiled_ids, [compiled_message_key("Code ", None)]);
+        assert!(
+            result
+                .code
+                .expect("image compiles")
+                .contains("message: \"Code \"")
+        );
+    }
+
+    #[test]
+    fn callout_markers_are_structural_and_do_not_change_message_identity() {
+        let source = "> [!NOTE]\n> Keep this **note**.\n";
+        let result = analyze_valid(source, MdxOptions::default());
+        assert_eq!(result.messages.len(), 1);
+        assert_eq!(result.messages[0].message, "Keep this <0>note</0>.");
+        assert_eq!(
+            result.messages[0].origin,
+            ("guide.mdx".to_owned(), 2, Some(3))
+        );
+        assert_eq!(
+            result.compiled_ids,
+            [compiled_message_key("Keep this <0>note</0>.", None)]
+        );
+    }
+
+    #[test]
+    fn paragraph_boundaries_inside_same_line_jsx_keep_separate_messages() {
+        let source = "<Card>First paragraph\n\nSecond paragraph</Card>\n";
+        let result = analyze_valid(source, MdxOptions::default());
+        assert_eq!(
+            result
+                .messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            ["<0>First paragraph</0>", "Second paragraph"]
+        );
+        assert_eq!(
+            result.messages[0].origin,
+            ("guide.mdx".to_owned(), 1, Some(1))
+        );
+        assert_eq!(
+            result.messages[1].origin,
+            ("guide.mdx".to_owned(), 3, Some(1))
+        );
+        assert_eq!(
+            result.compiled_ids,
+            [
+                compiled_message_key("<0>First paragraph</0>", None),
+                compiled_message_key("Second paragraph", None)
+            ]
+        );
+    }
+
     #[test]
     fn extracts_semantic_units_and_protects_non_prose() {
         let source = r#"import { Card } from "./Card"
