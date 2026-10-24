@@ -200,11 +200,14 @@ parsing is configured by Palamedes; Solid needs the explicit `.mdx` extension
 shown above. React development output is lowered through Vite after native
 macro transforms so `.mdx` edits can rebuild without an additional MDX plugin.
 
-MDX parsing uses Ferromark 3.5.1's source-ranged AST with strict JavaScript/JSX
+MDX parsing uses Ferromark 3.6.0's source-ranged AST with strict JavaScript/JSX
 validation. Image alt text includes the complete accessible description,
 including inline-code words. Separate paragraphs inside JSX remain separate
-messages. Parser failures return the first `InvalidMdx` or `NestingTooDeep`
-diagnostic with a primary range; related tag ranges are unavailable. Re-run
+messages. Structured alt metadata provides original source references, and
+public callout metadata excludes structural markers. Parser failures return typed
+diagnostics with original primary and related opening-tag ranges where available.
+Up to 16 independent standalone unmatched closing tags are collected; ambiguous
+syntax and JavaScript failures stop collection without producing output. Re-run
 `pmds extract` after upgrading from the retired event parser; message IDs may
 change before v2. See `/docs/mdx.md` for the migration boundary.
 

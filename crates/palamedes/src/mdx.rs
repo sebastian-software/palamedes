@@ -5,11 +5,12 @@
 //! placeholders, message identity, extraction records, and the runtime module.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroUsize;
 
 use ferromark::ast::{
     AlignKind, Document, MdxJsxAttributeEntry, MdxJsxAttributeValue, Node, Span, Visit, walk_node,
 };
-use ferromark::{ParseError, ParseErrorKind, ParserOptions};
+use ferromark::{MdxDiagnosticKind, ParseError, ParseErrorKind, ParserOptions};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::CommentKind;
 use oxc_parser::Parser;
@@ -27,6 +28,7 @@ const DEFAULT_IGNORE_DIRECTIVE: &str = "palamedes-ignore";
 const DEFAULT_RUNTIME_MODULE: &str = "@palamedes/runtime";
 const REACT_TRANS_MODULE: &str = "@palamedes/react/compiled";
 const SOLID_TRANS_MODULE: &str = "@palamedes/solid/compiled";
+const MAX_MDX_DIAGNOSTICS: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 
 /// Framework contract used for generated rich-text component bindings.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
@@ -105,7 +107,7 @@ impl MdxOptions {
         fields.sort();
         fields.dedup();
         format!(
-            "mdx-v3|attrs={}|front={}|ignore={}",
+            "mdx-v4|attrs={}|front={}|ignore={}",
             attributes.join(","),
             fields.join(","),
             self.ignore_directive
@@ -160,16 +162,22 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
         mdx: true,
         mdx_compatible: true,
         front_matter: true,
+        image_alt_content: true,
         ..ParserOptions::gfm()
     };
-    let document = match ferromark::Parser::with_options(&allocator, source, parser_options).parse()
+    let document = match ferromark::Parser::with_options(&allocator, source, parser_options)
+        .parse_with_diagnostics(MAX_MDX_DIAGNOSTICS)
     {
         Ok(document) => document,
         Err(error) => {
             let locator = SourceLocator::new(source);
             return MdxAnalysisResult {
                 messages: Vec::new(),
-                diagnostics: vec![diagnostic_record(&locator, error)],
+                diagnostics: error
+                    .errors
+                    .into_iter()
+                    .map(|error| diagnostic_record(&locator, error))
+                    .collect(),
                 code: None,
                 compiled_ids: Vec::new(),
                 map: None,
@@ -234,16 +242,29 @@ pub fn extract_mdx_messages(
 }
 
 fn diagnostic_record(locator: &SourceLocator, error: ParseError) -> MdxDiagnosticRecord {
-    let code = match error.kind() {
-        ParseErrorKind::InvalidMdx { .. } => "InvalidMdx",
-        ParseErrorKind::NestingTooDeep { .. } => "NestingTooDeep",
-        _ => "ParseError",
+    let detail = error.mdx_diagnostic();
+    let code = match detail.map(|detail| detail.kind) {
+        Some(MdxDiagnosticKind::InvalidExpression) => "InvalidExpression",
+        Some(MdxDiagnosticKind::InvalidOpeningTag) => "InvalidOpeningTag",
+        Some(MdxDiagnosticKind::UnclosedElement) => "UnclosedElement",
+        Some(MdxDiagnosticKind::MismatchedClosingTag) => "MismatchedClosingTag",
+        Some(MdxDiagnosticKind::UnexpectedClosingTag) => "UnexpectedClosingTag",
+        Some(MdxDiagnosticKind::InvalidClosingTag) => "InvalidClosingTag",
+        Some(MdxDiagnosticKind::InvalidModule) => "InvalidModule",
+        Some(_) => "InvalidMdx",
+        None => match error.kind() {
+            ParseErrorKind::InvalidMdx { .. } => "InvalidMdx",
+            ParseErrorKind::NestingTooDeep { .. } => "NestingTooDeep",
+            _ => "ParseError",
+        },
     };
     MdxDiagnosticRecord {
         code: code.to_owned(),
         message: error.to_string(),
         primary: source_range(locator, error.span()),
-        related: None,
+        related: detail
+            .and_then(|detail| detail.related_span)
+            .map(|span| source_range(locator, span)),
     }
 }
 
@@ -582,16 +603,16 @@ impl<'a> MdxCompiler<'a> {
             Node::Heading(heading) => self.prose(&format!("h{}", heading.depth), &heading.children),
             Node::BlockQuote(quote) => {
                 self.body.append("<blockquote>\n");
-                if let Some(Node::Paragraph(paragraph)) = quote.children.first()
-                    && let Some(consumed) = callout_prefix(paragraph)
-                {
+                if let Some(callout) = quote.callout(self.source) {
                     self.start_unit("<p>");
-                    let mut remaining = consumed;
-                    for child in &paragraph.children {
-                        if let Node::Text(text) = child {
-                            let skipped = remaining.min(text.value.len());
-                            remaining -= skipped;
-                            self.text(text, skipped);
+                    for (index, child) in callout.body.inlines.iter().enumerate() {
+                        if index == 0
+                            && let Node::Text(text) = child
+                        {
+                            self.text_value(
+                                &text.value[callout.body.text_offset..],
+                                callout_body_offset(self.source, text.span, callout.marker_span),
+                            );
                         } else {
                             self.inline(child);
                         }
@@ -599,7 +620,7 @@ impl<'a> MdxCompiler<'a> {
                     if self.finish_unit() {
                         self.body.append("</p>\n");
                     }
-                    self.blocks(&quote.children[1..]);
+                    self.blocks(callout.body.blocks);
                 } else {
                     self.blocks(&quote.children);
                 }
@@ -801,7 +822,7 @@ impl<'a> MdxCompiler<'a> {
 
     fn inline(&mut self, node: &Node<'_>) {
         match node {
-            Node::Text(text) => self.text(text, 0),
+            Node::Text(text) => self.text(text),
             Node::Emphasis(value) => self.rich_children("<em>", "</em>", &value.children),
             Node::Strong(value) => self.rich_children("<strong>", "</strong>", &value.children),
             Node::Delete(value) => self.rich_children("<del>", "</del>", &value.children),
@@ -881,26 +902,14 @@ impl<'a> MdxCompiler<'a> {
         }
     }
 
-    fn text(&mut self, text: &ferromark::ast::Text<'_>, skipped: usize) {
-        let value = &text.value[skipped..];
+    fn text(&mut self, text: &ferromark::ast::Text<'_>) {
         let raw = range_text(self.source, text.span);
-        let (value, offset) = if skipped > 0 {
-            // `detect_callout` counts decoded bytes. Locate the body after the
-            // original marker, including any stripped blockquote prefixes.
-            let value = value.trim_start();
-            let marker_end = raw.find(']').map_or(0, |offset| offset + 1);
-            let body = &raw[marker_end..];
-            let trimmed = body.trim_start_matches([' ', '\t', '\r', '\n', '>']);
-            (
-                value,
-                text.span.start as usize + marker_end + body.len() - trimmed.len(),
-            )
-        } else {
-            (
-                value,
-                text.span.start as usize + raw.len() - raw.trim_start_matches([' ', '\t']).len(),
-            )
-        };
+        let offset =
+            text.span.start as usize + raw.len() - raw.trim_start_matches([' ', '\t']).len();
+        self.text_value(text.value, offset);
+    }
+
+    fn text_value(&mut self, value: &str, offset: usize) {
         let value = clean_jsx_whitespace(value);
         if !value.is_empty() {
             self.mark_unit_start(offset);
@@ -969,15 +978,20 @@ impl<'a> MdxCompiler<'a> {
         let source_offset = image.span.start as usize;
         self.mark_unit_start(source_offset);
         // All words in the normalized accessible description are translatable,
-        // including inline-code words. The parser supplies the image's span.
+        // including inline-code words. Structured alt metadata supplies its
+        // original range without changing the normalized accessible text.
         let alt = clean_jsx_whitespace(image.alt);
         let ignored = self
             .unit
             .as_ref()
             .and_then(|unit| unit.ignored)
             .unwrap_or(false);
+        let alt_offset = image
+            .alt_content
+            .as_ref()
+            .map_or(source_offset, |content| content.span.start as usize);
         let reference = (!ignored && !alt.is_empty())
-            .then(|| self.push_message(alt.clone(), BTreeMap::new(), source_offset));
+            .then(|| self.push_message(alt.clone(), BTreeMap::new(), alt_offset));
         let alt_expression = reference.as_ref().map_or_else(
             || js_string(&alt),
             |reference| {
@@ -1516,29 +1530,21 @@ fn is_js_identifier(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '$'))
 }
 
-// Callout labels are structural metadata, not translator-facing prose.
-// Inspect only the AST's leading text; code, links, and JSX cannot form markers.
-fn callout_prefix(paragraph: &ferromark::ast::Paragraph<'_>) -> Option<usize> {
-    let mut prefix = String::new();
-    for child in &paragraph.children {
-        let Node::Text(text) = child else {
-            return None;
-        };
-        for character in text.value.chars() {
-            prefix.push(character);
-            if character == ']' {
-                let name = prefix.strip_prefix("[!")?.strip_suffix(']')?.trim();
-                return ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"]
-                    .iter()
-                    .any(|kind| name.eq_ignore_ascii_case(kind))
-                    .then_some(prefix.len());
-            }
-            if prefix.len() > 16 {
-                return None;
-            }
+// Map the parser's trimmed body back through whitespace and container prefixes.
+// Marker recognition and decoded body boundaries come from BlockQuote::callout.
+fn callout_body_offset(source: &str, text: Span, marker: Span) -> usize {
+    let start = text.start.max(marker.end) as usize;
+    let mut remaining = &source[start..text.end as usize];
+    loop {
+        let trimmed = remaining.trim_start();
+        let crossed_line = remaining[..remaining.len() - trimmed.len()].contains(['\r', '\n']);
+        remaining = trimmed;
+        if !crossed_line {
+            break;
         }
+        remaining = remaining.trim_start_matches(['>', ' ', '\t']);
     }
-    None
+    text.end as usize - remaining.len()
 }
 
 fn range_text(source: &str, range: Span) -> &str {
@@ -1967,12 +1973,17 @@ mod tests {
 
     #[test]
     fn rejects_invalid_javascript_and_jsx_without_partial_output() {
-        for source in [
-            "Text {value +} after.",
-            "<Card title={value +} />",
-            "<Card><Badge></Card></Badge>",
-            "export const value = ;\n\n# Heading",
-            "export const value: number = 1;\n\n# Heading",
+        for (source, code) in [
+            ("Text {value +} after.", "InvalidExpression"),
+            ("<Card title={value +} />", "InvalidOpeningTag"),
+            ("<Card><Badge></Card></Badge>", "MismatchedClosingTag"),
+            ("<Card>\nBody", "UnclosedElement"),
+            ("</Card invalid>", "InvalidClosingTag"),
+            ("export const value = ;\n\n# Heading", "InvalidModule"),
+            (
+                "export const value: number = 1;\n\n# Heading",
+                "InvalidModule",
+            ),
         ] {
             let result = analyze_mdx(source, "invalid.mdx", MdxOptions::default());
             assert!(result.code.is_none(), "{source}");
@@ -1982,11 +1993,73 @@ mod tests {
             let [diagnostic] = result.diagnostics.as_slice() else {
                 panic!("expected one parser failure: {source}");
             };
-            assert_eq!(diagnostic.code, "InvalidMdx");
+            assert_eq!(diagnostic.code, code);
             assert!(diagnostic.primary.end <= source.len());
-            assert!(diagnostic.primary.start < diagnostic.primary.end);
+            assert!(diagnostic.primary.start <= diagnostic.primary.end);
+            if code == "UnclosedElement" {
+                let related = diagnostic.related.as_ref().expect("unclosed opening tag");
+                assert_eq!(&source[related.start..related.end], "<Card>");
+            } else {
+                assert!(diagnostic.primary.start < diagnostic.primary.end);
+            }
+        }
+    }
+
+    #[test]
+    fn typed_diagnostics_preserve_related_ranges_in_original_containers() {
+        for source in [
+            "é前\r\n\r\n> <Card>\r\n> <Badge>\r\n> </Card>\r\n",
+            "- <Card>\n  <Badge>\n  </Card>\n",
+            "<Outer>\n  > <Card>\n  > <Badge>\n  > </Card>\n</Outer>\n",
+        ] {
+            let result = analyze_mdx(source, "invalid.mdx", MdxOptions::default());
+            let [diagnostic] = result.diagnostics.as_slice() else {
+                panic!("expected one ambiguous mismatch: {source}");
+            };
+            assert_eq!(diagnostic.code, "MismatchedClosingTag");
+            let primary = &diagnostic.primary;
+            let related = diagnostic.related.as_ref().expect("related opening tag");
+            assert_eq!(&source[primary.start..primary.end], "</Card>");
+            assert_eq!(&source[related.start..related.end], "<Badge>");
+            assert_eq!(
+                (primary.line, primary.column),
+                SourceLocator::new(source).location(source.find("</Card>").unwrap())
+            );
+            assert!(result.code.is_none());
+        }
+    }
+
+    #[test]
+    fn collects_bounded_independent_diagnostics_without_partial_output() {
+        let source = "é\r\n\r\n</First>\r\n\r\n</Second>\r\n";
+        let result = analyze_mdx(source, "invalid.mdx", MdxOptions::default());
+        assert_eq!(result.diagnostics.len(), 2);
+        for (diagnostic, tag) in result.diagnostics.iter().zip(["</First>", "</Second>"]) {
+            assert_eq!(diagnostic.code, "UnexpectedClosingTag");
+            assert_eq!(
+                &source[diagnostic.primary.start..diagnostic.primary.end],
+                tag
+            );
             assert!(diagnostic.related.is_none());
         }
+        assert!(result.messages.is_empty());
+        assert!(result.compiled_ids.is_empty());
+        assert!(result.code.is_none());
+        assert!(result.map.is_none());
+
+        let ambiguous = analyze_mdx(
+            "x </First>\n\n</Second>",
+            "invalid.mdx",
+            MdxOptions::default(),
+        );
+        assert_eq!(ambiguous.diagnostics.len(), 1);
+        let many = analyze_mdx(
+            &"</Unknown>\n\n".repeat(20),
+            "invalid.mdx",
+            MdxOptions::default(),
+        );
+        assert_eq!(many.diagnostics.len(), 16);
+        assert!(many.code.is_none());
     }
 
     #[test]
@@ -2039,7 +2112,7 @@ mod tests {
         assert_eq!(result.messages[0].message, "Bold and code &amp;");
         assert_eq!(
             result.messages[0].origin,
-            ("guide.mdx".to_owned(), 1, Some(1))
+            ("guide.mdx".to_owned(), 1, Some(3))
         );
         assert_eq!(
             result.compiled_ids,
@@ -2055,18 +2128,51 @@ mod tests {
 
     #[test]
     fn callouts_exclude_markers_and_keep_body_locations() {
-        for (marker, expected) in [
-            ("NOTE", "Keep this <0>note</0>."),
-            ("warning", "Keep this <0>note</0>."),
+        for marker in [
+            "[!NOTE]",
+            "[!warning]",
+            "&#91;!NOTE&#93;",
+            "\\[!NOTE\\]",
+            "[!          NOTE          ]",
         ] {
-            let source = format!("> [!{marker}]\r\n> Keep this **note**.\r\n");
+            let source = format!("> {marker}\r\n> Keep this **note**.\r\n");
             let result = analyze_valid(&source, MdxOptions::default());
-            assert_eq!(result.messages[0].message, expected);
+            assert_eq!(
+                result.messages[0].message, "Keep this <0>note</0>.",
+                "{marker}"
+            );
             assert_eq!(
                 result.messages[0].origin,
                 ("guide.mdx".to_owned(), 2, Some(3))
             );
         }
+
+        let source = "> &#91;!NOTE&#93; > Keep this **note**.";
+        let result = analyze_valid(source, MdxOptions::default());
+        assert_eq!(result.messages[0].message, "> Keep this <0>note</0>.");
+        let expected = SourceLocator::new(source).location(source.find("> Keep").unwrap());
+        assert_eq!(
+            (result.messages[0].origin.1, result.messages[0].origin.2),
+            (expected.0, Some(expected.1))
+        );
+        assert_eq!(
+            messages("> [!CUSTOM]\n> Ordinary prose."),
+            ["[!CUSTOM] Ordinary prose."]
+        );
+    }
+
+    #[test]
+    fn image_alt_locations_use_original_bracket_contents_in_containers() {
+        let source =
+            "é前\r\n\r\n> - ![**Bold** and `code` &amp;][image]\r\n\r\n[image]: /image.png\r\n";
+        let result = analyze_valid(source, MdxOptions::default());
+        let alt = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Bold and code &")
+            .expect("complete alt message");
+        let expected = SourceLocator::new(source).location(source.find("**Bold").unwrap());
+        assert_eq!((alt.origin.1, alt.origin.2), (expected.0, Some(expected.1)));
     }
 
     #[test]
