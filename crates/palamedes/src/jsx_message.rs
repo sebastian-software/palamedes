@@ -47,6 +47,11 @@ pub(crate) struct JoinedJsxMessage {
 }
 
 pub(crate) fn clean_jsx_text(text: &str) -> String {
+    decode_jsx_entities(&clean_jsx_whitespace(text))
+}
+
+/// Normalize JSX whitespace for text that the parser has already decoded.
+pub(crate) fn clean_jsx_whitespace(text: &str) -> String {
     // Mirror Babel's `cleanJSXElementLiteralChild`, which Lingui relies on:
     // whitespace touching a line break is dropped, lines are trimmed, and the
     // remaining lines are joined with a single space. This keeps message ids
@@ -83,7 +88,7 @@ pub(crate) fn clean_jsx_text(text: &str) -> String {
         }
     }
 
-    decode_jsx_entities(&result)
+    result
 }
 
 pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessage {

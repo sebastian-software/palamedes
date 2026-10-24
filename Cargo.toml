@@ -30,9 +30,7 @@ test-support = []
 ferrocat = "=3.4.2"
 ferrocat-icu = "=3.4.2"
 ferrocat-po = "=3.4.2"
-# Intentional v1 pin: the 3.5.1 AST flattens image alt text and cannot preserve
-# our extraction contract directly. See docs/mdx.md and issue #1313.
-ferromark = { version = "=0.7.0", features = ["mdx"] }
+ferromark = { version = "=3.5.1", features = ["jsx"] }
 oxc_allocator = "0.146.0"
 oxc_ast = "0.146.0"
 oxc_ast_visit = "0.146.0"

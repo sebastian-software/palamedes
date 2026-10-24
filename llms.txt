@@ -220,6 +220,7 @@ changes; cache failures are non-fatal. See `/docs/cli.md` and
 - `/docs/cli.md`: full CLI reference
 - `/docs/platform-support.md`: published native targets and unsupported Node processes
 - `/docs/catalog-formats.md`: PO default and opt-in FCL
+- MDX uses Ferromark 3 strict JavaScript/JSX parsing. Image alt messages include the complete accessible text; re-extract catalogs after upgrading from the old parser. Parse failures return the first source-ranged diagnostic.
 - `/docs/mdx.md`: native MDX extraction, Vite compilation, limits, and verified setup
 - `/docs/principles.md`: architectural principles
 - `/docs/migrate-from-lingui.md`: migration guidance for Lingui-shaped projects

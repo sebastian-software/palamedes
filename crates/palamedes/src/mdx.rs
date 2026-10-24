@@ -1,14 +1,15 @@
 //! Native MDX analysis and JSX module lowering.
 //!
-//! FerroMark owns syntax recognition and exposes the versioned semantic event
-//! stream. Palamedes consumes that stream to define translation units, rich
+//! Ferromark owns syntax recognition and exposes a source-ranged AST.
+//! Palamedes consumes that tree to define translation units, rich
 //! placeholders, message identity, extraction records, and the runtime module.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ferromark::block::{CodeBlockKind, ListKind};
-use ferromark::mdx::{MdxDiagnostic, MdxEvent, parse_events_strict};
-use ferromark::{BlockEvent, InlineEvent, Range};
+use ferromark::ast::{
+    AlignKind, Document, MdxJsxAttributeEntry, MdxJsxAttributeValue, Node, Span, Visit, walk_node,
+};
+use ferromark::{ParseError, ParseErrorKind, ParserOptions};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::CommentKind;
 use oxc_parser::Parser;
@@ -18,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::extract::ExtractedMessageRecord;
 use crate::icu_text::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
+use crate::jsx_message::{JsxMessagePart, clean_jsx_whitespace, join_jsx_message_parts};
 use crate::source::{SourceComment, SourceCommentKind, SourceLocator, SourceRange};
 use crate::transform::NativeTransformSourceMap;
 
@@ -104,7 +105,7 @@ impl MdxOptions {
         fields.sort();
         fields.dedup();
         format!(
-            "mdx-v1|attrs={}|front={}|ignore={}",
+            "mdx-v3|attrs={}|front={}|ignore={}",
             attributes.join(","),
             fields.join(","),
             self.ignore_directive
@@ -119,7 +120,7 @@ pub type MdxSourceRange = SourceRange;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MdxDiagnosticRecord {
-    /// Stable FerroMark diagnostic code.
+    /// Parser diagnostic category or a Palamedes compatibility diagnostic.
     pub code: String,
     /// Human-readable diagnostic text.
     pub message: String,
@@ -154,16 +155,21 @@ pub struct MdxAnalysisResult {
 /// Analyze and compile an MDX document using one native semantic pipeline.
 #[must_use]
 pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnalysisResult {
-    let stream = match parse_events_strict(source) {
-        Ok(stream) => stream,
-        Err(diagnostics) => {
+    let allocator = ferromark::Allocator::new();
+    let parser_options = ParserOptions {
+        mdx: true,
+        mdx_compatible: true,
+        front_matter: true,
+        ..ParserOptions::gfm()
+    };
+    let document = match ferromark::Parser::with_options(&allocator, source, parser_options).parse()
+    {
+        Ok(document) => document,
+        Err(error) => {
             let locator = SourceLocator::new(source);
             return MdxAnalysisResult {
                 messages: Vec::new(),
-                diagnostics: diagnostics
-                    .into_iter()
-                    .map(|diagnostic| diagnostic_record(&locator, diagnostic))
-                    .collect(),
+                diagnostics: vec![diagnostic_record(&locator, error)],
                 code: None,
                 compiled_ids: Vec::new(),
                 map: None,
@@ -172,7 +178,7 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
         }
     };
 
-    if let Some(range) = unsupported_footnote_range(source, &stream.events) {
+    if let Some(range) = unsupported_footnote_range(&document) {
         let locator = SourceLocator::new(source);
         return MdxAnalysisResult {
             messages: Vec::new(),
@@ -189,9 +195,9 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
         };
     }
 
-    let comments = mdx_source_comments(source, &stream.events);
-    let compiler = MdxCompiler::new(source, filename, options, &stream.link_references);
-    let mut result = compiler.compile(&stream.events);
+    let comments = mdx_source_comments(source, &document);
+    let compiler = MdxCompiler::new(source, filename, options);
+    let mut result = compiler.compile(&document);
     result.comments = comments;
     result
 }
@@ -227,131 +233,117 @@ pub fn extract_mdx_messages(
     }
 }
 
-fn diagnostic_record(locator: &SourceLocator, diagnostic: MdxDiagnostic) -> MdxDiagnosticRecord {
-    MdxDiagnosticRecord {
-        code: format!("{:?}", diagnostic.code),
-        message: diagnostic.message.to_owned(),
-        primary: source_range(locator, diagnostic.primary_range),
-        related: diagnostic
-            .related_range
-            .map(|range| source_range(locator, range)),
-    }
-}
-
-fn source_range(locator: &SourceLocator, range: Range) -> MdxSourceRange {
-    locator.range(range.start_usize(), range.end_usize())
-}
-
-fn mdx_source_comments(source: &str, events: &[MdxEvent]) -> Vec<SourceComment> {
-    let allocator = Allocator::default();
-    let locator = SourceLocator::new(source);
-    let mut comments = Vec::new();
-
-    for event in events {
-        match event {
-            MdxEvent::Esm(range) => {
-                append_javascript_comments(source, *range, &allocator, &locator, &mut comments)
-            }
-            MdxEvent::FlowExpression(range)
-            | MdxEvent::Inline(InlineEvent::MdxExpression(range)) => {
-                append_mdx_expression_comments(source, *range, &allocator, &locator, &mut comments)
-            }
-            MdxEvent::FlowJsxOpen(range)
-            | MdxEvent::FlowJsxSelfClose(range)
-            | MdxEvent::Inline(InlineEvent::MdxJsxOpen(range))
-            | MdxEvent::Inline(InlineEvent::MdxJsxSelfClose(range)) => {
-                append_jsx_attribute_comments(source, *range, &allocator, &locator, &mut comments);
-            }
-            MdxEvent::Inline(InlineEvent::Text(range) | InlineEvent::Html(range))
-            | MdxEvent::Block(BlockEvent::HtmlBlockText(range)) => {
-                append_html_comments(source, *range, &locator, &mut comments);
-            }
-            _ => {}
-        }
-    }
-
-    comments.sort_by_key(|comment| (comment.range.start, comment.range.end));
-    comments.dedup_by(|left, right| {
-        left.range.start == right.range.start
-            && left.range.end == right.range.end
-            && left.kind == right.kind
-    });
-    let fenced_ranges = mdx_fenced_ranges(source);
-    comments.retain(|comment| {
-        !fenced_ranges.iter().any(|range| {
-            range.start_usize() <= comment.range.start && comment.range.start < range.end_usize()
-        })
-    });
-    comments
-}
-
-fn mdx_fenced_ranges(source: &str) -> Vec<Range> {
-    let mut ranges = Vec::new();
-    let mut open: Option<(char, usize, usize)> = None;
-    let mut line_start = 0usize;
-    for line in source.split_inclusive('\n') {
-        if let Some((marker, width, range_start)) = open {
-            if is_closing_fence(line, marker, width) {
-                ranges.push(Range::from_usize(range_start, line_start + line.len()));
-                open = None;
-            }
-        } else if let Some((marker, width)) = opening_fence(line) {
-            open = Some((marker, width, line_start));
-        }
-        line_start += line.len();
-    }
-    if let Some((_, _, range_start)) = open {
-        ranges.push(Range::from_usize(range_start, source.len()));
-    }
-    ranges
-}
-
-fn opening_fence(line: &str) -> Option<(char, usize)> {
-    let content = commonmark_fence_content(line)?;
-    for marker in ['`', '~'] {
-        let width = fence_width(content, marker);
-        if width >= 3 && (marker != '`' || !content[width..].contains('`')) {
-            return Some((marker, width));
-        }
-    }
-    None
-}
-
-fn is_closing_fence(line: &str, marker: char, opening_width: usize) -> bool {
-    let Some(content) = commonmark_fence_content(line) else {
-        return false;
+fn diagnostic_record(locator: &SourceLocator, error: ParseError) -> MdxDiagnosticRecord {
+    let code = match error.kind() {
+        ParseErrorKind::InvalidMdx { .. } => "InvalidMdx",
+        ParseErrorKind::NestingTooDeep { .. } => "NestingTooDeep",
+        _ => "ParseError",
     };
-    let width = fence_width(content, marker);
-    width >= opening_width
-        && content[width..]
-            .bytes()
-            .all(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
+    MdxDiagnosticRecord {
+        code: code.to_owned(),
+        message: error.to_string(),
+        primary: source_range(locator, error.span()),
+        related: None,
+    }
 }
 
-fn commonmark_fence_content(line: &str) -> Option<&str> {
-    let indent = line
-        .as_bytes()
-        .iter()
-        .take_while(|byte| **byte == b' ')
-        .count();
-    (indent <= 3).then_some(&line[indent..])
+fn source_range(locator: &SourceLocator, range: Span) -> MdxSourceRange {
+    locator.range(range.start as usize, range.end as usize)
 }
 
-fn fence_width(line: &str, marker: char) -> usize {
-    line.chars()
-        .take_while(|character| *character == marker)
-        .count()
+fn source_span(start: usize, end: usize) -> Span {
+    Span::new(
+        u32::try_from(start).expect("MDX source offsets fit in u32"),
+        u32::try_from(end).expect("MDX source offsets fit in u32"),
+    )
+}
+
+fn mdx_source_comments(source: &str, document: &Document<'_>) -> Vec<SourceComment> {
+    struct Comments<'a> {
+        source: &'a str,
+        allocator: Allocator,
+        locator: SourceLocator<'a>,
+        comments: Vec<SourceComment>,
+    }
+    impl<'a> Visit<'a> for Comments<'_> {
+        fn visit_node(&mut self, node: &Node<'a>) {
+            match node {
+                Node::MdxjsEsm(esm) => append_javascript_comments(
+                    self.source,
+                    esm.span,
+                    &self.allocator,
+                    &self.locator,
+                    &mut self.comments,
+                ),
+                Node::MdxFlowExpression(expression) => append_mdx_expression_comments(
+                    self.source,
+                    expression.span,
+                    &self.allocator,
+                    &self.locator,
+                    &mut self.comments,
+                ),
+                Node::MdxTextExpression(expression) => append_mdx_expression_comments(
+                    self.source,
+                    expression.span,
+                    &self.allocator,
+                    &self.locator,
+                    &mut self.comments,
+                ),
+                Node::MdxJsxFlowElement(element) => self.attributes(&element.attributes),
+                Node::MdxJsxTextElement(element) => self.attributes(&element.attributes),
+                Node::Html(html) => {
+                    append_html_comments(self.source, html.span, &self.locator, &mut self.comments)
+                }
+                _ => {}
+            }
+            walk_node(self, node);
+        }
+    }
+    impl Comments<'_> {
+        fn attributes(&mut self, attributes: &[MdxJsxAttributeEntry<'_>]) {
+            for attribute in attributes {
+                let span = match attribute {
+                    MdxJsxAttributeEntry::Expression(expression) => expression.span,
+                    MdxJsxAttributeEntry::Attribute(attribute) => match &attribute.value {
+                        Some(MdxJsxAttributeValue::Expression(expression)) => expression.span,
+                        _ => continue,
+                    },
+                };
+                append_mdx_expression_comments(
+                    self.source,
+                    span,
+                    &self.allocator,
+                    &self.locator,
+                    &mut self.comments,
+                );
+            }
+        }
+    }
+    let mut visitor = Comments {
+        source,
+        allocator: Allocator::default(),
+        locator: SourceLocator::new(source),
+        comments: Vec::new(),
+    };
+    visitor.visit_document(document);
+    visitor
+        .comments
+        .sort_by_key(|comment| (comment.range.start, comment.range.end));
+    visitor
+        .comments
+        .dedup_by(|left, right| left.range == right.range && left.kind == right.kind);
+    visitor.comments
 }
 
 fn append_javascript_comments(
     source: &str,
-    range: Range,
+    range: Span,
     allocator: &Allocator,
     locator: &SourceLocator,
     comments: &mut Vec<SourceComment>,
 ) {
-    let start = range.start_usize();
-    let end = range.end_usize();
+    let start = range.start as usize;
+    let end = range.end as usize;
     let Some(snippet) = source.get(start..end) else {
         return;
     };
@@ -373,13 +365,13 @@ fn append_javascript_comments(
 
 fn append_mdx_expression_comments(
     source: &str,
-    range: Range,
+    range: Span,
     allocator: &Allocator,
     locator: &SourceLocator,
     comments: &mut Vec<SourceComment>,
 ) {
-    let range_start = range.start_usize();
-    let range_end = range.end_usize();
+    let range_start = range.start as usize;
+    let range_end = range.end as usize;
     let Some(raw) = source.get(range_start..range_end) else {
         return;
     };
@@ -394,69 +386,21 @@ fn append_mdx_expression_comments(
     }
     append_javascript_comments(
         source,
-        Range::from_usize(start + 1, end - 1),
+        source_span(start + 1, end - 1),
         allocator,
         locator,
         comments,
     );
 }
 
-fn append_jsx_attribute_comments(
-    source: &str,
-    range: Range,
-    allocator: &Allocator,
-    locator: &SourceLocator,
-    comments: &mut Vec<SourceComment>,
-) {
-    let start = range.start_usize();
-    let end = range.end_usize();
-    let Some(tag) = source.get(start..end) else {
-        return;
-    };
-    let bytes = tag.as_bytes();
-    let mut position = 0usize;
-    while position < bytes.len() {
-        match bytes[position] {
-            quote @ (b'\'' | b'"') => {
-                position += 1;
-                while position < bytes.len() {
-                    match bytes[position] {
-                        b'\\' => position = (position + 2).min(bytes.len()),
-                        byte if byte == quote => {
-                            position += 1;
-                            break;
-                        }
-                        _ => position += 1,
-                    }
-                }
-            }
-            b'{' => {
-                let Some(length) = ferromark::mdx::expr::find_expression_end(&bytes[position..])
-                else {
-                    break;
-                };
-                append_mdx_expression_comments(
-                    source,
-                    Range::from_usize(start + position, start + position + length),
-                    allocator,
-                    locator,
-                    comments,
-                );
-                position += length;
-            }
-            _ => position += 1,
-        }
-    }
-}
-
 fn append_html_comments(
     source: &str,
-    eligible_range: Range,
+    eligible_range: Span,
     locator: &SourceLocator,
     comments: &mut Vec<SourceComment>,
 ) {
-    let start = eligible_range.start_usize();
-    let end = eligible_range.end_usize();
+    let start = eligible_range.start as usize;
+    let end = eligible_range.end as usize;
     let Some(eligible) = source.get(start..end) else {
         return;
     };
@@ -497,7 +441,6 @@ struct MdxCompiler<'a> {
     source: &'a str,
     filename: &'a str,
     options: MdxOptions,
-    link_references: &'a [ferromark::LinkRefDef],
     locator: SourceLocator<'a>,
     body: ModuleWriter,
     esm: Vec<(usize, String)>,
@@ -508,22 +451,14 @@ struct MdxCompiler<'a> {
     needs_trans: bool,
     needs_i18n: bool,
     unit: Option<RichUnit>,
-    code_block_depth: usize,
-    table_head_depth: usize,
 }
 
 impl<'a> MdxCompiler<'a> {
-    fn new(
-        source: &'a str,
-        filename: &'a str,
-        options: MdxOptions,
-        link_references: &'a [ferromark::LinkRefDef],
-    ) -> Self {
+    fn new(source: &'a str, filename: &'a str, options: MdxOptions) -> Self {
         Self {
             source,
             filename,
             options,
-            link_references,
             locator: SourceLocator::new(source),
             body: ModuleWriter::default(),
             esm: Vec::new(),
@@ -534,15 +469,14 @@ impl<'a> MdxCompiler<'a> {
             needs_trans: false,
             needs_i18n: false,
             unit: None,
-            code_block_depth: 0,
-            table_head_depth: 0,
         }
     }
 
-    fn compile(mut self, events: &[MdxEvent]) -> MdxAnalysisResult {
-        for event in events {
-            self.event(event);
+    fn compile(mut self, document: &Document<'_>) -> MdxAnalysisResult {
+        if let Some(front_matter) = &document.front_matter {
+            self.front_matter(front_matter.content_span);
         }
+        self.blocks(&document.children);
         self.finish_unit();
 
         let mut writer = ModuleWriter::default();
@@ -590,37 +524,7 @@ impl<'a> MdxCompiler<'a> {
         }
     }
 
-    fn event(&mut self, event: &MdxEvent) {
-        match event {
-            MdxEvent::FrontMatter { content, .. } => self.front_matter(*content),
-            MdxEvent::Esm(range) => self.esm.push((
-                range.start_usize(),
-                range_text(self.source, *range).to_owned(),
-            )),
-            MdxEvent::FlowExpression(range) => {
-                self.finish_unit();
-                let expression = range_text(self.source, *range).trim();
-                self.body.append_at(expression, range.start_usize());
-                self.body.append("\n");
-            }
-            MdxEvent::FlowJsxOpen(range) | MdxEvent::FlowJsxSelfClose(range) => {
-                self.finish_unit();
-                let markup = self.rewrite_jsx_tag(*range);
-                self.body.append_at(markup.trim(), range.start_usize());
-                self.body.append("\n");
-            }
-            MdxEvent::FlowJsxClose(range) => {
-                self.finish_unit();
-                self.body
-                    .append_at(range_text(self.source, *range).trim(), range.start_usize());
-                self.body.append("\n");
-            }
-            MdxEvent::Block(event) => self.block_event(event),
-            MdxEvent::Inline(event) => self.inline_event(event),
-        }
-    }
-
-    fn front_matter(&mut self, content: Range) {
+    fn front_matter(&mut self, content: Span) {
         for scalar in parse_front_matter_scalars(self.source, content) {
             self.front_matter
                 .insert(scalar.key.clone(), scalar.value.clone());
@@ -666,190 +570,204 @@ impl<'a> MdxCompiler<'a> {
         writer.append(" };\n}\n");
     }
 
-    fn block_event(&mut self, event: &BlockEvent) {
-        match event {
-            BlockEvent::ParagraphStart => {
-                self.finish_unit();
-                self.start_unit("<p>");
-            }
-            BlockEvent::ParagraphEnd => {
-                if self.finish_unit() {
-                    self.body.append("</p>\n");
-                }
-            }
-            BlockEvent::HeadingStart { level } => {
-                self.finish_unit();
-                self.start_unit(&format!("<h{level}>"));
-            }
-            BlockEvent::HeadingEnd { level } => {
-                if self.finish_unit() {
-                    self.body.append(&format!("</h{level}>\n"));
-                }
-            }
-            BlockEvent::CodeBlockStart { kind } => {
-                self.finish_unit();
-                self.code_block_depth += 1;
-                let class_name = match kind {
-                    CodeBlockKind::Fenced { info: Some(info) } => range_text(self.source, *info)
-                        .split_whitespace()
-                        .next()
-                        .filter(|language| !language.is_empty())
-                        .map(|language| format!("language-{language}")),
-                    CodeBlockKind::Fenced { info: None } | CodeBlockKind::Indented => None,
-                };
-                match class_name {
-                    Some(class_name) => self.body.append(&format!(
-                        "<pre><code className={{{}}}>",
-                        js_string(&class_name)
-                    )),
-                    None => self.body.append("<pre><code>"),
-                }
-            }
-            BlockEvent::CodeBlockEnd => {
-                self.code_block_depth = self.code_block_depth.saturating_sub(1);
-                self.body.append("</code></pre>\n");
-            }
-            BlockEvent::BlockQuoteStart { .. } => {
-                self.finish_unit();
+    fn blocks(&mut self, nodes: &[Node<'_>]) {
+        for node in nodes {
+            self.block(node);
+        }
+    }
+
+    fn block(&mut self, node: &Node<'_>) {
+        match node {
+            Node::Paragraph(paragraph) => self.prose("p", &paragraph.children),
+            Node::Heading(heading) => self.prose(&format!("h{}", heading.depth), &heading.children),
+            Node::BlockQuote(quote) => {
                 self.body.append("<blockquote>\n");
-            }
-            BlockEvent::BlockQuoteEnd => {
-                self.finish_unit();
+                if let Some(Node::Paragraph(paragraph)) = quote.children.first()
+                    && let Some(consumed) = callout_prefix(paragraph)
+                {
+                    self.start_unit("<p>");
+                    let mut remaining = consumed;
+                    for child in &paragraph.children {
+                        if let Node::Text(text) = child {
+                            let skipped = remaining.min(text.value.len());
+                            remaining -= skipped;
+                            self.text(text, skipped);
+                        } else {
+                            self.inline(child);
+                        }
+                    }
+                    if self.finish_unit() {
+                        self.body.append("</p>\n");
+                    }
+                    self.blocks(&quote.children[1..]);
+                } else {
+                    self.blocks(&quote.children);
+                }
                 self.body.append("</blockquote>\n");
             }
-            BlockEvent::ListStart { kind, .. } => {
-                self.finish_unit();
-                match kind {
-                    ListKind::Unordered => self.body.append("<ul>\n"),
-                    ListKind::Ordered { start, .. } if *start == 1 => self.body.append("<ol>\n"),
-                    ListKind::Ordered { start, .. } => {
-                        self.body.append(&format!("<ol start={{{start}}}>\n"));
+            Node::List(list) => {
+                let tag = if list.ordered { "ol" } else { "ul" };
+                let start = list.start.unwrap_or(1);
+                if list.ordered && start != 1 {
+                    self.body.append(&format!("<ol start={{{start}}}>\n"));
+                } else {
+                    self.body.append(&format!("<{tag}>\n"));
+                }
+                for item in &list.children {
+                    self.body.append("<li>");
+                    self.blocks(&item.children);
+                    self.body.append("</li>\n");
+                }
+                self.body.append(&format!("</{tag}>\n"));
+            }
+            Node::CodeBlock(code) => {
+                if let Some(language) = code.lang.filter(|language| !language.is_empty()) {
+                    self.body.append(&format!(
+                        "<pre><code className={{{}}}>",
+                        js_string(&format!("language-{language}"))
+                    ));
+                } else {
+                    self.body.append("<pre><code>");
+                }
+                if !code.value.is_empty() {
+                    self.body.append_at(
+                        &format!("{{{}}}", js_string(code.value)),
+                        code.span.start as usize,
+                    );
+                }
+                self.body.append("</code></pre>\n");
+            }
+            Node::Table(table) => {
+                self.body.append("<table>\n");
+                for (row_index, row) in table.children.iter().enumerate() {
+                    if row_index == 0 {
+                        self.body.append("<thead>\n");
+                    }
+                    if row_index == 1 {
+                        self.body.append("<tbody>\n");
+                    }
+                    self.body.append("<tr>");
+                    let tag = if row_index == 0 { "th" } else { "td" };
+                    let mut column = 0;
+                    for cell in &row.children {
+                        let mut attrs = String::new();
+                        if cell.colspan > 1 {
+                            attrs.push_str(&format!(" colSpan={{{}}}", cell.colspan));
+                        }
+                        let alignment = match table.align.get(column) {
+                            Some(AlignKind::Left) => Some("left"),
+                            Some(AlignKind::Center) => Some("center"),
+                            Some(AlignKind::Right) => Some("right"),
+                            _ => None,
+                        };
+                        if let Some(alignment) = alignment {
+                            attrs.push_str(&format!(" align={{{}}}", js_string(alignment)));
+                        }
+                        self.start_unit(&format!("<{tag}{attrs}>"));
+                        self.inlines(&cell.children);
+                        if self.finish_unit() {
+                            self.body.append(&format!("</{tag}>"));
+                        }
+                        column += cell.colspan;
+                    }
+                    self.body.append("</tr>\n");
+                    if row_index == 0 {
+                        self.body.append("</thead>\n");
+                    }
+                }
+                if table.children.len() > 1 {
+                    self.body.append("</tbody>\n");
+                }
+                self.body.append("</table>\n");
+            }
+            Node::DefinitionList(list) => {
+                self.body.append("<dl>\n");
+                self.blocks(&list.children);
+                self.body.append("</dl>\n");
+            }
+            Node::DefinitionListTerm(term) => self.prose("dt", &term.children),
+            Node::DefinitionListDefinition(definition) => {
+                for child in &definition.children {
+                    if let Node::Paragraph(paragraph) = child {
+                        self.prose("dd", &paragraph.children);
+                    } else {
+                        self.block(child);
                     }
                 }
             }
-            BlockEvent::ListEnd { kind, .. } => {
-                self.finish_unit();
-                match kind {
-                    ListKind::Unordered => self.body.append("</ul>\n"),
-                    ListKind::Ordered { .. } => self.body.append("</ol>\n"),
-                }
+            Node::ThematicBreak(range) => {
+                self.body.append_at("<hr />\n", range.span.start as usize)
             }
-            BlockEvent::ListItemStart { .. } => {
-                self.finish_unit();
-                self.body.append("<li>");
-            }
-            BlockEvent::ListItemEnd => {
-                self.finish_unit();
-                self.body.append("</li>\n");
-            }
-            BlockEvent::DefinitionListStart => self.body.append("<dl>\n"),
-            BlockEvent::DefinitionListEnd => self.body.append("</dl>\n"),
-            BlockEvent::DefinitionTermStart => {
-                self.finish_unit();
-                self.start_unit("<dt>");
-            }
-            BlockEvent::DefinitionTermEnd => {
-                if self.finish_unit() {
-                    self.body.append("</dt>\n");
-                }
-            }
-            BlockEvent::DefinitionDescriptionStart { .. } => {
-                self.finish_unit();
-                self.start_unit("<dd>");
-            }
-            BlockEvent::DefinitionDescriptionEnd => {
-                if self.finish_unit() {
-                    self.body.append("</dd>\n");
-                }
-            }
-            BlockEvent::ThematicBreak(range) => {
-                self.finish_unit();
-                self.body.append_at("<hr />\n", range.start_usize());
-            }
-            BlockEvent::Comment(_) => {}
-            BlockEvent::HtmlBlockStart | BlockEvent::HtmlBlockEnd => {}
-            BlockEvent::HtmlBlockText(range) => {
-                let html = range_text(self.source, *range);
-                if is_html_comment(html) {
-                    return;
-                }
-                self.finish_unit();
-                self.body
-                    .append_at(&format!("{{{}}}", js_string(html)), range.start_usize());
-            }
-            BlockEvent::SoftBreak => {
-                if let Some(unit) = self.unit.as_mut() {
-                    unit.push(RichNode::Text(" ".to_owned(), None));
-                }
-            }
-            BlockEvent::Text(range) => {
-                self.mark_unit_start(range.start_usize());
-                if let Some(unit) = self.unit.as_mut() {
-                    unit.text(self.source, *range);
-                }
-            }
-            BlockEvent::Code(range) => {
-                self.finish_unit();
+            Node::MdxjsEsm(esm) => self
+                .esm
+                .push((esm.span.start as usize, esm.value.to_owned())),
+            Node::MdxFlowExpression(expression) => {
                 self.body.append_at(
-                    &format!("{{{}}}", js_string(range_text(self.source, *range))),
-                    range.start_usize(),
+                    range_text(self.source, expression.span).trim(),
+                    expression.span.start as usize,
                 );
+                self.body.append("\n");
             }
-            BlockEvent::VirtualSpaces(count) => {
-                if self.code_block_depth > 0 {
-                    self.body
-                        .append(&format!("{{{}}}", js_string(&" ".repeat(*count as usize))));
-                }
-            }
-            BlockEvent::TableStart => self.body.append("<table>\n"),
-            BlockEvent::TableColumnWidthsStart
-            | BlockEvent::TableColumnWidth { .. }
-            | BlockEvent::TableColumnWidthsEnd => {}
-            BlockEvent::TableEnd => self.body.append("</table>\n"),
-            BlockEvent::TableHeadStart => {
-                self.table_head_depth += 1;
-                self.body.append("<thead>\n");
-            }
-            BlockEvent::TableHeadEnd => {
-                self.table_head_depth = self.table_head_depth.saturating_sub(1);
-                self.body.append("</thead>\n");
-            }
-            BlockEvent::TableBodyStart => self.body.append("<tbody>\n"),
-            BlockEvent::TableBodyEnd => self.body.append("</tbody>\n"),
-            BlockEvent::TableRowStart => self.body.append("<tr>"),
-            BlockEvent::TableRowEnd => self.body.append("</tr>\n"),
-            BlockEvent::TableCellStart { alignment, colspan } => {
-                self.finish_unit();
-                let tag = if self.table_head_depth > 0 {
-                    "th"
+            Node::MdxJsxFlowElement(element) => {
+                let opening = jsx_opening_span(self.source, element.span, &element.attributes);
+                // Inline content on the opening line remains one rich unit.
+                // Multiple block children must retain their paragraph boundaries.
+                let after_open = &self.source[opening.end as usize..element.span.end as usize];
+                let inline = !element.self_closing
+                    && matches!(element.children.as_slice(), [Node::Paragraph(_)])
+                    && !after_open
+                        .split(['\r', '\n'])
+                        .next()
+                        .unwrap_or_default()
+                        .trim()
+                        .is_empty();
+                if inline {
+                    self.start_unit("<p>");
+                    self.jsx_inline(
+                        element.name,
+                        &element.attributes,
+                        &element.children,
+                        element.self_closing,
+                        element.span,
+                    );
+                    if self.finish_unit() {
+                        self.body.append("</p>\n");
+                    }
                 } else {
-                    "td"
-                };
-                let mut attrs = String::new();
-                if *colspan > 1 {
-                    attrs.push_str(&format!(" colSpan={{{colspan}}}"));
-                }
-                let alignment = match alignment {
-                    ferromark::Alignment::None => None,
-                    ferromark::Alignment::Left => Some("left"),
-                    ferromark::Alignment::Center => Some("center"),
-                    ferromark::Alignment::Right => Some("right"),
-                };
-                if let Some(alignment) = alignment {
-                    attrs.push_str(&format!(" align={{{}}}", js_string(alignment)));
-                }
-                self.start_unit(&format!("<{tag}{attrs}>"));
-            }
-            BlockEvent::TableCellEnd => {
-                let tag = if self.table_head_depth > 0 {
-                    "th"
-                } else {
-                    "td"
-                };
-                if self.finish_unit() {
-                    self.body.append(&format!("</{tag}>"));
+                    let markup = self.rewrite_jsx_tag(opening, &element.attributes);
+                    self.body.append_at(&markup, opening.start as usize);
+                    self.body.append("\n");
+                    self.blocks(&element.children);
+                    if !element.self_closing {
+                        let raw = range_text(self.source, element.span);
+                        let closing = raw.rfind("</").expect("paired JSX has a closing tag");
+                        self.body.append_at(
+                            raw[closing..].trim_end(),
+                            element.span.start as usize + closing,
+                        );
+                        self.body.append("\n");
+                    }
                 }
             }
+            Node::Html(html) if is_html_comment(html.value) => {}
+            Node::Html(html) => self.body.append_at(
+                &format!("{{{}}}", js_string(html.value)),
+                html.span.start as usize,
+            ),
+            Node::Definition(_) => {}
+            _ => self.prose("p", std::slice::from_ref(node)),
+        }
+    }
+
+    fn prose(&mut self, tag: &str, nodes: &[Node<'_>]) {
+        self.start_unit(&if tag.is_empty() {
+            String::new()
+        } else {
+            format!("<{tag}>")
+        });
+        self.inlines(nodes);
+        if self.finish_unit() && !tag.is_empty() {
+            self.body.append(&format!("</{tag}>\n"));
         }
     }
 
@@ -875,168 +793,164 @@ impl<'a> MdxCompiler<'a> {
         }
     }
 
-    fn inline_event(&mut self, event: &InlineEvent) {
-        if self.unit.is_none() {
+    fn inlines(&mut self, nodes: &[Node<'_>]) {
+        for node in nodes {
+            self.inline(node);
+        }
+    }
+
+    fn inline(&mut self, node: &Node<'_>) {
+        match node {
+            Node::Text(text) => self.text(text, 0),
+            Node::Emphasis(value) => self.rich_children("<em>", "</em>", &value.children),
+            Node::Strong(value) => self.rich_children("<strong>", "</strong>", &value.children),
+            Node::Delete(value) => self.rich_children("<del>", "</del>", &value.children),
+            Node::Subscript(value) => self.rich_children("<sub>", "</sub>", &value.children),
+            Node::Superscript(value) => self.rich_children("<sup>", "</sup>", &value.children),
+            Node::Highlight(value) => self.rich_children("<mark>", "</mark>", &value.children),
+            Node::InlineCode(value) => self.fixed_code(value.value, value.span),
+            Node::InlineMath(value) => self.fixed_code(value.value, value.span),
+            Node::MathBlock(value) => self.fixed_code(value.value, value.span),
+            Node::Break(_) => self
+                .unit
+                .as_mut()
+                .expect("inline nodes belong to a unit")
+                .push(RichNode::fixed("<br />".to_owned(), 0)),
+            Node::Link(link) => {
+                let raw = range_text(self.source, link.span);
+                if !raw.starts_with('[') {
+                    self.mark_unit_start(link.span.start as usize);
+                    self.unit
+                        .as_mut()
+                        .expect("link belongs to a unit")
+                        .push(RichNode::fixed(
+                            format!("<a href={{{0}}}>{{{0}}}</a>", js_string(link.url)),
+                            link.span.start as usize,
+                        ));
+                    return;
+                }
+                self.mark_unit_start(link.span.start as usize);
+                self.open_markdown_component(
+                    &format!("<a href={{{}}}>", js_string(link.url)),
+                    "</a>",
+                );
+                self.inlines(&link.children);
+                self.close_component();
+            }
+            Node::Image(image) => self.image(image),
+            Node::Html(html) if is_html_comment(html.value) => {}
+            Node::Html(html) => {
+                self.mark_unit_start(html.span.start as usize);
+                self.unit
+                    .as_mut()
+                    .expect("inline nodes belong to a unit")
+                    .push(RichNode::fixed(
+                        format!("{{{}}}", js_string(html.value)),
+                        html.span.start as usize,
+                    ));
+            }
+            Node::MdxTextExpression(expression) => {
+                if !is_jsx_comment(range_text(self.source, expression.span))
+                    && !expression.value.trim().is_empty()
+                {
+                    self.mark_unit_start(expression.span.start as usize);
+                    self.unit
+                        .as_mut()
+                        .expect("inline nodes belong to a unit")
+                        .value(expression.value.trim(), expression.span.start as usize);
+                }
+            }
+            Node::MdxJsxTextElement(element) => self.jsx_inline(
+                element.name,
+                &element.attributes,
+                &element.children,
+                element.self_closing,
+                element.span,
+            ),
+            Node::MdxJsxFlowElement(element) => self.jsx_inline(
+                element.name,
+                &element.attributes,
+                &element.children,
+                element.self_closing,
+                element.span,
+            ),
+            Node::Paragraph(paragraph) => self.inlines(&paragraph.children),
+            // These options are disabled; footnotes are rejected before lowering.
+            Node::Definition(_) | Node::FootnoteReference(_) | Node::FootnoteDefinition(_) => {}
+            _ => unreachable!("block or disabled extension in inline MDX: {node:?}"),
+        }
+    }
+
+    fn text(&mut self, text: &ferromark::ast::Text<'_>, skipped: usize) {
+        let value = &text.value[skipped..];
+        let raw = range_text(self.source, text.span);
+        let (value, offset) = if skipped > 0 {
+            // `detect_callout` counts decoded bytes. Locate the body after the
+            // original marker, including any stripped blockquote prefixes.
+            let value = value.trim_start();
+            let marker_end = raw.find(']').map_or(0, |offset| offset + 1);
+            let body = &raw[marker_end..];
+            let trimmed = body.trim_start_matches([' ', '\t', '\r', '\n', '>']);
+            (
+                value,
+                text.span.start as usize + marker_end + body.len() - trimmed.len(),
+            )
+        } else {
+            (
+                value,
+                text.span.start as usize + raw.len() - raw.trim_start_matches([' ', '\t']).len(),
+            )
+        };
+        let value = clean_jsx_whitespace(value);
+        if !value.is_empty() {
+            self.mark_unit_start(offset);
+            self.unit
+                .as_mut()
+                .expect("inline text belongs to a unit")
+                .push(RichNode::Text(value, Some(offset)));
+        }
+    }
+
+    fn rich_children(&mut self, opening: &str, closing: &str, children: &[Node<'_>]) {
+        self.open_markdown_component(opening, closing);
+        self.inlines(children);
+        self.close_component();
+    }
+
+    fn fixed_code(&mut self, value: &str, span: Span) {
+        self.mark_unit_start(span.start as usize);
+        self.unit
+            .as_mut()
+            .expect("inline nodes belong to a unit")
+            .push(RichNode::fixed(
+                format!("<code>{{{}}}</code>", js_string(value)),
+                span.start as usize,
+            ));
+    }
+
+    fn jsx_inline(
+        &mut self,
+        name: Option<&str>,
+        attributes: &[MdxJsxAttributeEntry<'_>],
+        children: &[Node<'_>],
+        self_closing: bool,
+        span: Span,
+    ) {
+        let opening = jsx_opening_span(self.source, span, attributes);
+        self.mark_unit_start(opening.start as usize);
+        let markup = self.rewrite_jsx_tag(opening, attributes);
+        let unit = self.unit.as_mut().expect("inline JSX belongs to a unit");
+        if self_closing {
+            unit.push(RichNode::fixed(markup, opening.start as usize));
             return;
         }
-        match event {
-            InlineEvent::Text(range) => {
-                self.mark_unit_start(range.start_usize());
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .text(self.source, *range);
-            }
-            InlineEvent::Code(range) => {
-                self.mark_unit_start(range.start_usize());
-                let code = range_text(self.source, *range);
-                let markup = format!("<code>{{{}}}</code>", js_string(code));
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .push(RichNode::fixed(markup, range.start_usize()));
-            }
-            InlineEvent::EmphasisStart => self.open_markdown_component("<em>", "</em>"),
-            InlineEvent::EmphasisEnd => self.close_component(),
-            InlineEvent::StrongStart => self.open_markdown_component("<strong>", "</strong>"),
-            InlineEvent::StrongEnd => self.close_component(),
-            InlineEvent::StrikethroughStart => self.open_markdown_component("<del>", "</del>"),
-            InlineEvent::StrikethroughEnd => self.close_component(),
-            InlineEvent::SubscriptStart => self.open_markdown_component("<sub>", "</sub>"),
-            InlineEvent::SubscriptEnd => self.close_component(),
-            InlineEvent::SuperscriptStart => self.open_markdown_component("<sup>", "</sup>"),
-            InlineEvent::SuperscriptEnd => self.close_component(),
-            InlineEvent::HighlightStart => self.open_markdown_component("<mark>", "</mark>"),
-            InlineEvent::HighlightEnd => self.close_component(),
-            InlineEvent::LinkStart { url, .. } => {
-                self.mark_unit_start(url.start_usize());
-                let href = range_text(self.source, *url);
-                self.open_markdown_component(&format!("<a href={{{}}}>", js_string(href)), "</a>");
-            }
-            InlineEvent::LinkStartRef { def_index } => {
-                let href = self
-                    .link_references
-                    .get(*def_index as usize)
-                    .and_then(|definition| std::str::from_utf8(&definition.url).ok())
-                    .unwrap_or_default();
-                self.open_markdown_component(&format!("<a href={{{}}}>", js_string(href)), "</a>");
-            }
-            InlineEvent::LinkEnd => self.close_component(),
-            InlineEvent::ImageStart { url, .. } => {
-                self.mark_unit_start(url.start_usize());
-                let src = range_text(self.source, *url).to_owned();
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .open_image(src, url.start_usize());
-            }
-            InlineEvent::ImageStartRef { def_index } => {
-                let src = self
-                    .link_references
-                    .get(*def_index as usize)
-                    .and_then(|definition| std::str::from_utf8(&definition.url).ok())
-                    .unwrap_or_default()
-                    .to_owned();
-                self.unit.as_mut().expect("unit exists").open_image(src, 0);
-            }
-            InlineEvent::ImageEnd => self.close_image(),
-            InlineEvent::Autolink { url, .. } | InlineEvent::AutolinkLiteral { url, .. } => {
-                self.mark_unit_start(url.start_usize());
-                let href = range_text(self.source, *url);
-                let markup = format!("<a href={{{0}}}>{{{0}}}</a>", js_string(href));
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .push(RichNode::fixed(markup, url.start_usize()));
-            }
-            InlineEvent::Html(range) => {
-                let html = range_text(self.source, *range);
-                if is_html_comment(html) {
-                    return;
-                }
-                self.mark_unit_start(range.start_usize());
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .push(RichNode::fixed(
-                        format!("{{{}}}", js_string(html)),
-                        range.start_usize(),
-                    ));
-            }
-            InlineEvent::SoftBreak => self
-                .unit
-                .as_mut()
-                .expect("unit exists")
-                .push(RichNode::Text(" ".to_owned(), None)),
-            InlineEvent::HardBreak => self
-                .unit
-                .as_mut()
-                .expect("unit exists")
-                .push(RichNode::fixed("<br />".to_owned(), 0)),
-            InlineEvent::EscapedChar(value) => self
-                .unit
-                .as_mut()
-                .expect("unit exists")
-                .push(RichNode::Text(char::from(*value).to_string(), None)),
-            InlineEvent::FootnoteRef { .. } => {}
-            InlineEvent::InlineFootnote(range)
-            | InlineEvent::MathInline(range)
-            | InlineEvent::MathDisplay(range) => {
-                let content = range_text(self.source, *range);
-                let markup = format!("<code>{{{}}}</code>", js_string(content));
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .push(RichNode::fixed(markup, range.start_usize()));
-            }
-            InlineEvent::MdxExpression(range) => {
-                let raw = range_text(self.source, *range);
-                if is_jsx_comment(raw) {
-                    return;
-                }
-                self.mark_unit_start(range.start_usize());
-                let expression = raw
-                    .strip_prefix('{')
-                    .and_then(|value| value.strip_suffix('}'))
-                    .unwrap_or(raw)
-                    .trim();
-                if expression.is_empty() {
-                    return;
-                }
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .value(expression, range.start_usize());
-            }
-            InlineEvent::MdxJsxOpen(range) => {
-                self.mark_unit_start(range.start_usize());
-                let markup = self.rewrite_jsx_tag(*range);
-                let name = ferromark::mdx::jsx_tag::parse_jsx_tag(markup.as_bytes())
-                    .map(|tag| tag.name.to_owned())
-                    .unwrap_or_default();
-                if name.is_empty() {
-                    self.unit.as_mut().expect("unit exists").open_transparent();
-                } else {
-                    self.unit.as_mut().expect("unit exists").open_component(
-                        markup.trim().to_owned(),
-                        format!("</{name}>"),
-                        range.start_usize(),
-                    );
-                }
-            }
-            InlineEvent::MdxJsxClose(_) => self.close_component(),
-            InlineEvent::MdxJsxSelfClose(range) => {
-                self.mark_unit_start(range.start_usize());
-                let markup = self.rewrite_jsx_tag(*range);
-                self.unit
-                    .as_mut()
-                    .expect("unit exists")
-                    .push(RichNode::fixed(
-                        markup.trim().to_owned(),
-                        range.start_usize(),
-                    ));
-            }
+        if let Some(name) = name {
+            unit.open_component(markup, format!("</{name}>"), opening.start as usize);
+        } else {
+            unit.open_transparent();
         }
+        self.inlines(children);
+        self.close_component();
     }
 
     fn open_markdown_component(&mut self, opening: &str, closing: &str) {
@@ -1051,26 +965,20 @@ impl<'a> MdxCompiler<'a> {
         self.unit.as_mut().expect("unit exists").close_frame();
     }
 
-    fn close_image(&mut self) {
-        let Some(mut unit) = self.unit.take() else {
-            return;
-        };
-        let Some(image) = unit.close_image() else {
-            self.unit = Some(unit);
-            return;
-        };
-        let source_offset = image
-            .children
-            .iter()
-            .find_map(RichNode::source_offset)
-            .unwrap_or(image.source_offset);
-        let alt = plain_text(&image.children);
-        let ignored = unit.ignored.unwrap_or_else(|| {
-            is_ignored_unit(self.source, source_offset, &self.options.ignore_directive)
-        });
-        let alt_reference = (!ignored && !alt.is_empty())
+    fn image(&mut self, image: &ferromark::ast::Image<'_>) {
+        let source_offset = image.span.start as usize;
+        self.mark_unit_start(source_offset);
+        // All words in the normalized accessible description are translatable,
+        // including inline-code words. The parser supplies the image's span.
+        let alt = clean_jsx_whitespace(image.alt);
+        let ignored = self
+            .unit
+            .as_ref()
+            .and_then(|unit| unit.ignored)
+            .unwrap_or(false);
+        let reference = (!ignored && !alt.is_empty())
             .then(|| self.push_message(alt.clone(), BTreeMap::new(), source_offset));
-        let alt_expression = alt_reference.as_ref().map_or_else(
+        let alt_expression = reference.as_ref().map_or_else(
             || js_string(&alt),
             |reference| {
                 self.needs_i18n = true;
@@ -1080,12 +988,19 @@ impl<'a> MdxCompiler<'a> {
                 )
             },
         );
-        let markup = format!(
-            "<img src={{{}}} alt={{{alt_expression}}} />",
-            js_string(&image.src),
-        );
-        unit.push(RichNode::fixed(markup, source_offset));
-        self.unit = Some(unit);
+        let title = image.title.map_or_else(String::new, |title| {
+            format!(" title={{{}}}", js_string(title))
+        });
+        self.unit
+            .as_mut()
+            .expect("image belongs to a unit")
+            .push(RichNode::fixed(
+                format!(
+                    "<img src={{{}}} alt={{{alt_expression}}}{title} />",
+                    js_string(image.url)
+                ),
+                source_offset,
+            ));
     }
 
     fn finish_unit(&mut self) -> bool {
@@ -1204,7 +1119,7 @@ impl<'a> MdxCompiler<'a> {
         }
     }
 
-    fn rewrite_jsx_tag(&mut self, range: Range) -> String {
+    fn rewrite_jsx_tag(&mut self, range: Span, attributes: &[MdxJsxAttributeEntry<'_>]) -> String {
         let source = range_text(self.source, range);
         let mut replacements = Vec::new();
         let ignored = self
@@ -1214,43 +1129,50 @@ impl<'a> MdxCompiler<'a> {
             .unwrap_or_else(|| {
                 is_ignored_unit(
                     self.source,
-                    range.start_usize(),
+                    range.start as usize,
                     &self.options.ignore_directive,
                 )
             });
-        for attribute in static_jsx_attributes(source) {
-            if self.options.framework == MdxFramework::React && attribute.name == "class" {
-                replacements.push((
-                    attribute.name_start,
-                    attribute.name_end,
-                    "className".to_owned(),
-                ));
-            }
-            if ignored {
+        for entry in attributes {
+            let MdxJsxAttributeEntry::Attribute(attribute) = entry else {
                 continue;
+            };
+            let start = attribute.span.start as usize;
+            let end = attribute.span.end as usize;
+            let name_start = start - range.start as usize;
+            let name_end = name_start + attribute.name.len();
+            if self.options.framework == MdxFramework::React && attribute.name == "class" {
+                replacements.push((name_start, name_end, "className".to_owned()));
             }
-            if matches!(attribute.name.as_str(), "href" | "src")
+            if ignored
+                || matches!(attribute.name, "href" | "src")
                 || !self
                     .options
                     .translatable_attributes
                     .iter()
-                    .any(|name| name == &attribute.name)
+                    .any(|name| name == attribute.name)
             {
                 continue;
             }
-            let value = decode_jsx_entities(attribute.value);
+            let Some(MdxJsxAttributeValue::Literal(_)) = &attribute.value else {
+                continue;
+            };
+            let after_name = start + attribute.name.len();
+            let raw = self.source[after_name..end]
+                .split_once('=')
+                .expect("literal JSX attribute has =")
+                .1
+                .trim_start();
+            let token_start = end - raw.len();
+            let value = decode_jsx_entities(&self.source[token_start + 1..end - 1]);
             if value.is_empty() {
                 continue;
             }
-            let reference = self.push_message(
-                value,
-                BTreeMap::new(),
-                range.start_usize() + attribute.value_start,
-            );
+            let reference = self.push_message(value, BTreeMap::new(), token_start + 1);
             self.needs_i18n = true;
             replacements.push((
-                attribute.token_start,
-                attribute.token_end,
+                token_start - range.start as usize,
+                end - range.start as usize,
                 format!(
                     "{{__palamedesGetI18n()._({})}}",
                     runtime_lookup_arguments(&reference, self.options.keep_source_fallbacks)
@@ -1291,19 +1213,7 @@ impl RichUnit {
         match self.frames.last_mut() {
             Some(RichFrame::Component(component)) => component.children.push(node),
             Some(RichFrame::Transparent(children)) => children.push(node),
-            Some(RichFrame::Image(image)) => image.children.push(node),
             None => self.roots.push(node),
-        }
-    }
-
-    fn text(&mut self, source: &str, range: Range) {
-        let raw = range_text(source, range);
-        if is_html_comment(raw) {
-            return;
-        }
-        let text = clean_jsx_text(raw);
-        if !text.is_empty() {
-            self.push(RichNode::Text(text, Some(range.start_usize())));
         }
     }
 
@@ -1348,14 +1258,6 @@ impl RichUnit {
         self.frames.push(RichFrame::Transparent(Vec::new()));
     }
 
-    fn open_image(&mut self, src: String, source_offset: usize) {
-        self.frames.push(RichFrame::Image(RichImage {
-            src,
-            children: Vec::new(),
-            source_offset,
-        }));
-    }
-
     fn close_frame(&mut self) {
         let Some(frame) = self.frames.pop() else {
             return;
@@ -1367,42 +1269,12 @@ impl RichUnit {
                     self.push(child);
                 }
             }
-            RichFrame::Image(image) => {
-                self.frames.push(RichFrame::Image(image));
-            }
-        }
-    }
-
-    fn close_image(&mut self) -> Option<RichImage> {
-        match self.frames.pop() {
-            Some(RichFrame::Image(image)) => Some(image),
-            Some(other) => {
-                self.frames.push(other);
-                None
-            }
-            None => None,
         }
     }
 
     fn close_all(&mut self) {
         while !self.frames.is_empty() {
-            if matches!(self.frames.last(), Some(RichFrame::Image(_))) {
-                let image = match self.frames.pop() {
-                    Some(RichFrame::Image(image)) => image,
-                    _ => unreachable!(),
-                };
-                let alt = plain_text(&image.children);
-                self.push(RichNode::fixed(
-                    format!(
-                        "<img src={{{}}} alt={{{}}} />",
-                        js_string(&image.src),
-                        js_string(&alt)
-                    ),
-                    image.source_offset,
-                ));
-            } else {
-                self.close_frame();
-            }
+            self.close_frame();
         }
     }
 }
@@ -1410,13 +1282,6 @@ impl RichUnit {
 enum RichFrame {
     Component(RichComponent),
     Transparent(Vec<RichNode>),
-    Image(RichImage),
-}
-
-struct RichImage {
-    src: String,
-    children: Vec<RichNode>,
-    source_offset: usize,
 }
 
 enum RichNode {
@@ -1578,7 +1443,7 @@ fn plain_text(nodes: &[RichNode]) -> String {
             RichNode::Component(component) => text.push_str(&plain_text(&component.children)),
         }
     }
-    clean_jsx_text(&text)
+    clean_jsx_whitespace(&text)
 }
 
 fn infer_expression_name(expression: &str) -> String {
@@ -1651,10 +1516,33 @@ fn is_js_identifier(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '$'))
 }
 
-fn range_text(source: &str, range: Range) -> &str {
-    range
-        .slice_str(source.as_bytes())
-        .expect("FerroMark ranges must retain UTF-8 boundaries")
+// Callout labels are structural metadata, not translator-facing prose.
+// Inspect only the AST's leading text; code, links, and JSX cannot form markers.
+fn callout_prefix(paragraph: &ferromark::ast::Paragraph<'_>) -> Option<usize> {
+    let mut prefix = String::new();
+    for child in &paragraph.children {
+        let Node::Text(text) = child else {
+            return None;
+        };
+        for character in text.value.chars() {
+            prefix.push(character);
+            if character == ']' {
+                let name = prefix.strip_prefix("[!")?.strip_suffix(']')?.trim();
+                return ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"]
+                    .iter()
+                    .any(|kind| name.eq_ignore_ascii_case(kind))
+                    .then_some(prefix.len());
+            }
+            if prefix.len() > 16 {
+                return None;
+            }
+        }
+    }
+    None
+}
+
+fn range_text(source: &str, range: Span) -> &str {
+    range.source_text(source)
 }
 
 fn js_string(value: &str) -> String {
@@ -1700,93 +1588,23 @@ fn preceding_comment_payload(source: &str, offset: usize) -> Option<&str> {
         .and_then(|line| line.trim().strip_prefix("//"))
 }
 
-fn unsupported_footnote_range(source: &str, events: &[MdxEvent]) -> Option<Range> {
-    let mut exact_range = None;
-    let mut has_reference = false;
-    for event in events {
-        match event {
-            MdxEvent::Inline(InlineEvent::FootnoteRef { .. }) => has_reference = true,
-            MdxEvent::Inline(InlineEvent::InlineFootnote(range)) => {
-                exact_range = Some(*range);
-                break;
+fn unsupported_footnote_range(document: &Document<'_>) -> Option<Span> {
+    #[derive(Default)]
+    struct Footnotes(Option<Span>);
+    impl<'a> Visit<'a> for Footnotes {
+        fn visit_node(&mut self, node: &Node<'a>) {
+            if matches!(
+                node,
+                Node::FootnoteReference(_) | Node::FootnoteDefinition(_)
+            ) {
+                self.0.get_or_insert(node.span());
             }
-            _ => {}
+            walk_node(self, node);
         }
     }
-    exact_range.or_else(|| {
-        (has_reference || source.contains("[^"))
-            .then(|| find_footnote_reference(source))
-            .flatten()
-    })
-}
-
-fn find_footnote_reference(source: &str) -> Option<Range> {
-    let mut offset = 0usize;
-    let mut fence = None;
-    for line in source.split_inclusive('\n') {
-        let content = line.trim_end_matches(['\r', '\n']);
-        let trimmed = content.trim_start();
-        let indentation = content.len().saturating_sub(trimmed.len());
-        let marker = (indentation <= 3)
-            .then(|| trimmed.as_bytes().first().copied())
-            .flatten()
-            .filter(|_| trimmed.len() >= 3)
-            .filter(|byte| matches!(byte, b'`' | b'~'))
-            .filter(|byte| {
-                trimmed
-                    .as_bytes()
-                    .iter()
-                    .take(3)
-                    .all(|candidate| candidate == byte)
-            });
-        if let Some(marker) = marker {
-            if fence == Some(marker) {
-                fence = None;
-            } else if fence.is_none() {
-                fence = Some(marker);
-            }
-            offset += line.len();
-            continue;
-        }
-        if fence.is_some() {
-            offset += line.len();
-            continue;
-        }
-
-        let bytes = content.as_bytes();
-        let mut position = 0usize;
-        let mut inline_code = false;
-        while position + 2 < bytes.len() {
-            if bytes[position] == b'`' {
-                inline_code = !inline_code;
-                position += 1;
-                continue;
-            }
-            if inline_code || bytes[position] != b'[' || bytes[position + 1] != b'^' {
-                position += 1;
-                continue;
-            }
-            let escaped = bytes[..position]
-                .iter()
-                .rev()
-                .take_while(|byte| **byte == b'\\')
-                .count()
-                % 2
-                == 1;
-            if escaped {
-                position += 2;
-                continue;
-            }
-            let Some(relative_end) = bytes[position + 2..].iter().position(|byte| *byte == b']')
-            else {
-                break;
-            };
-            let end = position + 2 + relative_end;
-            return Some(Range::from_usize(offset + position, offset + end + 1));
-        }
-        offset += line.len();
-    }
-    None
+    let mut visitor = Footnotes::default();
+    visitor.visit_document(document);
+    visitor.0
 }
 
 struct FrontMatterScalar {
@@ -1795,7 +1613,7 @@ struct FrontMatterScalar {
     value_offset: usize,
 }
 
-fn parse_front_matter_scalars(source: &str, content: Range) -> Vec<FrontMatterScalar> {
+fn parse_front_matter_scalars(source: &str, content: Span) -> Vec<FrontMatterScalar> {
     let raw = range_text(source, content);
     let mut scalars = Vec::new();
     let mut local_offset = 0usize;
@@ -1830,7 +1648,7 @@ fn parse_front_matter_scalars(source: &str, content: Range) -> Vec<FrontMatterSc
             scalars.push(FrontMatterScalar {
                 key: key.to_owned(),
                 value: unquoted.to_owned(),
-                value_offset: content.start_usize()
+                value_offset: content.start as usize
                     + local_offset
                     + separator_offset
                     + 1
@@ -1852,108 +1670,26 @@ fn split_front_matter_scalar(line: &str) -> Option<(&str, &str, usize)> {
     Some((key, &line[separator + 1..], separator))
 }
 
-struct StaticJsxAttribute<'a> {
-    name: String,
-    name_start: usize,
-    name_end: usize,
-    value: &'a str,
-    value_start: usize,
-    token_start: usize,
-    token_end: usize,
-}
-
-fn static_jsx_attributes(source: &str) -> Vec<StaticJsxAttribute<'_>> {
-    let bytes = source.as_bytes();
-    if bytes.first() != Some(&b'<') || bytes.get(1) == Some(&b'/') {
-        return Vec::new();
-    }
-    let mut position = 1usize;
-    while matches!(
-        bytes.get(position),
-        Some(byte) if byte.is_ascii_alphanumeric() || matches!(*byte, b'_' | b'-' | b'.' | b':')
-    ) {
-        position += 1;
-    }
-    let mut attributes = Vec::new();
-    while position < bytes.len() {
-        while matches!(bytes.get(position), Some(byte) if byte.is_ascii_whitespace()) {
-            position += 1;
-        }
-        if matches!(bytes.get(position), Some(b'>') | Some(b'/')) {
-            break;
-        }
-        if bytes.get(position) == Some(&b'{') {
-            let Some(length) = ferromark::mdx::expr::find_expression_end(&bytes[position..]) else {
-                break;
-            };
-            position += length;
-            continue;
-        }
-        let name_start = position;
-        while matches!(
-            bytes.get(position),
-            Some(byte) if byte.is_ascii_alphanumeric() || matches!(*byte, b'_' | b'-' | b'.' | b':')
-        ) {
-            position += 1;
-        }
-        if position == name_start {
-            break;
-        }
-        let name_end = position;
-        let name = source[name_start..position].to_owned();
-        while matches!(bytes.get(position), Some(byte) if byte.is_ascii_whitespace()) {
-            position += 1;
-        }
-        if bytes.get(position) != Some(&b'=') {
-            continue;
-        }
-        position += 1;
-        while matches!(bytes.get(position), Some(byte) if byte.is_ascii_whitespace()) {
-            position += 1;
-        }
-        let token_start = position;
-        let Some(quote @ (b'"' | b'\'')) = bytes.get(position).copied() else {
-            if bytes.get(position) == Some(&b'{') {
-                let Some(length) = ferromark::mdx::expr::find_expression_end(&bytes[position..])
-                else {
-                    break;
-                };
-                position += length;
-            } else {
-                while matches!(
-                    bytes.get(position),
-                    Some(byte) if !byte.is_ascii_whitespace() && !matches!(*byte, b'>' | b'/')
-                ) {
-                    position += 1;
-                }
-            }
-            continue;
-        };
-        position += 1;
-        let value_start = position;
-        while position < bytes.len() && bytes[position] != quote {
-            if bytes[position] == b'\\' {
-                position = (position + 2).min(bytes.len());
-            } else {
-                position += 1;
-            }
-        }
-        if position >= bytes.len() {
-            break;
-        }
-        let value_end = position;
-        position += 1;
-        attributes.push(StaticJsxAttribute {
-            name,
-            name_start,
-            name_end,
-            value: &source[value_start..value_end],
-            value_start,
-            token_start,
-            token_end: position,
+// Attributes carry complete source spans, so a `>` or `}` inside a string,
+// regex, spread, or template never needs to be scanned again by Palamedes.
+fn jsx_opening_span(source: &str, span: Span, attributes: &[MdxJsxAttributeEntry<'_>]) -> Span {
+    let start = span.start as usize;
+    let tag_start = start
+        + source[start..span.end as usize]
+            .find('<')
+            .expect("JSX element has an opener");
+    let after_attributes = attributes
+        .last()
+        .map_or(tag_start, |attribute| match attribute {
+            MdxJsxAttributeEntry::Attribute(attribute) => attribute.span.end as usize,
+            MdxJsxAttributeEntry::Expression(expression) => expression.span.end as usize,
         });
-    }
-    attributes
+    let end = after_attributes
+        + source[after_attributes..span.end as usize]
+            .find('>')
+            .expect("JSX opener ends with >")
+        + 1;
+    source_span(tag_start, end)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2229,11 +1965,69 @@ mod tests {
         result
     }
 
-    // These cases constrain a parser upgrade (#1313): source-first identity
-    // includes the distinction between authored prose and protected code.
     #[test]
-    fn image_alt_extraction_excludes_inline_code_and_keeps_identity() {
-        let source = "![Code `sample`](./sample.png)";
+    fn rejects_invalid_javascript_and_jsx_without_partial_output() {
+        for source in [
+            "Text {value +} after.",
+            "<Card title={value +} />",
+            "<Card><Badge></Card></Badge>",
+            "export const value = ;\n\n# Heading",
+            "export const value: number = 1;\n\n# Heading",
+        ] {
+            let result = analyze_mdx(source, "invalid.mdx", MdxOptions::default());
+            assert!(result.code.is_none(), "{source}");
+            assert!(result.messages.is_empty(), "{source}");
+            assert!(result.map.is_none(), "{source}");
+            assert!(result.compiled_ids.is_empty(), "{source}");
+            let [diagnostic] = result.diagnostics.as_slice() else {
+                panic!("expected one parser failure: {source}");
+            };
+            assert_eq!(diagnostic.code, "InvalidMdx");
+            assert!(diagnostic.primary.end <= source.len());
+            assert!(diagnostic.primary.start < diagnostic.primary.end);
+            assert!(diagnostic.related.is_none());
+        }
+    }
+
+    #[test]
+    fn preserves_javascript_templates_regex_spreads_and_attribute_locations() {
+        let source = "<Card {...props} onClick={() => /}/.test(value)} title=\"Open &amp; go\" />\n\nHello {`name ${user.name}`} and { /}/.test(value) }.";
+        let result = analyze_valid(
+            source,
+            MdxOptions {
+                translatable_attributes: vec!["title".into()],
+                keep_source_fallbacks: true,
+                ..MdxOptions::default()
+            },
+        );
+        assert_eq!(result.messages[0].message, "Open & go");
+        assert_eq!(
+            result.messages[0].origin,
+            ("guide.mdx".to_owned(), 1, Some(57))
+        );
+        let code = result.code.expect("valid JSX");
+        assert!(code.contains("{...props} onClick={() => /}/.test(value)}"));
+        assert!(code.contains("(`name ${user.name}`)"));
+        assert!(code.contains("(/}/.test(value))"));
+    }
+
+    #[test]
+    fn keeps_mdx_looking_code_literal_and_does_not_decode_entities_twice() {
+        let source =
+            "# Literal &amp;amp;\n\n```mdx\n<Component />\n{/* code comment */}\n{broken +}\n```\n";
+        let result = analyze_valid(source, MdxOptions::default());
+        assert_eq!(result.messages[0].message, "Literal &amp;");
+        assert_eq!(result.messages.len(), 1);
+        assert!(result.comments.is_empty());
+        let code = result.code.expect("code fence compiles");
+        assert!(code.contains(&js_string(
+            "<Component />\n{/* code comment */}\n{broken +}\n"
+        )));
+    }
+
+    #[test]
+    fn image_alt_is_the_complete_accessible_description() {
+        let source = "![**Bold** and `code` &amp;amp;](./image.png)";
         let result = analyze_valid(
             source,
             MdxOptions {
@@ -2242,39 +2036,67 @@ mod tests {
             },
         );
         assert_eq!(result.messages.len(), 1);
-        assert_eq!(result.messages[0].message, "Code ");
+        assert_eq!(result.messages[0].message, "Bold and code &amp;");
         assert_eq!(
             result.messages[0].origin,
-            ("guide.mdx".to_owned(), 1, Some(3))
+            ("guide.mdx".to_owned(), 1, Some(1))
         );
-        assert_eq!(result.compiled_ids, [compiled_message_key("Code ", None)]);
+        assert_eq!(
+            result.compiled_ids,
+            [compiled_message_key("Bold and code &amp;", None)]
+        );
         assert!(
             result
                 .code
                 .expect("image compiles")
-                .contains("message: \"Code \"")
+                .contains("message: \"Bold and code &amp;\"")
         );
     }
 
     #[test]
-    fn callout_markers_are_structural_and_do_not_change_message_identity() {
-        let source = "> [!NOTE]\n> Keep this **note**.\n";
-        let result = analyze_valid(source, MdxOptions::default());
-        assert_eq!(result.messages.len(), 1);
-        assert_eq!(result.messages[0].message, "Keep this <0>note</0>.");
-        assert_eq!(
-            result.messages[0].origin,
-            ("guide.mdx".to_owned(), 2, Some(3))
-        );
-        assert_eq!(
-            result.compiled_ids,
-            [compiled_message_key("Keep this <0>note</0>.", None)]
-        );
+    fn callouts_exclude_markers_and_keep_body_locations() {
+        for (marker, expected) in [
+            ("NOTE", "Keep this <0>note</0>."),
+            ("warning", "Keep this <0>note</0>."),
+        ] {
+            let source = format!("> [!{marker}]\r\n> Keep this **note**.\r\n");
+            let result = analyze_valid(&source, MdxOptions::default());
+            assert_eq!(result.messages[0].message, expected);
+            assert_eq!(
+                result.messages[0].origin,
+                ("guide.mdx".to_owned(), 2, Some(3))
+            );
+        }
     }
 
     #[test]
-    fn paragraph_boundaries_inside_same_line_jsx_keep_separate_messages() {
-        let source = "<Card>First paragraph\n\nSecond paragraph</Card>\n";
+    fn multiline_jsx_retains_the_container_and_separate_paragraphs() {
+        let source = "<Card>First paragraph\n\nSecond **paragraph**</Card>\n";
+        let result = analyze_valid(
+            source,
+            MdxOptions {
+                keep_source_fallbacks: true,
+                ..MdxOptions::default()
+            },
+        );
+        assert_eq!(
+            result
+                .messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            ["First paragraph", "Second <0>paragraph</0>"]
+        );
+        let code = result.code.expect("container compiles");
+        assert!(code.contains("<Card>\n"));
+        assert!(code.contains("</Card>"));
+        assert_eq!(code.matches("<p>").count(), 2);
+        assert!(!code.contains("paragraphSecond"));
+    }
+
+    #[test]
+    fn resolves_references_document_wide_inside_jsx() {
+        let source = "<Card>\n\nRead [the guide][guide] and ![Diagram][image].\n\n</Card>\n\n[guide]: /docs\n[image]: /diagram.svg \"Diagram title\"\n";
         let result = analyze_valid(source, MdxOptions::default());
         assert_eq!(
             result
@@ -2282,23 +2104,26 @@ mod tests {
                 .iter()
                 .map(|message| message.message.as_str())
                 .collect::<Vec<_>>(),
-            ["<0>First paragraph</0>", "Second paragraph"]
+            ["Diagram", "Read <0>the guide</0> and <1/>."]
         );
+        let code = result.code.expect("references compile");
+        assert!(code.contains("href={\"/docs\"}"));
+        assert!(code.contains("src={\"/diagram.svg\"}"));
+        assert!(code.contains("title={\"Diagram title\"}"));
+        assert!(!code.contains("[guide]"));
+    }
+
+    #[test]
+    fn uses_gfm_strikethrough_and_reports_excessive_nesting() {
         assert_eq!(
-            result.messages[0].origin,
-            ("guide.mdx".to_owned(), 1, Some(1))
+            messages("Old ~word~ and ~~phrase~~."),
+            ["Old <0>word</0> and <1>phrase</1>."]
         );
-        assert_eq!(
-            result.messages[1].origin,
-            ("guide.mdx".to_owned(), 3, Some(1))
-        );
-        assert_eq!(
-            result.compiled_ids,
-            [
-                compiled_message_key("<0>First paragraph</0>", None),
-                compiled_message_key("Second paragraph", None)
-            ]
-        );
+        let source = format!("{}Deep", "> ".repeat(110));
+        let result = analyze_mdx(&source, "deep.mdx", MdxOptions::default());
+        assert_eq!(result.diagnostics[0].code, "NestingTooDeep");
+        assert!(result.code.is_none());
+        assert!(result.messages.is_empty());
     }
 
     #[test]
