@@ -207,9 +207,9 @@ messages. Structured alt metadata provides original source references, and
 public callout metadata excludes structural markers. Parser failures return typed
 diagnostics with original primary and related opening-tag ranges where available.
 Up to 16 independent standalone unmatched closing tags are collected; ambiguous
-syntax and JavaScript failures stop collection without producing output. Re-run
-`pmds extract` after upgrading from the retired event parser; message IDs may
-change before v2. See `/docs/mdx.md` for the migration boundary.
+syntax and JavaScript failures stop collection without producing output.
+MDX ships with v2 and uses the shared `SourceRange` type for diagnostic locations.
+See `/docs/mdx.md` for the parser contract.
 
 ## Authoring model
 

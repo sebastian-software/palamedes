@@ -115,22 +115,19 @@ impl MdxOptions {
     }
 }
 
-/// Backward-compatible name for the shared source diagnostic range.
-pub type MdxSourceRange = SourceRange;
-
 /// Structured source-ranged MDX diagnostic.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MdxDiagnosticRecord {
-    /// Parser diagnostic category or a Palamedes compatibility diagnostic.
+    /// Parser diagnostic category or an unsupported Palamedes MDX construct.
     pub code: String,
     /// Human-readable diagnostic text.
     pub message: String,
     /// Primary source location.
-    pub primary: MdxSourceRange,
+    pub primary: SourceRange,
     /// Related source location for delimiter/tag mismatches.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub related: Option<MdxSourceRange>,
+    pub related: Option<SourceRange>,
 }
 
 /// Coarse native MDX workflow result shared by extraction and Vite.
@@ -268,7 +265,7 @@ fn diagnostic_record(locator: &SourceLocator, error: ParseError) -> MdxDiagnosti
     }
 }
 
-fn source_range(locator: &SourceLocator, range: Span) -> MdxSourceRange {
+fn source_range(locator: &SourceLocator, range: Span) -> SourceRange {
     locator.range(range.start as usize, range.end as usize)
 }
 
@@ -898,7 +895,8 @@ impl<'a> MdxCompiler<'a> {
             Node::Paragraph(paragraph) => self.inlines(&paragraph.children),
             // These options are disabled; footnotes are rejected before lowering.
             Node::Definition(_) | Node::FootnoteReference(_) | Node::FootnoteDefinition(_) => {}
-            _ => unreachable!("block or disabled extension in inline MDX: {node:?}"),
+            // Formatting Node here would retain the full AST Debug implementation in binaries.
+            _ => unreachable!("block or disabled extension in inline MDX"),
         }
     }
 
@@ -989,7 +987,9 @@ impl<'a> MdxCompiler<'a> {
         let alt_offset = image
             .alt_content
             .as_ref()
-            .map_or(source_offset, |content| content.span.start as usize);
+            .expect("MDX parsing enables structured image alt content")
+            .span
+            .start as usize;
         let reference = (!ignored && !alt.is_empty())
             .then(|| self.push_message(alt.clone(), BTreeMap::new(), alt_offset));
         let alt_expression = reference.as_ref().map_or_else(

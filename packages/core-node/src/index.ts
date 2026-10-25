@@ -50,7 +50,6 @@ import type {
   NativeMdxDiagnostic as GeneratedNativeMdxDiagnostic,
   NativeMdxFramework as GeneratedNativeMdxFramework,
   NativeMdxOptions as GeneratedNativeMdxOptions,
-  NativeMdxSourceRange as GeneratedNativeMdxSourceRange,
   NativeSourceAnalysisResult as GeneratedNativeSourceAnalysisResult,
   NativeSourceAnalysisOptions as GeneratedNativeSourceAnalysisOptions,
   NativeSourceDiagnostic as GeneratedNativeSourceDiagnostic,
@@ -309,7 +308,6 @@ export type MdxFramework = "react" | "solid";
 export type MdxOptions = Omit<GeneratedNativeMdxOptions, "framework"> & {
   framework?: MdxFramework;
 };
-export type MdxSourceRange = GeneratedNativeMdxSourceRange;
 export type MdxDiagnostic = GeneratedNativeMdxDiagnostic;
 export type MdxAnalysisResult = Omit<GeneratedNativeMdxAnalysisResult, "messages"> & {
   messages: NativeExtractedMessage[];

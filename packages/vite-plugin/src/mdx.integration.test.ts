@@ -105,7 +105,7 @@ describe("Palamedes MDX Vite integration", () => {
         .poll(() => server.watcher.getWatched()[root], { timeout: 5000 })
         .toContain("page.mdx");
       async function edit(source: string) {
-        const module = server.moduleGraph.getModuleById(pagePath);
+        const module = await server.moduleGraph.getModuleByUrl("/page.mdx");
         if (!module) throw new Error("Expected the compiled MDX module in Vite's graph");
         const previous = module.lastInvalidationTimestamp;
         await writeFile(pagePath, source);
