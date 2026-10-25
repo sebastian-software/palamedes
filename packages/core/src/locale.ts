@@ -529,31 +529,42 @@ export function defineLocaleControls<TLocale extends string>(
     const preferences = languagePreferences(header);
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
-      .map(({ tag }) => ({ tag, maximized: languageTag(tag)?.maximize() }));
+      .map(({ tag }) => {
+        const parsed = languageTag(tag);
+        return {
+          tag: parsed?.baseName.toLowerCase() ?? tag,
+          maximized: parsed?.maximize(),
+        };
+      });
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
       matches.length === 1 ? matches[0]?.locale : undefined;
 
     for (const { tag, quality } of preferences) {
       if (quality <= 0) continue;
-      const available = languageLocales.filter(({ locale, maximized: supported }) => {
-        const lower = locale.toLowerCase();
-        const specificity =
-          lower === tag || lower.startsWith(`${tag}-`) ? tag.split("-").length : 0;
-        return exclusions.every(({ tag: excludedTag, maximized: excluded }) => {
-          // A specific accepted range overrides a broader rejection, including
-          // '*;q=0'. Inference cannot override an explicitly rejected locale.
-          if (excludedTag === "*") return true;
-          const matches =
-            lower === excludedTag ||
-            lower.startsWith(`${excludedTag}-`) ||
-            (excluded && supported && excluded.baseName === supported.baseName);
-          return !matches || specificity > excludedTag.split("-").length;
-        });
-      });
+      const parsed = languageTag(tag);
+      const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
+      const available = languageLocales.filter(
+        ({ locale, parsed: configured, maximized: supported }) => {
+          const lower = configured?.baseName.toLowerCase() ?? locale.toLowerCase();
+          const specificity =
+            lower === canonicalTag || lower.startsWith(`${canonicalTag}-`)
+              ? canonicalTag.split("-").length
+              : 0;
+          return exclusions.every(({ tag: excludedTag, maximized: excluded }) => {
+            // A specific accepted range overrides a broader rejection, including
+            // '*;q=0'. Inference cannot override an explicitly rejected locale.
+            if (excludedTag === "*") return true;
+            const matches =
+              lower === excludedTag ||
+              lower.startsWith(`${excludedTag}-`) ||
+              (excluded && supported && excluded.baseName === supported.baseName);
+            return !matches || specificity > excludedTag.split("-").length;
+          });
+        },
+      );
       const exact = unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
       if (exact) return exact;
 
-      const parsed = languageTag(tag);
       if (!parsed) continue;
       const canonical = unique(
         available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName),

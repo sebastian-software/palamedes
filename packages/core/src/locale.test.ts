@@ -279,6 +279,16 @@ describe("language preference matching", () => {
     expect(controls.preferredLocale("de-CH, de;q=0, es;q=0.5")).toBe("es");
   });
 
+  it("canonicalizes aliases for exclusions and more specific accepted ranges", () => {
+    const hebrew = defineLocaleControls({
+      locales: ["en", "he-US"] as const,
+      defaultLocale: "en",
+    });
+    expect(hebrew.preferredLocale("iw;q=0, he")).toBe("en");
+    expect(hebrew.preferredLocale("iw;q=0, he-US")).toBe("he-US");
+    expect(hebrew.preferredLocale("he;q=0, iw-US")).toBe("he-US");
+  });
+
   it("ignores malformed and unsupported preferences without throwing", () => {
     expect(scripts.preferredLocale("zh_@@, *, xx-YY, zh-Hant;q=0.5")).toBe("zh-Hant");
     expect(scripts.preferredLocale("invalid_tag, xx-YY")).toBe("en");

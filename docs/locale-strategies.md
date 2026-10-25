@@ -37,7 +37,9 @@ locale before calling their request integration.
 
 A `q=0` range excludes its matching configured tags, subtags, and equivalent
 maximized tags from preference matching, so inference cannot reintroduce an
-excluded locale. A more specific positive range overrides a broader exclusion:
+excluded locale. These comparisons use canonical language tags too: `iw;q=0`
+excludes Hebrew catalogs under their canonical `he` spelling. A more specific
+positive range overrides a broader exclusion:
 `de-CH, de;q=0` can select configured `de-CH`, but cannot select generic `de`.
 A supported positive preference also overrides `*;q=0`. Malformed or unsupported
 tags without a configured exact match are ignored. If no preference
