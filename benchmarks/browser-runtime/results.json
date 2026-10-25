@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "measuredAt": "2026-10-25T10:41:01.911Z",
-  "sourceCommit": "10db77fb1e2c602de37d5738846221f52f4879a5",
+  "measuredAt": "2026-10-25T10:42:35.571Z",
+  "sourceCommit": "d14fc2646d204ca696cd5208665042832bef65bf",
   "worktreeDirty": true,
-  "sourceSha256": "4a59f2b6ab722fac49c9da2e12e0eb9227ae5f9ef55f80acba2e720a8567125e",
+  "sourceSha256": "47f6b303631cd0103cacd86a20853d755401e1acd6615f09254318dfd3d67dae",
   "environment": {
     "node": "v24.22.0",
-    "vite": "8.2.2",
+    "vite": "8.2.4",
     "rolldown": "1.2.14",
     "browser": "151.0.7922.34",
     "platform": "darwin",

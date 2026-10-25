@@ -94,7 +94,7 @@
     "solid-js": "2.0.0-rc.16",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
-    "vite": "8.2.2",
+    "vite": "8.2.4",
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
