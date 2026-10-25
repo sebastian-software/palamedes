@@ -254,7 +254,7 @@ Implementation PRs can merge into `main` behind this hold. A Publish workflow
 dispatch with `dry_run` still builds and verifies artifacts without publishing.
 
 The original v2 migration and host verification in #1215 is complete. Before
-release, complete #1252's React and Solid TanStack Start verification, align the
+release, complete #1252's representative TanStack React and Solid/Nitro verification, align the
 support matrix and migration guidance with that evidence, coordinate the
 corrected #1154 standards `rust-node-product` release layout, and obtain explicit
 release authorization before enabling `publicationEnabled` in a reviewed PR.

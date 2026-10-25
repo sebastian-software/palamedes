@@ -4,9 +4,10 @@
 on `main`. Publication remains held; they do not announce an available release.
 
 The original migration and delivery verification is complete. Current release
-work includes verified TanStack Start support for React and Solid, tracked in
-[#1252](https://github.com/sebastian-software/palamedes/issues/1252). The existing
-Solid examples use Solid with Nitro; they do not establish Solid Start support.
+work includes representative integration verification in
+[#1252](https://github.com/sebastian-software/palamedes/issues/1252): TanStack
+Start with React and Solid 2 Start Mode with Nitro. These demos also serve as
+executable integration tests. TanStack Solid Start is outside the v2 scope.
 See [Contributing](../CONTRIBUTING.md#releases) for the release gates.
 
 Palamedes 2.0 makes translation delivery part of the framework integration.

@@ -153,7 +153,7 @@ export const getStatus = createServerFn({ method: "GET" })
   faq: [
     {
       q: "Does this verification include Solid Start?",
-      a: "The checked examples use React Start 1.169.4. A candidate Solid binding and focused application exist, but Solid Start 2.0.0-rc.9 pins a server core with a known security advisory. Patched cores expose SSR APIs that this Solid release does not support. Solid Start therefore remains unsupported and a v2 release requirement in issue #1252. The Solid Start Mode/Nitro demos verify a different host.",
+      a: "TanStack Start is verified with React Start 1.169.4. Solid is verified separately through the Solid 2 Start Mode/Nitro demos. Both families are executable integration tests covering SSR, hydration, navigation, locale changes, and catalog recovery. TanStack Solid Start is outside the v2 scope; these examples do not establish support for that combination.",
     },
     {
       q: "Does Palamedes replace TanStack Router's i18n routing patterns?",
