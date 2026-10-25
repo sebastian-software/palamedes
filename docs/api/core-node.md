@@ -15,6 +15,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `applyTranslationPatchesAsync(request, options?: AsyncTaskOptions)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
+- `checkTranslationTargets(request)`
 - `inspectCatalogMachineTranslations(config, options?)`
 - `inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?: AsyncTaskOptions)`
 - `deriveMessageMetadata(message, context?)`
@@ -118,6 +119,64 @@ as `auditCatalogs()`, while allowing compatible target-language plural
 categories. A failed catalog write can still include completed
 per-file outcomes: identify that error with `isTranslationPatchWriteError()`
 and read its `report`. See [Translation candidate patches](../translation-candidate-patches.md).
+
+## Review proposed or stored target text
+
+`checkTranslationTargets()` runs optional local review checks before writeback.
+It accepts the same `TranslationValue` used by candidates and patches; Core renders
+projected plurals, so callers do not need to serialize ICU themselves.
+
+```ts
+import { checkTranslationTargets, applyTranslationPatches } from "@palamedes/core-node";
+
+// Carry each candidate's id and fingerprint into its completed patch.
+const targetText = { boundaryWhitespace: true, metadataLeakage: true };
+const reviews = checkTranslationTargets({ targets: patches, checks: targetText });
+for (const review of reviews) {
+  const bytes = Buffer.from(review.target);
+  for (const warning of review.diagnostics) {
+    console.log(
+      review.id,
+      warning.code,
+      bytes.subarray(warning.span.start, warning.span.end).toString(),
+    );
+  }
+}
+// Apply only after the caller's review policy has accepted the proposals.
+const result = applyTranslationPatches({ config, patches });
+```
+
+Both checks default to disabled. Enable the same checks for stored PO/FCL values
+with `auditCatalogs(config, { checks: { targetText } })`. Both surfaces use the
+same native detector and emit `warning` diagnostics:
+
+- `target.boundary_whitespace`: leading or trailing Unicode whitespace introduced
+  on a whole-message boundary where the source has none. A source boundary with
+  intentional whitespace exempts that side. Internal spaces, ICU branch boundaries,
+  rich-text fragments, and nonbreaking spaces before punctuation are left alone.
+- `target.metadata_leakage`: additional native PO `#@ key:` markers in visible ICU
+  literals. Ferrocat recognizes the metadata grammar, including custom keys. A
+  source literal documenting a marker exempts the same key and occurrence count;
+  documenting `lock` does not exempt a newly introduced `ai` marker. ICU formatter
+  styles and unquoted plural `#` substitutions are not visible metadata literals.
+
+Preflight returns one `TranslationTargetTextResult` per input with warnings, in
+request order. Each result carries the candidate `id` (including its locale),
+checked `target`, and `diagnostics`; identity and target text are stored once,
+regardless of warning count. Inputs without warnings are omitted. Each warning
+`span` is a half-open range of **UTF-8 bytes** in its result's `target`: the original
+singular value, or Core's rendered ICU for a projected plural. For catalog audit,
+`span` indexes the decoded stored target value. These are not PO/FCL file offsets
+or JavaScript UTF-16 indexes. Metadata spans highlight the marker through its
+colon, rather than its payload; the range starts at the hash and can include
+ICU quoting within that header. Invalid source or rendered target ICU is left to existing syntax validation.
+Rendering a projected plural can throw if a branch is malformed; a malformed
+singular string instead produces no optional warnings. These checks do not
+certify syntax or translation quality.
+
+The preflight reads no catalogs and never writes, trims, clears review markers,
+or rejects a patch. Audit is also read-only. Callers own their warning policy;
+`applyTranslationPatches()` continues to enforce its existing validation contract.
 
 ## Inspect stored machine-translation claims
 

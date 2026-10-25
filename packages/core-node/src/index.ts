@@ -1,4 +1,9 @@
 import type {
+  TranslationTargetTextResult as GeneratedTranslationTargetTextResult,
+  TargetTextCheckOptions as GeneratedTargetTextCheckOptions,
+  TargetTextSpan as GeneratedTargetTextSpan,
+  TranslationTargetTextRequest as GeneratedTranslationTargetTextRequest,
+  TranslationTargetTextDiagnostic as GeneratedTranslationTargetTextDiagnostic,
   CatalogMachineTranslationInspection as GeneratedCatalogMachineTranslationInspection,
   CatalogMachineTranslationInspectionResult as GeneratedCatalogMachineTranslationInspectionResult,
   CatalogAuditCheckOptions as GeneratedCatalogAuditCheckOptions,
@@ -118,6 +123,22 @@ export type CatalogMachineTranslationInspectionResult = Omit<
   catalogs: CatalogMachineTranslationInspection[];
 };
 export type CatalogMachineTranslationInspectionOptions = { locales?: string[] };
+export type TargetTextCheckOptions = GeneratedTargetTextCheckOptions;
+/** Half-open UTF-8 byte offsets in decoded target text, not UTF-16 or PO-file offsets. */
+export type TargetTextSpan = GeneratedTargetTextSpan;
+export type TranslationTargetTextRequest = Omit<
+  GeneratedTranslationTargetTextRequest,
+  "targets"
+> & { targets: { id: TranslationCandidateId; translation: TranslationValue }[] };
+export type TranslationTargetTextDiagnostic = Omit<
+  GeneratedTranslationTargetTextDiagnostic,
+  "severity"
+> & { severity: "warning" };
+export type TranslationTargetTextResult = Omit<
+  GeneratedTranslationTargetTextResult,
+  "diagnostics"
+> & { diagnostics: TranslationTargetTextDiagnostic[] };
+
 export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions;
 export type CatalogAuditSummary = GeneratedCatalogAuditSummary;
 export type CatalogDiagnosticSeverity = "info" | "warning" | "error";
@@ -448,6 +469,24 @@ function mapNativeSourceDiagnosticSeverity(
 
 export function getNativeInfo(): NativeInfo {
   return native.getNativeInfo();
+}
+
+/** Read-only, opt-in review warnings for proposed translation values. */
+export function checkTranslationTargets(
+  request: TranslationTargetTextRequest,
+): TranslationTargetTextResult[] {
+  const snapshot = snapshotNativeArgument("checkTranslationTargets", request);
+  const nativeRequest = {
+    ...snapshot,
+    targets: snapshot.targets.map((target) => ({
+      ...target,
+      translation: toNativeTranslationValue(target.translation),
+    })),
+  };
+  return native.checkTranslationTargets(nativeRequest).map((result) => ({
+    ...result,
+    diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic, severity: "warning" })),
+  }));
 }
 
 export function parsePo(source: string): ParsedPoFile {

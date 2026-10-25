@@ -372,6 +372,26 @@ allowed. Compatibility errors retain audit's `icu.*` codes and explanations;
 audit warnings do not reject patches. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
 
+`checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
+metadataLeakage: true } })` checks proposed `TranslationValue` content without
+catalog I/O. Both checks default to disabled. `auditCatalogs(config, { checks:
+{ targetText: { boundaryWhitespace: true, metadataLeakage: true } } })` uses the
+same native detector on stored PO/FCL values. `target.boundary_whitespace` warns
+about introduced whole-message boundary whitespace, exempting source boundaries
+with intentional whitespace. Internal ICU branch/rich-text spacing and NBSP
+before punctuation are unchanged. `target.metadata_leakage` warns about additional
+native PO `#@ key:` markers in visible ICU literals; source exemptions match each
+key and occurrence count. No global language or address blacklist is applied.
+Preflight returns one `TranslationTargetTextResult` per input with warnings:
+shared candidate `id`, checked `target`, and `diagnostics`. Each diagnostic has
+severity `warning` and a half-open UTF-8 byte `span` into its result's `target`
+(original singular or natively rendered plural ICU). Payload and identity occur
+once per input, and inputs without warnings are omitted. Audit spans index the decoded stored target, not file text. Invalid
+ICU remains the existing syntax validator's concern; malformed projected plural
+branches can fail native rendering, while malformed singular strings are skipped.
+These advisory checks never
+write, trim, clear review markers, or reject patches.
+
 `inspectCatalogMachineTranslations(config, { locales? })` inspects PO/FCL machine
 claims without rewriting files. Its `catalogs` sections identify the catalog
 pattern, target path, and locale, with active-entry `current`, `stale`, `absent`,

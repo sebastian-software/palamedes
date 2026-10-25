@@ -261,6 +261,33 @@ export interface CatalogDiagnostic {
   message: string;
   sourceKey?: CatalogDiagnosticSourceKey;
 }
+export interface TargetTextCheckOptions {
+  boundaryWhitespace?: boolean;
+  metadataLeakage?: boolean;
+}
+export interface TargetTextSpan {
+  start: number;
+  end: number;
+}
+export interface TranslationTargetText {
+  id: TranslationCandidateId;
+  translation: TranslationValue;
+}
+export interface TranslationTargetTextRequest {
+  targets: Array<TranslationTargetText>;
+  checks?: TargetTextCheckOptions;
+}
+export interface TranslationTargetTextDiagnostic {
+  severity: CatalogDiagnosticSeverity;
+  code: string;
+  message: string;
+  span: TargetTextSpan;
+}
+export interface TranslationTargetTextResult {
+  id: TranslationCandidateId;
+  target: string;
+  diagnostics: Array<TranslationTargetTextDiagnostic>;
+}
 export interface CatalogAuditCheckOptions {
   completeness?: boolean;
   extraMessages?: boolean;
@@ -269,6 +296,7 @@ export interface CatalogAuditCheckOptions {
   semanticMetadata?: boolean;
   obsoleteEntries?: boolean;
   fuzzyFlags?: boolean;
+  targetText?: TargetTextCheckOptions;
 }
 export interface CatalogAuditRequest {
   config: CatalogArtifactConfig;
@@ -285,6 +313,7 @@ export interface CatalogAuditSummary {
   infos: number;
 }
 export interface CatalogAuditDiagnostic {
+  span?: TargetTextSpan;
   severity: CatalogDiagnosticSeverity;
   code: string;
   message: string;
@@ -576,6 +605,7 @@ export interface NativeTransformResult {
 }
 
 export interface NativeBindings {
+  checkTranslationTargets(request: TranslationTargetTextRequest): Array<TranslationTargetTextResult>;
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
   updateCatalogFileAsync(request: CatalogUpdateRequest, signal?: AbortSignal | undefined | null): Promise<CatalogUpdateResult>;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;

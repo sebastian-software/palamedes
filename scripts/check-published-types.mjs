@@ -368,10 +368,13 @@ import {
   SelectOrdinal as SolidSelectOrdinal,
   Trans as SolidTrans,
 } from "@palamedes/solid/macro"
-import { inspectCatalogMachineTranslations, inspectCatalogMachineTranslationsAsync, type CatalogMachineTranslationStatus } from "@palamedes/core-node"
+import { checkTranslationTargets, inspectCatalogMachineTranslations, inspectCatalogMachineTranslationsAsync, type CatalogMachineTranslationStatus } from "@palamedes/core-node"
 const inspectionConfig = { rootDir: ".", locales: ["en", "de"], sourceLocale: "en", catalogs: [] }
 export const inspection = inspectCatalogMachineTranslations(inspectionConfig)
 export const inspectionAsync = inspectCatalogMachineTranslationsAsync(inspectionConfig, { locales: ["de"] }, { signal: new AbortController().signal })
+export const targetWarnings = checkTranslationTargets({ targets: [{ id: { catalog: "{locale}", locale: "de", message: "Save" }, translation: { kind: "singular", value: " Speichern" } }], checks: { boundaryWhitespace: true } })
+export const warningSeverity: "warning" = targetWarnings[0]!.diagnostics[0]!.severity
+export const warningByteOffset: number = targetWarnings[0]!.diagnostics[0]!.span.start
 export const integrityStatuses: CatalogMachineTranslationStatus[] = ["current", "stale", "absent", "invalid"]
 // @ts-expect-error Metadata integrity is not an authorship classification.
 export const authorship: CatalogMachineTranslationStatus = "human"
@@ -461,6 +464,8 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
 import coreNode = require("@palamedes/core-node")
 export const inspection = coreNode.inspectCatalogMachineTranslations({ rootDir: ".", sourceLocale: "en", locales: ["en"], catalogs: [] })
 export const inspectionAsync: Promise<coreNode.CatalogMachineTranslationInspectionResult> = coreNode.inspectCatalogMachineTranslationsAsync({ rootDir: ".", sourceLocale: "en", locales: ["en"], catalogs: [] })
+export const targetWarnings = coreNode.checkTranslationTargets({ targets: [{ id: { catalog: "{locale}", locale: "de", message: "{n, plural, other {Files}}" }, translation: { kind: "plural", variable: "n", pluralKind: "cardinal", offset: 0, values: { other: "Dateien" } } }], checks: { metadataLeakage: true } })
+export const warningSeverity: "warning" = targetWarnings[0]!.diagnostics[0]!.severity
 export const status: coreNode.CatalogMachineTranslationStatus = "invalid"
 import coreMacro = require("@palamedes/core/macro")
 import reactMacro = require("@palamedes/react/macro")

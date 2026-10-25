@@ -438,6 +438,106 @@ pub struct CatalogDiagnostic {
 }
 
 #[napi(object)]
+pub struct TargetTextCheckOptions {
+    pub boundary_whitespace: Option<bool>,
+    pub metadata_leakage: Option<bool>,
+}
+
+impl From<TargetTextCheckOptions> for palamedes::TargetTextCheckOptions {
+    fn from(value: TargetTextCheckOptions) -> Self {
+        Self {
+            boundary_whitespace: value.boundary_whitespace.unwrap_or(false),
+            metadata_leakage: value.metadata_leakage.unwrap_or(false),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct TargetTextSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl TryFrom<palamedes::TargetTextSpan> for TargetTextSpan {
+    type Error = napi::Error;
+    fn try_from(value: palamedes::TargetTextSpan) -> Result<Self> {
+        Ok(Self {
+            start: checked_u32(value.start, "span.start")?,
+            end: checked_u32(value.end, "span.end")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct TranslationTargetText {
+    pub id: TranslationCandidateId,
+    pub translation: TranslationValue,
+}
+
+#[napi(object)]
+pub struct TranslationTargetTextRequest {
+    pub targets: Vec<TranslationTargetText>,
+    pub checks: Option<TargetTextCheckOptions>,
+}
+
+#[napi(object)]
+pub struct TranslationTargetTextDiagnostic {
+    pub severity: CatalogDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub span: TargetTextSpan,
+}
+
+#[napi(object)]
+pub struct TranslationTargetTextResult {
+    pub id: TranslationCandidateId,
+    pub target: String,
+    pub diagnostics: Vec<TranslationTargetTextDiagnostic>,
+}
+
+#[napi(catch_unwind)]
+/// Checks proposed translation values without reading or writing catalogs.
+pub fn check_translation_targets(
+    request: TranslationTargetTextRequest,
+) -> Result<Vec<TranslationTargetTextResult>> {
+    let request = palamedes::TranslationTargetTextRequest {
+        targets: request
+            .targets
+            .into_iter()
+            .map(|target| {
+                Ok(palamedes::TranslationTargetText {
+                    id: target.id.into(),
+                    translation: target.translation.try_into()?,
+                })
+            })
+            .collect::<Result<_>>()?,
+        checks: request.checks.map(Into::into).unwrap_or_default(),
+    };
+    palamedes::check_translation_targets(&request)
+        .map_err(to_napi_error)?
+        .into_iter()
+        .map(|result| {
+            Ok(TranslationTargetTextResult {
+                id: result.id.into(),
+                target: result.target,
+                diagnostics: result
+                    .diagnostics
+                    .into_iter()
+                    .map(|diagnostic| {
+                        Ok(TranslationTargetTextDiagnostic {
+                            severity: diagnostic.severity.into(),
+                            code: diagnostic.code,
+                            message: diagnostic.message,
+                            span: diagnostic.span.try_into()?,
+                        })
+                    })
+                    .collect::<Result<_>>()?,
+            })
+        })
+        .collect()
+}
+
+#[napi(object)]
 pub struct CatalogAuditCheckOptions {
     pub completeness: Option<bool>,
     pub extra_messages: Option<bool>,
@@ -446,6 +546,7 @@ pub struct CatalogAuditCheckOptions {
     pub semantic_metadata: Option<bool>,
     pub obsolete_entries: Option<bool>,
     pub fuzzy_flags: Option<bool>,
+    pub target_text: Option<TargetTextCheckOptions>,
 }
 
 #[napi(object)]
@@ -468,6 +569,7 @@ pub struct CatalogAuditSummary {
 
 #[napi(object)]
 pub struct CatalogAuditDiagnostic {
+    pub span: Option<TargetTextSpan>,
     pub severity: CatalogDiagnosticSeverity,
     pub code: String,
     pub message: String,
@@ -1343,6 +1445,7 @@ impl From<CatalogAuditCheckOptions> for palamedes::CatalogAuditCheckOptions {
             semantic_metadata: value.semantic_metadata,
             obsolete_entries: value.obsolete_entries,
             fuzzy_flags: value.fuzzy_flags,
+            target_text: value.target_text.map(Into::into).unwrap_or_default(),
         }
     }
 }
@@ -1411,9 +1514,11 @@ impl From<palamedes::CatalogDiagnostic> for CatalogDiagnostic {
     }
 }
 
-impl From<palamedes::CatalogAuditDiagnostic> for CatalogAuditDiagnostic {
-    fn from(value: palamedes::CatalogAuditDiagnostic) -> Self {
-        Self {
+impl TryFrom<palamedes::CatalogAuditDiagnostic> for CatalogAuditDiagnostic {
+    type Error = napi::Error;
+    fn try_from(value: palamedes::CatalogAuditDiagnostic) -> Result<Self> {
+        Ok(Self {
+            span: value.span.map(TryInto::try_into).transpose()?,
             severity: value.severity.into(),
             code: value.code,
             message: value.message,
@@ -1421,7 +1526,7 @@ impl From<palamedes::CatalogAuditDiagnostic> for CatalogAuditDiagnostic {
             locale: value.locale,
             source_key: value.source_key.map(CatalogDiagnosticSourceKey::from),
             name: value.name,
-        }
+        })
     }
 }
 
@@ -1434,8 +1539,8 @@ impl TryFrom<palamedes::CatalogAuditResult> for CatalogAuditResult {
             diagnostics: value
                 .diagnostics
                 .into_iter()
-                .map(CatalogAuditDiagnostic::from)
-                .collect(),
+                .map(CatalogAuditDiagnostic::try_from)
+                .collect::<Result<_>>()?,
         })
     }
 }

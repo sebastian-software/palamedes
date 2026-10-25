@@ -209,6 +209,11 @@ patch, compile, and extraction variants so native work runs on Node's shared
 libuv worker pool instead of the event-loop thread; bound caller concurrency
 because queued native work is not cancellable.
 
+`checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
+metadataLeakage: true } })` adds read-only, opt-in target-text review warnings.
+`auditCatalogs` shares these checks through `checks.targetText`; spans are UTF-8
+byte offsets in decoded target text. Warnings never rewrite values or reject patches.
+
 ## CLI plugins
 
 Third-party commands run as `pmds <plugin> <command>` and must be explicitly

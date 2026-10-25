@@ -91,6 +91,13 @@ console.log(info.palamedesVersion);
 console.log(po.headers.Language);
 ```
 
+`checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
+metadataLeakage: true } })` provides read-only, opt-in review warnings before
+patch writeback. The same native checks run during `auditCatalogs` through
+`checks.targetText`. Results group candidate identity, checked text, and UTF-8 byte spans;
+see [target-text review](../../docs/api/core-node.md#review-proposed-or-stored-target-text)
+for source-aware exemptions and span semantics.
+
 ## Available APIs
 
 - `getNativeInfo()`
@@ -103,6 +110,7 @@ console.log(po.headers.Language);
 - `applyTranslationPatchesAsync(request, taskOptions?)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
+- `checkTranslationTargets(request)`
 - `inspectCatalogMachineTranslations(config, options?)`
 - `inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?: AsyncTaskOptions)`
 - `deriveMessageMetadata(message, context?)`
