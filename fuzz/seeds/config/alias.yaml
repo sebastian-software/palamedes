@@ -1,0 +1,2 @@
+x-value: &a [one, two]
+x-copy: [*a, *a]

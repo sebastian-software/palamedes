@@ -1,0 +1,9 @@
+---
+title: "こんにちは"
+---
+
+# Hello *world*
+
+<Trans>Welcome {name}</Trans>
+
+[link](https://example.test)

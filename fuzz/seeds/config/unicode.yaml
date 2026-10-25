@@ -1,0 +1,3 @@
+locales: [en, 日本語]
+source-locale: en
+catalogs: [{path: "locales/{locale}", include: ["src/**"]}]

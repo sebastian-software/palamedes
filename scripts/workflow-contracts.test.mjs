@@ -31,6 +31,35 @@ function job(workflow, name, nextName) {
 }
 
 describe("workflow contracts", () => {
+  it("keeps native fuzzing bounded, isolated, and separate from normal Rust gates", async () => {
+    const workflow = await readRepositoryFile(".github/workflows/native-fuzz.yml");
+    const runner = await readRepositoryFile("scripts/fuzz-native.mjs");
+    expect(workflow).toContain("pull_request:");
+    expect(workflow).toContain("schedule:");
+    expect(workflow).toContain("permissions:\n  contents: read");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain("timeout-minutes: 45");
+    expect(workflow).toContain("cargo install cargo-fuzz --version 0.13.2 --locked");
+    expect(workflow).toContain("manifest-path: fuzz/Cargo.toml");
+    expect(workflow).toContain("command-arguments: --config deny.toml");
+    expect(workflow).toContain("nightly-2026-07-20");
+    expect(workflow).toContain("'smoke' || 'scheduled'");
+    expect(workflow).not.toMatch(/secrets\.|pull_request_target|continue-on-error/u);
+    for (const flag of [
+      "-seed=1311",
+      "-max_len=65536",
+      "-timeout=5",
+      "-rss_limit_mb=2048",
+      "-malloc_limit_mb=256",
+    ])
+      expect(runner).toContain(flag);
+    expect(runner).toContain("lockBefore");
+    expect(runner).toContain("offline: true");
+    expect(runner).toContain('child.kill("SIGKILL")');
+    expect(workflow).toContain("fuzz/artifacts/");
+    expect(workflow).toContain("fuzz/target/run-*/");
+  });
+
   it("keeps paid benchmark VMs manual and retains separate, paired Linux/macOS evidence", async () => {
     const workflow = await readRepositoryFile(".github/workflows/blacksmith-benchmarks.yml");
     const triggers = workflow.slice(workflow.indexOf("on:"), workflow.indexOf("permissions:"));

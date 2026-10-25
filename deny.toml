@@ -36,6 +36,11 @@ allow = ["CC0-1.0"]
 crate = "webpki-roots"
 allow = ["CDLA-Permissive-2.0"]
 
+[[licenses.exceptions]]
+# The isolated sanitizer harness links LLVM libFuzzer's permissive NCSA code.
+crate = "libfuzzer-sys"
+allow = ["NCSA"]
+
 [bans]
 # Duplicates are surfaced for maintenance review without blocking a safe build.
 multiple-versions = "warn"

@@ -1,0 +1,61 @@
+name: Native Fuzz
+
+on:
+  pull_request:
+  schedule:
+    - cron: "41 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-fuzz-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CARGO_BUILD_JOBS: 3
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  fuzz:
+    name: bounded native fuzz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check isolated fuzz dependency policy
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          manifest-path: fuzz/Cargo.toml
+          arguments: ""
+          command: check
+          command-arguments: --config deny.toml
+      - name: Set up fuzz toolchain
+        uses: ./.github/actions/setup-workspace
+        with:
+          pnpm-cache: "false"
+          rust-toolchain: nightly-2026-07-20
+          rust-components: rustfmt
+      - name: Check isolated fuzz formatting
+        run: cargo fmt --manifest-path fuzz/Cargo.toml --all --check
+      - name: Install pinned cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Run bounded mutation campaign
+        run: node scripts/fuzz-native.mjs ${{ github.event_name == 'pull_request' && 'smoke' || 'scheduled' }}
+      - name: Preserve reproducing inputs and mutation statistics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            fuzz/artifacts/
+            fuzz/target/*-smoke.log
+            fuzz/target/*-scheduled.log
+            fuzz/target/run-*/
+          retention-days: 14
+          if-no-files-found: warn
