@@ -185,6 +185,11 @@ matrix and reusable in apps:
   errors. Cookie names, protocols, configured hosts, and TLD labels are
   validated; locale identifiers must be DNS-safe only for the host-based
   `subdomain` and `tld` strategies.
+  Language preferences match case-insensitively, preserve configured output
+  spelling, and infer missing script/region fields with `Intl.Locale.maximize()`.
+  Exact identities for cookies and routes remain case-sensitive. See
+  [language preference matching](../locale-strategies.md#language-preference-matching)
+  for quality ordering, exclusions, and ambiguity rules.
   `suggest()` derives browser-language hints from `Accept-Language`. A recorded
   choice matching the current locale suppresses the hint. An earlier choice for
   a different locale never replaces the browser preference; host mismatches
