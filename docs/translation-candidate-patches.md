@@ -74,11 +74,23 @@ version, discard in-flight candidates and list them again before patching.
 
 `applyTranslationPatches()` validates the complete request before writing any
 catalog. Unknown or ambiguous catalogs, unknown messages, duplicate identities,
-stale fingerprints, shape mismatches, invalid ICU plural branches, and invalid
+stale fingerprints, empty completed values, invalid ICU, and invalid
 provenance are returned as structured diagnostics with the rejected patch
 identity. A rejected validation batch leaves every original catalog unchanged.
 Source-locale patch identities are likewise rejected as
 `translation.source_locale`, before any catalog write.
+
+Patch validation and `auditCatalogs()` share the same native ICU compatibility
+rules, including the runtime's apostrophe quoting policy. A missing argument
+such as `Hello {name}` → `Hallo` is rejected as `icu.missing_argument` before
+writeback. Plural translations may add target-language categories such as
+Russian `few` and `many`; variable names, argument kinds, plural offsets,
+required selectors (including exact-number selectors), and rich-text tags
+remain checked by Ferrocat. Repeated arguments in plain messages must retain
+their occurrence counts. Compatibility errors use the same `icu.*` codes and
+explanations as audit; audit warnings do not reject a patch. The singular/plural
+value variants describe the payload projection, not a separate compatibility
+rule. Completed plural branches must all be nonempty.
 
 On success, Palamedes preserves unrelated translations, comments, origins,
 flags, obsolete entries, and PO headers. Each changed PO or FCL file is replaced

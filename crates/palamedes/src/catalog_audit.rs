@@ -4,15 +4,15 @@ use std::path::PathBuf;
 
 use ferrocat::{
     CatalogAuditIcuOptions, CatalogAuditOptions, CatalogMessage, EffectiveTranslationRef,
-    IcuMessage, IcuNode, NormalizedParsedCatalog, ParseCatalogOptions, parse_catalog_for_review,
-    parse_icu,
+    NormalizedParsedCatalog, ParseCatalogOptions, parse_catalog_for_review,
 };
 use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_text::{RUNTIME_ICU_SYNTAX_POLICY, canonicalize_runtime_icu};
+use crate::icu_compatibility::compare_runtime_icu;
+use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 use crate::message_metadata::MessageMetadataInput;
 
 use super::catalog_artifact::{CatalogArtifactConfig, CatalogConfig, resolve_catalog_path};
@@ -145,10 +145,16 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
             .collect::<Vec<_>>();
         let icu_options =
             CatalogAuditIcuOptions::new().with_syntax_policy(RUNTIME_ICU_SYNTAX_POLICY);
+        // Share compatibility with patch writeback below; Ferrocat owns the other audit checks.
         let options = CatalogAuditOptions::new(&request.config.source_locale)
             .with_locales(&locale_refs)
             .with_metadata(&metadata)
-            .with_checks(request.checks.to_ferrocat_checks())
+            .with_checks(
+                request
+                    .checks
+                    .to_ferrocat_checks()
+                    .with_icu_compatibility(false),
+            )
             .with_icu_options(icu_options);
         let report = ferrocat_audit_catalogs(&catalogs, &options).map_err(PalamedesError::from)?;
         add_summary(&mut result.summary, &report.summary);
@@ -186,7 +192,7 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
             });
         }
         if request.checks.icu_compatibility.unwrap_or(true) {
-            add_plain_argument_occurrence_diagnostics(
+            add_icu_compatibility_diagnostics(
                 &loaded,
                 &request.config.source_locale,
                 &target_locales,
@@ -199,7 +205,7 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
     Ok(result)
 }
 
-fn add_plain_argument_occurrence_diagnostics(
+fn add_icu_compatibility_diagnostics(
     loaded: &[LoadedAuditCatalog],
     source_locale: &str,
     target_locales: &[String],
@@ -243,36 +249,28 @@ fn add_plain_argument_occurrence_diagnostics(
             else {
                 continue;
             };
-            let Some(source_counts) = plain_argument_occurrences(&key.msgid) else {
+            let Ok(diagnostics) = compare_runtime_icu(&key.msgid, target_value) else {
+                // Ferrocat's syntax audit reports malformed source and target messages.
                 continue;
             };
-            let Some(target_counts) = plain_argument_occurrences(target_value) else {
-                continue;
-            };
-
-            for (name, source_count) in source_counts {
-                let Some(target_count) = target_counts.get(&name).copied() else {
-                    continue;
-                };
-                if source_count == target_count {
-                    continue;
-                }
-
+            for diagnostic in diagnostics {
                 result.summary.diagnostics += 1;
-                result.summary.errors += 1;
+                match diagnostic.severity {
+                    ferrocat::IcuDiagnosticSeverity::Error => result.summary.errors += 1,
+                    ferrocat::IcuDiagnosticSeverity::Warning => result.summary.warnings += 1,
+                    ferrocat::IcuDiagnosticSeverity::Info => result.summary.infos += 1,
+                }
                 result.diagnostics.push(CatalogAuditDiagnostic {
-                    severity: CatalogDiagnosticSeverity::Error,
-                    code: "icu.argument_occurrence_mismatch".to_owned(),
-                    message: format!(
-                        "ICU argument `{name}` appears {source_count} occurrence(s) in the source and {target_count} in the translation."
-                    ),
+                    severity: diagnostic.severity.into(),
+                    code: diagnostic.code.to_string(),
+                    message: diagnostic.message,
                     catalog_path: target_path.to_string_lossy().into_owned(),
                     locale: Some(target_locale.clone()),
                     source_key: Some(CatalogDiagnosticSourceKey {
                         message: key.msgid.clone(),
                         context: key.msgctxt.clone(),
                     }),
-                    name: Some(name),
+                    name: diagnostic.name,
                 });
             }
         }
@@ -284,45 +282,6 @@ fn singular_translation(message: &CatalogMessage) -> Option<&str> {
         EffectiveTranslationRef::Singular(value) => Some(value),
         EffectiveTranslationRef::Plural(_) => None,
     }
-}
-
-fn plain_argument_occurrences(value: &str) -> Option<BTreeMap<String, usize>> {
-    let canonical = canonicalize_runtime_icu(value);
-    let message = parse_icu(&canonical).ok()?;
-    let mut counts = BTreeMap::new();
-    count_plain_arguments(&message, &mut counts).then_some(counts)
-}
-
-fn count_plain_arguments(message: &IcuMessage, counts: &mut BTreeMap<String, usize>) -> bool {
-    count_plain_argument_nodes(&message.nodes, counts)
-}
-
-fn count_plain_argument_nodes(nodes: &[IcuNode], counts: &mut BTreeMap<String, usize>) -> bool {
-    for node in nodes {
-        let name = match node {
-            IcuNode::Argument { name }
-            | IcuNode::Number { name, .. }
-            | IcuNode::Date { name, .. }
-            | IcuNode::Time { name, .. }
-            | IcuNode::List { name, .. }
-            | IcuNode::Duration { name, .. }
-            | IcuNode::Ago { name, .. }
-            | IcuNode::Name { name, .. } => Some(name),
-            IcuNode::Select { .. } | IcuNode::Plural { .. } => return false,
-            IcuNode::Tag { children, .. } => {
-                if !count_plain_argument_nodes(children, counts) {
-                    return false;
-                }
-                None
-            }
-            IcuNode::Literal(_) | IcuNode::Pound => None,
-            _ => None,
-        };
-        if let Some(name) = name {
-            *counts.entry(name.clone()).or_default() += 1;
-        }
-    }
-    true
 }
 
 impl CatalogAuditCheckOptions {

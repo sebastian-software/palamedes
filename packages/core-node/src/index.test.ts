@@ -21,6 +21,7 @@ import {
   analyzeSourceNative,
   applyTranslationPatches,
   applyTranslationPatchesAsync,
+  auditCatalogs,
   combineCatalogs,
   compileCatalogArtifact,
   compileCatalogArtifactAsync,
@@ -1624,6 +1625,68 @@ msgstr ""
     const output = await readFile(targetPath, "utf8");
     expect(output).toContain('msgstr "Hallo"');
     expect(output).toContain("{count, plural, one {# Datei} other {# Dateien}}");
+  });
+
+  it("shares patch and audit compatibility diagnostics across sync and async writeback", async () => {
+    const rootDir = await createTempDir();
+    const targetPath = path.join(rootDir, "ru.po");
+    const pluralSource = "{count, plural, one {# file} other {# files}}";
+    const pluralTarget =
+      "{count, plural, one {# файл} few {# файла} many {# файлов} other {# файла}}";
+    const catalog = (locale: string, greeting: string, pluralTranslation: string) =>
+      `msgid ""\nmsgstr ""\n"Language: ${locale}\\n"\n\nmsgid "Hello {name}"\nmsgstr ${JSON.stringify(greeting)}\n\nmsgid ${JSON.stringify(pluralSource)}\nmsgstr ${JSON.stringify(pluralTranslation)}\n`;
+    const before = catalog("ru", "", "");
+    await writeFile(targetPath, before);
+    await writeFile(path.join(rootDir, "en.po"), catalog("en", "Hello {name}", pluralSource));
+    const config = {
+      rootDir,
+      locales: ["en", "ru"],
+      sourceLocale: "en",
+      catalogs: [{ path: "{locale}", include: ["src"] }],
+    };
+    const listed = listTranslationCandidates({ config });
+    const hello = listed.candidates.find((candidate) => candidate.id.message === "Hello {name}");
+    const plural = listed.candidates.find((candidate) => candidate.source.kind === "plural");
+    if (!hello || !plural || plural.source.kind !== "plural") {
+      throw new Error("Expected greeting and plural candidates");
+    }
+    const patches = [
+      {
+        id: hello.id,
+        fingerprint: hello.fingerprint,
+        translation: { kind: "singular" as const, value: "Hallo" },
+      },
+      {
+        id: plural.id,
+        fingerprint: plural.fingerprint,
+        translation: {
+          ...plural.source,
+          values: { one: "# файл", few: "# файла", many: "# файлов", other: "# файла" },
+        },
+      },
+    ];
+    const rejected = applyTranslationPatches({ config, patches });
+    expect(await applyTranslationPatchesAsync({ config, patches })).toStrictEqual(rejected);
+    expect(rejected).toMatchObject({
+      updated: false,
+      stats: { applied: 0 },
+      diagnostics: [{ code: "icu.missing_argument", id: hello.id }],
+      outcomes: [{ status: "rejected" }, { status: "notApplied" }],
+    });
+    expect(await readFile(targetPath, "utf8")).toBe(before);
+    await writeFile(targetPath, catalog("ru", "Hallo", pluralTarget));
+    const audit = auditCatalogs(config);
+    expect(audit.diagnostics.map(({ code, message }) => ({ code, message }))).toStrictEqual(
+      rejected.diagnostics.map(({ code, message }) => ({ code, message })),
+    );
+    await writeFile(targetPath, before);
+    patches[0].translation = { kind: "singular", value: "Привет {name}" };
+    expect(await applyTranslationPatchesAsync({ config, patches })).toMatchObject({
+      updated: true,
+      stats: { applied: 2 },
+      diagnostics: [],
+    });
+    expect(auditCatalogs(config).diagnostics).toStrictEqual([]);
   });
 
   it("serializes skipped fresh target catalogs while excluding an explicit source locale", async () => {
