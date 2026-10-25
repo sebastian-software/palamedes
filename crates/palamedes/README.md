@@ -9,6 +9,15 @@ call into. It is not published to crates.io yet; see the repository
 [README](https://github.com/sebastian-software/palamedes#readme) for the
 supported entry points.
 
+## Availability and compatibility
+
+The Rust SDK is Preview. This core, `palamedes-build`, and `palamedes-i18n`
+share the coordinated Palamedes version; no separate prerelease publication
+channel is enabled. Use the builder and runtime for applications. The core is
+a compiler dependency, with no stable low-level Rust API promise during Preview.
+Publication preparation and the held release lane are tracked in
+[#1309](https://github.com/sebastian-software/palamedes/issues/1309).
+
 ## Documentation
 
 - [palamedes.dev](https://palamedes.dev)

@@ -1,0 +1,33 @@
+# palamedes-build
+
+Cargo build integration for [Palamedes](https://palamedes.dev). Compile PO
+catalogs in `build.rs`, generate a source-first translation macro with checked
+arguments, and export a message schema for later data-only translation updates.
+The application loads external data with `palamedes-i18n`.
+
+```rust,no_run
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let catalogs = palamedes_build::CatalogBuilder::new("locales", "en")
+        .locales(&["en", "de"])
+        .build()?;
+    catalogs.install_to(std::path::Path::new("dist/translations"))?;
+    std::fs::copy(catalogs.schema_file, "dist/schema.pmd.json")?;
+    Ok(())
+}
+```
+
+## Availability and compatibility
+
+The Rust SDK is Preview and not published on crates.io yet. The builder, runtime,
+and core compiler share the coordinated Palamedes version. Pin the builder and
+runtime to the same reviewed revision until registry versions exist. No
+prerelease publishing channel is enabled. Catalog format version 2 is independent
+of the crate version; changing message IDs or argument contracts requires an
+application rebuild. Compatible translation updates use the exported schema and
+a matching `pmds catalog compile --target rust`, without Node or an application
+build. See the [Rust application guide](https://palamedes.dev/docs/rust-applications)
+for the supported subset and failure modes.
+
+## License
+
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

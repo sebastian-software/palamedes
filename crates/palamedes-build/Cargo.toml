@@ -1,11 +1,24 @@
 [package]
 name = "palamedes-build"
 version = "1.25.1"
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Cargo build integration for external Palamedes Rust catalogs."
+documentation = "https://docs.rs/palamedes-build"
+readme = "README.md"
+include = ["/src/**", "/tests/**", "/README.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
+keywords = ["i18n", "internationalization", "gettext", "ferramenta"]
+categories = ["internationalization", "development-tools"]
+# Publication needs a reviewed release-enablement change as well as the policy gate.
 publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

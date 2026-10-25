@@ -253,11 +253,14 @@ continue to describe the last release until its generated release PR lands.
 Implementation PRs can merge into `main` behind this hold. A Publish workflow
 dispatch with `dry_run` still builds and verifies artifacts without publishing.
 
-The original v2 migration and host verification in #1215 is complete. Before
-release, complete #1252's representative TanStack React and Solid/Nitro verification, align the
-support matrix and migration guidance with that evidence, coordinate the
-corrected #1154 standards `rust-node-product` release layout, and obtain explicit
-release authorization before enabling `publicationEnabled` in a reviewed PR.
+The v2 migration, representative TanStack React and Solid/Nitro verification,
+and standards release-layout migration are complete. Before release, finish
+Rust SDK preparation in #1309, reconcile the support matrix and migration guidance
+with the current evidence, and obtain explicit release authorization before
+enabling `publicationEnabled` in a reviewed PR. Cargo publication additionally
+requires explicit `publish = ["crates-io"]` allowlists on the three SDK crates and
+verified crates.io ownership and release credentials. `pnpm release:rust:dry-run`
+packages and verifies the SDK through a staging registry without uploading.
 The hold is independent of that layout migration; it does not replace it. Once enabled,
 publication still rejects versions below `minimumMajor` and prerelease versions.
 Remove the one-time `release-as` override after 2.0.0 is released so subsequent
