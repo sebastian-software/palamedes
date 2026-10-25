@@ -196,12 +196,47 @@ translation. Ferrocat records the implementation and trade-offs in
 See [Catalog formats](./catalog-formats.md) for the product boundary between
 PO storage, FCL storage, and the current framework `.po` import loaders.
 
-`include` and `exclude` are resolved relative to the config file directory.
-When an include entry is a directory-like path, extraction scans JavaScript,
-TypeScript, and MDX files below it.
+### Native CLI source patterns
 
-When `exclude` is empty, the native CLI implicitly excludes
-`**/node_modules/**`.
+`include` and `exclude` are resolved relative to the config file directory;
+absolute patterns are also accepted. An existing directory in `include`
+expands to a recursive scan for `.js`, `.jsx`, `.ts`, `.tsx`, `.mdx`, `.vue`,
+and `.svelte` files. An explicit file or glob keeps its configured spelling.
+
+The native CLI uses Ferralk's `PatternOptions::walker()` dialect with hidden
+matching enabled and separator-crossing ordinary wildcards. A single `*` can
+cross directory separators, so `app/*.tsx` also selects `app/nested/page.tsx`.
+Hidden files and directories participate in matching. The same native
+`PatternSet` contract decides which files extraction reads and which source
+changes trigger watch mode.
+
+Supported syntax includes recursive `**`, character classes and POSIX classes
+such as `[[:digit:]]`, brace alternatives such as `*.{ts,tsx}`, and extglobs such
+as `@(foo|bar).ts`. An empty brace alternative participates: `{,foo}.ts` selects
+both `.ts` and `foo.ts`. A leading `!` remains literal path text; use `exclude`
+for exclusions. `!(foo).ts` is a negated extglob.
+
+Write `/` as the separator on every platform, including Windows. A backslash
+escapes syntax on every platform: for example, the single-quoted YAML pattern
+`'app/\[draft\].tsx'` selects the literal filename `[draft].tsx`. Project
+root names containing glob syntax are escaped automatically. Relative `./`
+and `../` prefixes resolve from the config directory; absolute globs are
+accepted too. An explicitly configured existing directory is treated literally
+before it expands to a recursive source pattern.
+
+When `exclude` is empty, the CLI excludes `**/node_modules/**` under the config
+root. A nonempty list replaces that default, so repeat it if it should still
+apply. To exclude a subtree, use `src/generated/**`; a bare exclude directory
+does not expand recursively. Invalid include or exclude syntax stops discovery
+with a pattern diagnostic. Files are sorted and deduplicated across overlapping
+includes.
+
+Discovery includes symlinks to files and skips broken links. A directory
+symlink explicitly named by an include is a scan root; directory symlinks
+encountered below a scan root are not followed. Recoverable filesystem
+traversal errors are skipped. See the
+[Ferralk adoption assessment](./ferralk-adoption.md) for the migration examples,
+contract fixtures, and bounded traversal measurement.
 
 ## MDX
 

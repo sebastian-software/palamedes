@@ -355,7 +355,7 @@ jobs:
             toolchain: stable
             lint: true
           - os: ubuntu-24.04
-            toolchain: "1.95"
+            toolchain: "1.96"
             lint: true
           - os: windows-2025
             toolchain: stable
@@ -391,14 +391,14 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Verify packaged Rust SDK and registry-only consumer
-        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.95'
+        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.96'
         run: node ./scripts/verify-rust-sdk.mjs
 
       - name: Run Rust tests
         run: cargo test --workspace --locked
 
       - name: Verify enabled update-check opt-outs without network access
-        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.95'
+        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.96'
         run: node ./scripts/check-enabled-update-check.mjs
 
       # One instrumented test run, three reports: `report` re-renders the
@@ -434,7 +434,7 @@ jobs:
       # anything baked into either artifact multiplies. Checked once, on the
       # pinned toolchain, because the number only has to be watched — not twice.
       - name: Check shipped binary sizes
-        if: matrix.toolchain == '1.95'
+        if: matrix.toolchain == '1.96'
         run: node ./scripts/check-binary-size.mjs
 
   validate-dependency-policy:

@@ -4,5 +4,5 @@
 # RUSTUP_TOOLCHAIN, which takes precedence over this file, so the `stable` legs
 # still exercise stable.
 [toolchain]
-channel = "1.95"
+channel = "1.96"
 components = ["clippy", "rustfmt"]

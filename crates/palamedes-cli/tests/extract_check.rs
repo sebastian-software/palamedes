@@ -6,6 +6,105 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::{Value, json};
 
 #[test]
+fn native_globs_ignore_colliding_prefix_directories_inside_and_outside_the_project() {
+    let fixture = fixture_dir("native-prefix-roots");
+    let project = fixture.join("project");
+    let shared = fixture.join("shared");
+    fs::create_dir_all(project.join("app/foo")).unwrap();
+    fs::create_dir_all(shared.join("foo")).unwrap();
+    for (directory, label) in [(project.join("app"), "Inside"), (shared.clone(), "Outside")] {
+        for suffix in ['a', 'b'] {
+            fs::write(directory.join(format!("foo{suffix}.tsx")), format!("import {{ t }} from '@palamedes/core/macro'; export function title() {{ return t`{label} {suffix}`; }}\n")).unwrap();
+        }
+    }
+    let absolute = |path: &Path| {
+        let path = path.to_string_lossy();
+        let portable = if cfg!(windows) {
+            path.replace('\\', "/")
+        } else {
+            path.into_owned()
+        };
+        ferralk::ferralk_glob::escape_str(&portable)
+    };
+    for (pattern, selected, rejected) in [
+        ("app/foo@(a|b).tsx".to_owned(), "Inside", "Outside"),
+        ("app/foo*.tsx".to_owned(), "Inside", "Outside"),
+        (
+            format!("{}/foo@(a|b).tsx", absolute(&project.join("app"))),
+            "Inside",
+            "Outside",
+        ),
+        ("../shared/foo@(a|b).tsx".to_owned(), "Outside", "Inside"),
+        (
+            format!("{}/foo*.tsx", absolute(&shared)),
+            "Outside",
+            "Inside",
+        ),
+    ] {
+        fs::write(project.join("palamedes.yaml"), format!("locales: [en]\nsource-locale: en\nsource-reference-root: config\ncatalogs:\n  - path: locales/{{locale}}\n    include: ['{pattern}']\n")).unwrap();
+        let output = pmds(
+            &project,
+            &["extract", "--no-cache", "--fail-on-empty-catalog"],
+        );
+        assert!(output.status.success(), "{pattern}: {output:?}");
+        let catalog = fs::read_to_string(project.join("locales/en.po")).unwrap();
+        for suffix in ['a', 'b'] {
+            assert!(
+                catalog
+                    .lines()
+                    .any(|line| line == format!("msgid \"{selected} {suffix}\"")),
+                "{pattern}: {catalog}"
+            );
+            assert!(
+                !catalog
+                    .lines()
+                    .any(|line| line == format!("msgid \"{rejected} {suffix}\"")),
+                "{pattern}: {catalog}"
+            );
+        }
+    }
+    fs::remove_dir_all(fixture).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_parent_include_extracts_the_filesystem_target_and_keeps_its_reference_spelling() {
+    let fixture = fixture_dir("symlink-parent-source");
+    let project = fixture.join("project");
+    let external = fixture.join("external");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(external.join("target")).unwrap();
+    fs::write(project.join("palamedes.yaml"), "locales: [en]\nsource-locale: en\nsource-reference-root: config\ncatalogs:\n  - path: locales/{locale}\n    include: [link/..]\n").unwrap();
+    fs::write(
+        project.join("local.ts"),
+        "import {t} from '@palamedes/core/macro'; export function title() { return t`Local`; }\n",
+    )
+    .unwrap();
+    fs::write(
+        external.join("external.ts"),
+        "import {t} from '@palamedes/core/macro'; export function title() { return t`External`; }\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(external.join("target"), project.join("link")).unwrap();
+    let output = pmds(
+        &project,
+        &["extract", "--no-cache", "--fail-on-empty-catalog"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    let catalog = fs::read_to_string(project.join("locales/en.po")).unwrap();
+    assert!(
+        catalog.lines().any(|line| line == "msgid \"External\""),
+        "{catalog}"
+    );
+    assert!(
+        !catalog.lines().any(|line| line == "msgid \"Local\""),
+        "{catalog}"
+    );
+    assert!(catalog.contains("link/../external.ts"), "{catalog}");
+    fs::remove_dir_all(fixture).unwrap();
+}
+
+#[test]
 fn svelte_scripts_are_discovered_extracted_and_checked_by_the_native_cli() {
     let fixture = fixture_dir("svelte-scripts");
     write_project(

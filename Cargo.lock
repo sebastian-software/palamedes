@@ -417,20 +417,22 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferralk"
-version = "0.5.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c0d36da7d332904f0c2afd713c35810b024ba212a3250bbd93471dbeafcfb1b"
+checksum = "1dbedb34f7a55ef8ba75b3b102a5faefa7cea9597bf9e0d70ea15ee6ad3db5c9"
 dependencies = [
  "crossbeam-deque",
  "ferralk-glob",
+ "libc",
  "memchr",
+ "unicode-normalization",
 ]
 
 [[package]]
 name = "ferralk-glob"
-version = "0.5.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1212705ff0b27267a1df49138b512c9aafd3d995a7789c3f8a9b00b8e54d553d"
+checksum = "54de39b15f06b86ad258cb62f68d77c99aaffb7b1053635777ea81b6948b06ff"
 dependencies = [
  "memchr",
 ]
@@ -1471,7 +1473,6 @@ dependencies = [
  "clap",
  "config",
  "ferralk",
- "globset",
  "libc",
  "notify",
  "palamedes",
@@ -2055,6 +2056,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+[[package]]
 name = "toml"
 version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2108,6 +2115,15 @@ name = "unicode-linebreak"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b09c83c3c29d37506a3e260c08c03743a6bb66a9cd432c6934ab501a190571f"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-segmentation"
