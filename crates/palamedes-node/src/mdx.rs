@@ -2,7 +2,7 @@ use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 
 use crate::extract::NativeExtractedMessage;
-use crate::shared::checked_u32;
+use crate::source::NativeSourceRange;
 use crate::transform::NativeTransformSourceMap;
 
 #[napi(string_enum)]
@@ -24,19 +24,11 @@ pub struct NativeMdxOptions {
 }
 
 #[napi(object)]
-pub struct NativeMdxSourceRange {
-    pub start: u32,
-    pub end: u32,
-    pub line: u32,
-    pub column: u32,
-}
-
-#[napi(object)]
 pub struct NativeMdxDiagnostic {
     pub code: String,
     pub message: String,
-    pub primary: NativeMdxSourceRange,
-    pub related: Option<NativeMdxSourceRange>,
+    pub primary: NativeSourceRange,
+    pub related: Option<NativeSourceRange>,
 }
 
 #[napi(object)]
@@ -81,19 +73,6 @@ impl From<NativeMdxOptions> for palamedes::MdxOptions {
     }
 }
 
-impl TryFrom<palamedes::MdxSourceRange> for NativeMdxSourceRange {
-    type Error = napi::Error;
-
-    fn try_from(value: palamedes::MdxSourceRange) -> Result<Self> {
-        Ok(Self {
-            start: checked_u32(value.start, "mdxRange.start")?,
-            end: checked_u32(value.end, "mdxRange.end")?,
-            line: checked_u32(value.line, "mdxRange.line")?,
-            column: checked_u32(value.column, "mdxRange.column")?,
-        })
-    }
-}
-
 impl TryFrom<palamedes::MdxDiagnosticRecord> for NativeMdxDiagnostic {
     type Error = napi::Error;
 
@@ -101,11 +80,8 @@ impl TryFrom<palamedes::MdxDiagnosticRecord> for NativeMdxDiagnostic {
         Ok(Self {
             code: value.code,
             message: value.message,
-            primary: NativeMdxSourceRange::try_from(value.primary)?,
-            related: value
-                .related
-                .map(NativeMdxSourceRange::try_from)
-                .transpose()?,
+            primary: NativeSourceRange::try_from(value.primary)?,
+            related: value.related.map(NativeSourceRange::try_from).transpose()?,
         })
     }
 }

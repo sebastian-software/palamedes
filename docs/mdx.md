@@ -201,20 +201,19 @@ native code and source map.
 This boundary prevents extraction and compilation from developing separate
 Markdown heuristics.
 
-## Ferromark 3 Migration
+## Parser Contract
 
 The native adapter uses Ferromark 3.6.0 with its `jsx` feature and both `mdx`
 and `mdx_compatible` parser options. Structured image-alt analysis is enabled
-for source provenance. This adopts the public arena AST in place
-of the retired 0.7 event API. Its MIT license, Rust requirement, and OXC version
+for source provenance. The adapter consumes the public arena AST. Its MIT license,
+Rust requirement, and OXC version
 are compatible with the workspace. See the upstream
 [v2 migration guide](https://github.com/sebastian-software/ferromark/blob/v3.6.0/docs/migration-v2.md)
 and [v3 upgrade notes](https://github.com/sebastian-software/ferromark/blob/v3.6.0/docs/migration-v3.md).
 
-This migration happens before Palamedes v2. Translation units follow the
-current parsed semantics rather than reproducing old parser quirks. Re-run
-`pmds extract` and review changed source messages and IDs when upgrading.
-The MDX extraction cache stamp changes so previous analysis is discarded.
+MDX ships with Palamedes v2. Translation units follow the current parsed
+semantics. MDX diagnostics use the shared `SourceRange` type with original
+UTF-8 byte offsets and line/column positions.
 
 - Image alt text is the complete normalized accessible description. Alt text
   authored as ``Code `sample` `` produces the message `Code sample`, including

@@ -450,17 +450,11 @@ export interface NativeMdxOptions {
   /** Preserve source messages as runtime fallbacks. Defaults to `false`. */
   keepSourceFallbacks?: boolean;
 }
-export interface NativeMdxSourceRange {
-  start: number;
-  end: number;
-  line: number;
-  column: number;
-}
 export interface NativeMdxDiagnostic {
   code: string;
   message: string;
-  primary: NativeMdxSourceRange;
-  related?: NativeMdxSourceRange;
+  primary: NativeSourceRange;
+  related?: NativeSourceRange;
 }
 export interface NativeMdxAnalysisResult {
   messages: Array<NativeExtractedMessage>;

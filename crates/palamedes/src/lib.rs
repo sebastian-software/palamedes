@@ -102,7 +102,7 @@ pub use extract::{
 };
 pub use extract_cache::{ExtractCache, default_cache_path};
 pub use mdx::{
-    MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework, MdxOptions, MdxSourceRange, analyze_mdx,
+    MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework, MdxOptions, analyze_mdx,
     extract_mdx_messages,
 };
 pub use message_metadata::{
