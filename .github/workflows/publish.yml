@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
       dry_run:
-        description: "Build and smoke-test the native packages without publishing anything"
+        description: "Verify native and Cargo SDK artifacts without publishing anything"
         required: false
         type: boolean
         default: false
@@ -91,6 +91,9 @@ jobs:
 
       - name: Check types
         run: pnpm check-types
+
+      - name: Verify Cargo SDK archives and independent registry consumer
+        run: node ./scripts/publish-rust-sdk.mjs --dry-run
 
       - name: Run Rust workspace tests
         run: cargo test --workspace --locked
@@ -204,6 +207,31 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
         run: node ./scripts/publish-package-if-needed.mjs "${{ matrix.package_name }}"
 
+  publish-cargo:
+    needs:
+      - determine-release
+      - validate-release
+    if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          pnpm-cache: "false"
+
+      - name: Publish Cargo SDK in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          PALAMEDES_CRATES_OWNER: ${{ vars.CRATES_IO_OWNER }}
+        run: node ./scripts/publish-rust-sdk.mjs
+
   publish-js:
     needs:
       - determine-release
@@ -272,6 +300,7 @@ jobs:
       - determine-release
       - publish-native
       - publish-js
+      - publish-cargo
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -329,6 +358,7 @@ jobs:
       - validate-release
       - publish-native
       - publish-js
+      - publish-cargo
       - verify-release
     if: ${{ failure() && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) && (needs.determine-release.result == 'failure' || needs.determine-release.outputs.should_publish == 'true') }}
     runs-on: ubuntu-24.04
@@ -349,7 +379,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "The publish workflow failed, so this release may be only partially on npm."
+            echo "The publish workflow failed, so this release may be only partially on npm or crates.io."
             echo
             echo "| Job | Result |"
             echo "| --- | --- |"
@@ -357,6 +387,7 @@ jobs:
             echo "| validate-release | ${{ needs.validate-release.result }} |"
             echo "| publish-native | ${{ needs.publish-native.result }} |"
             echo "| publish-js | ${{ needs.publish-js.result }} |"
+            echo "| publish-cargo | ${{ needs.publish-cargo.result }} |"
             echo "| verify-release | ${{ needs.verify-release.result }} |"
             echo
             echo "Commit: \`${{ github.sha }}\`"

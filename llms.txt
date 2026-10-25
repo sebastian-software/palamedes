@@ -145,6 +145,7 @@ Generated plural/ordinal calls require built-in numeric types or a validated
 `PluralNumber` to preserve visible fractional zeros.
 Number/date/time formatting remains unsupported. Format version 2 requires
 matching regenerated catalogs and schemas; see `docs/rust-applications.md`.
+The Preview Rust SDK stays in the coordinated version set and is not published on crates.io. `pnpm verify:rust-sdk` checks actual Cargo archives, rustdoc, a staged-registry version-only consumer, and an unchanged binary after a native CLI translation update. `pnpm release:rust:dry-run` uploads nothing; the Cargo lane requires both policy and manifest publication guards to be explicitly enabled in an authorized release change.
 `pmds catalog compile --target rust --schema <schema.pmd.json> --catalog-dir <dir>
 --locale <tag> --output <dir>` compiles compatible PO updates without an application
 build. Repeat `--locale` or `--fallback-locale` as needed; `--fail-on-missing`

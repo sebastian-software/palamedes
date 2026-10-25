@@ -7,11 +7,59 @@ languages can ship without rebuilding it.
 
 This is an experimental repository integration. `palamedes-build` and
 `palamedes-i18n` are **not published on crates.io**; the publication hold in
-[#1153](https://github.com/sebastian-software/palamedes/issues/1153) still applies.
+[#1309](https://github.com/sebastian-software/palamedes/issues/1309) still applies.
 The current subset is text, display arguments, string selects, and cardinal and
 ordinal plurals. Localized number/date/time formatting, rich text, and translation
 contexts are rejected. This path does not yet offer the full TypeScript workflow or a stable
 Rust SDK contract. See the [stability guide](./stability.md).
+
+## Preview and Publication
+
+The Rust SDK is Preview. The runtime, builder, and core compiler stay in the
+coordinated Palamedes release set; they do not use separate SDK versions or an
+independent prerelease publishing channel. The shared release policy allows only
+stable v2-or-later versions after explicit release authorization. The current
+`1.25.1` manifests describe the previous coordinated release, not an available
+Rust SDK release. Keep Git installation instructions until the matching registry
+versions actually exist.
+
+`pnpm verify:rust-sdk` packages the three crates in dependency order and inspects
+all archive file lists, license texts, READMEs, packaged builds, and rustdoc. A
+loopback sparse staging registry serves those exact archives. An independent
+project outside the repository uses exact version-only dependencies, a normal
+`build.rs`, and no workspace paths or patches. It runs a copied executable with
+external English and German catalogs and an empty `PATH`, checks plurals and
+missing/incompatible errors, then compiles a real PO change with native `pmds`
+against the exported version 2 schema. The application checksum must remain
+unchanged. The receipt is `target/rust-sdk-proof/receipt.json`; temporary consumer
+and installation paths are recorded there for inspection.
+
+`pnpm release:rust:dry-run` runs the same verification without uploading. The
+Publish workflow uses it before any publication and CI runs the proof on the
+pinned Rust toolchain. Staging matters before the first release: the builder's
+registry dependencies do not exist on crates.io yet, so a crates.io publish dry
+run cannot verify that graph. No archive/build verification is bypassed.
+
+The prepared Cargo lane publishes `palamedes-i18n`, then `palamedes`, then
+`palamedes-build`. It checks exact archive checksums before skipping an existing
+version, rejects yanked or different content, and waits a bounded interval for
+index visibility before packaging the next crate. Registry authentication or
+server errors stop the lane. The lane also requires a configured
+`CARGO_REGISTRY_TOKEN` secret and `CRATES_IO_OWNER` repository variable naming a
+direct owner; it checks existing names against that owner and repository, and
+checks ownership after a first upload before continuing to dependent crates.
+The token is passed only to Cargo for upload, never to the staging registry.
+
+Both `publicationEnabled: false` and the three `publish = false` manifests remain
+in effect. A reviewed release-enablement change must set the policy and explicit
+`publish = ["crates-io"]` allowlists after the v2 gates and release authorization.
+Preparation does not configure secrets, claim names, or authorize publication.
+Public name checks currently report all three names absent; that is not a name
+reservation. Ownership and the configured token's publish permissions still need
+confirmation during the authorized first release. crates.io's `/api/v1/me`
+identity endpoint requires website authentication and cannot validate this API
+token. Do not treat its HTTP 403 response as evidence that an upload token is
+invalid.
 
 ## Build a Small CLI
 

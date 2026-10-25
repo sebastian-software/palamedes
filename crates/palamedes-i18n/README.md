@@ -1,0 +1,25 @@
+# palamedes-i18n
+
+The parser-free Rust runtime for [Palamedes](https://palamedes.dev). Load one
+external catalog for the selected locale and render text, named arguments,
+selects, and CLDR cardinal/ordinal plurals. English is external too; missing,
+corrupt, or incompatible catalogs return errors instead of a language fallback.
+
+Use `palamedes-build` in `build.rs` to generate the message contract and checked
+translation macro. Compatible translation updates replace catalog data without
+rebuilding the application. The runtime has no Node, PO, or ICU parser dependency.
+
+## Availability and compatibility
+
+The Rust SDK is Preview and not published on crates.io yet. The three SDK crates
+share the coordinated Palamedes version. Pin the builder and runtime to the same
+reviewed revision until registry versions are published. No prerelease publishing
+channel is enabled. Catalog format version 2 is separate from the crate version:
+upgrade incompatible schemas, catalogs, and executables together. Within an
+unchanged contract, translation edits and new locales do not require a rebuild.
+See the [Rust application guide](https://palamedes.dev/docs/rust-applications)
+for the supported subset and installation workflow.
+
+## License
+
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

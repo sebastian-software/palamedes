@@ -457,6 +457,7 @@ by cargo build -p palamedes-cli --message-format=json. Human fallback warnings
 quote source messages like build.rs; JSON keeps the raw message text.
 The crates.io hold
 remains in force. See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
+The Preview Rust SDK stays in the coordinated version set and is not published on crates.io. `pnpm verify:rust-sdk` checks actual Cargo archives, rustdoc, a staged-registry version-only consumer, and an unchanged binary after a native CLI translation update. `pnpm release:rust:dry-run` uploads nothing; the Cargo lane requires both policy and manifest publication guards to be explicitly enabled in an authorized release change.
 
 Unbundled Node code (native type stripping, plain `tsc` output, scripts, tests)
 can keep the `t`, `plural`, `select`, and `selectOrdinal` macros from
