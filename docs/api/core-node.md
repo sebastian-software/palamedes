@@ -15,6 +15,8 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `applyTranslationPatchesAsync(request, options?: AsyncTaskOptions)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
+- `inspectCatalogMachineTranslations(config, options?)`
+- `inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?: AsyncTaskOptions)`
 - `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
@@ -62,7 +64,7 @@ first-party Vite, Next, and Remix integrations use this function for `.po`
 imports.
 
 For event-loop-sensitive integrations, use the additive `Async` variants of
-catalog update, translation patch, catalog artifact/module compilation, and
+catalog update, translation patch, machine-metadata inspection, catalog artifact/module compilation, and
 file extraction. Each call moves one owned operation to Node's shared libuv
 worker pool and returns the same result or error shape in a promise. Vite and
 Next await these APIs in their asynchronous plugin hooks. Remix's synchronous
@@ -116,6 +118,50 @@ as `auditCatalogs()`, while allowing compatible target-language plural
 categories. A failed catalog write can still include completed
 per-file outcomes: identify that error with `isTranslationPatchWriteError()`
 and read its `report`. See [Translation candidate patches](../translation-candidate-patches.md).
+
+## Inspect stored machine-translation claims
+
+```ts
+import { inspectCatalogMachineTranslationsAsync } from "@palamedes/core-node";
+
+const result = await inspectCatalogMachineTranslationsAsync(config, { locales: ["de"] });
+for (const catalog of result.catalogs) {
+  for (const entry of catalog.details) {
+    console.log(catalog.targetPath, entry.message, entry.context, entry.status);
+  }
+}
+```
+
+The synchronous `inspectCatalogMachineTranslations()` returns the same result.
+Both read each selected PO/FCL catalog and its configured source catalog once,
+without rewriting files. `locales` defaults to all configured non-source locales;
+a missing source or requested target catalog rejects the call. Duplicate message
+identities and parse failures also reject it.
+
+Each `catalogs` section identifies the configured `catalog` pattern, resolved
+`targetPath`, and `locale`. Its `current`, `stale`, `absent`, and `invalid` counters
+count active target entries, including entries outside the source inventory.
+`details` contains each entry's `message`, optional `context`, and lowercase
+`status`. Obsolete entries are excluded. Sections follow configuration order and
+sorted target locales; details use Ferrocat's deterministic identity order.
+
+Ferrocat owns the canonical payload, versioned hash, and all four classifications:
+
+- `current`: the stored lock matches the current effective translation.
+- `stale`: the stored lock does not match the current effective translation.
+- `absent`: no machine metadata survives in the parsed entry.
+- `invalid`: retained machine metadata fails Ferrocat's validation, when detectable.
+
+Malformed metadata can be rejected during parsing or discarded before review;
+`invalid` is not a complete malformed-metadata detector. Inspection preserves
+these native limits. A status establishes neither human/machine authorship nor
+linguistic quality. The lock is also separate from candidate optimistic-concurrency
+fingerprints. Subsequent extraction retains its existing stale-metadata cleanup;
+inspection lets tooling see the stored claim before that write.
+
+Rust tooling can call `palamedes::inspect_catalog_machine_translations()` and
+consume the re-exported native `CatalogMachineTranslationReview` and
+`CatalogMachineTranslationStatus` directly.
 
 `analyzeSourceNative()` performs the source-level semantic analysis used by
 linting and extraction, returning extracted messages and diagnostics in one

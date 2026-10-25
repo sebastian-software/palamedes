@@ -23,6 +23,7 @@ mod catalog_audit;
 mod catalog_combine;
 mod catalog_convert;
 mod catalog_coverage;
+mod catalog_machine_translation;
 mod catalog_module;
 mod catalog_three_way;
 mod catalog_update;
@@ -80,6 +81,10 @@ pub use catalog_coverage::{
     CatalogCoverageRequest, CatalogCoverageResult, CatalogLocaleCoverageResult,
     measure_catalog_coverage,
 };
+pub use catalog_machine_translation::{
+    CatalogMachineTranslationInspection, CatalogMachineTranslationInspectionRequest,
+    CatalogMachineTranslationInspectionResult, inspect_catalog_machine_translations,
+};
 pub use catalog_module::render_catalog_module;
 pub use catalog_three_way::{
     CATALOG_MODIFY_DELETE_RESOLVED, CatalogFileThreeWayMergeRequest, CatalogMergeSide,
@@ -102,6 +107,7 @@ pub use extract::{
     extract_messages, extract_messages_with_mdx_options,
 };
 pub use extract_cache::{ExtractCache, default_cache_path};
+pub use ferrocat::{CatalogMachineTranslationReview, CatalogMachineTranslationStatus};
 pub use mdx::{
     MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework, MdxOptions, analyze_mdx,
     extract_mdx_messages,

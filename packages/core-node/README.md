@@ -103,6 +103,8 @@ console.log(po.headers.Language);
 - `applyTranslationPatchesAsync(request, taskOptions?)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
+- `inspectCatalogMachineTranslations(config, options?)`
+- `inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?: AsyncTaskOptions)`
 - `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
@@ -128,6 +130,13 @@ console.log(po.headers.Language);
 fallbacks by default. Pass `keepSourceFallbacks: true` when generated runtime
 code must retain them. `stripMessageField` remains a deprecated inverse option
 for macro-transform compatibility.
+
+`inspectCatalogMachineTranslations()` and its `Async` variant inspect stored
+PO/FCL machine claims without rewriting files. They expose Ferrocat
+`current`/`stale`/`absent`/`invalid` counters and identity/status details.
+Integrity does not verify authorship or translation quality; malformed metadata
+may be rejected or discarded before review. See the
+[inspection API](../../docs/api/core-node.md#inspect-stored-machine-translation-claims).
 
 Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring
 diagnostics, metadata validation, and deterministic combine workflows. That

@@ -133,6 +133,7 @@ const preparedNativeArguments = new WeakSet<object>();
 const abortSignalAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
 const abortableNativeOperations = new Set([
   "updateCatalogFileAsync",
+  "inspectCatalogMachineTranslationsAsync",
   "applyTranslationPatchesAsync",
   "compileCatalogArtifactAsync",
   "compileCatalogArtifactSelectedAsync",
