@@ -8,6 +8,7 @@ export default defineConfig({
   build: {
     ssr: true,
     target: "node22",
+    sourcemap: true,
     rolldownOptions: {
       input: { cli: "src/cli.ts", express: "src/express-server.ts", hono: "src/hono-server.ts" },
       output: { entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },

@@ -7,6 +7,7 @@ const generatedAndBuildIgnores = {
   ignores: [
     "**/dist/**",
     "examples/node-backend/dist-tsdown/**",
+    "examples/node-backend/dist-rolldown/**",
     "**/node_modules/**",
     "**/.palamedes/**",
     "**/.next/**",

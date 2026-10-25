@@ -152,7 +152,7 @@ Ways to run backend code with macros:
 | ------------------------------------ | ----------------------------------------------------------------------- |
 | Vite build                           | Supported through `@palamedes/vite-plugin`                              |
 | tsdown                               | Supported through `@palamedes/vite-plugin` with `environment: "server"` |
-| Standalone Rolldown                  | Builds with `environment: "server"`; not covered by the example suite   |
+| Standalone Rolldown                  | Supported through the same plugin with `environment: "server"`          |
 | Direct Node or plain `tsc`           | Supported through runtime macros and precompiled catalogs               |
 | Node load hooks, `tsc` preprocessing | Not supported: they need the compiler on the runtime host               |
 
@@ -225,10 +225,28 @@ a fresh instance.
 
 In `examples/node-backend`, `src/i18n.ts` is this module and needs no build
 configuration beyond `palamedes({ framework: "none" })`, plus
-`environment: "server"` under tsdown. The booking service,
+`environment: "server"` under tsdown or standalone Rolldown. The booking service,
 CLI, Express, and Hono code doesn't depend on the build, and one test suite
-runs against the Vite bundle, the tsdown bundle, plain `node` type stripping,
-and plain `tsc` output.
+runs against the Vite, tsdown, and standalone Rolldown bundles, plain `node`
+type stripping, and plain `tsc` output. Each path executes from a copied
+deployment outside the repository. Bundles ship all emitted chunks and need no
+installed packages. Unbundled deployments ship the application, the generated
+manifest and catalog modules, and declared production dependencies; they need no
+compiler, native addon, YAML config, or PO files on the deployment host.
+
+For unbundled development, regenerate the manifest after translated source
+changes, recompile catalogs after PO or catalog-config changes, and restart the
+process. Run `tsc` again when executing emitted JavaScript. A running process
+caches its manifest and catalogs. Native Node execution needs erasable
+TypeScript outside `node_modules`; the example uses ESM and explicit relative
+imports. Type stripping alone does not prepare macros or catalogs.
+
+Standalone Rolldown watch rebuilds when source, catalog, or config files change;
+restart Node to load the rebuilt output. All prebuilt example paths emit source
+maps, and `node --enable-source-maps` reports authored TypeScript locations after
+async service calls. The
+[example's deployment guide](https://github.com/sebastian-software/palamedes/tree/main/examples/node-backend#deployment-and-verification)
+records the exact tested versions, commands, and reproducible lifecycle tests.
 
 ## Hono Example
 
