@@ -29,12 +29,19 @@ const confirmed = {
   en: "Booking BK-1 is confirmed.",
   de: "Buchung BK-1 ist bestätigt.",
   es: "La reserva BK-1 está confirmada.",
+  fr: "La réservation BK-1 est confirmée.",
 };
-const labels = { en: "Booking details.", de: "Buchungsdetails.", es: "Detalles de la reserva." };
+const labels = {
+  en: "Booking details.",
+  de: "Buchungsdetails.",
+  es: "Detalles de la reserva.",
+  fr: "Détails de la réservation.",
+};
 const seats = {
   en: ["2 seats available", "1 seat available"],
   de: ["2 Plätze verfügbar", "1 Platz verfügbar"],
   es: ["2 plazas disponibles", "1 plaza disponible"],
+  fr: ["2 places disponibles", "1 place disponible"],
 };
 let deployed;
 
@@ -107,7 +114,9 @@ test("CLI follows --locale, then LC_ALL > LC_MESSAGES > LANG", async () => {
     [{ LANG: "de_DE.UTF-8@euro" }, "de"],
     [{ LC_ALL: "C.UTF-8", LANG: "de_DE" }, "en"],
     [{ LC_ALL: "POSIX", LANG: "de_DE" }, "en"],
-    [{ LC_ALL: "fr_FR.UTF-8", LANG: "de_DE" }, "en"],
+    [{ LC_ALL: "fr_FR.UTF-8", LANG: "de_DE" }, "fr"],
+    [{ LANG: "fr_CA.UTF-8" }, "fr"],
+    [{ LC_ALL: "ja_JP.UTF-8", LANG: "de_DE" }, "en"],
     [{ LC_ALL: "invalid!", LANG: "de_DE" }, "en"],
     [{}, "en"],
   ];
@@ -119,10 +128,14 @@ test("CLI follows --locale, then LC_ALL > LC_MESSAGES > LANG", async () => {
   }
   const overridden = await cli(["show", "BK-1", "--locale", "es-MX"], { LC_ALL: "de_DE" });
   assert.ok(overridden.stdout.includes(confirmed.es));
+  const french = await cli(["show", "BK-1", "--locale", "fr-CA"], { LC_ALL: "de_DE" });
+  assert.ok(french.stdout.includes(confirmed.fr));
+  assert.ok(french.stdout.includes("149,00 €"));
+  assert.ok(french.stdout.includes("18 octobre 2026"));
 });
 
 test("CLI renders singular and plural seat counts", async () => {
-  for (const locale of ["en", "de", "es"]) {
+  for (const locale of ["en", "de", "es", "fr"]) {
     const [other, one] = seats[locale];
     assert.ok((await cli(["show", "BK-1", "--locale", locale])).stdout.includes(`\n${other}\n`));
     assert.ok((await cli(["show", "BK-2", "--locale", locale])).stdout.includes(`\n${one}\n`));
@@ -130,12 +143,12 @@ test("CLI renders singular and plural seat counts", async () => {
 });
 
 test("CLI rejects an unsupported --locale with exit code 2", async () => {
-  const invalid = await cli(["show", "BK-1", "--locale", "fr"], { LANG: "de_DE" });
+  const invalid = await cli(["show", "BK-1", "--locale", "ja"], { LANG: "de_DE" });
   assert.equal(invalid.code, 2);
   assert.equal(invalid.stdout, "");
   assert.equal(
     invalid.stderr.trim(),
-    'Nicht unterstützte Sprache "fr". Verwenden Sie eine von: en, de, es.',
+    'Nicht unterstützte Sprache "ja". Verwenden Sie eine von: en, de, es, fr.',
   );
   const machine = await cli(["show", "BK-1", "--locale", "???", "--json"]);
   assert.equal(machine.code, 2);
@@ -154,10 +167,11 @@ test("CLI keeps exit codes and --json output stable across locales", async () =>
   assert.equal(syntax.code, 2);
   assert.match(syntax.stderr, /Ungültige Argumente/u);
   const machine = await Promise.all(
-    ["en_US", "de_DE", "es_ES"].map((LANG) => cli(["show", "BK-1", "--json"], { LANG })),
+    ["en_US", "de_DE", "es_ES", "fr_FR"].map((LANG) => cli(["show", "BK-1", "--json"], { LANG })),
   );
   assert.equal(machine[0].stdout, machine[1].stdout);
   assert.equal(machine[0].stdout, machine[2].stdout);
+  assert.equal(machine[0].stdout, machine[3].stdout);
   assert.deepEqual(JSON.parse(machine[0].stdout), {
     code: "BOOKING_CONFIRMED",
     id: "BK-1",
@@ -214,7 +228,8 @@ for (const framework of ["express", "hono"]) {
       ["de-DE,de;q=0.9,en;q=0.8", "de", "BK-1"],
       ["es-MX,en;q=0.5", "es", "BK-2"],
       ["en", "en", "BK-2"],
-      ["fr,zh;q=0.5", "en", "BK-1"],
+      ["fr-CA,en;q=0.5", "fr", "BK-1"],
+      ["zh,ja;q=0.5", "en", "BK-1"],
       [undefined, "en", "BK-1"],
     ];
     // Interleave locales on one process, including the first cold catalog loads.

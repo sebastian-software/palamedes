@@ -1,15 +1,21 @@
 import "server-only";
 
+import { defineLocaleControls } from "@palamedes/core/locale";
 import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 
-export type Locale = "en" | "de";
+export type Locale = "en" | "de" | "fr";
+const controls = defineLocaleControls<Locale>({
+  locales: ["en", "de", "fr"],
+  defaultLocale: "en",
+  cookies: { locale: "locale" },
+});
 
 function resolveLocale(request: Request): Locale {
-  const cookie = request.headers.get("cookie") ?? "";
-  if (/(?:^|;\s*)locale=de(?:;|$)/u.test(cookie)) {
-    return "de";
-  }
-  return request.headers.get("accept-language")?.startsWith("de") ? "de" : "en";
+  return controls.resolve({
+    strategy: "cookie",
+    cookieHeader: request.headers.get("cookie"),
+    acceptLanguageHeader: request.headers.get("accept-language"),
+  }).locale;
 }
 
 /** Resolves request policy; the Vite adapter owns lazy catalog loading. */

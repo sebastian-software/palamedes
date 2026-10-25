@@ -6,7 +6,7 @@
 import { defineNodeI18n } from "@palamedes/runtime/node";
 
 // Must match palamedes.yaml; test/backend.test.mjs fails when they disagree.
-export const locales = ["en", "de", "es"] as const;
+export const locales = ["en", "de", "es", "fr"] as const;
 export const defaultLocale = "en";
 
 // `src/` and `build/` sit at the same depth, so this URL works under type
