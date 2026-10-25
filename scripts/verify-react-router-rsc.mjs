@@ -150,37 +150,50 @@ const server = spawn("pnpm", ["--filter", "@palamedes/example-react-router-rsc-c
 try {
   await waitForServer();
   await expectMultiCookieLocale();
+  const negotiatedFrench = await fetch(baseUrl, {
+    headers: { "accept-language": "fr-CA,en;q=0.5" },
+  });
+  const frenchHtml = await negotiatedFrench.text();
+  if (
+    !negotiatedFrench.ok ||
+    !/<html[^>]*\slang="fr"/u.test(frenchHtml) ||
+    !frenchHtml.includes("Le rendu serveur a confirmé la langue.")
+  ) {
+    throw new Error("A regional French browser preference did not render a French document.");
+  }
+  if (negotiatedFrench.headers.has("set-cookie"))
+    throw new Error("Negotiation persisted a locale choice.");
   await expectDefaultDocumentLocale();
   await expectDefaultDocumentLocale("locale=unsupported");
   const browser = await chromium.launch({ headless: true });
   try {
     await expectFallbackServerFunction(browser, undefined);
     await expectFallbackServerFunction(browser, "unsupported");
-    const [deContext, enContext] = await Promise.all([browser.newContext(), browser.newContext()]);
+    const [deContext, frContext] = await Promise.all([browser.newContext(), browser.newContext()]);
     await Promise.all([
       deContext.addCookies([{ name: "locale", value: "de", url: baseUrl }]),
-      enContext.addCookies([{ name: "locale", value: "en", url: baseUrl }]),
+      frContext.addCookies([{ name: "locale", value: "fr", url: baseUrl }]),
     ]);
-    const [dePage, enPage] = await Promise.all([deContext.newPage(), enContext.newPage()]);
-    const verifyArtifacts = observeBrowserArtifacts(enPage, example);
-    await Promise.all([dePage.goto(baseUrl), enPage.goto(baseUrl)]);
+    const [dePage, frPage] = await Promise.all([deContext.newPage(), frContext.newPage()]);
+    const verifyArtifacts = observeBrowserArtifacts(frPage, example);
+    await Promise.all([dePage.goto(baseUrl), frPage.goto(baseUrl)]);
 
     await expectText(dePage, "server-rendered-message", "Server-Rendern bestätigte Sprache.");
-    await expectText(enPage, "server-rendered-message", "Server render confirmed locale.");
-    await enPage.getByTestId("server-function-trigger").waitFor();
+    await expectText(frPage, "server-rendered-message", "Le rendu serveur a confirmé la langue.");
+    await frPage.getByTestId("server-function-trigger").waitFor();
     await verifyArtifacts.checkpoint();
     const barrierId = `react-router-rsc-server-function-${Date.now()}`;
     const snapshots = await Promise.all([
       addServerFunctionBarrier(dePage, barrierId),
-      addServerFunctionBarrier(enPage, barrierId),
+      addServerFunctionBarrier(frPage, barrierId),
     ]);
-    const [deResponse, enResponse] = await Promise.all([
+    const [deResponse, frResponse] = await Promise.all([
       waitForServerFunctionBarrier(dePage, barrierId),
-      waitForServerFunctionBarrier(enPage, barrierId),
+      waitForServerFunctionBarrier(frPage, barrierId),
       dePage.getByTestId("server-function-trigger").click(),
-      enPage.getByTestId("server-function-trigger").click(),
+      frPage.getByTestId("server-function-trigger").click(),
     ]);
-    if (!deResponse.ok() || !enResponse.ok()) {
+    if (!deResponse.ok() || !frResponse.ok()) {
       throw new Error("A rendezvoused React Router RSC Server Function request failed.");
     }
     for (const responses of snapshots) {
@@ -192,7 +205,7 @@ try {
     }
     const cookieLocale = async (context) =>
       (await context.cookies()).find((cookie) => cookie.name === "locale")?.value;
-    if ((await cookieLocale(deContext)) !== "de" || (await cookieLocale(enContext)) !== "en") {
+    if ((await cookieLocale(deContext)) !== "de" || (await cookieLocale(frContext)) !== "fr") {
       throw new Error("A read-only Server Function changed the stored locale.");
     }
     await Promise.all([
@@ -202,37 +215,64 @@ try {
         "Direktes Serverfunktionsmakro bestätigte Sprache.",
       ),
       expectText(
-        enPage,
+        frPage,
         "server-function-direct",
-        "Direct Server Function macro confirmed locale.",
+        "La macro directe de la fonction serveur a confirmé la langue.",
       ),
       expectText(dePage, "server-function-sync", "Synchroner Helfer bestätigte Sprache."),
-      expectText(enPage, "server-function-sync", "Synchronous helper confirmed locale."),
+      expectText(
+        frPage,
+        "server-function-sync",
+        "La fonction auxiliaire synchrone a confirmé la langue.",
+      ),
       expectText(dePage, "server-function-async", "Asynchroner Helfer bestätigte Sprache."),
-      expectText(enPage, "server-function-async", "Asynchronous helper confirmed locale."),
+      expectText(
+        frPage,
+        "server-function-async",
+        "La fonction auxiliaire asynchrone a confirmé la langue.",
+      ),
       expectText(
         dePage,
         "server-function-cross-module",
         "Modulübergreifender Helfer bestätigte Sprache.",
       ),
-      expectText(enPage, "server-function-cross-module", "Cross-module helper confirmed locale."),
+      expectText(
+        frPage,
+        "server-function-cross-module",
+        "La fonction auxiliaire intermodule a confirmé la langue.",
+      ),
       expectText(dePage, "server-function-default", "Parameterstandard bestätigte Sprache."),
-      expectText(enPage, "server-function-default", "Default parameter confirmed locale."),
+      expectText(
+        frPage,
+        "server-function-default",
+        "Le paramètre par défaut a confirmé la langue.",
+      ),
     ]);
     await Promise.all([
       dePage.getByTestId("lazy-browser-trigger").click(),
-      enPage.getByTestId("lazy-browser-trigger").click(),
+      frPage.getByTestId("lazy-browser-trigger").click(),
     ]);
     await Promise.all([
       expectText(dePage, "lazy-browser-message", "Lokales Browserfragment bestätigte Sprache."),
-      expectText(enPage, "lazy-browser-message", "Lazy browser fragment confirmed locale."),
+      expectText(
+        frPage,
+        "lazy-browser-message",
+        "Le fragment du navigateur chargé à la demande a confirmé la langue.",
+      ),
     ]);
     await Promise.all([
       expectText(dePage, "server-rendered-message", "Server-Rendern bestätigte Sprache."),
-      expectText(enPage, "server-rendered-message", "Server render confirmed locale."),
+      expectText(frPage, "server-rendered-message", "Le rendu serveur a confirmé la langue."),
     ]);
     await verifyArtifacts();
-    await Promise.all([deContext.close(), enContext.close()]);
+    await frPage.getByTestId("locale-en").click();
+    await expectText(frPage, "server-rendered-message", "Server render confirmed locale.");
+    await frPage.getByTestId("locale-fr").click();
+    await expectText(frPage, "server-rendered-message", "Le rendu serveur a confirmé la langue.");
+    if ((await frPage.getByTestId("locale-fr").getAttribute("aria-pressed")) !== "true") {
+      throw new Error("The French locale choice was not active after reload.");
+    }
+    await Promise.all([deContext.close(), frContext.close()]);
 
     const initialFailureContext = await browser.newContext();
     try {
@@ -282,7 +322,7 @@ try {
       await lazyFailureContext.close();
     }
 
-    for (const locale of ["en", "de"]) {
+    for (const locale of ["en", "de", "fr"]) {
       for (const failure of ["network", "evaluation"]) {
         const context = await browser.newContext();
         try {

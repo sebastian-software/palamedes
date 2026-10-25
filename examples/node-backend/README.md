@@ -14,6 +14,8 @@ runtime macros and loads catalogs compiled by `pmds catalog compile --target js`
 when plain `node` or `tsc` output runs it, and the plugin resolves it to the
 bundled catalog store in the Vite and tsdown builds.
 
+English, German, Spanish, and French use the same CLI and HTTP paths.
+
 The rest of `src/` and the PO catalogs don't depend on how the backend runs either.
 
 ```sh
