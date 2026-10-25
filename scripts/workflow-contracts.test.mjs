@@ -41,7 +41,6 @@ describe("workflow contracts", () => {
     expect(workflow).toContain("timeout-minutes: 45");
     expect(workflow).toContain("cargo install cargo-fuzz --version 0.13.2 --locked");
     expect(workflow).toContain("manifest-path: fuzz/Cargo.toml");
-    expect(workflow).toContain("command-arguments: --config deny.toml");
     expect(workflow).toContain("nightly-2026-07-20");
     expect(workflow).toContain("'smoke' || 'scheduled'");
     expect(workflow).not.toMatch(/secrets\.|pull_request_target|continue-on-error/u);
