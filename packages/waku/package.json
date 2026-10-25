@@ -46,7 +46,7 @@
   "dependencies": {
     "@palamedes/runtime": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "hono": "^4.13.7"
+    "hono": "^4.13.11"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

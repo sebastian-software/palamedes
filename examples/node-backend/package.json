@@ -18,7 +18,7 @@
     "@palamedes/core": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "express": "5.2.1",
-    "hono": "4.13.7"
+    "hono": "4.13.11"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
@@ -28,7 +28,7 @@
     "@types/node": "^24.0.0",
     "tsdown": "0.23.0",
     "typescript": "7.0.2",
-    "vite": "8.2.2"
+    "vite": "8.2.4"
   },
   "engines": {
     "node": ">=22.22.0"
