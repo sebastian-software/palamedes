@@ -368,6 +368,13 @@ import {
   SelectOrdinal as SolidSelectOrdinal,
   Trans as SolidTrans,
 } from "@palamedes/solid/macro"
+import { inspectCatalogMachineTranslations, inspectCatalogMachineTranslationsAsync, type CatalogMachineTranslationStatus } from "@palamedes/core-node"
+const inspectionConfig = { rootDir: ".", locales: ["en", "de"], sourceLocale: "en", catalogs: [] }
+export const inspection = inspectCatalogMachineTranslations(inspectionConfig)
+export const inspectionAsync = inspectCatalogMachineTranslationsAsync(inspectionConfig, { locales: ["de"] }, { signal: new AbortController().signal })
+export const integrityStatuses: CatalogMachineTranslationStatus[] = ["current", "stale", "absent", "invalid"]
+// @ts-expect-error Metadata integrity is not an authorship classification.
+export const authorship: CatalogMachineTranslationStatus = "human"
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
@@ -451,6 +458,10 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
   writeFileSync(
     commonJsFixture,
     `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
+import coreNode = require("@palamedes/core-node")
+export const inspection = coreNode.inspectCatalogMachineTranslations({ rootDir: ".", sourceLocale: "en", locales: ["en"], catalogs: [] })
+export const inspectionAsync: Promise<coreNode.CatalogMachineTranslationInspectionResult> = coreNode.inspectCatalogMachineTranslationsAsync({ rootDir: ".", sourceLocale: "en", locales: ["en"], catalogs: [] })
+export const status: coreNode.CatalogMachineTranslationStatus = "invalid"
 import coreMacro = require("@palamedes/core/macro")
 import reactMacro = require("@palamedes/react/macro")
 import nextPlugin = require("@palamedes/next-plugin")

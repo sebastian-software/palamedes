@@ -22,6 +22,8 @@ import {
   applyTranslationPatches,
   applyTranslationPatchesAsync,
   auditCatalogs,
+  inspectCatalogMachineTranslations,
+  inspectCatalogMachineTranslationsAsync,
   combineCatalogs,
   compileCatalogArtifact,
   compileCatalogArtifactAsync,
@@ -1551,6 +1553,111 @@ msgstr "Ihr"
     expect(fileResult.format).toBe("po");
     expect(await readFile(outputPath, "utf8")).toBe(merged.content);
   });
+
+  it.each(["po", "fcl"] as const)(
+    "inspects %s machine claims read-only through an extraction round trip",
+    async (format) => {
+      const rootDir = await createTempDir();
+      const sourcePath = path.join(rootDir, "messages.ts");
+      const targetPath = path.join(rootDir, `de.${format}`);
+      const plural = "{count, plural, one {# file} other {# files}}";
+      await writeFile(
+        sourcePath,
+        `import { t } from "@palamedes/core/macro";
+export function messages() { return [
+  t({ message: "Hello", context: "home" }),
+  t({ message: "Plain" }),
+  t({ message: ${JSON.stringify(plural)} }),
+]; }`,
+      );
+      const extracted = extractCatalogMessagesFromFiles({
+        rootDir,
+        files: [sourcePath],
+        maxThreads: 1,
+      });
+      const config = {
+        rootDir,
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [{ path: "{locale}", include: ["."], format }],
+      };
+      const update = (locale: string) =>
+        updateCatalogFile({
+          targetPath: path.join(rootDir, `${locale}.${format}`),
+          locale,
+          sourceLocale: "en",
+          format,
+          clean: false,
+          messages: extracted.messages,
+        });
+      update("en");
+      update("de");
+      const listed = listTranslationCandidates({ config });
+      expect(listed.candidates).toHaveLength(3);
+      const patches = listed.candidates
+        .filter((candidate) => candidate.id.message !== "Plain")
+        .map((candidate) => ({
+          id: candidate.id,
+          fingerprint: candidate.fingerprint,
+          translation:
+            candidate.source.kind === "plural"
+              ? { ...candidate.source, values: { one: "# Datei", other: "# Dateien" } }
+              : { kind: "singular" as const, value: "Hallo" },
+          machine: { ai: { model: "fixture/model", confidence: 0.95 } },
+        }));
+      expect(applyTranslationPatches({ config, patches }).diagnostics).toStrictEqual([]);
+      const current = inspectCatalogMachineTranslations(config);
+      expect(current.catalogs).toHaveLength(1);
+      expect(current.catalogs[0]).toMatchObject({ current: 2, stale: 0, absent: 1, invalid: 0 });
+      const nativeWritten = await readFile(targetPath, "utf8");
+      expect(nativeWritten).toContain("fixture/model");
+      const edited = nativeWritten
+        .replace("Hallo", "Hallo edited")
+        .replaceAll("# Datei", "# Dokument");
+      await writeFile(targetPath, edited);
+      const stale = inspectCatalogMachineTranslations(config, { locales: ["de", "de"] });
+      expect(stale.catalogs[0]).toMatchObject({ current: 0, stale: 2, absent: 1, invalid: 0 });
+      expect(stale.catalogs[0]?.details).toEqual(
+        expect.arrayContaining([
+          { message: "Hello", context: "home", status: "stale" },
+          { message: "Plain", status: "absent" },
+          { message: plural, status: "stale" },
+        ]),
+      );
+      expect(await inspectCatalogMachineTranslationsAsync(config)).toStrictEqual(stale);
+      expect(
+        await inspectCatalogMachineTranslationsAsync(
+          config,
+          {},
+          {
+            signal: new AbortController().signal,
+          },
+        ),
+      ).toStrictEqual(stale);
+      expect(await readFile(targetPath, "utf8")).toBe(edited);
+      update("de");
+      expect(inspectCatalogMachineTranslations(config).catalogs[0]).toMatchObject({
+        current: 0,
+        stale: 0,
+        absent: 3,
+        invalid: 0,
+      });
+      const cleaned = await readFile(targetPath, "utf8");
+      expect(cleaned).toContain("Hallo edited");
+      expect(cleaned).not.toContain("fixture/model");
+      expect(() => inspectCatalogMachineTranslations(config, { locales: ["fr"] })).toThrow(
+        /locale/iu,
+      );
+      await expect(
+        inspectCatalogMachineTranslationsAsync(config, { locales: ["fr"] }),
+      ).rejects.toThrow(/locale/iu);
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        inspectCatalogMachineTranslationsAsync(config, {}, { signal: controller.signal }),
+      ).rejects.toThrow(/abort/iu);
+    },
+  );
 
   it("enumerates and atomically applies typed translation patches", async () => {
     const rootDir = await createTempDir();

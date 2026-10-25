@@ -261,6 +261,60 @@ const TRANSLATION_PATCH_WRITE_CAUSE_CODE: &str = "ERR_PALAMEDES_CATALOG_WRITE";
 const TRANSLATION_PATCH_WRITE_ERROR_MESSAGE: &str = "Failed to replace a translation catalog; completed per-file outcomes are available in error.report.";
 
 #[napi(object)]
+pub struct CatalogMachineTranslationInspectionRequest {
+    pub config: CatalogArtifactConfig,
+    pub locales: Option<Vec<String>>,
+}
+
+#[napi(string_enum)]
+pub enum CatalogMachineTranslationStatus {
+    Current,
+    Stale,
+    Absent,
+    Invalid,
+}
+
+impl TryFrom<palamedes::CatalogMachineTranslationStatus> for CatalogMachineTranslationStatus {
+    type Error = Error;
+
+    fn try_from(status: palamedes::CatalogMachineTranslationStatus) -> Result<Self> {
+        match status {
+            palamedes::CatalogMachineTranslationStatus::Current => Ok(Self::Current),
+            palamedes::CatalogMachineTranslationStatus::Stale => Ok(Self::Stale),
+            palamedes::CatalogMachineTranslationStatus::Absent => Ok(Self::Absent),
+            palamedes::CatalogMachineTranslationStatus::Invalid => Ok(Self::Invalid),
+            _ => Err(Error::from_reason(
+                "Unsupported Ferrocat machine-translation status",
+            )),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct CatalogMachineTranslationMessage {
+    pub message: String,
+    pub context: Option<String>,
+    pub status: CatalogMachineTranslationStatus,
+}
+
+#[napi(object)]
+pub struct CatalogMachineTranslationInspection {
+    pub catalog: String,
+    pub target_path: String,
+    pub locale: String,
+    pub current: u32,
+    pub stale: u32,
+    pub absent: u32,
+    pub invalid: u32,
+    pub details: Vec<CatalogMachineTranslationMessage>,
+}
+
+#[napi(object)]
+pub struct CatalogMachineTranslationInspectionResult {
+    pub catalogs: Vec<CatalogMachineTranslationInspection>,
+}
+
+#[napi(object)]
 pub struct CatalogCombineInput {
     pub content: String,
     pub label: Option<String>,
@@ -1945,6 +1999,80 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> Result<CatalogAuditResult
 
 #[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
+/// Inspects stored machine-translation integrity without modifying catalogs.
+///
+/// # Errors
+///
+/// Returns an error for unreadable/unparseable catalogs, unavailable locales,
+/// unsupported native statuses, or counters outside the binding's integer range.
+pub fn inspect_catalog_machine_translations(
+    request: CatalogMachineTranslationInspectionRequest,
+) -> Result<CatalogMachineTranslationInspectionResult> {
+    let result = palamedes::inspect_catalog_machine_translations(
+        palamedes::CatalogMachineTranslationInspectionRequest {
+            config: request.config.into(),
+            locales: request.locales.unwrap_or_default(),
+        },
+    )
+    .map_err(to_napi_error)?;
+    let catalogs = result
+        .catalogs
+        .into_iter()
+        .map(|entry| {
+            let review = entry.machine_translation;
+            Ok(CatalogMachineTranslationInspection {
+                catalog: entry.catalog,
+                target_path: entry.target_path,
+                locale: entry.locale,
+                current: checked_u32(review.current, "current machine translations")?,
+                stale: checked_u32(review.stale, "stale machine translations")?,
+                absent: checked_u32(review.absent, "absent machine translations")?,
+                invalid: checked_u32(review.invalid, "invalid machine translations")?,
+                details: review
+                    .details
+                    .into_iter()
+                    .map(|detail| {
+                        let status = CatalogMachineTranslationStatus::try_from(detail.status)?;
+                        Ok(CatalogMachineTranslationMessage {
+                            message: detail.source_key.msgid,
+                            context: detail.source_key.msgctxt,
+                            status,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(CatalogMachineTranslationInspectionResult { catalogs })
+}
+
+#[napi(
+    catch_unwind,
+    ts_return_type = "Promise<CatalogMachineTranslationInspectionResult>"
+)]
+#[allow(clippy::needless_pass_by_value)]
+/// Inspects metadata on a libuv worker without modifying catalogs.
+pub fn inspect_catalog_machine_translations_async(
+    request: CatalogMachineTranslationInspectionRequest,
+    signal: Option<AbortSignal>,
+) -> AsyncTask<
+    BlockingTask<
+        CatalogMachineTranslationInspectionRequest,
+        CatalogMachineTranslationInspectionResult,
+    >,
+> {
+    AsyncTask::with_optional_signal(
+        BlockingTask::new(
+            "inspectCatalogMachineTranslationsAsync",
+            request,
+            inspect_catalog_machine_translations,
+        ),
+        signal,
+    )
+}
+
+#[napi(catch_unwind)]
+#[allow(clippy::needless_pass_by_value)]
 /// Derives normalized semantic metadata from an ICU MessageFormat v1 message.
 ///
 /// # Errors
@@ -2404,6 +2532,27 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{render_catalog_module, widen_confidence};
+
+    #[test]
+    fn all_native_machine_integrity_statuses_survive_the_binding() {
+        use super::CatalogMachineTranslationStatus as Binding;
+        use palamedes::CatalogMachineTranslationStatus as Native;
+
+        for (native, expected) in [
+            (Native::Current, "Current"),
+            (Native::Stale, "Stale"),
+            (Native::Absent, "Absent"),
+            (Native::Invalid, "Invalid"),
+        ] {
+            let actual = match Binding::try_from(native).expect("supported native status") {
+                Binding::Current => "Current",
+                Binding::Stale => "Stale",
+                Binding::Absent => "Absent",
+                Binding::Invalid => "Invalid",
+            };
+            assert_eq!(actual, expected);
+        }
+    }
 
     #[test]
     fn confidence_round_trips_through_the_boundary() {
