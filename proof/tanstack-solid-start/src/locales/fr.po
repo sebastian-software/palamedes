@@ -1,0 +1,31 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: proof/tanstack-solid-start/src/server-helper.ts#helper
+msgid "Cross-module helper confirmed locale."
+msgstr "La fonction auxiliaire intermodule a confirmé la langue."
+
+#: proof/tanstack-solid-start/src/components/lazy-message.tsx
+msgid "Lazy browser fragment confirmed locale."
+msgstr "Le fragment du navigateur chargé à la demande a confirmé la langue."
+
+#: proof/tanstack-solid-start/src/routes/details.tsx
+msgid "Navigation confirmed locale."
+msgstr "La navigation a confirmé la langue."
+
+#: proof/tanstack-solid-start/src/server-functions.ts#status
+msgid "Server function confirmed locale."
+msgstr "La fonction serveur a confirmé la langue."
+
+#: proof/tanstack-solid-start/src/routes/index.tsx#Home
+msgid "Server render confirmed locale."
+msgstr "Le rendu serveur a confirmé la langue."
+
+#: proof/tanstack-solid-start/src/routes/index.tsx#Home
+msgid "TanStack Solid Start request scope"
+msgstr "Portée de requête TanStack Solid Start"

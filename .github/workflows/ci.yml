@@ -219,6 +219,12 @@ jobs:
           pnpm --dir proof/sveltekit-ssr install --frozen-lockfile
           pnpm --dir proof/sveltekit-ssr test
 
+      - name: Verify TanStack Solid Start host
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: |
+          pnpm --dir proof/tanstack-solid-start install --frozen-lockfile
+          pnpm --dir proof/tanstack-solid-start test
+
       - name: Verify component framework locale strategies
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: |

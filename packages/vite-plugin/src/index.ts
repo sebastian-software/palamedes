@@ -1120,6 +1120,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             .sort();
           if (bareImports.length > 0) {
             chunkImports[fileName] = bareImports;
+            // These specifiers are resolved by the document import map, not
+            // asset URLs. Keep them in our locale manifest and emitted source,
+            // but exclude them from framework route preload manifests.
+            output.imports = output.imports.filter(
+              (imported) => !imported.startsWith(BARE_MESSAGES_PREFIX),
+            );
           }
         }
 

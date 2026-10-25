@@ -46,6 +46,8 @@ overrides:
   "markdown-it": "14.3.3"
   "proxy-addr": "2.0.8"
   "seroval": "1.6.9"
+  # GHSA-qx66-fv34-fjm8: use the first patched core while Solid RC.9 verification is blocked.
+  "@tanstack/start-server-core@1.169.26": "1.169.39"
   "shell-quote": "1.11.0"
   "sharp": "0.35.5"
   "source-map-js": "1.2.2"
