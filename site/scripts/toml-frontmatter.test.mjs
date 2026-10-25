@@ -67,3 +67,24 @@ test("TOML parsing rejects excessive nesting with a catchable parse error", () =
       error.message.includes("Maximum nesting depth"),
   );
 });
+
+test("TOML parsing blocks quoted-key collisions from reopening date values", () => {
+  // GHSA-h895-cgqg-jf52 bypassed the older prototype traversal guard.
+  const payload = `"b.c" = 1979-05-27T07:32:00Z
+[['"b']]
+["b.c"]
+__proto__.__proto__.polluted = "yes"`;
+
+  try {
+    assert.throws(() => toml.parse(payload));
+    assert.equal(Object.prototype.polluted, undefined);
+  } finally {
+    delete Object.prototype.polluted;
+  }
+});
+
+test("TOML frontmatter integers retain number semantics and reject precision loss", () => {
+  assert.equal(toml.parse("count = 9007199254740991").count, Number.MAX_SAFE_INTEGER);
+  assert.throws(() => toml.parse("count = 9007199254740993"), /losslessly/);
+  assert.throws(() => toml.parse("count = 9223372036854775808"), /64-bit signed integer range/);
+});

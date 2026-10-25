@@ -16,7 +16,7 @@
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/waku": "workspace:^",
-    "hono": "^4.13.7",
+    "hono": "^4.13.11",
     "react": "~19.3.1",
     "react-dom": "~19.3.1",
     "react-server-dom-webpack": "~19.3.1",
