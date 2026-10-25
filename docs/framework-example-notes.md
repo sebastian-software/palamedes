@@ -35,12 +35,30 @@ The route example uses a dynamic `/$locale` segment and verifies locale
 redirects, SSR, and later server-function calls.
 
 These examples pin React Start 1.169.4 with TanStack Router 1.170.46.
-The candidate Solid Start entry and focused application remain blocked by the
-RC.9 dependency graph: its original server core has a known security advisory,
-and patched cores expose incompatible SSR APIs. The existing Solid Start Mode
-and Nitro examples verify a different host. See the
-[adapter notes](./api/tanstack.md#verified-react-baseline-and-blocked-solid-candidate)
-for exact versions and reproducible evidence; #1252 remains open.
+For v2, TanStack Start is verified with React; Solid is verified separately
+through the Solid 2 Start Mode/Nitro examples below. TanStack Solid Start is
+outside the v2 scope. The examples serve as both adoption demos and integration
+tests rather than an exhaustive cross-product of frameworks and renderers.
+
+Run the production smoke and browser checks for either family:
+
+```sh
+pnpm verify:examples:smoke --framework tanstack
+pnpm verify:examples:browser --framework tanstack
+pnpm verify:examples:smoke --framework solid
+pnpm verify:examples:browser --framework solid
+```
+
+The smoke checks include deterministically overlapping locale requests. Browser
+checks cover hydration, interaction, navigation, and locale switching. Each
+family's cookie example additionally runs initial/lazy catalog failure and
+recovery checks and development invalidation proofs. A rendered screenshot alone
+does not satisfy this verification contract.
+
+The [Example Verification workflow](../.github/workflows/example-verification.yml)
+runs these checks on relevant pull requests and `main` changes, plus a weekly
+regression run. The demos therefore remain checked integration fixtures after
+the initial acceptance run.
 
 ## Solid
 

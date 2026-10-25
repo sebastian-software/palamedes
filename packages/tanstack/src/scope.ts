@@ -1,7 +1,7 @@
 import { createScopedI18nRunner, type ServerI18nScope } from "@palamedes/runtime/server";
 import type { I18nInstance } from "@palamedes/runtime";
 
-import type { TanStackI18nResolver } from "./types";
+import type { TanStackI18nResolver } from "./index";
 
 export type ScopedTanStackI18nRunner<T extends I18nInstance> = {
   run<Result>(request: Request, next: () => Result | Promise<Result>): Promise<Result>;

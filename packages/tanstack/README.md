@@ -11,44 +11,24 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 `@palamedes/tanstack` is ESM-only. Use ESM imports; CommonJS
 `require("@palamedes/tanstack")` is not supported.
 
-## Verified React baseline and blocked Solid candidate
+## Verified React baseline and representative coverage
 
 The React fixtures pin `@tanstack/react-start@1.169.4` and
 `@tanstack/react-router@1.170.46`, with Seroval 1.6.9.
 
-The candidate `@palamedes/tanstack/solid` entry binds the same middleware API
-to Solid Start rather than importing React Start. Its representative application
-lives in `proof/tanstack-solid-start`. This host is **not supported yet**;
-[#1252](https://github.com/sebastian-software/palamedes/issues/1252) remains open
-and the coordinated v2 publication hold remains active.
+Palamedes v2 verifies TanStack Start through React and Solid through the
+separate Solid 2 Start Mode/Nitro stack. The four `tanstack-*` and four
+`solid-*` examples are both adoption demos and executable integration tests.
+They check translated SSR, hydration, navigation, locale changes, and overlapping
+request isolation. The cookie examples also check initial and lazy catalog
+failure/recovery and development invalidation.
 
-TanStack Solid Start and Router 2.0.0-rc.9 work functionally with Solid and
-`@solidjs/web` 2.0.0-rc.16 and Solid Vite plugin 3.0.0-next.50. Production
-SSR, hydration, client navigation, locale changes, concurrent Server Functions,
-and catalog failure/recovery passed with that release's original core graph.
-However, RC.9 pins `@tanstack/start-server-core@1.169.26`, affected by
-[GHSA-qx66-fv34-fjm8](https://github.com/advisories/GHSA-qx66-fv34-fjm8).
-That graph is unsuitable as a supported release baseline.
-
-The fixture pins the first patched server core, 1.169.39. The audits then pass,
-but SSR fails because RC.9's router core lacks `reserveStreamFastPath`.
-Aligning the shared router/client/storage cores exposes additional removed APIs
-still used by the Solid host, including `isPlainObject`, `isPlainArray`, and
-`makeSsrSerovalPlugin`. The current server core 1.169.45 also removes the
-`getResponse` and `requestHandler` exports used by RC.9.
-
-The stable Solid Start 1.169.4 line still uses Solid 1 renderer APIs such as
-`ErrorBoundary`, `Suspense`, and `solid-js/web`; it does not replace the Solid 2
-RC host. A new upstream Solid release that supports a patched core is required
-before this host can be accepted. No compatibility implementations or advisory exceptions are added.
-
-Run the checked fixture to reproduce the safe-core failure. It intentionally
-fails its SSR acceptance check until the upstream combination is fixed; a
-passing dependency audit alone does not establish host compatibility.
-
-Solid 2 Start Mode with Nitro remains a separate integration, verified by the
-four existing `solid-*` examples. Its working demos do not prove TanStack
-Solid Start support.
+This representative coverage does not promise every framework combination.
+TanStack Solid Start is outside the v2 scope; there is no
+`@palamedes/tanstack/solid` export. The Solid/Nitro evidence establishes the
+Solid integration, not compatibility with TanStack's Solid host. See the
+[framework example notes](../../docs/framework-example-notes.md) for the
+checked hosts and verification commands.
 
 ## Global server-function middleware
 

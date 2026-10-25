@@ -45,7 +45,7 @@ may change faster than Stable surfaces.
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                                                                                      |
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                                                                                              |
 | `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.                                                                              |
-| `@palamedes/tanstack`                                 | Stable   | TanStack Start server-function middleware and its request resolver contract are public integration APIs.                                                                                            |
+| `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                               |
 | `@palamedes/remix`                                    | Preview  | Full-stack Remix v3 adapter; stable Remix `3.0.0` with Node `>=24.3.0`; all four strategies have public HTTPS browser proofs; the adapter contract remains Preview for that exact upstream version. |
 | `@palamedes/react-router-rsc`                         | Preview  | Opt-in React Router RSC Framework Mode request scope; the upstream RSC contract remains experimental.                                                                                               |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                |
@@ -142,6 +142,20 @@ reverified. Waku reaching stable 1.0 alone does not promote the adapter.
 This adapter tier is separate from the repository's unreleased Palamedes v2
 publication preview. The release hold applies to all v2 packages; after v2
 publication, Waku remains Preview until that boundary is resolved.
+
+### Representative TanStack and Solid verification
+
+The v2 integration scope uses TanStack Start with React and Solid 2 Start Mode
+with Nitro. The four examples in each family are both demos and executable
+integration tests for SSR, hydration, navigation, locale changes, and overlapping
+request isolation. Cookie examples add initial/lazy catalog failure/recovery and
+development invalidation proofs. See the
+[framework example notes](./framework-example-notes.md) for commands and versions.
+
+TanStack Solid Start is outside this scope. Support for the individual TanStack
+and Solid integrations does not promise their combined host or every framework
+and renderer combination. Any future host needs its own integration evidence
+before it is advertised as supported.
 
 ## Stable Surfaces
 

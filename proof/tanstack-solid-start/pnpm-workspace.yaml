@@ -1,4 +1,0 @@
-packages: [.]
-overrides:
-  # GHSA-qx66-fv34-fjm8: do not accept the vulnerable core pinned by Solid RC.9.
-  "@tanstack/start-server-core@1.169.26": "1.169.39"
