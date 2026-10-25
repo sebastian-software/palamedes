@@ -4,6 +4,8 @@
     "noEmit": false,
     "rewriteRelativeImportExtensions": true,
     "erasableSyntaxOnly": true,
+    "sourceMap": true,
+    "inlineSources": true,
     "rootDir": "src",
     "outDir": "build"
   },

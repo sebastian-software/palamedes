@@ -7,6 +7,7 @@ export default defineConfig({
   outDir: "dist-tsdown",
   platform: "node",
   target: "node22",
+  sourcemap: true,
   plugins: [palamedes({ framework: "none", environment: "server" })],
   // Bundle Express, Hono, and the Palamedes runtime so the output runs on its own.
   deps: { alwaysBundle: [/./u], onlyBundle: false },

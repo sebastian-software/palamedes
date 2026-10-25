@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdtemp, readFile, readdir, rename, rm } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -9,6 +19,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { loadPalamedesConfigSync } from "@palamedes/config";
+import { packWorkspaceDependencies } from "../../../scripts/pack-workspace-dependencies.mjs";
 
 // The suite only depends on the build output contract: cli.mjs, express.mjs,
 // and hono.mjs, with each locale's catalog in its own module. Another build
@@ -16,8 +27,8 @@ import { loadPalamedesConfigSync } from "@palamedes/config";
 //
 // Unbundled runtime macros (plain `node` type stripping or plain `tsc`
 // output) set NODE_BACKEND_ENTRIES to a JSON map from cli, express, and hono
-// to entry files. That code runs in place against the installed packages and
-// loads its catalogs from .palamedes/catalogs.
+// to entry files. Those files and .palamedes/ ship together, with only the
+// declared production dependencies installed from packed runtime packages.
 const run = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
 const dist = path.resolve(root, process.env.NODE_BACKEND_DIST ?? "dist");
@@ -44,20 +55,91 @@ const seats = {
   fr: ["2 places disponibles", "1 place disponible"],
 };
 let deployed;
+let temporary;
 
-// Every bundled test runs the copied build output: no node_modules, sources, or PO catalogs.
+// No application executes in the repository: deployment must be self-contained.
 before(async () => {
+  temporary = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-backend-"));
+  // Spaces exercise file-URL handling for ESM catalog imports too.
+  deployed = path.join(temporary, "shipped app");
+  await mkdir(deployed);
   if (unbundled) {
-    deployed = root;
+    const entryDirectory = path.dirname(entries.cli);
+    await cp(path.join(root, entryDirectory), path.join(deployed, entryDirectory), {
+      recursive: true,
+      filter: (source) => !source.endsWith(".po"),
+    });
+    await cp(
+      path.join(root, ".palamedes/macros.json"),
+      path.join(deployed, ".palamedes/macros.json"),
+      {
+        recursive: true,
+      },
+    );
+    await cp(path.join(root, ".palamedes/catalogs"), path.join(deployed, ".palamedes/catalogs"), {
+      recursive: true,
+    });
+    const archiveDirectory = path.join(temporary, "archives");
+    await mkdir(archiveDirectory);
+    const archives = packWorkspaceDependencies(
+      path.resolve(root, "../../packages/runtime"),
+      archiveDirectory,
+    );
+    const { dependencies } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+    await writeFile(
+      path.join(deployed, "package.json"),
+      JSON.stringify({
+        name: "shipped-node-backend",
+        private: true,
+        type: "module",
+        dependencies: { ...dependencies, ...archives },
+      }),
+    );
+    await run(
+      process.platform === "win32" ? "npm.cmd" : "npm",
+      [
+        "install",
+        "--omit=dev",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--package-lock=false",
+      ],
+      { cwd: deployed, timeout: 120_000, shell: process.platform === "win32" },
+    );
     return;
   }
-  deployed = await mkdtemp(path.join(os.tmpdir(), "palamedes-node-backend-"));
   await cp(dist, deployed, { recursive: true });
 });
-after(() => (unbundled ? undefined : rm(deployed, { recursive: true, force: true })));
+after(() => temporary && rm(temporary, { recursive: true, force: true }));
+
+test(
+  "unbundled artifacts resolve only shipped production dependencies",
+  { skip: !unbundled },
+  async () => {
+    const files = await readdir(deployed, { recursive: true });
+    assert.ok(!files.some((file) => /\.po$|\.node$|(?:^|[\\/])palamedes\.yaml$/u.test(file)));
+    for (const name of ["core", "runtime"]) {
+      const installed = await realpath(path.join(deployed, "node_modules/@palamedes", name));
+      assert.ok(installed.startsWith(await realpath(deployed)), installed);
+    }
+    const packages = await run(
+      process.platform === "win32" ? "npm.cmd" : "npm",
+      ["ls", "--omit=dev", "--all", "--json"],
+      {
+        cwd: deployed,
+        shell: process.platform === "win32",
+      },
+    );
+    assert.doesNotMatch(
+      packages.stdout,
+      /"(?:@palamedes\/(?:cli|core-node|config|transform|vite-plugin)|vite|typescript|rolldown)"/u,
+    );
+  },
+);
 
 test("compiled catalogs carry no compiler", { skip: !unbundled }, async () => {
-  const catalogs = path.join(root, ".palamedes/catalogs");
+  const catalogs = path.join(deployed, ".palamedes/catalogs");
   for (const file of await readdir(catalogs)) {
     const source = await readFile(path.join(catalogs, file), "utf8");
     assert.doesNotMatch(source, /@palamedes\/(?:core-node|transform|config)/u, file);
@@ -278,7 +360,7 @@ for (const framework of ["express", "hono"]) {
 
 /** The one deployed module holding Spanish messages, found by content so any build layout works. */
 async function findSpanishCatalog() {
-  const directory = unbundled ? path.join(root, ".palamedes/catalogs") : deployed;
+  const directory = unbundled ? path.join(deployed, ".palamedes/catalogs") : deployed;
   const matches = [];
   for (const file of await readdir(directory, { recursive: true })) {
     if (!file.endsWith(".mjs")) continue;
