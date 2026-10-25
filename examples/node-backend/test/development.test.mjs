@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { once, on } from "node:events";
-import { cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createInterface } from "node:readline";
@@ -28,11 +38,15 @@ async function fixture(t) {
     "rolldown.config.mjs",
   ])
     await cp(path.join(root, file), path.join(directory, file), { recursive: true });
-  await symlink(
-    path.join(root, "node_modules"),
-    path.join(directory, "node_modules"),
-    process.platform === "win32" ? "junction" : "dir",
-  );
+  const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  // Resolve pnpm's relative workspace links before linking each package.
+  // Windows temp and checkout directories can be on different drives.
+  for (const name of Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })) {
+    const target = await realpath(path.join(root, "node_modules", name));
+    const destination = path.join(directory, "node_modules", name);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await symlink(target, destination, process.platform === "win32" ? "junction" : "dir");
+  }
   return directory;
 }
 
