@@ -11,32 +11,44 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 `@palamedes/tanstack` is ESM-only. Use ESM imports; CommonJS
 `require("@palamedes/tanstack")` is not supported.
 
-## Verified dependency baseline and Solid follow-up
+## Verified React baseline and blocked Solid candidate
 
-The React fixtures pin `@tanstack/react-start@1.169.3` and
-`@tanstack/react-router@1.170.45`. React Start requires `seroval@^1.6.7`;
-the workspace override uses 1.6.9. Keeping the previous 1.6.3 override causes
-Start to fail at module import because its serializer has no `isStream` export.
+The React fixtures pin `@tanstack/react-start@1.169.4` and
+`@tanstack/react-router@1.170.46`, with Seroval 1.6.9.
 
-Solid Start remains **under integration verification** in
-[#1252](https://github.com/sebastian-software/palamedes/issues/1252).
-The existing Solid/Nitro examples use Solid and `@solidjs/web@2.0.0-rc.16`
-with the Solid Vite plugin's Start Mode.
-Solid Start's separate `2.0.0-rc.8` release requires
-`@solidjs/web >=2.0.0-rc.6 <3.0.0`, which the current Nitro baseline satisfies.
-That runtime peer match does not verify the separate Start host. The stable 1.169.3 package declares
-`solid-js >=1.0.0`; that broad peer range alone does not prove compatibility
-with Palamedes' Solid 2 baseline. Neither Start line is proven by the Nitro examples.
+The candidate `@palamedes/tanstack/solid` entry binds the same middleware API
+to Solid Start rather than importing React Start. Its representative application
+lives in `proof/tanstack-solid-start`. This host is **not supported yet**;
+[#1252](https://github.com/sebastian-software/palamedes/issues/1252) remains open
+and the coordinated v2 publication hold remains active.
 
-A probe using Solid Start 2.0.0-rc.8 with matching Solid and
-`@solidjs/web@2.0.0-rc.6` also exposed legacy Solid 1 Vite-plugin peers.
-Importing that host's root entry directly in Node evaluates client DOM
-`template()` calls and throws a client-only API error. This does not establish
-whether Start's bundled server path fails; it needs its own representative
-fixture and SSR/hydration/navigation/catalog-failure browser checks before a
-Solid host export or support claim is added.
+TanStack Solid Start and Router 2.0.0-rc.9 work functionally with Solid and
+`@solidjs/web` 2.0.0-rc.16 and Solid Vite plugin 3.0.0-next.50. Production
+SSR, hydration, client navigation, locale changes, concurrent Server Functions,
+and catalog failure/recovery passed with that release's original core graph.
+However, RC.9 pins `@tanstack/start-server-core@1.169.26`, affected by
+[GHSA-qx66-fv34-fjm8](https://github.com/advisories/GHSA-qx66-fv34-fjm8).
+That graph is unsuitable as a supported release baseline.
 
-The v2 publication hold remains active until both Start integrations are proven.
+The fixture pins the first patched server core, 1.169.39. The audits then pass,
+but SSR fails because RC.9's router core lacks `reserveStreamFastPath`.
+Aligning the shared router/client/storage cores exposes additional removed APIs
+still used by the Solid host, including `isPlainObject`, `isPlainArray`, and
+`makeSsrSerovalPlugin`. The current server core 1.169.45 also removes the
+`getResponse` and `requestHandler` exports used by RC.9.
+
+The stable Solid Start 1.169.4 line still uses Solid 1 renderer APIs such as
+`ErrorBoundary`, `Suspense`, and `solid-js/web`; it does not replace the Solid 2
+RC host. A new upstream Solid release that supports a patched core is required
+before this host can be accepted. No compatibility implementations or advisory exceptions are added.
+
+Run the checked fixture to reproduce the safe-core failure. It intentionally
+fails its SSR acceptance check until the upstream combination is fixed; a
+passing dependency audit alone does not establish host compatibility.
+
+Solid 2 Start Mode with Nitro remains a separate integration, verified by the
+four existing `solid-*` examples. Its working demos do not prove TanStack
+Solid Start support.
 
 ## Global server-function middleware
 
@@ -131,7 +143,7 @@ and begins before server-function validation and handler execution.
 
 `@palamedes/tanstack` uses `@palamedes/runtime/server`, which requires Node's
 `AsyncLocalStorage`. It supports the pinned TanStack Start line
-`@tanstack/react-start@^1.169.3` on Node.js 22.22 or later. Do not use this
+`@tanstack/react-start@^1.169.4` on Node.js 22.22 or later. Do not use this
 adapter in Edge or Worker runtimes unless their Node-compatible
 `AsyncLocalStorage` behavior has been independently verified.
 

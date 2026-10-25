@@ -28,8 +28,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "React Start 1.169.3",
-      note: "With TanStack Router 1.170.45 and Vite 8.2.2.",
+      value: "React Start 1.169.4",
+      note: "With TanStack Router 1.170.46 and Vite 8.2.4.",
     },
     {
       label: "Server model",
@@ -153,7 +153,7 @@ export const getStatus = createServerFn({ method: "GET" })
   faq: [
     {
       q: "Does this verification include Solid Start?",
-      a: "The checked examples use React Start 1.169.3. Solid Start needs a separate host binding and application proof: its Solid 2 prerelease requires newer Solid web packages than the existing Solid/Nitro examples. That verification remains a Palamedes v2 release requirement in issue #1252.",
+      a: "The checked examples use React Start 1.169.4. A candidate Solid binding and focused application exist, but Solid Start 2.0.0-rc.9 pins a server core with a known security advisory. Patched cores expose SSR APIs that this Solid release does not support. Solid Start therefore remains unsupported and a v2 release requirement in issue #1252. The Solid Start Mode/Nitro demos verify a different host.",
     },
     {
       q: "Does Palamedes replace TanStack Router's i18n routing patterns?",

@@ -63,6 +63,14 @@ test("the packed package exposes a loadable ESM entry and no CommonJS entry", (c
     types: "./dist/server.d.ts",
     import: "./dist/server.mjs",
   });
+  assert.deepEqual(packedManifest.exports["./solid"], {
+    types: "./dist/solid.d.ts",
+    import: "./dist/solid.mjs",
+  });
+  assert.doesNotMatch(
+    readFileSync(path.join(packedPackage, "dist/solid.d.ts"), "utf8"),
+    /@tanstack\/react-start/u,
+  );
   assert.equal(packedManifest.main, undefined);
   assert.equal(packedManifest.module, undefined);
   assert.equal(

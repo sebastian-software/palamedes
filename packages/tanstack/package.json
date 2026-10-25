@@ -33,6 +33,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.mjs"
+    },
+    "./solid": {
+      "types": "./dist/solid.d.ts",
+      "import": "./dist/solid.mjs"
     }
   },
   "publishConfig": {
@@ -49,14 +53,24 @@
     "@palamedes/vite-plugin": "workspace:^"
   },
   "devDependencies": {
-    "@tanstack/react-start": "1.169.3",
+    "@tanstack/react-start": "1.169.4",
+    "@tanstack/solid-start": "2.0.0-rc.9",
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
-    "@tanstack/react-start": "^1.169.3"
+    "@tanstack/react-start": "^1.169.4",
+    "@tanstack/solid-start": "^2.0.0-rc.9"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-start": {
+      "optional": true
+    },
+    "@tanstack/solid-start": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22.22.0"

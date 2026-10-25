@@ -1285,7 +1285,13 @@ describe("automatic graph splitting", () => {
       {},
       { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
     );
-    const emitted = await emitImportMap(sidecarPlugin, key);
+    const bundle = {
+      "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
+      "assets/vendor.js": { type: "chunk", imports: [] },
+      "assets/style.css": { type: "asset" },
+    };
+    const emitted = await emitImportMap(sidecarPlugin, key, bundle);
+    expect(bundle["assets/home-abc.js"].imports).toEqual(["assets/vendor.js"]);
 
     // One dependency-free asset per (sidecar x locale), pseudo included.
     const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"));
@@ -1578,7 +1584,15 @@ async function runSidecarLoad(
   };
 }
 
-async function emitImportMap(sidecarPlugin: any, key: string) {
+async function emitImportMap(
+  sidecarPlugin: any,
+  key: string,
+  bundle = {
+    "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
+    "assets/vendor.js": { type: "chunk", imports: [] },
+    "assets/style.css": { type: "asset" },
+  },
+) {
   const emitted: { fileName: string; source: string }[] = [];
   await sidecarPlugin.generateBundle.call(
     {
@@ -1586,11 +1600,7 @@ async function emitImportMap(sidecarPlugin: any, key: string) {
       emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
     } as never,
     {},
-    {
-      "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
-      "assets/vendor.js": { type: "chunk", imports: [] },
-      "assets/style.css": { type: "asset" },
-    },
+    bundle,
   );
   return emitted;
 }

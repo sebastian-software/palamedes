@@ -34,14 +34,13 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 The route example uses a dynamic `/$locale` segment and verifies locale
 redirects, SSR, and later server-function calls.
 
-These examples pin React Start 1.169.3 with TanStack Router 1.170.45.
-A separate Solid Start integration remains v2 release work in
-[#1252](https://github.com/sebastian-software/palamedes/issues/1252).
-Solid Start 2.0.0-rc.8 requires `@solidjs/web >=2.0.0-rc.6`, while the Solid
-examples below use Solid 2.0.0-rc.16 with the Solid Vite plugin's Start Mode
-and Nitro. The runtime now satisfies that peer range, but the examples do not prove Solid
-Start support; see the [adapter notes](./api/tanstack.md) for the remaining
-version and host-build verification gaps.
+These examples pin React Start 1.169.4 with TanStack Router 1.170.46.
+The candidate Solid Start entry and focused application remain blocked by the
+RC.9 dependency graph: its original server core has a known security advisory,
+and patched cores expose incompatible SSR APIs. The existing Solid Start Mode
+and Nitro examples verify a different host. See the
+[adapter notes](./api/tanstack.md#verified-react-baseline-and-blocked-solid-candidate)
+for exact versions and reproducible evidence; #1252 remains open.
 
 ## Solid
 
