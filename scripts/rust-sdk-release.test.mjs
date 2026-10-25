@@ -9,6 +9,7 @@ import {
 } from "./publish-rust-sdk.mjs";
 import {
   indexPath,
+  assertArchiveContents,
   registryJson,
   RUST_SDK_PACKAGES,
   RUST_SDK_REPOSITORY,
@@ -22,6 +23,46 @@ const packages = RUST_SDK_PACKAGES.map((name) => ({
 }));
 const policy = { publicationEnabled: true, minimumMajor: 2, reason: "test" };
 const environment = { CARGO_REGISTRY_TOKEN: "fixture", PALAMEDES_CRATES_OWNER: "owner" };
+
+function allowedArchiveFiles(name) {
+  return [
+    ".cargo_vcs_info.json",
+    "Cargo.toml",
+    "Cargo.toml.orig",
+    "Cargo.lock",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    name === "palamedes" ? "crates/palamedes/README.md" : "README.md",
+    name === "palamedes" ? "crates/palamedes/src/lib.rs" : "src/lib.rs",
+  ];
+}
+
+test("Archive allowlists reject recursively matched dependencies, generated outputs, and unrelated files", () => {
+  for (const name of RUST_SDK_PACKAGES) {
+    const files = allowedArchiveFiles(name);
+    assert.doesNotThrow(() => assertArchiveContents(name, files));
+    const source = name === "palamedes" ? "crates/palamedes/src/" : "src/";
+    for (const leaked of [
+      "benchmarks/lingui-v6/node_modules/some-package/LICENSE-MIT",
+      "node_modules/example/README.md",
+      "target/debug/greeting",
+      "dist/index.js",
+      "unrelated.txt",
+      `${source}node_modules/example/LICENSE-MIT`,
+      `${source}target/generated.rs`,
+    ]) {
+      assert.throws(() => assertArchiveContents(name, [...files, leaked]), /unexpected path/);
+    }
+    assert.throws(
+      () =>
+        assertArchiveContents(
+          name,
+          files.filter((file) => file !== "LICENSE-MIT"),
+        ),
+      /misses LICENSE-MIT/,
+    );
+  }
+});
 
 test("Rust publishing requires the policy, stable coordinated versions, manifest allowlists, and credentials", () => {
   assert.doesNotThrow(() => assertRustPublication(policy, packages, environment));
@@ -139,7 +180,13 @@ test("The Cargo lane retains both independent publication guards and its verifie
     "crates/palamedes-i18n/Cargo.toml",
     "crates/palamedes-build/Cargo.toml",
   ]) {
-    assert.match(await readFile(new URL(`../${file}`, import.meta.url), "utf8"), /publish = false/);
+    const manifest = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.match(manifest, /publish = false/);
+    const includes = manifest.match(/include = \[([^\]]+)\]/u)?.[1].match(/"([^"]+)"/gu) ?? [];
+    assert(
+      includes.length > 0 && includes.every((entry) => entry.startsWith('"/')),
+      `${file} must anchor every include path`,
+    );
   }
   const workflow = await readFile(
     new URL("../.github/workflows/publish.yml", import.meta.url),
@@ -161,6 +208,7 @@ test("The Cargo lane retains both independent publication guards and its verifie
 test("The publisher orders verified archives, skips exact versions, and stops before dependents on failure", async () => {
   const events = [];
   let failing = false;
+  let leaking = false;
   const services = {
     async metadata() {
       return packages;
@@ -180,6 +228,12 @@ test("The publisher orders verified archives, skips exact versions, and stops be
       return "same";
     },
     async execute(command, args) {
+      if (command === "tar") {
+        const name = RUST_SDK_PACKAGES.find((name) => args[1].endsWith(`${name}-2.0.0.crate`));
+        const files = allowedArchiveFiles(name);
+        if (leaking && name === "palamedes") files.push("node_modules/example/LICENSE-MIT");
+        return files.map((file) => `${name}-2.0.0/${file}`).join("\n");
+      }
       assert.equal(command, "cargo");
       assert.equal(args[args.indexOf("--registry") + 1], "crates-io");
       const event = `${args[0]}:${args[args.indexOf("-p") + 1]}`;
@@ -209,5 +263,14 @@ test("The publisher orders verified archives, skips exact versions, and stops be
     "visible:palamedes-i18n",
     "package:palamedes",
     "publish:palamedes",
+  ]);
+  events.length = 0;
+  failing = false;
+  leaking = true;
+  await assert.rejects(publishRustSdk("/fixture", environment, services), /unexpected path/);
+  assert.deepEqual(events, [
+    "package:palamedes-i18n",
+    "visible:palamedes-i18n",
+    "package:palamedes",
   ]);
 });

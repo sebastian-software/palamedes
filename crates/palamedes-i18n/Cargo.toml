@@ -10,7 +10,7 @@ license.workspace = true
 description = "Parser-free Rust runtime for external Palamedes catalogs."
 documentation = "https://docs.rs/palamedes-i18n"
 readme = "README.md"
-include = ["src/**", "tests/**", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
+include = ["/src/**", "/tests/**", "/README.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
 keywords = ["i18n", "internationalization", "gettext", "ferramenta"]
 categories = ["internationalization", "development-tools"]
 # Publication needs a reviewed release-enablement change as well as the policy gate.

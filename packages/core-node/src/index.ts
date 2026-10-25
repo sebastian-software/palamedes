@@ -1,4 +1,6 @@
 import type {
+  CatalogMachineTranslationInspection as GeneratedCatalogMachineTranslationInspection,
+  CatalogMachineTranslationInspectionResult as GeneratedCatalogMachineTranslationInspectionResult,
   CatalogAuditCheckOptions as GeneratedCatalogAuditCheckOptions,
   CatalogAuditDiagnostic as GeneratedCatalogAuditDiagnostic,
   CatalogAuditRequest as GeneratedCatalogAuditRequest,
@@ -101,6 +103,21 @@ export type ExtractCatalogMessagesRequest = Omit<GeneratedExtractCatalogMessages
 export type ExtractCatalogMessagesResult = GeneratedExtractCatalogMessagesResult;
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage;
 export type MachineMetadata = GeneratedMachineMetadata;
+/** Stored metadata integrity, without authorship or linguistic-quality claims. */
+export type CatalogMachineTranslationStatus = "current" | "stale" | "absent" | "invalid";
+export type CatalogMachineTranslationInspection = Omit<
+  GeneratedCatalogMachineTranslationInspection,
+  "details"
+> & {
+  details: { message: string; context?: string; status: CatalogMachineTranslationStatus }[];
+};
+export type CatalogMachineTranslationInspectionResult = Omit<
+  GeneratedCatalogMachineTranslationInspectionResult,
+  "catalogs"
+> & {
+  catalogs: CatalogMachineTranslationInspection[];
+};
+export type CatalogMachineTranslationInspectionOptions = { locales?: string[] };
 export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions;
 export type CatalogAuditSummary = GeneratedCatalogAuditSummary;
 export type CatalogDiagnosticSeverity = "info" | "warning" | "error";
@@ -670,6 +687,71 @@ function fromNativeTranslationPatchOutcomeStatus(
     case "NotApplied":
       return "notApplied";
   }
+}
+
+function mapMachineTranslationStatus(
+  status: GeneratedCatalogMachineTranslationInspection["details"][number]["status"],
+): CatalogMachineTranslationStatus {
+  switch (status) {
+    case "Current":
+      return "current";
+    case "Stale":
+      return "stale";
+    case "Absent":
+      return "absent";
+    case "Invalid":
+      return "invalid";
+  }
+}
+
+function mapMachineTranslationInspection(
+  result: GeneratedCatalogMachineTranslationInspectionResult,
+): CatalogMachineTranslationInspectionResult {
+  return {
+    catalogs: result.catalogs.map((catalog) => ({
+      ...catalog,
+      details: catalog.details.map((detail) => ({
+        ...detail,
+        status: mapMachineTranslationStatus(detail.status),
+      })),
+    })),
+  };
+}
+
+/**
+ * Inspects active PO/FCL entries without rewriting files. Uses Ferrocat's native
+ * hash/status rules. Malformed metadata discarded by its parser can appear
+ * absent. Integrity does not verify authorship or linguistic quality.
+ */
+export function inspectCatalogMachineTranslations(
+  config: CatalogArtifactConfig,
+  options: CatalogMachineTranslationInspectionOptions = {},
+): CatalogMachineTranslationInspectionResult {
+  return mapMachineTranslationInspection(
+    native.inspectCatalogMachineTranslations({
+      config: toNativeArtifactConfig(config),
+      locales: options.locales,
+    }),
+  );
+}
+
+/** Worker-pool equivalent of inspectCatalogMachineTranslations. */
+export async function inspectCatalogMachineTranslationsAsync(
+  config: CatalogArtifactConfig,
+  options: CatalogMachineTranslationInspectionOptions = {},
+  taskOptions: AsyncTaskOptions = {},
+): Promise<CatalogMachineTranslationInspectionResult> {
+  return mapMachineTranslationInspection(
+    await startAbortableNativeTask(taskOptions, (signal) =>
+      native.inspectCatalogMachineTranslationsAsync(
+        {
+          config: toNativeArtifactConfig(config),
+          locales: options.locales,
+        },
+        signal,
+      ),
+    ),
+  );
 }
 
 export function auditCatalogs(

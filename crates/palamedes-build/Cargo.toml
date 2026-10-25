@@ -10,7 +10,7 @@ license.workspace = true
 description = "Cargo build integration for external Palamedes Rust catalogs."
 documentation = "https://docs.rs/palamedes-build"
 readme = "README.md"
-include = ["src/**", "tests/**", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
+include = ["/src/**", "/tests/**", "/README.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
 keywords = ["i18n", "internationalization", "gettext", "ferramenta"]
 categories = ["internationalization", "development-tools"]
 # Publication needs a reviewed release-enablement change as well as the policy gate.

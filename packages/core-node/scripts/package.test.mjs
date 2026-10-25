@@ -62,6 +62,15 @@ test("built ESM and CJS wrappers share process-wide coordination", async (contex
   const cjs = require(path.join(packageDir, "dist", "index.cjs"));
   assert.equal(typeof esm.compileCatalogArtifactSelectedAsync, "function");
   assert.equal(typeof cjs.compileCatalogArtifactSelectedAsync, "function");
+  assert.equal(typeof esm.inspectCatalogMachineTranslations, "function");
+  assert.equal(typeof cjs.inspectCatalogMachineTranslations, "function");
+  assert.equal(typeof esm.inspectCatalogMachineTranslationsAsync, "function");
+  assert.equal(typeof cjs.inspectCatalogMachineTranslationsAsync, "function");
+  const emptyInspectionConfig = { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] };
+  assert.deepEqual(esm.inspectCatalogMachineTranslations(emptyInspectionConfig), { catalogs: [] });
+  assert.deepEqual(await cjs.inspectCatalogMachineTranslationsAsync(emptyInspectionConfig), {
+    catalogs: [],
+  });
   assert.equal(typeof esm.updateCatalogFileAsync, "function");
   assert.equal(typeof cjs.updateCatalogFileAsync, "function");
 

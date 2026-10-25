@@ -372,6 +372,18 @@ allowed. Compatibility errors retain audit's `icu.*` codes and explanations;
 audit warnings do not reject patches. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
 
+`inspectCatalogMachineTranslations(config, { locales? })` inspects PO/FCL machine
+claims without rewriting files. Its `catalogs` sections identify the catalog
+pattern, target path, and locale, with active-entry `current`, `stale`, `absent`,
+and `invalid` counters and `details` rows (`message`, optional `context`, `status`).
+Ferrocat owns all hash and status rules. Obsolete entries are excluded; missing
+source/target catalogs and parse failures reject the call. Malformed metadata may
+be rejected or discarded before review, so invalid is not a complete detector.
+Integrity establishes neither authorship nor linguistic quality. This is separate
+from candidate concurrency fingerprints and leaves extraction cleanup unchanged.
+`inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?)` has the
+same result/error contract on the shared libuv pool.
+
 File-touching operations also have additive promise-returning variants:
 `updateCatalogFileAsync`, `applyTranslationPatchesAsync`,
 `compileCatalogArtifactAsync`, `compileCatalogArtifactSelectedAsync`,

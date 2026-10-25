@@ -61,6 +61,59 @@ export function archivePath(target, pkg) {
   return join(target, "package", `${pkg.name}-${pkg.version}.crate`);
 }
 
+export function assertArchiveContents(name, files) {
+  if (!RUST_SDK_PACKAGES.includes(name)) throw new Error(`Unknown Rust SDK package: ${name}`);
+  const exact = new Set([
+    ".cargo_vcs_info.json",
+    "Cargo.toml",
+    "Cargo.toml.orig",
+    "Cargo.lock",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    name === "palamedes" ? "crates/palamedes/README.md" : "README.md",
+  ]);
+  const prefixes =
+    name === "palamedes"
+      ? ["crates/palamedes/src/", "crates/palamedes/fixtures/"]
+      : ["src/", "tests/"];
+  const excludedDirectories = new Set([
+    "node_modules",
+    ".pnpm",
+    ".git",
+    "target",
+    "dist",
+    "build",
+    "..",
+  ]);
+  for (const file of files) {
+    if (
+      file.split("/").some((part) => excludedDirectories.has(part)) ||
+      (!exact.has(file) && !prefixes.some((prefix) => file.startsWith(prefix)))
+    ) {
+      throw new Error(`${name} archive contains an unexpected path: ${file}`);
+    }
+  }
+  for (const required of [...exact].filter((file) => file !== ".cargo_vcs_info.json")) {
+    if (!files.includes(required)) throw new Error(`${name} archive misses ${required}`);
+  }
+  if (!files.some((file) => file.startsWith(prefixes[0]) && file.endsWith(".rs"))) {
+    throw new Error(`${name} archive has no Rust source files`);
+  }
+}
+
+export async function readArchiveContents(archive, pkg, execute = run) {
+  const prefix = `${pkg.name}-${pkg.version}/`;
+  const files = (await execute("tar", ["-tzf", archive]))
+    .trim()
+    .split("\n")
+    .map((path) => {
+      if (!path.startsWith(prefix)) throw new Error(`Unexpected archive root: ${path}`);
+      return path.slice(prefix.length);
+    });
+  assertArchiveContents(pkg.name, files);
+  return files;
+}
+
 export async function registryJson(url, { fetchImpl = fetch, headers = {} } = {}) {
   const response = await fetchImpl(url, {
     headers: { "User-Agent": "Palamedes-Rust-SDK-release", ...headers },

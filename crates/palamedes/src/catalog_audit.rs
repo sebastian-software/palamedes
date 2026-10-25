@@ -112,8 +112,8 @@ pub struct CatalogAuditDiagnostic {
     pub name: Option<String>,
 }
 
-struct LoadedAuditCatalog {
-    catalog: NormalizedParsedCatalog,
+pub(crate) struct LoadedAuditCatalog {
+    pub(crate) catalog: NormalizedParsedCatalog,
 }
 
 /// Audits configured catalogs with Ferrocat catalog QA checks.
@@ -312,7 +312,7 @@ impl CatalogAuditCheckOptions {
     }
 }
 
-fn target_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec<String> {
+pub(crate) fn target_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec<String> {
     let mut locales = if requested.is_empty() {
         config
             .locales
@@ -333,7 +333,7 @@ fn target_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec<S
     locales
 }
 
-fn load_audit_catalogs(
+pub(crate) fn load_audit_catalogs(
     config: &CatalogArtifactConfig,
     catalog: &CatalogConfig,
     target_locales: &[String],

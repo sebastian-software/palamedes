@@ -159,6 +159,29 @@ export interface TranslationPatchResult {
   outcomes: Array<TranslationPatchOutcome>;
   diagnostics: Array<TranslationWorkflowDiagnostic>;
 }
+export interface CatalogMachineTranslationInspectionRequest {
+  config: CatalogArtifactConfig;
+  locales?: Array<string>;
+}
+export type CatalogMachineTranslationStatus = "Current" | "Stale" | "Absent" | "Invalid"
+export interface CatalogMachineTranslationMessage {
+  message: string;
+  context?: string;
+  status: CatalogMachineTranslationStatus;
+}
+export interface CatalogMachineTranslationInspection {
+  catalog: string;
+  targetPath: string;
+  locale: string;
+  current: number;
+  stale: number;
+  absent: number;
+  invalid: number;
+  details: Array<CatalogMachineTranslationMessage>;
+}
+export interface CatalogMachineTranslationInspectionResult {
+  catalogs: Array<CatalogMachineTranslationInspection>;
+}
 export interface CatalogCombineInput {
   content: string;
   label?: string;
@@ -560,6 +583,8 @@ export interface NativeBindings {
   applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult;
   applyTranslationPatchesAsync(request: TranslationPatchRequest, signal?: AbortSignal | undefined | null): Promise<TranslationPatchResult>;
   auditCatalogs(request: CatalogAuditRequest): CatalogAuditResult;
+  inspectCatalogMachineTranslations(request: CatalogMachineTranslationInspectionRequest): CatalogMachineTranslationInspectionResult;
+  inspectCatalogMachineTranslationsAsync(request: CatalogMachineTranslationInspectionRequest, signal?: AbortSignal | undefined | null): Promise<CatalogMachineTranslationInspectionResult>;
   deriveMessageMetadata(message: string, context?: string | undefined | null): MessageMetadata;
   normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
   validateMessageMetadata(input: MessageMetadataInput): MessageMetadataValidationReport;

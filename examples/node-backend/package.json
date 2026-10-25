@@ -8,8 +8,10 @@
     "i18n": "pmds extract --runtime-manifest .palamedes/macros.json && pmds catalog compile --target js --output .palamedes/catalogs",
     "build:tsc": "pnpm i18n && tsc -p tsconfig.build.json",
     "build:tsdown": "tsdown",
-    "test": "vite build && node --test test/backend.test.mjs && pnpm test:tsdown && pnpm test:runtime-macros",
+    "build:rolldown": "rolldown --config rolldown.config.mjs",
+    "test": "vite build && node --test test/backend.test.mjs && pnpm test:tsdown && pnpm test:rolldown && pnpm test:runtime-macros && node --test test/development.test.mjs",
     "test:tsdown": "tsdown && node --env-file=test/tsdown.env --test test/backend.test.mjs",
+    "test:rolldown": "pnpm build:rolldown && node --env-file=test/rolldown.env --test test/backend.test.mjs",
     "test:runtime-macros": "pnpm build:tsc && node --env-file=test/type-stripping.env --test test/backend.test.mjs && node --env-file=test/tsc.env --test test/backend.test.mjs",
     "typecheck": "tsc --noEmit"
   },
@@ -26,6 +28,7 @@
     "@palamedes/vite-plugin": "workspace:^",
     "@types/express": "5.0.6",
     "@types/node": "^24.0.0",
+    "rolldown": "1.2.14",
     "tsdown": "0.23.0",
     "typescript": "7.0.2",
     "vite": "8.2.4"

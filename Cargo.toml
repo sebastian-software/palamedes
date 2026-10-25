@@ -11,11 +11,11 @@ description = "Shared extraction, catalog, ICU, and transform compiler for Palam
 documentation = "https://docs.rs/palamedes"
 readme = "crates/palamedes/README.md"
 include = [
-  "crates/palamedes/src/**",
-  "crates/palamedes/fixtures/**",
-  "crates/palamedes/README.md",
-  "LICENSE-MIT",
-  "LICENSE-APACHE",
+  "/crates/palamedes/src/**",
+  "/crates/palamedes/fixtures/**",
+  "/crates/palamedes/README.md",
+  "/LICENSE-MIT",
+  "/LICENSE-APACHE",
 ]
 keywords = ["i18n", "internationalization", "icu", "gettext", "ferramenta"]
 categories = ["internationalization", "development-tools", "text-processing"]

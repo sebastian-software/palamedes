@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { publicationAllowed, readReleasePolicy } from "./release-policy.mjs";
 import {
   archivePath,
+  readArchiveContents,
   registryJson,
   RUST_SDK_REPOSITORY,
   run,
@@ -72,7 +73,9 @@ export async function publishRustSdk(
         cwd: root,
       },
     );
-    const checksum = await checksumOf(archivePath(target, pkg));
+    const archive = archivePath(target, pkg);
+    await readArchiveContents(archive, pkg, execute);
+    const checksum = await checksumOf(archive);
     const published = await registry(`https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}`);
     if (published) {
       assertPublishedArchive(published.version, checksum, pkg);

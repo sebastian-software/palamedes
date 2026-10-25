@@ -8,6 +8,8 @@ import { join, resolve } from "node:path";
 
 import {
   archivePath,
+  assertArchiveContents,
+  readArchiveContents,
   indexPath,
   RUST_SDK_PACKAGES,
   run,
@@ -80,14 +82,8 @@ try {
   for (const pkg of packages) {
     console.log(`Packaging and verifying ${pkg.name}@${pkg.version}`);
     const listing = await cargo(["package", "-p", pkg.name, "--list", "--allow-dirty"]);
-    for (const file of ["Cargo.toml", "Cargo.lock", "LICENSE-MIT", "LICENSE-APACHE"]) {
-      assert(listing.split("\n").includes(file), `${pkg.name} archive misses ${file}`);
-    }
-    assert(listing.includes(pkg.readme), `${pkg.name} archive misses its README`);
-    assert(
-      !listing.includes("examples/cli/"),
-      "The SDK archive must not contain a nested workspace",
-    );
+    const files = listing.trim().split("\n");
+    assertArchiveContents(pkg.name, files);
     await cargo([
       "package",
       "-p",
@@ -99,6 +95,12 @@ try {
       "2",
     ]);
     const archive = archivePath(target, pkg);
+    const archiveFiles = await readArchiveContents(archive, pkg);
+    assert.deepEqual(
+      [...archiveFiles].sort(),
+      [...files].sort(),
+      `${pkg.name} archive differs from its file list`,
+    );
     const checksum = await sha256(archive);
     archives.set(`${pkg.name}@${pkg.version}`, archive);
     entries.set(indexPath(pkg.name), {
@@ -139,7 +141,7 @@ try {
       name: pkg.name,
       version: pkg.version,
       checksum,
-      files: listing.trim().split("\n"),
+      files,
     });
   }
 
