@@ -216,8 +216,8 @@ current parsed semantics rather than reproducing old parser quirks. Re-run
 `pmds extract` and review changed source messages and IDs when upgrading.
 The MDX extraction cache stamp changes so previous analysis is discarded.
 
-- Image alt text is the complete normalized accessible description. For
-  ``![Code `sample`](./sample.png)``, the message is `Code sample`, including
+- Image alt text is the complete normalized accessible description. Alt text
+  authored as ``Code `sample` `` produces the message `Code sample`, including
   words authored as inline code. Its source reference points to the original
   bracket contents using Ferromark's structured alt metadata, including inside
   lists, quotes, and reference-style images.
