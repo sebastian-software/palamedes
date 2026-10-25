@@ -111,7 +111,9 @@ compatibility helper delegates to this function; there is no second ICU parser
 or code generator.
 
 `listTranslationCandidates()` and `applyTranslationPatches()` form the native
-translation-review workflow. A failed catalog write can still include completed
+translation-review workflow. Patches reject the same ICU compatibility errors
+as `auditCatalogs()`, while allowing compatible target-language plural
+categories. A failed catalog write can still include completed
 per-file outcomes: identify that error with `isTranslationPatchWriteError()`
 and read its `report`. See [Translation candidate patches](../translation-candidate-patches.md).
 

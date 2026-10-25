@@ -364,7 +364,12 @@ The candidate/patch type surface is `TranslationCandidateId`,
 `TranslationPatchOutcomeStatus`, `TranslationPatchOutcome`,
 `TranslationPatchResult`, and `TranslationPatchWriteError`. The patch result
 reports `applied`, `unchanged`, `rejected`, or `notApplied` outcomes and
-diagnostics. A failed catalog replacement throws an error with a partial report;
+diagnostics. Patch validation shares native ICU compatibility rules with
+`auditCatalogs(...)`: missing arguments, changed kinds, offsets, required
+selectors, rich-text tags, and plain argument occurrence counts are checked
+before any catalog write. Compatible target-language plural categories are
+allowed. Compatibility errors retain audit's `icu.*` codes and explanations;
+audit warnings do not reject patches. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
 
 File-touching operations also have additive promise-returning variants:

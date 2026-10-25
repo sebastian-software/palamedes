@@ -8,7 +8,7 @@ use ferrocat::{
     CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr,
     PoFile, PoItem, SerializeOptions, convert_catalog, machine_translation_hash,
 };
-use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, parse_icu, stringify_icu};
+use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, stringify_icu};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -24,6 +24,7 @@ thread_local! {
 
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{AiProvenance, MachineMetadata, po_serialize_options};
+use crate::icu_compatibility::compare_runtime_icu;
 use crate::icu_text::parse_runtime_icu;
 use crate::{
     CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError, PalamedesResult,
@@ -577,13 +578,41 @@ where
                 ));
                 continue;
             }
-            if let Err(message) = validate_patch_translation(&current.source, &patch.translation) {
+            if let Err(message) = validate_patch_translation(&patch.translation) {
                 rejected.insert(patch_index);
                 diagnostics.push(workflow_diagnostic(
                     "translation.shape_mismatch",
                     message,
                     Some(patch.id.clone()),
                 ));
+            } else {
+                let compatibility =
+                    render_translation_value(&patch.translation).and_then(|translation| {
+                        compare_runtime_icu(&current.id.message, &translation)
+                            .map_err(PalamedesError::from)
+                    });
+                match compatibility {
+                    Ok(compatibility) => {
+                        for diagnostic in compatibility.into_iter().filter(|diagnostic| {
+                            diagnostic.severity == ferrocat_icu::IcuDiagnosticSeverity::Error
+                        }) {
+                            rejected.insert(patch_index);
+                            diagnostics.push(workflow_diagnostic(
+                                diagnostic.code.as_ref(),
+                                diagnostic.message,
+                                Some(patch.id.clone()),
+                            ));
+                        }
+                    }
+                    Err(error) => {
+                        rejected.insert(patch_index);
+                        diagnostics.push(workflow_diagnostic(
+                            "translation.invalid_icu",
+                            format!("Source or rendered translation is not valid ICU: {error}"),
+                            Some(patch.id.clone()),
+                        ));
+                    }
+                }
             }
             if let Some(machine) = &patch.machine
                 && let Err(message) = validate_machine_provenance(machine)
@@ -1259,7 +1288,7 @@ fn project_po_translation(item: &PoItem, source: &TranslationValue) -> Translati
 }
 
 fn project_icu_plural(value: &str) -> Option<TranslationValue> {
-    let parsed = parse_icu(value).ok()?;
+    let parsed = parse_runtime_icu(value).ok()?;
     let [
         IcuNode::Plural {
             name,
@@ -1354,47 +1383,17 @@ fn hash_json<T: Serialize + ?Sized>(hasher: &mut Sha256, value: &T) {
     hasher.update(bytes);
 }
 
-fn validate_patch_translation(
-    source: &TranslationValue,
-    translation: &TranslationValue,
-) -> Result<(), &'static str> {
-    match (source, translation) {
-        (TranslationValue::Singular { .. }, TranslationValue::Singular { value }) => {
-            if value.is_empty() {
-                Err("Completed singular translations must not be empty.")
-            } else {
-                Ok(())
-            }
+fn validate_patch_translation(translation: &TranslationValue) -> Result<(), &'static str> {
+    match translation {
+        TranslationValue::Singular { value } if value.is_empty() => {
+            Err("Completed singular translations must not be empty.")
         }
-        (
-            TranslationValue::Plural {
-                variable: source_variable,
-                plural_kind: source_kind,
-                offset: source_offset,
-                values: source_values,
-            },
-            TranslationValue::Plural {
-                variable,
-                plural_kind,
-                offset,
-                values,
-            },
-        ) => {
-            if variable != source_variable || plural_kind != source_kind || offset != source_offset
-            {
-                return Err("Plural variable, kind, and offset must match the source candidate.");
-            }
-            if values.keys().ne(source_values.keys()) {
-                return Err(
-                    "Plural translation selectors must exactly match the source candidate.",
-                );
-            }
-            if values.values().any(String::is_empty) {
-                return Err("Completed plural translation branches must not be empty.");
-            }
-            Ok(())
+        TranslationValue::Plural { values, .. }
+            if values.is_empty() || values.values().any(String::is_empty) =>
+        {
+            Err("Completed plural translation branches must not be empty.")
         }
-        _ => Err("Translation shape must match the source candidate."),
+        _ => Ok(()),
     }
 }
 
@@ -2413,6 +2412,213 @@ msgstr "placeholder"
     }
 
     #[test]
+    fn patch_and_audit_share_icu_compatibility_rules() {
+        for (source, target, mut expected_codes) in [
+            ("Hello {name}", "Hallo", vec!["icu.missing_argument"]),
+            (
+                "{count, plural, one {# file} other {# files}}",
+                "{count, plural, one {# файл} few {# файла} many {# файлов} other {# файла}}",
+                vec![],
+            ),
+            (
+                "Hello {name} {name}",
+                "Hallo {name}",
+                vec!["icu.argument_occurrence_mismatch"],
+            ),
+            ("Don't greet {name}", "N'oubliez pas {name}", vec![]),
+            (
+                "{count, plural, one {Don't touch # file} other {Don't touch # files}}",
+                "{count, plural, one {N'oubliez pas # fichier} other {N'oubliez pas # fichiers}}",
+                vec![],
+            ),
+            (
+                "{count, plural, one {'#' '{ignored}' {name}} other {# {name}}}",
+                "{count, plural, one {'#' '{ignored}' {name}} few {# {name}} other {# {name}}}",
+                vec![],
+            ),
+            (
+                "'{ignored}' Hello {name}",
+                "'{ignored}' Hallo {name}",
+                vec![],
+            ),
+            ("L'{name} est prêt", "L'{title} ist bereit", vec![]),
+            (
+                "{gender, select, female {{count, plural, one {{name} has # file} other {{name} has # files}}} other {{name} has files}}",
+                "{gender, select, female {{count, plural, one {{name}: # файл} few {{name}: # файла} other {{name}: # файлов}}} other {{name}: файлы}}",
+                vec![],
+            ),
+            (
+                "{gender, select, female {{count, plural, one {{name} has # file} other {{name} has # files}}} other {{name} has files}}",
+                "{gender, select, female {{count, plural, one {# Datei} other {# Dateien}}} other {Dateien}}",
+                vec!["icu.missing_argument"],
+            ),
+            (
+                "{count, plural, one {# file} other {# files}}",
+                "{items, plural, one {# Datei} other {# Dateien}}",
+                vec!["icu.missing_argument", "icu.extra_argument"],
+            ),
+            (
+                "{count, plural, one {# file} other {# files}}",
+                "{count, selectordinal, one {# Datei} other {# Dateien}}",
+                vec!["icu.argument_kind_changed"],
+            ),
+            (
+                "{count, plural, offset:1 one {# file} other {# files}}",
+                "{count, plural, one {# Datei} other {# Dateien}}",
+                vec!["icu.plural_offset_changed"],
+            ),
+            (
+                "{count, plural, =0 {No files} one {# file} other {# files}}",
+                "{count, plural, one {# Datei} other {# Dateien}}",
+                vec!["icu.missing_plural_selector"],
+            ),
+            (
+                "<strong>Hello {name}</strong>",
+                "Hallo {name}",
+                vec!["icu.missing_tag"],
+            ),
+            (
+                "Total: {count, number}",
+                "Summe: {count}",
+                vec!["icu.argument_kind_changed"],
+            ),
+            (
+                "{gender, select, female {She} other {They}}",
+                "{gender, select, other {Sie}}",
+                vec!["icu.missing_select_selector"],
+            ),
+            (
+                "{count, plural, one {# file} other {# files}}",
+                "Dateien: {count, plural, one {# Datei} other {# Dateien}}",
+                vec![],
+            ),
+            // Extra select categories are advisory in audit and do not reject writeback.
+            (
+                "{gender, select, other {They}}",
+                "{gender, select, female {Sie} other {Sie}}",
+                vec![],
+            ),
+        ] {
+            let fixture = tempfile::tempdir().expect("fixture directory");
+            let path = fixture.path().join("messages/de.po");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let catalog = |locale: &str, translation: &str| {
+                format!(
+                    "msgid \"\"\nmsgstr \"\"\n\"Language: {locale}\\n\"\n\nmsgid {}\nmsgstr {}\n",
+                    serde_json::to_string(source).unwrap(),
+                    serde_json::to_string(translation).unwrap(),
+                )
+            };
+            fs::write(&path, catalog("de", "")).unwrap();
+            fs::write(fixture.path().join("messages/en.po"), catalog("en", source)).unwrap();
+            let before = fs::read_to_string(&path).unwrap();
+            let listed = list_translation_candidates(&TranslationCandidateRequest {
+                config: po_config(fixture.path()),
+                locales: vec![],
+                targets: vec![],
+                max_origins: 8,
+            })
+            .unwrap();
+            let current = &listed.candidates[0];
+            let result = apply_translation_patches(TranslationPatchRequest {
+                config: po_config(fixture.path()),
+                po: None,
+                patches: vec![TranslationPatch {
+                    id: current.id.clone(),
+                    fingerprint: current.fingerprint.clone(),
+                    translation: super::project_source(target),
+                    machine: None,
+                }],
+            })
+            .unwrap();
+            let patch_codes = result
+                .diagnostics
+                .iter()
+                .map(|d| d.code.as_str())
+                .collect::<Vec<_>>();
+            expected_codes.sort_unstable();
+            assert_eq!(
+                patch_codes, expected_codes,
+                "source {source}; target {target}"
+            );
+            if expected_codes.is_empty() {
+                assert!(result.updated);
+            } else {
+                assert!(!result.updated);
+                assert_eq!(fs::read_to_string(&path).unwrap(), before);
+                // Audit a separately authored target after verifying that writeback rejected it.
+                fs::write(&path, catalog("de", target)).unwrap();
+            }
+            let audit = crate::audit_catalogs(crate::CatalogAuditRequest {
+                config: po_config(fixture.path()),
+                locales: vec![],
+                checks: Default::default(),
+                metadata: vec![],
+            })
+            .unwrap();
+            let mut audit_errors = audit
+                .diagnostics
+                .iter()
+                .filter(|d| d.severity == crate::CatalogDiagnosticSeverity::Error)
+                .map(|d| (d.code.as_str(), d.message.as_str()))
+                .collect::<Vec<_>>();
+            audit_errors.sort_unstable();
+            assert_eq!(
+                audit_errors,
+                result
+                    .diagnostics
+                    .iter()
+                    .map(|d| (d.code.as_str(), d.message.as_str()))
+                    .collect::<Vec<_>>(),
+                "source {source}; target {target}",
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_incompatible_patch_before_writing_any_catalog() {
+        let fixture = tempfile::tempdir().unwrap();
+        let mut before = Vec::new();
+        for name in ["first", "second"] {
+            let path = fixture.path().join(format!("{name}/de.po"));
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let content = "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Hello {name}\"\nmsgstr \"\"\n";
+            fs::write(&path, content).unwrap();
+            before.push((path, content.to_owned()));
+        }
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: two_catalog_config(fixture.path()),
+            locales: vec![],
+            targets: vec![],
+            max_origins: 8,
+        })
+        .unwrap();
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: two_catalog_config(fixture.path()),
+            po: None,
+            patches: vec![
+                singular_patch(&listed.candidates[0], "Hallo {name}"),
+                singular_patch(&listed.candidates[1], "Hallo"),
+            ],
+        })
+        .unwrap();
+        assert!(!result.updated);
+        assert_eq!(result.stats.applied, 0);
+        assert_eq!(result.diagnostics[0].code, "icu.missing_argument");
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::NotApplied
+        );
+        assert_eq!(
+            result.outcomes[1].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        for (path, content) in before {
+            assert_eq!(fs::read_to_string(path).unwrap(), content);
+        }
+    }
+
+    #[test]
     fn applies_singular_and_plural_po_patches_without_losing_unrelated_state() {
         let fixture = tempfile::tempdir().expect("fixture directory");
         write_po_fixture(&fixture.path().join("messages/de.po"), "de");
@@ -2904,6 +3110,56 @@ msgstr "placeholder"
         assert!(output.contains("\tc=Greeting shown on the home page"));
         assert!(output.contains("Review me\t\tBitte prüfen"));
         assert!(output.contains("\tf=fuzzy\tf=x-custom"));
+    }
+
+    #[test]
+    fn rejects_invalid_rendered_plural_selectors_without_writing() {
+        let fixture = tempfile::tempdir().unwrap();
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let before = fs::read_to_string(&path).unwrap();
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec![],
+            targets: vec![],
+            max_origins: 8,
+        })
+        .unwrap();
+        let plural = listed
+            .candidates
+            .iter()
+            .find(|candidate| matches!(candidate.source, TranslationValue::Plural { .. }))
+            .unwrap();
+        for values in [
+            [("one", "# Datei")]
+                .into_iter()
+                .map(|(key, value)| (key.to_owned(), value.to_owned()))
+                .collect(),
+            [("other", "# Dateien"), ("bad selector", "# Dateien")]
+                .into_iter()
+                .map(|(key, value)| (key.to_owned(), value.to_owned()))
+                .collect(),
+        ] {
+            let result = apply_translation_patches(TranslationPatchRequest {
+                config: po_config(fixture.path()),
+                po: None,
+                patches: vec![TranslationPatch {
+                    id: plural.id.clone(),
+                    fingerprint: plural.fingerprint.clone(),
+                    translation: TranslationValue::Plural {
+                        variable: "count".to_owned(),
+                        plural_kind: TranslationPluralKind::Cardinal,
+                        offset: 0,
+                        values,
+                    },
+                    machine: None,
+                }],
+            })
+            .expect("rendered ICU errors are structured rejections");
+            assert!(!result.updated);
+            assert_eq!(result.diagnostics[0].code, "translation.invalid_icu");
+            assert_eq!(fs::read_to_string(&path).unwrap(), before);
+        }
     }
 
     #[test]
