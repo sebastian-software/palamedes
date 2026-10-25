@@ -4,6 +4,54 @@ The example matrix proves four authoritative locale strategies — cookie, route
 subdomain, and tld — plus one derived host mapping behavior on top of the route
 strategy.
 
+## Language Preference Matching
+
+`preferredLocale()` and the `Accept-Language` fallback in `resolve()` match
+preferences case-insensitively and return the original configured locale.
+For example, `ZH-hant` selects `zh-Hant` and `PT-br` selects `pt-BR`; catalog
+identifiers, cookie values, and canonical URLs keep their configured spelling.
+
+Matching follows the header's quality order, retaining header order for equal
+qualities. Each preference first tries an exact tag, then its canonical language
+tag without extensions. Remaining candidates must share its language and
+script. `Intl.Locale.maximize()` supplies missing script and region fields from
+the host's likely-subtag data; explicit scripts are preserved. Within that set,
+a unique region match wins, followed by a unique locale without a region, then
+a single remaining candidate. Ambiguous matches move on to the next preference.
+The order of `locales` never breaks a tie.
+
+With `locales: ["en", "zh-Hans", "zh-Hant"]`:
+
+| Preference                                  | Selected locale                      |
+| ------------------------------------------- | ------------------------------------ |
+| `zh-Hant`, `ZH-hant`, `zh-Hant-TW`, `zh-TW` | `zh-Hant`                            |
+| `zh-Hant-CN`                                | `zh-Hant` (the explicit script wins) |
+| `zh-CN`, bare `zh`                          | `zh-Hans`                            |
+| `zh-Latn`                                   | `en` (unsupported script)            |
+
+Likewise, bare `pt` selects `pt-BR` when both `pt-BR` and `pt-PT` are supported.
+A `pt-AO` preference is ambiguous with those two regional catalogs and falls
+back to the next preference or `defaultLocale`. No application-specific alias
+map is provided; applications needing another policy can choose a configured
+locale before calling their request integration.
+
+A `q=0` range excludes its matching configured tags, subtags, and equivalent
+maximized tags from preference matching, so inference cannot reintroduce an
+excluded locale. These comparisons use canonical language tags too: `iw;q=0`
+excludes Hebrew catalogs under their canonical `he` spelling. A more specific
+positive range overrides a broader exclusion:
+`de-CH, de;q=0` can select configured `de-CH`, but cannot select generic `de`.
+A supported positive preference also overrides `*;q=0`. Malformed or unsupported
+tags without a configured exact match are ignored. If no preference
+matches, controls return `defaultLocale`, including when every candidate was
+excluded; the helper does not produce an HTTP 406 response. A wildcard does not
+select an arbitrary configured locale.
+
+Persisted choices and route identifiers have a separate exact contract:
+`isLocale()`, `normalizeLocale()`, `readChoice()`, cookie resolution, and route
+resolution accept only configured spelling. Use preference matching for browser
+language input, and exact validation for catalog and route identity.
+
 ## Cookie Strategy
 
 Cookie examples follow this rule set:

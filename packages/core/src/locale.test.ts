@@ -93,6 +93,7 @@ describe("locale controls", () => {
       labels: { "experiment=v2": "Experiment" },
     });
     expect(custom.readChoice("locale-choice=experiment=v2")).toBe("experiment=v2");
+    expect(custom.preferredLocale("EXPERIMENT=v2")).toBe("experiment=v2");
   });
 
   it("supports custom cookie names", () => {
@@ -215,6 +216,98 @@ describe("locale controls", () => {
     const items = buildLocaleSwitchItems({ currentLocale: "en", locales: ["en", "de"] as const });
     expect(items).toHaveLength(2);
     expect(items[0]?.active).toBe(true);
+  });
+});
+
+describe("language preference matching", () => {
+  const scripts = defineLocaleControls({
+    locales: ["en", "zh-Hant", "zh-Hans"] as const,
+    defaultLocale: "en",
+  });
+
+  it.each([
+    ["zh-Hant", "zh-Hant"],
+    ["ZH-hant", "zh-Hant"],
+    ["zh-Hant-TW", "zh-Hant"],
+    ["zh-Hant-CN", "zh-Hant"],
+    ["zh-TW", "zh-Hant"],
+    ["zh-CN", "zh-Hans"],
+    ["zh", "zh-Hans"],
+  ])("matches %s to configured %s", (header, locale) => {
+    expect(scripts.resolve({ strategy: "cookie", acceptLanguageHeader: header })).toStrictEqual({
+      locale,
+      source: "accept-language",
+    });
+  });
+
+  it("does not substitute a different explicit script", () => {
+    expect(scripts.preferredLocale("zh-Latn, en;q=0.5")).toBe("en");
+    expect(scripts.preferredLocale("zh-Latn-TW, zh-Hant;q=0.5")).toBe("zh-Hant");
+  });
+
+  it("matches canonical regions and inferred defaults without configuration-order ties", () => {
+    const regions = defineLocaleControls({
+      locales: ["en", "pt-PT", "pt-BR"] as const,
+      defaultLocale: "en",
+    });
+    expect(regions.preferredLocale("PT-br")).toBe("pt-BR");
+    expect(regions.preferredLocale("pt-Latn-BR")).toBe("pt-BR");
+    expect(regions.preferredLocale("pt")).toBe("pt-BR");
+    expect(regions.preferredLocale("pt-AO")).toBe("en");
+  });
+
+  it("retains quality order across inferred and base-language matches", () => {
+    expect(scripts.preferredLocale("zh-TW;q=0.4, zh-CN;q=0.9")).toBe("zh-Hans");
+    expect(scripts.preferredLocale("zh-TW, zh-CN")).toBe("zh-Hant");
+    expect(controls.preferredLocale("de-CH;q=0.9, es;q=0.8")).toBe("de");
+  });
+
+  it("does not reintroduce excluded locales through inference or base fallback", () => {
+    expect(scripts.preferredLocale("zh-Hant;q=0, zh-TW, zh-CN;q=0.5")).toBe("zh-Hans");
+    expect(scripts.preferredLocale("zh;q=0, zh-TW, es;q=0.5")).toBe("en");
+    expect(controls.preferredLocale("de;q=0, de-CH, es;q=0.5")).toBe("es");
+    expect(scripts.preferredLocale("zh-Hant;q=0")).toBe("en");
+  });
+
+  it("lets specific positive ranges override broader zero-quality ranges", () => {
+    expect(controls.preferredLocale("de, *;q=0")).toBe("de");
+    const regional = defineLocaleControls({
+      locales: ["en", "de-CH"] as const,
+      defaultLocale: "en",
+    });
+    expect(regional.preferredLocale("de-CH, de;q=0")).toBe("de-CH");
+    expect(controls.preferredLocale("de-CH, de;q=0, es;q=0.5")).toBe("es");
+  });
+
+  it("canonicalizes aliases for exclusions and more specific accepted ranges", () => {
+    const hebrew = defineLocaleControls({
+      locales: ["en", "he-US"] as const,
+      defaultLocale: "en",
+    });
+    expect(hebrew.preferredLocale("iw;q=0, he")).toBe("en");
+    expect(hebrew.preferredLocale("iw;q=0, he-US")).toBe("he-US");
+    expect(hebrew.preferredLocale("he;q=0, iw-US")).toBe("he-US");
+  });
+
+  it("ignores malformed and unsupported preferences without throwing", () => {
+    expect(scripts.preferredLocale("zh_@@, *, xx-YY, zh-Hant;q=0.5")).toBe("zh-Hant");
+    expect(scripts.preferredLocale("invalid_tag, xx-YY")).toBe("en");
+    expect(scripts.preferredLocale(null)).toBe("en");
+  });
+
+  it("keeps persisted and route identities exact while suggestions use preferences", () => {
+    expect(scripts.isLocale("zh-hant")).toBe(false);
+    expect(scripts.normalizeLocale("zh-hant")).toBe("en");
+    expect(scripts.readChoice("locale-choice=zh-hant")).toBeNull();
+    expect(scripts.extractLocaleFromPath("/zh-hant/docs")).toBeNull();
+    expect(scripts.resolve({ strategy: "route", routeLocale: "zh-hant" }).locale).toBe("en");
+    expect(scripts.resolve({ strategy: "cookie", cookieHeader: "locale=zh-hant" }).locale).toBe(
+      "en",
+    );
+    expect(
+      scripts.suggest({ currentLocale: "en", pathname: "/en", acceptLanguageHeader: "zh-TW" })
+        ?.recommendedUrl,
+    ).toBe("/zh-Hant");
   });
 });
 

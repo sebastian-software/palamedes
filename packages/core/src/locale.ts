@@ -125,33 +125,40 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
+function languagePreferences(header: string | null | undefined) {
+  return (header ?? "")
+    .split(",")
+    .map((entry) => {
+      const [tag, ...params] = entry.trim().split(";");
+      const qParam = params.find((param) => param.trim().startsWith("q="));
+      const quality = qParam ? Number(qParam.split("=")[1]) : 1;
+      return {
+        quality: Number.isFinite(quality) ? quality : 1,
+        tag: tag.toLowerCase(),
+      };
+    })
+    .filter(({ tag }) => tag.length > 0)
+    .sort((left, right) => right.quality - left.quality);
+}
+
 /** Accept-Language tags sorted by quality, with base languages expanded. */
 export function parseAcceptLanguage(header: string | null | undefined): string[] {
-  if (!header) {
-    return [];
+  return languagePreferences(header)
+    .filter(({ quality }) => quality > 0)
+    .flatMap(({ tag }) => {
+      const base = tag.split("-")[0];
+      return base && base !== tag ? [tag, base] : [tag];
+    });
+}
+
+function languageTag(tag: string): Intl.Locale | null {
+  try {
+    return new Intl.Locale(tag);
+  } catch (error) {
+    // Preferences are untrusted request data; malformed tags have no match.
+    if (error instanceof RangeError) return null;
+    throw error;
   }
-
-  return (
-    header
-      .split(",")
-      .map((entry) => {
-        const [tag, ...params] = entry.trim().split(";");
-        const qParam = params.find((param) => param.trim().startsWith("q="));
-        const quality = qParam ? Number(qParam.split("=")[1]) : 1;
-
-        return {
-          quality: Number.isFinite(quality) ? quality : 1,
-          tag: tag.toLowerCase(),
-        };
-      })
-      // RFC 9110: a quality of 0 marks the tag as "not acceptable".
-      .filter(({ quality }) => quality > 0)
-      .sort((left, right) => right.quality - left.quality)
-      .flatMap(({ tag }) => {
-        const base = tag.split("-")[0];
-        return base && base !== tag ? [tag, base] : [tag];
-      })
-  );
 }
 
 /**
@@ -513,11 +520,72 @@ export function defineLocaleControls<TLocale extends string>(
 
   const label = (locale: TLocale): string => labels[locale];
 
+  const languageLocales = config.locales.map((locale) => {
+    const parsed = languageTag(locale);
+    return { locale, parsed, maximized: parsed?.maximize() };
+  });
+
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    for (const candidate of parseAcceptLanguage(header)) {
-      if (isLocale(candidate)) {
-        return candidate;
-      }
+    const preferences = languagePreferences(header);
+    const exclusions = preferences
+      .filter(({ quality }) => quality === 0)
+      .map(({ tag }) => {
+        const parsed = languageTag(tag);
+        return {
+          tag: parsed?.baseName.toLowerCase() ?? tag,
+          maximized: parsed?.maximize(),
+        };
+      });
+    const unique = (matches: typeof languageLocales): TLocale | undefined =>
+      matches.length === 1 ? matches[0]?.locale : undefined;
+
+    for (const { tag, quality } of preferences) {
+      if (quality <= 0) continue;
+      const parsed = languageTag(tag);
+      const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
+      const available = languageLocales.filter(
+        ({ locale, parsed: configured, maximized: supported }) => {
+          const lower = configured?.baseName.toLowerCase() ?? locale.toLowerCase();
+          const specificity =
+            lower === canonicalTag || lower.startsWith(`${canonicalTag}-`)
+              ? canonicalTag.split("-").length
+              : 0;
+          return exclusions.every(({ tag: excludedTag, maximized: excluded }) => {
+            // A specific accepted range overrides a broader rejection, including
+            // '*;q=0'. Inference cannot override an explicitly rejected locale.
+            if (excludedTag === "*") return true;
+            const matches =
+              lower === excludedTag ||
+              lower.startsWith(`${excludedTag}-`) ||
+              (excluded && supported && excluded.baseName === supported.baseName);
+            return !matches || specificity > excludedTag.split("-").length;
+          });
+        },
+      );
+      const exact = unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
+      if (exact) return exact;
+
+      if (!parsed) continue;
+      const canonical = unique(
+        available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName),
+      );
+      if (canonical) return canonical;
+
+      // Likely subtags supply missing fields, but never replace an explicit
+      // script. Use the host's CLDR data rather than a regional alias table.
+      const maximized = parsed.maximize();
+      const compatible = available.filter(
+        (candidate) =>
+          candidate.maximized?.language === maximized.language &&
+          candidate.maximized.script === maximized.script,
+      );
+      const match =
+        unique(
+          compatible.filter((candidate) => candidate.maximized?.region === maximized.region),
+        ) ??
+        unique(compatible.filter((candidate) => candidate.parsed?.region === undefined)) ??
+        unique(compatible);
+      if (match) return match;
     }
 
     return config.defaultLocale;
