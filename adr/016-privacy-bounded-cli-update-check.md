@@ -42,11 +42,17 @@ plugins, and application runtimes do not report automatically.
   networking, including deletion, but explicitly consented local counts can
   accumulate within the client's limits. CI needs separate informed opt-in
   and a private state directory unique to the job/run.
-- Ordinary failures remain silent and advisory. Each due client request has
-  a 200 ms network deadline; state, discovery, serialization, and scheduling
-  add overhead. Updates and telemetry can each become due. No daemon,
-  detached uploader, or postinstall reporting is introduced. Existing command
-  stdout/JSON and exit codes remain authoritative.
+- Ordinary failures remain silent and advisory. Persist telemetry locally and
+  send one due operation in a short-lived background copy of the same binary;
+  the command does not wait for network delivery. Its reserved worker entry
+  runs before normal parsing, locale/config/plugin setup, update checks, and
+  counting. It rechecks current policy and private state before sending.
+  There is no permanent daemon or postinstall reporting. Updates retain their
+  independent 200-ms network deadline. Local state, discovery, spawning, and
+  scheduling add overhead; existing stdout/JSON and exit codes remain authoritative.
+  Flush/deletion return pending status until a worker acknowledgement. Queues,
+  retry suppression, offline/withdrawal rules, and generation-safe ACKs remain
+  shared-client responsibilities.
 
 ## Context
 
@@ -78,3 +84,9 @@ The [CLI reference](../docs/cli.md#advisory-update-checks),
 [telemetry guide](../docs/telemetry.md), and
 [shared contract](https://github.com/sebastian-software/app-tracking/blob/main/docs/telemetry-api.md)
 own exact controls, wire values, and delivery evidence.
+
+## Change history
+
+- 2026-10-26: Move telemetry networking out of the command process after live
+  registration attempts could not be acknowledged within the former 200-ms
+  deadline. Adopt the shared bounded background worker; keep updates independent.

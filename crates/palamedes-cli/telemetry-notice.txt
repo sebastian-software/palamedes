@@ -6,7 +6,9 @@ installations and repositories participate. It does not measure people or
 everyone who uses the tool.
 
 If you enable it, the tool counts invocations locally and normally uploads
-daily while you use it. Reports contain UTC day, tool/version, command category,
+daily while you use it. A short-lived background process can finish a pending
+request after the CLI command exits; there is no permanent background service.
+Reports contain UTC day, tool/version, command category,
 count, a separate installation ID for this tool and profile, consent revision,
 and local/CI context. Registration includes when you gave consent. Installation
 and batch IDs also contain their creation time. We do not send command

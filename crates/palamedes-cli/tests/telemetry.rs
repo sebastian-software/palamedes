@@ -73,6 +73,22 @@ fn no_consent_or_notice_alone_creates_no_state() {
 }
 
 #[test]
+fn internal_worker_never_enters_a_command_or_creates_reporting_state() {
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let output = run(
+        profile.path(),
+        project.path(),
+        &["--app-tracking-worker-v1", &"0".repeat(64)],
+        &[],
+    );
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    assert_eq!(fs::read_dir(profile.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn failed_commands_count_once_and_controls_never_count() {
     let profile = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
