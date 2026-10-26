@@ -18,10 +18,11 @@ number for the whole project. This table is the canonical list; the
 | No declaration | The `@palamedes/cli-*` platform shells, which leave Node compatibility to their `@palamedes/cli` wrapper                                                    |
 | `>=22.22.0`    | This repository itself — development and CI, declared in the root `package.json` and shown by the repository Node badge                                     |
 
-The repository floor is stricter than every published package on purpose:
-contributors run the full workspace, not one integration. `pnpm check:llms`
-compares this table with the `engines.node` field of every published package,
-so a package that changes its floor fails the check until the table is updated.
+The repository floor is stricter than the default published-package floor.
+Host-specific requirements still apply: use Node.js 24.3 or newer for Remix
+examples. `pnpm check:llms` compares this table with the `engines.node` field of
+every published package, so a package that changes its floor fails the check
+until the table is updated.
 
 ## Supported Targets
 

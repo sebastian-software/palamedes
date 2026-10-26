@@ -6,7 +6,7 @@ well-scoped changes are easiest to review.
 
 ## Prerequisites
 
-- Node.js `>=22.22`
+- Node.js `>=22.22`; use `>=24.3.0` when working on Remix examples
 - pnpm via Corepack
 - Rust — `rust-toolchain.toml` pins the workspace MSRV, so `rustup` installs it
   on the first `cargo` invocation; make sure `rustup` itself is up to date
@@ -253,19 +253,49 @@ continue to describe the last release until its generated release PR lands.
 Implementation PRs can merge into `main` behind this hold. A Publish workflow
 dispatch with `dry_run` still builds and verifies artifacts without publishing.
 
-The v2 migration, representative TanStack React and Solid/Nitro verification,
-and standards release-layout migration are complete. Before release, finish
-Rust SDK preparation in #1309, reconcile the support matrix and migration guidance
-with the current evidence, and obtain explicit release authorization before
-enabling `publicationEnabled` in a reviewed PR. Cargo publication additionally
-requires explicit `publish = ["crates-io"]` allowlists on the three SDK crates and
-verified crates.io ownership and release credentials. `pnpm release:rust:dry-run`
-packages and verifies the SDK through a staging registry without uploading.
-The hold is independent of that layout migration; it does not replace it. Once enabled,
-publication still rejects versions below `minimumMajor` and prerelease versions.
-Remove the one-time `release-as` override after 2.0.0 is released so subsequent
-versions follow conventional commits again. Run `pnpm check:release-set` and
-`pnpm check:workflow-contracts` when changing this policy or its workflow wiring.
+The v2 migration, representative TanStack React and Solid 2 Start Mode/Nitro
+verification, focused French examples, Node deployment proofs, and standards
+release-layout migration are complete. Rust SDK archives, independent consumers,
+and the dependency-ordered release lane are implemented; #1309 tracks the
+remaining registry ownership and credential verification. #1204 owns final
+coordinated acceptance. The [support tiers](docs/stability.md),
+[framework evidence](docs/framework-example-notes.md), and
+[migration guide](docs/migration-v2.md) define the supported scope. TanStack
+Solid Start and additional translation-assistance features are outside the v2
+release requirements.
+
+Before lifting the hold:
+
+1. Run `pnpm check:release-set`, `pnpm check:workflow-contracts`, and the Publish
+   workflow with `dry_run` against the held source revision. This verifies the
+   implementation with the current manifest versions; it is not evidence for
+   the future versioned 2.0 artifacts. The dry run checks package builds,
+   declarations, tests, native artifacts for all six platforms, and the staged
+   Rust SDK consumer without uploading packages.
+2. Resolve registry readiness separately: `node scripts/check-first-publish.mjs`
+   checks that npm package names already exist; it does not verify trusted
+   publisher configuration. Follow #1309 and the
+   [Rust distribution guide](docs/rust-applications.md#preview-and-publication)
+   for crates.io ownership and release credentials. A passing dry run does not
+   establish publication permissions.
+3. Obtain explicit release authorization before enabling `publicationEnabled`
+   in a reviewed PR. Cargo publication additionally requires explicit
+   `publish = ["crates-io"]` allowlists on the three SDK crates. Keep the current
+   versions until the generated Release Please PR applies the coordinated
+   `2.0.0` version.
+
+After authorized enablement generates the Release Please PR, run the Publish
+workflow with `dry_run` on that PR's exact 2.0 revision before merging it. The
+release PR merge triggers actual publication; a source dry run at `1.25.1` does
+not replace this versioned artifact check.
+
+`pnpm release:rust:dry-run` can run the SDK staging check locally without
+uploading. Once enabled, publication still rejects versions below
+`minimumMajor` and prerelease versions. After publishing, verify that every
+coordinated npm and Cargo package is available before closing #1204. Remove the
+one-time `release-as` override after 2.0.0 is released so subsequent versions
+follow conventional commits again. Run `pnpm check:release-set` and
+`pnpm check:workflow-contracts` when changing policy or workflow wiring.
 
 Do not edit generated changelog entries by hand unless the release automation
 requires a specific correction.
