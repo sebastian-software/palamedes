@@ -7,7 +7,8 @@
     "studio": "remotion studio src/index.ts",
     "render:picture": "remotion render src/index.ts PalamedesFilm audio/.work/out/picture.mp4 --codec=h264 --crf=18 --muted",
     "render:poster": "remotion still src/index.ts PalamedesPoster audio/.work/out/poster.png --image-format=png",
-    "render:film": "sh audio/build.sh audio/cues/film.json"
+    "render:film": "sh audio/build.sh audio/cues/film.json",
+    "publish:bunny": "node scripts/publish-bunny.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.535",
