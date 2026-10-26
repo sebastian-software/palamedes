@@ -34,6 +34,7 @@ const MARKS: Partial<Record<string, FrameworkMark>> = {
   express: { asset: "express-icon.svg", width: 24, height: 24 },
   rust: { asset: "rust.svg", width: 26, height: 26, endInset: 3.75 },
   mdx: { asset: "mdx.svg", width: 58, height: 24, slotWidth: 58 },
+  nodejs: { asset: "nodejs.svg", width: 25, height: 28 },
 };
 
 /** The visible name identifies the integration; its unmodified mark is decorative. */
@@ -43,8 +44,11 @@ export function FrameworkIdentity({ slug, name }: { slug: string; name: string }
     <span className="inline-flex min-h-8 items-center gap-4 align-middle text-[15px] font-semibold whitespace-nowrap">
       {mark ? (
         <span
-          className="inline-flex size-8 shrink-0 items-center justify-end"
-          style={mark.slotWidth ? { width: mark.slotWidth } : undefined}
+          className="inline-flex size-8 shrink-0 items-center"
+          style={{
+            width: `var(--pmds-identity-slot-width, ${mark.slotWidth ?? 32}px)`,
+            justifyContent: "var(--pmds-identity-justify, flex-end)",
+          }}
         >
           <img
             src={`/framework-logos/${mark.asset}`}
@@ -55,7 +59,7 @@ export function FrameworkIdentity({ slug, name }: { slug: string; name: string }
             style={{
               width: mark.width,
               height: mark.height,
-              transform: mark.endInset ? `translateX(${mark.endInset}px)` : undefined,
+              transform: `translateX(var(--pmds-identity-inset, ${mark.endInset ?? 0}px))`,
             }}
             className="max-w-none shrink-0 object-contain object-right"
             loading="lazy"

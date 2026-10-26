@@ -150,9 +150,11 @@ body copy, hairline rules, and tabular numbers. Code reads like a printed
 listing on a light ground, not a dark editor.
 Product specimens — real code, a real `.po` entry, a rendered component in
 several languages, URL bars — are the imagery. Terminal green/amber remain
-reserved for CLI output. Hard rules: zero border-radius, zero box-shadow, zero
-gradients. Confidence comes from clear explanation and evidence, not visual
-loudness.
+reserved for CLI output. The general rules are zero border-radius, zero
+box-shadow, and zero gradients. Homepage integration links are the scoped
+exception: small white badges use a fine border, a 3 px radius, a subtle shadow,
+and one shared mark slot to align names across differently shaped vendor logos.
+Confidence comes from clear explanation and evidence, not visual loudness.
 
 Non-brand marketing pictograms come exclusively from **Streamline Sharp Duo**
 under the project's existing Pro license, colored with the navy and bronze
@@ -180,7 +182,8 @@ an implementation dependency for its own documentation chrome.
    terminal output, benchmark tables, screenshot matrices) carry the claim.
    Real numbers, mono + tabular, always.
 2. **Hairlines, not boxes.** Structure comes from rules and the framed column
-   grid, never from cards, shadows, or rounded containers.
+   grid. The small integration badges identify individual links; they do not
+   replace the page's editorial structure.
 3. **One accent, spent deliberately.** Bronze `#8e6628` marks interaction and
    emphasis; everything else is ink on paper.
 4. **The docs are part of the brand.** Reference pages share the same tokens

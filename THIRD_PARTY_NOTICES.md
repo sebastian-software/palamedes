@@ -65,6 +65,19 @@ MDX credits Evil Rabbit of Vercel for its logo design.
 | ---- | ------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------ |
 | MDX  | `site/public/framework-logos/mdx.svg` | [Official MDX site icon](https://mdxjs.com/icon.svg) | `3c34b81444050ad4520f7203280f133a46f35c02f28e7a02c30c834e477c1136` |
 
+## Node.js mark
+
+Retrieved 2026-10-26. The unmodified green JS hexagon identifies Node.js CLI
+compatibility on the homepage. Node.js and its logo are trademarks of the
+OpenJS Foundation. The artwork remains outside the Palamedes license grant;
+its use does not imply sponsorship or endorsement. See the
+[official branding page](https://nodejs.org/en/about/branding/) and
+[OpenJS trademark policy](https://trademark-policy.openjsf.org/).
+
+| Mark    | Local asset                              | Source                                                                    | SHA-256                                                            |
+| ------- | ---------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Node.js | `site/public/framework-logos/nodejs.svg` | [Official green JS icon](https://nodejs.org/static/logos/jsIconGreen.svg) | `3c88b1a2261132b11d242fe8831525be051450e1149c965d5a5f1ded63e9b50d` |
+
 ## Streamline visual assets
 
 Selected icons used by the Palamedes website are from the **Streamline Sharp

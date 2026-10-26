@@ -55,7 +55,11 @@ const GROUPS: readonly IntegrationGroup[] = [
     id: "cli-applications",
     label: "CLI",
     integrations: [
-      { slug: "cli", name: "Node.js CLI", href: "/docs/backend-servers#one-setup-for-every-build" },
+      {
+        slug: "nodejs",
+        name: "Node.js CLI",
+        href: "/docs/backend-servers#one-setup-for-every-build",
+      },
     ],
     note: "Localize your command-line tools.",
     example: { label: "CLI example", href: repoHref("examples/node-backend/src/cli.ts", "blob") },
@@ -117,22 +121,14 @@ export function IntegrationBand() {
               <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1">
                 <ul
                   aria-label={group.label}
-                  className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1"
+                  className="flex min-w-0 flex-wrap items-center gap-2 [--pmds-identity-inset:0px] [--pmds-identity-justify:center] [--pmds-identity-slot-width:60px]"
                 >
                   {group.integrations.map((integration) => (
                     <li key={integration.name}>
                       <a
                         href={integration.href}
-                        className="flex min-h-14 items-center gap-4 px-2 hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        className="flex min-h-12 items-center rounded-[3px] border border-hair bg-white px-2 shadow-sm shadow-ink/10 hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       >
-                        {integration.slug === "cli" ? (
-                          <code
-                            aria-hidden="true"
-                            className="flex h-8 w-8 items-center justify-end text-[24px]"
-                          >
-                            &gt;_
-                          </code>
-                        ) : null}
                         <FrameworkIdentity slug={integration.slug} name={integration.name} />
                       </a>
                     </li>

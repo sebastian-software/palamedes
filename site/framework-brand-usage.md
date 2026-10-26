@@ -67,8 +67,18 @@ Retrieved 2026-10-26. The homepage MDX entry uses the unmodified
 proportions, artwork, and upstream color-scheme treatment are preserved.
 The [MDX project credits Evil Rabbit of Vercel for the logo design](https://mdxjs.com/community/about/#who-designed-the-logo).
 It identifies Palamedes' MDX integration without implying endorsement or use
-of the `@mdx-js` compiler. The CLI entry uses a typeset terminal prompt, not a
-third-party logo or an additional icon-set asset.
+of the `@mdx-js` compiler.
+
+## Node.js CLI entry
+
+Retrieved 2026-10-26. The homepage CLI entry uses the unmodified green JS
+hexagon from the [official Node.js branding page](https://nodejs.org/en/about/branding/),
+stored as `site/public/framework-logos/nodejs.svg`, beside the visible
+"Node.js CLI" name. Preserve its original colors, proportions, and clear space.
+The mark identifies compatibility with the Node.js runtime under the
+[OpenJS trademark policy](https://trademark-policy.openjsf.org/), without
+implying sponsorship or endorsement. Its source URL and SHA-256 are recorded
+in `THIRD_PARTY_NOTICES.md`.
 
 ## Product film
 
