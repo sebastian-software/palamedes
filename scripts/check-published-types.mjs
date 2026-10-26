@@ -378,7 +378,6 @@ export const warningByteOffset: number = targetWarnings[0]!.diagnostics[0]!.span
 export const integrityStatuses: CatalogMachineTranslationStatus[] = ["current", "stale", "absent", "invalid"]
 // @ts-expect-error Metadata integrity is not an authorship classification.
 export const authorship: CatalogMachineTranslationStatus = "human"
-import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
 import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
@@ -440,8 +439,6 @@ t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
-export const lintPlugin = palamedesLint
-export const lintConfig = palamedesLintConfigs.recommended
 export const wakuInterceptor = createWakuI18nInterceptor((request) => ({
   locale: request.headers.get("accept-language") ?? "en",
   _: () => "",

@@ -78,6 +78,23 @@ Keep catalog/network failures visible to the host's ordinary error handling.
 Do not catch them and return an empty catalog, source text, or internal keys as
 successful localized output. Error UI must work without the failed catalog.
 
+## Check source changes
+
+Use the installed compatible CLI through the application's package manager:
+`pmds lint <changed-files> --json --fail-on warning`. Pass literal files relative
+to the invocation directory. Explicit files replace discovery and bypass catalog
+include/exclude patterns while preserving project lint policy and other cache
+entries. Inspect `diagnostics` and `failedFiles`, fix findings, and rerun. Missing
+or unsupported inputs fail the lint verdict with exit `4`; operational failures
+use `1`, and invalid usage uses `2`.
+
+Before handoff run `pmds lint --json --fail-on warning` for all configured source
+files. After normal extraction and catalog review, use
+`pmds extract --check --json --fail-on-empty-catalog` to catch drift (exit `3`).
+Use `pmds audit --json --fail-on warning` for catalog translation/ICU checks
+(threshold failure exits `5`). Lint does not update catalogs. Use the native
+checks directly; v2 does not include a first-party linter adapter or LSP.
+
 ## Verify and hand off
 
 Run the application's relevant extraction/lint, type, test, and production build

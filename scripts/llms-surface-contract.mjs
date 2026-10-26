@@ -13,11 +13,7 @@ export const compactCommandInventory = [
   "pmds catalog merge-driver",
 ];
 
-export const compactPackageInventory = [
-  "@palamedes/cli",
-  "@palamedes/core-node",
-  "@palamedes/eslint-plugin",
-];
+export const compactPackageInventory = ["@palamedes/cli", "@palamedes/core-node"];
 
 // Every public package is intentionally enumerated. Platform binaries remain
 // discoverable through their parent package in the full context, while an
@@ -27,7 +23,6 @@ export const publishedPackageInventory = [
   "@palamedes/config",
   "@palamedes/core",
   "@palamedes/core-node",
-  "@palamedes/eslint-plugin",
   "@palamedes/extractor",
   "@palamedes/next-plugin",
   "@palamedes/react",
@@ -89,7 +84,6 @@ export const compactTranslationApiInventory = [
 
 export const featureNarrative = {
   lint: ["non-mutating", "MDX"],
-  eslintAdapter: ["Preview", "ESLint/Oxlint", "pmds lint"],
   extractCheck: ["pmds extract --check --json", "--fail-on-empty-catalog", "--no-cache"],
   mergeDriver: ["deletion-aware", "three-way merge"],
   binaryPlugins: ["binary-only", "binary plugin protocol"],

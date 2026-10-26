@@ -89,7 +89,6 @@ Advanced/custom-tooling packages:
 - `@palamedes/transform`
 - `@palamedes/extractor`
 - `@palamedes/core-node`: native Node wrapper for transform, extract, catalog audit, metadata validation, catalog combine workflows, and typed translation candidate/patch APIs
-- `@palamedes/eslint-plugin`: Preview ESLint/Oxlint facade over native source diagnostics. Oxlint's JavaScript plugin API is still alpha; `pmds lint` remains the stable CI and MDX path.
 
 Reserved placeholder packages, not the normal starting point today:
 
@@ -535,6 +534,7 @@ pnpm exec pmds extract --runtime-manifest .palamedes/macros.json
 pnpm exec pmds catalog compile --target js --output .palamedes/catalogs
 pnpm exec pmds lint --json
 pnpm exec pmds lint --fail-on warning
+pnpm exec pmds lint src/view.tsx src/actions.ts --json --fail-on warning
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
 pnpm exec pmds report --json
@@ -549,9 +549,18 @@ and `catalog convert` accept `--source-locale <locale>` and `--locale <locale>`
 for catalog semantics.
 
 `pmds lint` is non-mutating source-authoring validation for the configured
-source files (including MDX). It has human or deterministic JSON output;
-`--fail-on warning` also makes warnings fail. Its cache is shared with
-extraction; use `--no-cache` when the run must not write the cache.
+source files (including MDX, Vue scripts, and Svelte scripts). Explicit file
+arguments replace discovery, resolve relative to the invocation directory, and
+bypass catalog include/exclude patterns while retaining project lint policy.
+Use literal files, not directories or quoted globs. Missing, unreadable, or
+unsupported inputs appear in `failedFiles` and exit with code `4`. It has human
+or deterministic JSON output; `--fail-on warning` also makes warnings fail. Its
+cache is shared with extraction, and targeted runs preserve other cached files;
+use `--no-cache` when the run must not write the cache. Agents should lint changed
+files after edits, run `pmds extract --check --json --fail-on-empty-catalog` for
+catalog drift after extraction, and use `pmds audit --json --fail-on warning` for
+catalog translation and ICU checks. A targeted lint pass is not a full-project
+or catalog validation.
 An extraction-cache write failure does not change the command verdict, but it
 always emits a stderr warning even without `--verbose`. Watch mode reports a
 persistent write failure once per process rather than once per file event. Use

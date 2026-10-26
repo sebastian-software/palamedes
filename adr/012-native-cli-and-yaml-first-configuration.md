@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-26
 
 The native CLI owns operational workflows and reads data-only configuration, with YAML as the documented default.
 
@@ -60,6 +60,16 @@ load the same YAML, JSON, and TOML data files as well as legacy
 `palamedes.config.*` files. That keeps Vite and Next.js integrations compatible
 while making the CLI boundary native.
 
+Source-authoring checks use `pmds lint` as their single first-party interface.
+Agents can pass explicit files after an edit and run the configured project
+check before handoff. Both paths share native rules, project policy, suppression
+syntax, structured diagnostics, exit codes, and the extraction cache. A targeted
+run does not evict cached analysis for other files.
+
+The v2 release set excludes `@palamedes/eslint-plugin`. Palamedes does not ship
+ESLint, Oxlint, or Biome rule adapters, an editor extension, or an LSP as part of
+v2. The native analysis and Node binding remain reusable by integrations.
+
 ## Context
 
 The operational toolchain must run without a JavaScript runtime merely to reach
@@ -70,6 +80,11 @@ Data-only configuration is portable across frontend projects and other hosts.
 Executing JavaScript configuration would add a second runtime and a code
 execution boundary to otherwise native commands. JavaScript host adapters can
 retain their own configuration loader without imposing it on the CLI.
+
+The agent workflow needs quick, directly executable checks after source edits.
+The former ESLint/Oxlint adapter exposed three native diagnostics but added host
+configuration, rule names, suppression syntax, and compatibility requirements.
+Its editor transport does not justify that release surface for the v2 scope.
 
 ## Alternatives Considered
 
@@ -103,6 +118,14 @@ look more complex than they are.
 Rejected as the canonical user-authored format. JSON is easy for tools but poor
 for hand-authored project config. It remains supported as a data-only format.
 
+### 5. Keep the ESLint/Oxlint adapter
+
+It provides diagnostics through existing editor integrations without duplicating
+native rule semantics. Rejected for v2 because host compatibility and separate
+policy/suppression handling add maintenance to the same source checks. An LSP
+would also create another supported transport; it is deferred until a concrete
+workflow requires it.
+
 ## Consequences
 
 - Projects invoking `pmds` use data configuration; JavaScript-host config is
@@ -121,3 +144,18 @@ for hand-authored project config. It remains supported as a data-only format.
   the operational dependency is a native binary rather than Node.js.
 - Future CLI features should be implemented in Rust unless they are explicitly
   JavaScript-host integration features.
+- Agents can lint changed files without discovering or parsing the whole project.
+- Removing the adapter removes first-party live editor diagnostics. Existing
+  users migrate host severity and suppression settings to the native interface.
+- Source checks remain independent of the application's general-purpose linter.
+
+## Validation And Review Triggers
+
+CLI integration tests cover targeted checks, structured failures, deterministic
+cached/uncached results, and retention of unrelated cache entries. The
+[agent workflow](../docs/agent-skill.md#check-changes-with-pmds) documents the
+source, catalog-drift, and catalog-audit checks.
+
+Revisit editor or linter integration when an actual adoption workflow requires
+it and its maintenance cost is justified. Add stdin only when an agent workflow
+needs to check content before writing it to disk.

@@ -119,6 +119,24 @@ Prebuilt npm native packages do not require a local Rust toolchain.
   Vite/React, and Lingui migration. It preserves existing locale policy and
   translations and verifies rendered output against a compatible target.
 
+## Native checks for agent workflows
+
+`pmds lint` accepts explicit source files for quick feedback after edits:
+
+```bash
+pnpm exec pmds lint src/view.tsx src/actions.ts --json --fail-on warning
+```
+
+Omit files for the full configured source check. Both paths use the same native
+rules, project policy, suppression directives, deterministic JSON, and exit
+codes. Targeted runs retain other files in the shared extraction/lint cache.
+
+`@palamedes/eslint-plugin` is removed from the v2 release set. Replace its host
+configuration and suppression comments using the
+[lint migration steps](./migration-v2.md#replace-the-lint-adapter). Native source
+analysis and its Node binding remain available. Editor adapters and an LSP are
+outside the v2 scope.
+
 ## Why this is a major release
 
 V2 removes a supported execution model and changes how failures are handled.
