@@ -21,6 +21,9 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    if let Some(code) = telemetry::worker_entry() {
+        return ExitCode::from(code);
+    }
     if let Err(error) = i18n::initialize() {
         eprintln!("pmds: {error}");
         return ExitCode::from(1);

@@ -20,7 +20,7 @@ pmds telemetry preview                        # Local payload preview, no reques
 pmds telemetry disable                        # Withdraw and discard unsent data
 pmds telemetry decline                        # Record a refusal
 pmds telemetry delete                         # Stop and request remote deletion
-pmds telemetry flush                          # Try one pending request
+pmds telemetry flush                          # Schedule one pending operation
 ```
 
 There is no forced prompt, preselected consent, or installation hook. The full
@@ -114,8 +114,12 @@ offline, including when consent is given.
 The shared client bounds state to 4 MiB, 4,096 open dimensions, 64 batches, and
 seven eligible UTC dates of unsent usage. Overflow/expiry can drop old data;
 status exposes local dropped counts. Each invocation attempts at most one
-telemetry request, with a 200 ms network deadline. Independent update waiting,
-discovery, filesystem work, and scheduling are additional. Reports retry the
+background request in a short-lived copy of the same binary. The command does
+not wait for that request or worker exit. A worker can continue after the command
+finishes; its network deadline is five seconds. It never enters a normal command,
+discovers a project, or counts itself. Independent update waiting remains bounded
+to 200 ms; discovery, local filesystem work, process startup, and scheduling are
+additional. Reports retry the
 same immutable batch after unknown outcomes; accepted duplicates do not count
 again. Terminal conflicts pause rather than silently replacing an identity.
 
@@ -143,3 +147,12 @@ agreement and published policies. The service does not independently verify a
 universal maximum for all such records; the current processor disclosure
 distinguishes verified product limits from unknown internal periods. This does
 not change the 90-day reporting retention described above.
+
+`flush`, `delete`, and `reset` schedule a background attempt and return the
+current local status; they do not wait for remote acknowledgement. Inspect
+`telemetry status` to observe completion. Existing retry suppression still
+applies. A killed worker or CI/container teardown can prevent final delivery,
+so preserve the isolated state until acknowledgement when it matters. There
+is no permanent daemon, postinstall hook, or retry loop. The worker reloads
+private state and policy before sending and uses the same consent, offline,
+network-lock, and generation rules as the shared client.

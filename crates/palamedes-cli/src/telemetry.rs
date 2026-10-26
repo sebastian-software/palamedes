@@ -12,6 +12,28 @@ use std::time::{Duration, Instant};
 
 const DISCLOSURE: &str = include_str!("../telemetry-notice.txt");
 
+/// Handle the shared worker before locale setup, CLI parsing, project lookup,
+/// update checks, or command counting. Worker failures never print user output.
+pub fn worker_entry() -> Option<u8> {
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref()
+        != Some(std::ffi::OsStr::new(
+            app_tracking::telemetry::BACKGROUND_WORKER_ARGUMENT,
+        ))
+    {
+        return None;
+    }
+    let token = args.next().and_then(|value| value.into_string().ok());
+    let success = token
+        .filter(|_| args.next().is_none())
+        .is_some_and(|token| {
+            configured(false).is_some_and(|(client, policy)| {
+                client.run_background_worker(&policy, &token).is_ok()
+            })
+        });
+    Some(u8::from(!success))
+}
+
 #[derive(Debug, Args)]
 pub struct Options {
     #[command(subcommand)]
@@ -160,7 +182,7 @@ pub fn execute(options: &Options, offline: bool) -> Result<u8, CliError> {
                 Operation::Delete | Operation::Reset | Operation::Flush
             ) {
                 client
-                    .run(
+                    .run_in_background(
                         &policy,
                         None,
                         unknown_context,
@@ -182,7 +204,7 @@ pub fn record(category: &'static str, offline: bool, context: impl FnOnce() -> R
     };
     // Advisory failures never change command output or exit status. All project
     // discovery stays inside the closure, after effective collection consent.
-    let _ = client.run(
+    let _ = client.run_in_background(
         &policy,
         Some(Invocation {
             command: category,
