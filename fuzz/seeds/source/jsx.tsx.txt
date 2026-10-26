@@ -1,0 +1,2 @@
+import { Trans, Plural } from "@palamedes/react/macro";
+export const View = () => <Trans>Bonjour 👋 <strong>世界</strong> <Plural value={count} one="one" other="#" /></Trans>;

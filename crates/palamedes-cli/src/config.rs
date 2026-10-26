@@ -54,19 +54,6 @@ pub enum ConfigError {
     AmbiguousCatalogPath { path: PathBuf, catalogs: String },
 }
 
-impl ConfigError {
-    pub fn localized(&self) -> String {
-        match self {
-            Self::NotFound => tr!("Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml.").to_owned(),
-            Self::MissingExplicit { path } => tr!("Palamedes config does not exist: {path}", path = path.display()),
-            Self::Parse { path, source } => tr!("Could not parse Palamedes config {path}: {source}", path = path.display(), source = source),
-            Self::Invalid { path, message } => tr!("Invalid Palamedes config in {path}: {message}", message = message, path = path.display()),
-            Self::JsConfigUnsupported { path } => tr!("Found {path}, but pmds only loads data configs. Create palamedes.yaml, palamedes.yml, palamedes.json, or palamedes.toml; JavaScript and TypeScript configs are not executable CLI configuration.", path = path.display()),
-            Self::AmbiguousCatalogPath { path, catalogs } => tr!("Catalog path {path} matches multiple configured catalogs ({catalogs}); refusing to choose one.", catalogs = catalogs, path = path.display()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadedConfig {
@@ -190,7 +177,7 @@ impl ConfigPluginDeclaration {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct RawConfig {
+pub(crate) struct RawConfig {
     locales: Vec<String>,
     #[serde(alias = "source_locale")]
     source_locale: String,
@@ -229,12 +216,22 @@ pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedCon
             path: config_path.clone(),
             source: Box::new(source),
         })?;
-    check_top_level_keys(&value, &config_path)?;
+    let raw = parse_config_value(value, &config_path)?;
+    normalize_config(raw, config_path)
+}
+
+/// Parse and validate data without resolving paths, reading files, or loading plugins.
+pub(crate) fn parse_config_value(
+    value: serde_json::Value,
+    path: &Path,
+) -> Result<RawConfig, ConfigError> {
+    check_top_level_keys(&value, path)?;
     let raw: RawConfig = serde_json::from_value(value).map_err(|source| ConfigError::Invalid {
-        path: config_path.clone(),
+        path: path.to_path_buf(),
         message: source.to_string(),
     })?;
-    normalize_config(raw, config_path)
+    validate_config(&raw, path)?;
+    Ok(raw)
 }
 
 /// Data configs are kebab-case (with snake_case aliases). Lingui-style
@@ -625,7 +622,6 @@ fn not_found(js_config: Option<PathBuf>) -> ConfigError {
 }
 
 fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig, ConfigError> {
-    validate_config(&raw, &config_path)?;
     let root_dir = config_path
         .parent()
         .map(Path::to_path_buf)

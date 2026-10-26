@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
-use std::io::{self, BufRead, BufReader, IsTerminal, Read, Write};
+use std::io::{self, BufReader, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use crate::command::Context;
 use crate::config::{ConfigError, LoadedConfig};
 use crate::error::CliError;
+use crate::plugin_protocol::{parse_event, read_protocol_line};
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
@@ -783,9 +784,7 @@ fn invoke_binary(
     let (stdout_tx, stdout_rx) = mpsc::sync_channel(1);
     let reader = thread::spawn(move || {
         loop {
-            let mut line = Vec::new();
-            let read = Read::take(&mut stdout, (policy.max_line_bytes + 1) as u64)
-                .read_until(b'\n', &mut line);
+            let (read, line) = read_protocol_line(&mut stdout, policy.max_line_bytes);
             let message = match read {
                 Ok(0) => StdoutMessage::Eof,
                 Ok(_) if line.len() > policy.max_line_bytes => StdoutMessage::LineTooLong,
@@ -1160,20 +1159,6 @@ impl ChildSignalGuard {
 impl Drop for ChildSignalGuard {
     fn drop(&mut self) {
         ACTIVE_PLUGIN_GROUP.store(0, Ordering::SeqCst);
-    }
-}
-
-fn parse_event(value: Value) -> Result<PluginEvent, String> {
-    let kind = value
-        .get("event")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| "event lines must be objects with an \"event\" kind".to_owned())?;
-    match kind.as_str() {
-        "manifest" | "diagnostic" | "output" | "result" => {
-            serde_json::from_value(value).map_err(|error| format!("invalid {kind} event: {error}"))
-        }
-        other => Err(format!("unknown event \"{other}\"")),
     }
 }
 

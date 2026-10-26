@@ -12,6 +12,7 @@ mod command;
 mod commands;
 mod config;
 mod error;
+mod plugin_protocol;
 mod plugins;
 mod update_check;
 

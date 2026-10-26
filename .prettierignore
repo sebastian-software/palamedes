@@ -22,3 +22,7 @@ benchmarks/*/results/
 # Vendored snapcn sources (MIT), kept as upstream ships them
 video/src/components/snap-cn/
 video/src/lib/snap-cn-ui/
+
+# Native fuzz corpus inputs must retain malformed syntax and exact bytes.
+fuzz/seeds/
+fuzz/Cargo.lock
