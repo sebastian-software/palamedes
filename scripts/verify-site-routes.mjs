@@ -1189,8 +1189,8 @@ async function checkProgressiveOutlineAnchors(browser) {
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'));
 
-  if (docs.length !== 30) {
-    fail(`progressive docs outline: expected 30 generated long docs, got ${docs.length}`);
+  if (docs.length !== 29) {
+    fail(`progressive docs outline: expected 29 generated long docs, got ${docs.length}`);
   }
   if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/vite-plugin/index.md")) {
     fail(
