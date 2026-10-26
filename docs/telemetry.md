@@ -138,3 +138,8 @@ reports. Published provider information is available from
 [subprocessor list](https://bunny.net/gdpr/sub-processors/), and the
 [PlanetScale Trust Center](https://trust.planetscale.com/). These links do not
 establish EU-only processing or replace verification of the deployed settings.
+Provider-internal security/transport records follow the applicable provider
+agreement and published policies. The service does not independently verify a
+universal maximum for all such records; the current processor disclosure
+distinguishes verified product limits from unknown internal periods. This does
+not change the 90-day reporting retention described above.
