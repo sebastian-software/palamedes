@@ -11,11 +11,12 @@ import { at } from "./timeline";
 /*
  * Bars 41–43: "Working with a coding agent? Add the Palamedes skill and
  * simply ask it to set up translations for you." The command types itself,
- * then snapcn's Prompt Send writes the homepage's prompt below it and sends it. The
+ * then snapcn's Prompt Send writes the prompt below it and sends it. The
  * scope line is the homepage's too, so nobody expects more from the skill.
  */
 const COMMAND = "npx skills add sebastian-software/palamedes --skill palamedes";
-const PROMPT = "Use $palamedes to set up translations in this app.";
+// Plain language, so the prompt reads the same in any agent that loads skills.
+const PROMPT = "Use the Palamedes skill to set up translations in this app.";
 const CUE = { command: at(1.9), handover: at(3.6), scope: at(7.2) };
 
 /** Typing that starts slow, runs, and settles, the way Prompt Send types. */

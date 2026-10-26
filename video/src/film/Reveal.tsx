@@ -12,7 +12,8 @@ import { at } from "./timeline";
  * Bars 9–13: "That's exactly why we built Palamedes. You just write your
  * sentences… Your translators bring the languages, and Palamedes takes care
  * of everything in between." The emblem settles, then the division of labour
- * is set out in three rows; Palamedes is the rail between them.
+ * is set out in three rows; Palamedes is the rail between them, named in
+ * plain type along it.
  */
 const CUE = {
   rows: at(3.1),
@@ -244,25 +245,24 @@ export function Reveal() {
           />
         ))}
       </div>
-      <div
+      {/* the rail's name, set along it: plain type, not an addition to the emblem */}
+      <p
         style={{
           position: "absolute",
-          right: 140,
-          top: 120,
-          display: "flex",
-          alignItems: "center",
-          gap: 18,
-          ...arrive(frame, CUE.between + 10),
+          left: 150,
+          top: ROW_Y[0] + (ROW_Y[2] - ROW_Y[0] + 90) / 2,
+          margin: 0,
+          transform: "translate(-50%, -50%) rotate(-90deg)",
+          fontFamily: FONT.display,
+          fontSize: 26,
+          letterSpacing: "0.28em",
+          whiteSpace: "nowrap",
+          color: C.bronze,
+          opacity: away * ease(frame, CUE.between + 10, 14),
         }}
       >
-        <Img src={staticFile("logo.svg")} style={{ width: 64, height: 64 }} />
-        <div>
-          <Display size={40}>Palamedes</Display>
-          <p style={{ margin: "4px 0 0", fontFamily: FONT.sans, fontSize: 24, color: C.slate }}>
-            takes care of everything in between
-          </p>
-        </div>
-      </div>
+        PALAMEDES
+      </p>
     </AbsoluteFill>
   );
 }

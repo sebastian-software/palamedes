@@ -14,6 +14,7 @@ import { at } from "./timeline";
  * minute on the details. One seat, but three seats. Words that change their
  * order. Prices and dates that every language writes its own way. And that's
  * with just two languages." Each detail gets a card with English above German;
+ * in the word-order card the German words travel into their German places;
  * plural forms come from the site's specimen, formats are real Intl output.
  */
 const CUE = {
@@ -41,20 +42,63 @@ const day = (locale: string) =>
   );
 const FORMATS = [`${money("en-US")} · ${day("en-US")}`, `${money("de-DE")} · ${day("de-DE")}`];
 
-/** Word order: the same sentence in both languages, with the words that belong together. */
+/**
+ * Word order: the German words first stand in the English order, then move to
+ * where German puts them. Each token keeps its identity, so the eye can follow
+ * "morgen" travelling to the front.
+ */
 const ORDER = {
   en: "Your trip starts tomorrow.",
-  de: "Morgen beginnt deine Reise.",
-  pairs: [["tomorrow.", "Morgen"]],
+  tokens: [
+    { from: "Deine", to: "deine", at: 0, goal: 2, lead: false },
+    { from: "Reise", to: "Reise.", at: 1, goal: 3, lead: false },
+    { from: "beginnt", to: "beginnt", at: 2, goal: 1, lead: false },
+    { from: "morgen.", to: "Morgen", at: 3, goal: 0, lead: true },
+  ],
 } as const;
 
 const MONO = 24;
 const ADVANCE = (1233 / 2048) * MONO;
 const CARD = 540;
 
-function wordCentre(sentence: string, word: string): number {
-  const start = sentence.indexOf(word);
-  return (start + word.length / 2) * ADVANCE;
+/** Left edge, in px, of the word at `slot` when the words are laid out in that order. */
+function slotX(words: readonly string[], slot: number): number {
+  return words.slice(0, slot).reduce((x, word) => x + (word.length + 1) * ADVANCE, 0);
+}
+
+function Reorder({ frame, start }: { frame: number; start: number }) {
+  const before = [...ORDER.tokens].sort((l, r) => l.at - r.at).map((t) => t.from);
+  const after = [...ORDER.tokens].sort((l, r) => l.goal - r.goal).map((t) => t.to);
+  return (
+    <span style={{ position: "relative", display: "inline-block", width: 420, height: MONO * 1.2 }}>
+      {ORDER.tokens.map((token) => {
+        const t = ramp(frame, start, start + 26);
+        const x =
+          slotX(before, token.at) + (slotX(after, token.goal) - slotX(before, token.at)) * t;
+        // Words moving right arc above the line, words moving left dip below it,
+        // so no two words ever cross on the same path.
+        const right = token.goal > token.at;
+        const y = (right ? -16 : token.lead ? 30 : 14) * Math.sin(Math.PI * t);
+        return (
+          <span
+            key={token.from}
+            style={{
+              position: "absolute",
+              left: x,
+              top: 0,
+              transform: `translateY(${y.toFixed(2)}px)`,
+              fontFamily: FONT.mono,
+              fontSize: MONO,
+              color: token.lead && t > 0 ? C.bronze : C.ink,
+              whiteSpace: "pre",
+            }}
+          >
+            {t < 0.5 ? token.from : token.to}
+          </span>
+        );
+      })}
+    </span>
+  );
 }
 
 function Card({
@@ -112,7 +156,6 @@ export function Details() {
   const three = frame >= CUE.three;
   const [en, de] = seats(three ? 3 : 1);
   const swap = ease(frame, CUE.three, 8);
-  const links = ramp(frame, CUE.order + 10, CUE.order + 34);
   const two = ease(frame, CUE.two, 10);
 
   return (
@@ -145,32 +188,9 @@ export function Details() {
           <Row tag="EN" lit={0}>
             {ORDER.en}
           </Row>
-          <div style={{ position: "relative", height: 80 }}>
-            <svg
-              width={CARD}
-              height={80}
-              style={{ position: "absolute", left: 58, top: 0, overflow: "visible" }}
-            >
-              {ORDER.pairs.map(([from, to], index) => (
-                <line
-                  key={from}
-                  x1={wordCentre(ORDER.en, from)}
-                  y1={6}
-                  x2={
-                    wordCentre(ORDER.en, from) +
-                    (wordCentre(ORDER.de, to) - wordCentre(ORDER.en, from)) *
-                      ramp(links, index * 0.12, index * 0.12 + 0.6)
-                  }
-                  y2={6 + 66 * ramp(links, index * 0.12, index * 0.12 + 0.6)}
-                  stroke={from === "tomorrow." ? C.bronze : C.slate}
-                  strokeWidth={from === "tomorrow." ? 3 : 1.5}
-                  opacity={links > 0 ? 1 : 0}
-                />
-              ))}
-            </svg>
-          </div>
+          <div style={{ height: 28 }} />
           <Row tag="DE" lit={two}>
-            {ORDER.de}
+            <Reorder frame={frame} start={CUE.order + 10} />
           </Row>
         </Card>
 
