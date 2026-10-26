@@ -87,9 +87,10 @@ mean these reports describe observed visits rather than all server requests.
 
 ## Video definitions and reports
 
-Video events include `video_id`, `video_version`, and `placement`. The initial
-film is `df747a2a-efb7-414e-8e67-da6a3be9654f`, version `v6`, placement
-`homepage-film`. Update version metadata when replacing the film.
+Video events include `video_id`, `video_version`, and `placement`. The current
+film is `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee`, version `v7`, placement
+`homepage-film`; v6 was `df747a2a-efb7-414e-8e67-da6a3be9654f`. Update version
+metadata when replacing the film.
 
 - `video_start`: the timeline actually advances while playing. Opening the
   dialog or a play event without advancing playback doesn't count.

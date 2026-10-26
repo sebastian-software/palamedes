@@ -1,15 +1,15 @@
 /*
- * The homepage film: PalamedesFilm from video/, 2:40, streamed from Bunny
+ * The homepage film: PalamedesFilm from video/, 3:06, streamed from Bunny
  * Stream (library 783695) with adaptive playback and selectable English
  * captions. The player loads only when someone asks for the film.
  */
-const PLAYER = "https://player.mediadelivery.net/embed/783695/df747a2a-efb7-414e-8e67-da6a3be9654f";
+const PLAYER = "https://player.mediadelivery.net/embed/783695/b37ad483-9fee-4c09-a0ca-1c7fadc4aaee";
 
 export const FILM = {
-  id: "df747a2a-efb7-414e-8e67-da6a3be9654f",
-  version: "v6",
+  id: "b37ad483-9fee-4c09-a0ca-1c7fadc4aaee",
+  version: "v7",
   title: "Palamedes product film",
-  duration: "2:40",
+  duration: "3:06",
   /** Opens the hosted player page; used as the link when JavaScript is off. */
   page: `${PLAYER}?autoplay=false`,
   /** A still from the film, shown until someone presses play. */
@@ -34,9 +34,9 @@ export const FILM_TRANSCRIPT: readonly string[] = [
   "Then your build does the clever part: every sentence becomes a short ID, and every translation becomes ready-to-run code.",
   "The catalog is split into one piece per screen, so each screen loads only its own words, in your visitor's language.",
   "And it doesn't stop there. Plurals, numbers and dates, server rendering and server actions, a linter for your messages and an audit that catches every missing translation: it's one complete toolchain, from the first sentence to the last translation.",
-  "The wiring is already built: for React and Solid, for Next.js, TanStack, Waku and Remix, and for Vite. Every one of them is tested as a real app.",
-  "And it's seriously fast. Its Rust core works through fifteen hundred files in just seventy-three milliseconds.",
+  "The wiring is already built: for React, Solid, Vue and Svelte. And not just on their own: inside Next.js, Nuxt, SvelteKit, TanStack, React Router, Waku and Remix, too. And beyond the browser, for backends, command-line tools, MDX docs and Rust. Each one comes with a working example.",
+  "And it's seriously fast, in every one of them. Its Rust core works through fifteen hundred files in about a tenth of a second. The next-fastest tool needs over two seconds.",
   "Working with a coding agent? Add the Palamedes skill and simply ask it to set up translations for you.",
-  "Clear, complete, and fast. For once, you get to pick all three.",
-  "Palamedes is open source. Get started today at palamedes.dev.",
+  "The fastest i18n toolchain. Complete from code to screen, and proven in eighteen integrations.",
+  "Palamedes 2.0 is open source. Get started today at palamedes.dev.",
 ];
