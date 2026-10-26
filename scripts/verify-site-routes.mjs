@@ -401,37 +401,76 @@ async function checkRoutes(context, label, { expectHydration }) {
     // Homepage completion blocks: real routing destinations, a reproducible
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
-    const applicationPaths = integrationSection.getByRole("list", { name: "Application paths" });
-    const applicationEntries = applicationPaths.locator(":scope > li");
-    const applicationNames = await applicationEntries
-      .getByRole("heading", { level: 3 })
-      .allTextContents();
-    if (applicationNames.join("|") !== "Frontend|Backend|CLI|MDX|Rust") {
-      fail(
-        `home application paths: expected five peer entries, got ${applicationNames.join(", ")}`,
-      );
+    const integrationGroups = integrationSection.getByRole("list", {
+      name: "Integration groups",
+      exact: true,
+    });
+    const groupEntries = integrationGroups.locator(":scope > li");
+    const groupNames = await groupEntries.getByRole("heading", { level: 3 }).allTextContents();
+    const expectedGroups = {
+      Frameworks: 7,
+      "UI Libraries": 4,
+      "Build Tools": 2,
+      Backends: 2,
+      CLI: 1,
+      MDX: 1,
+      Rust: 1,
+    };
+    if (groupNames.join("|") !== Object.keys(expectedGroups).join("|")) {
+      fail(`home integration groups: expected seven peer groups, got ${groupNames.join(", ")}`);
     }
-    const guideTargets = [
-      "/frameworks",
-      "/docs/backend-servers",
-      "/docs/backend-servers#one-setup-for-every-build",
-      "/docs/mdx",
-      "/docs/rust-applications",
-    ];
-    for (const [index, href] of guideTargets.entries()) {
-      const entry = applicationEntries.nth(index);
+    for (const [name, expectedCount] of Object.entries(expectedGroups)) {
+      const group = integrationSection.getByRole("list", { name, exact: true });
       if (
-        (await entry.getByRole("link").count()) !== 2 ||
-        (await entry.locator(`a[href="${href}"]`).count()) !== 1
+        !(await group.isVisible()) ||
+        (await group.getByRole("listitem").count()) !== expectedCount
       ) {
-        fail(
-          `home application paths: ${applicationNames[index]} needs a guide and working example`,
-        );
+        fail(`home integration groups: ${name} needs ${expectedCount} visible entries`);
       }
     }
-    const mdxDemo = applicationPaths.getByRole("link", { name: "MDX live demo" });
+    if ((await integrationSection.locator("details").count()) !== 0) {
+      fail("home integration groups: the complete stripe must be visible without disclosures");
+    }
+    const frameworks = integrationSection.getByRole("list", { name: "Frameworks", exact: true });
+    for (const [name, href] of [
+      ["Next.js", "/frameworks/nextjs"],
+      ["Nuxt", "/frameworks/nuxt"],
+      ["SvelteKit", "/frameworks/sveltekit"],
+      ["TanStack Start", "/frameworks/tanstack-start"],
+      ["React Router", "/frameworks/react-router"],
+      ["Waku", "/frameworks/waku"],
+      ["Remix", "/frameworks/remix-v3"],
+    ]) {
+      const link = frameworks.getByRole("link", { name, exact: true });
+      if (!(await link.isVisible()) || (await link.getAttribute("href")) !== href) {
+        fail(`home framework support: ${name} needs a visible link to its own guide`);
+      }
+    }
+    const libraries = integrationSection.getByRole("list", { name: "UI Libraries", exact: true });
+    if (
+      (await libraries.getByRole("link", { name: "Svelte", exact: true }).getAttribute("href")) !==
+      "/frameworks/svelte"
+    ) {
+      fail(
+        "home integration groups: Svelte must keep its UI-library guide separate from SvelteKit",
+      );
+    }
+    for (const [selector, href] of [
+      ["#cli-applications", "/docs/backend-servers#one-setup-for-every-build"],
+      ["#mdx-applications", "/docs/mdx"],
+      ["#rust-applications", "/docs/rust-applications"],
+    ]) {
+      const group = integrationSection.locator(selector);
+      if (
+        (await group.getByRole("link").count()) !== 2 ||
+        (await group.locator(`a[href="${href}"]`).count()) !== 1
+      ) {
+        fail(`home integration groups: ${selector} needs a guide and working example`);
+      }
+    }
+    const mdxDemo = integrationSection.getByRole("link", { name: "MDX live demo", exact: true });
     if ((await mdxDemo.getAttribute("href")) !== "https://vite-mdx.examples.palamedes.dev") {
-      fail("home application paths: MDX must link to its live handbook demo");
+      fail("home integration groups: MDX must link to its live handbook demo");
     }
     const heroStart = page
       .locator(".pmds-hero")
@@ -441,64 +480,27 @@ async function checkRoutes(context, label, { expectHydration }) {
       (await heroStart.getAttribute("href")) !== "#applications" ||
       (await integrationSection.getAttribute("id")) !== "applications"
     ) {
-      fail("home application paths: the hero must lead to the shared application overview");
+      fail("home integration groups: the hero must lead to the common stripe");
     }
-    const frameworkSupport = integrationSection.getByRole("region", {
-      name: "Framework integrations",
-      exact: true,
-    });
-    if (
-      !(await frameworkSupport.isVisible()) ||
-      (await frameworkSupport.locator("details").count()) !== 0
-    ) {
-      fail(
-        "home framework support: the complete integration block must be visible without a disclosure",
-      );
-    }
-    const frontendIntegrations = integrationSection.getByRole("list", {
-      name: "Frontend integrations",
-    });
-    if (
-      !(await frontendIntegrations.isVisible()) ||
-      (await frontendIntegrations.getByRole("listitem").count()) !== 11
-    ) {
-      fail("home framework support: all eleven frontend integrations must be visible");
-    }
-    for (const [name, href] of [
-      ["Next.js", "/frameworks/nextjs"],
-      ["Nuxt", "/frameworks/nuxt"],
-      ["SvelteKit", "/frameworks/sveltekit"],
-      ["TanStack Start", "/frameworks/tanstack-start"],
-      ["React Router", "/frameworks/react-router"],
-      ["Waku", "/frameworks/waku"],
-      ["Remix", "/frameworks/remix-v3"],
-      ["Svelte", "/frameworks/svelte"],
-    ]) {
-      const link = frontendIntegrations.getByRole("link", { name, exact: true });
-      if (!(await link.isVisible()) || (await link.getAttribute("href")) !== href) {
-        fail(`home framework support: ${name} needs a visible link to its own guide`);
-      }
-    }
-    await frontendIntegrations.getByRole("link", { name: "Next.js", exact: true }).focus();
+    await frameworks.getByRole("link", { name: "Next.js", exact: true }).focus();
     await page.keyboard.press("Tab");
     if (
-      !(await frontendIntegrations
+      !(await frameworks
         .getByRole("link", { name: "Nuxt", exact: true })
         .evaluate((link) => link === document.activeElement))
     ) {
       fail("home framework support: keyboard navigation must follow the visible integration order");
     }
-    const integrationLogos = integrationSection.locator("li img");
-    for (const logo of await integrationLogos.all()) {
+    for (const logo of await integrationSection.locator("li img").all()) {
       await logo.scrollIntoViewIfNeeded();
       await logo.evaluate((image) => image.decode());
     }
-    const mdxLogo = applicationPaths.locator('img[src="/framework-logos/mdx.svg"]');
+    const mdxLogo = integrationSection.locator('img[src="/framework-logos/mdx.svg"]');
     if (
       (await mdxLogo.count()) !== 1 ||
       !(await mdxLogo.evaluate((image) => image.naturalWidth > 0))
     ) {
-      fail("home application paths: the original MDX mark must load beside its visible name");
+      fail("home integration groups: the original MDX mark must load beside its visible name");
     }
     const decisionPaths = page.getByRole("list", { name: "Decision paths" });
     const questionRoutes = await decisionPaths.locator(":scope > li").count();
@@ -853,28 +855,19 @@ async function checkRoutes(context, label, { expectHydration }) {
     const integrationBand = await page
       .getByRole("region", { name: "First-party integrations" })
       .isVisible();
-    const applicationNames = await page
-      .getByRole("list", { name: "Application paths" })
+    const groupNames = await page
+      .getByRole("list", { name: "Integration groups", exact: true })
       .getByRole("heading", { level: 3 })
       .allTextContents();
-    if (applicationNames.join("|") !== "Frontend|Backend|CLI|MDX|Rust") {
-      fail("no-JS: all five application paths must be present in prerendered HTML");
+    if (groupNames.join("|") !== "Frameworks|UI Libraries|Build Tools|Backends|CLI|MDX|Rust") {
+      fail("no-JS: all seven integration groups must be present in prerendered HTML");
     }
-    const frameworkSupport = page.getByRole("region", {
-      name: "Framework integrations",
-      exact: true,
-    });
-    const frontendIntegrations = frameworkSupport.getByRole("list", {
-      name: "Frontend integrations",
-    });
+    const frameworks = page.getByRole("list", { name: "Frameworks", exact: true });
     if (
-      !(await frontendIntegrations.isVisible()) ||
-      !(await frontendIntegrations
-        .getByRole("link", { name: "Next.js", exact: true })
-        .isVisible()) ||
-      (await frameworkSupport.locator("details").count()) !== 0
+      !(await frameworks.getByRole("link", { name: "Next.js", exact: true }).isVisible()) ||
+      (await page.locator("#applications details").count()) !== 0
     ) {
-      fail("no-JS: framework support and Next.js must be visible without opening a disclosure");
+      fail("no-JS: the technology stripe and framework names must be visible without disclosures");
     }
     const questionRouting = await page.getByText("Starting a new project?").isVisible();
     const faq = await page.getByText("Is Palamedes ready for production use?").isVisible();
@@ -1191,7 +1184,7 @@ async function checkHomepageSetupViewport(browser, width) {
   } else {
     const metrics = await page.evaluate(() => {
       const setup = document.querySelector('.pmds-hero a[href="#applications"]');
-      const guides = [...document.querySelectorAll('[aria-label="Application paths"] > li')].map(
+      const guides = [...document.querySelectorAll('[aria-label="Integration groups"] > li')].map(
         (entry) => entry.querySelector("a"),
       );
 
@@ -1205,18 +1198,18 @@ async function checkHomepageSetupViewport(browser, width) {
       };
     });
     if (metrics.setupBottom === null || metrics.setupBottom > metrics.viewportHeight) {
-      fail(`home ${width}px: the primary application action is outside the first viewport`);
+      fail(`home ${width}px: the primary integration action is outside the first viewport`);
     }
     if (
-      metrics.guideBottoms.length !== 5 ||
+      metrics.guideBottoms.length !== 7 ||
       metrics.guideBottoms.some((bottom) => bottom === null || bottom >= metrics.pageHeight * 0.2)
     ) {
       fail(
-        `home ${width}px: all five application guides must be within the first fifth of the page`,
+        `home ${width}px: all seven integration groups must be within the first fifth of the page`,
       );
     }
     console.log(
-      `  homepage ${width}px: application action visible at ${metrics.setupBottom}px; all guides by ${Math.max(...metrics.guideBottoms)}px`,
+      `  homepage ${width}px: integration action visible at ${metrics.setupBottom}px; all guides by ${Math.max(...metrics.guideBottoms)}px`,
     );
   }
   await context.close();

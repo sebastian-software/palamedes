@@ -82,14 +82,15 @@ the reader may be starting greenfield or from any established i18n stack:
 
 ## Public Content And Evidence
 
-The homepage gives frontend, backend, CLI, MDX, and Rust equal application
-entry points. Each has a short benefit, a setup guide, and a working example.
-CLI here means applications being localized; the `pmds` CLI is the shared
-toolchain beneath all five paths. Show the full frontend framework and UI-library
-inventory in a separate, always-visible integration block, with app frameworks
-first and build tools alongside. Equal discovery prominence does not imply identical capabilities
-or maturity. The hero and closing action lead to these application paths;
-focused guides own setup, version requirements, and support boundaries.
+The homepage uses one technology stripe with seven separate, always-visible
+integration groups: Frameworks, UI Libraries, Build Tools, Backends, CLI, MDX,
+and Rust. Each group uses the same heading and identity treatment; all supported
+framework names and marks remain visible. CLI here means applications being
+localized; the `pmds` CLI is the shared toolchain beneath these integrations.
+MDX, CLI, and Rust have direct guides and runnable examples or demos. Equal
+discovery prominence does not imply identical capabilities or maturity. The hero
+and closing action lead to this common stripe; focused guides own setup,
+version requirements, and support boundaries.
 
 The homepage is a guided tour for someone choosing an i18n library who may
 never have used i18n tooling. Every section opens with a line that earns
