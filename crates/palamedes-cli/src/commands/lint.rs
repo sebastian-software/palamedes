@@ -118,7 +118,7 @@ impl Command for LintOptions {
                 }
             })
             .map(|path| SourceFileAnalysisRequest {
-                path: path.to_string_lossy().into_owned(),
+                path: source_path_string(path),
                 filename: display_source_path(path, &config.root_dir),
             })
             .collect::<Vec<_>>();
@@ -152,7 +152,7 @@ impl Command for LintOptions {
 
         let cache_keys = files
             .iter()
-            .map(|path| path.to_string_lossy().into_owned())
+            .map(|path| source_path_string(path))
             .collect::<Vec<_>>();
         // A targeted run must preserve cached analysis for the rest of the project.
         if self.files.is_empty() {
@@ -263,10 +263,18 @@ fn is_supported_source_file(path: &Path) -> bool {
 }
 
 fn display_source_path(path: &Path, root_dir: &Path) -> String {
-    path.strip_prefix(root_dir)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .into_owned()
+    source_path_string(path.strip_prefix(root_dir).unwrap_or(path))
+}
+
+fn source_path_string(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    // Ferralk discovery uses forward slashes on Windows. Explicit paths must
+    // use the same spelling for cache keys and machine-readable diagnostics.
+    if cfg!(windows) {
+        path.replace('\\', "/")
+    } else {
+        path.into_owned()
+    }
 }
 
 fn severity_name(severity: SourceDiagnosticSeverity) -> &'static str {
