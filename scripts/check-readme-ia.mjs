@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, normalize, relative, resolve } from "node:path";
+import { dirname, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { javascriptWorkspacePackages } from "./release-packages.mjs";
@@ -222,7 +222,8 @@ function checkPackageBadges(markdown) {
     if (reserved.has(name)) continue;
     const packageUrl = `https://www.npmjs.com/package/${name}`;
     const encodedName = encodeURIComponent(name);
-    const row = lines.find((line) => line.startsWith(`| [\`${name}\`](${directory}/README.md) |`));
+    const readmePath = `${directory.split(sep).join("/")}/README.md`;
+    const row = lines.find((line) => line.startsWith(`| [\`${name}\`](${readmePath}) |`));
     if (!row) fail(`missing package README link: ${name}`);
     for (const metric of ["v", "dm"]) {
       if (!row.includes(`](https://img.shields.io/npm/${metric}/${encodedName})](${packageUrl})`)) {
