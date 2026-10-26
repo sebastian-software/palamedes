@@ -2,6 +2,12 @@
 
 pub(crate) mod cache;
 pub(crate) mod sources;
+impl ExtractOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod test_support;
 mod watch;

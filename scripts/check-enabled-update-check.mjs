@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const endpoint = "https://version-service.sebastian-software.de/check";
+const endpoint = "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable";
 
 export function assertNetworkIsolation({
   parentNamespace,
@@ -51,9 +51,13 @@ function assertNoCache(roots) {
   }
 }
 
-export function assertEnabledCacheContents(timestamp, cohort) {
-  assert.match(timestamp, /^\d+\n$/u);
-  assert.match(cohort, /^\d{4}-\d{2}\n$/u);
+export function assertEnabledCacheContents(text) {
+  const state = JSON.parse(text);
+  assert.equal(state.schema_version, 1);
+  assert.equal(state.resource, endpoint);
+  assert.ok(Number.isSafeInteger(state.next_check) && state.next_check > 0);
+  assert.ok(Number.isInteger(state.failures) && state.failures >= 1 && state.failures <= 5);
+  assert.equal(state.release, null);
 }
 
 export function enabledBuildArtifacts(stdout) {
@@ -91,27 +95,40 @@ function checkProcess(binary, catalogDirectory, version, optOut, dropOptOut) {
       PALAMEDES_UI_CATALOG_DIR: catalogDirectory,
     };
     if (!dropOptOut) env[optOut] = optOut === "DO_NOT_TRACK" ? "1" : "0";
-    const result = spawnSync(binary, ["version"], {
+    const versionResult = spawnSync(binary, ["version"], {
+      cwd: fixture,
+      env,
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.ifError(versionResult.error);
+    assert.equal(versionResult.status, 0);
+    assert.equal(
+      versionResult.stdout,
+      `pmds (Palamedes) v${version}\nFast i18n tooling for modern apps\n`,
+    );
+    assert.equal(versionResult.stderr, "");
+    assertNoCache(roots);
+    const result = spawnSync(binary, ["report"], {
       cwd: fixture,
       env,
       encoding: "utf8",
       timeout: 10_000,
     });
     assert.ifError(result.error);
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 1);
     assert.equal(result.signal, null);
-    assert.equal(
-      result.stdout,
-      `pmds (Palamedes) v${version}\nFast i18n tooling for modern apps\n`,
-    );
-    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /Could not find a Palamedes config/u);
     if (dropOptOut) {
       // This real due-check side effect proves the binary is enabled. It also
       // demonstrates that the same oracle rejects an ignored/missing opt-out.
       assert.throws(() => assertNoCache(roots), /unexpected cache write/u);
       assertEnabledCacheContents(
-        readFileSync(join(roots[1], "palamedes", "update-check-v1"), "utf8"),
-        readFileSync(join(roots[1], "palamedes", "installed-since-v1"), "utf8"),
+        readFileSync(
+          join(roots[1], "palamedes", "app-tracking-updates", "palamedes.github.stable.json"),
+          "utf8",
+        ),
       );
     } else {
       assertNoCache(roots);

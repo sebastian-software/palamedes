@@ -9,7 +9,8 @@ use std::process::{Command, Output};
 
 use update_endpoint::{UPDATE_ENDPOINT_ENV, validate};
 
-const VALID_ENDPOINT: &str = "https://version-service.sebastian-software.de/check";
+const VALID_ENDPOINT: &str =
+    "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable";
 
 #[test]
 fn build_contract_accepts_only_the_owned_https_route() {
@@ -17,19 +18,19 @@ fn build_contract_accepts_only_the_owned_https_route() {
 
     for endpoint in [
         "",
-        "http://version-service.sebastian-software.de/check",
+        "http://sebastian-app-tracking.b-cdn.net/check",
         "https://",
-        "https://version-service.sebastian-software.de",
-        "https://version-service.sebastian-software.de/",
-        "https://version-service.sebastian-software.de/other",
-        "https://user@version-service.sebastian-software.de/check",
-        "https://version-service.sebastian-software.de:443/check",
-        "https://version-service.sebastian-software.de/check?channel=stable",
-        "https://version-service.sebastian-software.de/check#latest",
+        "https://sebastian-app-tracking.b-cdn.net",
+        "https://sebastian-app-tracking.b-cdn.net/",
+        "https://sebastian-app-tracking.b-cdn.net/other",
+        "https://user@sebastian-app-tracking.b-cdn.net/check",
+        "https://sebastian-app-tracking.b-cdn.net:443/check",
+        "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable?channel=stable",
+        "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable#latest",
         "https://updates.example/check",
         "https://version.palamedes.dev/check",
         "https://version.sebastian-software.dev/check",
-        " https://version-service.sebastian-software.de/check",
+        " https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable",
     ] {
         assert!(validate(endpoint).is_err(), "accepted {endpoint:?}");
     }

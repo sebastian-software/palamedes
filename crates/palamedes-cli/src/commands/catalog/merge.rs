@@ -311,6 +311,12 @@ fn git_path_exists(name: &str) -> bool {
     Path::new(path.trim()).exists()
 }
 
+impl MergeOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{GitMergeOperation, MergeConflictStrategy, MergeDriverOptions};

@@ -440,3 +440,42 @@ msgstr "{count, plural, one {Se compiló # módulo de catálogo JavaScript.} oth
 
 msgid "Could not compile JavaScript catalog modules: {source}"
 msgstr "No se pudieron compilar los módulos de catálogo JavaScript: {source}"
+
+msgid "Disable network access for update checks and usage reporting."
+msgstr "Desactivar el acceso a la red para buscar actualizaciones y enviar informes de uso."
+
+msgid "Manage optional usage reporting."
+msgstr "Gestionar los informes de uso opcionales."
+
+msgid "Read the usage reporting notice and optionally enable it."
+msgstr "Leer el aviso sobre informes de uso y activarlos opcionalmente."
+
+msgid "Inspect the effective usage reporting policy without sending data."
+msgstr "Consultar la política efectiva sin enviar datos."
+
+msgid "Preview queued reports without sending data."
+msgstr "Previsualizar los informes pendientes sin enviar datos."
+
+msgid "Stop usage reporting and discard unsent reports."
+msgstr "Detener los informes de uso y descartar los no enviados."
+
+msgid "Decline usage reporting."
+msgstr "Rechazar los informes de uso."
+
+msgid "Request deletion of retained usage reports."
+msgstr "Solicitar la eliminación de los informes de uso almacenados."
+
+msgid "Try sending one pending operation."
+msgstr "Intentar enviar una operación pendiente."
+
+msgid "Delete the previous identity before a separate new consent decision."
+msgstr "Eliminar la identidad anterior antes de dar un nuevo consentimiento."
+
+msgid "Forget local authority without confirming remote deletion."
+msgstr "Olvidar las credenciales locales sin confirmar la eliminación remota."
+
+msgid "Usage reporting operation failed: {message}"
+msgstr "Error en la operación de informes de uso: {message}"
+
+msgid "pmds: Palamedes {latest} is available (installed {installed}). Update with your original package manager; for npm, run: npm install @palamedes/cli@latest"
+msgstr "pmds: Palamedes {latest} está disponible (instalado: {installed}). Actualiza con tu gestor de paquetes original; para npm: npm install @palamedes/cli@latest"

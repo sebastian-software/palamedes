@@ -3,8 +3,8 @@ use std::env;
 pub const UPDATE_ENDPOINT_ENV: &str = "PALAMEDES_UPDATE_ENDPOINT";
 pub const VALIDATED_UPDATE_ENDPOINT_ENV: &str = "PALAMEDES_VALIDATED_UPDATE_ENDPOINT";
 pub const UPDATE_ENDPOINT_CFG: &str = "palamedes_update_endpoint";
-pub const ALLOWED_UPDATE_HOST: &str = "version-service.sebastian-software.de";
-pub const ALLOWED_UPDATE_PATH: &str = "check";
+pub const ALLOWED_UPDATE_HOST: &str = "sebastian-app-tracking.b-cdn.net";
+pub const ALLOWED_UPDATE_PATH: &str = "v1/versions/palamedes/github/stable";
 
 pub fn configure() {
     println!("cargo:rerun-if-env-changed={UPDATE_ENDPOINT_ENV}");
@@ -40,15 +40,13 @@ pub fn validate(endpoint: &str) -> Result<(), &'static str> {
         return Err("a non-empty path is required");
     };
     if authority != ALLOWED_UPDATE_HOST {
-        return Err(
-            "the host must be version-service.sebastian-software.de without userinfo or a port",
-        );
+        return Err("the host must be sebastian-app-tracking.b-cdn.net without userinfo or a port");
     }
     if path.is_empty() {
         return Err("a non-empty path is required");
     }
     if path != ALLOWED_UPDATE_PATH {
-        return Err("the path must be /check");
+        return Err("the path must be /v1/versions/palamedes/github/stable");
     }
 
     Ok(())

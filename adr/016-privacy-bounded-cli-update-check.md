@@ -1,171 +1,80 @@
-# ADR-016: Privacy-Bounded CLI Update Checks
+# ADR-016: Independent Update Checks and Opt-In CLI Usage Reporting
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-26
 
-Advisory update checks use an owned endpoint, bounded work, explicit opt-outs, and no installation identifier.
+Palamedes v2 uses the shared Rust `app-tracking` client and service. Version
+checks remain independent of optional usage reporting. The native `pmds`
+entry point owns both calls; the npm launcher, Node/Rust APIs, framework
+plugins, and application runtimes do not report automatically.
 
 ## Decision
 
-The native `pmds` binary owns one advisory update-check mechanism:
-
-1. It starts only after Clap has accepted a regular subcommand. There is no
-   daemon, service, postinstall hook, or separate scheduled process.
-2. Release builds enable the mechanism only when
-   `PALAMEDES_UPDATE_ENDPOINT` is exactly the owned HTTPS route
-   `https://version-service.sebastian-software.de/check`. Missing values keep it
-   disabled; malformed, alternate-origin, credentialed, port-qualified, query,
-   or fragment values fail the build. The release workflow sets that variable for all six CLI artifacts, including
-   the two host-built musl targets. Ordinary builds and general validation
-   remain default-off. Packaging smoke checks set `PALAMEDES_UPDATE_CHECK=0`,
-   explicitly inside the musl container too; this runtime opt-out is not a
-   packaged default and does not remove the compiled endpoint.
-3. `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0` disable the mechanism before
-   cache or network access.
-4. A platform cache records an attempted check before network I/O. Linux uses
-   `$XDG_CACHE_HOME` with `$HOME/.cache` fallback, macOS uses
-   `$HOME/Library/Caches`, and Windows uses `%LOCALAPPDATA%`. A per-cache
-   operating-system file lock prevents concurrent processes from producing
-   more than one request in the same 24-hour window. A timestamp up to one
-   interval in the future is tolerated as clock skew; a value farther ahead is
-   treated as corrupt and replaced by the next claim. Missing, corrupt, or
-   unwritable cache state never fails the command; if the rate limit cannot be
-   recorded, the request is skipped.
-5. The HTTPS POST body contains exactly the project identifier (`palamedes`),
-   the CLI version, Rust target OS, Rust target architecture, a CI boolean,
-   and a year-month install cohort. It contains no installation ID, telemetry
-   ID, command, arguments, current directory, project path, config, hostname,
-   username, or other application identifier.
-6. The install cohort is deliberately never finer than a month. Combined with
-   the other payload dimensions, a day- or week-precision value could form
-   singleton combinations whose daily requests become linkable across days — a
-   de-facto identifier. The value is derived once, persisted beside the cache
-   as `installed-since-v1`, validated on read, and recomputed when missing,
-   malformed, or in the future. A deleted cache restarts the cohort. Coarse
-   dimensions reduce specificity; they do not guarantee anonymity or prevent
-   every linkable combination.
-7. Redirects are disabled and the entire request/response operation has a
-   two-second deadline. The response body is limited to 4 KiB. The check runs
-   beside the command; joining it can add only the remainder of that deadline
-   to a due fast command. Offline, invalid, oversized, failed, or panicked
-   checks are silent and cannot affect the command's exit code.
-8. A strictly newer semantic version produces one short notice on stderr after
-   command output. Stdout, including JSON output, remains unchanged.
-
-The server half is a shared, multi-project endpoint owned by the public
-[version-service](https://github.com/sebastian-software/version-service)
-repository: a Bunny Edge Scripting script that validates the documented JSON
-fields against a per-project allowlist, answers with the latest released
-version read from the project's distribution registry (cached for 10 minutes
-server-side; publishing a release is the synchronization), and forwards only
-the documented aggregate dimensions to the self-hosted Rybbit analytics
-instance with neutralized IP and user-agent values. Application code does not
-access or persist client IP addresses, forwarded headers, user agents, or
-other identifying headers. It reads the request URL path, `Content-Type`, and
-`Content-Length` only for route, media-type, and body-size validation; none of
-that protocol metadata reaches the analytics sink or application logs. The
-edge platform still necessarily processes network metadata as infrastructure;
-the application contract is that we do not persist or query it. The sink is
-swappable behind the stable wire contract without rebuilding any client.
-
-The service accepts exactly the six request fields, bounded to 1024 bytes, and
-returns `{"latestVersion":"<SemVer>"}` on success. Invalid payloads return 400,
-unsupported methods 405, and configuration, registry, or analytics failures
-503; the client treats these as silent, nonfatal outcomes. Rybbit acceptance
-requires HTTP 200 and an exact bounded `{"success":true}` acknowledgement.
-That acknowledgement does not prove later event visibility, and a client
-timeout can follow ingestion.
-
-Service operators own raw request logging, retention, abuse controls, and
-production observation. Client success alone does not establish ingestion,
-privacy alignment, or the active deployed revision. Verify those properties
-through the service runbook with sanitized evidence; do not reset the client
-cache to manufacture repeated observations.
-
-For immediate user-side disable, set `DO_NOT_TRACK=1` or
-`PALAMEDES_UPDATE_CHECK=0`. Maintainers can remove endpoint embedding from
-future builds and publish a new patch release; existing binaries stay enabled
-until users opt out or install a disabled build. Service-side containment
-belongs to version-service operators. Disarming `BUNNY_DEPLOY_ENABLED` only
-prevents future deployments, not requests to an already deployed service.
+- Release builds validate and embed the owned app-tracking version route.
+  Ordinary source builds without that configuration make no network calls.
+  Updates use the existing oss-metrics release snapshot through the service,
+  accept only eligible GitHub releases at least one hour old, and do not send
+  an installed version, installation ID, project hash, or usage payload.
+- Usage reporting is off until an explicit decision after disclosure.
+  `pmds telemetry enable` displays the notice without granting consent;
+  `--accept telemetry-v1` records the affirmative decision. Existing
+  version-service reporting is never imported as consent.
+- Count one successfully parsed native command entering execution, regardless
+  of its eventual exit status. Use a reviewed fixed command catalog; catalog
+  operations have distinct categories. Help/version, telemetry controls,
+  automatic Git merge-driver execution, and watch rebuilds are excluded.
+  External plugins use a single `plugin` category without their names.
+- Reports contain UTC day, tool/version, category, count, a tool/profile-scoped
+  installation ID, consent metadata, local/CI scope, and an optional SHA-256
+  project identifier from the normalized repository URL. Equivalent clones
+  share the project hash across tools. Hashes are guessable and pseudonymous,
+  not an anonymity guarantee. Arguments, content, paths, raw repository URLs,
+  plugin names, and user/machine names are excluded.
+- The shared client owns private state, bounded durable batches, retries,
+  concurrent-process coordination, withdrawal, deletion, and expiry. `status`
+  and `preview` send nothing. Disabling clears unsent reports; deletion stays
+  visibly pending until the service acknowledges it. Lost credentials cannot
+  authenticate remote deletion.
+- `DO_NOT_TRACK=1` vetoes telemetry and preserves Palamedes' existing update
+  opt-out. `PALAMEDES_UPDATE_CHECK=0` controls only updates;
+  `PALAMEDES_TELEMETRY=off` controls collection/upload. Offline settings prevent
+  networking, including deletion, but explicitly consented local counts can
+  accumulate within the client's limits. CI needs separate informed opt-in
+  and a private state directory unique to the job/run.
+- Ordinary failures remain silent and advisory. Each due client request has
+  a 200 ms network deadline; state, discovery, serialization, and scheduling
+  add overhead. Updates and telemetry can each become due. No daemon,
+  detached uploader, or postinstall reporting is introduced. Existing command
+  stdout/JSON and exit codes remain authoritative.
 
 ## Context
 
-The native CLI provides an advisory notice when a newer release exists. A
-small update request can answer that question and provide aggregate evidence
-about versions and platforms that make update checks. It is also a
-trust-sensitive network side effect: an automatic request can reveal more than
-its JSON body through application logging, stable identifiers, repeated
-attempts, or accidental command and filesystem context.
-
-The [CLI guide](../docs/cli.md#advisory-update-checks) and the
-[version-service repository](https://github.com/sebastian-software/version-service)
-own release readiness, deployment evidence, and the service runbook. This
-record defines the enduring client and privacy contract, not rollout status.
-
-The no-identifier boundary has one important measurement consequence. A
-24-hour client cache rate-limits requests from one installation, but the server
-cannot recognize that installation again on a later day. Weekly unique active
-installations are therefore not derivable. The honest measurements are
-rate-limited request volume, version, OS, architecture, and CI/local
-distributions, and — through a coarse year-month install cohort — requests
-from older cohorts, not counts of retained installations.
-
-## Alternatives Considered
-
-### Hard-code the proposed endpoint before deployment
-
-Rejected. A non-fatal failure is still an undisclosed, predictably broken
-network side effect and cannot prove the server privacy contract.
-
-### Let clients query npm or GitHub directly
-
-Rejected for the client. That would move the request to a third party, would
-not implement the self-controlled aggregation contract, and would make its
-data-retention policy part of CLI behavior. The shared service does read the
-distribution registry server-side as its version source — behind the owned
-endpoint, where the retention contract stays ours.
-
-### Add a stable anonymous installation identifier
-
-Rejected. It would make weekly unique counts possible but violates the chosen
-minimal-data contract and materially increases fingerprinting and disclosure
-risk. Identified telemetry, if ever wanted, is
-[#856](https://github.com/sebastian-software/palamedes/issues/856) as an
-explicit opt-in with its own decision.
-
-### Send a day-precision install date
-
-Rejected. Roughly 365 values per year multiplied with the version, OS, and
-architecture dimensions produce singleton cells; a singleton that pings daily
-can be linkable without any explicit identifier. Year-month buckets retain a
-coarser cohort signal without promising that every combination is nonunique.
-
-### Count IP addresses as installations
-
-Rejected. NAT, dynamic addressing, VPNs, and CI make the measure inaccurate,
-and retaining IP-derived identity contradicts the privacy requirement.
-
-### Detach the request and let the process exit
-
-Rejected. A detached thread has no delivery or notice guarantee once a short
-CLI process exits. The bounded join makes ownership explicit and caps the only
-possible delay at the documented two-second deadline.
+The v2 CLI needs to distinguish usage of its own tools while keeping updates
+available without usage consent. The earlier update-check protocol had no
+stable installation or repository identity and could not answer those questions.
+A separate opted-in reporting lifecycle supports those measurements without
+making an ordinary update check a consent decision.
 
 ## Consequences
 
-- Update notices and aggregate request evidence share one small, explicit
-  protocol without creating general CLI telemetry.
-- Opt-outs, stream separation, rate limiting, concurrency, time, transport,
-  cohort derivation, and semantic-version comparison have deterministic tests;
-  server validation is tested in the version-service repository.
-- An offline due check is not retried until the next 24-hour window. This favors
-  bounded impact over maximizing observations.
-- A release build with no endpoint has no cache or network side effect.
-- Request volume is a usage proxy, not a unique-installation count; the
-  year-month cohort adds a retention signal without an identifier.
-- The service and its deployment guide live outside this repository; changing
-  the endpoint host requires a coordinated build-allowlist update here.
-- Adding TLS/HTTP code to the shipped CLI must remain within the separate
-  `pmds` binary-size ceiling and be remeasured on the release profile.
+A shared client avoids separate implementations of consent, persistence, and
+update delivery in each CLI. Stable installation IDs and repository hashes
+support active installation/project and command-distribution statistics, but
+require explicit consent and withdrawal/deletion controls. Opt-in reports do
+not measure people, all installations, or total adoption; resets, lost state,
+late/dropped batches, shared profiles, and fabricated clients affect coverage.
+
+The previous version-service protocol combined update checks with coarse
+request analytics. Existing published binaries keep that protocol; migrated
+v2 invocations use only app-tracking. Retiring the old service is a separate
+decision. A shared token or self-reported binary hash cannot prove authentic
+usage; additional challenges remain deferred.
+
+Production telemetry activation belongs to app-tracking operations, including
+provider/privacy settings, request limits, retention, and a verified deployed
+revision. Consumer code and synthetic tests alone do not certify that service.
+The [CLI reference](../docs/cli.md#advisory-update-checks),
+[telemetry guide](../docs/telemetry.md), and
+[shared contract](https://github.com/sebastian-software/app-tracking/blob/main/docs/telemetry-api.md)
+own exact controls, wire values, and delivery evidence.

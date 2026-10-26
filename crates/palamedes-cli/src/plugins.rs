@@ -1855,7 +1855,14 @@ mod tests {
             reserved_plugin_namespaces(),
             BTreeSet::from_iter(
                 [
-                    "extract", "lint", "audit", "report", "catalog", "version", "help"
+                    "extract",
+                    "lint",
+                    "audit",
+                    "report",
+                    "catalog",
+                    "version",
+                    "telemetry",
+                    "help"
                 ]
                 .map(str::to_owned)
             )

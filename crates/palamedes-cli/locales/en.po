@@ -440,3 +440,42 @@ msgstr "{count, plural, one {Compiled # JavaScript catalog module.} other {Compi
 
 msgid "Could not compile JavaScript catalog modules: {source}"
 msgstr "Could not compile JavaScript catalog modules: {source}"
+
+msgid "Disable network access for update checks and usage reporting."
+msgstr "Disable network access for update checks and usage reporting."
+
+msgid "Manage optional usage reporting."
+msgstr "Manage optional usage reporting."
+
+msgid "Read the usage reporting notice and optionally enable it."
+msgstr "Read the usage reporting notice and optionally enable it."
+
+msgid "Inspect the effective usage reporting policy without sending data."
+msgstr "Inspect the effective usage reporting policy without sending data."
+
+msgid "Preview queued reports without sending data."
+msgstr "Preview queued reports without sending data."
+
+msgid "Stop usage reporting and discard unsent reports."
+msgstr "Stop usage reporting and discard unsent reports."
+
+msgid "Decline usage reporting."
+msgstr "Decline usage reporting."
+
+msgid "Request deletion of retained usage reports."
+msgstr "Request deletion of retained usage reports."
+
+msgid "Try sending one pending operation."
+msgstr "Try sending one pending operation."
+
+msgid "Delete the previous identity before a separate new consent decision."
+msgstr "Delete the previous identity before a separate new consent decision."
+
+msgid "Forget local authority without confirming remote deletion."
+msgstr "Forget local authority without confirming remote deletion."
+
+msgid "Usage reporting operation failed: {message}"
+msgstr "Usage reporting operation failed: {message}"
+
+msgid "pmds: Palamedes {latest} is available (installed {installed}). Update with your original package manager; for npm, run: npm install @palamedes/cli@latest"
+msgstr "pmds: Palamedes {latest} is available (installed {installed}). Update with your original package manager; for npm, run: npm install @palamedes/cli@latest"

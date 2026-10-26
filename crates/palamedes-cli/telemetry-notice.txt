@@ -1,0 +1,73 @@
+Optional usage reporting is operated by Sebastian Software GmbH
+([legal notice](https://oss.sebastian-software.com/imprint), privacy contact:
+info@sebastian-software.de). It helps us understand how often the tool runs,
+which command categories and versions are used, and how many reporting
+installations and repositories participate. It does not measure people or
+everyone who uses the tool.
+
+If you enable it, the tool counts invocations locally and normally uploads
+daily while you use it. Reports contain UTC day, tool/version, command category,
+count, a separate installation ID for this tool and profile, consent revision,
+and local/CI context. Registration includes when you gave consent. Installation
+and batch IDs also contain their creation time. We do not send command
+arguments, skill content/names, source code, repository URLs, local paths,
+usernames, machine names, session IDs, or an installed-version update request.
+
+When reliable project metadata exists, we send SHA-256 of the normalized
+repository URL. Different clones/developers of the same repository share the
+hash, including across our tools; forks remain different. This lets us count
+repositories. Someone who guesses a repository URL can calculate and match its
+hash. These reports are pseudonymous, not promised anonymous. Your installation
+ID is not shared across different tools. CI reporting is separately opt-in and
+is kept distinct from local usage.
+
+Reports use HTTPS to the app-tracking service at
+https://sebastian-app-tracking.b-cdn.net. Bunny hosts the API and processes
+network metadata such as IP addresses; PlanetScale stores reporting data.
+Their infrastructure and subprocessors may involve international processing.
+Current provider/processor information is available at https://bunny.net/gdpr/,
+https://bunny.net/gdpr/sub-processors/, and https://trust.planetscale.com/.
+Choosing an EU database does not establish EU-only processing.
+
+Usage is retained for at most 90 days in active reporting, with physical
+cleanup within another 24 hours. Receipts last 90 days from receipt. A minimal
+revoked-identity record lasts 90 days after revocation, without usage or
+repository hashes. Ordinary database backups have a seven-day maximum policy
+and are not queried for reporting; deleting active data does not edit a backup
+in place. Provider-managed restore is described in the retention policy at
+https://github.com/sebastian-software/app-tracking/blob/main/docs/telemetry-retention.md.
+Application logs never contain your reports or credentials. Separately processed provider security/transport records follow the service
+processor disclosure and its verified operational retention bounds.
+
+Reporting is off until you opt in. Declining does not limit the tool or its
+independently configurable update checks. You can inspect the effective
+setting and queued payload without sending it, disable reporting at any time,
+or request deletion using the locally held credential. Disabling stops new
+collection/upload and discards unsent usage. Deletion stops reporting and
+removes retained active contributions after acknowledgement. Offline deletion
+remains visibly pending; you can retry when online. If the credential is lost,
+we cannot authenticate automatic deletion or identify you from an account;
+contact the privacy address for assistance. We will not ask you to disclose
+repository URLs as proof. Resetting changes the installation count and does
+not merge old and new identities.
+
+Consent is optional and can be withdrawn as easily as it is given. You can
+contact us about access, erasure, restriction, correction, objection where
+applicable, and portability, or complain to a supervisory authority. Preview
+shows the locally held data; it is not a server-side access export. The common service notice explains the applicable rights and legal bases at
+https://github.com/sebastian-software/app-tracking/blob/main/docs/telemetry-consent.md.
+
+Palamedes controls (telemetry-v1)
+
+Run pmds telemetry enable --accept telemetry-v1 only if you agree to this notice.
+Running pmds telemetry enable without --accept only displays this notice.
+Inspect: pmds telemetry status; pmds telemetry preview.
+Stop: pmds telemetry disable. Delete: pmds telemetry delete.
+Offline deletion stays pending; retry online.
+Palamedes counts one native CLI invocation, including a failed command, in the
+fixed extract/lint/audit/report/catalogmerge/catalogconvert/catalogcompile/plugin/other
+categories. Plugin names, arguments, watch rebuilds, and automatic Git merge
+driver executions are excluded. Rust/Node APIs and build plugins do not report
+automatically. Prior version-service reporting is not consent to this service.
+The service notice and processor information are maintained at:
+https://github.com/sebastian-software/app-tracking/blob/main/docs/telemetry-consent.md

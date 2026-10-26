@@ -144,6 +144,12 @@ fn format_percent(value: f64) -> String {
     }
 }
 
+impl ReportOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

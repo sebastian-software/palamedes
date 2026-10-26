@@ -33,11 +33,13 @@ export const BUDGETS = [
       label: "@palamedes/cli-linux-x64-gnu@1.17.3",
       bytes: 8_022_504,
     },
-    // Ferralk 1.1 + Rust 1.96.1 measured 9,745,216 B on Linux x64 GNU at
-    // aad69656 (CI job 121310093980), up 84,864 B from the Rust 1.95 base.
-    // 9.9 MB restores ~150 KB of toolchain headroom (154,784 B measured)
-    // while retaining the guard against megabyte-class dependency growth.
-    maxBytes: 9_900_000,
+    // The shared opt-in telemetry client adds private durable state, consent,
+    // replay-safe batches, and deletion. Same Rust 1.96/macOS ARM64 release
+    // builds with their production endpoint enabled measured 9,997,168 B at
+    // 89a6a5f3 and 10,465,984 B with this integration (+468,816 B, 4.7%).
+    // Add 600 KB for that functionality plus bounded toolchain/linker headroom;
+    // Linux CI remains authoritative for its own target. Keep the addon cap.
+    maxBytes: 10_500_000,
   },
   {
     label: "core-node addon (release)",

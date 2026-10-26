@@ -129,14 +129,25 @@ describe("workflow contracts", () => {
     expect(() => enabledBuildArtifacts(json([]))).toThrow("pmds executable");
   });
 
-  it("validates the enabled control's newline-terminated Rust cache files", () => {
-    expect(() => assertEnabledCacheContents("1788773977\n", "2026-09\n")).not.toThrow();
-    for (const timestamp of ["1788773977", "1788773977\n\n", "1788773977\r\n", "invalid\n", ""]) {
-      expect(() => assertEnabledCacheContents(timestamp, "2026-09\n")).toThrow();
+  it("validates the shared client's failed-attempt cache without a legacy cohort", () => {
+    const valid = {
+      schema_version: 1,
+      resource: "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable",
+      next_check: 1_788_773_977,
+      failures: 1,
+      release: null,
+    };
+    expect(() => assertEnabledCacheContents(JSON.stringify(valid))).not.toThrow();
+    for (const change of [
+      { schema_version: 2 },
+      { resource: "https://example.invalid" },
+      { next_check: 0 },
+      { failures: 0 },
+      { release: {} },
+    ]) {
+      expect(() => assertEnabledCacheContents(JSON.stringify({ ...valid, ...change }))).toThrow();
     }
-    for (const cohort of ["2026-09", "2026-09\n\n", "2026-09\r\n", "2026-09-07\n", ""]) {
-      expect(() => assertEnabledCacheContents("1788773977\n", cohort)).toThrow();
-    }
+    expect(() => assertEnabledCacheContents("1788773977\n")).toThrow();
   });
 
   it("embeds the exact update endpoint only in all six native release build paths", async () => {
@@ -150,7 +161,7 @@ describe("workflow contracts", () => {
     const native = job(publish, "publish-native", "publish-js");
     const header = native.slice(0, native.indexOf("    steps:"));
     expect(header).toMatch(
-      /^ {4}env:\n(?: {6}.+\n)* {6}PALAMEDES_UPDATE_ENDPOINT: https:\/\/version-service\.sebastian-software\.de\/check$/mu,
+      /^ {4}env:\n(?: {6}.+\n)* {6}PALAMEDES_UPDATE_ENDPOINT: https:\/\/sebastian-app-tracking\.b-cdn\.net\/v1\/versions\/palamedes\/github\/stable$/mu,
     );
     expect(publish.match(/PALAMEDES_UPDATE_ENDPOINT/gu)).toHaveLength(1);
     expect(ci).not.toContain("PALAMEDES_UPDATE_ENDPOINT:");

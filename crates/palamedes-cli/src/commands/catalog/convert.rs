@@ -206,6 +206,12 @@ const fn target_catalog_format(to: ConvertFormat) -> PalamedesCatalogFormat {
     }
 }
 
+impl ConvertOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

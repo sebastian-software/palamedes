@@ -71,6 +71,10 @@ jobs:
       # Runs before the build so a package that npm cannot mint a trusted
       # publishing token for stops the release in seconds, rather than after
       # the native packages have already shipped.
+      - name: Verify deployed app-tracking routes before publication
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+        run: node ./scripts/check-app-tracking-ready.mjs
+
       - name: Check first-publish readiness
         run: node ./scripts/check-first-publish.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--warn-only' || '' }}
 
@@ -159,7 +163,7 @@ jobs:
       NPM_CONFIG_PROVENANCE: true
       PALAMEDES_ALLOW_CROSS_NATIVE: ${{ matrix.rust_target != '' && '1' || '0' }}
       PALAMEDES_RUST_PROFILE: release
-      PALAMEDES_UPDATE_ENDPOINT: https://version-service.sebastian-software.de/check
+      PALAMEDES_UPDATE_ENDPOINT: https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable
 
     steps:
       - name: Check out repository

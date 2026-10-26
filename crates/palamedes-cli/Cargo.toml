@@ -25,6 +25,7 @@ name = "pmds"
 path = "src/main.rs"
 
 [dependencies]
+app-tracking = "0.2.1"
 palamedes-build = { version = "1.25.1", path = "../palamedes-build" }
 palamedes-i18n = { version = "1.25.1", path = "../palamedes-i18n" }
 clap = { version = "4.6.6", features = ["derive"] }
@@ -36,11 +37,9 @@ palamedes = { version = "1.25.1", path = "../.." }
 palamedes-plugin = { version = "1.25.1", path = "../palamedes-plugin" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-semver = "1.0.28"
 sha2 = "0.11.0"
 tempfile = "3.27.0"
 thiserror = "2.0.20"
-ureq = { version = "3.4.0", default-features = false, features = ["json", "rustls"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"
