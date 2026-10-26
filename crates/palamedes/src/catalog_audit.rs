@@ -59,6 +59,9 @@ pub struct CatalogAuditCheckOptions {
     /// Report entries carrying a fuzzy review marker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fuzzy_flags: Option<bool>,
+    /// Optional, source-aware review warnings for target text. Disabled by default.
+    #[serde(default)]
+    pub target_text: crate::TargetTextCheckOptions,
 }
 
 /// Aggregate catalog audit result.
@@ -110,6 +113,9 @@ pub struct CatalogAuditDiagnostic {
     /// Argument, selector, tag, locale, or field name associated with the diagnostic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// UTF-8 byte range in the decoded target value, when a target-text check emitted it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<crate::TargetTextSpan>,
 }
 
 pub(crate) struct LoadedAuditCatalog {
@@ -189,8 +195,17 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
                         context: source_key.msgctxt,
                     }),
                 name: diagnostic.name,
+                span: None,
             });
         }
+        add_target_text_diagnostics(
+            &loaded,
+            &request.config.source_locale,
+            &target_locales,
+            &paths_by_locale,
+            request.checks.target_text,
+            &mut result,
+        );
         if request.checks.icu_compatibility.unwrap_or(true) {
             add_icu_compatibility_diagnostics(
                 &loaded,
@@ -271,6 +286,71 @@ fn add_icu_compatibility_diagnostics(
                         context: key.msgctxt.clone(),
                     }),
                     name: diagnostic.name,
+                    span: None,
+                });
+            }
+        }
+    }
+}
+
+fn add_target_text_diagnostics(
+    loaded: &[LoadedAuditCatalog],
+    source_locale: &str,
+    target_locales: &[String],
+    paths_by_locale: &BTreeMap<String, PathBuf>,
+    checks: crate::TargetTextCheckOptions,
+    result: &mut CatalogAuditResult,
+) {
+    if !checks.boundary_whitespace && !checks.metadata_leakage {
+        return;
+    }
+    let Some(source) = loaded
+        .iter()
+        .find(|loaded| loaded.catalog.parsed_catalog().locale.as_deref() == Some(source_locale))
+    else {
+        return;
+    };
+    for locale in target_locales {
+        let Some(target) = loaded
+            .iter()
+            .find(|loaded| loaded.catalog.parsed_catalog().locale.as_deref() == Some(locale))
+        else {
+            continue;
+        };
+        let Some(path) = paths_by_locale.get(locale) else {
+            continue;
+        };
+        for (key, source_message) in source.catalog.iter() {
+            if source_message.obsolete.is_some() {
+                continue;
+            }
+            let Some(target_message) = target
+                .catalog
+                .get(key)
+                .filter(|message| message.obsolete.is_none())
+            else {
+                continue;
+            };
+            let Some(value) =
+                singular_translation(target_message).filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+            for warning in crate::target_text::check_target_text(&key.msgid, value, checks) {
+                result.summary.diagnostics += 1;
+                result.summary.warnings += 1;
+                result.diagnostics.push(CatalogAuditDiagnostic {
+                    severity: CatalogDiagnosticSeverity::Warning,
+                    code: warning.code.to_owned(),
+                    message: warning.message.to_owned(),
+                    catalog_path: path.to_string_lossy().into_owned(),
+                    locale: Some(locale.clone()),
+                    source_key: Some(CatalogDiagnosticSourceKey {
+                        message: key.msgid.clone(),
+                        context: key.msgctxt.clone(),
+                    }),
+                    name: None,
+                    span: Some(warning.span),
                 });
             }
         }
@@ -830,6 +910,89 @@ msgstr "Hallo {{name}}"
                 .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"
                     && diagnostic.locale.as_deref() == Some("de"))
         );
+    }
+
+    #[test]
+    fn target_text_checks_are_opt_in_read_only_and_share_preflight_warnings() {
+        for format in [
+            crate::PalamedesCatalogFormat::Po,
+            crate::PalamedesCatalogFormat::Fcl,
+        ] {
+            let fixture = create_fixture_dir("catalog-target-text");
+            let locale_dir = fixture.join("src/locales");
+            fs::create_dir_all(&locale_dir).expect("locale dir");
+            let extension = if format == crate::PalamedesCatalogFormat::Po {
+                "po"
+            } else {
+                "fcl"
+            };
+            for (locale, translation) in [("en", ""), ("de", " Épargner #@ lock: abc")] {
+                let po = format!(
+                    "msgid \"\"\nmsgstr \"\"\n\"Language: {locale}\\n\"\n\n#, fuzzy\nmsgctxt \"button\"\nmsgid \"Save\"\nmsgstr {translation:?}\n"
+                );
+                let content = if format == crate::PalamedesCatalogFormat::Po {
+                    po
+                } else {
+                    ferrocat::convert_catalog(
+                        ferrocat::ConvertCatalogOptions::new(
+                            &po,
+                            "en",
+                            ferrocat::CatalogMode::IcuPo,
+                            ferrocat::CatalogMode::IcuFcl,
+                        )
+                        .with_locale(locale),
+                    )
+                    .expect("convert FCL")
+                    .content
+                };
+                fs::write(locale_dir.join(format!("{locale}.{extension}")), content)
+                    .expect("write catalog");
+            }
+            let target_path = locale_dir.join(format!("de.{extension}"));
+            let before = fs::read(&target_path).expect("before");
+            let request = |checks| {
+                let mut configuration = config(&fixture);
+                configuration.catalogs[0].format = format;
+                CatalogAuditRequest {
+                    config: configuration,
+                    locales: vec!["de".to_owned()],
+                    checks,
+                    metadata: Vec::new(),
+                }
+            };
+            let disabled = audit_catalogs(request(CatalogAuditCheckOptions::default()))
+                .expect("default audit");
+            assert!(
+                disabled
+                    .diagnostics
+                    .iter()
+                    .all(|diagnostic| !diagnostic.code.starts_with("target."))
+            );
+            let enabled = audit_catalogs(request(CatalogAuditCheckOptions {
+                target_text: crate::TargetTextCheckOptions {
+                    boundary_whitespace: true,
+                    metadata_leakage: true,
+                },
+                ..Default::default()
+            }))
+            .expect("opt-in audit");
+            let warnings = enabled
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.code.starts_with("target."))
+                .collect::<Vec<_>>();
+            assert_eq!(warnings.len(), 2);
+            assert_eq!(enabled.summary.warnings, disabled.summary.warnings + 2);
+            for warning in warnings {
+                assert_eq!(warning.severity, crate::CatalogDiagnosticSeverity::Warning);
+                assert_eq!(warning.locale.as_deref(), Some("de"));
+                let key = warning.source_key.as_ref().expect("identity");
+                assert_eq!(key.message, "Save");
+                assert_eq!(key.context.as_deref(), Some("button"));
+                assert!(warning.span.is_some());
+            }
+            assert_eq!(fs::read(target_path).expect("after"), before);
+        }
     }
 
     fn config(root: &std::path::Path) -> CatalogArtifactConfig {

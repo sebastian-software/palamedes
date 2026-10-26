@@ -47,6 +47,7 @@ mod source;
 mod source_macros;
 mod source_message;
 mod svelte;
+mod target_text;
 #[cfg(test)]
 mod test_support;
 mod transform;
@@ -133,6 +134,10 @@ pub use source::{
     SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions, SourceAnalysisResult, SourceComment,
     SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult,
     SourceRange, SourceRuleLevel, SourceRuleOptions,
+};
+pub use target_text::{
+    TargetTextCheckOptions, TargetTextSpan, TranslationTargetText, TranslationTargetTextDiagnostic,
+    TranslationTargetTextRequest, TranslationTargetTextResult, check_translation_targets,
 };
 pub use transform::{
     NativeTransformEdit, NativeTransformOptions, NativeTransformResult, NativeTransformSourceMap,

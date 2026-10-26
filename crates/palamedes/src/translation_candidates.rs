@@ -1512,7 +1512,7 @@ fn apply_patch_to_po(
     Ok(())
 }
 
-fn render_translation_value(value: &TranslationValue) -> PalamedesResult<String> {
+pub(crate) fn render_translation_value(value: &TranslationValue) -> PalamedesResult<String> {
     match value {
         TranslationValue::Singular { value } => Ok(value.clone()),
         TranslationValue::Plural {

@@ -22,6 +22,7 @@ import {
   applyTranslationPatches,
   applyTranslationPatchesAsync,
   auditCatalogs,
+  checkTranslationTargets,
   inspectCatalogMachineTranslations,
   inspectCatalogMachineTranslationsAsync,
   combineCatalogs,
@@ -1794,6 +1795,216 @@ msgstr ""
       diagnostics: [],
     });
     expect(auditCatalogs(config).diagnostics).toStrictEqual([]);
+  });
+
+  it("shares optional target-text warnings between preflight and read-only PO/FCL audit", async () => {
+    for (const format of ["po", "fcl"] as const) {
+      const rootDir = await createTempDir();
+      const source = "{n, plural, one {One} other {Many}}";
+      const documented = "{n, plural, other {'#@ lock': abc}}";
+      const plain = "{n, plural, other {Save}}";
+      const messages = ["Save", source, documented, plain].map((message) => ({
+        message,
+        context: "button",
+        extractedComments: [],
+        origins: [],
+      }));
+      for (const locale of ["en", "de"]) {
+        updateCatalogFile({
+          targetPath: path.join(rootDir, `${locale}.${format}`),
+          locale,
+          sourceLocale: "en",
+          format,
+          clean: false,
+          messages,
+        });
+      }
+      const config = {
+        rootDir,
+        sourceLocale: "en",
+        locales: ["en", "de"],
+        catalogs: [{ path: "{locale}", format, include: ["src"] }],
+      };
+      const candidates = listTranslationCandidates({ config }).candidates;
+      const singular = candidates.find((candidate) => candidate.id.message === "Save");
+      const plural = candidates.find((candidate) => candidate.id.message === source);
+      const documentedCandidate = candidates.find(
+        (candidate) => candidate.id.message === documented,
+      );
+      const plainCandidate = candidates.find((candidate) => candidate.id.message === plain);
+      if (
+        !singular ||
+        !plural ||
+        !documentedCandidate ||
+        !plainCandidate ||
+        plural.source.kind !== "plural"
+      )
+        throw new Error("Expected both candidates");
+      const patches = [
+        {
+          id: singular.id,
+          fingerprint: singular.fingerprint,
+          translation: { kind: "singular" as const, value: " Épargner '#@ lock: abc'" },
+        },
+        {
+          id: plural.id,
+          fingerprint: plural.fingerprint,
+          translation: { ...plural.source, values: { one: "Un", other: "'#@ ai: model'" } },
+        },
+        {
+          id: documentedCandidate.id,
+          fingerprint: documentedCandidate.fingerprint,
+          translation: { kind: "singular" as const, value: "{n, plural, other {'#'@ lock: abc}}" },
+        },
+        {
+          id: plainCandidate.id,
+          fingerprint: plainCandidate.fingerprint,
+          translation: { kind: "singular" as const, value: "{n, plural, other {'#@ lock': abc}}" },
+        },
+      ];
+      const targetPath = path.join(rootDir, `de.${format}`);
+      const before = await readFile(targetPath, "utf8");
+      expect(checkTranslationTargets({ targets: patches })).toStrictEqual([]);
+      const targetText = { boundaryWhitespace: true, metadataLeakage: true };
+      const results = checkTranslationTargets({ targets: patches, checks: targetText });
+      expect(results.map(({ id }) => id)).toStrictEqual([
+        singular.id,
+        plural.id,
+        plainCandidate.id,
+      ]);
+      const warnings = results.flatMap((review) =>
+        review.diagnostics.map((diagnostic) => ({
+          ...diagnostic,
+          id: review.id,
+          target: review.target,
+        })),
+      );
+      expect(warnings.map(({ code }) => code)).toStrictEqual([
+        "target.boundary_whitespace",
+        "target.metadata_leakage",
+        "target.metadata_leakage",
+        "target.metadata_leakage",
+      ]);
+      expect(warnings[0]).toMatchObject({
+        severity: "warning",
+        id: singular.id,
+        target: patches[0].translation.value,
+      });
+      for (const warning of warnings.filter(({ code }) => code === "target.metadata_leakage")) {
+        expect(
+          Buffer.from(warning.target)
+            .subarray(warning.span.start, warning.span.end)
+            .toString()
+            .replaceAll("'", ""),
+        ).toMatch(/^#@ (lock|ai):$/u);
+      }
+      expect(await readFile(targetPath, "utf8")).toBe(before);
+      // Warnings are advisory. The existing patch API remains the explicit write boundary.
+      expect(applyTranslationPatches({ config, patches })).toMatchObject({
+        updated: true,
+        stats: { applied: 4 },
+        diagnostics: [],
+      });
+      const written = await readFile(targetPath, "utf8");
+      expect(auditCatalogs(config).diagnostics).toStrictEqual([]);
+      const audited = auditCatalogs(config, { checks: { targetText } });
+      expect(audited.summary).toMatchObject({ warnings: 4, errors: 0 });
+      expect(audited.diagnostics.map(({ code, span }) => ({ code, span }))).toStrictEqual(
+        warnings.map(({ code, span }) => ({ code, span })),
+      );
+      expect(
+        audited.diagnostics.every(
+          ({ locale, sourceKey }) => locale === "de" && sourceKey?.context === "button",
+        ),
+      ).toBe(true);
+      expect(await readFile(targetPath, "utf8")).toBe(written);
+    }
+  });
+
+  it("keeps literal metadata exemptions source-aware and returns original Unicode byte spans", () => {
+    const malformed = {
+      id: { catalog: "{locale}", locale: "de", message: "Save" },
+      translation: {
+        kind: "plural" as const,
+        variable: "n",
+        pluralKind: "cardinal" as const,
+        offset: 0,
+        values: { other: "{broken" },
+      },
+    };
+    expect(() =>
+      checkTranslationTargets({ targets: [malformed], checks: { metadataLeakage: true } }),
+    ).toThrow(/Expected ICU selector/u);
+    expect(checkTranslationTargets({ targets: [malformed] })).toStrictEqual([]);
+    expect(
+      checkTranslationTargets({
+        targets: [{ ...malformed, translation: { kind: "singular", value: " {broken" } }],
+        checks: { boundaryWhitespace: true },
+      }),
+    ).toStrictEqual([]);
+    const id = { catalog: "{locale}", locale: "fr", message: "Use #@ lock: abc", context: "help" };
+    const target = "Été '#@ lock: def' puis #@ ai: model";
+    const results = checkTranslationTargets({
+      targets: [{ id, translation: { kind: "singular", value: target } }],
+      checks: { metadataLeakage: true },
+    });
+    expect(results).toHaveLength(1);
+    const warnings = results.flatMap((review) =>
+      review.diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        id: review.id,
+        target: review.target,
+      })),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      severity: "warning",
+      code: "target.metadata_leakage",
+      id,
+      target,
+    });
+    const span = warnings[0].span;
+    expect(Buffer.from(target).subarray(span.start, span.end).toString()).toBe("#@ ai:");
+    expect(span.start).toBe(Buffer.byteLength("Été '#@ lock: def' puis "));
+    expect(
+      checkTranslationTargets({
+        targets: [
+          {
+            id: { ...id, message: "Save" },
+            translation: { kind: "singular", value: "<b> Enregistrer </b> !" },
+          },
+        ],
+        checks: { boundaryWhitespace: true },
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("stores proposed payload and identity once when a pasted catalog produces many warnings", () => {
+    const id = { catalog: "{locale}", locale: "de", message: "Source sentence. ".repeat(500) };
+    const check = (count: number) => {
+      const target = Array.from({ length: count }, (_, index) => `#@ lock: pasted-${index}`).join(
+        "\n",
+      );
+      const results = checkTranslationTargets({
+        targets: [{ id, translation: { kind: "singular", value: target } }],
+        checks: { metadataLeakage: true },
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toStrictEqual(id);
+      expect(results[0].target).toBe(target);
+      expect(results[0].diagnostics).toHaveLength(count);
+      expect(
+        results[0].diagnostics.every(
+          (diagnostic) => !Object.hasOwn(diagnostic, "target") && !Object.hasOwn(diagnostic, "id"),
+        ),
+      ).toBe(true);
+      const json = JSON.stringify(results);
+      expect(json.match(/"target":/gu)).toHaveLength(1);
+      expect(json.match(/"id":/gu)).toHaveLength(1);
+      return Buffer.byteLength(json);
+    };
+    const thousandBytes = check(1000);
+    expect(check(2000)).toBeLessThan(thousandBytes * 2.2);
   });
 
   it("serializes skipped fresh target catalogs while excluding an explicit source locale", async () => {
