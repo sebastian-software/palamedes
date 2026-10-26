@@ -95,6 +95,36 @@ async function cli(directory, entry, locale = "de") {
   }
 }
 
+async function nextWatchBuild(builds, changedFile) {
+  while (true) {
+    const completion = await builds.next();
+    if (completion.done) break;
+    const [line] = completion.value;
+    const build = JSON.parse(line);
+    if (!changedFile || build.changes.includes(changedFile)) return build;
+  }
+  assert.fail(`Watcher closed before rebuilding ${changedFile ?? "the initial output"}`);
+}
+
+test("watch completion waits for the edited input rather than a queued build", async () => {
+  const completions = [
+    { changes: [] },
+    { changes: ["src/locales/de.po"] },
+    { changes: ["src/locales/de.po"] },
+    { changes: ["src/booking.ts"] },
+    { changes: ["src/booking.ts"] },
+    { changes: ["palamedes.yaml"] },
+  ];
+  async function* builds() {
+    for (const completion of completions) yield [JSON.stringify(completion)];
+  }
+  const events = builds();
+  assert.deepEqual(await nextWatchBuild(events), completions[0]);
+  assert.deepEqual(await nextWatchBuild(events, "src/locales/de.po"), completions[1]);
+  assert.deepEqual(await nextWatchBuild(events, "src/booking.ts"), completions[3]);
+  assert.deepEqual(await nextWatchBuild(events, "palamedes.yaml"), completions[5]);
+});
+
 test("unbundled development regenerates source/catalog/config artifacts and restarts", async (t) => {
   const directory = await fixture(t);
   await generate(directory);
@@ -193,10 +223,21 @@ test("standalone Rolldown watch rebuilds source, catalogs, and configuration", a
     path.join(directory, "test/watch.mjs"),
     `
 import { watch } from "rolldown";
+import path from "node:path";
 import config from "../rolldown.config.mjs";
+const pending = new Set();
+let changes = [];
+config.plugins.push({
+  name: "watch-build-inputs",
+  watchChange(id) { pending.add(path.relative(process.cwd(), id).split(path.sep).join("/")); },
+  buildStart() {
+    changes = [...pending];
+    pending.clear();
+  },
+});
 const watcher = watch(config);
 watcher.on("event", (event) => {
-  if (event.code === "END") console.log("built");
+  if (event.code === "END") console.log(JSON.stringify({ changes }));
   if (event.code === "ERROR") { console.error(event.error); process.exitCode = 1; }
 });
 process.on("SIGTERM", async () => { await watcher.close(); process.exit(); });
@@ -212,10 +253,15 @@ process.on("SIGTERM", async () => { await watcher.close(); process.exit(); });
   });
   active.lines = createInterface({ input: active.child.stdout });
   const builds = on(active.lines, "line", { signal: controller.signal });
-  async function rebuilt() {
+  async function rebuilt(changedFile) {
     const timeout = setTimeout(() => controller.abort(), 20_000);
     try {
-      assert.deepEqual((await builds.next()).value, ["built"], stderr);
+      // A preceding edit can produce more than one completion. Only accept a
+      // build whose input snapshot includes this edit's watchChange event.
+      await nextWatchBuild(builds, changedFile);
+    } catch (error) {
+      error.message += `\nWaiting for ${changedFile ?? "the initial build"}\n${stderr}`;
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -227,12 +273,12 @@ process.on("SIGTERM", async () => { await watcher.close(); process.exit(); });
     catalog,
     (await readFile(catalog, "utf8")).replace("ist bestätigt.", "wurde aktualisiert."),
   );
-  await rebuilt();
+  await rebuilt("src/locales/de.po");
   assert.match((await cli(directory, "dist-rolldown/cli.mjs")).stdout, /wurde aktualisiert\./u);
 
   const source = path.join(directory, "src/booking.ts");
   await writeFile(source, (await readFile(source, "utf8")).replace("amount: 149", "amount: 199"));
-  await rebuilt();
+  await rebuilt("src/booking.ts");
   assert.match((await cli(directory, "dist-rolldown/cli.mjs", "en")).stdout, /199\.00/u);
 
   await cp(path.join(directory, "src/locales"), path.join(directory, "src/translations"), {
@@ -251,7 +297,7 @@ process.on("SIGTERM", async () => { await watcher.close(); process.exit(); });
     config,
     (await readFile(config, "utf8")).replace("src/locales/", "src/translations/"),
   );
-  await rebuilt();
+  await rebuilt("palamedes.yaml");
   assert.match(
     (await cli(directory, "dist-rolldown/cli.mjs")).stdout,
     /nutzt neue Konfiguration\./u,
