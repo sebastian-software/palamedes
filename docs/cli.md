@@ -216,13 +216,24 @@ template expressions.
 
 Checks Palamedes source authoring without creating or updating catalogs. It
 uses the union of the configured `catalogs[].include` and `exclude` file sets,
-deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, MDX, and Vue scripts.
+deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, MDX, Vue scripts,
+and Svelte scripts.
 
 ```bash
 pmds lint
 pmds lint --json
 pmds lint --fail-on warning
+pmds lint src/view.tsx src/actions.ts --json --fail-on warning
 ```
+
+Explicit file arguments replace catalog source discovery. They are literal file
+paths relative to the invocation directory, including when `--config` points
+elsewhere. They bypass catalog `include` and `exclude` patterns; configuration
+still supplies lint policy, MDX options, and the shared cache. Duplicate paths
+are checked once. Use files rather than directories or quoted globs. Missing,
+unreadable, or unsupported inputs appear in `failedFiles` and produce exit code
+`4`, so a mistyped path cannot silently pass. Omit files for the full configured
+source check. Targeted runs preserve cache entries for other project files.
 
 Options:
 
@@ -294,15 +305,11 @@ const inline = t`${status}`; // palamedes-lint-disable-line pmds/no-placeholder-
 Unknown codes, directives without a code, and valid suppressions that no longer
 match a finding are reported by `pmds lint`.
 
-`palamedes-lint-disable-*` directives are consumed by `pmds lint` only. The
-ESLint and Oxlint adapter in [`@palamedes/eslint-plugin`](./api/eslint-plugin.md)
-leaves suppression handling to its host, so the same finding is silenced with
-`eslint-disable-next-line palamedes/<rule>` or
-`oxlint-disable-next-line palamedes/<rule>` there. The two forms do not
-transfer: a project running both lanes needs the directive each lane
-understands. The rule names differ too — the CLI reports the native diagnostic
-codes (`pmds/...`), while the adapter exposes them under its host plugin
-namespace (`palamedes/...`).
+`palamedes-lint-disable-*` directives and native `pmds/...` diagnostic codes
+are the source-authoring suppression interface. When migrating from the removed
+ESLint/Oxlint adapter, replace host directives and `palamedes/...` rule names as
+shown in the [v2 migration guide](./migration-v2.md#replace-the-lint-adapter).
+
 The default `.palamedes/extract-cache.json` stores compatible messages and
 diagnostics together, so `extract` and `lint` can reuse the same native parse.
 Lint follows extraction's bounded parallel read/parse model. Workers only

@@ -6,7 +6,6 @@ const standardPackages = [
   "config",
   "core-node",
   "core",
-  "eslint-plugin",
   "extractor",
   "next-plugin",
   "react-router-rsc",

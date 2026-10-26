@@ -71,6 +71,40 @@ mapping before deleting catalogs or dependencies. It runs extraction twice and
 the application's relevant type, test, and production build commands, then
 reports actual results and remaining limits.
 
+## Check changes with `pmds`
+
+Use the project's package manager and a compatible v2 CLI. After changing source
+files, run the narrow check first:
+
+```bash
+pnpm exec pmds lint src/view.tsx src/actions.ts --json --fail-on warning
+```
+
+Arguments are literal files relative to the invocation directory. They replace
+catalog discovery and bypass include/exclude patterns while retaining project
+lint policy. Omit file arguments for the full configured source check before
+handoff. Targeted runs preserve other entries in the shared extraction cache;
+use `--no-cache` when cache writes are unwanted.
+
+Use the checks for the concern they own:
+
+| Change or question                                      | Check                                                 |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| Source authoring after an edit                          | `pmds lint <files> --json --fail-on warning`          |
+| All configured source authoring before handoff or in CI | `pmds lint --json --fail-on warning`                  |
+| Catalog drift after extraction or before handoff        | `pmds extract --check --json --fail-on-empty-catalog` |
+| Translation and ICU validity in catalogs                | `pmds audit --json --fail-on warning`                 |
+
+Inspect stable diagnostic `code`, `file`, `primary` location, `message`, and
+`help`, and check `failedFiles` as well as findings. Repair the source and rerun
+the same command. Exit `0` means the requested policy passed; `4` is a completed
+lint verdict with threshold or file-analysis failures; `1` is an operational
+failure; `2` is invalid usage. Extraction drift uses `3`, and audit threshold
+failure uses `5`. A failed check must not be reported as clean. Source checks do
+not create or update catalogs; run normal extraction before its drift check
+when a source edit changes messages. Keep the application's type, test, and
+production build checks in the handoff.
+
 ## Repository validation
 
 `pnpm test:adoption-skill` executes the bundled authoring recipes and migration

@@ -156,6 +156,46 @@ The existing `CatalogMessages` string-map type can describe build-time data;
 `PalamedesI18n`; custom runtimes must provide the required `renderMessage()`
 capability. No parsed-node fallback is used for older custom instances.
 
+## Replace the lint adapter
+
+`@palamedes/eslint-plugin` is removed from the v2 release set. Remove the package,
+its import/plugin registration, and `palamedes/...` rules from ESLint or Oxlint
+configuration. Keep the application's other lint rules.
+
+Use the native CLI for Palamedes source checks:
+
+```bash
+# Fast feedback after an agent edits these files.
+pnpm exec pmds lint src/view.tsx src/actions.ts --json --fail-on warning
+# Full configured source check before handoff or in CI.
+pnpm exec pmds lint --json --fail-on warning
+```
+
+Explicit paths are relative to the invocation directory and bypass catalog
+include/exclude patterns. Project configuration still controls rule severity.
+The CLI supports MDX, Vue scripts, and Svelte scripts as well as JS/TS/JSX/TSX.
+Keep the native CLI and other coupled Palamedes packages on one release.
+
+Replace `eslint-disable-next-line palamedes/<rule>` and
+`oxlint-disable-next-line palamedes/<rule>` with
+`palamedes-lint-disable-next-line pmds/<rule>`. For same-line exceptions use
+`palamedes-lint-disable-line pmds/<rule>`. Preserve unrelated host directives.
+Move Palamedes rule severity into the `lint` section of `palamedes.yaml`; host
+rule configuration does not transfer automatically. To preserve the former
+`configs.recommended` severity settings:
+
+```yaml
+lint:
+  rules:
+    placeholder-only: warning
+    empty-component-only: off
+    prefer-trans-in-jsx: warning
+```
+
+See the
+[lint configuration](./configuration.md) and [CLI reference](./cli.md#pmds-lint).
+There is no first-party editor adapter or LSP in v2.
+
 ## Handle failures through the host
 
 Valid missing translations are resolved at compilation through the fallback

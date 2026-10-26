@@ -30,8 +30,8 @@ from `main`.
   storage, semantic merging, and a Git merge driver support local workflows.
 - **Automate translation checks.** The `pmds` CLI extracts and watches sources,
   checks catalog drift, lints authoring, audits ICU compatibility, reports
-  translation coverage, and hosts configured binary plugins. An ESLint/Oxlint
-  adapter brings diagnostics into the editor.
+  translation coverage, and hosts configured binary plugins. Agents can check
+  changed source files directly with `pmds lint <files> --json --fail-on warning`.
 - **Delegate catalog delivery.** V2 adapters load compiled translations for
   the active locale, including lazy browser dependencies, without app-owned
   catalog maps. Server runtimes isolate request state and share immutable
@@ -90,7 +90,6 @@ README; version and download badges link to npm.
 | --- | --- | --- | --- |
 | [`@palamedes/cli`](packages/cli/README.md) | Native `pmds` CLI | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fcli)](https://www.npmjs.com/package/@palamedes/cli) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fcli)](https://www.npmjs.com/package/@palamedes/cli) |
 | [`@palamedes/config`](packages/config/README.md) | Shared host configuration | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fconfig)](https://www.npmjs.com/package/@palamedes/config) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fconfig)](https://www.npmjs.com/package/@palamedes/config) |
-| [`@palamedes/eslint-plugin`](packages/eslint-plugin/README.md) | ESLint/Oxlint diagnostics (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Feslint-plugin)](https://www.npmjs.com/package/@palamedes/eslint-plugin) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Feslint-plugin)](https://www.npmjs.com/package/@palamedes/eslint-plugin) |
 | [`@palamedes/extractor`](packages/extractor/README.md) | Extraction API (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fextractor)](https://www.npmjs.com/package/@palamedes/extractor) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fextractor)](https://www.npmjs.com/package/@palamedes/extractor) |
 | [`@palamedes/transform`](packages/transform/README.md) | Transform API (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Ftransform)](https://www.npmjs.com/package/@palamedes/transform) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Ftransform)](https://www.npmjs.com/package/@palamedes/transform) |
 | [`@palamedes/core-node`](packages/core-node/README.md) | Native Node binding (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fcore-node)](https://www.npmjs.com/package/@palamedes/core-node) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fcore-node)](https://www.npmjs.com/package/@palamedes/core-node) |
