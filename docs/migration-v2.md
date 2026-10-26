@@ -11,6 +11,21 @@ Implementation and host verification are recorded in the
 Publication remains held pending release authorization and the current release
 gates; these documents do not announce an available 2.0 release.
 
+## Check installation and tooling prerequisites
+
+Update coupled Palamedes packages together and regenerate compiled artifacts
+with the v2 toolchain. Keep the previous dependency lockfile and generated
+artifacts together if you need to roll back to the previous application build;
+v1 and v2 catalog artifacts are not interchangeable.
+
+Prebuilt npm packages do not require Rust. Check the
+[platform support table](./platform-support.md) for the Node.js floor and native
+targets; Remix requires Node.js 24.3 or newer. Building from Rust source requires
+Rust 1.96 or newer. The CLI now uses Ferralk's native pattern syntax, including
+extglobs and POSIX classes; Windows patterns use `/` separators and `\` escapes.
+Review [source-pattern migration](./ferralk-adoption.md#pattern-migration) before
+running extraction with existing include/exclude patterns.
+
 ## Compile catalogs before loading
 
 A v1 application could pass ICU strings directly:

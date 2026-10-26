@@ -3,12 +3,12 @@
 **Draft for the planned 2.0 release.** These notes describe the implementation
 on `main`. Publication remains held; they do not announce an available release.
 
-The original migration and delivery verification is complete. Current release
-work includes representative integration verification in
-[#1252](https://github.com/sebastian-software/palamedes/issues/1252): TanStack
-Start with React and Solid 2 Start Mode with Nitro. These demos also serve as
-executable integration tests. TanStack Solid Start is outside the v2 scope.
-See [Contributing](../CONTRIBUTING.md#releases) for the release gates.
+The migration and representative integration verification are complete.
+TanStack Start with React and Solid 2 Start Mode with Nitro are checked demos
+and executable integration tests. TanStack Solid Start is outside the v2 scope.
+The [v2 acceptance issue](https://github.com/sebastian-software/palamedes/issues/1204)
+tracks final release verification and publication; see
+[Contributing](../CONTRIBUTING.md#releases) for the release gates.
 
 Palamedes 2.0 makes translation delivery part of the framework integration.
 You still write messages next to your code and keep translations in catalogs.
