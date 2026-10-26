@@ -9,9 +9,9 @@
   "06-build": "Then your build does the clever part: every sentence becomes a short ID, and every translation becomes ready-to-run code.",
   "07-load": "The catalog is split into one piece per screen, so each screen loads only its own words, in your visitor's language.",
   "08-complete": "And it doesn't stop there! Plurals, numbers and dates, server rendering and server actions, a linter for your messages and an audit that catches every missing translation: it's one complete toolchain, from the first sentence to the last translation.",
-  "09-frameworks": "The wiring is already built: for React and Solid, for Next JS, TanStack, Waku and Remix, and for Veet. Every one of them is tested as a real app.",
-  "10-fast": "[excited] And it's seriously fast! Its Rust core works through fifteen hundred files in just seventy-three milliseconds.",
+  "09-frameworks": "The wiring is already built: for Next JS, Nuxt, Svelt Kit, TanStack, React Router, Waku and Remix; for React, Solid, View and Svelt; and beyond the browser, for backends, command-line tools, M D X docs and Rust. Each one comes with a guide and a working example.",
+  "10-fast": "[excited] And it's seriously fast, in every one of them! Its Rust core works through fifteen hundred files in about a tenth of a second. The next-fastest tool needs over two seconds.",
   "11-agent": "Working with a coding agent? Add the Pala-meedeez skill and simply ask it to set up translations for you.",
-  "12-claim": "Clear, complete, and fast. For once, you get to pick all three.",
-  "13-end": "Pala-meedeez is open source. Get started today at pala-meedeez dot dev."
+  "12-claim": "The fastest i-eighteen-n toolchain. Complete from code to screen, and proven in eighteen integrations.",
+  "13-end": "Pala-meedeez two point oh is open source. Get started today at pala-meedeez dot dev."
 }

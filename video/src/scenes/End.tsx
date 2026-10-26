@@ -3,11 +3,12 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "rem
 import { C, FONT } from "../brand";
 import { BAR } from "../timeline";
 import { Revealed } from "../kinetic";
-import { arrive, Display, ease } from "../ui";
+import { arrive, Display, ease, VersionBadge } from "../ui";
 
-/** Scene frames for the domain and the license line. */
+/** Scene frames for the domain, the release badge, and the license line. */
 export interface EndCues {
   domain: number;
+  release: number;
   note: number;
   bars: number;
   /** When the company band arrives; leave it out for a card without one. */
@@ -15,7 +16,8 @@ export interface EndCues {
 }
 
 /*
- * The end card holds still and fades only at the very end. The company band
+ * The end card holds still and fades only at the very end. The release badge
+ * sits with the license line as a fact about this version, apart from the mark. The company band
  * follows the same pattern as dalo.sh: who makes Palamedes, and who to talk
  * to when you want help with it.
  */
@@ -43,6 +45,8 @@ export function End({ cues }: { cues: EndCues }) {
         <p
           style={{
             margin: "30px 0 0",
+            // Letter spacing trails the last letter; pad the first side to keep the name centred.
+            paddingLeft: "0.28em",
             fontFamily: FONT.display,
             fontSize: 46,
             letterSpacing: "0.28em",
@@ -71,14 +75,17 @@ export function End({ cues }: { cues: EndCues }) {
         </p>
         <p
           style={{
-            margin: "16px 0 0",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            margin: "18px 0 0",
             fontFamily: FONT.sans,
             fontSize: 24,
             color: C.slate,
-            ...arrive(frame, cues.note),
           }}
         >
-          Open source · MIT OR Apache-2.0
+          <VersionBadge size={20} style={arrive(frame, cues.release)} />
+          <span style={arrive(frame, cues.note)}>Open source · MIT OR Apache-2.0</span>
         </p>
       </AbsoluteFill>
       {cues.company === undefined ? null : <CompanyBand frame={frame} at={cues.company} />}

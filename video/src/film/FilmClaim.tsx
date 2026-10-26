@@ -4,21 +4,21 @@ import { C } from "../brand";
 import { BAR } from "../timeline";
 import { Revealed } from "../kinetic";
 import { Display, sceneFade } from "../ui";
-import { at } from "./timeline";
 
 /*
- * Bars 44–45: "Clear, complete, and fast. For once, you get to pick all
- * three." Each word arrives as it is spoken; the answer lands with the full
- * chord on the second downbeat.
+ * "The fastest i18n toolchain. Complete from code to screen, and proven in
+ * eighteen integrations." One measured superlative, then two statements that
+ * need no rival to hold: the workflow the journey just showed, and the count
+ * of integrations on the homepage stripe, each with a guide and an example.
  */
-const WORDS = [
-  { text: "Clear,", cue: at(0.2) },
-  { text: "complete,", cue: at(0.95) },
-  { text: "and fast.", cue: at(1.7) },
-];
-const PICK = at(3.9);
+export interface ClaimCues {
+  fastest: number;
+  complete: number;
+  proven: number;
+  bars: number;
+}
 
-export function FilmClaim() {
+export function FilmClaim({ cues }: { cues: ClaimCues }) {
   const frame = useCurrentFrame();
   return (
     <AbsoluteFill
@@ -26,16 +26,24 @@ export function FilmClaim() {
         background: C.mist,
         alignItems: "center",
         justifyContent: "center",
-        opacity: sceneFade(frame, BAR * 2),
+        textAlign: "center",
+        opacity: sceneFade(frame, BAR * cues.bars),
       }}
     >
       <Display size={108}>
-        {WORDS.map((word) => (
-          <Revealed key={word.text} text={word.text} frame={frame} at={word.cue - 4} />
-        ))}
+        <Revealed text="The fastest i18n toolchain." frame={frame} at={cues.fastest - 4} />
       </Display>
-      <Display size={126} style={{ marginTop: 30, color: C.bronze }}>
-        <Revealed text="Pick all three." frame={frame} at={PICK - 5} unit="character" stagger={1} />
+      <Display size={64} style={{ marginTop: 48 }}>
+        <Revealed text="Complete from code to screen." frame={frame} at={cues.complete - 4} />
+      </Display>
+      <Display size={64} style={{ marginTop: 18, color: C.bronze }}>
+        <Revealed
+          text="Proven in 18 integrations."
+          frame={frame}
+          at={cues.proven - 5}
+          unit="character"
+          stagger={1}
+        />
       </Display>
     </AbsoluteFill>
   );

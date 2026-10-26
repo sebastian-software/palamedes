@@ -82,16 +82,16 @@ in `THIRD_PARTY_NOTICES.md`.
 
 ## Product film
 
-The product film in `video/` shows the unmodified React, Solid, Next.js, TanStack,
-Remix, and Vite files in one framework-integration scene, grouped as UI
-libraries, frameworks, and build tool. They identify first-party integrations.
-The film uses an unmodified copy of the React mark (retrieved 2026-10-19), with
-Meta's trademark noted in `THIRD_PARTY_NOTICES.md`. The film names no support
+The product film in `video/` (v7) shows the homepage stripe's seven groups
+with the same unmodified compact marks, each with its visible name and at the
+shared proportions of `FrameworkIdentity`, scaled up together: Next.js, Nuxt,
+SvelteKit, TanStack Start, React Router, Waku, and Remix; React, Solid, Vue,
+and Svelte; Vite and Turbopack; Hono and Express; Node.js CLI; MDX; and Rust.
+The film keeps the editorial hairline treatment rather than the homepage's
+scoped link badges. They identify integrations only. The film names no support
 levels, so a change in an adapter's status does not require a new render; the
-site states the levels.
-Waku appears as its name in text, because its published SVG is drawn for dark
-surfaces and must not be recoloured, and its site icon is an emoji image rather
-than a mark.
+site states the levels. The v6 cut showed React, Solid, Next.js, TanStack,
+Remix, and Vite, with Waku as text.
 
 On 2026-10-17 the Product Owner decided to publish the long cut
 (`PalamedesFilm`) on the homepage, on the same trademark-risk position as the

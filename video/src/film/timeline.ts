@@ -2,7 +2,7 @@ import type { FlightWarp } from "../flight/JourneyFlight";
 import { BAR, FPS } from "../timeline";
 
 /*
- * The product film: 56 bars at 84 BPM. Scene
+ * The product film: 63 bars at 84 BPM. Scene
  * boundaries sit on downbeats; audio/cues/film.json holds the same plan for
  * the score and places Brian's takes on it, so change bars in both together.
  */
@@ -13,10 +13,10 @@ const SECTIONS = [
   ["reveal", 5],
   ["journey", 14],
   ["complete", 6],
-  ["frameworks", 4],
-  ["fast", 3],
+  ["frameworks", 8],
+  ["fast", 5],
   ["agent", 3],
-  ["claim", 2],
+  ["claim", 3],
   ["end", 4],
 ] as const;
 

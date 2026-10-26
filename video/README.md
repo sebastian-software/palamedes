@@ -1,8 +1,9 @@
 # Palamedes product film
 
-This standalone Remotion project contains the current v6 product film: 2:40
-at 1920 × 1080 and 30 fps. It is the version published on the homepage through
-Bunny Stream and [on YouTube](https://youtu.be/XBECHvmx2qQ).
+This standalone Remotion project contains the v7 product film for Palamedes
+2.0: 3:00 at 1920 × 1080 and 30 fps. The homepage and
+[YouTube](https://youtu.be/XBECHvmx2qQ) still carry v6 (2:40) until v7 is
+published.
 `PalamedesFilm` is the only film composition; `PalamedesPoster` renders its
 poster. The project is outside the repository workspace, and its Remotion and
 React dependencies are used only to produce the film.
@@ -19,24 +20,24 @@ pnpm run render:film     # score, chosen voice takes, mix, picture, MP4 + SRT
 
 ## Story and timing
 
-The film uses 56 bars at 84 BPM in 4/4. `src/film/timeline.ts` defines the
+The film uses 63 bars at 84 BPM in 4/4. `src/film/timeline.ts` defines the
 scene boundaries, and `audio/cues/film.json` defines the matching score plan,
 voice placement, composition, and output name. Keep the two bar counts aligned.
 The shared clock constants live in `src/timeline.ts`.
 
-| Bars  | Scene      | Content                                                                |
-| ----- | ---------- | ---------------------------------------------------------------------- |
-| 1–2   | Open       | Your app speaks English. Most of the world doesn't.                    |
-| 3–8   | Hook       | Plurals, word order, prices, and dates                                 |
-| 9–15  | Problems   | Invented keys, whole catalogs, runtime parsing, glue code, slow tools  |
-| 16–20 | Reveal     | You write, translators add languages, visitors read                    |
-| 21–34 | Journey    | One sentence through extraction, translation, compilation, and loading |
-| 35–40 | Complete   | Plurals, formatting, server rendering, lint, and audit                 |
-| 41–44 | Frameworks | React and Solid; Next.js, TanStack, Waku, and Remix; Vite              |
-| 45–47 | Fast       | The checked extraction benchmark, played back in real time             |
-| 48–50 | Agent      | The skill command and setup prompt                                     |
-| 51–52 | Claim      | Clear, complete, and fast. Pick all three.                             |
-| 53–56 | End        | Palamedes, the website, Sebastian Software, and Sebastian Consulting   |
+| Bars  | Scene      | Content                                                                    |
+| ----- | ---------- | -------------------------------------------------------------------------- |
+| 1–2   | Open       | Your app speaks English. Most of the world doesn't. The v2.0 lockup.       |
+| 3–8   | Hook       | Plurals, word order, prices, and dates                                     |
+| 9–15  | Problems   | Invented keys, whole catalogs, runtime parsing, glue code, slow tools      |
+| 16–20 | Reveal     | You write, translators add languages, visitors read                        |
+| 21–34 | Journey    | One sentence through extraction, translation, compilation, and loading     |
+| 35–40 | Complete   | Plurals, formatting, server rendering, lint, and audit                     |
+| 41–48 | Frameworks | The homepage's seven integration groups, 18 marks, each with an example    |
+| 49–53 | Fast       | The checked React, Vue, Svelte, and Solid benchmarks in real time          |
+| 54–56 | Agent      | The skill command and setup prompt                                         |
+| 57–59 | Claim      | The fastest i18n toolchain. Complete from code to screen. 18 integrations. |
+| 60–63 | End        | Palamedes v2.0, the website, Sebastian Software, and Sebastian Consulting  |
 
 `src/flight/JourneyFlight.tsx` supplies the camera flight inside the film.
 Its 12-bar choreography maps onto the journey's 14 bars through `JOURNEY_WARP`
@@ -44,8 +45,10 @@ so each station meets its narration. Moving text folds into a spark, travels,
 and unfolds at its destination.
 
 The scenes import the site's real transform/compiler output, specimen, and
-benchmark data from `site/app/data/`. The benchmark race excludes React Intl,
-whose recorded run covers extraction only. The visual system follows ADR-011:
+benchmark data from `site/app/data/`; run `pnpm --filter @palamedes/site
+prebuild` once so its generated files exist. The benchmark race uses the
+site's `benchmarkView()` for each framework: it excludes React Intl, whose
+recorded run covers extraction only, and labels tools whose scope is broader. The visual system follows ADR-011:
 paper, parchment, and mist backgrounds, navy text, a bronze accent, Cinzel
 Hellenic, and light code listings. The sans and mono stacks use macOS system
 fonts, so render on macOS or supply equivalent font files before rendering

@@ -1,231 +1,211 @@
-import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Img, staticFile, useCurrentFrame } from "remotion";
 
 import { C, FONT } from "../brand";
 import { BAR } from "../timeline";
 import { Revealed } from "../kinetic";
-import { arrive, Display, sceneFade } from "../ui";
+import { arrive, Display, ease, sceneFade } from "../ui";
 
 /*
- * Framework integration. The marks of the first-party adapters
- * arrive on the beat, then a message travels the four moments every adapter
- * has to get right. Support levels stay off screen, so the film outlives them.
+ * Framework integration. Each mark arrives as the narration names it, grouped
+ * the way the homepage integration band groups them. Marks are the site's
+ * unmodified compact assets at the site's proportions (FrameworkIdentity),
+ * scaled up together, always with the visible name. Support levels stay off
+ * screen, so the film outlives them.
  */
 interface IntegrationMark {
-  file: string | null;
-  name?: string;
-  label: string | null;
+  id: string;
+  name: string;
+  /** File in public/logos and its display size at 1×, as on the site. */
+  asset: string;
+  w: number;
   h: number;
-  group: (typeof GROUPS)[number];
+  /** Slot width at 1× for a horizontal mark; the others share a 32 px square. */
+  slot?: number;
 }
 
-const MARKS: readonly IntegrationMark[] = [
-  { file: "react", label: "React", h: 40, group: "UI libraries" },
-  { file: "solid", label: "Solid", h: 40, group: "UI libraries" },
-  { file: "nextjs", label: null, h: 30, group: "Frameworks" },
-  { file: "tanstack", label: null, h: 46, group: "Frameworks" },
-  // Waku's published SVG is drawn for dark surfaces and its icon is an emoji
-  // image; the ledger forbids recolouring a mark, so the film names it instead.
-  { file: null, name: "Waku", label: null, h: 32, group: "Frameworks" },
-  { file: "remix", label: null, h: 26, group: "Frameworks" },
-  { file: "vite", label: null, h: 30, group: "Build tool" },
+const SCALE = 1.6;
+
+type IntegrationGroup = { label: string; marks: readonly IntegrationMark[] };
+
+// The homepage technology stripe's seven groups and order (IntegrationBand),
+// laid out three rows deep so every name stays readable at film distance.
+const ROWS: readonly (readonly IntegrationGroup[])[] = [
+  [
+    {
+      label: "Frameworks",
+      marks: [
+        { id: "nextjs", name: "Next.js", asset: "nextjs-icon.svg", w: 24, h: 24 },
+        { id: "nuxt", name: "Nuxt", asset: "nuxt.svg", w: 34, h: 34 },
+        { id: "sveltekit", name: "SvelteKit", asset: "svelte.svg", w: 20, h: 24 },
+        { id: "tanstack", name: "TanStack Start", asset: "tanstack-icon.svg", w: 24, h: 24 },
+        {
+          id: "react-router",
+          name: "React Router",
+          asset: "react-router-icon.svg",
+          w: 30,
+          h: 20,
+        },
+        { id: "waku", name: "Waku", asset: "waku-icon.png", w: 26, h: 26 },
+        { id: "remix", name: "Remix", asset: "remix-icon.svg", w: 30, h: 18 },
+      ],
+    },
+  ],
+  [
+    {
+      label: "UI Libraries",
+      marks: [
+        { id: "react", name: "React", asset: "react.svg", w: 28, h: 26 },
+        { id: "solid", name: "Solid", asset: "solid.svg", w: 26, h: 24 },
+        { id: "vue", name: "Vue", asset: "vue.svg", w: 25, h: 23 },
+        { id: "svelte", name: "Svelte", asset: "svelte.svg", w: 20, h: 24 },
+      ],
+    },
+    {
+      label: "Build Tools",
+      marks: [
+        { id: "vite", name: "Vite", asset: "vite-icon.svg", w: 26, h: 26 },
+        { id: "turbopack", name: "Turbopack", asset: "turbopack-icon.svg", w: 24, h: 24 },
+      ],
+    },
+  ],
+  [
+    {
+      label: "Backends",
+      marks: [
+        { id: "hono", name: "Hono", asset: "hono.svg", w: 24, h: 26 },
+        { id: "express", name: "Express", asset: "express-icon.svg", w: 24, h: 24 },
+      ],
+    },
+    {
+      label: "CLI",
+      marks: [{ id: "nodejs", name: "Node.js CLI", asset: "nodejs.svg", w: 25, h: 28 }],
+    },
+    {
+      label: "MDX",
+      marks: [{ id: "mdx", name: "MDX", asset: "mdx.svg", w: 58, h: 24, slot: 58 }],
+    },
+    {
+      label: "Rust",
+      marks: [{ id: "rust", name: "Rust", asset: "rust.svg", w: 26, h: 26 }],
+    },
+  ],
 ];
-const GROUPS = ["UI libraries", "Frameworks", "Build tool"] as const;
 
-const MOMENTS = [
-  { where: "On the server", title: "The page is rendered" },
-  { where: "On the wire", title: "HTML arrives translated" },
-  { where: "In the browser", title: "The page comes alive" },
-  { where: "Back on the server", title: "A server action replies" },
-] as const;
-
-/** Scene frames for each mark and the travelling message. */
+/** Scene frames at which each mark arrives, keyed by mark id. */
 export interface WiringCues {
-  marks: readonly number[];
-  travel: readonly [number, number];
+  marks: Readonly<Record<string, number>>;
   bars: number;
 }
 
 export function Wiring({ cues }: { cues: WiringCues }) {
   const frame = useCurrentFrame();
-  const travel = interpolate(frame, [...cues.travel], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  // Stations sit 400px apart; the line joins their centres (27px in).
-  const STATION = 400;
-  const CENTRE = 27;
 
   return (
     <AbsoluteFill
       style={{
         background: C.paper,
-        padding: "110px 160px",
+        padding: "0 160px",
+        justifyContent: "center",
         opacity: sceneFade(frame, BAR * cues.bars),
       }}
     >
-      <Display size={62} style={{ maxWidth: 1500 }}>
-        <Revealed
-          text={"The wiring is already built\u00a0— and tested as real apps."}
-          frame={frame}
-          at={3}
-        />
+      <Display size={72}>
+        <Revealed text="Built into your stack." frame={frame} at={3} />
       </Display>
 
-      <div style={{ display: "flex", alignItems: "flex-start", marginTop: 64 }}>
-        {GROUPS.map((group, groupIndex) => (
-          <div
-            key={group}
-            style={{
-              paddingLeft: groupIndex ? 48 : 0,
-              marginLeft: groupIndex ? 48 : 0,
-              borderLeft: groupIndex ? `1.5px solid ${C.hair}` : undefined,
-            }}
-          >
-            <p
-              style={{
-                margin: 0,
-                fontFamily: FONT.sans,
-                fontSize: 22,
-                fontWeight: 600,
-                color: C.slate,
-              }}
-            >
-              {group}
-            </p>
-            <div
-              style={{ display: "flex", alignItems: "center", gap: 36, marginTop: 18, height: 56 }}
-            >
-              {MARKS.map((mark, index) =>
-                mark.group === group ? (
-                  <div
-                    key={mark.file ?? mark.name}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      ...arrive(frame, cues.marks[index] ?? 8, 10),
-                    }}
-                  >
-                    {mark.file ? (
-                      <Img src={staticFile(`logos/${mark.file}.svg`)} style={{ height: mark.h }} />
-                    ) : (
-                      <span
-                        style={{
-                          fontFamily: FONT.sans,
-                          fontSize: 34,
-                          fontWeight: 800,
-                          color: C.ink,
-                        }}
-                      >
-                        {mark.name}
-                      </span>
-                    )}
-                    {mark.label ? (
-                      <span
-                        style={{
-                          fontFamily: FONT.sans,
-                          fontSize: 26,
-                          fontWeight: 700,
-                          color: C.ink,
-                        }}
-                      >
-                        {mark.label}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null,
-              )}
-            </div>
+      <div style={{ display: "grid", rowGap: 60, marginTop: 80 }}>
+        {ROWS.map((row) => (
+          <div key={row[0].label} style={{ display: "flex", alignItems: "flex-start" }}>
+            {row.map((group, index) => (
+              <div
+                key={group.label}
+                style={
+                  index
+                    ? {
+                        paddingLeft: 52,
+                        marginLeft: 52,
+                        // Each divider fades in with its group, so it never stands alone.
+                        borderLeft: `1.5px solid rgba(221, 214, 198, ${ease(frame, firstCue(group, cues))})`,
+                      }
+                    : undefined
+                }
+              >
+                <Group group={group} frame={frame} cues={cues} />
+              </div>
+            ))}
           </div>
         ))}
       </div>
+    </AbsoluteFill>
+  );
+}
 
-      <div style={{ position: "relative", marginTop: 90, height: 260 }}>
-        <span
-          style={{
-            position: "absolute",
-            top: CENTRE - 1,
-            left: CENTRE,
-            width: STATION * 3,
-            height: 2,
-            background: "rgba(134, 96, 38, 0.45)",
-          }}
-        />
-        <span
-          style={{
-            position: "absolute",
-            top: CENTRE - 7,
-            left: CENTRE - 7 + travel * STATION * 3,
-            width: 14,
-            height: 14,
-            background: C.bronze,
-            transform: "rotate(45deg)",
-            opacity: travel > 0 && travel < 1 ? 1 : 0,
-          }}
-        />
-        {MOMENTS.map((moment, index) => {
-          const reached = travel >= index / 3 - 0.001;
-          return (
-            <div
-              key={moment.title}
-              style={{ position: "absolute", left: index * STATION, top: 0, width: 360 }}
-            >
-              <span
-                style={{
-                  position: "relative",
-                  zIndex: 1,
-                  display: "grid",
-                  placeItems: "center",
-                  width: 54,
-                  height: 54,
-                  border: `2px solid ${C.bronze}`,
-                  background: reached && travel > 0 ? C.mist : C.paper,
-                  fontFamily: FONT.display,
-                  fontSize: 26,
-                  color: C.bronze,
-                }}
-              >
-                {index + 1}
-              </span>
-              <p
-                style={{
-                  margin: "26px 0 0",
-                  fontFamily: FONT.sans,
-                  fontSize: 22,
-                  fontWeight: 600,
-                  color: C.bronze,
-                }}
-              >
-                {moment.where}
-              </p>
-              <p
-                style={{
-                  margin: "10px 0 0",
-                  fontFamily: FONT.sans,
-                  fontSize: 32,
-                  fontWeight: 700,
-                  color: C.ink,
-                }}
-              >
-                {moment.title}
-              </p>
-            </div>
-          );
-        })}
-      </div>
+function firstCue(group: IntegrationGroup, cues: WiringCues): number {
+  return Math.min(...group.marks.map((mark) => cues.marks[mark.id] ?? 8));
+}
+
+function Group({
+  group,
+  frame,
+  cues,
+}: {
+  group: IntegrationGroup;
+  frame: number;
+  cues: WiringCues;
+}) {
+  return (
+    <div>
       <p
         style={{
-          position: "absolute",
-          left: 160,
-          bottom: 96,
           margin: 0,
           fontFamily: FONT.sans,
-          fontSize: 24,
+          fontSize: 22,
+          fontWeight: 600,
           color: C.slate,
+          ...arrive(frame, firstCue(group, cues) - 4),
         }}
       >
-        Hono and Express use the same runtime for backend messages.
+        {group.label}
       </p>
-    </AbsoluteFill>
+      <div style={{ display: "flex", alignItems: "center", gap: 40, marginTop: 18 }}>
+        {group.marks.map((mark) => (
+          <div
+            key={mark.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              ...arrive(frame, cues.marks[mark.id] ?? 8, 10),
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                width: (mark.slot ?? 32) * SCALE,
+                height: 32 * SCALE,
+              }}
+            >
+              <Img
+                src={staticFile(`logos/${mark.asset}`)}
+                style={{ width: mark.w * SCALE, height: mark.h * SCALE, objectFit: "contain" }}
+              />
+            </span>
+            <span
+              style={{
+                fontFamily: FONT.sans,
+                fontSize: 30,
+                fontWeight: 700,
+                color: C.ink,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {mark.name}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
