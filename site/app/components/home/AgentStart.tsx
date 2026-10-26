@@ -11,7 +11,7 @@ export function AgentStart() {
       <p className="micro text-[11px] tracking-label text-slate">Prefer your coding agent?</p>
       <p className="mt-2 text-[15px] leading-relaxed text-ink/85">
         Add the Palamedes skill, then ask:{" "}
-        <q className="font-semibold">Use $palamedes to set up translations in this app.</q>
+        <q className="font-semibold">Use the Palamedes skill to set up translations in this app.</q>
       </p>
       <CopyCommand
         command="npx skills add sebastian-software/palamedes --skill palamedes"

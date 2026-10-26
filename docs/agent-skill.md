@@ -29,17 +29,19 @@ installation workflow supports it.
 Example requests:
 
 ```text
-Use $palamedes to set up translations in this Next.js App Router app.
+Use the Palamedes skill to set up translations in this Next.js App Router app.
 Keep the existing account and cookie locale policy, and verify English and German.
 ```
 
 ```text
-Use $palamedes to migrate this Vite/React app from Lingui.
+Use the Palamedes skill to migrate this Vite/React app from Lingui.
 Preserve every PO translation and context. Report conflicting ID mappings
 before removing entries, and run the relevant extraction and build checks.
 ```
 
-Client invocation syntax can differ; the skill name is `palamedes`.
+Plain language works in any agent that loads skills. Clients that also offer a
+direct invocation use their own syntax, for example `$palamedes` in Codex or
+`/palamedes` in Claude Code; the skill name is `palamedes`.
 
 ## Compatibility and scope
 
