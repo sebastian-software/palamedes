@@ -37,7 +37,7 @@ if (failures.length > 0) {
 
 if (unpublished.length === 0) {
   console.log(
-    `All ${packages.length} public packages exist on the registry; trusted publishing can mint tokens for each.`,
+    `All ${packages.length} public package names exist on the registry. Trusted-publisher configuration and publish permissions are not verified by this name-only check.`,
   );
   process.exit(0);
 }
@@ -62,7 +62,7 @@ for (const packageInfo of unpublished) {
 }
 console.error("");
 console.error(
-  "Then configure a trusted publisher for each package on npmjs.com (repository sebastian-software/palamedes, workflow publish.yml, no environment) and re-run this workflow with force_publish.",
+  "Then verify a trusted publisher for each package on npmjs.com (repository sebastian-software/palamedes, workflow publish.yml, no environment, direct npm publish allowed). Run the upload-free dry run on the reviewed revision; actual publication remains subject to the coordinated release policy and authorization.",
 );
 
 if (warnOnly) {
