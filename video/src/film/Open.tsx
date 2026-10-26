@@ -1,20 +1,21 @@
-import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Img, staticFile, useCurrentFrame } from "remotion";
 
 import { SPECIMEN_LOCALES, specimenSeats } from "../../../site/app/data/specimen";
 import { C, FONT } from "../brand";
 import { ramp } from "../flight/motion";
 import { Revealed, steady } from "../kinetic";
 import { BAR } from "../timeline";
-import { arrive, sceneFade } from "../ui";
+import { arrive, sceneFade, VersionBadge } from "../ui";
 import { at } from "./timeline";
 
 /*
  * Bars 1–2, the prologue: "Your app speaks English. Most of the world
  * doesn't." An English card sits in the middle; then the world answers in
  * its own languages around it. English is spoken by roughly 1.5 of 8 billion
- * people, so the line holds.
+ * people, so the line holds. A quiet lockup in the corner announces the
+ * release before the story starts.
  */
-const CUE = { card: at(0.3), world: at(2.5) };
+const CUE = { card: at(0.3), world: at(2.5), release: 4 };
 const ENGLISH = SPECIMEN_LOCALES.find((entry) => entry.locale === "en");
 
 /** "Hello" in other languages, placed around the card (x, y in px, size). */
@@ -30,7 +31,7 @@ const GREETINGS = [
   { text: "안녕하세요", lang: "ko", x: 470, y: 920, size: 46 },
   { text: "Merhaba", lang: "tr", x: 1180, y: 940, size: 44 },
   { text: "你好", lang: "zh", x: 1120, y: 110, size: 52 },
-  { text: "Cześć", lang: "pl", x: 430, y: 90, size: 42 },
+  { text: "Cześć", lang: "pl", x: 560, y: 250, size: 42 },
 ] as const;
 
 export function Open() {
@@ -57,6 +58,31 @@ export function Open() {
           <Revealed text={greeting.text} frame={frame} at={CUE.world + index * 2} blur={14} />
         </span>
       ))}
+
+      <div
+        style={{
+          position: "absolute",
+          left: 72,
+          top: 60,
+          display: "flex",
+          alignItems: "center",
+          gap: 18,
+          ...arrive(frame, CUE.release, 16, 12),
+        }}
+      >
+        <Img src={staticFile("logo.svg")} style={{ width: 46, height: 46 }} />
+        <span
+          style={{
+            fontFamily: FONT.display,
+            fontSize: 26,
+            letterSpacing: "0.28em",
+            color: C.ink,
+          }}
+        >
+          PALAMEDES
+        </span>
+        <VersionBadge size={20} />
+      </div>
 
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
         <div

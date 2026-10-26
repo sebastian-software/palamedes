@@ -38,16 +38,51 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
     <Wiring
       key="frameworks"
       cues={{
-        marks: [at(2.4), at(3), at(3.95), at(5.2), at(6.2), at(6.65), at(7.75)],
-        travel: [at(8.6), at(10.9)],
-        bars: 4,
+        marks: {
+          nextjs: at(2.4),
+          nuxt: at(3.75),
+          sveltekit: at(4.55),
+          tanstack: at(5.5),
+          "react-router": at(6.5),
+          waku: at(7.7),
+          remix: at(8.25),
+          react: at(9.4),
+          solid: at(10.3),
+          vue: at(11),
+          svelte: at(11.45),
+          vite: at(11.9),
+          turbopack: at(12.2),
+          hono: at(13.95),
+          express: at(14.25),
+          nodejs: at(14.8),
+          mdx: at(16.2),
+          rust: at(17.25),
+        },
+        bars: FILM_SCENES.frameworks.bars,
       }}
     />,
   ],
-  ["fast", <Rust key="fast" />],
+  ["fast", <Rust key="fast" bars={FILM_SCENES.fast.bars} />],
   ["agent", <Agent key="agent" />],
-  ["claim", <FilmClaim key="claim" />],
-  ["end", <End key="end" cues={{ domain: at(3.8), note: at(1.4), bars: 4, company: at(5.4) }} />],
+  [
+    "claim",
+    <FilmClaim
+      key="claim"
+      cues={{
+        fastest: at(0.4),
+        complete: at(3),
+        proven: at(4.5),
+        bars: FILM_SCENES.claim.bars,
+      }}
+    />,
+  ],
+  [
+    "end",
+    <End
+      key="end"
+      cues={{ domain: at(4.4), release: at(1), note: at(1.9), bars: 4, company: at(6) }}
+    />,
+  ],
 ];
 
 export function PalamedesFilm() {

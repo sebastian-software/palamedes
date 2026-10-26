@@ -161,3 +161,31 @@ export const Dim = ({ children }: { children: ReactNode }) => (
 export const Tag = ({ children }: { children: ReactNode }) => (
   <span style={{ color: C.slate }}>{children}</span>
 );
+
+/** The release this cut presents; the film's v2.0 badge and end card read it. */
+export const RELEASE = "v2.0";
+
+/** A bronze release badge, sized by its type. */
+export function VersionBadge({ size = 22, style }: { size?: number; style?: CSSProperties }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: `${size * 0.28}px ${size * 0.62}px`,
+        border: `2px solid ${C.bronze}`,
+        borderRadius: 999,
+        background: C.paper,
+        fontFamily: FONT.mono,
+        fontSize: size,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1,
+        textTransform: "none",
+        color: C.bronze,
+        ...style,
+      }}
+    >
+      {RELEASE}
+    </span>
+  );
+}

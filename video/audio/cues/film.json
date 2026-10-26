@@ -1,140 +1,342 @@
 {
   "composition": "PalamedesFilm",
   "output": "palamedes-film",
-  "total": 159.967,
+  "total": 180.0,
   "plan": [
-    ["F", "open"],
-    ["C", "open"],
-    ["Dm", "hook"],
-    ["Bb", "hook"],
-    ["Gm", "hook"],
-    ["Dm", "hook"],
-    ["Bb", "hook"],
-    ["C", "hook"],
-    ["Gm", "hook"],
-    ["Dm", "hook"],
-    ["Bb", "hook"],
-    ["F", "hook"],
-    ["Gm", "hook"],
-    ["Bb", "hook"],
-    [["Asus", "A"], "hook"],
-    ["F", "reveal"],
-    ["C", "reveal"],
-    ["Dm", "reveal"],
-    ["Bb", "reveal"],
-    ["C", "reveal"],
-    ["F", "journey"],
-    ["C", "journey"],
-    ["Dm", "journey"],
-    ["Bb", "journey"],
-    ["F", "journey"],
-    ["C", "journey"],
-    ["Gm", "journey"],
-    ["C", "journey"],
-    ["Dm", "journey"],
-    ["Bb", "journey"],
-    ["F", "journey"],
-    ["C", "journey"],
-    ["Bb", "journey"],
-    ["C", "journey"],
-    ["F", "complete"],
-    ["Dm", "complete"],
-    ["Bb", "complete"],
-    ["C", "complete"],
-    ["F", "complete"],
-    ["C", "complete"],
-    ["Bb", "wiring"],
-    ["F", "wiring"],
-    ["Gm", "wiring"],
-    ["C", "wiring"],
-    ["Dm", "rust"],
-    ["Bb", "rust"],
-    ["C", "rust"],
-    ["F", "agent"],
-    ["Bb", "agent"],
-    ["C", "agent"],
-    [["Bb", "C"], "claim"],
-    ["F", "claim"],
-    ["F", "end"],
-    ["F", "end"],
-    ["F", "end"],
-    ["F", "end"]
+    [
+      "F",
+      "open"
+    ],
+    [
+      "C",
+      "open"
+    ],
+    [
+      "Dm",
+      "hook"
+    ],
+    [
+      "Bb",
+      "hook"
+    ],
+    [
+      "Gm",
+      "hook"
+    ],
+    [
+      "Dm",
+      "hook"
+    ],
+    [
+      "Bb",
+      "hook"
+    ],
+    [
+      "C",
+      "hook"
+    ],
+    [
+      "Gm",
+      "hook"
+    ],
+    [
+      "Dm",
+      "hook"
+    ],
+    [
+      "Bb",
+      "hook"
+    ],
+    [
+      "F",
+      "hook"
+    ],
+    [
+      "Gm",
+      "hook"
+    ],
+    [
+      "Bb",
+      "hook"
+    ],
+    [
+      [
+        "Asus",
+        "A"
+      ],
+      "hook"
+    ],
+    [
+      "F",
+      "reveal"
+    ],
+    [
+      "C",
+      "reveal"
+    ],
+    [
+      "Dm",
+      "reveal"
+    ],
+    [
+      "Bb",
+      "reveal"
+    ],
+    [
+      "C",
+      "reveal"
+    ],
+    [
+      "F",
+      "journey"
+    ],
+    [
+      "C",
+      "journey"
+    ],
+    [
+      "Dm",
+      "journey"
+    ],
+    [
+      "Bb",
+      "journey"
+    ],
+    [
+      "F",
+      "journey"
+    ],
+    [
+      "C",
+      "journey"
+    ],
+    [
+      "Gm",
+      "journey"
+    ],
+    [
+      "C",
+      "journey"
+    ],
+    [
+      "Dm",
+      "journey"
+    ],
+    [
+      "Bb",
+      "journey"
+    ],
+    [
+      "F",
+      "journey"
+    ],
+    [
+      "C",
+      "journey"
+    ],
+    [
+      "Bb",
+      "journey"
+    ],
+    [
+      "C",
+      "journey"
+    ],
+    [
+      "F",
+      "complete"
+    ],
+    [
+      "Dm",
+      "complete"
+    ],
+    [
+      "Bb",
+      "complete"
+    ],
+    [
+      "C",
+      "complete"
+    ],
+    [
+      "F",
+      "complete"
+    ],
+    [
+      "C",
+      "complete"
+    ],
+    [
+      "Bb",
+      "wiring"
+    ],
+    [
+      "F",
+      "wiring"
+    ],
+    [
+      "Gm",
+      "wiring"
+    ],
+    [
+      "C",
+      "wiring"
+    ],
+    [
+      "Dm",
+      "wiring"
+    ],
+    [
+      "Bb",
+      "wiring"
+    ],
+    [
+      "Gm",
+      "wiring"
+    ],
+    [
+      "C",
+      "wiring"
+    ],
+    [
+      "Dm",
+      "rust"
+    ],
+    [
+      "Bb",
+      "rust"
+    ],
+    [
+      "F",
+      "rust"
+    ],
+    [
+      "Gm",
+      "rust"
+    ],
+    [
+      "C",
+      "rust"
+    ],
+    [
+      "F",
+      "agent"
+    ],
+    [
+      "Bb",
+      "agent"
+    ],
+    [
+      "C",
+      "agent"
+    ],
+    [
+      "Gm",
+      "claim"
+    ],
+    [
+      [
+        "Bb",
+        "C"
+      ],
+      "claim"
+    ],
+    [
+      "F",
+      "claim"
+    ],
+    [
+      "F",
+      "end"
+    ],
+    [
+      "F",
+      "end"
+    ],
+    [
+      "F",
+      "end"
+    ],
+    [
+      "F",
+      "end"
+    ]
   ],
   "cues": [
     {
       "take": "eleven-brian/00-open",
-      "at": 0.5,
+      "at": 0.55,
       "text": "Your app speaks English. Most of the world doesn't."
     },
     {
       "take": "eleven-brian/01-hook",
-      "at": 6.1,
+      "at": 6.01,
       "text": "Translating an app looks simple, until you spend a minute on the details. One seat, but three seats. Words that change their order. Prices and dates that every language writes its own way. And that's with just two languages."
     },
     {
       "take": "eleven-brian/01b-problems",
-      "at": 23.23,
+      "at": 23.16,
       "text": "And the usual setup makes it harder. You invent a key for every sentence. Every visitor downloads the whole language file. Message syntax gets parsed at runtime, in the browser. Every framework needs its own glue code. And the tools are too slow to run on every save."
     },
     {
       "take": "eleven-brian/02-reveal",
-      "at": 43.13,
+      "at": 43.15,
       "text": "That's exactly why we built Palamedes. You just write your sentences, right where they're used. Your translators bring the languages, and Palamedes takes care of everything in between."
     },
     {
       "take": "eleven-brian/03-write",
-      "at": 57.43,
+      "at": 57.44,
       "text": "Here's how it works. That little Trans tag around your sentence is a macro: it looks like plain JSX to you, and your build rewrites it later."
     },
     {
       "take": "eleven-brian/04-extract",
-      "at": 66.73,
+      "at": 66.82,
       "text": "One command lifts every sentence out of your code and into catalog files your translators already know."
     },
     {
       "take": "eleven-brian/05-translate",
-      "at": 73.33,
+      "at": 73.36,
       "text": "They add the translations, and your code stays exactly as it is."
     },
     {
       "take": "eleven-brian/06-build",
-      "at": 77.63,
+      "at": 77.7,
       "text": "Then your build does the clever part: every sentence becomes a short ID, and every translation becomes ready-to-run code."
     },
     {
       "take": "eleven-brian/07-load",
-      "at": 86.13,
+      "at": 86.16,
       "text": "The catalog is split into one piece per screen, so each screen loads only its own words, in your visitor's language."
     },
     {
       "take": "eleven-brian/08-complete",
-      "at": 97.53,
+      "at": 97.56,
       "text": "And it doesn't stop there. Plurals, numbers and dates, server rendering and server actions, a linter for your messages and an audit that catches every missing translation: it's one complete toolchain, from the first sentence to the last translation."
     },
     {
       "take": "eleven-brian/09-frameworks",
-      "at": 114.57,
-      "text": "The wiring is already built: for React and Solid, for Next.js, TanStack, Waku and Remix, and for Vite. Every one of them is tested as a real app."
+      "at": 114.59,
+      "text": "The wiring is already built: for Next.js, Nuxt, SvelteKit, TanStack, React Router, Waku and Remix; for React, Solid, Vue and Svelte; and beyond the browser, for backends, command-line tools, MDX docs and Rust. Each one comes with a guide and a working example."
     },
     {
       "take": "eleven-brian/10-fast",
-      "at": 126.0,
-      "text": "And it's seriously fast. Its Rust core works through fifteen hundred files in just seventy-three milliseconds."
+      "at": 137.44,
+      "text": "And it's seriously fast, in every one of them. Its Rust core works through fifteen hundred files in about a tenth of a second. The next-fastest tool needs over two seconds."
     },
     {
       "take": "eleven-brian/11-agent",
-      "at": 134.67,
+      "at": 151.84,
       "text": "Working with a coding agent? Add the Palamedes skill and simply ask it to set up translations for you."
     },
     {
       "take": "eleven-brian/12-claim",
-      "at": 143.03,
-      "text": "Clear, complete, and fast. For once, you get to pick all three."
+      "at": 160.3,
+      "text": "The fastest i18n toolchain. Complete from code to screen, and proven in eighteen integrations."
     },
     {
       "take": "eleven-brian/13-end",
-      "at": 149.03,
-      "text": "Palamedes is open source. Get started today at palamedes.dev."
+      "at": 168.87,
+      "text": "Palamedes 2.0 is open source. Get started today at palamedes.dev."
     }
   ]
 }

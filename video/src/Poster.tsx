@@ -1,7 +1,7 @@
 import { AbsoluteFill, Img, staticFile } from "remotion";
 
 import { C, FONT } from "./brand";
-import { Display, Kicker, useBrandFonts } from "./ui";
+import { Display, Kicker, useBrandFonts, VersionBadge } from "./ui";
 
 /*
  * The poster for the site's "Watch the film" button and video platforms: the
@@ -23,7 +23,10 @@ export function Poster() {
           opacity: 0.08,
         }}
       />
-      <Kicker>Open-source i18n for React, Solid &amp; TypeScript</Kicker>
+      <Kicker>
+        Open-source i18n · frontend, backend, CLI, MDX &amp; Rust
+        <VersionBadge size={20} />
+      </Kicker>
       <Display size={124} style={{ marginTop: 40 }}>
         Just write
         <br />
