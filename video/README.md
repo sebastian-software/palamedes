@@ -54,6 +54,32 @@ Hellenic, and light code listings. The sans and mono stacks use macOS system
 fonts, so render on macOS or supply equivalent font files before rendering
 elsewhere.
 
+## Publishing to Bunny Stream
+
+The homepage plays the film from Bunny Stream (library 783695). Bunny cannot
+replace the file of an existing video, so each cut is published as a new video
+and the site switches to its id; the previous video stays as a rollback until
+it is deleted in the dashboard. `scripts/publish-bunny.mjs` does the whole
+round: create, upload (or let Bunny fetch from an https URL), wait for
+encoding, set the poster as thumbnail, add English captions, and with `--site`
+rewrite `site/app/data/film.ts` (id, version, duration, transcript from the cue
+sheet), copy the poster to `site/public/media`, and update the film line in
+`site/analytics.md`.
+
+It needs only the account API key, `BUNNY_API_KEY`, from the environment or an
+untracked `--env` file; the library key is read from the account API and never
+printed. Always start with a dry run, which only reads from Bunny:
+
+```sh
+node scripts/publish-bunny.mjs --dry-run --site --version v7 \
+  --file audio/.work/out/palamedes-film.mp4 \
+  --poster <poster.webp> --captions audio/.work/out/palamedes-film.en.vtt \
+  --env /path/to/.env
+```
+
+Drop `--dry-run` to publish, then run the formatter and open a PR for the site
+changes.
+
 ## Motion components
 
 Some motion comes from [snapcn](https://snapcn.dev) (MIT). Its copied source is
