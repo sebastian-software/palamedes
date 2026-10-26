@@ -38,8 +38,9 @@ catalog compilation to native CLIs and services. Its Cargo integration produces
 external language files; all languages, including English, stay outside the
 executable. The application build exports a message contract; `pmds catalog
 compile --target rust` checks PO updates against it and produces compatible
-language files independently of the application build. Present it as an additional evaluation path with its own guide and
-example, not as full parity with the TypeScript workflow. The crates remain
+language files independently of the application build. Give Rust the same discovery
+prominence as the other application paths, with its own guide and example;
+keep its supported scope explicit. The crates remain
 unpublished, and the current subset is text, display arguments, string selects, and cardinal/ordinal plurals.
 Keep those limits beside the claim that compatible translations can ship without
 rebuilding an application.
@@ -80,6 +81,15 @@ the reader may be starting greenfield or from any established i18n stack:
    remains useful without it.
 
 ## Public Content And Evidence
+
+The homepage gives frontend, backend, CLI, MDX, and Rust equal application
+entry points. Each has a short benefit, a setup guide, and a working example.
+CLI here means applications being localized; the `pmds` CLI is the shared
+toolchain beneath all five paths. Group frontend frameworks together and keep
+their full inventory and build-tool details available through progressive
+disclosure. Equal discovery prominence does not imply identical capabilities
+or maturity. The hero and closing action lead to these application paths;
+focused guides own setup, version requirements, and support boundaries.
 
 The homepage is a guided tour for someone choosing an i18n library who may
 never have used i18n tooling. Every section opens with a line that earns

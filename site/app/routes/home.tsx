@@ -11,7 +11,6 @@ import { Journey } from "~/components/home/Journey";
 import { OriginStory } from "~/components/home/OriginStory";
 import { ProofSection } from "~/components/home/ProofSection";
 import { QuestionRoutes } from "~/components/home/QuestionRoutes";
-import { RustApplications } from "~/components/home/RustApplications";
 import { RustRace } from "~/components/home/RustRace";
 import { Band, BandHeader } from "~/components/marketing/Band";
 import { REPO } from "~/data/links";
@@ -22,7 +21,7 @@ export const handle = { layout: "bare" };
 export function meta() {
   const title = "Palamedes — just write the sentence";
   const description =
-    "Open-source i18n for React, Vue, Svelte, Solid, Remix, TypeScript, and Rust. Native tools compile your messages; integrations connect Next.js, Nuxt, SvelteKit, React Router, and more. Keep readable PO catalogs and deliver translations per screen.";
+    "Open-source i18n for frontends, backends, command-line tools, MDX documentation, and Rust applications. Keep translations in Git and compile catalogs with one local toolchain.";
 
   return [
     ...pageMeta({ title, description, path: "/" }),
@@ -57,7 +56,6 @@ export default function Home() {
       <RustRace />
       <FrameworkWiring />
       <BrowserRuntime />
-      <RustApplications />
       <Chooser />
       <ProofSection />
       <OriginStory />
@@ -88,8 +86,8 @@ export default function Home() {
 
       <CtaBand
         headline="Write one sentence. Watch it speak German."
-        lede="The guided setup takes you from installation to a rendered translation in your own stack — by hand, or with your coding agent."
-        primary={{ label: "Start with your framework", href: "/get-started" }}
+        lede="Choose the guide and working example for your frontend, backend, command-line tool, MDX documentation, or Rust application."
+        primary={{ label: "Find your starting point", href: "#applications" }}
         secondary={{ label: "Browse the source", href: REPO }}
       />
     </Page>

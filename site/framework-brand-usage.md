@@ -59,6 +59,17 @@ The source artwork is neither cropped nor modified. The compact assets were retr
 2026-10-23; SHA-256 receipts and the earlier wordmark sources are recorded in
 `THIRD_PARTY_NOTICES.md`.
 
+## MDX application entry
+
+Retrieved 2026-10-26. The homepage MDX entry uses the unmodified
+[official MDX site icon](https://mdxjs.com/icon.svg), stored as
+`site/public/framework-logos/mdx.svg`, beside the visible MDX name. Its
+proportions, artwork, and upstream color-scheme treatment are preserved.
+The [MDX project credits Evil Rabbit of Vercel for the logo design](https://mdxjs.com/community/about/#who-designed-the-logo).
+It identifies Palamedes' MDX integration without implying endorsement or use
+of the `@mdx-js` compiler. The CLI entry uses a typeset terminal prompt, not a
+third-party logo or an additional icon-set asset.
+
 ## Product film
 
 The product film in `video/` shows the unmodified React, Solid, Next.js, TanStack,

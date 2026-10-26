@@ -55,6 +55,16 @@ are trademarks of Shopify Inc. Rust and the Rust logo are trademarks of the Rust
 Express is a project of the OpenJS Foundation. All other marks are trademarks
 of their respective owners.
 
+## MDX mark
+
+Retrieved 2026-10-26. The unmodified MDX icon identifies MDX support on the
+homepage. It remains third-party artwork outside the Palamedes license grant.
+MDX credits Evil Rabbit of Vercel for its logo design.
+
+| Mark | Local asset                           | Source                                               | SHA-256                                                            |
+| ---- | ------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------ |
+| MDX  | `site/public/framework-logos/mdx.svg` | [Official MDX site icon](https://mdxjs.com/icon.svg) | `3c34b81444050ad4520f7203280f133a46f35c02f28e7a02c30c834e477c1136` |
+
 ## Streamline visual assets
 
 Selected icons used by the Palamedes website are from the **Streamline Sharp
