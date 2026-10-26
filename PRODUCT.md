@@ -85,9 +85,9 @@ the reader may be starting greenfield or from any established i18n stack:
 The homepage gives frontend, backend, CLI, MDX, and Rust equal application
 entry points. Each has a short benefit, a setup guide, and a working example.
 CLI here means applications being localized; the `pmds` CLI is the shared
-toolchain beneath all five paths. Group frontend frameworks together and keep
-their full inventory and build-tool details available through progressive
-disclosure. Equal discovery prominence does not imply identical capabilities
+toolchain beneath all five paths. Show the full frontend framework and UI-library
+inventory in a separate, always-visible integration block, with app frameworks
+first and build tools alongside. Equal discovery prominence does not imply identical capabilities
 or maturity. The hero and closing action lead to these application paths;
 focused guides own setup, version requirements, and support boundaries.
 

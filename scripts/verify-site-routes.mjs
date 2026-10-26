@@ -443,10 +443,18 @@ async function checkRoutes(context, label, { expectHydration }) {
     ) {
       fail("home application paths: the hero must lead to the shared application overview");
     }
-    const frontendDisclosure = integrationSection.locator("details");
-    const frontendSummary = frontendDisclosure.locator("summary");
-    await frontendSummary.focus();
-    await page.keyboard.press("Enter");
+    const frameworkSupport = integrationSection.getByRole("region", {
+      name: "Framework integrations",
+      exact: true,
+    });
+    if (
+      !(await frameworkSupport.isVisible()) ||
+      (await frameworkSupport.locator("details").count()) !== 0
+    ) {
+      fail(
+        "home framework support: the complete integration block must be visible without a disclosure",
+      );
+    }
     const frontendIntegrations = integrationSection.getByRole("list", {
       name: "Frontend integrations",
     });
@@ -454,15 +462,31 @@ async function checkRoutes(context, label, { expectHydration }) {
       !(await frontendIntegrations.isVisible()) ||
       (await frontendIntegrations.getByRole("listitem").count()) !== 11
     ) {
-      fail(
-        "home integration details: all eleven frontend integrations must be keyboard-accessible",
-      );
+      fail("home framework support: all eleven frontend integrations must be visible");
     }
-    for (const name of ["Svelte", "SvelteKit"]) {
+    for (const [name, href] of [
+      ["Next.js", "/frameworks/nextjs"],
+      ["Nuxt", "/frameworks/nuxt"],
+      ["SvelteKit", "/frameworks/sveltekit"],
+      ["TanStack Start", "/frameworks/tanstack-start"],
+      ["React Router", "/frameworks/react-router"],
+      ["Waku", "/frameworks/waku"],
+      ["Remix", "/frameworks/remix-v3"],
+      ["Svelte", "/frameworks/svelte"],
+    ]) {
       const link = frontendIntegrations.getByRole("link", { name, exact: true });
-      if ((await link.getAttribute("href")) !== `/frameworks/${name.toLowerCase()}`) {
-        fail(`home integration details: ${name} must link to its own guide`);
+      if (!(await link.isVisible()) || (await link.getAttribute("href")) !== href) {
+        fail(`home framework support: ${name} needs a visible link to its own guide`);
       }
+    }
+    await frontendIntegrations.getByRole("link", { name: "Next.js", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    if (
+      !(await frontendIntegrations
+        .getByRole("link", { name: "Nuxt", exact: true })
+        .evaluate((link) => link === document.activeElement))
+    ) {
+      fail("home framework support: keyboard navigation must follow the visible integration order");
     }
     const integrationLogos = integrationSection.locator("li img");
     for (const logo of await integrationLogos.all()) {
@@ -475,11 +499,6 @@ async function checkRoutes(context, label, { expectHydration }) {
       !(await mdxLogo.evaluate((image) => image.naturalWidth > 0))
     ) {
       fail("home application paths: the original MDX mark must load beside its visible name");
-    }
-    await frontendSummary.focus();
-    await page.keyboard.press("Enter");
-    if ((await frontendDisclosure.getAttribute("open")) !== null) {
-      fail("home integration details: keyboard activation must close the disclosure");
     }
     const decisionPaths = page.getByRole("list", { name: "Decision paths" });
     const questionRoutes = await decisionPaths.locator(":scope > li").count();
@@ -841,10 +860,21 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (applicationNames.join("|") !== "Frontend|Backend|CLI|MDX|Rust") {
       fail("no-JS: all five application paths must be present in prerendered HTML");
     }
-    const integrationDetails = page.locator("#applications details");
-    await integrationDetails.locator("summary").click();
-    if (!(await page.getByRole("list", { name: "Frontend integrations" }).isVisible())) {
-      fail("no-JS: frontend integration details must open without JavaScript");
+    const frameworkSupport = page.getByRole("region", {
+      name: "Framework integrations",
+      exact: true,
+    });
+    const frontendIntegrations = frameworkSupport.getByRole("list", {
+      name: "Frontend integrations",
+    });
+    if (
+      !(await frontendIntegrations.isVisible()) ||
+      !(await frontendIntegrations
+        .getByRole("link", { name: "Next.js", exact: true })
+        .isVisible()) ||
+      (await frameworkSupport.locator("details").count()) !== 0
+    ) {
+      fail("no-JS: framework support and Next.js must be visible without opening a disclosure");
     }
     const questionRouting = await page.getByText("Starting a new project?").isVisible();
     const faq = await page.getByText("Is Palamedes ready for production use?").isVisible();

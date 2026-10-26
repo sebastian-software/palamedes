@@ -1,4 +1,5 @@
 import { FrameworkIdentity } from "~/components/FrameworkIdentity";
+import { StreamlineIcon } from "~/components/icons/StreamlineIcon";
 import { frameworkLandingHref } from "~/data/framework-landing";
 import { repoHref } from "~/data/links";
 
@@ -17,11 +18,7 @@ const APPLICATIONS: readonly Application[] = [
   {
     id: "frontend-applications",
     name: "Frontend",
-    marks: [
-      { name: "React", asset: "react.svg", width: 28, height: 26 },
-      { name: "Vue", asset: "vue.svg", width: 25, height: 23 },
-      { name: "Svelte", asset: "svelte.svg", width: 20, height: 24 },
-    ],
+    marks: [],
     body: "Translate interfaces and server-rendered apps. Framework adapters prepare messages for rendering, hydration, and lazy screens.",
     guide: { label: "Frontend guides", href: "/frameworks" },
     example: { label: "Live app demos", href: "/frameworks#frontend-frameworks" },
@@ -73,10 +70,6 @@ const APPLICATIONS: readonly Application[] = [
 ];
 
 const FRONTEND_INTEGRATIONS = [
-  { slug: "react", name: "React", href: "/get-started" },
-  { slug: "solid", name: "Solid", href: frameworkLandingHref("solid") },
-  { slug: "vue", name: "Vue", href: frameworkLandingHref("vue") },
-  { slug: "svelte", name: "Svelte", href: frameworkLandingHref("svelte") },
   { slug: "nextjs", name: "Next.js", href: frameworkLandingHref("nextjs") },
   { slug: "nuxt", name: "Nuxt", href: frameworkLandingHref("nuxt") },
   { slug: "sveltekit", name: "SvelteKit", href: frameworkLandingHref("sveltekit") },
@@ -84,6 +77,10 @@ const FRONTEND_INTEGRATIONS = [
   { slug: "react-router", name: "React Router", href: frameworkLandingHref("react-router") },
   { slug: "waku", name: "Waku", href: frameworkLandingHref("waku") },
   { slug: "remix", name: "Remix", href: frameworkLandingHref("remix") },
+  { slug: "react", name: "React", href: "/get-started" },
+  { slug: "solid", name: "Solid", href: frameworkLandingHref("solid") },
+  { slug: "vue", name: "Vue", href: frameworkLandingHref("vue") },
+  { slug: "svelte", name: "Svelte", href: frameworkLandingHref("svelte") },
 ] as const;
 
 const ASSURANCES = [
@@ -120,6 +117,12 @@ export function IntegrationBand() {
             >
               <h3 className="text-[21px] font-semibold">{application.name}</h3>
               <div className="mt-5 flex min-h-16 items-start gap-5">
+                {application.id === "frontend-applications" ? (
+                  <span className="flex flex-col items-center gap-2">
+                    <StreamlineIcon name="app-widgets-plugin-extension" className="size-8" />
+                    <span className="text-[12px] text-ink/75">Web apps</span>
+                  </span>
+                ) : null}
                 {application.marks.map((mark) => (
                   <span key={mark.name} className="flex flex-col items-center gap-2">
                     <span className="flex h-8 items-center">
@@ -160,10 +163,16 @@ export function IntegrationBand() {
             </li>
           ))}
         </ul>
-        <details className="mt-6 border-b border-hair pb-6">
-          <summary className="min-h-11 cursor-pointer py-3 text-[15px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-            Explore all frontend integrations and build tools
-          </summary>
+        <section
+          aria-labelledby="framework-support-title"
+          className="mt-8 border border-hair px-6 py-6 sm:px-8"
+        >
+          <h3 id="framework-support-title" className="display-serif text-[25px] leading-tight">
+            Framework integrations
+          </h3>
+          <p className="mt-3 text-[16px] leading-relaxed text-ink/80">
+            First-party guides for your app framework and UI library.
+          </p>
           <ul aria-label="Frontend integrations" className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
             {FRONTEND_INTEGRATIONS.map((integration) => (
               <li key={integration.name}>
@@ -176,18 +185,22 @@ export function IntegrationBand() {
               </li>
             ))}
           </ul>
-          <p className="mt-5 text-[15px] leading-relaxed text-ink/80">
-            Build integrations:{" "}
-            <a href={frameworkLandingHref("vite")} className="pmds-arrow-link">
-              Vite
+          <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-hair pt-4">
+            <p className="text-[14px] font-semibold text-ink/75">Build tools</p>
+            <a
+              href={frameworkLandingHref("vite")}
+              className="flex min-h-14 items-center px-2 hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <FrameworkIdentity slug="vite" name="Vite" />
             </a>
-            {" · "}
-            <a href={frameworkLandingHref("nextjs")} className="pmds-arrow-link">
-              Turbopack through Next.js
+            <a
+              href={frameworkLandingHref("nextjs")}
+              className="flex min-h-14 items-center px-2 hover:bg-parchment focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <FrameworkIdentity slug="turbopack" name="Turbopack" />
             </a>
-            .
-          </p>
-        </details>
+          </div>
+        </section>
         <p className="mt-6 max-w-[56rem] text-[16px] leading-relaxed text-ink/80">
           One local toolchain connects these paths: extract messages, review PO catalogs, check
           translations, and compile them for your target.{" "}
