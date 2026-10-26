@@ -27,9 +27,28 @@ const SCALE = 1.6;
 
 type IntegrationGroup = { label: string; marks: readonly IntegrationMark[] };
 
-// The homepage technology stripe's seven groups and order (IntegrationBand),
-// laid out three rows deep so every name stays readable at film distance.
+// The homepage technology stripe's seven groups (IntegrationBand), three rows
+// deep so every name stays readable at film distance. The film names the UI
+// libraries before the frameworks that host them, so the story builds.
 const ROWS: readonly (readonly IntegrationGroup[])[] = [
+  [
+    {
+      label: "UI Libraries",
+      marks: [
+        { id: "react", name: "React", asset: "react.svg", w: 28, h: 26 },
+        { id: "solid", name: "Solid", asset: "solid.svg", w: 26, h: 24 },
+        { id: "vue", name: "Vue", asset: "vue.svg", w: 25, h: 23 },
+        { id: "svelte", name: "Svelte", asset: "svelte.svg", w: 20, h: 24 },
+      ],
+    },
+    {
+      label: "Build Tools",
+      marks: [
+        { id: "vite", name: "Vite", asset: "vite-icon.svg", w: 26, h: 26 },
+        { id: "turbopack", name: "Turbopack", asset: "turbopack-icon.svg", w: 24, h: 24 },
+      ],
+    },
+  ],
   [
     {
       label: "Frameworks",
@@ -47,24 +66,6 @@ const ROWS: readonly (readonly IntegrationGroup[])[] = [
         },
         { id: "waku", name: "Waku", asset: "waku-icon.png", w: 26, h: 26 },
         { id: "remix", name: "Remix", asset: "remix-icon.svg", w: 30, h: 18 },
-      ],
-    },
-  ],
-  [
-    {
-      label: "UI Libraries",
-      marks: [
-        { id: "react", name: "React", asset: "react.svg", w: 28, h: 26 },
-        { id: "solid", name: "Solid", asset: "solid.svg", w: 26, h: 24 },
-        { id: "vue", name: "Vue", asset: "vue.svg", w: 25, h: 23 },
-        { id: "svelte", name: "Svelte", asset: "svelte.svg", w: 20, h: 24 },
-      ],
-    },
-    {
-      label: "Build Tools",
-      marks: [
-        { id: "vite", name: "Vite", asset: "vite-icon.svg", w: 26, h: 26 },
-        { id: "turbopack", name: "Turbopack", asset: "turbopack-icon.svg", w: 24, h: 24 },
       ],
     },
   ],
