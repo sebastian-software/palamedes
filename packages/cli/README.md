@@ -85,6 +85,7 @@ pnpm exec pmds extract --no-cache
 pnpm exec pmds extract --verbose
 pnpm exec pmds lint
 pnpm exec pmds lint --json
+pnpm exec pmds lint src/view.tsx src/actions.ts --json --fail-on warning
 pnpm exec pmds lint --fail-on warning
 pnpm exec pmds lint --threads 1
 pnpm exec pmds lint --no-cache
@@ -108,6 +109,13 @@ must fail CI; the default continues to fail only on errors.
 `pmds lint` is non-mutating and checks Palamedes authoring across the same
 configured sources as extraction. It supports stable human and JSON output,
 configured rule levels, code-specific line suppressions, and CI thresholds.
+Explicit file arguments replace discovery and resolve relative to the invocation
+directory. They bypass catalog include/exclude patterns while retaining project
+lint policy. Pass literal files, not directories or quoted globs. Missing,
+unreadable, or unsupported inputs appear in `failedFiles` and exit with code
+`4`. Targeted runs preserve cache entries for other project files. Omit file
+arguments for the full configured source check before handoff or in CI.
+
 Lint source analysis uses the same bounded parallel worker policy as
 extraction; `--threads` overrides `extract-threads` and `1` runs it serially.
 

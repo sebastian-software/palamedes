@@ -17,6 +17,10 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct LintOptions {
+    /// Explicit files bypass catalog discovery; paths are relative to the invocation directory.
+    #[arg(help = "Source files to check instead of configured catalog sources.")]
+    #[arg(value_name = "FILE")]
+    files: Vec<PathBuf>,
     #[arg(help = tr!("Path to a Palamedes config file."))]
     #[arg(short, long)]
     config: Option<PathBuf>,
@@ -72,8 +76,25 @@ impl Command for LintOptions {
     fn run(&self, context: &Context) -> Result<Self::Output, CliError> {
         let config = context.load_config(self.config.as_deref())?;
         let mut files = Vec::new();
-        for catalog in &config.catalogs {
-            files.extend(collect_source_files(catalog, &config)?);
+        if self.files.is_empty() {
+            for catalog in &config.catalogs {
+                files.extend(collect_source_files(catalog, &config)?);
+            }
+        } else {
+            let cwd = context.cwd()?;
+            let canonical_root = std::fs::canonicalize(&config.root_dir).ok();
+            files.extend(self.files.iter().map(|path| {
+                let resolved: PathBuf = cwd.join(path).components().collect();
+                std::fs::canonicalize(&resolved).map_or(resolved, |canonical| {
+                    canonical_root
+                        .as_ref()
+                        .and_then(|root| canonical.strip_prefix(root).ok())
+                        .map_or_else(
+                            || canonical.clone(),
+                            |relative| config.root_dir.join(relative),
+                        )
+                })
+            }));
         }
         sort_and_dedupe_paths(&mut files);
 
@@ -85,8 +106,19 @@ impl Command for LintOptions {
 
         let analysis_files = files
             .iter()
+            .filter(|path| {
+                if self.files.is_empty() || is_supported_source_file(path) {
+                    true
+                } else {
+                    failed_files.push(LintFileFailure {
+                        file: display_source_path(path, &config.root_dir),
+                        message: "Expected a JS, JSX, TS, TSX, MDX, Vue, or Svelte source file; directories and unexpanded globs are not supported.".to_owned(),
+                    });
+                    false
+                }
+            })
             .map(|path| SourceFileAnalysisRequest {
-                path: path.to_string_lossy().into_owned(),
+                path: source_path_string(path),
                 filename: display_source_path(path, &config.root_dir),
             })
             .collect::<Vec<_>>();
@@ -120,9 +152,12 @@ impl Command for LintOptions {
 
         let cache_keys = files
             .iter()
-            .map(|path| path.to_string_lossy().into_owned())
+            .map(|path| source_path_string(path))
             .collect::<Vec<_>>();
-        cache.retain_paths(&cache_keys.iter().map(String::as_str).collect());
+        // A targeted run must preserve cached analysis for the rest of the project.
+        if self.files.is_empty() {
+            cache.retain_paths(&cache_keys.iter().map(String::as_str).collect());
+        }
         persist_extract_cache(&config, &mut cache);
 
         diagnostics.sort_by(|left, right| {
@@ -220,11 +255,26 @@ impl Command for LintOptions {
     }
 }
 
+fn is_supported_source_file(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("js" | "jsx" | "ts" | "tsx" | "mdx" | "vue" | "svelte")
+    )
+}
+
 fn display_source_path(path: &Path, root_dir: &Path) -> String {
-    path.strip_prefix(root_dir)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .into_owned()
+    source_path_string(path.strip_prefix(root_dir).unwrap_or(path))
+}
+
+fn source_path_string(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    // Ferralk discovery uses forward slashes on Windows. Explicit paths must
+    // use the same spelling for cache keys and machine-readable diagnostics.
+    if cfg!(windows) {
+        path.replace('\\', "/")
+    } else {
+        path.into_owned()
+    }
 }
 
 fn severity_name(severity: SourceDiagnosticSeverity) -> &'static str {
@@ -452,6 +502,7 @@ function View({ status }) {
         .expect("write source");
 
         let output = LintOptions {
+            files: Vec::new(),
             config: None,
             json: false,
             fail_on: LintFailOn::Error,
@@ -792,6 +843,7 @@ catalogs:
         fs::write(app.join("src/guide.mdx"), "# Hello\n").expect("write MDX");
 
         let output = LintOptions {
+            files: Vec::new(),
             config: None,
             json: false,
             fail_on: LintFailOn::Error,
@@ -849,6 +901,7 @@ function View({ status }) { return <p>{t`${status}`}</p>; }
 
         let context = Context::with_cwd(&app);
         let cached = LintOptions {
+            files: Vec::new(),
             config: None,
             json: true,
             fail_on: LintFailOn::Error,
@@ -858,6 +911,7 @@ function View({ status }) { return <p>{t`${status}`}</p>; }
         .run(&context)
         .expect("cached lint");
         let cold = LintOptions {
+            files: Vec::new(),
             config: None,
             json: true,
             fail_on: LintFailOn::Error,
@@ -884,6 +938,7 @@ function View({ status }) { return <p>{t`${status}`}</p>; }
         };
         result.summary.warnings = 1;
         let options = LintOptions {
+            files: Vec::new(),
             config: None,
             json: false,
             fail_on: LintFailOn::Warning,

@@ -303,6 +303,201 @@ fn lint_reports_an_unwritable_extraction_cache_without_verbose_output() {
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
 
+#[test]
+fn targeted_lint_resolves_files_from_cwd_and_bypasses_catalog_patterns() {
+    let fixture = fixture_dir("targeted-paths");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::create_dir_all(fixture.join("config")).expect("create config directory");
+    fs::write(
+        fixture.join("config/palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\nlint:\n  rules:\n    placeholder-only: error\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [unrelated]\n    exclude: ['**/*.tsx']\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/view.tsx"),
+        "import { t } from \"@palamedes/core/macro\";\nexport function label(status) { return t`${status}`; }\n",
+    )
+    .expect("write source");
+    // A broken, unselected file must never reach native analysis.
+    fs::write(fixture.join("src/broken.tsx"), "export const = ;").expect("write broken file");
+    let absolute = fixture.join("src/view.tsx");
+    let output = pmds(
+        &fixture,
+        &[
+            "lint",
+            "src/view.tsx",
+            "./src/view.tsx",
+            "src/../src/view.tsx",
+            absolute.to_str().expect("UTF-8 path"),
+            "--config",
+            "config/palamedes.yaml",
+            "--json",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON result");
+    assert_eq!(result["summary"]["files"], 1);
+    assert_eq!(result["summary"]["errors"], 1);
+    assert_eq!(result["failedFiles"], serde_json::json!([]));
+    assert_eq!(
+        result["diagnostics"][0]["code"],
+        "pmds/no-placeholder-only-message"
+    );
+    assert!(
+        !fixture.join("config/locales").exists(),
+        "lint must not write catalogs"
+    );
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn targeted_lint_reports_bad_inputs_in_json_instead_of_passing_an_empty_scan() {
+    let fixture = targeted_fixture("targeted-failures");
+    fs::write(fixture.join("notes.txt"), "plain text").expect("write unsupported file");
+    let output = pmds(
+        &fixture,
+        &[
+            "lint",
+            "src/missing.tsx",
+            "notes.txt",
+            "src",
+            "src/*.tsx",
+            "--json",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON result");
+    assert_eq!(result["summary"]["files"], 4);
+    assert_eq!(result["summary"]["failedFiles"], 4);
+    assert_eq!(result["failedFiles"].as_array().expect("failures").len(), 4);
+    assert!(
+        result["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .is_empty()
+    );
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn targeted_lint_keeps_other_cache_entries_and_matches_cold_results_after_edits() {
+    let fixture = targeted_fixture("targeted-cache");
+    for file in ["view.tsx", "other.tsx"] {
+        fs::write(
+            fixture.join("src").join(file),
+            "import { t } from \"@palamedes/core/macro\";\nexport function label(status) { return t`${status}`; }\n",
+        )
+        .expect("write source");
+    }
+    let aged = SystemTime::now() - Duration::from_secs(10);
+    for file in ["view.tsx", "other.tsx"] {
+        fs::File::options()
+            .write(true)
+            .open(fixture.join("src").join(file))
+            .expect("open source")
+            .set_modified(aged)
+            .expect("age source");
+    }
+    let full = pmds(&fixture, &["lint", "--json"]);
+    assert!(full.status.success(), "{full:?}");
+    let cache_path = fixture.join(".palamedes/extract-cache.json");
+    let before: serde_json::Value =
+        serde_json::from_slice(&fs::read(&cache_path).expect("cache")).expect("cache JSON");
+    let targeted = pmds(&fixture, &["lint", "src/view.tsx", "--json"]);
+    assert!(targeted.status.success(), "{targeted:?}");
+    let after: serde_json::Value =
+        serde_json::from_slice(&fs::read(&cache_path).expect("cache")).expect("cache JSON");
+    assert_eq!(
+        before, after,
+        "targeted lint must preserve unrelated cached files"
+    );
+    assert!(
+        fs::read_to_string(&cache_path)
+            .expect("cache text")
+            .contains("other.tsx")
+    );
+    fs::write(
+        fixture.join("src/view.tsx"),
+        "import { t } from \"@palamedes/core/macro\";\nexport function label() { return t`Ready`; }\n",
+    )
+    .expect("edit source");
+    let warm = pmds(
+        &fixture,
+        &["lint", "src/view.tsx", "--json", "--fail-on", "warning"],
+    );
+    let repeated = pmds(
+        &fixture,
+        &["lint", "src/view.tsx", "--json", "--fail-on", "warning"],
+    );
+    let cold = pmds(
+        &fixture,
+        &[
+            "lint",
+            "src/view.tsx",
+            "--json",
+            "--fail-on",
+            "warning",
+            "--no-cache",
+        ],
+    );
+    assert!(warm.status.success(), "{warm:?}");
+    assert!(repeated.status.success(), "{repeated:?}");
+    assert!(cold.status.success(), "{cold:?}");
+    assert_eq!(warm.stdout, cold.stdout);
+    assert_eq!(warm.stdout, repeated.stdout);
+    assert!(
+        fs::read_to_string(&cache_path)
+            .expect("cache text")
+            .contains("other.tsx")
+    );
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn targeted_lint_preserves_component_suppressions_and_mdx_support() {
+    let fixture = targeted_fixture("targeted-formats");
+    for extension in ["vue", "svelte"] {
+        fs::write(
+            fixture.join(format!("src/view.{extension}")),
+            "<script setup>\nimport { t } from \"@palamedes/core/macro\";\nconst status = 'Ready';\n// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nconst label = t`${status}`;\n</script>\n",
+        )
+        .expect("write component");
+    }
+    fs::write(
+        fixture.join("src/guide.mdx"),
+        "# A guide\n\nA source file supported by the native lint path.\n",
+    )
+    .expect("write MDX");
+    let output = pmds(
+        &fixture,
+        &[
+            "lint",
+            "src/view.vue",
+            "src/view.svelte",
+            "src/guide.mdx",
+            "--json",
+            "--fail-on",
+            "warning",
+        ],
+    );
+    assert!(output.status.success(), "{output:?}");
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON result");
+    assert_eq!(result["summary"]["files"], 3);
+    assert_eq!(result["summary"]["suppressed"], 2);
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+fn targeted_fixture(name: &str) -> PathBuf {
+    let fixture = fixture_dir(name);
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fixture
+}
+
 fn pmds(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_pmds"))
         .env(

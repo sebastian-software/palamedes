@@ -67,9 +67,8 @@ Formatter, linter, and dependency-policy configurations are maintained in this
 repository. CI runs the checks above directly; there is no separate organization
 configuration generator or drift check. Keep the existing rules and narrow
 exceptions when updating these files. `pnpm lint` and `pnpm lint:fix` use Oxlint.
-The published ESLint/Oxlint adapter retains its own ESLint dependency and
-compatibility tests. ESLint-specific style rules without an Oxlint equivalent
-are no longer part of the repository gate.
+ESLint-specific style rules without an Oxlint equivalent are no longer part of
+the repository gate.
 
 Coverage is gated by this repository's own CI, not by an external service.
 `pnpm test:coverage` runs the JavaScript suites with coverage and fails below
