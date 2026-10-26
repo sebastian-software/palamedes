@@ -1189,8 +1189,8 @@ async function checkProgressiveOutlineAnchors(browser) {
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'));
 
-  if (docs.length !== 29) {
-    fail(`progressive docs outline: expected 29 generated long docs, got ${docs.length}`);
+  if (docs.length !== 30) {
+    fail(`progressive docs outline: expected 30 generated long docs, got ${docs.length}`);
   }
   if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/vite-plugin/index.md")) {
     fail(
@@ -1203,6 +1203,10 @@ async function checkProgressiveOutlineAnchors(browser) {
 
   if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "rust-applications.mdx")) {
     fail("progressive docs outline: Rust application guide is missing its generated outline");
+  }
+
+  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "migration-v2.mdx")) {
+    fail("progressive docs outline: v2 migration guide is missing its generated outline");
   }
 
   const context = await browser.newContext();
