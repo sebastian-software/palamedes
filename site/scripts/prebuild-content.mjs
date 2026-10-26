@@ -16,9 +16,7 @@ import {
 import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "../../scripts/component-demos.mjs";
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
-import { loadFrameworkBenchData } from "../../scripts/framework-bench-data.mjs";
-import { loadBlacksmithBenchData } from "../../scripts/blacksmith-bench-data.mjs";
-import { reactBenchmarkVersions } from "../../scripts/benchmark-tool-versions.mjs";
+import { writeBenchmarkData } from "./generate-benchmark-data.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -154,13 +152,7 @@ await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
 
 await writeContentStats(adrs);
 await writeBrowserRuntimeStats();
-await writeFrameworkBenchmarks();
-await writeReactBenchmarkVersions();
-await mkdir(generatedDataRoot, { recursive: true });
-await writeFile(
-  join(generatedDataRoot, "blacksmith-bench.json"),
-  `${JSON.stringify(await loadBlacksmithBenchData(repoRoot))}\n`,
-);
+await writeBenchmarkData(repoRoot);
 await writeNpmStats();
 
 console.log(
@@ -181,26 +173,6 @@ async function writeBrowserRuntimeStats() {
   await mkdir(generatedDataRoot, { recursive: true });
   await writeFile(
     join(generatedDataRoot, "browser-runtime.json"),
-    `${JSON.stringify(data, null, 2)}\n`,
-  );
-}
-
-async function writeReactBenchmarkVersions() {
-  const report = JSON.parse(
-    await readFile(join(repoRoot, "benchmarks/e2e-workflow/results/latest.json"), "utf8"),
-  );
-  await mkdir(generatedDataRoot, { recursive: true });
-  await writeFile(
-    join(generatedDataRoot, "benchmark-versions.json"),
-    `${JSON.stringify(reactBenchmarkVersions(report))}\n`,
-  );
-}
-
-async function writeFrameworkBenchmarks() {
-  const data = await loadFrameworkBenchData(repoRoot);
-  await mkdir(generatedDataRoot, { recursive: true });
-  await writeFile(
-    join(generatedDataRoot, "framework-bench.json"),
     `${JSON.stringify(data, null, 2)}\n`,
   );
 }

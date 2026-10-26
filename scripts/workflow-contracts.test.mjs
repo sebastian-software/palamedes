@@ -449,6 +449,25 @@ describe("workflow contracts", () => {
     );
   });
 
+  it("prepares site test imports before Vitest without depending on a full site build", async () => {
+    const publish = await readRepositoryFile(".github/workflows/publish.yml");
+    const validateRelease = job(publish, "validate-release", "publish-native");
+    const root = JSON.parse(await readRepositoryFile("package.json"));
+    const site = JSON.parse(await readRepositoryFile("site/package.json"));
+    expect(validateRelease).toContain("run: pnpm test");
+    expect(root.scripts.test).toContain("pnpm --filter @palamedes/site test");
+    expect(site.scripts.test.split(" && ").slice(0, 2)).toEqual([
+      "node ./scripts/generate-benchmark-data.mjs",
+      expect.stringMatching(/^vitest run /u),
+    ]);
+    expect(site.scripts.test).toContain("./scripts/generate-benchmark-data.test.mjs");
+    const prebuild = await readRepositoryFile("site/scripts/prebuild-content.mjs");
+    expect(prebuild).toContain(
+      'import { writeBenchmarkData } from "./generate-benchmark-data.mjs"',
+    );
+    expect(prebuild).toContain("await writeBenchmarkData(repoRoot)");
+  });
+
   it("stops a release before publishing anything when a package needs a first publish", async () => {
     const publish = await readRepositoryFile(".github/workflows/publish.yml");
     const validateRelease = job(publish, "validate-release", "publish-native");
