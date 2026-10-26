@@ -1,5 +1,5 @@
-# Seeded by @sebastian-software/standards. Widen it with narrow, reviewed
-# exceptions — never by loosening the org allow-list below.
+# Repository dependency policy. Add narrow, reviewed exceptions rather than
+# loosening the license allow-list below.
 
 [graph]
 all-features = true

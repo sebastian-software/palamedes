@@ -390,7 +390,38 @@
     "unicorn/no-process-exit": "off",
     "vitest/no-conditional-expect": "off",
     "vitest/no-conditional-in-test": "off",
-    "vitest/prefer-strict-equal": "off"
+    "vitest/prefer-strict-equal": "off",
+    "react/jsx-curly-brace-presence": [
+      "error",
+      {
+        "props": "never",
+        "children": "never",
+        "propElementValues": "ignore"
+      }
+    ],
+    "react/self-closing-comp": [
+      "error",
+      {
+        "component": true,
+        "html": true
+      }
+    ],
+    "no-implicit-globals": [
+      "error",
+      {
+        "lexicalBindings": false
+      }
+    ],
+    "no-unreachable-loop": "error",
+    "one-var": ["error", "never"],
+    "prefer-arrow-callback": [
+      "error",
+      {
+        "allowNamedFunctions": true,
+        "allowUnboundThis": true
+      }
+    ],
+    "prefer-regex-literals": "error"
   },
   "overrides": [
     {
@@ -779,6 +810,12 @@
       ],
       "rules": {
         "react/no-unknown-property": "off"
+      }
+    },
+    {
+      "files": ["**/*.js", "**/*.mjs", "**/*.cjs"],
+      "rules": {
+        "no-undef": "error"
       }
     }
   ],

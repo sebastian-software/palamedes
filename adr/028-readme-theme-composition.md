@@ -16,9 +16,8 @@ and link every usable public npm package with registry badges. Setup, API
 details, benchmarks, and framework demos are delegated to palamedes.dev.
 
 Pin the CLI with mise and the Git theme revision in mdtheme.yaml. CI checks
-the generated output. Source and output are committed together. Standards
-repositories explicitly delegate README ownership to mdtheme, so standards
-cannot append a second company footer. Published subpackage READMEs keep their
+the generated output. Source and output are committed together. mdtheme owns
+the root README and its company footer. Published subpackage READMEs keep their
 compact registry format and existing generator.
 
 ## Context

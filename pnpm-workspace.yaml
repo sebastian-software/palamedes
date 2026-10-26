@@ -7,7 +7,6 @@ packages:
 # Root devDependencies anchor existing optional React/RSC and dotenv peers.
 # Waku examples and adapter tests declare their own compatible React 19.3.1 trio.
 overrides:
-  "eslint-config-setup>eslint-plugin-oxlint": "1.81.0"
   # Security patches permitted by each parent's existing dependency line.
   # Remove these once the parent lock resolutions reach the patched versions.
   "brace-expansion@1.1.12": "1.1.21"
@@ -41,7 +40,6 @@ overrides:
   "@vitest/coverage-v8@4.1.11": "4.1.12"
   "zod@4.4.3 || 4.5.4": "4.6.6"
   "@lingui/swc-plugin>next": "16.4.1"
-  "eslint-plugin-storybook>storybook": "10.6.2"
   "compression": "1.8.2"
   "markdown-it": "14.3.3"
   "proxy-addr": "2.0.8"
@@ -53,10 +51,6 @@ overrides:
   "gt>smol-toml": "1.9.0"
   "waku>vite": "^8.2.0"
   "waku>@vitejs/plugin-react": "^6.0.5"
-
-peerDependencyRules:
-  allowedVersions:
-    "eslint-plugin-jsx-a11y>eslint": "^10.0.0"
 
 onlyBuiltDependencies:
   - "@swc/core"
@@ -99,7 +93,6 @@ minimumReleaseAgeExclude:
   - "@oxc-project/types@0.132.0"
   - "@types/node@26.0.0"
   - oxc-parser@0.132.0
-  - eslint@10.5.0
   - "@react-router/dev@8.3.0"
   - "@react-router/express@8.3.0"
   - "@react-router/node@8.3.0"

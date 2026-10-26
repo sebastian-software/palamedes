@@ -12,7 +12,7 @@
 
 - Work in a fresh isolated worktree, preferably under `/private/tmp`, and leave the primary checkout and other agents' worktrees unchanged. Record the worktree, base revision, and final revision in the handoff.
 - Before editing, confirm the worktree root with `git rev-parse --show-toplevel`, inspect `git status --short --branch`, and verify the intended base with `git rev-parse HEAD` and `git rev-parse origin/main`.
-- Read `CONTRIBUTING.md`, the relevant package or crate guidance, and the ADRs that govern the change. Keep generated or standards-managed files under their existing generators and markers.
+- Read `CONTRIBUTING.md`, the relevant package or crate guidance, and the ADRs that govern the change. Keep generated files under their existing generators and markers.
 - Run focused checks first. Before committing, run `git diff --check`, inspect the staged diff, stage only intended paths, and record the resulting commit with `git rev-parse HEAD`.
 
 ## Validation commands
@@ -23,29 +23,23 @@
 
 ---
 
-<!-- sebastian-software-consumer-agents:start -->
+# Repository guardrails
 
-# Standards-managed repo guardrails
-
-- Do not hand-edit managed files or standards-owned marker sections.
-- If `standards check` reports drift, run `standards apply` or update standards.
-- The repository's own gate may omit `standards check`; CI can still fail on it.
+- Do not hand-edit generated files or generated marker sections.
+- Formatter, linter, and dependency-policy configurations are maintained in this repository.
 
 Node repositories:
 
 - Fix or format every file reported by `oxfmt` whenever practical.
 - For generated files, prefer formatting in the generator step.
 - If formatting is not viable, use repo-local `.prettierignore`.
-- Never add repo-specific ignores to managed `.oxfmtrc.json`.
 
 Rust repositories:
 
 - Keep `cargo fmt --all --check` and
   `cargo clippy --workspace --all-targets --all-features -- -D warnings` green.
-- Lint levels belong in `[workspace.lints]`, never in managed `rustfmt.toml`.
+- Lint levels belong in `[workspace.lints]`, never in `rustfmt.toml`.
 - `rust-version` in `Cargo.toml` is the only MSRV; every other mention is a
   derived copy.
 - Record a cargo-deny finding as a narrow, commented exception in `deny.toml` —
-  never by widening the org allow-list.
-
-<!-- sebastian-software-consumer-agents:end -->
+  never by widening the license allow-list.
