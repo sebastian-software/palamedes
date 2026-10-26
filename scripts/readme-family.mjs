@@ -66,7 +66,7 @@ export const generatorSpecifier = GENERATOR;
 /*
  * Where a block goes when a README has none yet.
  *
- * The generator knows one placement rule: above the standards-owned
+ * The generator knows one placement rule: above the company branding
  * `sebastian-software-branding` section when there is one, and at the end of
  * the file otherwise. That is right for the repository README, which carries
  * the company footer. A package README ends in its `## License` section, so
