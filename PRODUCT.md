@@ -38,8 +38,9 @@ catalog compilation to native CLIs and services. Its Cargo integration produces
 external language files; all languages, including English, stay outside the
 executable. The application build exports a message contract; `pmds catalog
 compile --target rust` checks PO updates against it and produces compatible
-language files independently of the application build. Present it as an additional evaluation path with its own guide and
-example, not as full parity with the TypeScript workflow. The crates remain
+language files independently of the application build. Give Rust the same discovery
+prominence as the other application paths, with its own guide and example;
+keep its supported scope explicit. The crates remain
 unpublished, and the current subset is text, display arguments, string selects, and cardinal/ordinal plurals.
 Keep those limits beside the claim that compatible translations can ship without
 rebuilding an application.
@@ -80,6 +81,16 @@ the reader may be starting greenfield or from any established i18n stack:
    remains useful without it.
 
 ## Public Content And Evidence
+
+The homepage uses one technology stripe with seven separate, always-visible
+integration groups: Frameworks, UI Libraries, Build Tools, Backends, CLI, MDX,
+and Rust. Each group uses the same heading and identity treatment; all supported
+framework names and marks remain visible. CLI here means applications being
+localized; the `pmds` CLI is the shared toolchain beneath these integrations.
+MDX, CLI, and Rust have direct guides and runnable examples or demos. Equal
+discovery prominence does not imply identical capabilities or maturity. The hero
+and closing action lead to this common stripe; focused guides own setup,
+version requirements, and support boundaries.
 
 The homepage is a guided tour for someone choosing an i18n library who may
 never have used i18n tooling. Every section opens with a line that earns
@@ -139,9 +150,11 @@ body copy, hairline rules, and tabular numbers. Code reads like a printed
 listing on a light ground, not a dark editor.
 Product specimens — real code, a real `.po` entry, a rendered component in
 several languages, URL bars — are the imagery. Terminal green/amber remain
-reserved for CLI output. Hard rules: zero border-radius, zero box-shadow, zero
-gradients. Confidence comes from clear explanation and evidence, not visual
-loudness.
+reserved for CLI output. The general rules are zero border-radius, zero
+box-shadow, and zero gradients. Homepage integration links are the scoped
+exception: small white badges use a fine border, an 8 px radius, a subtle shadow,
+compact logo slots, a close logo-to-name gap, and balanced horizontal padding.
+Confidence comes from clear explanation and evidence, not visual loudness.
 
 Non-brand marketing pictograms come exclusively from **Streamline Sharp Duo**
 under the project's existing Pro license, colored with the navy and bronze
@@ -169,7 +182,8 @@ an implementation dependency for its own documentation chrome.
    terminal output, benchmark tables, screenshot matrices) carry the claim.
    Real numbers, mono + tabular, always.
 2. **Hairlines, not boxes.** Structure comes from rules and the framed column
-   grid, never from cards, shadows, or rounded containers.
+   grid. The small integration badges identify individual links; they do not
+   replace the page's editorial structure.
 3. **One accent, spent deliberately.** Bronze `#8e6628` marks interaction and
    emphasis; everything else is ink on paper.
 4. **The docs are part of the brand.** Reference pages share the same tokens

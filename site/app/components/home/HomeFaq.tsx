@@ -4,8 +4,8 @@ export const HOME_FAQ = [
     a: "The repository contains the current implementation and runnable examples. npm currently ships 1.x while 2.0 publication is on hold. Start with your framework guide and its checked example; the release notes explain the package versions, and the stability guide documents the API contracts.",
   },
   {
-    q: "Which frameworks does Palamedes support?",
-    a: "Palamedes integrates with React, Solid, Remix, Vue, and Svelte. App integrations cover Next.js, Nuxt, SvelteKit, TanStack Start, Solid Start Mode, Waku, and React Router; Vite connects the browser builds. Hono and Express use the shared backend runtime, and Cargo connects Rust applications. Each framework guide links to its working example and describes the integration scope.",
+    q: "What can I translate with Palamedes?",
+    a: "Frontend interfaces, backend content, Node.js command-line programs, MDX documentation, and Rust applications. Frontend integrations include React, Solid, Vue, Svelte, and their supported app frameworks. Hono and Express use the shared backend runtime; Vite compiles translated MDX for React or Solid; Cargo prepares external language files for Rust. Each guide describes its setup, working example, and supported scope.",
   },
   {
     q: "Can I translate a Rust CLI with Palamedes?",

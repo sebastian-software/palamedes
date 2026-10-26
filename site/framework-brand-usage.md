@@ -59,6 +59,27 @@ The source artwork is neither cropped nor modified. The compact assets were retr
 2026-10-23; SHA-256 receipts and the earlier wordmark sources are recorded in
 `THIRD_PARTY_NOTICES.md`.
 
+## MDX application entry
+
+Retrieved 2026-10-26. The homepage MDX entry uses the unmodified
+[official MDX site icon](https://mdxjs.com/icon.svg), stored as
+`site/public/framework-logos/mdx.svg`, beside the visible MDX name. Its
+proportions, artwork, and upstream color-scheme treatment are preserved.
+The [MDX project credits Evil Rabbit of Vercel for the logo design](https://mdxjs.com/community/about/#who-designed-the-logo).
+It identifies Palamedes' MDX integration without implying endorsement or use
+of the `@mdx-js` compiler.
+
+## Node.js CLI entry
+
+Retrieved 2026-10-26. The homepage CLI entry uses the unmodified green JS
+hexagon from the [official Node.js branding page](https://nodejs.org/en/about/branding/),
+stored as `site/public/framework-logos/nodejs.svg`, beside the visible
+"Node.js CLI" name. Preserve its original colors, proportions, and clear space.
+The mark identifies compatibility with the Node.js runtime under the
+[OpenJS trademark policy](https://trademark-policy.openjsf.org/), without
+implying sponsorship or endorsement. Its source URL and SHA-256 are recorded
+in `THIRD_PARTY_NOTICES.md`.
+
 ## Product film
 
 The product film in `video/` shows the unmodified React, Solid, Next.js, TanStack,

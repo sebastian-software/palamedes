@@ -401,45 +401,106 @@ async function checkRoutes(context, label, { expectHydration }) {
     // Homepage completion blocks: real routing destinations, a reproducible
     // benchmark command, and the seven FAQ entries must remain present together.
     const integrationSection = page.getByRole("region", { name: "First-party integrations" });
-    const integrationLinks = await integrationSection.locator("ul a").count();
-    if (integrationLinks !== 18) {
-      fail(`home integration band: expected 18 linked entries, got ${integrationLinks}`);
-    }
+    const integrationGroups = integrationSection.getByRole("list", {
+      name: "Integration groups",
+      exact: true,
+    });
+    const groupEntries = integrationGroups.locator(":scope > li");
+    const groupNames = await groupEntries.getByRole("heading", { level: 3 }).allTextContents();
     const expectedGroups = {
-      "UI frameworks": 5,
-      "App frameworks": 8,
-      "Build tools": 2,
+      Frameworks: 7,
+      "UI Libraries": 4,
+      "Build Tools": 2,
       Backends: 2,
+      CLI: 1,
+      MDX: 1,
       Rust: 1,
     };
-    for (const [group, expected] of Object.entries(expectedGroups)) {
-      const count = await integrationSection
-        .getByRole("list", { name: group, exact: true })
-        .getByRole("listitem")
-        .count();
-      if (count !== expected) {
-        fail(`home integration groups: expected ${expected} ${group} entries, got ${count}`);
+    if (groupNames.join("|") !== Object.keys(expectedGroups).join("|")) {
+      fail(`home integration groups: expected seven peer groups, got ${groupNames.join(", ")}`);
+    }
+    for (const [name, expectedCount] of Object.entries(expectedGroups)) {
+      const group = integrationSection.getByRole("list", { name, exact: true });
+      if (
+        !(await group.isVisible()) ||
+        (await group.getByRole("listitem").count()) !== expectedCount
+      ) {
+        fail(`home integration groups: ${name} needs ${expectedCount} visible entries`);
       }
     }
-    for (const name of ["Svelte", "SvelteKit"]) {
-      const link = integrationSection.getByRole("link", { name, exact: true });
-      if ((await link.getAttribute("href")) !== `/frameworks/${name.toLowerCase()}`) {
-        fail(`home integration band: ${name} must link to its own guide`);
+    if ((await integrationSection.locator("details").count()) !== 0) {
+      fail("home integration groups: the complete stripe must be visible without disclosures");
+    }
+    const frameworks = integrationSection.getByRole("list", { name: "Frameworks", exact: true });
+    for (const [name, href] of [
+      ["Next.js", "/frameworks/nextjs"],
+      ["Nuxt", "/frameworks/nuxt"],
+      ["SvelteKit", "/frameworks/sveltekit"],
+      ["TanStack Start", "/frameworks/tanstack-start"],
+      ["React Router", "/frameworks/react-router"],
+      ["Waku", "/frameworks/waku"],
+      ["Remix", "/frameworks/remix-v3"],
+    ]) {
+      const link = frameworks.getByRole("link", { name, exact: true });
+      if (!(await link.isVisible()) || (await link.getAttribute("href")) !== href) {
+        fail(`home framework support: ${name} needs a visible link to its own guide`);
       }
     }
-    const integrationLogos = integrationSection.locator("li img");
-    const logoCount = await integrationLogos.count();
-    if (logoCount !== 18) {
-      fail(`home integration band: expected 18 marks, got ${logoCount}`);
-    } else {
-      const unloadedLogos = await integrationLogos.evaluateAll((images) =>
-        images
-          .filter((image) => image.naturalWidth === 0)
-          .map((image) => image.getAttribute("src")),
+    const libraries = integrationSection.getByRole("list", { name: "UI Libraries", exact: true });
+    if (
+      (await libraries.getByRole("link", { name: "Svelte", exact: true }).getAttribute("href")) !==
+      "/frameworks/svelte"
+    ) {
+      fail(
+        "home integration groups: Svelte must keep its UI-library guide separate from SvelteKit",
       );
-      if (unloadedLogos.length > 0) {
-        fail(`home integration band: marks did not load: ${unloadedLogos.join(", ")}`);
+    }
+    for (const [selector, href] of [
+      ["#cli-applications", "/docs/backend-servers#one-setup-for-every-build"],
+      ["#mdx-applications", "/docs/mdx"],
+      ["#rust-applications", "/docs/rust-applications"],
+    ]) {
+      const group = integrationSection.locator(selector);
+      if (
+        (await group.getByRole("link").count()) !== 2 ||
+        (await group.locator(`a[href="${href}"]`).count()) !== 1
+      ) {
+        fail(`home integration groups: ${selector} needs a guide and working example`);
       }
+    }
+    const mdxDemo = integrationSection.getByRole("link", { name: "MDX live demo", exact: true });
+    if ((await mdxDemo.getAttribute("href")) !== "https://vite-mdx.examples.palamedes.dev") {
+      fail("home integration groups: MDX must link to its live handbook demo");
+    }
+    const heroStart = page
+      .locator(".pmds-hero")
+      .getByRole("link", { name: "Find your starting point" });
+    await heroStart.click();
+    if (
+      (await heroStart.getAttribute("href")) !== "#applications" ||
+      (await integrationSection.getAttribute("id")) !== "applications"
+    ) {
+      fail("home integration groups: the hero must lead to the common stripe");
+    }
+    await frameworks.getByRole("link", { name: "Next.js", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    if (
+      !(await frameworks
+        .getByRole("link", { name: "Nuxt", exact: true })
+        .evaluate((link) => link === document.activeElement))
+    ) {
+      fail("home framework support: keyboard navigation must follow the visible integration order");
+    }
+    for (const logo of await integrationSection.locator("li img").all()) {
+      await logo.scrollIntoViewIfNeeded();
+      await logo.evaluate((image) => image.decode());
+    }
+    const mdxLogo = integrationSection.locator('img[src="/framework-logos/mdx.svg"]');
+    if (
+      (await mdxLogo.count()) !== 1 ||
+      !(await mdxLogo.evaluate((image) => image.naturalWidth > 0))
+    ) {
+      fail("home integration groups: the original MDX mark must load beside its visible name");
     }
     const decisionPaths = page.getByRole("list", { name: "Decision paths" });
     const questionRoutes = await decisionPaths.locator(":scope > li").count();
@@ -599,17 +660,6 @@ async function checkRoutes(context, label, { expectHydration }) {
       fail("home benchmark: changed-source-files copy collapsed or missing");
     }
     if (!localWasOpen) await localBenchmark.locator("summary").click();
-    const rustApplications = page.locator("#rust-applications");
-    const rustCopy = (await rustApplications.innerText()).replaceAll(/\s+/gu, " ").toLowerCase();
-    if (
-      !rustCopy.includes("message contract changes need matching catalogs") ||
-      !rustCopy.includes("cardinal and ordinal plurals") ||
-      (await rustApplications.locator('a[href="/docs/rust-applications"]').count()) !== 1
-    ) {
-      fail(
-        "home Rust applications: supported messages, catalog contract, and guide link must accompany the claim",
-      );
-    }
     const homeCopy = await page.locator("main").textContent();
     if (/\b(?:beta|preview|experimental)\b/iu.test(homeCopy)) {
       fail(
@@ -795,6 +845,20 @@ async function checkRoutes(context, label, { expectHydration }) {
     const integrationBand = await page
       .getByRole("region", { name: "First-party integrations" })
       .isVisible();
+    const groupNames = await page
+      .getByRole("list", { name: "Integration groups", exact: true })
+      .getByRole("heading", { level: 3 })
+      .allTextContents();
+    if (groupNames.join("|") !== "Frameworks|UI Libraries|Build Tools|Backends|CLI|MDX|Rust") {
+      fail("no-JS: all seven integration groups must be present in prerendered HTML");
+    }
+    const frameworks = page.getByRole("list", { name: "Frameworks", exact: true });
+    if (
+      !(await frameworks.getByRole("link", { name: "Next.js", exact: true }).isVisible()) ||
+      (await page.locator("#applications details").count()) !== 0
+    ) {
+      fail("no-JS: the technology stripe and framework names must be visible without disclosures");
+    }
     const questionRouting = await page.getByText("Starting a new project?").isVisible();
     const faq = await page.getByText("Is Palamedes ready for production use?").isVisible();
     if (!integrationBand || !questionRouting || !faq) {
@@ -1109,28 +1173,33 @@ async function checkHomepageSetupViewport(browser, width) {
     fail(`home ${width}px: expected HTTP 200, got ${response?.status() ?? "no response"}`);
   } else {
     const metrics = await page.evaluate(() => {
-      const setup = document.querySelector('a[href="/get-started#install"]');
-      const example = document.querySelector("#journey pre");
-      const absoluteTop = (element) =>
-        Math.round(element.getBoundingClientRect().top + window.scrollY);
+      const setup = document.querySelector('.pmds-hero a[href="#applications"]');
+      const guides = [...document.querySelectorAll('[aria-label="Integration groups"] > li')].map(
+        (entry) => entry.querySelector("a"),
+      );
 
       return {
         pageHeight: document.documentElement.scrollHeight,
         viewportHeight: window.innerHeight,
         setupBottom: setup ? Math.round(setup.getBoundingClientRect().bottom) : null,
-        exampleTop: example ? absoluteTop(example) : null,
+        guideBottoms: guides.map((guide) =>
+          guide ? Math.round(guide.getBoundingClientRect().bottom + window.scrollY) : null,
+        ),
       };
     });
     if (metrics.setupBottom === null || metrics.setupBottom > metrics.viewportHeight) {
-      fail(`home ${width}px: the primary setup action is outside the first viewport`);
+      fail(`home ${width}px: the primary integration action is outside the first viewport`);
     }
-    if (metrics.exampleTop === null || metrics.exampleTop >= metrics.pageHeight * 0.2) {
+    if (
+      metrics.guideBottoms.length !== 7 ||
+      metrics.guideBottoms.some((bottom) => bottom === null || bottom >= metrics.pageHeight * 0.2)
+    ) {
       fail(
-        `home ${width}px: the first component example is not within the first fifth of the page`,
+        `home ${width}px: all seven integration groups must be within the first fifth of the page`,
       );
     }
     console.log(
-      `  homepage ${width}px: setup visible at ${metrics.setupBottom}px; component example at ${metrics.exampleTop}px`,
+      `  homepage ${width}px: integration action visible at ${metrics.setupBottom}px; all guides by ${Math.max(...metrics.guideBottoms)}px`,
     );
   }
   await context.close();

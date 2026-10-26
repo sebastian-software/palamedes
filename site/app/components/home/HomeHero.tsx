@@ -30,12 +30,12 @@ export function HomeHero() {
             <span className="block text-accent">the sentence.</span>
           </h1>
           <p className="mt-8 max-w-[36rem] text-[clamp(1.125rem,1rem+0.5vw,1.375rem)] leading-[1.6] text-ink/85">
-            Palamedes turns the plain sentences in your components into a complete translation
-            workflow. Translators get clean files, visitors get compiled messages screen by screen,
-            and your tooling stays fast enough to run on every save.
+            Translate your frontend, backend, command-line tools, MDX documentation, and Rust
+            applications. Write messages in your source, keep translations in Git, and use one local
+            toolchain from extraction to compiled catalogs.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
-            <ButtonLink href="/get-started#install">Start the guided setup</ButtonLink>
+            <ButtonLink href="#applications">Find your starting point</ButtonLink>
             <ButtonLink variant="outline" href="#journey">
               Show me how it works
             </ButtonLink>

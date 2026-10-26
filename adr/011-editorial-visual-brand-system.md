@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-26
 
 One editorial visual language connects product pages, documentation, and inspectable evidence.
 
@@ -34,7 +34,11 @@ editorial page that explains before it proves:
 - product specimens — real code, catalog entries, rendered components in
   several languages, address bars — are the primary marketing imagery;
 - mastheads and running heads use rules, alignment, and whitespace rather than
-  cards; border radius, box shadows, and gradients are outside the system;
+  cards; border radius, box shadows, and gradients are outside the system,
+  with one scoped exception: homepage integration links use small white badges
+  with a fine border, an 8 px radius, and a subtle shadow. Compact mark slots,
+  a close logo-to-name gap, and balanced padding preserve the vendor artwork
+  without oversized controls;
 - structural rules are one-pixel hairlines. Editorial qualifications, asides,
   and boundaries use the shared `EditorialRail` primitive. Its structural tone
   uses ink/hairline tokens; its emphasis tone may use bronze. Thick colored

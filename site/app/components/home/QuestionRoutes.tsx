@@ -7,13 +7,19 @@ const QUESTIONS = [
     icon: "deployment-workflow-collaboration",
     question: "Starting a new project?",
     answer:
-      "Pick your framework and get a first message rendering in a second language — yourself or with your coding agent.",
-    href: "/get-started",
-    label: "Start the guided setup",
+      "Choose your frontend, backend, CLI, MDX, or Rust starting point and follow its guide to a working translation.",
+    href: "#applications",
+    label: "Find your starting point",
     resources: [
       { label: "Frontend and full-stack adapters", href: "/frameworks#frontend-frameworks" },
       { label: "Backend services", href: "/frameworks#backend-integrations" },
+      {
+        label: "Node.js command-line tools",
+        href: "/docs/backend-servers#one-setup-for-every-build",
+      },
+      { label: "MDX documentation", href: "/docs/mdx" },
       { label: "Rust applications", href: "/docs/rust-applications" },
+      { label: "Frontend guided setup", href: "/get-started" },
       { label: "Set up with your coding agent", href: "/docs/agent-skill" },
     ],
   },
