@@ -21,27 +21,17 @@ const CONTAINER_COUNT = CONTAINER_EXAMPLES.length;
 const MATRIX_COUNT = EXAMPLE_MATRIX.length;
 const EXAMPLE_COUNT = MATRIX_COUNT + FOCUSED_EXAMPLES.length;
 const BROWSER_COUNT = selectBrowserExamples({}).length;
-const SCREENSHOT_COUNT = selectScreenshotExamples({}).length;
 
 /*
- * `examples/` holds one directory more than the verification matrix, because
- * the focused React Router RSC fixture has its own verifier. Prose that names
+ * `examples/` also holds focused fixtures outside the verification matrix.
+ * Those fixtures have their own verifiers. Prose that names
  * a bare "25 examples" therefore reads as wrong against a directory listing,
  * which is exactly how the counts went stale (#1155). Every count-bearing
  * sentence below is generated from the matrix, so adding an example fails this
- * check instead of leaving a stale number in the documentation.
+ * check instead of leaving a stale number in the documentation. The root
+ * README links to the framework overview instead of repeating these counts.
  */
 const DOCUMENTED_COUNTS = [
-  [
-    "README.md",
-    [
-      `those ${MATRIX_COUNT} make up the verification matrix`,
-      `make ${BROWSER_COUNT} browser-capable examples`,
-      `\`examples/\` holds ${EXAMPLE_COUNT} apps`,
-      `All ${MATRIX_COUNT} examples of the verification matrix`,
-      `the ${SCREENSHOT_COUNT} UI-adapter examples`,
-    ],
-  ],
   [
     "examples/README.md",
     [

@@ -18,18 +18,20 @@ Commit the source and generated README together. CI checks the complete output.
 uncommitted worktree; it never stages or commits files. To use it as a local
 pre-push hook, call it from your existing hook.
 
-The CLI is pinned in `mise.toml` and verified through `mise.lock`. Theme revisions
-are pinned in `mdtheme.yaml`: change a ref and regenerate to review an update.
+The CLI is pinned in `mise.toml` and verified through `mise.lock`. The theme
+revision is pinned in `mdtheme.yaml`: change the ref and regenerate to review
+an update.
 Git branches such as `main` are supported too, but a pin keeps CI reproducible.
 Theme retrieval needs Git and network access, including in check mode.
 
-The outer Sebastian theme adds its badge and closes with the company logo and
-consulting footer. The inner Ferramenta theme introduces the family and closes
-with its icon and sibling links. Each sibling has a short description; this
-project is excluded. Project content stays between the two frames.
+The Sebastian Software theme adds its badge and closes with the company logo
+and consulting footer. The root README focuses on Palamedes and links to
+palamedes.dev for setup, framework examples, API details, and benchmarks.
+Ferramenta family cross-promotion is omitted from the root README.
 
 Published subpackage READMEs retain their compact registry family blocks and
-existing regeneration command. The root README uses native theme composition.
+existing regeneration command. The root README uses the native Sebastian
+Software theme.
 
 See the [living decision](../adr/028-readme-theme-composition.md).
 
@@ -38,5 +40,5 @@ See the [living decision](../adr/028-readme-theme-composition.md).
 The project pins mdtheme 0.4.0 and uses one `mdtheme:badges:start` /
 `mdtheme:badges:end` comment pair in `README.md.src`. Sebastian's
 `badges-prepend.md` places its badge before the authored project badges.
-Ferramenta's header and footer stay unchanged. Upgrade the CLI and lockfile
-before adopting this theme revision. Keep badge markup outside raw HTML blocks.
+Upgrade the CLI and lockfile before adopting a theme revision that requires
+a newer composition contract. Keep badge markup outside raw HTML blocks.
