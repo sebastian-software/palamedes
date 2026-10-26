@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once, on } from "node:events";
 import {
   cp,
@@ -95,34 +96,36 @@ async function cli(directory, entry, locale = "de") {
   }
 }
 
-async function nextWatchBuild(builds, changedFile) {
+async function nextWatchBuild(builds, changedFile, expected, completed = []) {
   while (true) {
     const completion = await builds.next();
     if (completion.done) break;
     const [line] = completion.value;
     const build = JSON.parse(line);
-    if (!changedFile || build.changes.includes(changedFile)) return build;
+    completed.push(build);
+    if (completed.length > 16) completed.shift();
+    if (!changedFile || build.inputs[changedFile] === expected) return build;
   }
   assert.fail(`Watcher closed before rebuilding ${changedFile ?? "the initial output"}`);
 }
 
 test("watch completion waits for the edited input rather than a queued build", async () => {
   const completions = [
-    { changes: [] },
-    { changes: ["src/locales/de.po"] },
-    { changes: ["src/locales/de.po"] },
-    { changes: ["src/booking.ts"] },
-    { changes: ["src/booking.ts"] },
-    { changes: ["palamedes.yaml"] },
+    { inputs: {} },
+    { inputs: { "src/locales/de.po": "updated" } },
+    { inputs: { "src/locales/de.po": "updated", "src/booking.ts": "old" } },
+    { inputs: { "src/booking.ts": "updated" } },
+    { inputs: { "src/booking.ts": "updated", "palamedes.yaml": "old" } },
+    { inputs: { "palamedes.yaml": "updated" } },
   ];
   async function* builds() {
     for (const completion of completions) yield [JSON.stringify(completion)];
   }
   const events = builds();
   assert.deepEqual(await nextWatchBuild(events), completions[0]);
-  assert.deepEqual(await nextWatchBuild(events, "src/locales/de.po"), completions[1]);
-  assert.deepEqual(await nextWatchBuild(events, "src/booking.ts"), completions[3]);
-  assert.deepEqual(await nextWatchBuild(events, "palamedes.yaml"), completions[5]);
+  assert.deepEqual(await nextWatchBuild(events, "src/locales/de.po", "updated"), completions[1]);
+  assert.deepEqual(await nextWatchBuild(events, "src/booking.ts", "updated"), completions[3]);
+  assert.deepEqual(await nextWatchBuild(events, "palamedes.yaml", "updated"), completions[5]);
 });
 
 test("unbundled development regenerates source/catalog/config artifacts and restarts", async (t) => {
@@ -223,21 +226,24 @@ test("standalone Rolldown watch rebuilds source, catalogs, and configuration", a
     path.join(directory, "test/watch.mjs"),
     `
 import { watch } from "rolldown";
-import path from "node:path";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import config from "../rolldown.config.mjs";
-const pending = new Set();
-let changes = [];
+let inputs = {};
 config.plugins.push({
   name: "watch-build-inputs",
-  watchChange(id) { pending.add(path.relative(process.cwd(), id).split(path.sep).join("/")); },
-  buildStart() {
-    changes = [...pending];
-    pending.clear();
+  async buildStart() {
+    inputs = Object.fromEntries(await Promise.all(
+      ["src/locales/de.po", "src/booking.ts", "palamedes.yaml"].map(async (file) => [
+        file, createHash("sha256").update(await readFile(file)).digest("hex"),
+      ]),
+    ));
   },
 });
 const watcher = watch(config);
-watcher.on("event", (event) => {
-  if (event.code === "END") console.log(JSON.stringify({ changes }));
+watcher.on("event", async (event) => {
+  if (event.code === "BUNDLE_END") await event.result.close();
+  if (event.code === "END") console.log(JSON.stringify({ inputs }));
   if (event.code === "ERROR") { console.error(event.error); process.exitCode = 1; }
 });
 process.on("SIGTERM", async () => { await watcher.close(); process.exit(); });
@@ -254,13 +260,19 @@ process.on("SIGTERM", async () => { await watcher.close(); process.exit(); });
   active.lines = createInterface({ input: active.child.stdout });
   const builds = on(active.lines, "line", { signal: controller.signal });
   async function rebuilt(changedFile) {
+    const completed = [];
+    const expected = changedFile
+      ? createHash("sha256")
+          .update(await readFile(path.join(directory, changedFile)))
+          .digest("hex")
+      : undefined;
     const timeout = setTimeout(() => controller.abort(), 20_000);
     try {
       // A preceding edit can produce more than one completion. Only accept a
-      // build whose input snapshot includes this edit's watchChange event.
-      await nextWatchBuild(builds, changedFile);
+      // build that started with this edit's complete input bytes on disk.
+      await nextWatchBuild(builds, changedFile, expected, completed);
     } catch (error) {
-      error.message += `\nWaiting for ${changedFile ?? "the initial build"}\n${stderr}`;
+      error.message += `\nWaiting for ${changedFile ?? "the initial build"}\nCompleted builds: ${JSON.stringify(completed)}\n${stderr}`;
       throw error;
     } finally {
       clearTimeout(timeout);
