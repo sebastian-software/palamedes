@@ -152,8 +152,8 @@ Product specimens — real code, a real `.po` entry, a rendered component in
 several languages, URL bars — are the imagery. Terminal green/amber remain
 reserved for CLI output. The general rules are zero border-radius, zero
 box-shadow, and zero gradients. Homepage integration links are the scoped
-exception: small white badges use a fine border, a 3 px radius, a subtle shadow,
-and one shared mark slot to align names across differently shaped vendor logos.
+exception: small white badges use a fine border, an 8 px radius, a subtle shadow,
+compact logo slots, a close logo-to-name gap, and balanced horizontal padding.
 Confidence comes from clear explanation and evidence, not visual loudness.
 
 Non-brand marketing pictograms come exclusively from **Streamline Sharp Duo**

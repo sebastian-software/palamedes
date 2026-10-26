@@ -660,16 +660,6 @@ async function checkRoutes(context, label, { expectHydration }) {
       fail("home benchmark: changed-source-files copy collapsed or missing");
     }
     if (!localWasOpen) await localBenchmark.locator("summary").click();
-    const rustApplications = page.locator("#rust-applications");
-    const rustCopy = (await rustApplications.innerText()).replaceAll(/\s+/gu, " ").toLowerCase();
-    if (
-      !rustCopy.includes("compatible po translation updates") ||
-      (await rustApplications.locator('a[href="/docs/rust-applications"]').count()) !== 1
-    ) {
-      fail(
-        "home Rust applications: independent translation updates need the compatibility qualification and guide",
-      );
-    }
     const homeCopy = await page.locator("main").textContent();
     if (/\b(?:beta|preview|experimental)\b/iu.test(homeCopy)) {
       fail(

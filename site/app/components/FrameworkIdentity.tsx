@@ -41,12 +41,17 @@ const MARKS: Partial<Record<string, FrameworkMark>> = {
 export function FrameworkIdentity({ slug, name }: { slug: string; name: string }) {
   const mark = MARKS[slug];
   return (
-    <span className="inline-flex min-h-8 items-center gap-4 align-middle text-[15px] font-semibold whitespace-nowrap">
+    <span
+      className="inline-flex min-h-8 items-center align-middle text-[15px] font-semibold whitespace-nowrap"
+      style={{ gap: "var(--pmds-identity-gap, 1rem)" }}
+    >
       {mark ? (
         <span
           className="inline-flex size-8 shrink-0 items-center"
           style={{
-            width: `var(--pmds-identity-slot-width, ${mark.slotWidth ?? 32}px)`,
+            width: mark.slotWidth
+              ? `var(--pmds-identity-wide-slot-width, ${mark.slotWidth}px)`
+              : "var(--pmds-identity-slot-width, 32px)",
             justifyContent: "var(--pmds-identity-justify, flex-end)",
           }}
         >
@@ -59,6 +64,7 @@ export function FrameworkIdentity({ slug, name }: { slug: string; name: string }
             style={{
               width: mark.width,
               height: mark.height,
+              maxWidth: "var(--pmds-identity-mark-max-width, none)",
               transform: `translateX(var(--pmds-identity-inset, ${mark.endInset ?? 0}px))`,
             }}
             className="max-w-none shrink-0 object-contain object-right"

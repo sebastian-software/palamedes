@@ -7,7 +7,6 @@ type IntegrationGroup = {
   id: string;
   label: string;
   integrations: readonly Integration[];
-  note?: string;
   example?: { label: string; href: string };
 };
 
@@ -61,21 +60,18 @@ const GROUPS: readonly IntegrationGroup[] = [
         href: "/docs/backend-servers#one-setup-for-every-build",
       },
     ],
-    note: "Localize your command-line tools.",
     example: { label: "CLI example", href: repoHref("examples/node-backend/src/cli.ts", "blob") },
   },
   {
     id: "mdx-applications",
     label: "MDX",
     integrations: [{ slug: "mdx", name: "MDX", href: "/docs/mdx" }],
-    note: "One MDX source, multiple languages.",
     example: { label: "MDX live demo", href: "https://vite-mdx.examples.palamedes.dev" },
   },
   {
     id: "rust-applications",
     label: "Rust",
     integrations: [{ slug: "rust", name: "Rust", href: "/docs/rust-applications" }],
-    note: "External language catalogs. Compatible PO translation updates can ship without rebuilding.",
     example: {
       label: "Rust example",
       href: repoHref("crates/palamedes-i18n/examples/cli", "tree"),
@@ -121,24 +117,19 @@ export function IntegrationBand() {
               <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1">
                 <ul
                   aria-label={group.label}
-                  className="flex min-w-0 flex-wrap items-center gap-2 [--pmds-identity-inset:0px] [--pmds-identity-justify:center] [--pmds-identity-slot-width:60px]"
+                  className="flex min-w-0 flex-wrap items-center gap-2 [--pmds-identity-gap:10px] [--pmds-identity-inset:0px] [--pmds-identity-justify:center] [--pmds-identity-mark-max-width:40px] [--pmds-identity-slot-width:32px] [--pmds-identity-wide-slot-width:40px]"
                 >
                   {group.integrations.map((integration) => (
                     <li key={integration.name}>
                       <a
                         href={integration.href}
-                        className="flex min-h-12 items-center rounded-[3px] border border-hair bg-white px-2 shadow-sm shadow-ink/10 hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        className="flex min-h-11 items-center rounded-lg border border-hair bg-white px-3 shadow-sm shadow-ink/10 hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       >
                         <FrameworkIdentity slug={integration.slug} name={integration.name} />
                       </a>
                     </li>
                   ))}
                 </ul>
-                {group.note ? (
-                  <p className="max-w-[42rem] text-[15px] leading-relaxed text-ink/80">
-                    {group.note}
-                  </p>
-                ) : null}
                 {group.example ? (
                   <a href={group.example.href} className="pmds-arrow-link gap-2">
                     <span>{group.example.label}</span>

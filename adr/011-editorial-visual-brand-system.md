@@ -36,8 +36,9 @@ editorial page that explains before it proves:
 - mastheads and running heads use rules, alignment, and whitespace rather than
   cards; border radius, box shadows, and gradients are outside the system,
   with one scoped exception: homepage integration links use small white badges
-  with a fine border, a 3 px radius, and a subtle shadow. A shared mark slot
-  aligns their names while preserving the vendor artwork;
+  with a fine border, an 8 px radius, and a subtle shadow. Compact mark slots,
+  a close logo-to-name gap, and balanced padding preserve the vendor artwork
+  without oversized controls;
 - structural rules are one-pixel hairlines. Editorial qualifications, asides,
   and boundaries use the shared `EditorialRail` primitive. Its structural tone
   uses ink/hairline tokens; its emphasis tone may use bronze. Thick colored
