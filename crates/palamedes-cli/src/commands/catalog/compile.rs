@@ -194,3 +194,9 @@ fn compile_js(
     }
     Ok(update)
 }
+
+impl CompileOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}

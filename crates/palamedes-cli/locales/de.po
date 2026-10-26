@@ -440,3 +440,42 @@ msgstr "{count, plural, one {# JavaScript-Katalogmodul kompiliert.} other {# Jav
 
 msgid "Could not compile JavaScript catalog modules: {source}"
 msgstr "JavaScript-Katalogmodule konnten nicht kompiliert werden: {source}"
+
+msgid "Disable network access for update checks and usage reporting."
+msgstr "Netzwerkzugriffe für Update-Prüfungen und Nutzungsberichte deaktivieren."
+
+msgid "Manage optional usage reporting."
+msgstr "Optionale Nutzungsberichte verwalten."
+
+msgid "Read the usage reporting notice and optionally enable it."
+msgstr "Hinweise zu Nutzungsberichten lesen und diese optional aktivieren."
+
+msgid "Inspect the effective usage reporting policy without sending data."
+msgstr "Wirksame Einstellungen ohne Datenversand anzeigen."
+
+msgid "Preview queued reports without sending data."
+msgstr "Vorgemerkte Berichte ohne Datenversand anzeigen."
+
+msgid "Stop usage reporting and discard unsent reports."
+msgstr "Nutzungsberichte stoppen und ungesendete Berichte verwerfen."
+
+msgid "Decline usage reporting."
+msgstr "Nutzungsberichte ablehnen."
+
+msgid "Request deletion of retained usage reports."
+msgstr "Löschung gespeicherter Nutzungsberichte anfordern."
+
+msgid "Try sending one pending operation."
+msgstr "Versuchen, einen ausstehenden Vorgang zu senden."
+
+msgid "Delete the previous identity before a separate new consent decision."
+msgstr "Vorherige Kennung vor einer erneuten Zustimmung löschen."
+
+msgid "Forget local authority without confirming remote deletion."
+msgstr "Lokalen Zugang ohne Bestätigung der serverseitigen Löschung verwerfen."
+
+msgid "Usage reporting operation failed: {message}"
+msgstr "Nutzungsberichtsvorgang fehlgeschlagen: {message}"
+
+msgid "pmds: Palamedes {latest} is available (installed {installed}). Update with your original package manager; for npm, run: npm install @palamedes/cli@latest"
+msgstr "pmds: Palamedes {latest} ist verfügbar (installiert: {installed}). Mit dem ursprünglichen Paketmanager aktualisieren; für npm: npm install @palamedes/cli@latest"

@@ -42,6 +42,7 @@ const commandSources = {
     type: "CatalogCommand",
   },
   Version: { command: "pmds version" },
+  Telemetry: { command: "pmds telemetry" },
 };
 
 const catalogCommandSources = {
@@ -129,6 +130,7 @@ function discoverEnumVariants(source, enumName) {
 }
 
 export function discoverCliInventory(read) {
+  const globalFlags = discoverClapOptions(read("crates/palamedes-cli/src/cli.rs"), "Cli");
   const rootCommands = discoverEnumVariants(
     read("crates/palamedes-cli/src/cli.rs"),
     "Command",
@@ -139,7 +141,10 @@ export function discoverCliInventory(read) {
     const source = commandSources[variant];
     return {
       command: source.command,
-      flags: source.file ? discoverClapOptions(read(source.file), source.type) : [],
+      flags: [
+        ...globalFlags,
+        ...(source.file ? discoverClapOptions(read(source.file), source.type) : []),
+      ],
     };
   });
   const catalogVariants = discoverEnumVariants(
@@ -155,7 +160,7 @@ export function discoverCliInventory(read) {
     const source = catalogCommandSources[variant];
     commands.push({
       command: source.command,
-      flags: discoverClapOptions(read(source.file), source.type),
+      flags: [...globalFlags, ...discoverClapOptions(read(source.file), source.type)],
     });
   }
   return commands;

@@ -441,6 +441,12 @@ fn suppression_line(
         + 1
 }
 
+impl LintOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}
+
 #[cfg(test)]
 fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<SourceDiagnostic>) {
     let analysis = palamedes::analyze_source(source, filename)

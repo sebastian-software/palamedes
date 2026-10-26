@@ -133,3 +133,51 @@ describe("release tarball verification", () => {
     });
   });
 });
+
+describe("app-tracking publication preflight", () => {
+  it("checks only unauthenticated availability and rejects disabled/cached telemetry routes", async () => {
+    const { checkAppTrackingReady } = await import("./check-app-tracking-ready.mjs");
+    let broken;
+    const methods = [];
+    const fake = async (url, init) => {
+      expect(url).toMatch(/^https:\/\/sebastian-app-tracking\.b-cdn\.net\//u);
+      expect(init.credentials).toBe("omit");
+      expect(init.redirect).toBe("error");
+      expect(init.headers?.Authorization).toBeUndefined();
+      methods.push(init.method ?? "GET");
+      if (!init.method)
+        return Response.json({
+          schema_version: 1,
+          tool_id: "palamedes",
+          distribution: "github",
+          latest_version: "2.0.0",
+        });
+      return Response.json(
+        { schema_version: 1, error: { code: "unauthorized" } },
+        {
+          status: broken === "missing" ? 404 : 401,
+          headers: {
+            "cache-control": "no-store",
+            ...(broken === "cached" ? { "cdn-cache": "HIT" } : {}),
+          },
+        },
+      );
+    };
+    await checkAppTrackingReady(fake);
+    expect(methods).toEqual(["GET", "PUT", "POST", "DELETE"]);
+    broken = "missing";
+    await expect(checkAppTrackingReady(fake)).rejects.toThrow("telemetry routes are not ready");
+    broken = "cached";
+    await expect(checkAppTrackingReady(fake)).rejects.toThrow();
+  });
+  it("runs before any native package can be published while leaving dry runs usable", () => {
+    const workflow = readFileSync(
+      new URL("../.github/workflows/publish.yml", import.meta.url),
+      "utf8",
+    );
+    expect(workflow).toContain("if: github.event_name != 'workflow_dispatch' || !inputs.dry_run");
+    expect(workflow.indexOf("node ./scripts/check-app-tracking-ready.mjs")).toBeLessThan(
+      workflow.indexOf("  publish-native:"),
+    );
+  });
+});

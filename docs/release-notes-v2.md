@@ -194,3 +194,21 @@ for each scenario.
 The report identifies the checked revisions and measurement limits. Use those
 fixture results alongside a production build and browser checks of your own
 application.
+
+## Independent updates and optional CLI usage reporting
+
+The native CLI uses the shared app-tracking client for update notices and optional
+usage reporting. Reporting stays off until consent. `pmds telemetry enable`
+displays the notice; `--accept telemetry-v1` enables it. Inspect the effective
+policy and queued data with `status` and `preview`, stop with `disable`, and
+request deletion with `delete`. Previous version-service reporting is not consent.
+
+Counts distinguish CLI tools and catalog operations. They contain no command
+arguments, content, paths, raw repository URLs, or plugin names. An optional
+SHA-256 repository identifier lets equivalent clones count as one project. This
+is pseudonymous opt-in measurement, not a count of people or all adoption.
+Build integrations and embedded Rust/Node APIs do not report automatically.
+
+Update notices work without telemetry consent. See the [telemetry guide](./telemetry.md)
+for controls and limits. A release must verify the production telemetry service
+before enabling network reporting in published artifacts.

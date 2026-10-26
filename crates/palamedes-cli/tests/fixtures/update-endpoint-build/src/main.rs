@@ -2,7 +2,7 @@
 fn main() {
     assert_eq!(
         env!("PALAMEDES_VALIDATED_UPDATE_ENDPOINT"),
-        "https://version-service.sebastian-software.de/check"
+        "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable"
     );
 }
 

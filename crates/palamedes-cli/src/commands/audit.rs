@@ -138,6 +138,12 @@ fn print_audit_result(result: &CatalogAuditResult, fail_on: FailOn) {
     }
 }
 
+impl AuditOptions {
+    pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
+        self.config.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::FailOn;

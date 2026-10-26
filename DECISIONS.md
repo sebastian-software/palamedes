@@ -50,7 +50,7 @@ Then read how the native toolchain reaches users and exposes controlled extensio
 13. [ADR-013: Native Boundary and Distribution](./adr/013-native-boundary-and-distribution.md)
 14. [ADR-014: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch](./adr/014-npm-launcher-is-a-packaging-bridge.md)
 15. [ADR-015: Host Explicit Binary CLI Plugins In Rust](./adr/015-cli-plugin-execution-boundary.md)
-16. [ADR-016: Privacy-Bounded CLI Update Checks](./adr/016-privacy-bounded-cli-update-check.md)
+16. [ADR-016: Independent Update Checks and Opt-In CLI Usage Reporting](./adr/016-privacy-bounded-cli-update-check.md)
 
 ## Implementation contracts
 

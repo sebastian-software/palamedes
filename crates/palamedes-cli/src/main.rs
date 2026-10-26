@@ -14,6 +14,7 @@ mod config;
 mod error;
 mod plugin_protocol;
 mod plugins;
+mod telemetry;
 mod update_check;
 
 use std::io::{self, Write};
@@ -38,7 +39,7 @@ fn main() -> ExitCode {
             return ExitCode::from(u8::try_from(error.exit_code()).unwrap_or(2));
         }
     };
-    let update_check = update_check::UpdateCheck::start();
+    let category = cli.telemetry_category();
     let exit_code = match cli.execute() {
         Ok(code) => code,
         Err(error) => {
@@ -47,7 +48,10 @@ fn main() -> ExitCode {
         }
     };
 
-    if let Some(notice) = update_check.finish() {
+    if let Some(category) = category {
+        telemetry::record(category, cli.offline(), || cli.telemetry_context());
+    }
+    if let Some(notice) = category.and_then(|_| update_check::check(cli.offline())) {
         // Advisory output must not turn a successful command into a broken-pipe
         // panic when stderr is closed by its caller.
         let _ = writeln!(io::stderr().lock(), "{notice}");

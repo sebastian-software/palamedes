@@ -23,6 +23,8 @@ use crate::plugins;
 pub struct Cli {
     #[command(subcommand)]
     command: Command,
+    #[arg(long, global = true, help = tr!("Disable network access for update checks and usage reporting."))]
+    offline: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -39,12 +41,62 @@ enum Command {
     Catalog(CatalogCommand),
     #[command(about = tr!("Show version information."))]
     Version,
+    #[command(about = tr!("Manage optional usage reporting."))]
+    Telemetry(crate::telemetry::Options),
     #[command(about = tr!("Dispatch an explicitly configured binary plugin namespace."))]
     #[command(external_subcommand)]
     Plugin(Vec<String>),
 }
 
 impl Cli {
+    pub fn telemetry_context(&self) -> app_tracking::project::RepositoryContext {
+        let explicit = match &self.command {
+            Command::Extract(options) => options.telemetry_config(),
+            Command::Lint(options) => options.telemetry_config(),
+            Command::Audit(options) => options.telemetry_config(),
+            Command::Report(options) => options.telemetry_config(),
+            Command::Catalog(options) => match &options.command {
+                CatalogSubcommand::Merge(options) => match options.telemetry_config() {
+                    Some(path) => Some(path),
+                    None => return crate::telemetry::unknown_context(),
+                },
+                CatalogSubcommand::Convert(options) => match options.telemetry_config() {
+                    Some(path) => Some(path),
+                    None => return crate::telemetry::unknown_context(),
+                },
+                CatalogSubcommand::Compile(options) => match options.telemetry_config() {
+                    Some(path) => Some(path),
+                    None => return crate::telemetry::unknown_context(),
+                },
+                CatalogSubcommand::MergeDriver(_) => return crate::telemetry::unknown_context(),
+            },
+            Command::Plugin(_) => return crate::telemetry::unknown_context(),
+            Command::Version | Command::Telemetry(_) => return crate::telemetry::unknown_context(),
+        };
+        crate::telemetry::project_context(explicit)
+    }
+
+    pub fn offline(&self) -> bool {
+        self.offline
+    }
+
+    pub fn telemetry_category(&self) -> Option<&'static str> {
+        match &self.command {
+            Command::Extract(_) => Some("extract"),
+            Command::Lint(_) => Some("lint"),
+            Command::Audit(_) => Some("audit"),
+            Command::Report(_) => Some("report"),
+            Command::Catalog(catalog) => match &catalog.command {
+                CatalogSubcommand::Merge(_) => Some("catalogmerge"),
+                CatalogSubcommand::MergeDriver(_) => None,
+                CatalogSubcommand::Convert(_) => Some("catalogconvert"),
+                CatalogSubcommand::Compile(_) => Some("catalogcompile"),
+            },
+            Command::Plugin(_) => Some("plugin"),
+            Command::Version | Command::Telemetry(_) => None,
+        }
+    }
+
     pub fn parse_localized() -> Result<Self, clap::Error> {
         let matches = localize_help(Self::command()).try_get_matches()?;
         Self::from_arg_matches(&matches)
@@ -64,6 +116,7 @@ impl Cli {
                 CatalogSubcommand::Compile(options) => execute(options, &context).map(|()| 0),
             },
             Command::Version => execute(&VersionCommand, &context).map(|()| 0),
+            Command::Telemetry(options) => crate::telemetry::execute(options, self.offline),
             Command::Plugin(args) => Ok(plugins::run(args, &context)),
         }
     }

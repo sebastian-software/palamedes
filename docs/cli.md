@@ -568,116 +568,63 @@ pmds --version
 
 ## Advisory update checks
 
-Published native CLI packages enable privacy-bounded update checks starting
-with [1.24.0](https://github.com/sebastian-software/palamedes/releases/tag/palamedes-v1.24.0).
-The [1.25.0 release evidence](https://github.com/sebastian-software/palamedes/issues/1036#issuecomment-5599225464)
-confirms publication for all six CLI platforms. Service readiness is complete;
-the remaining rollout task is a matching Rybbit observation from an unmodified
-published client, tracked in
-[#1036](https://github.com/sebastian-software/palamedes/issues/1036) and
-[version-service #12](https://github.com/sebastian-software/version-service/issues/12).
-The September 9, 2026 attempt could not establish ingestion because its test
-environment blocked external DNS. CLI success and cache files alone do not
-prove that an event reached Rybbit.
-Ordinary/local builds without `PALAMEDES_UPDATE_ENDPOINT` make no update-check
-request and write no update-check cache. A configured build fails unless the value is exactly the
-owned HTTPS route `https://version-service.sebastian-software.de/check`; malformed,
-alternate-host, credentialed, port-qualified, query, and fragment values cannot
-produce a release binary. The server half of the contract lives in the public
-[version-service](https://github.com/sebastian-software/version-service)
-repository and serves all Sebastian Software CLIs.
+Palamedes v2 uses the shared `app-tracking` Rust client. Release builds embed
+exactly `https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable`;
+invalid build-time `PALAMEDES_UPDATE_ENDPOINT` values fail the build. Ordinary
+builds without that setting remain offline. Published v1 clients keep their
+existing version-service behavior.
 
-Once enabled, a regular `pmds` subcommand checks at most once per 24 hours. It
-runs as part of that process — never as a daemon, background service, or
-postinstall hook — and sends only this JSON shape over HTTPS:
+A regular native CLI invocation checks when due, with an hourly success cache,
+bounded failure suppression, and notice throttling. The service reads the
+existing CDN-cached oss-metrics GitHub release snapshot and requires a release
+to be at least one hour old. This does not guarantee that every downstream
+package manager is already updated. There is no separate client GitHub/npm
+lookup. The version GET contains no usage body, installation ID, project hash,
+installed version, platform, or install cohort. Network infrastructure still
+processes metadata such as the requesting IP.
 
-```json
-{
-  "project": "palamedes",
-  "version": "<installed pmds version>",
-  "os": "linux",
-  "arch": "x86_64",
-  "ci": false,
-  "installedSince": "2026-08"
-}
+A newer release produces an advisory stderr notice after command output.
+Stdout/JSON and exit status stay unchanged. Each due update request has a
+200 ms network deadline; filesystem and process overhead are additional.
+Failures are silent. `DO_NOT_TRACK=1`, `PALAMEDES_UPDATE_CHECK=0`, `--offline`,
+or `PALAMEDES_OFFLINE=1` suppress update checks before cache/network access.
+Help/version, telemetry controls, and automatic Git merge-driver execution do
+not trigger a check.
+
+The cache is `palamedes/app-tracking-updates` beneath `$XDG_CACHE_HOME`
+(or `$HOME/.cache`) on Linux, `$HOME/Library/Caches` on macOS, and
+`%LOCALAPPDATA%` on Windows. New clients do not reuse or transmit the old
+`update-check-v1` timestamp or `installed-since-v1` cohort.
+
+## `pmds telemetry`
+
+Optional command usage reporting is off until explicit consent. Run:
+
+```sh
+pmds telemetry enable                         # Display the full notice only
+pmds telemetry enable --accept telemetry-v1   # Give informed consent
+pmds telemetry status                         # Local policy and queue status
+pmds telemetry preview                        # Inspect data without sending
+pmds telemetry disable                        # Stop and discard unsent usage
+pmds telemetry delete                         # Request remote deletion
+pmds telemetry flush                          # Try one pending operation
 ```
 
-`installedSince` is a coarse year-month install cohort and is deliberately
-never finer than a month: combined with the other fields, a day-precision value
-could form singleton combinations whose daily requests become linkable — a
-de-facto identifier. A month reduces specificity but does not guarantee that
-every combination is nonunique or unlinkable. There is no installation or telemetry ID and no command,
-arguments, path, project data, username, or hostname. Palamedes application
-code does not access or persist client IP addresses, forwarded headers, user
-agents, or other identifying headers. The service reads the request URL path,
-`Content-Type`, and `Content-Length` only to validate the route, media type,
-and body-size limit, and forwards nothing but the documented aggregate
-dimensions — with neutralized transport metadata — to its analytics sink. It
-aggregates rate-limited request volume and
-version/OS/architecture/CI/cohort distributions; because it has no stable
-identifier, those requests are not unique weekly installations.
+`decline` records a refusal. `reset` requests deletion of the previous identity;
+new reporting needs a separate `enable` decision. If local state is corrupt or
+its credential is lost, `forget --acknowledge-unverified-deletion` explicitly
+abandons local authority without claiming remote deletion.
 
-Set either opt-out before invoking the CLI to prevent both cache and network
-access:
+Status and preview are JSON documents with no credentials. An offline deletion
+can remain pending; rerun `delete` or an ordinary command online to retry.
+Controls never count as usage. A busy or invalid state produces an explicit
+control error; ordinary command failures to count/report remain advisory.
 
-```bash
-export DO_NOT_TRACK=1
-# or
-export PALAMEDES_UPDATE_CHECK=0
-```
-
-The platform cache is under `$XDG_CACHE_HOME/palamedes` (falling back to
-`$HOME/.cache/palamedes`) on Linux, `$HOME/Library/Caches/palamedes` on macOS,
-and `%LOCALAPPDATA%\palamedes` on Windows. A due attempt is recorded before the
-request so offline use is not retried on every command, and the year-month
-cohort is persisted beside it as `installed-since-v1`; deleting the cache
-restarts the cohort. Cache and network failures are non-fatal and silent. The
-network operation has a two-second total deadline; a valid newer semantic
-version produces only this stderr notice after the command output:
-
-```text
-A new version of palamedes is available: <installed version> → <published version>
-```
-
-Stdout and exit status are unchanged, including for `--json` commands. A
-silent check is not proof of successful ingestion, and a timeout can occur
-after the service accepted an event. The service's 10-minute registry cache
-can briefly return the previous version after publication; do not delete the
-client cache to poll. Packaging smoke tests opt out without disabling checks
-in the shipped artifact. Removing endpoint embedding only affects future
-builds; existing binaries require an opt-out or an update to a disabled build.
-See
-[ADR-016](../adr/016-privacy-bounded-cli-update-check.md) for the data boundary
-and the [version-service](https://github.com/sebastian-software/version-service)
-repository for the service implementation and its deployment guide.
-
-### Interpreting usage counts
-
-An `update_check` event records an observed request. It does not identify a
-person or let us deduplicate an installation across days. One installation can
-produce several events over a week, fresh CI caches can produce additional
-events, and opt-outs or network failures leave usage unobserved. The
-`installedSince` month describes requests from an older cohort, not a count of
-retained users.
-
-The existing [oss-metrics service](https://github.com/sebastian-software/oss-metrics)
-publishes [cached public metrics](https://metrics.sebastian-software.com/v1/metrics.json)
-for GitHub and package registries. It does not yet include Rybbit data.
-A [planned server-side integration](https://github.com/sebastian-software/oss-metrics/issues/10)
-can publish aggregate update-check counts
-over complete UTC days, with explicit windows, source status, and freshness.
-Website visitors should read that public snapshot; Rybbit credentials and raw
-events stay private.
-
-Use labels such as "Update checks in the last 30 days" for these counts.
-Unique active users, weekly/monthly active installations, and user retention
-cannot be derived from this protocol. A Rybbit visitor or session count also
-cannot supply that identity: the version service deliberately neutralizes
-client transport metadata. Version/platform distributions are useful for
-internal analysis; public displays should use broad totals rather than small
-cohort or platform cells. Missing, failed, incomplete, or unverified data must
-not appear as zero users. General command-level telemetry remains separate in
-[#856](https://github.com/sebastian-software/palamedes/issues/856).
+See [optional CLI usage reporting](./telemetry.md) for collected fields, fixed
+command categories, project identity, environment settings, CI, retention, and
+measurement limits. The complete disclosure is also available through
+`pmds telemetry enable` in English. Update checks do not require telemetry
+consent. Existing v1 request analytics do not opt anyone into v2 telemetry.
 
 ## Configuration Errors
 

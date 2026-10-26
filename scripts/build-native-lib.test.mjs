@@ -31,7 +31,8 @@ test("native Cargo builds inherit the release endpoint but ordinary builds leave
         unsupportedTargetMessage: (name) => name,
         postBuild() {},
       });
-    process.env.PALAMEDES_UPDATE_ENDPOINT = "https://version-service.sebastian-software.de/check";
+    process.env.PALAMEDES_UPDATE_ENDPOINT =
+      "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable";
     build();
     delete process.env.PALAMEDES_UPDATE_ENDPOINT;
     build();
@@ -40,7 +41,7 @@ test("native Cargo builds inherit the release endpoint but ordinary builds leave
     assert.deepEqual(calls[0][1].slice(0, 3), ["build", "--package", "palamedes-cli"]);
     assert.equal(
       calls[0][2].env.PALAMEDES_UPDATE_ENDPOINT,
-      "https://version-service.sebastian-software.de/check",
+      "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable",
     );
     assert.equal(Object.hasOwn(calls[1][2].env, "PALAMEDES_UPDATE_ENDPOINT"), false);
   } finally {

@@ -17,6 +17,8 @@ pub const REPORT_VERDICT_EXIT_CODE: u8 = 6;
 
 #[derive(Debug, Error)]
 pub enum CliError {
+    #[error("Usage reporting operation failed: {message}")]
+    Telemetry { message: String },
     #[error("Could not compile Rust language catalogs: {message}")]
     CatalogCompilation { message: String },
     #[error("Could not compile JavaScript catalog modules: {message}")]
@@ -111,6 +113,10 @@ impl CliError {
     /// Human output only; Display remains stable for structured diagnostics.
     pub fn localized(&self) -> String {
         match self {
+            Self::Telemetry { message } => tr!(
+                "Usage reporting operation failed: {message}",
+                message = message
+            ),
             Self::CatalogCompilation { message } => tr!(
                 "Could not compile Rust language catalogs: {source}",
                 source = message
