@@ -155,3 +155,24 @@ test("keeps building and measuring after an earlier cargo build fails", () => {
   assert.equal(logs.length, 1);
   assert.match(logs[0], /core-node addon \(release\)/u);
 });
+
+test("measures the CLI with the published endpoint enabled", () => {
+  const builds = [];
+  assert.equal(
+    checkBinarySizes({
+      execute(_cmd, args, options) {
+        builds.push({ crate: args.at(-1), env: options.env });
+      },
+      stat() {
+        return { size: 1 };
+      },
+      output: { log() {}, error() {} },
+    }),
+    0,
+  );
+  assert.equal(
+    builds[0].env.PALAMEDES_UPDATE_ENDPOINT,
+    "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable",
+  );
+  assert.equal(builds[1].env.PALAMEDES_UPDATE_ENDPOINT, process.env.PALAMEDES_UPDATE_ENDPOINT);
+});

@@ -33,13 +33,19 @@ export const BUDGETS = [
       label: "@palamedes/cli-linux-x64-gnu@1.17.3",
       bytes: 8_022_504,
     },
-    // The shared opt-in telemetry client adds private durable state, consent,
-    // replay-safe batches, and deletion. Same Rust 1.96/macOS ARM64 release
-    // builds with their production endpoint enabled measured 9,997,168 B at
-    // 89a6a5f3 and 10,465,984 B with this integration (+468,816 B, 4.7%).
-    // Add 600 KB for that functionality plus bounded toolchain/linker headroom;
-    // Linux CI remains authoritative for its own target. Keep the addon cap.
-    maxBytes: 10_500_000,
+    // Measure the shipped CLI with its validated endpoint enabled. The older
+    // 9.9 MB guard built a source-only CLI with the entire update transport
+    // optimized away; it did not bound published CLI artifacts. The shared
+    // telemetry API also keeps that transport reachable in a source build.
+    // Linux x64/Rust 1.96 measured 12,286,272 B before enabling the release-only
+    // notice path; a 12.5 MB cap leaves bounded headroom for that actual variant.
+    // Same-toolchain macOS ARM64 production variants measured 9,997,168 B at
+    // 89a6a5f3 and 10,465,984 B here (+468,816 B, 4.7%). Keep the addon cap.
+    maxBytes: 12_500_000,
+    buildEnvironment: {
+      PALAMEDES_UPDATE_ENDPOINT:
+        "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable",
+    },
   },
   {
     label: "core-node addon (release)",
@@ -108,6 +114,7 @@ export function checkBinarySizes({
       execute("cargo", ["build", "--release", "--locked", "-p", budget.crate], {
         cwd: ROOT,
         stdio: "inherit",
+        env: { ...process.env, ...budget.buildEnvironment },
       });
     } catch (error) {
       failed = true;
