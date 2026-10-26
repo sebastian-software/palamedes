@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AbsoluteFill, Sequence } from "remotion";
+import { AbsoluteFill, Img, Sequence, staticFile, useCurrentFrame } from "remotion";
 
 import { C } from "../brand";
 import { JourneyFlight } from "../flight/JourneyFlight";
@@ -10,7 +10,7 @@ import { SnapCnUIProvider } from "@/lib/snap-cn-ui";
 
 import { steady } from "../kinetic";
 import { palamedesTheme } from "../snapcn-theme";
-import { useBrandFonts } from "../ui";
+import { ease, useBrandFonts } from "../ui";
 import { Agent } from "./Agent";
 import { Complete } from "./Complete";
 import { Details } from "./Details";
@@ -50,8 +50,6 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
           "react-router": at(11.35),
           waku: at(12.5),
           remix: at(13.2),
-          vite: at(13.7),
-          turbopack: at(14),
           hono: at(16),
           express: at(16.3),
           nodejs: at(16.9),
@@ -62,7 +60,7 @@ const PARTS: ReadonlyArray<readonly [FilmSection, ReactNode]> = [
       }}
     />,
   ],
-  ["fast", <Rust key="fast" bars={FILM_SCENES.fast.bars} />],
+  ["fast", <Rust key="fast" bars={FILM_SCENES.fast.bars} start={at(3.8)} />],
   ["agent", <Agent key="agent" />],
   [
     "claim",
@@ -100,7 +98,26 @@ export function PalamedesFilm() {
             {scene}
           </Sequence>
         ))}
+        <Sequence
+          from={FILM_SCENES.journey.from}
+          durationInFrames={FILM_SCENES.claim.to - FILM_SCENES.journey.from}
+          name="corner mark"
+        >
+          <CornerMark length={FILM_SCENES.claim.to - FILM_SCENES.journey.from} />
+        </Sequence>
       </AbsoluteFill>
     </SnapCnUIProvider>
+  );
+}
+
+/** The emblem as a small footnote from the journey to the claim, unchanged and alone. */
+function CornerMark({ length }: { length: number }) {
+  const frame = useCurrentFrame();
+  const shown = ease(frame, 12, 18) * (1 - ease(frame, length - 18, 18));
+  return (
+    <Img
+      src={staticFile("logo.svg")}
+      style={{ position: "absolute", right: 56, bottom: 44, width: 44, height: 44, opacity: shown }}
+    />
   );
 }

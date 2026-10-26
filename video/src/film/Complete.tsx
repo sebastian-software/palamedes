@@ -10,8 +10,8 @@ import { arrive, Display, ease, sceneFade } from "../ui";
 import { at } from "./timeline";
 
 /*
- * Bars 28–33: "And it doesn't stop there." Four cards arrive as the voice
- * names them, then one rail joins them from the first sentence to the last
+ * Bars 35–40: "And it doesn't stop there." Three cards arrive as the voice
+ * names them (the lint and audit commands share one), then one rail joins them from the first sentence to the last
  * translation. Formats are real Intl output for German; the CLI cards show
  * the commands and what docs/cli.md says they do, with no invented output.
  */
@@ -34,6 +34,10 @@ const DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeZone: "UT
   new Date(Date.UTC(2026, 9, 18)),
 );
 
+const CARD_W = 520;
+const GAP = 30;
+const ROW_W = CARD_W * 3 + GAP * 2;
+
 function Card({
   frame,
   cue,
@@ -51,9 +55,8 @@ function Card({
     <div
       style={{
         position: "relative",
-        width: 372,
-        height: 360,
-        padding: "30px 30px 0",
+        width: CARD_W,
+        padding: "30px 30px 34px",
         border: `1.5px solid ${C.hair}`,
         borderTop: `4px solid ${lit > 0.5 ? C.bronze : C.hair}`,
         background: C.paper,
@@ -108,7 +111,7 @@ const Command = ({ text, note }: { text: string; note: string }) => (
     </p>
     <p
       style={{
-        margin: "16px 0 0",
+        margin: "12px 0 0",
         fontFamily: FONT.sans,
         fontSize: 22,
         lineHeight: 1.4,
@@ -123,7 +126,7 @@ const Command = ({ text, note }: { text: string; note: string }) => (
 export function Complete() {
   const frame = useCurrentFrame();
   const rail = ramp(frame, CUE.toolchain, CUE.toolchain + 40);
-  const lit = (index: number) => (rail * 4 > index + 0.5 ? 1 : 0);
+  const lit = (index: number) => (rail * 3 > index + 0.5 ? 1 : 0);
 
   return (
     <AbsoluteFill
@@ -137,7 +140,7 @@ export function Complete() {
         <Revealed text="And it doesn't stop there." frame={frame} at={4} />
       </Display>
 
-      <div style={{ display: "flex", gap: 32, marginTop: 70 }}>
+      <div style={{ display: "flex", gap: GAP, marginTop: 70 }}>
         <Card
           frame={frame}
           cue={CUE.plurals}
@@ -159,7 +162,7 @@ export function Complete() {
           frame={frame}
           cue={CUE.server}
 
-          title="Server rendering, server actions"
+          title="Server rendering and actions"
           lit={lit(1)}
         >
           <Line frame={frame} cue={CUE.server}>
@@ -172,37 +175,23 @@ export function Complete() {
             Server actions reply translated
           </Line>
         </Card>
-        <Card
-          frame={frame}
-          cue={CUE.lint}
-
-          title="A linter for your messages"
-          lit={lit(2)}
-        >
-          <Command text="pmds lint" note="Checks how messages are written in your source." />
-        </Card>
-        <Card
-          frame={frame}
-          cue={CUE.audit}
-
-          title="An audit for every catalog"
-          lit={lit(3)}
-        >
-          <Command
-            text="pmds audit"
-            note="Finds missing translations, fuzzy markers and ICU issues."
-          />
+        <Card frame={frame} cue={CUE.lint} title="Lint and audit" lit={lit(2)}>
+          <Command text="pmds lint" note="Checks how messages are written." />
+          <div style={{ height: 22, ...arrive(frame, CUE.audit - 4, 12, 12) }} />
+          <div style={arrive(frame, CUE.audit - 4, 12, 12)}>
+            <Command text="pmds audit" note="Finds every missing translation." />
+          </div>
         </Card>
       </div>
 
       {/* one toolchain, from the first sentence to the last translation */}
-      <div style={{ position: "relative", width: 372 * 4 + 32 * 3, marginTop: 54, height: 80 }}>
+      <div style={{ position: "relative", width: ROW_W, marginTop: 54, height: 80 }}>
         <span
           style={{
             position: "absolute",
             left: 0,
             top: 0,
-            width: (372 * 4 + 32 * 3) * rail,
+            width: ROW_W * rail,
             height: 4,
             background: C.bronze,
           }}
@@ -224,7 +213,7 @@ export function Complete() {
         <p
           style={{
             position: "absolute",
-            left: (372 * 4 + 32 * 3) / 2,
+            left: ROW_W / 2,
             top: 22,
             margin: 0,
             transform: "translateX(-50%)",

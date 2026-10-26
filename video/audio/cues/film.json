@@ -1,7 +1,7 @@
 {
   "composition": "PalamedesFilm",
   "output": "palamedes-film",
-  "total": 182.857,
+  "total": 185.714,
   "plan": [
     ["F", "open"],
     ["C", "open"],
@@ -56,6 +56,7 @@
     ["Bb", "rust"],
     ["F", "rust"],
     ["Gm", "rust"],
+    ["Bb", "rust"],
     ["C", "rust"],
     ["F", "agent"],
     ["Bb", "agent"],
@@ -131,17 +132,17 @@
     },
     {
       "take": "eleven-brian/11-agent",
-      "at": 154.7,
+      "at": 157.55,
       "text": "Working with a coding agent? Add the Palamedes skill and simply ask it to set up translations for you."
     },
     {
       "take": "eleven-brian/12-claim",
-      "at": 163.16,
+      "at": 166.01,
       "text": "The fastest i18n toolchain. Complete from code to screen, and proven in eighteen integrations."
     },
     {
       "take": "eleven-brian/13-end",
-      "at": 171.73,
+      "at": 174.59,
       "text": "Palamedes 2.0 is open source. Get started today at palamedes.dev."
     }
   ]

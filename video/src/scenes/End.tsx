@@ -99,14 +99,15 @@ function CompanyBand({ frame, at }: { frame: number; at: number }) {
     <div
       style={{
         position: "absolute",
-        left: 260,
-        right: 260,
-        bottom: 96,
+        left: 0,
+        right: 0,
+        bottom: 0,
         display: "grid",
         gridTemplateColumns: "1fr 1.6fr",
         gap: 80,
-        paddingTop: 40,
-        borderTop: `1.5px solid ${C.hair}`,
+        padding: "48px 260px 72px",
+        // A white ground: the company marks are drawn for white, not for mist.
+        background: C.white,
         ...arrive(frame, at, 18, 24),
       }}
     >

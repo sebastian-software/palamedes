@@ -27,9 +27,10 @@ const SCALE = 1.6;
 
 type IntegrationGroup = { label: string; marks: readonly IntegrationMark[] };
 
-// The homepage technology stripe's seven groups (IntegrationBand), three rows
-// deep so every name stays readable at film distance. The film names the UI
-// libraries before the frameworks that host them, so the story builds.
+// The homepage technology stripe's groups (IntegrationBand), three rows deep so
+// every name stays readable at film distance. The film names the UI libraries
+// before the frameworks that host them, so the story builds. Build tools stay
+// off screen: they come with the frameworks.
 const ROWS: readonly (readonly IntegrationGroup[])[] = [
   [
     {
@@ -39,13 +40,6 @@ const ROWS: readonly (readonly IntegrationGroup[])[] = [
         { id: "solid", name: "Solid", asset: "solid.svg", w: 26, h: 24 },
         { id: "vue", name: "Vue", asset: "vue.svg", w: 25, h: 23 },
         { id: "svelte", name: "Svelte", asset: "svelte.svg", w: 20, h: 24 },
-      ],
-    },
-    {
-      label: "Build Tools",
-      marks: [
-        { id: "vite", name: "Vite", asset: "vite-icon.svg", w: 26, h: 26 },
-        { id: "turbopack", name: "Turbopack", asset: "turbopack-icon.svg", w: 24, h: 24 },
       ],
     },
   ],
@@ -107,7 +101,7 @@ export function Wiring({ cues }: { cues: WiringCues }) {
         background: C.paper,
         padding: "0 160px",
         justifyContent: "center",
-        opacity: sceneFade(frame, BAR * cues.bars),
+        opacity: sceneFade(frame, BAR * cues.bars, 18),
       }}
     >
       <Display size={72}>

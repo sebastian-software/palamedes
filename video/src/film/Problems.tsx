@@ -15,19 +15,19 @@ import { at } from "./timeline";
  * problems the homepage's before/after table names, each answered later.
  */
 const PROBLEMS: readonly { cue: number; title: string; sample: ReactNode }[] = [
-  { cue: at(3.6), title: "Keys nobody can invent", sample: 't("checkout.cta_v2")' },
+  { cue: at(2.75), title: "Keys nobody can invent", sample: 't("checkout.cta_v2")' },
   {
-    cue: at(6.1),
+    cue: at(5.3),
     title: "One big file per language",
     sample: "de.json · every message, on every page",
   },
   {
-    cue: at(9.2),
+    cue: at(8.4),
     title: "Parsed at runtime",
     sample: "{seats, plural, …} → a parser in the browser",
   },
-  { cue: at(12.95), title: "Glue for every framework", sample: "loaders · providers · middleware" },
-  { cue: at(15.6), title: "Tools too slow for every save", sample: "seconds per extraction run" },
+  { cue: at(12.2), title: "Glue for every framework", sample: "loaders · providers · middleware" },
+  { cue: at(15.4), title: "Tools too slow for every save", sample: "seconds per extraction run" },
 ];
 
 export function Problems() {
@@ -37,7 +37,7 @@ export function Problems() {
       style={{ background: C.mist, padding: "130px 160px", opacity: sceneFade(frame, BAR * 7) }}
     >
       <Display size={64}>
-        <Revealed text="And the usual setup makes it harder." frame={frame} at={at(1)} />
+        <Revealed text="And the usual setup makes it harder." frame={frame} at={at(0.4)} />
       </Display>
       <div style={{ marginTop: 64, borderTop: `1.5px solid ${C.hair}` }}>
         {PROBLEMS.map((problem) => (
