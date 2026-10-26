@@ -11,8 +11,8 @@
  * they are guarded separately: Palamedes warm against Palamedes cold, never
  * against another tool.
  *
- * The README quotes the realistic warm pair as well, so it is checked here
- * too — it is the most public surface of all and has no other guard.
+ * The README links to the proof page instead of repeating benchmark figures;
+ * its navigation is guarded by check-readme-ia.mjs.
  */
 
 import { readFileSync } from "node:fs";
@@ -26,13 +26,11 @@ await loadFrameworkBenchData(repoRoot);
 await loadBlacksmithBenchData(repoRoot);
 const reportPath = join(repoRoot, "benchmarks/e2e-workflow/results/latest.md");
 const benchTsPath = join(repoRoot, "site/app/data/bench.ts");
-const readmePath = join(repoRoot, "README.md");
 const benchmarkLedgerPath = join(repoRoot, "site/app/components/proof/BenchmarkLedger.tsx");
 const fbteeDossierPath = join(repoRoot, "docs/research/competitors/frameworks/fbtee.md");
 
 const report = readFileSync(reportPath, "utf8");
 const benchTs = readFileSync(benchTsPath, "utf8");
-const readme = readFileSync(readmePath, "utf8");
 const benchmarkLedger = readFileSync(benchmarkLedgerPath, "utf8");
 const fbteeDossier = readFileSync(fbteeDossierPath, "utf8");
 const ratioFields = {
@@ -386,21 +384,6 @@ for (const [profile, section, constant] of [
     `${profile} touched files: report says ${reportedWarm.touchedFiles}, bench.ts says ${hardcoded.touchedFiles}`,
     reportedWarm.touchedFiles === hardcoded.touchedFiles,
   );
-}
-
-/*
- * README and homepage prose quote the realistic warm pair. Whitespace is collapsed
- * first because the README is hard-wrapped: a token may straddle a line break,
- * and reflowing a paragraph must not read as drift.
- */
-const realisticWarm = parseBenchWarm("REALISTIC");
-const readmeText = readme.replace(/\s+/gu, " ");
-for (const [label, token] of [
-  ["realistic cold median", `\`${Math.round(realisticWarm.coldMs)} ms\``],
-  ["realistic warm median", `\`${Math.round(realisticWarm.warmMs)} ms\``],
-  ["touched files", `\`${realisticWarm.touchedFiles}\` source files`],
-]) {
-  expect(`README is missing the ${label} ${token} quoted by bench.ts`, readmeText.includes(token));
 }
 
 expect(

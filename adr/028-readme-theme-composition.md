@@ -2,19 +2,20 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-26
 
-Native mdtheme composes the project README from its source and pinned shared themes.
+Native mdtheme composes the project README from its source and a pinned company theme.
 
 ## Decision
 
-The project README is composed by native mdtheme from `README.md.src`. The
-outer frame is Sebastian Software; Ferramenta is the inner frame. Footers close
-in reverse order. The project content remains the main focus; shared branding
-is compact and maintained upstream. The Ferramenta footer excludes this project
-and includes sibling descriptions and the family icon.
+The project README is composed by native mdtheme from `README.md.src` with the
+Sebastian Software theme. The company badge and consulting footer remain;
+Ferramenta family introductions and sibling links are omitted from the root
+README. Its job is to summarize capabilities, identify integration boundaries,
+and link every usable public npm package with registry badges. Setup, API
+details, benchmarks, and framework demos are delegated to palamedes.dev.
 
-Pin the CLI with mise and both Git theme revisions in mdtheme.yaml. CI checks
+Pin the CLI with mise and the Git theme revision in mdtheme.yaml. CI checks
 the generated output. Source and output are committed together. Standards
 repositories explicitly delegate README ownership to mdtheme, so standards
 cannot append a second company footer. Published subpackage READMEs keep their
@@ -22,16 +23,19 @@ compact registry format and existing generator.
 
 ## Context
 
-The README needs consistent family branding without duplicate footers or
-hand-maintained generated output. Root and npm package READMEs have different
-rendering constraints, so their generators remain separate.
+The README needs consistent company branding without duplicate footers or
+hand-maintained generated output. Ferramenta sibling links distract readers
+evaluating an i18n tool; the website owns the detailed adoption path. Root and
+npm package READMEs have different rendering constraints, so their generators
+remain separate.
 
 ## Theme badge placement
 
 The project pins mdtheme in `mise.toml` and uses one `mdtheme:badges:start` /
 `mdtheme:badges:end` comment pair in `README.md.src`. The Sebastian Software
 theme prepends its badge before the authored project badges.
-Ferramenta's header and footer stay unchanged. Update the CLI and theme pins together when their contracts change. Keep badge markup outside raw HTML blocks.
+Update the CLI and theme pin together when their contracts change. Keep badge
+markup outside raw HTML blocks.
 
 ## Consequences
 

@@ -21,20 +21,31 @@ test("accepts the checked-in README information architecture", () => {
   assert.doesNotThrow(check(readme));
 });
 
-test("rejects proof that moves ahead of the actionable start", () => {
-  const moved = readme
-    .replace("## Start Here", "## Temporary Heading")
-    .replace("## Proof You Can Inspect", "## Start Here")
-    .replace("## Temporary Heading", "## Proof You Can Inspect");
-  assert.throws(check(moved), /Start Here must precede proof/);
+test("requires website paths for setup and evaluation", () => {
+  assert.throws(
+    check(
+      readme.replaceAll(
+        "https://palamedes.dev/docs/first-working-translation",
+        "https://example.com",
+      ),
+    ),
+    /missing website path/u,
+  );
 });
 
-test("rejects drift between the compact and detailed install paths", () => {
-  const detailedStart = readme.indexOf("## Quick Start With Vite");
-  const drifted = `${readme.slice(0, detailedStart)}${readme
-    .slice(detailedStart)
-    .replace("pnpm add -D @palamedes/cli", "pnpm add -D @palamedes/cli-renamed")}`;
-  assert.throws(check(drifted), /detailed Vite quickstart drifted/);
+test("requires linked badges for every usable public npm package", () => {
+  assert.throws(
+    check(readme.replace("%40palamedes%2Fcore)", "%40palamedes%2Fmissing)")),
+    /missing linked npm v badge: @palamedes\/core/u,
+  );
+  assert.throws(
+    check(readme.replace("npm/dm/%40palamedes%2Fcli", "npm/dm/%40palamedes%2Fmissing")),
+    /missing linked npm dm badge: @palamedes\/cli/u,
+  );
+  assert.throws(
+    check(readme.replace("(packages/config/README.md)", "(packages/missing/README.md)")),
+    /missing package README link: @palamedes\/config/u,
+  );
 });
 
 test("rejects broken repository links and anchors", () => {
@@ -46,13 +57,13 @@ test("rejects broken repository links and anchors", () => {
 });
 
 test("ignores headings and links inside GFM fenced code blocks", () => {
-  const fencedOnlyStart = `${readme.replace("## Start Here", "## Start Elsewhere")}
+  const fencedOnlyIntegrations = `${readme.replace("## Integrations", "## Hosts")}
 \n~~~markdown
-## Start Here
+## Integrations
 [Missing guide](docs/missing-from-fence.md)
 ~~~
 `;
-  assert.throws(check(fencedOnlyStart), /missing Start Here/u);
+  assert.throws(check(fencedOnlyIntegrations), /missing Integrations/u);
 
   assert.doesNotThrow(
     check(`${readme}
@@ -64,7 +75,10 @@ test("ignores headings and links inside GFM fenced code blocks", () => {
 });
 
 test("does not accept a fenced heading as a GitHub anchor", () => {
-  assert.throws(check(`${readme}\n[Ghost](#palamedesyaml)\n`), /missing anchor/u);
+  assert.throws(
+    check(`${readme}\n\`\`\`yaml\n# palamedes.yaml\n\`\`\`\n[Ghost](#palamedesyaml)\n`),
+    /missing anchor/u,
+  );
 });
 
 test("matches GitHub duplicate-heading suffixes", () => {
@@ -130,16 +144,22 @@ ${"### \\`_Not code_\\`"}
   assert.throws(check(`${escapedBackticks}\n[Source emphasis](#_not-code_)\n`), /missing anchor/u);
 });
 
-test("requires native frame order and rejects legacy markers", () => {
-  assert.throws(check(readme.replace("More from Ferramenta", "Related tools")), /expected outer/u);
+test("requires company branding and rejects legacy markers", () => {
+  assert.throws(
+    check(`${readme}\n[More from Ferramenta](https://ferramenta.dev)\n`),
+    /cross-promotion/u,
+  );
   assert.throws(
     check(`${readme}\n<!-- ferramenta-family:start -->\n`),
     /legacy generated markers/u,
   );
-  assert.throws(check(readme.replace("logo-software.svg", "other.svg")), /expected outer/u);
+  assert.throws(
+    check(readme.replace("logo-software.svg", "other.svg")),
+    /expected Sebastian Software/u,
+  );
 });
 
-test("keeps project prose above the family footer", () => {
+test("keeps project prose above the company footer", () => {
   assert.throws(
     check(`${readme}\n## Afterword\n\nOne more thing.\n`),
     /project sections must precede/u,
@@ -150,5 +170,5 @@ test("keeps the company badge below the project title", () => {
   const badge = readme.match(/\[!\[Powered by Sebastian Software\]\([^\n]+?\)\]\([^\n]+?\)/u)?.[0];
   assert.ok(badge);
   const moved = readme.replace(badge, "").replace("# Palamedes", `${badge}\n\n# Palamedes`);
-  assert.throws(check(moved), /expected outer/u);
+  assert.throws(check(moved), /expected Sebastian Software/u);
 });

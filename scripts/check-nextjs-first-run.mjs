@@ -68,7 +68,8 @@ import { createActiveServerI18n } from "../lib/load-i18n.server"`,
     "the site quickstart must not require an app alias",
   );
 
-  for (const file of ["README.md", "llms.txt", "llms-full.txt", "packages/next-plugin/README.md"]) {
+  assertIncludes("README.md", "https://palamedes.dev/docs/nextjs-first-run");
+  for (const file of ["llms.txt", "llms-full.txt", "packages/next-plugin/README.md"]) {
     assertIncludes(file, "docs/nextjs-first-run.md");
   }
   assertIncludes("site/scripts/prebuild-content.mjs", '"nextjs-first-run.md", 12');
