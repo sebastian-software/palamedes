@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use globset::GlobSet;
+use ferralk::ferralk_glob::PatternSet;
 use notify::{RecursiveMode, Watcher};
 use palamedes::{ExtractCache, PalamedesCatalogFormat};
 
@@ -15,7 +15,8 @@ use crate::commands::extract::cache::{
     rebuild_extract_cache_for_reload,
 };
 use crate::commands::extract::sources::{
-    build_exclude_set, build_include_set, normalized_include_patterns, walk_roots_for_patterns,
+    build_exclude_set, build_include_set, matches_source_pattern, normalized_include_patterns,
+    walk_roots_for_patterns,
 };
 use crate::commands::extract::{ExtractOptions, run_extraction_with_cache};
 use crate::config::{LoadedConfig, load_config};
@@ -31,7 +32,7 @@ const WATCH_DEBOUNCE_MAX: Duration = Duration::from_secs(2);
 /// Per-catalog include/exclude matchers, built once per config generation so
 /// every filesystem event does not pay glob compilation again.
 struct WatchMatchers {
-    sets: Vec<(GlobSet, GlobSet)>,
+    sets: Vec<(PatternSet, PatternSet)>,
     /// notify backends may report the resolved target of a watched symlink.
     /// Translate those event paths back to the spelling used to build the
     /// catalog globs. More specific targets are evaluated first for a symlink
@@ -88,9 +89,9 @@ impl WatchMatchers {
     }
 
     fn matches_configured_path(&self, path: &Path) -> bool {
-        self.sets
-            .iter()
-            .any(|(include, exclude)| include.is_match(path) && !exclude.is_match(path))
+        self.sets.iter().any(|(include, exclude)| {
+            matches_source_pattern(include, path) && !matches_source_pattern(exclude, path)
+        })
     }
 }
 
@@ -397,6 +398,91 @@ mod tests {
             cache,
             &mut CachePersistenceWarnings::default(),
         )
+    }
+
+    #[test]
+    fn watch_events_and_discovery_share_the_native_pattern_contract() {
+        let root = temp_dir("watch-native-patterns[project]");
+        write_config(&root, None);
+        let sources = [
+            "app/page.tsx",
+            "app/nested/page.tsx",
+            "app/nested/skip.tsx",
+            "app/.generated/route.tsx",
+            "app/node_modules/dep/index.tsx",
+            "app/foo.tsx",
+            "app/.tsx",
+            "app/1.tsx",
+            "app/[draft].tsx",
+            "app/fooa.tsx",
+            "app/foob.tsx",
+        ];
+        fs::create_dir_all(root.join("app/foo")).expect("colliding prefix directory");
+        for source in sources {
+            let path = root.join(source);
+            fs::create_dir_all(path.parent().expect("parent")).expect("directory");
+            fs::write(path, "").expect("source");
+        }
+        for pattern in [
+            "app/*.tsx",
+            "app/@(page|foo).tsx",
+            "app/[[:digit:]].tsx",
+            "app/{,foo}.tsx",
+            r"app/\[draft\].tsx",
+            "app/foo@(a|b).tsx",
+            "app/foo*.tsx",
+        ] {
+            let mut config = load_config(&root, None).expect("config");
+            config.catalogs[0].include = vec![pattern.to_owned()];
+            config.catalogs[0].exclude = vec![
+                "app/**/skip.tsx".to_owned(),
+                "**/node_modules/**".to_owned(),
+            ];
+            let discovered = crate::commands::extract::sources::collect_source_files(
+                &config.catalogs[0],
+                &config,
+            )
+            .expect("discover sources");
+            let matchers = WatchMatchers::build(&config);
+            for source in sources {
+                let path = root.join(source);
+                assert_eq!(
+                    matchers.matches(&path),
+                    discovered.contains(&path),
+                    "{pattern}: {source}"
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_parent_include_preserves_filesystem_meaning_and_watch_aliases() {
+        let fixture = tempfile::tempdir().expect("fixture");
+        let root = fixture.path().join("project");
+        let external = fixture.path().join("external");
+        fs::create_dir_all(external.join("target")).expect("external target");
+        fs::create_dir_all(&root).expect("project");
+        write_config(&root, None);
+        fs::write(root.join("local.ts"), "").expect("local source");
+        fs::write(external.join("external.ts"), "").expect("external source");
+        std::os::unix::fs::symlink(external.join("target"), root.join("link"))
+            .expect("directory link");
+        let mut config = load_config(&root, None).expect("config");
+        config.catalogs[0].include = vec!["link/..".to_owned()];
+        let discovered =
+            crate::commands::extract::sources::collect_source_files(&config.catalogs[0], &config)
+                .expect("sources");
+        assert_eq!(discovered, vec![root.join("link/../external.ts")]);
+        assert_eq!(
+            fs::canonicalize(&discovered[0]).expect("real source"),
+            fs::canonicalize(external.join("external.ts")).expect("external source")
+        );
+        let matchers = WatchMatchers::build(&config);
+        assert!(matchers.matches(
+            &fs::canonicalize(external.join("external.ts")).expect("canonical external event")
+        ));
+        assert!(!matchers.matches(&root.join("local.ts")));
     }
 
     #[cfg(unix)]

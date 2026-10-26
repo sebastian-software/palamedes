@@ -1,19 +1,13 @@
-//! Turning a catalog's include/exclude patterns into the set of source files
-//! to extract from.
-//!
-//! Discovery uses [ferralk] for parallel traversal and `globset` for the
-//! catalog's public pattern contract. Ferralk has a larger pattern language,
-//! so walks start at the literal roots derived from includes, the established
-//! `GlobSet`s decide which files survive on worker threads, and only a narrow,
-//! equivalent subset of whole-subtree excludes is pushed down for pruning.
-//!
-//! [ferralk]: https://github.com/sebastian-software/ferralk
+//! Catalog source discovery and watch matching use Ferralk's walker dialect.
+//! Includes select hidden paths and ordinary wildcards cross separators. The
+//! same normalized absolute patterns feed traversal and watch-event matching.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
-use ferralk::{ErrorPolicy, Verdict, WalkOptions, Walker, WildcardMode};
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use ferralk::ferralk_glob::{Pattern, PatternOptions, PatternSet, escape_str};
+use ferralk::{ErrorPolicy, Verdict, Walker};
 
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
@@ -22,127 +16,73 @@ pub(crate) fn collect_source_files(
     catalog: &ConfigCatalog,
     config: &LoadedConfig,
 ) -> Result<Vec<PathBuf>, CliError> {
-    let include_patterns = normalized_include_patterns(catalog, config);
-    let exclude_patterns = resolved_exclude_patterns(catalog, config);
-    let include = build_glob_set(&include_patterns, "include")?;
-    let exclude = build_glob_set(&exclude_patterns, "exclude")?;
-    let mut files = Vec::new();
-
-    for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
-        let mut walker = Walker::new(&root)
-            .wildcard_mode(WildcardMode::SeparatorCrossing)
-            .match_hidden(true)
-            .threads(discovery_threads(config))
-            // Recoverable traversal errors are dropped rather than reported,
-            // as the `ignore` walk this replaced dropped its `Err` items.
-            .error_policy(ErrorPolicy::Skip)
-            .options(
-                WalkOptions::default()
-                    .files_only(true)
-                    /*
-                     * An unfollowed symlink is neither a listed directory nor
-                     * necessarily a source file. Resolve its kind to preserve
-                     * the old Path::is_file reading without following links.
-                     */
-                    .resolve_symlink_kind(true),
-            );
-
-        for pattern in safe_prune_patterns(&exclude_patterns, &root) {
-            walker = walker
-                .exclude(&pattern)
-                .map_err(|source| CliError::DiscoveryPattern {
-                    pattern: pattern.clone(),
-                    source,
-                })?;
-        }
-
-        // GlobSet remains authoritative and runs on the producing worker.
-        // Ferralk may only remove a subtree after the helper below proved its
-        // smaller dialect-independent pattern equivalent.
-        let result = walker.visit(|entry| {
-            if include.is_match(entry.path()) && !exclude.is_match(entry.path()) {
-                Verdict::Keep
-            } else {
-                Verdict::Skip
-            }
-        })?;
-        files.extend(result.entries().iter().map(|entry| entry.path().to_owned()));
+    let includes = normalized_include_patterns(catalog, config);
+    let excludes = resolved_exclude_patterns(catalog, config);
+    let include = build_pattern_set(&includes)?;
+    let exclude = build_pattern_set(&excludes)?;
+    if includes.is_empty() {
+        return Ok(Vec::new());
     }
-
+    let subtree_excludes = build_subtree_excludes(&excludes)?;
+    let mut files = Vec::new();
+    for root in walk_roots_for_patterns(&includes, &config.root_dir) {
+        // Narrow literal roots preserve explicitly included directory symlinks.
+        // Absolute PatternSet matching also handles config-wide excludes whose
+        // wildcard lies above a root and cannot be passed to Walker::exclude.
+        let result = Walker::new(root)
+            .threads(discovery_threads(config))
+            .error_policy(ErrorPolicy::Skip)
+            .visit(|entry| {
+                let path = entry.path();
+                let excluded = matches_source_pattern(&exclude, path);
+                if entry.is_dir() {
+                    let bytes = source_path_bytes(path);
+                    if subtree_excludes
+                        .iter()
+                        .any(|(root, full)| root.is_match(&bytes) && full.is_match(&bytes))
+                    {
+                        Verdict::Prune
+                    } else {
+                        Verdict::Skip
+                    }
+                } else if !excluded
+                    && matches_source_pattern(&include, path)
+                    && (!entry.is_symlink() || path.is_file())
+                {
+                    Verdict::Keep
+                } else {
+                    Verdict::Skip
+                }
+            })?;
+        let (entries, _) = result.into_parts();
+        files.extend(entries.into_iter().map(ferralk::WalkEntry::into_path));
+    }
     sort_and_dedupe_paths(&mut files);
     Ok(files)
 }
 
-/// Whole-subtree excludes which ferralk may safely apply before `GlobSet`.
-///
-/// This deliberately accepts less than either glob engine: literal components
-/// plus a complete `**` component, with `/**` at the end. Those patterns have
-/// the same meaning in both engines. Braces, character classes, extglobs,
-/// parent traversal, and partial wildcards remain per-file GlobSet checks, so
-/// an optimization can never broaden an existing exclude.
-fn safe_prune_patterns(patterns: &[String], root: &Path) -> Vec<String> {
+/// A terminal, unescaped `/**` covers descendants only when both the prefix
+/// and full exclude match the directory. Ferralk uses the same two conditions
+/// for subtree coverage. All syntax is compiled by the same native matcher.
+fn build_subtree_excludes(patterns: &[String]) -> Result<Vec<(Pattern, Pattern)>, CliError> {
     patterns
         .iter()
-        .filter_map(|pattern| safe_prune_pattern(pattern, root))
+        .filter_map(|pattern| {
+            pattern
+                .strip_suffix("/**")
+                .filter(|root| {
+                    root.bytes().rev().take_while(|byte| *byte == b'\\').count() % 2 == 0
+                })
+                .map(|root| {
+                    Ok((
+                        compile_source_pattern(root)?,
+                        compile_source_pattern(pattern)?,
+                    ))
+                })
+        })
         .collect()
 }
 
-fn safe_prune_pattern(pattern: &str, root: &Path) -> Option<String> {
-    if root.components().any(|part| part == Component::ParentDir) {
-        return None;
-    }
-
-    let components = Path::new(pattern).components().collect::<Vec<_>>();
-    let first_double_star = components
-        .iter()
-        .position(|part| matches!(part, Component::Normal(value) if *value == "**"))?;
-    if !matches!(components.last(), Some(Component::Normal(value)) if *value == "**") {
-        return None;
-    }
-    if components.iter().any(|part| match part {
-        Component::ParentDir => true,
-        Component::Normal(value) if *value == "**" => false,
-        Component::Normal(value) => value
-            .to_string_lossy()
-            .contains(['*', '?', '[', ']', '{', '}', '(', ')', '\\']),
-        _ => false,
-    }) {
-        return None;
-    }
-
-    let literal_prefix =
-        components[..first_double_star]
-            .iter()
-            .fold(PathBuf::new(), |mut path, part| {
-                path.push(part.as_os_str());
-                path
-            });
-    let mut relative = if literal_prefix.starts_with(root) {
-        literal_prefix.strip_prefix(root).ok()?.to_path_buf()
-    } else if root.starts_with(&literal_prefix) {
-        PathBuf::new()
-    } else {
-        return None;
-    };
-    for part in &components[first_double_star..] {
-        relative.push(part.as_os_str());
-    }
-    let pattern = relative.to_string_lossy();
-    (!pattern.is_empty()).then(|| walker_pattern(&pattern))
-}
-
-/// Walker patterns use `/` on every platform and read `\` as an escape.
-fn walker_pattern(pattern: &str) -> String {
-    if cfg!(windows) {
-        pattern.replace('\\', "/")
-    } else {
-        pattern.to_owned()
-    }
-}
-
-/// Worker count for discovery: the configured extraction threads, else the
-/// machine's parallelism. ferralk keeps small walks serial below its own size
-/// floor, so this does not need a threshold of its own.
 fn discovery_threads(config: &LoadedConfig) -> usize {
     config
         .extract_threads
@@ -184,8 +124,46 @@ pub(crate) fn sort_and_dedupe_paths<P: AsRef<Path> + Ord>(paths: &mut Vec<P>) {
 pub(super) fn build_include_set(
     catalog: &ConfigCatalog,
     config: &LoadedConfig,
-) -> Result<GlobSet, CliError> {
-    build_glob_set(&normalized_include_patterns(catalog, config), "include")
+) -> Result<PatternSet, CliError> {
+    build_pattern_set(&normalized_include_patterns(catalog, config))
+}
+
+pub(super) fn build_exclude_set(
+    catalog: &ConfigCatalog,
+    config: &LoadedConfig,
+) -> Result<PatternSet, CliError> {
+    build_pattern_set(&resolved_exclude_patterns(catalog, config))
+}
+
+fn compile_source_pattern(pattern: &str) -> Result<Pattern, CliError> {
+    Pattern::compile(pattern, PatternOptions::walker().match_hidden(true)).map_err(|source| {
+        CliError::DiscoveryPattern {
+            pattern: pattern.to_owned(),
+            source,
+        }
+    })
+}
+
+fn build_pattern_set(patterns: &[String]) -> Result<PatternSet, CliError> {
+    patterns
+        .iter()
+        .map(|pattern| compile_source_pattern(pattern))
+        .collect()
+}
+
+fn source_path_bytes(path: &Path) -> Cow<'_, [u8]> {
+    #[cfg(windows)]
+    {
+        Cow::Owned(path.to_string_lossy().replace('\\', "/").into_bytes())
+    }
+    #[cfg(not(windows))]
+    {
+        Cow::Borrowed(path.as_os_str().as_encoded_bytes())
+    }
+}
+
+pub(super) fn matches_source_pattern(set: &PatternSet, path: &Path) -> bool {
+    set.is_match(source_path_bytes(path))
 }
 
 pub(super) fn normalized_include_patterns(
@@ -196,13 +174,10 @@ pub(super) fn normalized_include_patterns(
         .include
         .iter()
         .map(|pattern| {
-            // Collapse `.`/`./` segments so dot paths resolve to a real
-            // directory (`.` -> the config root) instead of a literal `/.`
-            // fragment that silently matches no source files. Expand bare
-            // directories to a recursive source glob; pass through anything
-            // that already points at a file or contains glob syntax.
             let resolved: PathBuf = config.resolve_pattern(pattern).components().collect();
             if resolved.is_dir() {
+                // Keep parent components: `link/..` follows filesystem symlink
+                // semantics and remains the spelling used by watch aliases.
                 format!(
                     "{}/**/*.{{js,jsx,ts,tsx,mdx,vue,svelte}}",
                     escape_root_for_glob(&resolved)
@@ -214,48 +189,35 @@ pub(super) fn normalized_include_patterns(
         .collect()
 }
 
-/// Resolves a catalog glob without letting metacharacters in the project path
-/// become part of the caller's pattern. The configured suffix remains a glob;
-/// only the absolute root supplied by Palamedes is made literal.
+/// Only the root held by Palamedes is escaped; the configured suffix remains
+/// Ferralk syntax. Patterns use `/` on every platform, with `\` for escapes.
 fn resolve_glob_pattern(config: &LoadedConfig, pattern: &str) -> String {
-    let escaped_root = escape_root_for_glob(&config.root_dir);
-    PathBuf::from(escaped_root)
-        .join(pattern)
-        .to_string_lossy()
-        .into_owned()
+    if Path::new(pattern).is_absolute() {
+        return pattern.to_owned();
+    }
+    format!(
+        "{}/{pattern}",
+        escape_root_for_glob(&config.root_dir).trim_end_matches('/')
+    )
 }
 
-/// Escapes only the project root, leaving the catalog's own glob semantics
-/// unchanged. On Unix a backslash is not a path separator, so globset parses
-/// it as an escape unless it is represented by a literal character class.
 fn escape_root_for_glob(root: &Path) -> String {
-    let escaped = globset::escape(&root.to_string_lossy());
-    if cfg!(unix) {
-        escaped.replace('\\', "[\\]")
+    let root: PathBuf = root.components().collect();
+    let root = root.to_string_lossy();
+    if cfg!(windows) {
+        escape_str(&root.replace('\\', "/"))
     } else {
-        escaped
+        escape_str(&root)
     }
-}
-
-fn build_glob_set(patterns: &[String], label: &str) -> Result<GlobSet, CliError> {
-    let mut builder = GlobSetBuilder::new();
-    for pattern in patterns {
-        builder.add(Glob::new(pattern).map_err(|source| CliError::GlobPattern {
-            pattern: pattern.clone(),
-            source,
-        })?);
-    }
-    builder.build().map_err(|source| CliError::GlobPattern {
-        pattern: label.to_owned(),
-        source,
-    })
 }
 
 pub(super) fn walk_roots_for_patterns(patterns: &[String], fallback: &Path) -> Vec<PathBuf> {
     let mut roots = BTreeSet::new();
     for pattern in patterns {
-        let prefix = PathBuf::from(literal_glob_prefix(pattern));
-        let root = if prefix.is_dir() {
+        let literal = literal_glob_prefix(pattern);
+        let complete_component = literal.ends_with('/');
+        let prefix = PathBuf::from(literal);
+        let root = if complete_component {
             prefix
         } else {
             prefix
@@ -271,62 +233,37 @@ pub(super) fn walk_roots_for_patterns(patterns: &[String], fallback: &Path) -> V
     roots.into_iter().collect()
 }
 
-/// Returns the filesystem prefix before the first glob operator. `globset`
-/// represents escaped literal metacharacters as bracket expressions, so decode
-/// those forms while looking for the first caller-supplied operator.
+/// Decode Ferralk escapes until the first wildcard, class, brace or extglob.
+/// The prefix selects a walk/watch root, never decides whether a file matches.
 fn literal_glob_prefix(pattern: &str) -> String {
     let mut prefix = String::new();
-    let mut remaining = pattern;
-    while !remaining.is_empty() {
-        let Some(character) = remaining.chars().next() else {
-            break;
-        };
-        let escaped = match remaining.get(..3) {
-            Some("[*]") => Some('*'),
-            Some("[?]") => Some('?'),
-            Some("[[]") => Some('['),
-            Some("[]]") => Some(']'),
-            Some("[{]") => Some('{'),
-            Some("[}]") => Some('}'),
-            Some("[\\]") => Some('\\'),
-            _ => None,
-        };
-        if let Some(literal) = escaped {
-            prefix.push(literal);
-            remaining = &remaining[3..];
-        } else if matches!(character, '*' | '?' | '[' | '{') {
+    let mut characters = pattern.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character == '\\' {
+            if let Some(literal) = characters.next() {
+                prefix.push(literal);
+            }
+        } else if matches!(character, '*' | '?' | '[' | '{')
+            || (matches!(character, '@' | '+' | '!') && characters.peek() == Some(&'('))
+        {
             break;
         } else {
             prefix.push(character);
-            remaining = &remaining[character.len_utf8()..];
         }
     }
     prefix
 }
 
-pub(super) fn build_exclude_set(
-    catalog: &ConfigCatalog,
-    config: &LoadedConfig,
-) -> Result<GlobSet, CliError> {
-    build_glob_set(&resolved_exclude_patterns(catalog, config), "exclude")
-}
-
-/// The exclude patterns as absolute path globs, in catalog order. Split out of
-/// `build_exclude_set` because a walker that prunes during traversal needs the
-/// patterns themselves, not only the compiled `GlobSet`.
-pub(super) fn resolved_exclude_patterns(
-    catalog: &ConfigCatalog,
-    config: &LoadedConfig,
-) -> Vec<String> {
-    let excludes = if catalog.exclude.is_empty() {
-        vec!["**/node_modules/**".to_owned()]
+fn resolved_exclude_patterns(catalog: &ConfigCatalog, config: &LoadedConfig) -> Vec<String> {
+    if catalog.exclude.is_empty() {
+        vec![resolve_glob_pattern(config, "**/node_modules/**")]
     } else {
-        catalog.exclude.clone()
-    };
-    excludes
-        .iter()
-        .map(|pattern| resolve_glob_pattern(config, pattern))
-        .collect()
+        catalog
+            .exclude
+            .iter()
+            .map(|pattern| resolve_glob_pattern(config, pattern))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -417,63 +354,6 @@ mod tests {
         assert_eq!(discovered(&root), vec![root.join("app/page.tsx")]);
     }
 
-    /*
-     * A catalog pattern is a `globset` pattern, and `globset` as palamedes
-     * builds it lets an ordinary wildcard cross a separator, so a single-star
-     * include reaches a nested file. palamedes' own generated patterns are all
-     * `**`-rooted and cannot tell the two readings apart -- only a hand-written
-     * include like this one can, which is why the case is a fixture rather than
-     * something the real trees would have caught.
-     */
-    /*
-     * Windows spells a resolved catalog pattern with `\\`, which the walker
-     * reads as an escape rather than a separator. The respelling has to happen
-     * there and must not happen on Unix, where a backslash is a legal
-     * character in a filename.
-     */
-    #[test]
-    fn respells_walker_patterns_only_where_the_separator_is_a_backslash() {
-        let windows_shape = r"C:\repo\app\**\*.tsx";
-        assert_eq!(
-            super::walker_pattern(windows_shape),
-            if cfg!(windows) {
-                "C:/repo/app/**/*.tsx"
-            } else {
-                windows_shape
-            }
-        );
-        assert_eq!(super::walker_pattern("/repo/app/**"), "/repo/app/**");
-    }
-
-    #[test]
-    fn only_equivalent_whole_subtree_patterns_are_pushed_down() {
-        let root = temp_dir("safe-prune");
-        let app = root.join("app");
-        let default = format!("{}/**/node_modules/**", root.to_string_lossy());
-        let custom = format!("{}/app/generated/**", root.to_string_lossy());
-
-        assert_eq!(
-            super::safe_prune_pattern(&default, &app).as_deref(),
-            Some("**/node_modules/**")
-        );
-        assert_eq!(
-            super::safe_prune_pattern(&custom, &app).as_deref(),
-            Some("generated/**")
-        );
-        for unsafe_pattern in [
-            format!("{}/**/@(foo|bar)/**", root.to_string_lossy()),
-            format!("{}/**/[[:digit:]]/**", root.to_string_lossy()),
-            format!("{}/**/{{,foo}}/**", root.to_string_lossy()),
-            format!("{}/**/generated*/**", root.to_string_lossy()),
-        ] {
-            assert_eq!(super::safe_prune_pattern(&unsafe_pattern, &app), None);
-        }
-        assert_eq!(
-            super::safe_prune_pattern(&default, &root.join("app/../api")),
-            None
-        );
-    }
-
     #[test]
     fn a_single_star_include_reaches_nested_files() {
         let root = temp_dir("crossing-wildcard");
@@ -496,25 +376,275 @@ mod tests {
     }
 
     #[test]
-    fn ferralk_only_syntax_does_not_expand_include_patterns() {
+    fn absolute_and_overlapping_includes_are_sorted_and_deduplicated() {
+        let root = project_with_sources(
+            "absolute-overlapping[includes]",
+            &["app/page.tsx", "app/nested/deep.tsx", "app/other.ts"],
+        );
+        let mut config = load_config(&root, None).expect("load config");
+        config.catalogs[0].include = vec![
+            format!("{}/*.tsx", super::escape_root_for_glob(&root.join("app"))),
+            "app/nested".to_owned(),
+            "app/page.tsx".to_owned(),
+        ];
+
+        assert_eq!(
+            collect_source_files(&config.catalogs[0], &config).expect("collect sources"),
+            vec![root.join("app/nested/deep.tsx"), root.join("app/page.tsx")]
+        );
+    }
+
+    #[test]
+    fn a_partial_component_prefix_never_becomes_a_directory_root() {
+        let root = project_with_sources("colliding-prefix", &["app/fooa.tsx", "app/foob.tsx"]);
+        fs::create_dir(root.join("app/foo")).expect("unrelated colliding directory");
+        let mut config = load_config(&root, None).expect("config");
+        for pattern in [
+            "app/foo@(a|b).tsx".to_owned(),
+            "app/foo*.tsx".to_owned(),
+            format!(
+                "{}/foo@(a|b).tsx",
+                super::escape_root_for_glob(&root.join("app"))
+            ),
+        ] {
+            config.catalogs[0].include = vec![pattern.clone()];
+            assert_eq!(
+                collect_source_files(&config.catalogs[0], &config).expect("sources"),
+                vec![root.join("app/fooa.tsx"), root.join("app/foob.tsx")],
+                "{pattern}"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_excludes_replace_the_default_and_filter_partial_patterns() {
+        let root = project_with_sources(
+            "custom-excludes",
+            &[
+                "app/page.tsx",
+                "app/page.test.tsx",
+                "app/generated/route.tsx",
+                "app/.cache/generated/route.tsx",
+                "app/node_modules/dep/index.ts",
+            ],
+        );
+        let mut config = load_config(&root, None).expect("load config");
+        config.catalogs[0].exclude = vec!["**/*.test.tsx".to_owned(), "**/generated/**".to_owned()];
+
+        assert_eq!(
+            collect_source_files(&config.catalogs[0], &config).expect("collect sources"),
+            vec![
+                root.join("app/node_modules/dep/index.ts"),
+                root.join("app/page.tsx")
+            ]
+        );
+    }
+
+    #[test]
+    fn leading_bang_and_escaped_brackets_remain_literal() {
+        let root = project_with_sources(
+            "literal-pattern-syntax",
+            &["!app/page.tsx", "app/[draft].tsx", "app/d.tsx"],
+        );
+        let mut config = load_config(&root, None).expect("load config");
+        config.catalogs[0].include = vec!["!app/*.tsx".to_owned(), r"app/\[draft\].tsx".to_owned()];
+
+        assert_eq!(
+            collect_source_files(&config.catalogs[0], &config).expect("collect sources"),
+            vec![root.join("!app/page.tsx"), root.join("app/[draft].tsx")]
+        );
+    }
+
+    #[test]
+    fn invalid_include_and_exclude_patterns_report_the_rejected_glob() {
+        let root = project_with_sources("invalid-source-pattern", &["app/page.tsx"]);
+        for exclude in [false, true] {
+            let mut config = load_config(&root, None).expect("load config");
+            let patterns = if exclude {
+                &mut config.catalogs[0].exclude
+            } else {
+                &mut config.catalogs[0].include
+            };
+            *patterns = vec!["app/[".to_owned()];
+            let error =
+                collect_source_files(&config.catalogs[0], &config).expect_err("invalid glob");
+            match error {
+                crate::error::CliError::DiscoveryPattern { pattern, source } => {
+                    assert!(pattern.ends_with("app/["), "{pattern}");
+                    assert_eq!(source.offset(), pattern.len() - 1);
+                }
+                other => panic!("expected a glob diagnostic, got {other}"),
+            }
+        }
+    }
+
+    #[test]
+    fn missing_include_roots_produce_an_empty_source_set() {
+        let root = project_with_sources("missing-source-root", &["app/page.tsx"]);
+        let mut config = load_config(&root, None).expect("load config");
+        config.catalogs[0].include = vec!["missing/nested/**/*.tsx".to_owned()];
+        assert!(
+            collect_source_files(&config.catalogs[0], &config)
+                .expect("collect sources")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn discovers_outside_config_sources_from_relative_and_absolute_roots() {
+        let fixture = tempfile::tempdir().expect("fixture");
+        let root = fixture.path().join("web");
+        fs::create_dir_all(&root).expect("create config root");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [../shared]\n",
+        )
+        .expect("write config");
+        let shared = fixture.path().join("shared[app]");
+        fs::create_dir_all(shared.join(".generated")).expect("create external sources");
+        fs::write(shared.join("page.tsx"), "").expect("source");
+        fs::write(shared.join(".generated/route.tsx"), "").expect("hidden source");
+        let mut config = load_config(&root, None).expect("load config");
+        for include in [
+            "../shared[app]".to_owned(),
+            r"../shared\[app\]/**/*.tsx".to_owned(),
+            format!("{}/**/*.tsx", super::escape_root_for_glob(&shared)),
+        ] {
+            config.catalogs[0].include = vec![include.clone()];
+            let spelling = if Path::new(&include).is_absolute() {
+                shared.clone()
+            } else {
+                root.join("../shared[app]")
+            };
+            let expected = vec![
+                spelling.join(".generated/route.tsx"),
+                spelling.join("page.tsx"),
+            ];
+            assert_eq!(
+                collect_source_files(&config.catalogs[0], &config)
+                    .expect("collect external sources"),
+                expected,
+                "{include}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_includes_never_turn_into_an_unfiltered_walk() {
+        let root = project_with_sources("empty-includes", &["app/page.tsx"]);
+        let mut config = load_config(&root, None).expect("load config");
+        config.catalogs[0].include.clear();
+        assert!(
+            collect_source_files(&config.catalogs[0], &config)
+                .expect("empty sources")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn config_parent_segments_do_not_change_the_exclude_pattern_space() {
+        let root = project_with_sources(
+            "config-parent-segments",
+            &["app/page.tsx", "app/node_modules/dep/index.tsx"],
+        );
+        let config = load_config(&root, Some(&root.join("app/../palamedes.yaml"))).expect("config");
+        assert_eq!(
+            collect_source_files(&config.catalogs[0], &config).expect("sources"),
+            vec![config.root_dir.join("app/page.tsx")]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_patterns_use_forward_slashes_and_backslashes_escape_syntax() {
+        let root = project_with_sources(
+            "windows-native-patterns",
+            &["app/page.tsx", "app/nested/deep.tsx", "app/nested/skip.tsx"],
+        );
+        let mut config = load_config(&root, None).expect("load config");
+        config.catalogs[0].include = vec!["app/*.tsx".to_owned()];
+        config.catalogs[0].exclude = vec!["app/*/skip.tsx".to_owned()];
+        assert_eq!(
+            collect_source_files(&config.catalogs[0], &config).expect("collect sources"),
+            vec![root.join("app/nested/deep.tsx"), root.join("app/page.tsx")],
+        );
+        config.catalogs[0].include = vec![r"app\*.tsx".to_owned()];
+        assert!(
+            collect_source_files(&config.catalogs[0], &config)
+                .expect("escaped literal star")
+                .is_empty()
+        );
+    }
+
+    /// Characterization only: no timing threshold. Fixture setup is outside
+    /// the samples; every collected path is checked against the same oracle.
+    #[test]
+    #[ignore = "run explicitly to compare source-discovery dependency versions"]
+    fn measure_source_discovery() {
+        use std::time::Instant;
+
+        let fixture = tempfile::tempdir().expect("benchmark directory");
+        let root = fixture.path();
+        fs::write(root.join("palamedes.yaml"), "locales: [en, de]\nsource-locale: en\nextract-threads: 4\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [app]\n").expect("write config");
+        let mut expected = Vec::new();
+        for directory in 0..100 {
+            for (subtree, selected) in [
+                ("src", true),
+                (".generated", true),
+                ("node_modules/dep", false),
+            ] {
+                let directory = root.join(format!("app/feature-{directory}/{subtree}"));
+                fs::create_dir_all(&directory).expect("create benchmark directory");
+                for file in 0..30 {
+                    let path = directory.join(format!("view-{file}.tsx"));
+                    fs::write(&path, "export const message = 1;").expect("write benchmark source");
+                    if selected {
+                        expected.push(path);
+                    }
+                }
+            }
+        }
+        super::sort_and_dedupe_paths(&mut expected);
+        let config = load_config(root, None).expect("load config");
+        for _ in 0..5 {
+            assert_eq!(
+                collect_source_files(&config.catalogs[0], &config).expect("warmup"),
+                expected
+            );
+        }
+        let mut samples = Vec::new();
+        for _ in 0..30 {
+            let start = Instant::now();
+            let actual = collect_source_files(&config.catalogs[0], &config).expect("measurement");
+            samples.push(start.elapsed().as_micros());
+            assert_eq!(actual, expected);
+        }
+        println!(
+            "source-discovery: files={}, micros={samples:?}",
+            expected.len()
+        );
+    }
+
+    #[test]
+    fn native_pattern_syntax_selects_extglobs_posix_classes_and_empty_braces() {
         for (name, pattern, expanded, selected) in [
             (
                 "extglob-include",
                 "app/@(foo|bar).ts",
                 &["app/foo.ts", "app/bar.ts"][..],
-                &[][..],
+                &["app/foo.ts", "app/bar.ts"][..],
             ),
             (
                 "posix-include",
                 "app/[[:digit:]].ts",
                 &["app/1.ts"][..],
-                &[][..],
+                &["app/1.ts"][..],
             ),
             (
                 "brace-include",
                 "app/{,foo}.ts",
                 &["app/.ts", "app/foo.ts"][..],
-                &["app/foo.ts"][..],
+                &["app/.ts", "app/foo.ts"][..],
             ),
         ] {
             let root = temp_dir(name);
@@ -532,16 +662,17 @@ mod tests {
                 fs::write(path, "export const message = 1;").expect("write source");
             }
 
-            let expected = selected
+            let mut expected = selected
                 .iter()
                 .map(|relative| root.join(relative))
                 .collect::<Vec<_>>();
+            expected.sort();
             assert_eq!(discovered(&root), expected, "{pattern}");
         }
     }
 
     #[test]
-    fn ferralk_only_syntax_does_not_expand_exclude_patterns() {
+    fn native_exclude_patterns_filter_extglobs_posix_classes_and_empty_braces() {
         for (name, pattern, expanded) in [
             (
                 "extglob-exclude",
@@ -565,15 +696,7 @@ mod tests {
                 ),
             )
             .expect("write config");
-            let mut expected = sources
-                .iter()
-                .filter(|relative| match pattern {
-                    "app/{,foo}.ts" => **relative != "app/foo.ts",
-                    _ => true,
-                })
-                .map(|relative| root.join(relative))
-                .collect::<Vec<_>>();
-            expected.sort();
+            let expected = vec![root.join("app/keeper.ts")];
 
             assert_eq!(discovered(&root), expected, "{pattern}");
         }
@@ -602,6 +725,28 @@ mod tests {
         assert_eq!(
             discovered(&root),
             vec![root.join("app/linked.tsx"), root.join("app/page.tsx")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_explicit_directory_symlink_is_a_source_root_without_following_nested_links() {
+        let fixture = tempfile::tempdir().expect("fixture");
+        let root = project_with_sources("explicit-symlink-root", &["app/page.tsx"]);
+        fs::create_dir_all(fixture.path().join("nested")).expect("external directory");
+        fs::write(fixture.path().join("page.tsx"), "").expect("external source");
+        fs::write(fixture.path().join("nested/deep.tsx"), "").expect("nested source");
+        std::os::unix::fs::symlink(fixture.path().join("nested"), fixture.path().join("alias"))
+            .expect("nested directory link");
+        std::os::unix::fs::symlink(fixture.path(), root.join("linked")).expect("source root link");
+        let mut config = load_config(&root, None).expect("config");
+        config.catalogs[0].include = vec!["linked".to_owned()];
+        assert_eq!(
+            collect_source_files(&config.catalogs[0], &config).expect("sources"),
+            vec![
+                root.join("linked/nested/deep.tsx"),
+                root.join("linked/page.tsx")
+            ]
         );
     }
 
@@ -638,7 +783,7 @@ mod tests {
 
     // The counterpart: a hidden directory is not special to the *exclude*
     // either. A `node_modules` nested under a dot directory stays excluded,
-    // whether the walker prunes it or the GlobSet rejects it per file.
+    // whether it is pruned as a subtree or filtered as a file.
     #[test]
     fn excludes_dependencies_nested_under_hidden_directories() {
         let root = project_with_sources(

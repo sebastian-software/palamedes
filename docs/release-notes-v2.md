@@ -96,6 +96,13 @@ contract.
 
 ## Build and setup improvements
 
+Building Palamedes from Rust source now requires Rust 1.96 or newer. This
+supports Ferralk 1.1 for both source traversal and catalog pattern matching.
+Extglobs, POSIX classes, and empty brace alternatives now use Ferralk's native
+semantics; Windows patterns use `/` separators and `\` escapes. Review the
+[source-pattern migration examples](./ferralk-adoption.md) before extraction.
+Prebuilt npm native packages do not require a local Rust toolchain.
+
 - **Next.js fragment inputs:** selected fragments use a small adapter resource
   instead of repeatedly using the full PO file as bundler input. The fix covers
   Turbopack and webpack and keeps fragment loader inputs small while preserving

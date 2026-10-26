@@ -23,8 +23,15 @@ The native core builds on three first-party Rust crates:
   and MDX parsing behind the MDX extraction path
   (`crates/palamedes/src/mdx.rs`)
 - `ferralk` (https://github.com/sebastian-software/ferralk) owns parallel source
-  discovery during extraction
+  traversal and native CLI include/exclude matching through its walker-dialect
+  `PatternSet`, shared by extraction and watch mode. Hidden paths match and
+  ordinary `*` crosses separators; extglobs, POSIX classes, and empty brace
+  alternatives use Ferralk semantics. Patterns use `/` and `\` escapes on
+  every platform
   (`crates/palamedes-cli/src/commands/extract/sources.rs`)
+
+Building from Rust source requires the workspace MSRV in `Cargo.toml`
+(currently Rust 1.96). Prebuilt npm native packages do not need local Rust.
 
 Verified integrations currently include Next.js, Vite, TanStack Start, Solid, Waku, React Router, and full-stack Remix v3.
 

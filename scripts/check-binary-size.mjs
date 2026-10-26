@@ -33,10 +33,11 @@ export const BUDGETS = [
       label: "@palamedes/cli-linux-x64-gnu@1.17.3",
       bytes: 8_022_504,
     },
-    // 9.55 MB on Linux x64 once pmds compiled JavaScript catalog modules and
-    // wrote the runtime macro manifest (ferrocat's catalog compiler and the
-    // module renderer). 9.7 MB keeps ~150 KB for toolchain movement.
-    maxBytes: 9_700_000,
+    // Ferralk 1.1 + Rust 1.96.1 measured 9,745,216 B on Linux x64 GNU at
+    // aad69656 (CI job 121310093980), up 84,864 B from the Rust 1.95 base.
+    // 9.9 MB restores ~150 KB of toolchain headroom (154,784 B measured)
+    // while retaining the guard against megabyte-class dependency growth.
+    maxBytes: 9_900_000,
   },
   {
     label: "core-node addon (release)",

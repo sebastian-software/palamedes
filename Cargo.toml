@@ -80,7 +80,7 @@ edition = "2024"
 homepage = "https://palamedes.dev"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/sebastian-software/palamedes"
-rust-version = "1.95"
+rust-version = "1.96"
 
 [profile.release]
 # Native npm packages ship the release artifacts, not their debug symbols.

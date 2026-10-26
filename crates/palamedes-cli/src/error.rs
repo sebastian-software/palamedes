@@ -79,12 +79,6 @@ pub enum CliError {
     LintFailedOnWarning { errors: usize, warnings: usize },
     #[error("Source lint could not analyze source files (count: {failures}).")]
     LintAnalysisFailed { failures: usize },
-    #[error("Could not build glob pattern {pattern}: {source}")]
-    GlobPattern {
-        pattern: String,
-        #[source]
-        source: globset::Error,
-    },
     /// A catalog pattern the source walker refuses, which is a config problem
     /// and not a walk failure: an exclude anchored above the walk root, or a
     /// pattern containing `..`.
@@ -197,11 +191,6 @@ impl CliError {
             Self::LintAnalysisFailed { failures } => tr!(
                 "Source lint could not analyze {failures, plural, one {# source file} other {# source files}}.",
                 failures = failures
-            ),
-            Self::GlobPattern { pattern, source } => tr!(
-                "Could not build glob pattern {pattern}: {source}",
-                pattern = pattern,
-                source = source
             ),
             Self::DiscoveryPattern { pattern, source } => tr!(
                 "Could not use {pattern} for source discovery: {source}",

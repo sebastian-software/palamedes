@@ -13,6 +13,10 @@ import {
 } from "./check-enabled-update-check.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
+const rustVersion = (await readFile(resolve(repositoryRoot, "Cargo.toml"), "utf8")).match(
+  /^rust-version\s*=\s*"([^"]+)"/mu,
+)?.[1];
+if (!rustVersion) throw new Error("Missing workspace rust-version");
 
 async function readRepositoryFile(path) {
   return readFile(resolve(repositoryRoot, path), "utf8");
@@ -197,7 +201,9 @@ describe("workflow contracts", () => {
     const ciProof = ci
       .split("- name: Verify enabled update-check opt-outs without network access")[1]
       .split("- name:")[0];
-    expect(ciProof).toContain("if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '1.95'");
+    expect(ciProof).toContain(
+      `if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == '${rustVersion}'`,
+    );
     expect(ciProof).toContain("run: node ./scripts/check-enabled-update-check.mjs");
     const releaseValidation = job(publish, "validate-release", "publish-native");
     expect(releaseValidation).toContain("run: node ./scripts/check-enabled-update-check.mjs");
@@ -305,7 +311,7 @@ describe("workflow contracts", () => {
     expect(validateRust).toContain("rust-components: clippy, rustfmt");
     // Format and lint are platform-independent; only the tests fan out.
     expect(validateRust).toContain("if: ${{ matrix.lint }}");
-    expect(toolchain).toContain('channel = "1.95"');
+    expect(toolchain).toContain(`channel = "${rustVersion}"`);
   });
 
   it("budgets both shipped native artifact families on the pinned toolchain", async () => {
@@ -316,7 +322,7 @@ describe("workflow contracts", () => {
     const validateRust = job(ci, "validate-rust");
 
     expect(validateRust).toContain("- name: Check shipped binary sizes");
-    expect(validateRust).toContain("if: matrix.toolchain == '1.95'");
+    expect(validateRust).toContain(`if: matrix.toolchain == '${rustVersion}'`);
     expect(validateRust).toContain("run: node ./scripts/check-binary-size.mjs");
     expect(binarySizeCheck).toContain('crate: "palamedes-cli"');
     expect(binarySizeCheck).toContain('crate: "palamedes-node"');
@@ -387,7 +393,7 @@ describe("workflow contracts", () => {
     expect(verifyMuslNative).toContain("uses: actions/cache@");
     expect(verifyMuslNative).toContain("inputs.cargo-cache == 'true'");
     expect(verifyMuslNative).toContain("/usr/local/cargo/registry");
-    expect(verifyMuslNative).toContain("rust:1.95-alpine");
+    expect(verifyMuslNative).toContain(`rust:${rustVersion}-alpine`);
     expect(verifyMuslNative).toContain("node:24-alpine");
     expect(verifyMuslNative).toContain("node ../core-node/scripts/build-native.mjs");
     expect(verifyMuslNative).toContain("execFileSync('./bin/pmds', ['version']");
