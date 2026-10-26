@@ -84,9 +84,9 @@ in `THIRD_PARTY_NOTICES.md`.
 
 The product film in `video/` (v7) shows the homepage stripe's seven groups
 with the same unmodified compact marks, each with its visible name and at the
-shared proportions of `FrameworkIdentity`, scaled up together: Next.js, Nuxt,
-SvelteKit, TanStack Start, React Router, Waku, and Remix; React, Solid, Vue,
-and Svelte; Vite and Turbopack; Hono and Express; Node.js CLI; MDX; and Rust.
+shared proportions of `FrameworkIdentity`, scaled up together: React, Solid,
+Vue, and Svelte; Next.js, Nuxt, SvelteKit, TanStack Start, React Router, Waku,
+and Remix; Vite and Turbopack; Hono and Express; Node.js CLI; MDX; and Rust.
 The film keeps the editorial hairline treatment rather than the homepage's
 scoped link badges. They identify integrations only. The film names no support
 levels, so a change in an adapter's status does not require a new render; the

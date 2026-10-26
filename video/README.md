@@ -1,7 +1,7 @@
 # Palamedes product film
 
 This standalone Remotion project contains the v7 product film for Palamedes
-2.0: 3:00 at 1920 × 1080 and 30 fps. The homepage and
+2.0: 3:03 at 1920 × 1080 and 30 fps. The homepage and
 [YouTube](https://youtu.be/XBECHvmx2qQ) still carry v6 (2:40) until v7 is
 published.
 `PalamedesFilm` is the only film composition; `PalamedesPoster` renders its
@@ -20,7 +20,7 @@ pnpm run render:film     # score, chosen voice takes, mix, picture, MP4 + SRT
 
 ## Story and timing
 
-The film uses 63 bars at 84 BPM in 4/4. `src/film/timeline.ts` defines the
+The film uses 64 bars at 84 BPM in 4/4. `src/film/timeline.ts` defines the
 scene boundaries, and `audio/cues/film.json` defines the matching score plan,
 voice placement, composition, and output name. Keep the two bar counts aligned.
 The shared clock constants live in `src/timeline.ts`.
@@ -33,11 +33,11 @@ The shared clock constants live in `src/timeline.ts`.
 | 16–20 | Reveal     | You write, translators add languages, visitors read                        |
 | 21–34 | Journey    | One sentence through extraction, translation, compilation, and loading     |
 | 35–40 | Complete   | Plurals, formatting, server rendering, lint, and audit                     |
-| 41–48 | Frameworks | The homepage's seven integration groups, 18 marks, each with an example    |
-| 49–53 | Fast       | The checked React, Vue, Svelte, and Solid benchmarks in real time          |
-| 54–56 | Agent      | The skill command and setup prompt                                         |
-| 57–59 | Claim      | The fastest i18n toolchain. Complete from code to screen. 18 integrations. |
-| 60–63 | End        | Palamedes v2.0, the website, Sebastian Software, and Sebastian Consulting  |
+| 41–49 | Frameworks | UI libraries, then the frameworks that host them; 18 marks with examples   |
+| 50–54 | Fast       | The checked React, Vue, Svelte, and Solid benchmarks in real time          |
+| 55–57 | Agent      | The skill command and setup prompt                                         |
+| 58–60 | Claim      | The fastest i18n toolchain. Complete from code to screen. 18 integrations. |
+| 61–64 | End        | Palamedes v2.0, the website, Sebastian Software, and Sebastian Consulting  |
 
 `src/flight/JourneyFlight.tsx` supplies the camera flight inside the film.
 Its 12-bar choreography maps onto the journey's 14 bars through `JOURNEY_WARP`
