@@ -17,7 +17,7 @@ React Router RSC Framework Mode, use the separate
 | [`react-router-subdomain`](../../examples/react-router-subdomain) | Leftmost host label (`de.example.com`) |
 | [`react-router-tld`](../../examples/react-router-tld)             | Rightmost host label (`example.de`)    |
 
-The snippets below come from `react-router-cookie`, the smallest of the four.
+The snippets below come from `react-router-cookie`.
 [Locale strategies](#locale-strategies) lists what the other three change.
 
 ## Installation
@@ -93,7 +93,8 @@ export function resolveLocaleFromRequest(request: Request) {
 
 `resolve()` returns `{ locale, source }`. When the cookie is missing or holds
 an unknown locale, it falls back to the best `Accept-Language` match. See
-[Locale strategies](../locale-strategies.md) for the full control API.
+[locale controls](./core.md#locale-controls) for the API and
+[Locale strategies](../locale-strategies.md) for the strategies.
 
 ## Server i18n and catalog delivery
 
@@ -133,7 +134,7 @@ export const catalogDelivery = createViteCatalogDelivery({
   options here.
 - `createViteCatalogDelivery({ clientDirectory, development?, manifestName? })`
   reads the client build's `palamedes-split-manifest.json` and the locale import
-  maps it names. React Router writes the client build to `build/client`. With
+  maps it names. React Router's client build is normally `build/client`. With
   `development: true` it reads nothing and returns a `null` binding.
 
 The same delivery function is also exported as `createReactRouterCatalogDelivery`
@@ -264,7 +265,8 @@ export default function handleRequest(
 The example also calls `waitForServerI18nTestBarrier` and
 `markServerI18nTestBarrierReached` from `@palamedes/runtime/server/test`. Those
 hooks exist for the repository's concurrency checks. They do nothing unless
-`PALAMEDES_I18N_TEST_BARRIER=1` is set, and applications do not need them.
+`PALAMEDES_I18N_TEST_BARRIER=1` is set and the request carries the test header,
+and applications do not need them.
 
 `getLocaleBinding(locale)` returns the locale's import map and chunk mapping,
 or `null` in development. In production it throws when the manifest or the
@@ -373,12 +375,12 @@ Their entry awaits `createServerI18n(locale)` and renders inside
 `runServerI18n(locale, …)`. Unlike `createScopedI18nRunner`, this helper does
 not wrap catalog errors in a custom message.
 
-| Strategy  | Locale resolution                                                                                            | Locale switch                                                                                   |
-| --------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| Cookie    | `locales.resolve({ strategy: "cookie", … })`                                                                 | `<Form method="post" reloadDocument>`; the action sets the cookie and redirects.                |
-| Route     | `params.locale` in the route; the entry reads the first path segment. `/` redirects to the preferred locale. | Plain `<a href="/de">`; the click stores the choice with `locales.serializeChoice()`.           |
-| Subdomain | `locales.resolve({ strategy: "subdomain", … })` with the `Host` header                                       | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`. |
-| TLD       | `locales.resolve({ strategy: "tld", … })` with the `Host` header                                             | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`. |
+| Strategy  | Locale resolution                                                                                            | Locale switch                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Cookie    | `locales.resolve({ strategy: "cookie", … })`                                                                 | `<Form method="post" reloadDocument>`; the action sets the cookie and redirects.                             |
+| Route     | `params.locale` in the route; the entry reads the first path segment. `/` redirects to the preferred locale. | Plain `<a>` to the locale path, such as `/de`; the click stores the choice with `locales.serializeChoice()`. |
+| Subdomain | `locales.resolve({ strategy: "subdomain", … })` with the `Host` header                                       | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`.              |
+| TLD       | `locales.resolve({ strategy: "tld", … })` with the `Host` header                                             | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`.              |
 
 In the route example, client navigations request `/<locale>.data`. Its
 `resolveLocaleFromRequest` strips the `.data` suffix from the first segment;
