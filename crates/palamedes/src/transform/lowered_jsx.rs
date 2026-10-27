@@ -108,7 +108,8 @@ pub(super) fn choice_from_call(
         let key = key.into_owned();
         if matches!(
             key.as_str(),
-            "id" | "message" | "comment" | "context" | "value" | "children"
+            // `key` is the element's list key, not a branch.
+            "id" | "message" | "comment" | "context" | "value" | "children" | "key"
         ) {
             continue;
         }

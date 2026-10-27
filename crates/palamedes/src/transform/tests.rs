@@ -1692,6 +1692,35 @@ export function View() {
 }
 
 #[test]
+fn ignores_key_in_remix_lowered_choice_props() {
+    let source = r##"import { Plural as Count, Select as Pick, SelectOrdinal as Rank } from "@palamedes/react/macro";
+import { jsx as render } from "remix/component/jsx-runtime";
+export function labels(items) {
+  return items.map((item) => [
+    render(Count, { key: item.id, value: item.count, one: "# item", other: "# items" }),
+    render(Pick, { value: item.gender, key: "x", female: "She", other: "They" }),
+    render(Rank, { value: item.position, one: "#st", other: "#th", key: `row-${item.id}` }),
+  ]);
+}
+"##;
+    let result = transform_macros(source, "choices.js", None)
+        .expect("`key` in lowered choice props should be ignored");
+
+    for message in [
+        "{count, plural, one {# item} other {# items}}",
+        "{gender, select, female {She} other {They}}",
+        "{position, selectordinal, one {#st} other {#th}}",
+    ] {
+        assert!(
+            result.code.contains(&format!("message: \"{message}\"")),
+            "expected {message}:\n{}",
+            result.code
+        );
+    }
+    assert_eq!(result.compiled_ids.len(), 3);
+}
+
+#[test]
 fn transforms_nested_icu_choices_in_remix_lowered_choice_options() {
     let source = r##"import { Plural as Count } from "@palamedes/react/macro";
 import { jsx as render } from "remix/component/jsx-runtime";
