@@ -606,7 +606,7 @@ invalid build-time `PALAMEDES_UPDATE_ENDPOINT` values fail the build. Ordinary
 builds without that setting remain offline. Published v1 clients keep their
 existing version-service behavior.
 
-A regular native CLI invocation checks when due, with an hourly success cache,
+A regular native CLI invocation checks when due before command execution, with an hourly success cache,
 bounded failure suppression, and notice throttling. The service reads the
 existing CDN-cached oss-metrics GitHub release snapshot and requires a release
 to be at least one hour old. This does not guarantee that every downstream
@@ -615,7 +615,11 @@ lookup. The version GET contains no usage body, installation ID, project hash,
 installed version, platform, or install cohort. Network infrastructure still
 processes metadata such as the requesting IP.
 
-A newer release produces an advisory stderr notice after command output.
+A newer release produces an advisory stderr notice before command execution,
+including before a long-running watch session. Automatic checks run only with
+an interactive stderr terminal outside CI. CI and noninteractive commands do
+not access the update cache or network unless `PALAMEDES_UPDATE_CHECK=1`
+explicitly enables checks; this setting never grants telemetry consent.
 Stdout/JSON and exit status stay unchanged. Each due update request has a
 200 ms network deadline; filesystem and process overhead are additional.
 Failures are silent. `DO_NOT_TRACK=1`, `PALAMEDES_UPDATE_CHECK=0`, `--offline`,
@@ -627,6 +631,21 @@ The cache is `palamedes/app-tracking-updates` beneath `$XDG_CACHE_HOME`
 (or `$HOME/.cache`) on Linux, `$HOME/Library/Caches` on macOS, and
 `%LOCALAPPDATA%` on Windows. New clients do not reuse or transmit the old
 `update-check-v1` timestamp or `installed-since-v1` cohort.
+
+The release proof runs the enabled CLI with isolated profiles and seeded update
+responses, checking CI/offline vetoes, JSON/exit preservation, notice throttling
+and delivery before an interrupted watch session. For a local release binary or
+installed npm launcher, run:
+
+```sh
+node scripts/verify-cli-update-lifecycle.mjs /path/to/pmds /path/to/ui-catalogs --stalled-proxy
+```
+
+The optional stalled-proxy case uses a silent loopback proxy to verify the
+complete process returns with unchanged output and exit status, then checks
+that failure backoff avoids another request. Timings include process startup,
+local state and scheduling; they are measurements of that fixture, not a
+universal latency guarantee. This proof disables telemetry and sends no usage.
 
 ## `pmds telemetry`
 

@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { verifyCliUpdateLifecycle } from "./verify-cli-update-lifecycle.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const endpoint = "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable";
@@ -93,6 +94,8 @@ function checkProcess(binary, catalogDirectory, version, optOut, dropOptOut) {
       LOCALAPPDATA: roots[2],
       PALAMEDES_UI_LOCALE: "en",
       PALAMEDES_UI_CATALOG_DIR: catalogDirectory,
+      // This fixture explicitly exercises due checks even without a terminal.
+      PALAMEDES_UPDATE_CHECK: "1",
     };
     if (!dropOptOut) env[optOut] = optOut === "DO_NOT_TRACK" ? "1" : "0";
     const versionResult = spawnSync(binary, ["version"], {
@@ -141,7 +144,7 @@ function checkProcess(binary, catalogDirectory, version, optOut, dropOptOut) {
   }
 }
 
-function main() {
+async function main() {
   assert.equal(
     process.platform,
     "linux",
@@ -156,6 +159,7 @@ function main() {
       checkProcess(binary, catalogDirectory, version, optOut, false);
       checkProcess(binary, catalogDirectory, version, optOut, true);
     }
+    await verifyCliUpdateLifecycle(binary, catalogDirectory);
     return;
   }
 
@@ -207,4 +211,5 @@ function main() {
   );
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+  await main();

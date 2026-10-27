@@ -230,6 +230,9 @@ SHA-256 repository identifier lets equivalent clones count as one project. This
 is pseudonymous opt-in measurement, not a count of people or all adoption.
 Build integrations and embedded Rust/Node APIs do not report automatically.
 
-Update notices work without telemetry consent. See the [telemetry guide](./telemetry.md)
-for controls and limits. A release must verify the production telemetry service
+Update notices work without telemetry consent. Automatic checks run before commands with an
+interactive stderr terminal outside CI; `PALAMEDES_UPDATE_CHECK=1` explicitly
+enables CI/noninteractive checks. Consented invocation counts are saved before
+execution, so a watch session counts once even when stopped with Ctrl-C. See the
+[telemetry guide](./telemetry.md) for controls and limits. A release must verify the production telemetry service
 before enabling network reporting in published artifacts.

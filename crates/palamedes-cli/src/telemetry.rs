@@ -108,7 +108,7 @@ fn state_root(ci: bool) -> Option<PathBuf> {
         .then(|| root.join("palamedes/app-tracking"))
 }
 
-fn ci() -> bool {
+pub(crate) fn ci() -> bool {
     [
         "CI",
         "GITHUB_ACTIONS",

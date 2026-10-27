@@ -57,8 +57,9 @@ twice. The fixed categories are:
 
 Help/version, telemetry controls, automatic `catalog merge-driver` execution,
 and individual watch rebuilds do not count. A watch session is one CLI
-invocation, counted when it returns; an abruptly terminated process can lose
-that final count. Plugin names and arguments are never categories.
+invocation, persisted before command execution. Rebuilds and Ctrl-C do not add
+another count. A process killed before that local write, or a state/queue
+failure, can still lose a count. Plugin names and arguments are never categories.
 
 Reports contain UTC day, exact tool version, category, count, consent revision,
 local/CI context, and a tool/profile-scoped installation identity. Registration
@@ -91,6 +92,7 @@ names are not report fields.
 | `APP_TRACKING_TELEMETRY=off`         | Shared collection/upload veto; invalid values also veto.                                                                                                        |
 | `APP_TRACKING_CONSENT=telemetry-v1`  | Informed process/deployment consent after reviewing the same notice; it does not become persistent permission. Removing it stops environment-granted reporting. |
 | `PALAMEDES_UPDATE_CHECK=0`           | Disable updates; it does not grant or withdraw telemetry consent.                                                                                               |
+| `PALAMEDES_UPDATE_CHECK=1`           | Explicitly enable updates in CI or noninteractive use, subject to offline and do-not-track vetoes; it never grants telemetry consent.                           |
 | `--offline` or `PALAMEDES_OFFLINE=1` | No update or telemetry networking, including deletion. Consented local counts can accumulate within bounds.                                                     |
 | `APP_TRACKING_STATE_DIR`             | Absolute private state root; mandatory and isolated per job/run in CI. Never put it in a repository or shared CI cache.                                         |
 
@@ -130,6 +132,19 @@ stopped tools, reset/copied state, opt-in bias, and fabricated clients limit
 coverage. Counts describe reported invocations, installations, and repositories;
 they do not measure people, all adoption, or every tool execution. Distinct
 project/installation counts must be deduplicated over the requested period.
+
+The opt-in live CLI proof uses a fresh synthetic profile, verifies exactly one
+consented native invocation, waits for the shared client's upload acknowledgement,
+checks withdrawal, and requests authenticated deletion in its cleanup path:
+
+```sh
+PALAMEDES_LIVE_TELEMETRY_PROOF=1 node scripts/verify-cli-telemetry-live.mjs /path/to/pmds /path/to/ui-catalogs
+```
+
+It never uses the current user's profile or repository. If deletion cannot be
+confirmed, it retains the private test state and prints its location for cleanup
+instead of discarding the only deletion credentials. This is a deliberate
+service smoke test, separate from normal offline tests and CI.
 
 Sebastian Software GmbH operates the service; privacy contact:
 info@sebastian-software.de. See the

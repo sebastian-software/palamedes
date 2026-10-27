@@ -43,14 +43,9 @@ fn main() -> ExitCode {
         }
     };
     let category = cli.telemetry_category();
-    let exit_code = match cli.execute() {
-        Ok(code) => code,
-        Err(error) => {
-            eprintln!("{} {}", tr!("Error:"), error.localized());
-            error.exit_code()
-        }
-    };
-
+    // Persist the parsed invocation and deliver advisories before entering a
+    // long-running command. Watch rebuilds and signal termination never repeat
+    // this entry point, and the command does not wait for telemetry networking.
     if let Some(category) = category {
         telemetry::record(category, cli.offline(), || cli.telemetry_context());
     }
@@ -60,5 +55,12 @@ fn main() -> ExitCode {
         let _ = writeln!(io::stderr().lock(), "{notice}");
     }
 
+    let exit_code = match cli.execute() {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("{} {}", tr!("Error:"), error.localized());
+            error.exit_code()
+        }
+    };
     ExitCode::from(exit_code)
 }
