@@ -195,3 +195,57 @@ fn fallback_diagnostics_quote_source_messages_and_leave_json_raw() {
             .any(|entry| entry["message"] == "Invalid command-line arguments.")
     );
 }
+
+#[test]
+fn javascript_target_compiles_fuzzy_entries_as_missing_fallbacks() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    fs::write(
+        root.join("palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::create_dir_all(root.join("locales")).unwrap();
+    fs::write(
+        root.join("locales/en.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Fuzzy one\"\nmsgstr \"\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("locales/de.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\n#, fuzzy\nmsgid \"Fuzzy one\"\nmsgstr \"Unscharf\"\n",
+    )
+    .unwrap();
+    let compile = |strict: bool| {
+        let mut command = compiler();
+        command
+            .current_dir(root)
+            .args(["catalog", "compile", "--target", "js", "--locale", "de"])
+            .args(["--output", "out", "--json"]);
+        if strict {
+            command.arg("--fail-on-missing");
+        }
+        command.output().unwrap()
+    };
+
+    let output = compile(false);
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        report["missing"],
+        serde_json::json!([
+            { "locale": "de", "message": "Fuzzy one", "resolvedLocale": "en" }
+        ])
+    );
+    let module = fs::read_to_string(root.join("out/de.mjs")).unwrap();
+    assert!(module.contains("\"Fuzzy one\""), "{module}");
+    assert!(!module.contains("Unscharf"), "{module}");
+
+    let strict = compile(true);
+    assert_eq!(strict.status.code(), Some(1), "{strict:?}");
+    assert!(
+        String::from_utf8_lossy(&strict.stderr).contains("\"Fuzzy one\""),
+        "{strict:?}"
+    );
+}
