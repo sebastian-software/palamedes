@@ -5,7 +5,14 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
-import { build, createServer, resolveConfig, type InlineConfig, type ViteDevServer } from "vite";
+import {
+  build,
+  createServer,
+  isRunnableDevEnvironment,
+  resolveConfig,
+  type InlineConfig,
+  type ViteDevServer,
+} from "vite";
 
 import { palamedes } from "./index";
 
@@ -28,6 +35,44 @@ describe("installed Palamedes server packages", () => {
       optimizeDeps: { noDiscovery: true },
     });
     const entry = await server.ssrLoadModule("/entry.ts");
+    await expect(entry.locale()).resolves.toBe("de");
+  });
+
+  it("loads virtual server catalogs in additional server environments", async () => {
+    // React Server Components run in a separate `rsc` environment. Vite maps
+    // `ssr.noExternal` to the `ssr` environment only.
+    const root = await createFixture();
+    server = await createServer({
+      ...config(root),
+      environments: { rsc: { consumer: "server" } },
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+    const environment = server.environments.rsc;
+    if (!isRunnableDevEnvironment(environment)) {
+      throw new Error("Expected a runnable rsc environment");
+    }
+    const entry = await environment.runner.import("/entry.ts");
+    await expect(entry.locale()).resolves.toBe("de");
+  });
+
+  it("shares the bundled Waku router store with an installed Waku adapter", async () => {
+    // Waku development bundles `waku` in its `rsc` environment. An externalized
+    // adapter would import Node's separate copy of `waku/router/server`, whose
+    // request store the router never populates.
+    const root = await createFixture();
+    await createWakuRouterFixture(root);
+    server = await createServer({
+      ...config(root),
+      environments: { rsc: { consumer: "server", resolve: { noExternal: ["waku"] } } },
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+    const environment = server.environments.rsc;
+    if (!isRunnableDevEnvironment(environment)) {
+      throw new Error("Expected a runnable rsc environment");
+    }
+    const entry = await environment.runner.import("/waku-entry.ts");
     await expect(entry.locale()).resolves.toBe("de");
   });
 
@@ -76,8 +121,32 @@ describe("installed Palamedes server packages", () => {
         ...(Array.isArray(noExternal) ? noExternal : [noExternal]),
         "@palamedes/runtime",
         "@palamedes/vite-plugin",
+        "@palamedes/waku",
       ]);
     }
+  });
+
+  it("extends every server environment and preserves its noExternal policy", async () => {
+    const resolved = await resolveConfig(
+      {
+        configFile: false,
+        envFile: false,
+        logLevel: "silent",
+        plugins: [palamedes({ mdx: false })],
+        environments: {
+          rsc: { consumer: "server", resolve: { noExternal: "custom-package" } },
+          worker: { consumer: "server", resolve: { noExternal: true } },
+          browser: { consumer: "client" },
+        },
+      },
+      "build",
+    );
+    const packages = ["@palamedes/runtime", "@palamedes/vite-plugin", "@palamedes/waku"];
+    expect(resolved.environments.ssr?.resolve.noExternal).toEqual(packages);
+    expect(resolved.environments.rsc?.resolve.noExternal).toEqual(["custom-package", ...packages]);
+    expect(resolved.environments.worker?.resolve.noExternal).toBe(true);
+    expect(resolved.environments.client?.resolve.noExternal).toEqual([]);
+    expect(resolved.environments.browser?.resolve.noExternal).toEqual([]);
   });
 });
 
@@ -99,7 +168,7 @@ async function createFixture(): Promise<string> {
   await mkdir(scope, { recursive: true });
   // Real directories reproduce npm installation; workspace symlinks bypass
   // Vite's default SSR externalization and would hide the regression.
-  for (const name of ["runtime", "vite-plugin"]) {
+  for (const name of ["runtime", "vite-plugin", "waku"]) {
     const target = path.join(scope, name);
     await mkdir(target);
     await cp(path.join(packageRoot, name, "package.json"), path.join(target, "package.json"));
@@ -126,4 +195,41 @@ export async function locale() { return (await createViteServerI18n({ locale: "d
     );
   }
   return root;
+}
+
+// Models the module-local request store of `waku/router/server`.
+async function createWakuRouterFixture(root: string): Promise<void> {
+  const waku = path.join(root, "node_modules/waku");
+  await mkdir(path.join(waku, "router"), { recursive: true });
+  await writeFile(
+    path.join(waku, "package.json"),
+    '{"name":"waku","type":"module","exports":{"./router/server":"./router/server.js"}}',
+  );
+  await writeFile(
+    path.join(waku, "router/server.js"),
+    `
+import { AsyncLocalStorage } from "node:async_hooks";
+const routerStorage = new AsyncLocalStorage();
+export const runWithRouterStore = (req, fn) => routerStorage.run({ req }, fn);
+export function unstable_getRequest() {
+  const store = routerStorage.getStore();
+  if (!store) throw new Error("Request is not available.");
+  return store.req;
+}
+`,
+  );
+  await writeFile(
+    path.join(root, "waku-entry.ts"),
+    `
+import { getI18n } from "@palamedes/runtime";
+import { createWakuI18nInterceptor } from "@palamedes/waku";
+import { runWithRouterStore } from "waku/router/server";
+const interceptor = createWakuI18nInterceptor(() => ({ locale: "de", _: (message) => message }));
+export function locale() {
+  return runWithRouterStore(new Request("https://example.test/"), () =>
+    interceptor(async () => getI18n().locale),
+  );
+}
+`,
+  );
 }
