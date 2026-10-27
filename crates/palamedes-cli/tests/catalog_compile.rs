@@ -245,13 +245,23 @@ fn compile_js(project: &Path, extra: &[&str]) -> Output {
         .unwrap()
 }
 
-/// The catalog path as the CLI reports it, from the canonical config root.
-fn catalog_path(project: &Path, catalog: &str) -> String {
-    fs::canonicalize(project)
-        .unwrap()
-        .join(catalog)
-        .to_string_lossy()
-        .into_owned()
+/// Checks that a reported `catalogPath` names `catalog` in `project` and
+/// returns it as printed.
+///
+/// The CLI joins the configured pattern onto its config root, which comes from
+/// the working directory. That root is spelled differently per platform (an
+/// 8.3 short name on Windows, `/private/var` on macOS), so the comparison goes
+/// through the file system instead of predicting the spelling.
+fn reported_catalog_path(reported: &serde_json::Value, project: &Path, catalog: &str) -> String {
+    let reported = reported
+        .as_str()
+        .unwrap_or_else(|| panic!("catalog path is not a string: {reported}"));
+    assert_eq!(
+        fs::canonicalize(reported).unwrap(),
+        fs::canonicalize(project.join(catalog)).unwrap(),
+        "{reported} does not name {catalog}"
+    );
+    reported.to_owned()
 }
 
 #[test]
@@ -266,7 +276,29 @@ fn js_icu_diagnostics_name_the_catalog_locale_and_source_that_failed() {
             ],
         )],
     );
-    let english = catalog_path(project.path(), "locales/app/en.po");
+    let output = compile_js(project.path(), &["--locale", "de", "--json"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
+    assert_eq!(report["catalogs"], serde_json::json!([]), "{report}");
+    let diagnostics = report["diagnostics"].as_array().unwrap();
+    assert_eq!(diagnostics.len(), 1, "{report}");
+    let diagnostic = &diagnostics[0];
+    assert_eq!(diagnostic["severity"], "error");
+    assert_eq!(diagnostic["code"], "compile.invalid_icu_message");
+    let english = reported_catalog_path(
+        &diagnostic["catalogPath"],
+        project.path(),
+        "locales/app/en.po",
+    );
+    assert_eq!(diagnostic["locale"], "en");
+    assert_eq!(diagnostic["requestedLocale"], "de");
+    assert_eq!(diagnostic["sourceKey"]["message"], "Hello {name}");
+    assert!(
+        diagnostic["message"].as_str().unwrap().contains("ICU"),
+        "{report}"
+    );
+
     // The broken message lives in en.po; compiling `de` reaches it through the
     // source-locale fallback and must not blame de.po for it.
     for locale in ["de", "en"] {
@@ -289,25 +321,6 @@ fn js_icu_diagnostics_name_the_catalog_locale_and_source_that_failed() {
                 .exists()
         );
     }
-
-    let output = compile_js(project.path(), &["--locale", "de", "--json"]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
-    assert_eq!(report["catalogs"], serde_json::json!([]), "{report}");
-    let diagnostics = report["diagnostics"].as_array().unwrap();
-    assert_eq!(diagnostics.len(), 1, "{report}");
-    let diagnostic = &diagnostics[0];
-    assert_eq!(diagnostic["severity"], "error");
-    assert_eq!(diagnostic["code"], "compile.invalid_icu_message");
-    assert_eq!(diagnostic["catalogPath"], english);
-    assert_eq!(diagnostic["locale"], "en");
-    assert_eq!(diagnostic["requestedLocale"], "de");
-    assert_eq!(diagnostic["sourceKey"]["message"], "Hello {name}");
-    assert!(
-        diagnostic["message"].as_str().unwrap().contains("ICU"),
-        "{report}"
-    );
 }
 
 #[test]
@@ -364,27 +377,33 @@ fn js_target_rejects_conflicting_messages_across_catalogs() {
             ),
         ],
     );
-    let first = catalog_path(project.path(), "locales/first/de.po");
-    let second = catalog_path(project.path(), "locales/second/de.po");
-    let output = compile_js(project.path(), &["--locale", "de"]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains(&first), "{stderr}");
-    assert!(stderr.contains(&second), "{stderr}");
-    assert!(stderr.contains("[compile.conflicting_message]"), "{stderr}");
-    assert!(stderr.contains("\nSource: Save"), "{stderr}");
-    assert!(!project.path().join("out/de.mjs").exists());
-
     let output = compile_js(project.path(), &["--locale", "de", "--json"]);
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     let report: serde_json::Value = serde_json::from_slice(&output.stdout)
         .unwrap_or_else(|error| panic!("{error}: {output:?}"));
     let diagnostic = &report["diagnostics"][0];
     assert_eq!(diagnostic["code"], "compile.conflicting_message");
-    assert_eq!(diagnostic["catalogPath"], second);
-    assert_eq!(diagnostic["conflictingCatalogPath"], first);
+    let second = reported_catalog_path(
+        &diagnostic["catalogPath"],
+        project.path(),
+        "locales/second/de.po",
+    );
+    let first = reported_catalog_path(
+        &diagnostic["conflictingCatalogPath"],
+        project.path(),
+        "locales/first/de.po",
+    );
     assert_eq!(diagnostic["locale"], "de");
     assert_eq!(diagnostic["sourceKey"]["message"], "Save");
+
+    let output = compile_js(project.path(), &["--locale", "de"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains(&format!("{second}: ")), "{stderr}");
+    assert!(stderr.contains(&format!("than in {first};")), "{stderr}");
+    assert!(stderr.contains("[compile.conflicting_message]"), "{stderr}");
+    assert!(stderr.contains("\nSource: Save"), "{stderr}");
+    assert!(!project.path().join("out/de.mjs").exists());
 }
 
 #[test]
