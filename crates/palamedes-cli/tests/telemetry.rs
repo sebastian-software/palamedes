@@ -133,6 +133,94 @@ fn failed_commands_count_once_and_controls_never_count() {
 }
 
 #[test]
+fn watch_counts_on_entry_and_never_counts_rebuilds_or_termination() {
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    fs::write(project.path().join("palamedes.yaml"), "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n").unwrap();
+    fs::create_dir(project.path().join("app")).unwrap();
+    let source = project.path().join("app/main.ts");
+    fs::write(
+        &source,
+        "import {t} from '@palamedes/core/macro'; export function title() { return t`First`; }\n",
+    )
+    .unwrap();
+    enable(profile.path(), project.path());
+    let mut command = Command::new(env!("CARGO_BIN_EXE_pmds"));
+    command
+        .args(["extract", "--watch"])
+        .current_dir(project.path())
+        .env_clear()
+        .env("PALAMEDES_UI_LOCALE", "en")
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("APP_TRACKING_STATE_DIR", profile.path().join("state"))
+        .env("PALAMEDES_OFFLINE", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(
+            fs::File::create(profile.path().join("watch.stdout")).unwrap(),
+        ))
+        .stderr(Stdio::from(
+            fs::File::create(profile.path().join("watch.stderr")).unwrap(),
+        ));
+    for name in ["PATH", "SystemRoot"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    let mut child = command.spawn().unwrap();
+    let catalog = project.path().join("locales/en.po");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut wait_for = |message: &str| {
+        while !fs::read_to_string(&catalog).is_ok_and(|text| text.contains(message))
+            || !fs::read_to_string(profile.path().join("watch.stdout"))
+                .is_ok_and(|text| text.contains("Watching for changes..."))
+        {
+            if Instant::now() >= deadline || child.try_wait().unwrap().is_some() {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!(
+                    "watch did not extract {message}: stdout={}; stderr={}",
+                    fs::read_to_string(profile.path().join("watch.stdout")).unwrap(),
+                    fs::read_to_string(profile.path().join("watch.stderr")).unwrap()
+                );
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    };
+    wait_for("First");
+    let before = status(profile.path(), project.path())["unsent_invocations"].clone();
+    fs::write(
+        &source,
+        "import {t} from '@palamedes/core/macro'; export function title() { return t`Second`; }\n",
+    )
+    .unwrap();
+    wait_for("Second");
+    #[cfg(unix)]
+    {
+        assert!(
+            Command::new("kill")
+                .args(["-INT", &child.id().to_string()])
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    #[cfg(not(unix))]
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert_eq!(before, 1, "a live watch invocation must already be durable");
+    assert_eq!(
+        status(profile.path(), project.path())["unsent_invocations"],
+        1
+    );
+}
+
+#[test]
 fn withdrawal_and_do_not_track_override_environment_consent() {
     let profile = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();

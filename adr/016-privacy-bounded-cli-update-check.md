@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-26
+**Last updated:** 2026-10-27
 
 Palamedes v2 uses the shared Rust `app-tracking` client and service. Version
 checks remain independent of optional usage reporting. The native `pmds`
@@ -42,7 +42,15 @@ plugins, and application runtimes do not report automatically.
   networking, including deletion, but explicitly consented local counts can
   accumulate within the client's limits. CI needs separate informed opt-in
   and a private state directory unique to the job/run.
-- Ordinary failures remain silent and advisory. Persist telemetry locally and
+- Ordinary failures remain silent and advisory. Run invocation accounting and
+  offer any update notice before command execution, so watch interruption does
+  not bypass invocation accounting or advisory delivery. Watch rebuilds do not
+  re-enter this lifecycle. Automatic updates require an interactive stderr
+  terminal outside CI; `PALAMEDES_UPDATE_CHECK=1` explicitly enables checks in
+  CI/noninteractive use without granting telemetry consent. Existing offline
+  and do-not-track vetoes always win. No lossless counting is promised for a
+  process killed before its local write or for state/queue failures.
+  Persist telemetry locally and
   send one due operation in a short-lived background copy of the same binary;
   the command does not wait for network delivery. Its reserved worker entry
   runs before normal parsing, locale/config/plugin setup, update checks, and
@@ -61,6 +69,11 @@ available without usage consent. The earlier update-check protocol had no
 stable installation or repository identity and could not answer those questions.
 A separate opted-in reporting lifecycle supports those measurements without
 making an ordinary update check a consent decision.
+
+Accounting and advisory delivery cannot depend on a long-running command
+returning. Automatic updates are useful when a person can see the notice;
+unattended pipelines should not pay for unsolicited checks. An explicit
+override retains that capability for deliberate automation.
 
 ## Consequences
 
@@ -87,6 +100,8 @@ own exact controls, wire values, and delivery evidence.
 
 ## Change history
 
+- 2026-10-27: Run the invocation lifecycle before commands; make automatic updates
+  interactive and local, with explicit CI/noninteractive opt-in.
 - 2026-10-26: Move telemetry networking out of the command process after live
   registration attempts could not be acknowledged within the former 200-ms
   deadline. Adopt the shared bounded background worker; keep updates independent.

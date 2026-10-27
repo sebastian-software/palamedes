@@ -168,7 +168,6 @@ pub(super) fn run_watch_mode(
     initial_config: &LoadedConfig,
     options: &ExtractOptions,
 ) -> Result<(), CliError> {
-    println!("{}", tr!("Watching for changes..."));
     let mut config = initial_config.clone();
     /*
      * One cache for the life of the watcher. Every rebuild after the first
@@ -192,6 +191,7 @@ pub(super) fn run_watch_mode(
     watcher.watch(&watched_config_path, RecursiveMode::NonRecursive)?;
 
     let mut matchers = WatchMatchers::build_with_aliases(&config, initial_watch_paths.aliases);
+    println!("{}", tr!("Watching for changes..."));
 
     loop {
         let event = match rx.recv() {
