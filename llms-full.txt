@@ -716,6 +716,8 @@ Waku support is Preview, verified with Waku 1.0.0-rc.3 and React/React DOM/react
 
 Use the verified examples as the source of truth for framework-specific wiring. Palamedes' goal is a consistent runtime/catalog model across these hosts.
 
+React Router Framework Mode has no adapter package: it uses `@palamedes/vite-plugin` plus application-owned server wiring (request-scoped server i18n, the catalog document transform in `app/entry.server.tsx`, and scoped loaders and actions). See `/docs/api/react-router.md`.
+
 ## Migration from Lingui-shaped code
 
 When migrating Lingui-style code:
