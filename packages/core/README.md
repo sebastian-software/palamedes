@@ -105,10 +105,14 @@ non-empty unique locale set, the default locale, cookie names, `http`/`https`
 protocols, and configured DNS hosts/TLD labels. Locale identifiers only need to
 be DNS labels when the `subdomain` or `tld` strategy places them in a host.
 
-For unrelated language domains without path prefixes, configure
+**Top-level domain (`tld`)** mode changes `product.com` to `product.de`, keeping
+the rest of the hostname. **Explicit language domains (`domain`)** also support
+unrelated names such as `my-product.com` and `mein-produkt.de`. Configure
 `hosts: { mode: "domain", locales: { en: "product.example", de: "mein-produkt.de" } }`
 and resolve requests with `strategy: "domain"`. The map must include every
-locale with a distinct host. Existing `mode: "map"` keeps its prefixed paths.
+locale with a distinct host. Both TLD and domain mode omit locale path prefixes;
+existing TLD sites do not need to change modes. Existing `mode: "map"` keeps its
+prefixed paths and advisory host checks on top of route-based resolution.
 `controls.seoLinks({ locale, pathname })` derives canonical and language alternate
 link descriptors, including `x-default`; `xDefaultLocale: false` omits the latter.
 Use `protocol: "https"` for absolute SEO URLs. Static builds supply their

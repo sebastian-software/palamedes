@@ -196,7 +196,11 @@ matrix and reusable in apps:
   a different locale never replaces the browser preference; host mismatches
   remain independent of that choice.
 - `hosts: { mode: "domain", locales: { en: "product.example", de: "mein-produkt.de" } }`
-  selects an authoritative, complete locale-to-host map without path prefixes.
+  selects **explicit language domains**: an authoritative, complete locale-to-host
+  map without path prefixes. **Top-level domain (`tld`)** mode replaces only the
+  final DNS label (`product.com` to `product.de`); domain mode can also change the
+  rest of the hostname (`my-product.com` to `mein-produkt.de`). Existing TLD sites
+  can keep their strategy.
   Use `resolve({ strategy: "domain", requestHost })` for request detection or
   retain the fixed locale of a static build. Hosts must identify distinct
   locales; configured destination ports are preserved without inheriting the

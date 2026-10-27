@@ -146,7 +146,7 @@ are identified.
 
 - [Configuration reference](./configuration.md) for catalog layout, fallbacks, and pseudo locales
 - [CLI reference](./cli.md) for CI checks, catalog operations, and diagnostics
-- [Locale strategies](./locale-strategies.md) for cookie, route, subdomain, and tld application wiring
+- [Locale strategies](./locale-strategies.md) for cookie, route prefix, subdomain, TLD, and explicit language domain policies
 - [Migration from Lingui](./migrate-from-lingui.md) for an adoption path from an existing catalog workflow
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md) for verified framework integrations
 - [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md) when you are evaluating the project

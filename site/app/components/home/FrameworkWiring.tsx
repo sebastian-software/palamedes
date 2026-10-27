@@ -50,9 +50,14 @@ const URL_SHAPES = [
     body: "A host per language or market. Clean splits for CDNs and analytics.",
   },
   {
-    name: "Country domain",
+    name: "Top-level domain (TLD)",
     url: ["example", ".de", "/checkout"],
-    body: "A local domain per market, each mapped to its language.",
+    body: "product.com to product.de: keep the hostname and change its final DNS label.",
+  },
+  {
+    name: "Explicit language domains",
+    url: ["", "mein-produkt.de", "/checkout"],
+    body: "my-product.com to mein-produkt.de: map each language to a complete hostname, even when the names differ.",
   },
 ] as const;
 
@@ -103,9 +108,9 @@ export function FrameworkWiring() {
             Where does the language live in your URL?
           </h3>
           <p className="mt-4 text-[16px] leading-relaxed text-ink/80">
-            Your app decides; Palamedes doesn’t force a routing scheme. All four common answers run
-            as example apps — {FRAMEWORKS.length} app integrations ×{" "}
-            {contentStats.localeStrategyCount} URL shapes, each checked in CI.
+            Your app decides; Palamedes supports five locale strategies. The example matrix checks{" "}
+            {FRAMEWORKS.length} app integrations × {contentStats.localeStrategyCount} strategies in
+            CI. Explicit language domains and SEO link generation have focused core tests.
           </p>
           <Link to="/locale-routing" viewTransition className="pmds-arrow-link mt-3">
             Which one fits your product? →
@@ -113,7 +118,7 @@ export function FrameworkWiring() {
         </Reveal>
         <ul className="grid grid-cols-1 gap-px border border-hair bg-hair sm:grid-cols-2">
           {URL_SHAPES.map((shape) => (
-            <li key={shape.name} className="min-w-0 bg-paper px-5 py-6">
+            <li key={shape.name} className="min-w-0 bg-paper px-5 py-6 sm:last:col-span-2">
               <p className="mono-nums truncate border border-ink/60 bg-white px-3 py-2.5 text-[13px] text-ink/75">
                 {shape.url[0]}
                 <span className="font-semibold text-accent">{shape.url[1]}</span>
