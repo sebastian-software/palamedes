@@ -34,6 +34,71 @@ function job(workflow, name, nextName) {
   return workflow.slice(start, end);
 }
 
+// Reads the job graph of a workflow with the repository's two-space layout:
+// each job's `needs`, `if`, and its steps' `if` and full text.
+function workflowJobs(workflow) {
+  const jobs = new Map();
+  let current;
+  let step;
+  let inNeeds = false;
+  for (const line of workflow.slice(workflow.indexOf("\njobs:\n") + 7).split("\n")) {
+    let match;
+    if ((match = /^ {2}([a-z0-9-]+):$/u.exec(line))) {
+      current = { name: match[1], needs: [], if: "", steps: [], text: "" };
+      jobs.set(current.name, current);
+      step = undefined;
+      inNeeds = false;
+      continue;
+    }
+    if (!current) continue;
+    current.text += `${line}\n`;
+    if ((match = /^ {4}needs: (\S+)$/u.exec(line))) {
+      current.needs.push(match[1]);
+      continue;
+    }
+    if (/^ {4}needs:$/u.test(line)) {
+      inNeeds = true;
+      continue;
+    }
+    if (inNeeds && (match = /^ {6}- (\S+)$/u.exec(line))) {
+      current.needs.push(match[1]);
+      continue;
+    }
+    inNeeds = false;
+    if ((match = /^ {4}if: (.+)$/u.exec(line))) current.if = match[1];
+    if ((match = /^ {6}- name: (.+)$/u.exec(line))) {
+      step = { name: match[1], if: "", text: "" };
+      current.steps.push(step);
+      continue;
+    }
+    if (step) {
+      step.text += `${line}\n`;
+      if ((match = /^ {8}if: (.+)$/u.exec(line))) step.if = match[1];
+    }
+  }
+  return jobs;
+}
+
+function transitiveNeeds(jobs, name, seen = new Set()) {
+  for (const need of jobs.get(name)?.needs ?? []) {
+    if (!seen.has(need)) {
+      seen.add(need);
+      transitiveNeeds(jobs, need, seen);
+    }
+  }
+  return seen;
+}
+
+// Steps that can upload to npm or crates.io. The packing check and the Cargo
+// preflight pass `--dry-run` or `--preflight` and stay out of this set.
+function uploadsToRegistry(stepText) {
+  return (
+    /publish-package-if-needed\.mjs(?![^\n]*--dry-run)/u.test(stepText) ||
+    /publish-rust-sdk\.mjs\s*$/mu.test(stepText) ||
+    /\b(?:npm|pnpm|cargo) publish\b/u.test(stepText)
+  );
+}
+
 describe("workflow contracts", () => {
   it("keeps native fuzzing bounded, isolated, and separate from normal Rust gates", async () => {
     const workflow = await readRepositoryFile(".github/workflows/native-fuzz.yml");
@@ -97,11 +162,86 @@ describe("workflow contracts", () => {
       "DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}",
     );
     expect(detection).toContain("publicationAllowed(policy, version)");
-    for (const step of publish.split("- name:").slice(1)) {
-      if (/run:.*publish-package-if-needed|run:.*check-published-versions/.test(step)) {
-        expect(step).toContain("!inputs.dry_run");
+    const dryRunGate = "github.event_name != 'workflow_dispatch' || !inputs.dry_run";
+    const gated = [];
+    for (const releaseJob of workflowJobs(publish).values()) {
+      for (const step of releaseJob.steps) {
+        if (
+          uploadsToRegistry(step.text) ||
+          /check-published-(?:versions|crates)|crates-io-auth-action/u.test(step.text)
+        ) {
+          gated.push(step.name);
+          expect(`${releaseJob.if}\n${step.if}`, step.name).toContain(dryRunGate);
+        }
       }
     }
+    expect(gated).toEqual(
+      expect.arrayContaining([
+        "Exchange GitHub OIDC for a crates.io token",
+        "Publish native package",
+        "Authenticate to crates.io with OIDC",
+        "Publish Cargo SDK in dependency order",
+        "Publish JavaScript packages",
+        "Verify every package reached the registry",
+        "Verify every Cargo SDK crate reached crates.io",
+      ]),
+    );
+  });
+
+  it("starts no registry upload before the Cargo preflight and the JavaScript pack check pass", async () => {
+    const publish = await readRepositoryFile(".github/workflows/publish.yml");
+    const jobs = workflowJobs(publish);
+    const uploadJobs = [...jobs.values()]
+      .filter((releaseJob) => releaseJob.steps.some((step) => uploadsToRegistry(step.text)))
+      .map((releaseJob) => releaseJob.name);
+
+    expect(uploadJobs.sort()).toEqual(["publish-cargo", "publish-js", "publish-native"]);
+    for (const name of uploadJobs) {
+      const upstream = transitiveNeeds(jobs, name);
+      expect(upstream.has("preflight-cargo"), name).toBe(true);
+      expect(upstream.has("validate-release"), name).toBe(true);
+      // A status function would let the job start after a failed preflight.
+      for (const jobName of [name, ...upstream]) {
+        expect(jobs.get(jobName).if, jobName).not.toMatch(/always\(\)|failure\(\)|cancelled\(\)/u);
+      }
+      expect(jobs.get(name).text).not.toContain("continue-on-error");
+    }
+
+    const preflight = jobs.get("preflight-cargo");
+    expect(preflight.needs).toEqual(["determine-release"]);
+    expect(preflight.if).toBe("needs.determine-release.outputs.should_publish == 'true'");
+    expect(preflight.text).toMatch(/permissions:\n {6}contents: read\n {6}id-token: write/u);
+    expect(preflight.text).not.toMatch(/continue-on-error|secrets\.|CARGO_REGISTRY_TOKEN/u);
+    expect(preflight.steps.map((step) => step.name)).toEqual([
+      "Check out repository",
+      "Set up workspace",
+      "Exchange GitHub OIDC for a crates.io token",
+      "Check Cargo release readiness without uploading",
+    ]);
+    const [exchange, readiness] = preflight.steps.slice(2);
+    expect(exchange.text).toMatch(
+      /id: crates-auth\n {8}if: .+\n {8}uses: rust-lang\/crates-io-auth-action@[a-f0-9]{40} # v\d+\.\d+\.\d+/u,
+    );
+    expect(readiness.text).toContain("PALAMEDES_CRATES_OWNER: ${{ vars.CRATES_IO_OWNER }}");
+    expect(readiness.text).toContain(
+      "PALAMEDES_CRATES_TOKEN_ISSUED: ${{ steps.crates-auth.outputs.token != '' }}",
+    );
+    expect(readiness.text).toContain(
+      "run: node ./scripts/publish-rust-sdk.mjs --preflight ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}",
+    );
+
+    const validate = jobs.get("validate-release");
+    const stepNames = validate.steps.map((step) => step.name);
+    const pack = validate.steps.find(
+      (step) => step.name === "Pack JavaScript packages and verify release manifests",
+    );
+    expect(pack.text).toContain(
+      "run: node ./scripts/publish-package-if-needed.mjs --all-js --dry-run",
+    );
+    expect(pack.if).toBe("");
+    expect(stepNames.indexOf(pack.name)).toBeGreaterThan(stepNames.indexOf("Build packages"));
+    // Packing runs where no publishing credential exists.
+    expect(validate.text).not.toMatch(/id-token: write|registry-url|NODE_AUTH_TOKEN|secrets\./u);
   });
 
   it("finds enabled-proof catalogs independently of the Cargo executable directory", () => {
@@ -509,6 +649,8 @@ describe("workflow contracts", () => {
 
     expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m);
     expect(verifyRelease).toContain("run: node ./scripts/check-published-versions.mjs");
+    expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-cargo/m);
+    expect(verifyRelease).toContain("run: node ./scripts/check-published-crates.mjs");
     expect(verifyRelease).toContain("timeout-minutes: 15");
     expect(verifyRelease).toContain("PALAMEDES_REGISTRY_RETRY_BUDGET_MS: 300000");
     expect(verifyRelease).toContain("PALAMEDES_REGISTRY_RETRY_MS: 15000");
@@ -526,6 +668,7 @@ describe("workflow contracts", () => {
     expect(notifyFailure).toContain("--label type:bug");
     for (const jobName of [
       "determine-release",
+      "preflight-cargo",
       "validate-release",
       "publish-native",
       "publish-js",

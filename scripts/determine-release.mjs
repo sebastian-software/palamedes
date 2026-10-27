@@ -3,6 +3,17 @@ import { appendFileSync, readFileSync } from "node:fs";
 
 import { publicationAllowed, readReleasePolicy } from "./release-policy.mjs";
 
+// Release Please titles its combined pull request "chore: release ${branch}"
+// (.release-please-config.json keeps one PR for the root package on main). A
+// squash merge appends the pull request number; a direct merge does not.
+// Matching the whole subject keeps unrelated "chore: release ..." commits from
+// starting a publication.
+const RELEASE_COMMIT_SUBJECT = /^chore: release main(?: \(#\d+\))?$/mu;
+
+function isReleaseCommitSubject(subjects) {
+  return RELEASE_COMMIT_SUBJECT.test(subjects);
+}
+
 const forcePublish = process.env.FORCE_PUBLISH === "true";
 const eventName = process.env.GITHUB_EVENT_NAME;
 const sha = process.env.GITHUB_SHA;
@@ -19,7 +30,7 @@ if (!shouldPublish && eventName === "push") {
   const subjects = execFileSync("git", ["log", "--format=%s", `${baseRef}..${sha}`], {
     encoding: "utf8",
   });
-  shouldPublish = /^chore: release /mu.test(subjects);
+  shouldPublish = isReleaseCommitSubject(subjects);
 }
 
 if (shouldPublish && !dryRun) {

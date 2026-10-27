@@ -1,18 +1,22 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   assertPublishedArchive,
   assertRustPublication,
+  preflightRustSdk,
   publishRustSdk,
 } from "./publish-rust-sdk.mjs";
 import {
+  cargoManifestVersion,
   indexPath,
   assertArchiveContents,
   registryJson,
   RUST_SDK_PACKAGES,
   RUST_SDK_REPOSITORY,
+  sdkManifestVersions,
   waitForRegistryVersion,
 } from "./rust-sdk-packages.mjs";
 
@@ -101,6 +105,106 @@ test("Rust publishing requires the policy, stable coordinated versions, manifest
   );
 });
 
+test("The Cargo preflight proves readiness from the policy, manifests, token exchange, and registry without uploading", async () => {
+  const requests = [];
+  const crates = {
+    "palamedes-i18n": { crate: { repository: RUST_SDK_REPOSITORY } },
+    palamedes: { crate: { repository: RUST_SDK_REPOSITORY } },
+    "palamedes-build": { crate: { repository: RUST_SDK_REPOSITORY } },
+  };
+  let versions = {};
+  let owners = [{ login: "owner" }];
+  const preflightEnvironment = {
+    PALAMEDES_CRATES_OWNER: "owner",
+    PALAMEDES_CRATES_TOKEN_ISSUED: "true",
+  };
+  const services = (overrides = {}) => ({
+    async metadata() {
+      return packages;
+    },
+    policy() {
+      return policy;
+    },
+    async registry(url) {
+      requests.push(url);
+      const [, name, rest] = /\/crates\/([^/]+)(?:\/(.+))?$/u.exec(url);
+      if (rest === "owners") return { users: owners };
+      if (rest) return versions[`${name}@${rest}`] ?? null;
+      return crates[name] ?? null;
+    },
+    log() {},
+    ...overrides,
+  });
+
+  await preflightRustSdk("/fixture", preflightEnvironment, services());
+  assert.deepEqual(
+    requests.filter((url) => !url.endsWith("/owners") && !url.endsWith("/2.0.0")),
+    RUST_SDK_PACKAGES.map((name) => `https://crates.io/api/v1/crates/${name}`),
+  );
+
+  await assert.rejects(
+    preflightRustSdk("/fixture", { PALAMEDES_CRATES_OWNER: "owner" }, services()),
+    /did not issue a trusted publishing token/,
+  );
+  await assert.rejects(
+    preflightRustSdk("/fixture", { PALAMEDES_CRATES_TOKEN_ISSUED: "true" }, services()),
+    /PALAMEDES_CRATES_OWNER/,
+  );
+  await assert.rejects(
+    preflightRustSdk(
+      "/fixture",
+      preflightEnvironment,
+      services({ policy: () => ({ ...policy, publicationEnabled: false }) }),
+    ),
+    /Release hold/,
+  );
+  await assert.rejects(
+    preflightRustSdk(
+      "/fixture",
+      preflightEnvironment,
+      services({ metadata: async () => packages.map((pkg) => ({ ...pkg, publish: [] })) }),
+    ),
+    /explicitly allow crates-io/,
+  );
+
+  // A dry run needs no token and reports, rather than enforces, the release
+  // hold, but it still checks the registry state.
+  const held = services({
+    policy: () => ({ ...policy, publicationEnabled: false }),
+    metadata: async () => packages.map((pkg) => ({ ...pkg, publish: [] })),
+  });
+  await preflightRustSdk(
+    "/fixture",
+    { PALAMEDES_CRATES_OWNER: "owner" },
+    { ...held, dryRun: true },
+  );
+  owners = [{ login: "someone-else" }];
+  await assert.rejects(
+    preflightRustSdk("/fixture", { PALAMEDES_CRATES_OWNER: "owner" }, { ...held, dryRun: true }),
+    /owner is not a verified direct owner of palamedes-i18n/,
+  );
+  owners = [{ login: "owner" }];
+
+  delete crates.palamedes;
+  await assert.rejects(
+    preflightRustSdk("/fixture", preflightEnvironment, services()),
+    /palamedes does not exist on crates.io; trusted publishing cannot create a crate/,
+  );
+  crates.palamedes = { crate: { repository: "https://github.com/example/fork" } };
+  await assert.rejects(
+    preflightRustSdk("/fixture", preflightEnvironment, services()),
+    /Registry repository differs for palamedes/,
+  );
+  crates.palamedes = { crate: { repository: RUST_SDK_REPOSITORY } };
+  versions = { "palamedes-build@2.0.0": { version: { yanked: true } } };
+  await assert.rejects(
+    preflightRustSdk("/fixture", preflightEnvironment, services()),
+    /palamedes-build@2.0.0 is yanked/,
+  );
+  versions = { "palamedes-build@2.0.0": { version: { yanked: false, checksum: "same" } } };
+  await preflightRustSdk("/fixture", preflightEnvironment, services());
+});
+
 test("Already-published versions are skipped only when the exact archive matches and is not yanked", () => {
   assert.doesNotThrow(() =>
     assertPublishedArchive({ checksum: "same", yanked: false }, "same", packages[0]),
@@ -128,6 +232,39 @@ test("Registry errors cannot masquerade as name/version availability", async () 
       new RegExp(`HTTP ${status}`),
     );
   }
+});
+
+test("The release sweep reads SDK versions without Cargo and accepts any unyanked indexed archive", async () => {
+  assert.equal(
+    cargoManifestVersion(
+      '[package]\nname = "palamedes-i18n"\nversion = "2.0.0"\n\n[dependencies]\nserde = { version = "1" }\nversion = "9.9.9"\n',
+    ),
+    "2.0.0",
+  );
+  assert.throws(
+    () =>
+      cargoManifestVersion(
+        '[package]\nversion.workspace = true\n\n[dependencies]\nversion = "1"\n',
+      ),
+    /no literal \[package\] version/,
+  );
+  const versions = await sdkManifestVersions(fileURLToPath(new URL("..", import.meta.url)));
+  assert.deepEqual(
+    versions.map((pkg) => pkg.name),
+    RUST_SDK_PACKAGES,
+  );
+  assert.equal(new Set(versions.map((pkg) => pkg.version)).size, 1);
+
+  await waitForRegistryVersion(packages[0], null, {
+    fetchImpl: async () => new Response(JSON.stringify({ vers: "2.0.0", cksum: "any" })),
+  });
+  await assert.rejects(
+    waitForRegistryVersion(packages[0], null, {
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ vers: "2.0.0", cksum: "any", yanked: true })),
+    }),
+    /differs or is yanked/,
+  );
 });
 
 test("Registry propagation waits for the exact indexed archive, with a finite retry budget", async () => {
