@@ -123,20 +123,31 @@ impl Cli {
 }
 
 fn localize_help(command: clap::Command) -> clap::Command {
-    let mut command = command
+    // Build the tree once, from the root. clap copies global arguments such as
+    // `--offline` into each subcommand while the root builds, and a subcommand
+    // that was already built cannot take them: its help renderer panics.
+    let mut command = set_help_template(command);
+    command.build();
+    localize_built_help(command)
+}
+
+fn set_help_template(command: clap::Command) -> clap::Command {
+    command
         .help_template(format!(
             "{{about-with-newline}}\n{} {{usage}}\n\n{{all-args}}{{after-help}}",
             tr!("Usage:")
         ))
         .subcommand_help_heading(tr!("Commands"))
-        .mut_subcommands(localize_help);
-    command.build();
+        .mut_subcommands(set_help_template)
+}
+
+fn localize_built_help(command: clap::Command) -> clap::Command {
     let has_help = command.get_arguments().any(|arg| arg.get_id() == "help");
     let has_version = command.get_arguments().any(|arg| arg.get_id() == "version");
     let has_help_command = command
         .get_subcommands()
         .any(|command| command.get_name() == "help");
-    command = command.mut_args(|arg| {
+    let mut command = command.mut_args(|arg| {
         let heading = if arg.is_positional() {
             tr!("Arguments")
         } else {
@@ -157,5 +168,13 @@ fn localize_help(command: clap::Command) -> clap::Command {
             ))
         });
     }
-    command
+    // The generated `help` subcommand has never been localized beyond its
+    // about text, so keep it out of the recursion.
+    command.mut_subcommands(|subcommand| {
+        if subcommand.get_name() == "help" {
+            subcommand
+        } else {
+            localize_built_help(subcommand)
+        }
+    })
 }
