@@ -120,7 +120,9 @@ export default defineConfig({ plugins: [palamedes({ framework: "solid" }), solid
       body: "Author the message in your component, then run one command — it creates src/locales/en.po and de.po.",
       code: `// src/App.tsx
 import { Trans } from "@palamedes/solid/macro"
-export const App = () => <h1><Trans>Welcome to Palamedes</Trans></h1>
+export default function App() {
+  return <h1><Trans>Welcome to Palamedes</Trans></h1>
+}
 
 $ pmds extract`,
     },
