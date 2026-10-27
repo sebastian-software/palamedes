@@ -110,6 +110,21 @@ pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessa
     }
 }
 
+/// Markdown spaces are authored content, not JSX formatter whitespace.
+/// In particular, a terminal inline-code placeholder must not eat its preceding space.
+pub(crate) fn join_mdx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessage {
+    let message = parts.iter().map(JsxMessagePart::as_str).collect::<String>();
+    let ends_with_placeholder = parts
+        .iter()
+        .rev()
+        .find(|part| !part.as_str().trim().is_empty())
+        .is_some_and(JsxMessagePart::ends_with_placeholder);
+    JoinedJsxMessage {
+        message: trim_message_edges(&message),
+        ends_with_placeholder,
+    }
+}
+
 fn push_jsx_message_part(
     message: &mut String,
     ends_with_placeholder: &mut bool,
