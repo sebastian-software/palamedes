@@ -13,7 +13,7 @@ use crate::jsx_message::clean_jsx_text;
 use crate::mdx::{MdxOptions, analyze_mdx};
 use crate::placeholder_name::expression_name;
 use crate::source::{
-    SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    DiagnosticLocation, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
     SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
     SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
@@ -573,6 +573,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             ) {
                 self.fail(PalamedesError::NestedMessageMacro {
                     location: self.location(nested_start),
+                    branch: None,
                 });
                 return;
             }
@@ -583,7 +584,9 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
-                &self.location(it.span.start as usize),
+                &self
+                    .source_locator
+                    .indexed_location(&self.filename, it.span.start as usize),
             ) {
                 Ok(Some(message)) => {
                     let surface = if macro_name == "Trans" {
@@ -727,7 +730,9 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     self.origin(it.span.start as usize),
                     self.current_scope(),
                     self.source,
-                    &self.location(it.span.start as usize),
+                    &self
+                        .source_locator
+                        .indexed_location(&self.filename, it.span.start as usize),
                 ),
                 _ => extract_from_descriptor_call(
                     it,
@@ -735,7 +740,9 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     self.origin(it.span.start as usize),
                     self.current_scope(),
                     self.source,
-                    &self.location(it.span.start as usize),
+                    &self
+                        .source_locator
+                        .indexed_location(&self.filename, it.span.start as usize),
                 ),
             };
 
@@ -1036,7 +1043,7 @@ fn extract_choice_options_from_object(
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<ExtractedChoiceOptions> {
     let lowered = lower_choice_options_from_object(
         object,
@@ -1065,7 +1072,7 @@ fn extract_from_jsx_element(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let attrs = jsx_attributes(&element.opening_element);
 
@@ -1174,7 +1181,7 @@ fn extract_from_descriptor_call(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
         return Err(unsupported_macro_syntax(
@@ -1233,7 +1240,7 @@ fn extract_from_choice_call(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(value_arg) = call.arguments.first() else {
         return Ok(None);
@@ -1447,7 +1454,7 @@ fn extract_choice_options_from_jsx(
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<ExtractedChoiceOptions> {
     let lowered = shared_lower_choice_options_from_jsx(
         opening_element,

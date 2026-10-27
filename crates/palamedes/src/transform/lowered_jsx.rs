@@ -361,6 +361,7 @@ impl LoweringState {
                 if contains_macro_reference(authored_expression, imports) {
                     return Err(PalamedesError::NestedMessageMacro {
                         location: location.format(),
+                        branch: None,
                     });
                 }
                 let binding = expression_binding(
@@ -402,6 +403,7 @@ impl LoweringState {
         if is_macro_reference(element_type, imports) {
             return Err(PalamedesError::NestedMessageMacro {
                 location: location.format(),
+                branch: None,
             });
         }
         let props = props_object(call, macro_name, location)?;

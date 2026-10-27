@@ -6,8 +6,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use oxc_ast::ast::{
-    Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement, ObjectExpression,
-    ObjectPropertyKind, TemplateLiteral,
+    Expression, JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
+    ObjectExpression, ObjectPropertyKind, TemplateLiteral,
 };
 use oxc_span::GetSpan;
 
@@ -170,6 +170,18 @@ const NESTABLE_MESSAGE_MACROS: [&str; 4] = ["t", "plural", "select", "selectOrdi
 /// name is enough here: any call with arguments has no stable placeholder
 /// name, so only the wording of an existing error changes.
 fn nested_macro_placeholder(expr: &Expression<'_>, source: &str) -> Option<PalamedesError> {
+    let (name, start) = nested_message_macro_call(expr)?;
+    let (line, column) = SourceLocator::new(source).location(start as usize);
+    Some(PalamedesError::NestedMacroPlaceholder {
+        macro_name: name.to_owned(),
+        line,
+        column,
+    })
+}
+
+/// Returns the name and start offset of a `t`, `plural`, `select`, or
+/// `selectOrdinal` call or tagged template.
+fn nested_message_macro_call<'a>(expr: &'a Expression<'_>) -> Option<(&'a str, u32)> {
     let (name, start) = match expr.without_parentheses() {
         Expression::CallExpression(call) => (call.callee_name()?, call.span.start),
         Expression::TaggedTemplateExpression(tagged) => match tagged.tag.without_parentheses() {
@@ -178,15 +190,102 @@ fn nested_macro_placeholder(expr: &Expression<'_>, source: &str) -> Option<Palam
         },
         _ => return None,
     };
-    if !NESTABLE_MESSAGE_MACROS.contains(&name) {
-        return None;
+    NESTABLE_MESSAGE_MACROS
+        .contains(&name)
+        .then_some((name, start))
+}
+
+/// JSX message macros that cannot appear inside another message.
+const NESTABLE_JSX_MESSAGE_MACROS: [&str; 4] = ["Trans", "Plural", "Select", "SelectOrdinal"];
+
+fn is_nested_jsx_message_macro(element: &JSXElement<'_>) -> bool {
+    element
+        .opening_element
+        .name
+        .get_identifier_name()
+        .is_some_and(|name| NESTABLE_JSX_MESSAGE_MACROS.contains(&name.as_str()))
+}
+
+/// Lowers one choice branch. Only string and template literals are messages;
+/// anything else would vanish from the catalog, so it fails at the branch.
+fn lower_choice_branch(
+    key: &str,
+    value: &Expression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+    escape_literal: impl Fn(&str) -> String + Copy,
+) -> PalamedesResult<(String, Vec<SourceValue>)> {
+    match value.without_parentheses() {
+        Expression::StringLiteral(literal) => {
+            Ok((escape_literal(literal.value.as_str()), Vec::new()))
+        }
+        Expression::TemplateLiteral(template) => lower_template(
+            template,
+            source,
+            "choice option template expression",
+            used_value_names,
+            escape_literal,
+        ),
+        value => Err(unsupported_choice_branch(key, value, macro_name, location)),
     }
-    let (line, column) = SourceLocator::new(source).location(start as usize);
-    Some(PalamedesError::NestedMacroPlaceholder {
-        macro_name: name.to_owned(),
-        line,
-        column,
-    })
+}
+
+fn unsupported_choice_branch(
+    key: &str,
+    value: &Expression<'_>,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+) -> PalamedesError {
+    let nested_start = match value {
+        Expression::JSXElement(element) if is_nested_jsx_message_macro(element) => {
+            Some(element.span.start)
+        }
+        _ => nested_message_macro_call(value).map(|(_, start)| start),
+    };
+    if let Some(start) = nested_start {
+        return PalamedesError::NestedMessageMacro {
+            location: location.format_offset(start as usize),
+            branch: Some(key.to_owned()),
+        };
+    }
+
+    let kind = match value {
+        Expression::Identifier(_) => "an identifier",
+        Expression::StaticMemberExpression(_)
+        | Expression::ComputedMemberExpression(_)
+        | Expression::PrivateFieldExpression(_) => "a member expression",
+        Expression::JSXElement(_) => "a JSX element",
+        Expression::JSXFragment(_) => "a JSX fragment",
+        Expression::CallExpression(_) | Expression::NewExpression(_) => "a function call",
+        Expression::TaggedTemplateExpression(_) => "a tagged template",
+        Expression::ConditionalExpression(_) | Expression::LogicalExpression(_) => {
+            "a conditional expression"
+        }
+        Expression::NumericLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_) => "a non-string literal",
+        _ => "a dynamic expression",
+    };
+    unsupported_choice_branch_at(key, kind, macro_name, location, value.span().start)
+}
+
+fn unsupported_choice_branch_at(
+    key: &str,
+    kind: &str,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+    start: u32,
+) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_owned(),
+        location: location.format_offset(start as usize),
+        detail: format!(
+            "the `{key}` branch is {kind}; every choice branch must be a string literal or template literal"
+        ),
+    }
 }
 
 pub(crate) fn build_icu_message(
@@ -238,19 +337,15 @@ pub(crate) fn lower_choice_options_from_object(
         let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
             return Err(invalid_choice_option(macro_name, location, &key));
         };
-        let (value, option_values) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => {
-                (escape_literal(literal.value.as_str()), Vec::new())
-            }
-            Expression::TemplateLiteral(template) => lower_template(
-                template,
-                source,
-                "choice option template expression",
-                used_value_names,
-                escape_literal,
-            )?,
-            _ => continue,
-        };
+        let (value, option_values) = lower_choice_branch(
+            &key,
+            &property.value,
+            source,
+            used_value_names,
+            macro_name,
+            location,
+            escape_literal,
+        )?;
 
         options.push((normalized_key, value));
         append_unique_values(&mut values, option_values);
@@ -326,28 +421,41 @@ pub(crate) fn lower_choice_options_from_jsx(
         let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
             return Err(invalid_choice_option(macro_name, location, &key));
         };
-        let Some(attr_value) = attr.value.as_ref() else {
-            continue;
+        let unsupported = |kind: &str, start: u32| {
+            unsupported_choice_branch_at(&key, kind, macro_name, location, start)
         };
-        let (value, option_values) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => (
+        let (value, option_values) = match attr.value.as_ref() {
+            None => return Err(unsupported("missing a value", attr.span.start)),
+            Some(JSXAttributeValue::StringLiteral(literal)) => (
                 escape_literal(&decode_jsx_entities(literal.value.as_str())),
                 Vec::new(),
             ),
-            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => {
-                    (escape_literal(literal.value.as_str()), Vec::new())
-                }
-                JSXExpression::TemplateLiteral(template) => lower_template(
-                    template,
+            Some(JSXAttributeValue::ExpressionContainer(container)) => {
+                let Some(expression) = container.expression.as_expression() else {
+                    return Err(unsupported("empty", container.span.start));
+                };
+                lower_choice_branch(
+                    &key,
+                    expression,
                     source,
-                    "choice option template expression",
                     used_value_names,
+                    macro_name,
+                    location,
                     escape_literal,
-                )?,
-                _ => continue,
-            },
-            _ => continue,
+                )?
+            }
+            Some(JSXAttributeValue::Element(element)) => {
+                if is_nested_jsx_message_macro(element) {
+                    return Err(PalamedesError::NestedMessageMacro {
+                        location: location.format_offset(element.span.start as usize),
+                        branch: Some(key.clone()),
+                    });
+                }
+                return Err(unsupported("a JSX element", element.span.start));
+            }
+            Some(JSXAttributeValue::Fragment(fragment)) => {
+                return Err(unsupported("a JSX fragment", fragment.span.start));
+            }
         };
 
         options.push((normalized_key, value));
@@ -499,5 +607,291 @@ fn push_unique_value(values: &mut Vec<SourceValue>, value: SourceValue) {
 fn append_unique_values(values: &mut Vec<SourceValue>, incoming: Vec<SourceValue>) {
     for value in incoming {
         push_unique_value(values, value);
+    }
+}
+
+#[cfg(test)]
+mod choice_branch_tests {
+    //! Choice branches are lowered once and shared by extraction, the
+    //! transform, and the runtime macro manifest. A branch the lowering cannot
+    //! read must fail loudly in every consumer instead of disappearing from the
+    //! message (#1372).
+
+    use crate::error::PalamedesError;
+    use crate::extract::extract_messages;
+    use crate::{NativeTransformOptions, transform_macros};
+
+    const FILENAME: &str = "view.tsx";
+    const BODY_LINE: usize = 4;
+    const BODY_COLUMN: usize = "  return ".len() + 1;
+
+    enum Expected {
+        Unsupported {
+            macro_name: &'static str,
+            kind: &'static str,
+        },
+        Nested,
+    }
+
+    struct Case {
+        body: &'static str,
+        key: &'static str,
+        at: &'static str,
+        expected: Expected,
+    }
+
+    fn module(body: &str) -> String {
+        format!(
+            "import {{ plural, select, selectOrdinal, t }} from \"@palamedes/core/macro\";\nimport {{ Plural, Select, SelectOrdinal, Trans }} from \"@palamedes/react/macro\";\nexport function view(count: number, gender: string, name: string, label: string, labels: {{ one: string }}) {{\n  return {body};\n}}\n"
+        )
+    }
+
+    fn unsupported_cases() -> Vec<Case> {
+        vec![
+            Case {
+                body: r##"plural(count, { one: ONE, other: "# items" })"##,
+                key: "one",
+                at: "ONE",
+                expected: Expected::Unsupported {
+                    macro_name: "plural",
+                    kind: "an identifier",
+                },
+            },
+            Case {
+                body: r##"plural(count, { _0: t`nothing`, other: "# items" })"##,
+                key: "_0",
+                at: "t`nothing`",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"plural(count, { one: t({ message: "one item" }), other: "# items" })"##,
+                key: "one",
+                at: "t({",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"select(gender, { male: "he", female: "she", other: plural(count, { one: "# item", other: "# items" }) })"##,
+                key: "other",
+                at: "plural(count, { one",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"selectOrdinal(count, { one: select(gender, { male: "his", other: "their" }), other: "#th" })"##,
+                key: "one",
+                at: "select(gender",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"plural(count, { one: <b>one item</b>, other: "# items" })"##,
+                key: "one",
+                at: "<b>",
+                expected: Expected::Unsupported {
+                    macro_name: "plural",
+                    kind: "a JSX element",
+                },
+            },
+            Case {
+                body: r##"plural(count, { one: labels.one, other: "# items" })"##,
+                key: "one",
+                at: "labels.one",
+                expected: Expected::Unsupported {
+                    macro_name: "plural",
+                    kind: "a member expression",
+                },
+            },
+            Case {
+                body: r##"<Plural value={count} one={<b>one item</b>} other="# items" />"##,
+                key: "one",
+                at: "<b>",
+                expected: Expected::Unsupported {
+                    macro_name: "Plural",
+                    kind: "a JSX element",
+                },
+            },
+            Case {
+                body: r##"<Plural value={count} one=<b>one item</b> other="# items" />"##,
+                key: "one",
+                at: "<b>",
+                expected: Expected::Unsupported {
+                    macro_name: "Plural",
+                    kind: "a JSX element",
+                },
+            },
+            Case {
+                body: r##"<Select value={gender} male={label} other="they" />"##,
+                key: "male",
+                at: "label}",
+                expected: Expected::Unsupported {
+                    macro_name: "Select",
+                    kind: "an identifier",
+                },
+            },
+            Case {
+                body: r##"<Select value={gender} male other="they" />"##,
+                key: "male",
+                at: "male",
+                expected: Expected::Unsupported {
+                    macro_name: "Select",
+                    kind: "missing a value",
+                },
+            },
+            Case {
+                body: r##"<Plural value={count} one={<Trans>one item</Trans>} other="# items" />"##,
+                key: "one",
+                at: "<Trans>",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"<Plural value={count} _0=<Trans>no items</Trans> other="# items" />"##,
+                key: "_0",
+                at: "<Trans>",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"<Plural value={count} _0={t`nothing`} other="# items" />"##,
+                key: "_0",
+                at: "t`nothing`",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"<Select value={gender} male="he" other={plural(count, { one: "# item", other: "# items" })} />"##,
+                key: "other",
+                at: "plural(",
+                expected: Expected::Nested,
+            },
+            Case {
+                body: r##"<SelectOrdinal value={count} one={labels.one} other="#th" />"##,
+                key: "one",
+                at: "labels.one",
+                expected: Expected::Unsupported {
+                    macro_name: "SelectOrdinal",
+                    kind: "a member expression",
+                },
+            },
+        ]
+    }
+
+    fn branch_error_mismatch(case: &Case, error: &PalamedesError) -> Option<String> {
+        let column = BODY_COLUMN + case.body.find(case.at).expect("case anchor");
+        let location = format!("{FILENAME}:{BODY_LINE}:{column}");
+        let key = case.key;
+        let matched = match case.expected {
+            Expected::Unsupported { macro_name, kind } => matches!(
+                error,
+                PalamedesError::UnsupportedMacroSyntax {
+                    macro_name: actual_macro,
+                    location: actual_location,
+                    detail,
+                } if actual_macro == macro_name
+                    && *actual_location == location
+                    && detail.contains(&format!("`{key}` branch"))
+                    && detail.contains(kind)
+            ),
+            Expected::Nested => {
+                matches!(
+                    error,
+                    PalamedesError::NestedMessageMacro {
+                        location: actual_location,
+                        branch: Some(branch),
+                    } if *actual_location == location && branch == key
+                ) && error
+                    .to_string()
+                    .contains(&format!("in the `{key}` branch"))
+            }
+        };
+        (!matched).then(|| {
+            let expected = match case.expected {
+                Expected::Unsupported { kind, .. } => format!("UnsupportedMacroSyntax ({kind})"),
+                Expected::Nested => "NestedMessageMacro".to_owned(),
+            };
+            format!("expected {expected} for `{key}` at {location}, got: {error}")
+        })
+    }
+
+    fn assert_every_case_fails(
+        consumer: &str,
+        run: impl Fn(&str) -> Result<String, PalamedesError>,
+    ) {
+        let failures = unsupported_cases()
+            .iter()
+            .filter_map(|case| {
+                let mismatch = match run(&module(case.body)) {
+                    Ok(output) => Some(format!("succeeded with {output}")),
+                    Err(error) => branch_error_mismatch(case, &error),
+                };
+                mismatch.map(|mismatch| format!("{consumer} `{}`: {mismatch}", case.body))
+            })
+            .collect::<Vec<_>>();
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn extraction_rejects_choice_branches_that_are_not_literals() {
+        assert_every_case_fails("extraction", |source| {
+            extract_messages(source, FILENAME).map(|messages| {
+                format!(
+                    "{:?}",
+                    messages
+                        .iter()
+                        .map(|message| &message.message)
+                        .collect::<Vec<_>>()
+                )
+            })
+        });
+    }
+
+    #[test]
+    fn transform_rejects_choice_branches_that_are_not_literals() {
+        assert_every_case_fails("transform", |source| {
+            transform_macros(source, FILENAME, None).map(|result| result.code)
+        });
+    }
+
+    #[test]
+    fn literal_choice_branches_keep_extracting_and_transforming() {
+        for (body, message) in [
+            (
+                r##"plural(count, { one: ("# item"), other: `# items for ${name}` })"##,
+                "{count, plural, one {# item} other {# items for {name}}}",
+            ),
+            (
+                r##"<Plural value={count} one={"# item"} other={`# items for ${name}`} />"##,
+                "{count, plural, one {# item} other {# items for {name}}}",
+            ),
+            (
+                r##"<Plural value={count} _0="no items" one={`# item`} other="# items" />"##,
+                "{count, plural, =0 {no items} one {# item} other {# items}}",
+            ),
+            (
+                r##"<Select value={gender} male={("he")} other="they" />"##,
+                "{gender, select, male {he} other {they}}",
+            ),
+        ] {
+            let source = module(body);
+            let extracted = extract_messages(&source, FILENAME)
+                .unwrap_or_else(|error| panic!("extraction for `{body}` failed: {error}"));
+            assert_eq!(
+                extracted
+                    .iter()
+                    .map(|record| record.message.as_str())
+                    .collect::<Vec<_>>(),
+                [message],
+                "extraction for `{body}`"
+            );
+
+            let options = NativeTransformOptions {
+                keep_source_fallbacks: Some(true),
+                ..NativeTransformOptions::default()
+            };
+            let transformed = transform_macros(&source, FILENAME, Some(options))
+                .unwrap_or_else(|error| panic!("transform for `{body}` failed: {error}"));
+            assert!(
+                transformed
+                    .code
+                    .contains(&format!("message: \"{message}\"")),
+                "transform for `{body}` should embed {message}:\n{}",
+                transformed.code
+            );
+        }
     }
 }
