@@ -2,8 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Transform } from "node:stream";
+import { runInNewContext } from "node:vm";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createReactRouterCatalogDelivery } from "./react-router";
 
@@ -161,9 +162,39 @@ describe("React Router catalog delivery", () => {
       '<html><head></head><body><script type="module" src="/entry.client.tsx"></script>dev</body></html>',
     );
     expect(html).toContain("showPalamedesDevCatalogError");
-    expect(html).toContain("unhandledrejection");
-    expect(html).toContain("vite:preloadError");
-    expect(html).toContain("import(url)");
+    expect(html).toContain("palamedes:catalogError");
+  });
+
+  it.each(["error", "unhandledrejection", "vite:preloadError"])(
+    "leaves unrelated %s events to the host",
+    async (type) => {
+      const probe = await createDevelopmentProbe();
+      const event = new Event(type, { cancelable: true });
+      Object.assign(event, { error: new Error("Application hydration failed") });
+      probe.target.dispatchEvent(event);
+      expect(probe.replaceChildren).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+      expect(probe.context.__reactRouterContext.isSpaMode).toBe(false);
+    },
+  );
+
+  it("shows recovery UI once for an explicit catalog failure", async () => {
+    const probe = await createDevelopmentProbe();
+    probe.target.dispatchEvent(new Event("palamedes:catalogError"));
+    probe.target.dispatchEvent(new Event("palamedes:catalogError"));
+    expect(probe.replaceChildren).toHaveBeenCalledTimes(1);
+    expect(probe.context.__reactRouterContext.isSpaMode).toBe(true);
+    expect(probe.template.innerHTML).toContain("Reload the page");
+  });
+
+  it("defers catalog recovery until the document body exists", async () => {
+    const probe = await createDevelopmentProbe();
+    probe.context.document.body = null;
+    probe.target.dispatchEvent(new Event("palamedes:catalogError"));
+    expect(probe.replaceChildren).not.toHaveBeenCalled();
+    probe.context.document.body = { replaceChildren: probe.replaceChildren };
+    probe.documentTarget.dispatchEvent(new Event("DOMContentLoaded"));
+    expect(probe.replaceChildren).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a production document unchanged when no manifest binding exists", async () => {
@@ -210,4 +241,31 @@ async function collect(stream: Transform, value: string): Promise<string> {
   stream.end(value);
   await done;
   return Buffer.concat(chunks).toString("utf8");
+}
+
+async function createDevelopmentProbe() {
+  const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-probe-"));
+  fixtureDirectories.push(clientDirectory);
+  const delivery = createReactRouterCatalogDelivery({ clientDirectory, development: true });
+  const html = await collect(
+    delivery.createDocumentTransform(null),
+    "<html><head></head><body>app</body></html>",
+  );
+  const script = html.match(/<script>([\s\S]*?)<\/script>/u)?.[1];
+  if (!script) throw new Error("Missing development catalog probe");
+  const target = new EventTarget();
+  const documentTarget = new EventTarget();
+  const replaceChildren = vi.fn();
+  const template = { innerHTML: "", content: { cloneNode: () => ({}) } };
+  const context = {
+    __reactRouterContext: { isSpaMode: false },
+    addEventListener: target.addEventListener.bind(target),
+    document: {
+      body: { replaceChildren } as { replaceChildren: typeof replaceChildren } | null,
+      createElement: () => template,
+      addEventListener: documentTarget.addEventListener.bind(documentTarget),
+    },
+  };
+  runInNewContext(script, context);
+  return { context, target, documentTarget, replaceChildren, template };
 }
