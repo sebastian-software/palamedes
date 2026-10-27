@@ -39,6 +39,26 @@ try {
     0,
     "Dev used a stale build import map",
   );
+  await page.evaluate(() => {
+    globalThis.dispatchEvent(
+      new ErrorEvent("error", { error: new Error("unrelated application error") }),
+    );
+    globalThis.dispatchEvent(
+      new PromiseRejectionEvent("unhandledrejection", {
+        promise: Promise.resolve(),
+        reason: new Error("unrelated application rejection"),
+      }),
+    );
+    globalThis.dispatchEvent(new Event("vite:preloadError"));
+  });
+  assert.equal(
+    await page.locator("[data-palamedes-catalog-error]").count(),
+    0,
+    "Unrelated application errors replaced the document with catalog recovery UI",
+  );
+  await page.getByTestId("client-ready").waitFor({ state: "attached" });
+  console.log("Vite development: unrelated application errors remain with the host");
+
   const localeRequests = () =>
     requests.filter((url) => /palamedes:messages\/[^/]+\/(en|de|es)(?:\?|$)/u.test(url));
   assert(localeRequests().length > 0, JSON.stringify(requests));

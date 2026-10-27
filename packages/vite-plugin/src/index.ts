@@ -749,6 +749,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       const ids = new Set(PALAMEDES_MACRO_PACKAGES);
       macroIds = ids;
 
+      // Installed packages are externalized by default, unlike workspace links.
+      // Keep the server adapter and its virtual catalog imports in Vite's graph.
+      viteConfig.ssr ??= {};
+      if (viteConfig.ssr.noExternal !== true) {
+        const existing = viteConfig.ssr.noExternal;
+        viteConfig.ssr.noExternal = [
+          ...(existing ? (Array.isArray(existing) ? existing : [existing]) : []),
+          "@palamedes/runtime",
+          "@palamedes/vite-plugin",
+        ];
+      }
+
       // Exclude macro packages from optimization
       // https://github.com/lingui/js-lingui/issues/1464
       if (!viteConfig.optimizeDeps) {

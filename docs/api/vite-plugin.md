@@ -197,6 +197,11 @@ immutable complete catalog for the active locale and returns fresh request
 state. Host request middleware keeps that state in its request scope across
 SSR, loaders and actions. Applications do not construct catalog import maps.
 
+The adapter keeps its server entrypoints and runtime packages in Vite's SSR
+module graph automatically, including when installed from npm rather than
+linked from a workspace. Applications do not need a Palamedes-specific
+`ssr.noExternal` configuration.
+
 `@palamedes/vite-plugin/delivery` exports `createViteCatalogDelivery({
 clientDirectory, development?, manifestName? })`. Framework adapters call
 `getLocaleBinding(locale)` and pipe HTML through
@@ -209,6 +214,9 @@ React Router's initial route imports run before its client entry. The document
 transport observes their catalog dependencies independently. Lazy route facades
 forward failures into the host's normal ErrorBoundary instead of React Router's
 automatic reload. Error UI must be independent of message catalogs.
+
+In development, recovery listens to explicit catalog-delivery failures;
+unrelated application errors remain with the host's error handling.
 
 Static HTML applications receive a generated module entry that installs the
 active locale's import map and awaits application dependencies. An optional
