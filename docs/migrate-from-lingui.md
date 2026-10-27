@@ -309,7 +309,7 @@ unique matching `(msgid, msgctxt)` entry. Its translation, translator comments,
 flags, and machine metadata survive, including with `--force-clean`, and
 repeated extraction is stable. Exact identities always win; Palamedes does not
 merge ambiguous entries or entries with different contexts. See
-[Quoting and literal text](api/core.md#quoting-and-literal-text).
+[Quoting and literal text](../packages/core/README.md#quoting-and-literal-text).
 
 ## Common Migration Errors
 
