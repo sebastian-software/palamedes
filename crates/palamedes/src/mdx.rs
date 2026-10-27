@@ -20,9 +20,27 @@ use serde::{Deserialize, Serialize};
 use crate::extract::ExtractedMessageRecord;
 use crate::icu_text::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{JsxMessagePart, clean_jsx_whitespace, join_jsx_message_parts};
+use crate::jsx_message::{JsxMessagePart, clean_jsx_whitespace, join_mdx_message_parts};
 use crate::source::{SourceComment, SourceCommentKind, SourceLocator, SourceRange};
 use crate::transform::NativeTransformSourceMap;
+
+// Markdown soft line breaks separate words, including next to rich placeholders.
+fn normalize_mdx_whitespace(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut whitespace = false;
+    for character in value.chars() {
+        if character.is_ascii_whitespace() {
+            if !whitespace {
+                output.push(' ');
+            }
+            whitespace = true;
+        } else {
+            output.push(character);
+            whitespace = false;
+        }
+    }
+    output
+}
 
 const DEFAULT_IGNORE_DIRECTIVE: &str = "palamedes-ignore";
 const DEFAULT_RUNTIME_MODULE: &str = "@palamedes/runtime";
@@ -107,7 +125,7 @@ impl MdxOptions {
         fields.sort();
         fields.dedup();
         format!(
-            "mdx-v4|attrs={}|front={}|ignore={}",
+            "mdx-v5|attrs={}|front={}|ignore={}",
             attributes.join(","),
             fields.join(","),
             self.ignore_directive
@@ -685,6 +703,8 @@ impl<'a> MdxCompiler<'a> {
                         self.inlines(&cell.children);
                         if self.finish_unit() {
                             self.body.append(&format!("</{tag}>"));
+                        } else {
+                            self.body.append(&format!("<{tag}{attrs}></{tag}>"));
                         }
                         column += cell.colspan;
                     }
@@ -836,7 +856,7 @@ impl<'a> MdxCompiler<'a> {
                 .push(RichNode::fixed("<br />".to_owned(), 0)),
             Node::Link(link) => {
                 let raw = range_text(self.source, link.span);
-                if !raw.starts_with('[') {
+                if !raw.trim_start().starts_with('[') {
                     self.mark_unit_start(link.span.start as usize);
                     self.unit
                         .as_mut()
@@ -908,7 +928,7 @@ impl<'a> MdxCompiler<'a> {
     }
 
     fn text_value(&mut self, value: &str, offset: usize) {
-        let value = clean_jsx_whitespace(value);
+        let value = normalize_mdx_whitespace(value);
         if !value.is_empty() {
             self.mark_unit_start(offset);
             self.unit
@@ -1393,7 +1413,7 @@ fn rich_message(
             }
         }
     }
-    let mut joined = join_jsx_message_parts(&parts);
+    let mut joined = join_mdx_message_parts(&parts);
     if matches!(target, IcuLiteralTarget::Catalog) {
         joined.message = escape_icu_source_literal(&joined.message);
     }
@@ -1969,6 +1989,89 @@ mod tests {
         );
         assert_valid_tsx(result.code.as_deref().expect("valid MDX should compile"));
         result
+    }
+
+    #[test]
+    fn keeps_indented_explicit_link_labels_in_jsx_blocks() {
+        for framework in [MdxFramework::React, MdxFramework::Solid] {
+            let result = analyze_valid(
+                "<Tip>\n  See\n  [Deployment](/deploy) for every host.\n</Tip>",
+                MdxOptions {
+                    framework,
+                    ..MdxOptions::default()
+                },
+            );
+            assert_eq!(
+                result.messages[0].message,
+                "See <0>Deployment</0> for every host."
+            );
+            assert_eq!(result.messages.len(), 1);
+            assert!(result.code.unwrap().contains("<a href={\"/deploy\"}"));
+        }
+    }
+
+    #[test]
+    fn keeps_empty_table_cells_without_creating_empty_messages() {
+        for framework in [MdxFramework::React, MdxFramework::Solid] {
+            let result = analyze_valid(
+                "| | A | B |\n| :--- | :---: | ---: |\n| Key | | Two |\n| | Three | |",
+                MdxOptions {
+                    framework,
+                    ..MdxOptions::default()
+                },
+            );
+            assert_eq!(
+                result
+                    .messages
+                    .iter()
+                    .map(|message| message.message.as_str())
+                    .collect::<Vec<_>>(),
+                ["A", "B", "Key", "Two", "Three"],
+            );
+            let code = result.code.unwrap();
+            assert_eq!(code.matches("<th ").count(), 3);
+            assert_eq!(code.matches("<td ").count(), 6);
+            assert!(code.contains("<th align={\"left\"}></th>"));
+            for alignment in ["left", "center", "right"] {
+                assert!(code.contains(&format!("<td align={{\"{alignment}\"}}></td>")));
+            }
+        }
+    }
+
+    #[test]
+    fn preserves_markdown_spaces_around_fixed_rich_components() {
+        for (source, expected) in [
+            ("Use `icon`", "Use <0/>"),
+            ("**Without `icon`**: text", "<0>Without <1/></0>: text"),
+            ("Use `thing` or\n`other`.", "Use <0/> or <1/>."),
+            (
+                "Text with **bold code `term`** here.",
+                "Text with <0>bold code <1/></0> here.",
+            ),
+            (
+                "Keep `code` , including this space.",
+                "Keep <0/> , including this space.",
+            ),
+            (
+                "Bonjour\u{202f}: **monde**",
+                "Bonjour\u{202f}: <0>monde</0>",
+            ),
+        ] {
+            for framework in [MdxFramework::React, MdxFramework::Solid] {
+                let result = analyze_valid(
+                    source,
+                    MdxOptions {
+                        framework,
+                        ..MdxOptions::default()
+                    },
+                );
+                assert_eq!(
+                    result.messages[0].message, expected,
+                    "{framework:?}: {source}"
+                );
+                assert_eq!(result.messages.len(), 1);
+            }
+        }
     }
 
     #[test]
