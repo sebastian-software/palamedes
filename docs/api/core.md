@@ -241,6 +241,14 @@ the relevant i18n scope. Palamedes rejects these macros at module scope during
 transformation and extraction. Class field initializers, including instance
 fields, do not satisfy this syntactic rule; use a method or getter instead.
 
+Every `plural`, `select`, and `selectOrdinal` branch must be a string literal
+or a template literal, for example
+``plural(count, { one: "# item", other: `# items for ${name}` })``. Extraction
+and the transform reject any other branch value, such as a constant, a member
+expression, JSX, or a nested `t`, `plural`, or `select` call, with an error that
+names the branch and its source location. Write the complete sentence in each
+branch instead of composing it from other messages.
+
 ## Runtime Formatting
 
 Compiled messages support values, rich-text tags, select, plural and

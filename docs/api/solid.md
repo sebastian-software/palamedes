@@ -103,6 +103,12 @@ Choice macros take branch text as props: plural categories (`zero`, `one`,
 a JSX attribute cannot start with `=`. Exact matches are normalized to ICU
 `=N`, mirroring the macro transform. `other` is required.
 
+Each branch must be a string literal or a template literal, either as a plain
+attribute (`one="# item"`) or inside braces (``one={`# item for ${name}`}``).
+Extraction and the transform reject any other branch value, such as a constant,
+a member expression, a JSX element, or a nested `t`, `plural`, `select`, or
+`<Trans>`, with an error that names the branch and its source location.
+
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern, for "and N others" sentences where the number shown is
 smaller than the number counted:

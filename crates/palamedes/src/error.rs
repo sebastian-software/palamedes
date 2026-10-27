@@ -235,11 +235,14 @@ pub enum PalamedesError {
     },
     /// A JSX message macro was nested inside another JSX message macro.
     #[error(
-        "Nested i18n macro is not extractable as a single message at {location}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence."
+        "Nested i18n macro is not extractable as a single message at {location}{}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence.",
+        nested_branch_suffix(.branch.as_deref())
     )]
     NestedMessageMacro {
         /// Source location of the nested macro.
         location: String,
+        /// Authored choice branch key, when the macro is a choice branch value.
+        branch: Option<String>,
     },
     /// A message macro was used as a placeholder inside another message.
     #[error(
@@ -281,6 +284,12 @@ pub enum PalamedesError {
         /// Human-readable failure including locale and resource path.
         message: String,
     },
+}
+
+fn nested_branch_suffix(branch: Option<&str>) -> String {
+    branch
+        .map(|key| format!(" in the `{key}` branch"))
+        .unwrap_or_default()
 }
 
 impl PalamedesError {

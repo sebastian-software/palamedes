@@ -108,7 +108,8 @@ pub(super) fn choice_from_call(
         let key = key.into_owned();
         if matches!(
             key.as_str(),
-            "id" | "message" | "comment" | "context" | "value" | "children"
+            // `key` is the element's list key, not a branch.
+            "id" | "message" | "comment" | "context" | "value" | "children" | "key"
         ) {
             continue;
         }
@@ -361,6 +362,7 @@ impl LoweringState {
                 if contains_macro_reference(authored_expression, imports) {
                     return Err(PalamedesError::NestedMessageMacro {
                         location: location.format(),
+                        branch: None,
                     });
                 }
                 let binding = expression_binding(
@@ -402,6 +404,7 @@ impl LoweringState {
         if is_macro_reference(element_type, imports) {
             return Err(PalamedesError::NestedMessageMacro {
                 location: location.format(),
+                branch: None,
             });
         }
         let props = props_object(call, macro_name, location)?;
