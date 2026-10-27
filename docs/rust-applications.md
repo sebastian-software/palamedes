@@ -5,8 +5,9 @@ language from a file when your Rust CLI or service runs. Every language, includi
 English, stays outside the executable. Compatible translation edits and additional
 languages can ship without rebuilding it.
 
-This is an experimental repository integration. `palamedes-build` and
-`palamedes-i18n` are **not published on crates.io**; the publication hold in
+This is an experimental repository integration. Only nonfunctional `0.0.0`
+bootstrap placeholders are published on crates.io; the functional Rust SDK is
+**not released**. The publication hold in
 [#1309](https://github.com/sebastian-software/palamedes/issues/1309) still applies.
 The current subset is text, display arguments, string selects, and cardinal and
 ordinal plurals. Localized number/date/time formatting, rich text, and translation
@@ -37,29 +38,36 @@ and installation paths are recorded there for inspection.
 `pnpm release:rust:dry-run` runs the same verification without uploading. The
 Publish workflow uses it before any publication and CI runs the proof on the
 pinned Rust toolchain. Staging matters before the first release: the builder's
-registry dependencies do not exist on crates.io yet, so a crates.io publish dry
-run cannot verify that graph. No archive/build verification is bypassed.
+functional registry dependency versions do not exist on crates.io yet, so a
+crates.io publish dry run cannot verify that graph. No archive/build verification
+is bypassed.
 
 The prepared Cargo lane publishes `palamedes-i18n`, then `palamedes`, then
 `palamedes-build`. It checks exact archive checksums before skipping an existing
 version, rejects yanked or different content, and waits a bounded interval for
 index visibility before packaging the next crate. Registry authentication or
-server errors stop the lane. The lane also requires a configured
-`CARGO_REGISTRY_TOKEN` secret and `CRATES_IO_OWNER` repository variable naming a
-direct owner; it checks existing names against that owner and repository, and
-checks ownership after a first upload before continuing to dependent crates.
-The token is passed only to Cargo for upload, never to the staging registry.
+server errors stop the lane. The lane requires a `CRATES_IO_OWNER` repository
+variable naming a direct owner; it checks existing names against that owner and
+repository, and checks ownership after a first upload before continuing to
+dependent crates.
+
+Cargo publication uses [crates.io trusted publishing](https://crates.io/docs/trusted-publishing).
+Each crate must trust GitHub Actions for owner `sebastian-software`, repository
+`palamedes`, workflow `publish.yml`, with no environment constraint. The
+`publish-cargo` job grants `id-token: write` and exchanges its GitHub identity
+through the commit-pinned `rust-lang/crates-io-auth-action`. Its temporary token
+is passed as `CARGO_REGISTRY_TOKEN` only to the SDK upload step and is revoked
+by the action when the job completes. No long-lived Cargo secret or token
+fallback is used. Authentication failure stops publication; upload-free
+validation does not request an OIDC token.
 
 Both `publicationEnabled: false` and the three `publish = false` manifests remain
 in effect. A reviewed release-enablement change must set the policy and explicit
 `publish = ["crates-io"]` allowlists after the v2 gates and release authorization.
-Preparation does not configure secrets, claim names, or authorize publication.
-Public name checks currently report all three names absent; that is not a name
-reservation. Ownership and the configured token's publish permissions still need
-confirmation during the authorized first release. crates.io's `/api/v1/me`
-identity endpoint requires website authentication and cannot validate this API
-token. Do not treat its HTTP 403 response as evidence that an upload token is
-invalid.
+The bootstrap publications establish names and ownership, but do not verify a
+functional SDK release or an OIDC upload. Verify actual token exchange and
+publication during the authorized coordinated release. A passing dry run does
+not prove trusted-publisher permissions.
 
 ## Build a Small CLI
 

@@ -200,9 +200,44 @@ test("The Cargo lane retains both independent publication guards and its verifie
   assert.match(cargoJob, /needs.determine-release.outputs.should_publish == 'true'/);
   assert.match(cargoJob, /inputs.dry_run/);
   assert.match(workflow, /node .\/scripts\/publish-rust-sdk.mjs --dry-run/);
-  assert.match(cargoJob, /secrets.CARGO_REGISTRY_TOKEN/);
   assert.match(cargoJob, /vars.CRATES_IO_OWNER/);
   assert.equal(indexPath("palamedes"), "pa/la/palamedes");
+});
+
+test("Cargo OIDC stays in the guarded publish job and supplies only the upload step", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/publish.yml", import.meta.url),
+    "utf8",
+  );
+  const cargoJob = workflow.slice(
+    workflow.indexOf("  publish-cargo:"),
+    workflow.indexOf("  publish-js:"),
+  );
+  const validationJob = workflow.slice(
+    workflow.indexOf("  validate-release:"),
+    workflow.indexOf("  publish-native:"),
+  );
+  const header = workflow.slice(0, workflow.indexOf("jobs:"));
+  assert.match(cargoJob, /github\.event_name != 'workflow_dispatch' \|\| !inputs\.dry_run/);
+  assert.match(cargoJob, /permissions:\n {6}contents: read\n {6}id-token: write/);
+  assert.doesNotMatch(header, /^ {2}id-token:/m);
+  assert.doesNotMatch(validationJob, /id-token: write|crates-io-auth-action|CARGO_REGISTRY_TOKEN/);
+  assert.doesNotMatch(cargoJob, /secrets\.|environment:|continue-on-error:|always\(\)/);
+
+  const auth = cargoJob.indexOf("      - name: Authenticate to crates.io with OIDC");
+  const publish = cargoJob.indexOf("      - name: Publish Cargo SDK in dependency order");
+  assert(auth > cargoJob.indexOf("uses: ./.github/actions/setup-workspace"));
+  assert(publish > auth);
+  assert.match(
+    cargoJob.slice(auth, publish),
+    /id: crates-auth\n {8}uses: rust-lang\/crates-io-auth-action@[a-f0-9]{40} # v\d+\.\d+\.\d+/,
+  );
+  assert.match(
+    cargoJob.slice(publish),
+    /env:\n {10}CARGO_REGISTRY_TOKEN: \$\{\{ steps.crates-auth.outputs.token \}\}/,
+  );
+  assert.equal(cargoJob.match(/CARGO_REGISTRY_TOKEN/g)?.length, 1);
+  assert.doesNotMatch(workflow, /secrets\.CARGO_REGISTRY_TOKEN/);
 });
 
 test("The publisher orders verified archives, skips exact versions, and stops before dependents on failure", async () => {
