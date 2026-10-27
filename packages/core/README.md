@@ -80,7 +80,7 @@ and their related types. React and Solid re-export the switch-item helper for
 component packages.
 
 `defineLocaleControls` also binds deliberate-choice cookies, canonical URLs, and
-suggestion decisions for the cookie, route, subdomain, and tld strategies. Under
+suggestion decisions for the cookie, route, domain, subdomain, and tld strategies. Under
 the host strategies a locale switch changes the host, so `canonicalUrl()` and
 `suggest()` return host-carrying URLs. Those are protocol-relative
 (`//host/path`) by default — correct on http locally and https in production —
@@ -104,6 +104,15 @@ and the [core API reference](https://github.com/sebastian-software/palamedes/blo
 non-empty unique locale set, the default locale, cookie names, `http`/`https`
 protocols, and configured DNS hosts/TLD labels. Locale identifiers only need to
 be DNS labels when the `subdomain` or `tld` strategy places them in a host.
+
+For unrelated language domains without path prefixes, configure
+`hosts: { mode: "domain", locales: { en: "product.example", de: "mein-produkt.de" } }`
+and resolve requests with `strategy: "domain"`. The map must include every
+locale with a distinct host. Existing `mode: "map"` keeps its prefixed paths.
+`controls.seoLinks({ locale, pathname })` derives canonical and language alternate
+link descriptors, including `x-default`; `xDefaultLocale: false` omits the latter.
+Use `protocol: "https"` for absolute SEO URLs. Static builds supply their
+canonical `requestHost` for TLD/subdomain URLs and retain their build locale.
 
 ## Client-Side Language Suggestions
 

@@ -1,8 +1,9 @@
 # Locale Strategies In The Example Matrix
 
-The example matrix proves four authoritative locale strategies — cookie, route,
-subdomain, and tld — plus one derived host mapping behavior on top of the route
-strategy.
+Locale controls support five authoritative strategies: cookie, route, domain,
+subdomain, and tld. The example matrix proves cookie, route, subdomain, and tld
+integrations plus derived host mapping on top of the route strategy. Domain
+mapping and SEO link generation have focused core contract tests.
 
 ## Language Preference Matching
 
@@ -115,6 +116,57 @@ The examples treat host mapping as:
 When host mapping disagrees with the rendered locale, the example shows the same
 info bar used for `Accept-Language` mismatches, but the CTA points to the
 canonical host plus path for the recommended locale.
+
+## Domain Strategy
+
+Use `hosts.mode: "domain"` when each locale has an explicit canonical host and
+paths have no language prefix. The domains may have unrelated names:
+
+```ts
+const locales = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+  protocol: "https",
+  hosts: {
+    mode: "domain",
+    locales: { en: "product.example", de: "mein-produkt.de" },
+  },
+});
+
+locales.resolve({ strategy: "domain", requestHost: "mein-produkt.de" });
+// { locale: "de", source: "host" }
+locales.canonicalUrl({ locale: "de", pathname: "/pricing" });
+// https://mein-produkt.de/pricing
+locales.seoLinks({ locale: "de", pathname: "/pricing" });
+// canonical, en/de alternates, and the English x-default
+```
+
+Every configured locale must have a distinct host. Host matching ignores DNS
+case and request ports. Destination URLs use the configured host and its optional
+port; a development request's port is never copied to another domain. Unknown
+hosts fall back to `Accept-Language` and then `defaultLocale`. Applications can
+keep a prerendered build's locale authoritative instead of calling `resolve()`.
+
+This is an opt-in strategy. Existing `hosts.mode: "map"` integrations continue
+to use locale-prefixed paths and host mismatch suggestions. Switching to domain
+mode changes public URLs, so move existing prefixed URLs with application-owned
+redirects when adopting it. Language changes still load a new document.
+
+### SEO link descriptors
+
+`seoLinks()` returns framework-neutral descriptors with `href`, `rel`, and, for
+alternates, `hrefLang`. It uses exactly the URL policy of `canonicalUrl()` and
+orders links as the current canonical, one alternate per configured locale, and
+an `x-default` pointing to `defaultLocale`. Set `xDefaultLocale` to another
+configured locale or `false` to omit that link. Unsupported locale inputs throw
+`TypeError`. Query strings are included only when passed as `search`.
+
+Set `protocol: "https"` for absolute production SEO URLs. Without an explicit
+protocol, host-based URLs remain protocol-relative; route-only configurations
+return paths. For TLD and subdomain strategies, pass the canonical build host as
+`requestHost` during prerendering so previews cannot change the public SEO URLs.
+The caller owns page availability, rendering the descriptors, sitemap XML, and
+any application-specific path normalization.
 
 ## Subdomain Strategy
 
