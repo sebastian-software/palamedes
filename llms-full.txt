@@ -648,9 +648,9 @@ Missing compiled entries throw `MissingCompiledMessageError`; execution failures
 also propagate to host error handling. `onMissing`/`onError` are observers, not
 fallback handlers. `keepSourceFallbacks` is a legacy option name that retains
 diagnostic source metadata only; it cannot restore source rendering. Missing
-translations instead use the compiler's fallback chain. Set
-`keepSourceFallbacks: false` for compact diagnostic metadata when embedding
-authored source text is undesirable. Standard adapters provide adapter-owned
+translations instead use the compiler's fallback chain. Its v2 default is
+`false` (v1 adapters defaulted to `true`), which omits that diagnostic metadata
+and keeps output compact. Standard adapters provide adapter-owned
 active-locale compiled delivery, shared server catalog storage and ordinary host error UI;
 applications do not serialize raw ICU or maintain catalog maps. See
 `/docs/migration-v2.md`.
@@ -662,13 +662,15 @@ Use `@palamedes/vite-plugin`. Put `palamedes()` in the Vite plugin list alongsid
 ### Next.js
 
 Use `@palamedes/next-plugin`. Keep Next-specific behavior in the adapter; do
-not move catalog semantics into application code. Set `messageSplitting: true`
-to split client messages with the Next module graph. Set `serverFunctions: true`
-to initialize request-local i18n for recognized Server Functions and Actions;
-that mode requires exactly one `palamedes.server` module in the project root or
-`src`, exporting `initializeServerFunctionI18n`. The initializer should load
-and activate a fresh request-local instance and be request-memoized or
-idempotent.
+not move catalog semantics into application code. Client messages follow the
+Next module graph automatically; do not set the deprecated `messageSplitting`
+option, and note that `messageSplitting: false` throws. Request-local i18n for
+recognized Server Functions and Actions is enabled automatically when exactly
+one `palamedes.server` module exists in the project root or `src`; it must
+export `initializeServerFunctionI18n`. `serverFunctions: false` opts out;
+`serverFunctions: true` makes a missing module a configuration error. The
+initializer should load and activate a fresh request-local instance and be
+request-memoized or idempotent.
 
 Keep locale negotiation read-only. Do not write or renew locale cookies in the
 Server Function initializer or on every Server Action POST in middleware/proxy;

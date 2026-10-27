@@ -738,11 +738,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
 
     config(viteConfig, env) {
-      // A catalog chunk can be unavailable briefly during a staggered deploy or
-      // while an import-map fragment is still loading. Keep the authored
-      // message in first-party output by default so that case remains readable
-      // instead of exposing the opaque compiled id. Consumers that cannot ship
-      // source text can opt out explicitly.
+      // Authored source text is diagnostic metadata only and is omitted by
+      // default. A missing compiled message throws whether or not it is kept.
       resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false;
       stripNonEssentialProps = env.command === "build";
       isBuildCommand = env.command === "build";
