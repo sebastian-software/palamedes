@@ -405,7 +405,8 @@ pub(crate) fn lower_choice_options_from_jsx(
         let key = attr.name.get_identifier().name.to_string();
         if matches!(
             key.as_str(),
-            "id" | "message" | "comment" | "context" | "value"
+            // `key` is React's list key (react/jsx-key), not a branch.
+            "id" | "message" | "comment" | "context" | "value" | "key"
         ) {
             continue;
         }
@@ -845,6 +846,60 @@ mod choice_branch_tests {
         assert_every_case_fails("transform", |source| {
             transform_macros(source, FILENAME, None).map(|result| result.code)
         });
+    }
+
+    #[test]
+    fn key_is_a_reserved_attribute_not_a_branch() {
+        for key in [
+            "key={item.id}",
+            "key={`row-${index}`}",
+            "key={ids[index]}",
+            "key={getKey(item)}",
+            "key={item}",
+            "key=\"static\"",
+        ] {
+            for (element, message) in [
+                (
+                    format!("<Plural {key} value={{count}} one=\"# item\" other=\"# items\" />"),
+                    "{count, plural, one {# item} other {# items}}",
+                ),
+                (
+                    format!("<Select value={{gender}} {key} male=\"he\" other=\"they\" />"),
+                    "{gender, select, male {he} other {they}}",
+                ),
+                (
+                    format!("<SelectOrdinal value={{count}} one=\"#st\" other=\"#th\" {key} />"),
+                    "{count, selectordinal, one {#st} other {#th}}",
+                ),
+            ] {
+                let body = format!("[ids, getKey].map((item, index) => {element})");
+                let source = module(&body);
+                let extracted = extract_messages(&source, FILENAME)
+                    .unwrap_or_else(|error| panic!("extraction for `{element}` failed: {error}"));
+                assert_eq!(
+                    extracted
+                        .iter()
+                        .map(|record| record.message.as_str())
+                        .collect::<Vec<_>>(),
+                    [message],
+                    "extraction for `{element}`"
+                );
+
+                let options = NativeTransformOptions {
+                    keep_source_fallbacks: Some(true),
+                    ..NativeTransformOptions::default()
+                };
+                let transformed = transform_macros(&source, FILENAME, Some(options))
+                    .unwrap_or_else(|error| panic!("transform for `{element}` failed: {error}"));
+                assert!(
+                    transformed
+                        .code
+                        .contains(&format!("message: \"{message}\"")),
+                    "transform for `{element}` should embed {message}:\n{}",
+                    transformed.code
+                );
+            }
+        }
     }
 
     #[test]
