@@ -23,6 +23,11 @@ stable v2-or-later versions after explicit release authorization. The current
 Rust SDK release. Keep Git installation instructions until the matching registry
 versions actually exist.
 
+The [v2 bootstrap preparation](./prerelease-preparation.md) stages a functional
+`2.0.0-alpha.1` candidate outside the checkout for first-publication review. It
+does not enable the stable publisher or authorize an upload; the normal release
+hold and stable-only policy remain in place.
+
 `pnpm verify:rust-sdk` packages the three crates in dependency order and inspects
 all archive file lists, license texts, READMEs, packaged builds, and rustdoc. A
 loopback sparse staging registry serves those exact archives. An independent
