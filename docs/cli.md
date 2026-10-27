@@ -479,10 +479,27 @@ pmds catalog compile --target js --output .palamedes/catalogs
 ```
 
 Each module exports `messages` for `i18n.load()`. Configured catalogs of the
-same locale are merged, fallbacks follow the configuration, and `--locale`
-limits the output. `--config`, `--fail-on-missing`, and `--json` work as
-below; `--schema`, `--catalog-dir`, and `--fallback-locale` apply to the Rust
-target only.
+same locale are merged, and `--locale` limits the output. Fallbacks follow the
+configuration; `--fallback-locale` replaces the configured `fallback-locales`
+with one shared chain, and each locale it names must be listed in `locales`.
+`--config`, `--fail-on-missing`, and `--json` work as below; `--schema` and
+`--catalog-dir` apply to the Rust target only.
+
+A source message that appears in several catalogs compiles to one runtime ID.
+Identical output is kept once, and a translation takes precedence over another
+catalog's fallback for the same message. Two different compilations of the same
+message fail with `compile.conflicting_message`, naming both catalogs.
+
+No module is written while any catalog fails. Each failure names the catalog
+file that holds the message, that file's locale (a fallback locale when the
+message was reached through one), and the source message. Invalid or
+unsupported ICU fails with the compiler's code, such as
+`compile.invalid_icu_message`; `--fail-on-missing` reports each missing or
+fuzzy translation as `compile.missing_translation`. With `--json`, the document also
+contains a `diagnostics` array whose entries have `severity`, `code`,
+`message`, `catalogPath`, `locale`, `requestedLocale`, `sourceKey` when the
+source message is known, and `conflictingCatalogPath` for conflicts. The command
+then exits 1 and repeats the failure on stderr.
 
 With `--target rust`, compile PO translations into external Rust language files against an existing
 application contract. This experimental command requires an exported

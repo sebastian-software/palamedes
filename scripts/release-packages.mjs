@@ -253,3 +253,58 @@ export function isMissingFromRegistry(output) {
     output.includes("is not in the npm registry")
   );
 }
+
+const WORKSPACE_DEPENDENCY_FIELDS = ["dependencies", "optionalDependencies", "peerDependencies"];
+const MANIFEST_DEPENDENCY_FIELDS = [...WORKSPACE_DEPENDENCY_FIELDS, "devDependencies"];
+
+// pnpm replaces workspace references when it packs a package. These are the
+// ranges consumers receive: `workspace:*` pins the exact coordinated version
+// (the native optional dependencies rely on this), `workspace:^` and
+// `workspace:~` keep their operator, and an explicit range stays as written.
+export function expectedWorkspaceRange(specifier, version) {
+  const range = specifier.slice("workspace:".length);
+  if (range === "*") return version;
+  if (range === "^" || range === "~") return `${range}${version}`;
+  return range;
+}
+
+// Compares a packed manifest with its source manifest. `workspaceVersions`
+// maps every public workspace package name to the version it publishes.
+export function packedManifestProblems(sourceManifest, packedManifest, workspaceVersions) {
+  const problems = [];
+  for (const field of ["name", "version"]) {
+    if (packedManifest?.[field] !== sourceManifest[field]) {
+      problems.push(
+        `packed ${field} is ${String(packedManifest?.[field])}, expected ${sourceManifest[field]}`,
+      );
+    }
+  }
+
+  for (const field of MANIFEST_DEPENDENCY_FIELDS) {
+    for (const [name, specifier] of Object.entries(packedManifest?.[field] ?? {})) {
+      if (typeof specifier === "string" && /^(?:workspace|catalog):/u.test(specifier)) {
+        problems.push(`${field}.${name} still uses ${specifier} after packing`);
+      }
+    }
+  }
+
+  for (const field of WORKSPACE_DEPENDENCY_FIELDS) {
+    for (const [name, specifier] of Object.entries(sourceManifest[field] ?? {})) {
+      if (typeof specifier !== "string" || !specifier.startsWith("workspace:")) continue;
+      const version = workspaceVersions.get(name);
+      if (!version) {
+        problems.push(`${field}.${name} uses ${specifier}, but ${name} is not a public package`);
+        continue;
+      }
+      const expected = expectedWorkspaceRange(specifier, version);
+      const packed = packedManifest?.[field]?.[name];
+      if (packed !== expected) {
+        problems.push(
+          `${field}.${name} packed as ${String(packed)}, expected ${expected} from ${specifier}`,
+        );
+      }
+    }
+  }
+
+  return problems;
+}

@@ -277,8 +277,9 @@ Before lifting the hold:
    workflow with `dry_run` against the held source revision. This verifies the
    implementation with the current manifest versions; it is not evidence for
    the future versioned 2.0 artifacts. The dry run checks package builds,
-   declarations, tests, native artifacts for all six platforms, and the staged
-   Rust SDK consumer without uploading packages.
+   declarations, tests, native artifacts for all six platforms, the packed
+   JavaScript manifests in publish order, crates.io names and ownership, and
+   the staged Rust SDK consumer without uploading packages.
 2. Resolve registry readiness separately: `node scripts/check-first-publish.mjs`
    checks that npm package names already exist; it does not verify trusted
    publisher configuration. Follow #1309 and the
@@ -294,7 +295,12 @@ Before lifting the hold:
 After authorized enablement generates the Release Please PR, run the Publish
 workflow with `dry_run` on that PR's exact 2.0 revision before merging it. The
 release PR merge triggers actual publication; a source dry run at `1.25.1` does
-not replace this versioned artifact check.
+not replace this versioned artifact check. Only a commit titled
+`chore: release main` (optionally with its pull request number) starts a
+publication. Before any upload, the actual publication also runs the Cargo
+preflight: it exchanges the workflow's OIDC identity for a crates.io token and
+checks the policy, allowlists, and ownership, so npm cannot ship a release that
+crates.io then rejects.
 
 `pnpm release:rust:dry-run` can run the SDK staging check locally without
 uploading. Once enabled, publication still rejects versions below

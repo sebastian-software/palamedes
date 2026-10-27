@@ -47,7 +47,7 @@ function determine(root, env) {
 }
 
 test("determines release publication from force-publish and release commits", () => {
-  const root = fixtureRepository(["feat: first", "chore: release 1.17.0"]);
+  const root = fixtureRepository(["feat: first", "chore: release main (#1203)"]);
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
   const base = execFileSync("git", ["rev-parse", "HEAD^"], { cwd: root, encoding: "utf8" }).trim();
 
@@ -69,8 +69,42 @@ test("determines release publication from force-publish and release commits", ()
   }
 });
 
+test("only the Release Please pull request subject counts as a release commit", () => {
+  for (const [subject, expected] of [
+    ["chore: release main", "true"],
+    ["chore: release main (#1203)", "true"],
+    ["chore: release 2.0.0", "false"],
+    ["chore: release notes for the docs site", "false"],
+    ["chore: release main follow-up", "false"],
+    ['Revert "chore: release main (#1203)"', "false"],
+    ["chore(main): release 2.0.0", "false"],
+  ]) {
+    const root = fixtureRepository(["feat: first", subject]);
+    try {
+      assert.equal(
+        determine(root, { BASE_REF: "HEAD^", GITHUB_EVENT_NAME: "push", GITHUB_SHA: "HEAD" }),
+        `should_publish=${expected}\n`,
+        subject,
+      );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }
+
+  // A push can carry several commits; the release commit need not be the last.
+  const root = fixtureRepository(["feat: first", "chore: release main (#1203)", "docs: follow-up"]);
+  try {
+    assert.equal(
+      determine(root, { BASE_REF: "HEAD~2", GITHUB_EVENT_NAME: "push", GITHUB_SHA: "HEAD" }),
+      "should_publish=true\n",
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
 test("a release hold blocks release commits and forced publication, but permits a dry run", () => {
-  const root = fixtureRepository(["feat: first", "chore: release 2.0.0"], {
+  const root = fixtureRepository(["feat: first", "chore: release main"], {
     publicationEnabled: false,
   });
   try {

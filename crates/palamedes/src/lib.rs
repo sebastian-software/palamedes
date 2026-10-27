@@ -110,6 +110,7 @@ pub use extract::{
 };
 pub use extract_cache::{ExtractCache, default_cache_path};
 pub use ferrocat::{CatalogMachineTranslationReview, CatalogMachineTranslationStatus};
+pub use icu_text::compiled_message_key;
 pub use mdx::{
     MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework, MdxOptions, analyze_mdx,
     extract_mdx_messages,

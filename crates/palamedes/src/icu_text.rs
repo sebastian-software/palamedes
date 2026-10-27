@@ -87,7 +87,8 @@ fn escape_apostrophe_runs(
 ///
 /// The runtime syntax policy keeps transform-side IDs aligned with Ferrocat's
 /// policy-aware artifact compilation. Context is not ICU and stays untouched.
-pub(crate) fn compiled_message_key(message: &str, context: Option<&str>) -> String {
+#[must_use]
+pub fn compiled_message_key(message: &str, context: Option<&str>) -> String {
     ferrocat::compiled_key_with_policy(message, context, RUNTIME_ICU_SYNTAX_POLICY)
 }
 
