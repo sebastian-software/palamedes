@@ -199,8 +199,12 @@ SSR, loaders and actions. Applications do not construct catalog import maps.
 
 The adapter keeps its server entrypoints and runtime packages in Vite's SSR
 module graph automatically, including when installed from npm rather than
-linked from a workspace. Applications do not need a Palamedes-specific
-`ssr.noExternal` configuration.
+linked from a workspace. On Vite 6 and newer this applies to every server
+environment, such as the `rsc` environment used by Waku and React Router RSC,
+not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
+shares Waku's request store. Existing `noExternal` entries and `true` are
+preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
+`resolve.noExternal` configuration.
 
 `@palamedes/vite-plugin/delivery` exports `createViteCatalogDelivery({
 clientDirectory, development?, manifestName? })`. Framework adapters call

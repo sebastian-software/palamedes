@@ -79,6 +79,12 @@ function bareMessageAsset(rendered: string, locale: string): string {
   return `export const locale=${JSON.stringify(locale)};${withoutDefault}`;
 }
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config.";
+// Server packages that must stay in Vite's module graph. The runtime and
+// plugin entrypoints import `virtual:` catalog modules, which Node cannot
+// resolve. The Waku adapter must share the bundled `waku/router/server`
+// instance whose request store Waku's router populates. Entries for packages
+// an application does not install have no effect.
+const SERVER_GRAPH_PACKAGES = ["@palamedes/runtime", "@palamedes/vite-plugin", "@palamedes/waku"];
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10);
 // `moduleType` and Rollup's `moduleTypes` bridge require Vite's Rolldown-based
 // pipeline. The official rolldown-vite alias exposes this on the Vite 7 line,
@@ -751,13 +757,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       // Installed packages are externalized by default, unlike workspace links.
       // Keep the server adapter and its virtual catalog imports in Vite's graph.
+      // Vite 6+ applies `ssr.noExternal` to the `ssr` environment only; the
+      // configEnvironment hook below covers other server environments.
       viteConfig.ssr ??= {};
       if (viteConfig.ssr.noExternal !== true) {
         const existing = viteConfig.ssr.noExternal;
         viteConfig.ssr.noExternal = [
           ...(existing ? (Array.isArray(existing) ? existing : [existing]) : []),
-          "@palamedes/runtime",
-          "@palamedes/vite-plugin",
+          ...SERVER_GRAPH_PACKAGES,
         ];
       }
 
@@ -771,6 +778,25 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       for (const macroId of ids) {
         viteConfig.optimizeDeps.exclude.push(macroId);
       }
+    },
+
+    // React Server Component frameworks (Waku, @vitejs/plugin-rsc) run server
+    // code in environments such as `rsc`. Those environments do not inherit
+    // `ssr.noExternal`, so add the same packages to every server consumer.
+    // Vite runs this after mapping `ssr.noExternal` onto the `ssr` environment,
+    // which therefore already contains the entries.
+    configEnvironment(name, environmentConfig) {
+      const consumer = environmentConfig.consumer ?? (name === "client" ? "client" : "server");
+      if (consumer !== "server") return;
+      const noExternal = environmentConfig.resolve?.noExternal;
+      if (noExternal === true) return;
+      const existing =
+        noExternal === undefined ? [] : Array.isArray(noExternal) ? noExternal : [noExternal];
+      const missing = SERVER_GRAPH_PACKAGES.filter(
+        (packageName) => !existing.includes(packageName),
+      );
+      if (missing.length === 0) return;
+      return { resolve: { noExternal: missing } };
     },
 
     // Vite normalizes `base` and applies every plugin's config hook before
