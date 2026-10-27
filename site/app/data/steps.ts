@@ -62,7 +62,9 @@ export default defineConfig({ plugins: [palamedes(), react()] })
       body: "Author the message in your component, then run one command — it creates src/locales/en.po and de.po.",
       code: `// src/App.tsx
 import { Trans } from "@palamedes/react/macro"
-export const App = () => <h1><Trans>Welcome to Palamedes</Trans></h1>
+export default function App() {
+  return <h1><Trans>Welcome to Palamedes</Trans></h1>
+}
 
 $ pmds extract`,
     },
@@ -85,8 +87,10 @@ msgstr "Willkommen bei Palamedes"`,
     {
       title: "Install",
       body: "Core, runtime, Solid adapter, and the Vite plugin — plus the CLI as a dev dependency.",
-      code: `pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
-pnpm add -D @palamedes/cli @solidjs/vite-plugin`,
+      code: `pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web@2.0.0-rc.16 solid-js@2.0.0-rc.16
+pnpm add -D @palamedes/cli @solidjs/vite-plugin@3.0.0-next.50`,
+      aside:
+        "Solid 2 is still published only as prerelease versions, and an unpinned solid-js resolves to Solid 1. The commands pin the versions the maintained examples use.",
     },
     PACKAGE_BOUNDARY_STEP,
     {
@@ -116,7 +120,9 @@ export default defineConfig({ plugins: [palamedes({ framework: "solid" }), solid
       body: "Author the message in your component, then run one command — it creates src/locales/en.po and de.po.",
       code: `// src/App.tsx
 import { Trans } from "@palamedes/solid/macro"
-export const App = () => <h1><Trans>Welcome to Palamedes</Trans></h1>
+export default function App() {
+  return <h1><Trans>Welcome to Palamedes</Trans></h1>
+}
 
 $ pmds extract`,
     },
