@@ -75,21 +75,27 @@ export function createTanStackServerI18nRequestMiddleware(
     return deliveryPromise;
   };
 
+  // The resolver receives the same Request object that `runner.run()` gets, so
+  // the request is the key for handing its resolved locale to delivery.
+  const activeLocales = new WeakMap<Request, string>();
+  // Create the scope once per middleware. Each scope owns an AsyncLocalStorage,
+  // and Node 22 keeps every enabled one for the process lifetime.
+  const runner = createScopedTanStackI18nRunner(async (request) => {
+    const locale = await resolveLocale(request);
+    activeLocales.set(request, locale);
+    const options = resolveOptions ? await resolveOptions(request) : {};
+    // Keep the root middleware entry loadable without Vite. The server entry
+    // imports the generated virtual catalog module and is loaded only when a
+    // catalog-backed middleware is actually invoked.
+    const { createTanStackServerI18n } = await import("./server");
+    return await createTanStackServerI18n({ ...options, locale });
+  });
+
   return createMiddleware().server(async ({ handlerType, next, request }) => {
-    let activeLocale: string | undefined;
-    const runner = createScopedTanStackI18nRunner(async (currentRequest) => {
-      const locale = await resolveLocale(currentRequest);
-      activeLocale = locale;
-      const options = resolveOptions ? await resolveOptions(currentRequest) : {};
-      // Keep the root middleware entry loadable without Vite. The server entry
-      // imports the generated virtual catalog module and is loaded only when a
-      // catalog-backed middleware is actually invoked.
-      const { createTanStackServerI18n } = await import("./server");
-      return await createTanStackServerI18n({ ...options, locale });
-    });
     const result = await runner.run(request, async () => {
       const nextResult = await next();
       const delivery = await getDelivery();
+      const activeLocale = activeLocales.get(request);
       return handlerType === "router" && delivery && activeLocale
         ? await delivery(nextResult, activeLocale, request)
         : nextResult;
