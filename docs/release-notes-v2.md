@@ -37,6 +37,13 @@ Mode, React Router RSC, Remix, TanStack Start, and Waku. The integrations retain
 their [stability tiers](./stability.md#stability-tiers): Waku, Remix, and React
 Router RSC remain Preview.
 
+React Router Framework Mode has no dedicated adapter package. Its integration is
+the Vite plugin plus server wiring in the application: a request-scoped server
+i18n runner, the catalog document transform in `app/entry.server.tsx`, and a
+scope around translated loaders and actions. The
+[React Router Framework Mode guide](./api/react-router.md) shows that wiring
+from the checked examples.
+
 For Next.js, automatic browser splitting is now the default. Remove
 `messageSplitting: false`; it is rejected rather than selecting the old path.
 The plugin discovers `palamedes.server.*` for Server Function initialization,

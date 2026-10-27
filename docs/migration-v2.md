@@ -80,12 +80,39 @@ standard host workflow and does not permit marking raw ICU maps with
 | Next.js                                | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the legacy false option is rejected. Request server catalogs are shared and immutable. |
 | Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                 |
 | TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                       |
+| React Router Framework Mode            | Drop `experimentalGraphSplitting`, server `.po` maps, the manifest reader, and client `setClientI18n()`.     | No adapter package; the app wires delivery and request scopes per the [guide](./api/react-router.md).                |
 
 Host-specific guides may expose lower-level hooks for custom servers, but the
 checked standard examples are the evidence for the transparent path. Do not
 claim a host migration is complete until its initial and lazy failure proof,
 locale selection, recovery behavior, and published parser-free artifact check
 pass.
+
+### React Router Framework Mode
+
+There is no adapter package for this host; the application keeps its own
+server wiring. The v1 examples enabled
+`experimentalGraphSplitting: { localeBinding: "import-map" }`, imported every
+locale's `.po` catalog into a server map, and read
+`palamedes-split-manifest.json` to inject the import map with a hand-written
+stream transform. Their `entry.client.tsx` initialized the browser instance
+through `setClientI18n()`, and their loaders called the server scope's
+`activate()`.
+
+In v2:
+
+- call `palamedes()` without `experimentalGraphSplitting`;
+- create request i18n with `createViteServerI18n({ locale })` from
+  `@palamedes/vite-plugin/server` instead of importing catalogs;
+- replace the manifest reader and stream transform with
+  `createViteCatalogDelivery()` and its `createDocumentTransform()`;
+- remove the client bootstrap; the plugin initializes the browser instance from
+  `<html lang>`;
+- run loaders and actions inside the request scope with `run()` instead of
+  calling `activate()`.
+
+The [React Router Framework Mode guide](./api/react-router.md) shows the
+complete files.
 
 ### Stable Remix 3
 

@@ -133,13 +133,14 @@ The `react-router-cookie`, `react-router-route`, `react-router-subdomain`, and
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
+The [React Router Framework Mode guide](./api/react-router.md) describes the
+server wiring these examples use.
+
 Current tooling note:
 
 - React Router builds can emit non-actionable sourcemap location warnings during
   the underlying Vite/Rollup build. The example configs now filter that known
   warning so example builds stay clean while the underlying behavior remains
   documented here.
-- React Router's current dev/build toolchain still declares Vite support only
-  through v7 in peer metadata, but the examples are intentionally verified on
-  Vite 8. This is treated as an upstream maintenance lag, not as a blocker for
-  the Palamedes example matrix.
+- `@react-router/dev@8.3.1` declares `vite: ^7.0.0 || ^8.0.0` as its peer
+  range. The examples are verified on Vite 8.
