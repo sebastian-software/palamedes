@@ -1,7 +1,7 @@
 import { defineBuildConfig } from "unbuild";
 
 export default defineBuildConfig({
-  entries: ["./src/index", "./src/react-router", "./src/delivery", "./src/server"],
+  entries: ["./src/index", "./src/delivery"],
   declaration: true,
   failOnWarn: false,
   rollup: {

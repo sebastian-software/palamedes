@@ -104,8 +104,8 @@ through `setClientI18n()`, and their loaders called the server scope's
 In v2:
 
 - call `palamedes()` without `experimentalGraphSplitting`;
-- create request i18n with `createViteServerI18n({ locale })` from
-  `@palamedes/vite-plugin/server` instead of importing catalogs;
+- create request i18n with `createBundledServerI18n({ locale })` from
+  `@palamedes/runtime/server/bundled` instead of importing catalogs;
 - replace the manifest reader and stream transform with
   `createViteCatalogDelivery()` and its `createDocumentTransform()`;
 - remove the client bootstrap; the plugin initializes the browser instance from
@@ -141,9 +141,9 @@ sent browser catalogs as a serialized ICU bootstrap: `loadClientMessages` on
   imports the entry, so remove `initializeRemixClientI18n()` from the entry.
   Pass `nonce` when the page uses a script CSP.
 
-A serialized ICU bootstrap no longer works: `initializeRemixClientI18n()`
-throws a `TypeError` for inert ICU catalogs. Keep the Node hook order
-(`remix/node-tsx`, then `@palamedes/remix/register`). See the
+V2 removes the serialized ICU bootstrap APIs; the
+[removed APIs table](#replace-removed-apis) lists their replacements. Keep the
+Node hook order (`remix/node-tsx`, then `@palamedes/remix/register`). See the
 [Remix API guide](./api/remix.md#client-catalog-assets) and the checked
 [Remix cookie example](../examples/remix-cookie).
 
@@ -197,6 +197,13 @@ extractable rather than constructed during rendering.
 | Next.js `serverFunctions` (default `false`)                                                      | Enabled automatically when one `palamedes.server` module exists in the project root or `src`. `false` opts out; `true` makes a missing module an error.                                                                                                                                 |
 | `failOnCompileError`                                                                             | Remove it. Invalid/unsupported ICU always fails compilation, and any value throws a migration error. `failOnMissing` remains the separate translation-completeness policy.                                                                                                              |
 | `CompiledMessageRuntime.pattern()`                                                               | Regenerate v1 catalog artifacts. The v2 ABI contains executable operations only.                                                                                                                                                                                                        |
+| `createViteServerI18n()` from `@palamedes/vite-plugin/server`                                    | `createBundledServerI18n()` from `@palamedes/runtime/server/bundled`; same options (`BundledServerI18nOptions`). The `./server` subpath is removed.                                                                                                                                     |
+| `@palamedes/vite-plugin/react-router` subpath                                                    | `createViteCatalogDelivery()` from `@palamedes/vite-plugin/delivery` (was `createReactRouterCatalogDelivery()`); the `ReactRouter*` types are named `Vite*` there.                                                                                                                      |
+| Remix `loadClientMessages`, `createClientBootstrap()`                                            | Pass a shared `createPalamedesRemixCatalogAssetRegistry()` as `catalogAssets.registry`; the adapter serves executable catalog assets.                                                                                                                                                   |
+| Remix `renderClientBootstrap()`                                                                  | `remixI18n.renderClientCatalog(locale)` and `await remixI18n.renderClientEntry(entry, { assetServer })` in the document.                                                                                                                                                                |
+| Remix `initializeRemixClientI18n()`, `readRemixI18nBootstrap()`                                  | Remove it; the `renderClientEntry()` bootstrap initializes the browser. Custom hosts use `startRemixClient()` or `initializeRemixClientI18nAsync()`.                                                                                                                                    |
+| Remix `REMIX_I18N_BOOTSTRAP_ID`, `RemixI18nBootstrap*` types                                     | Removed with the JSON bootstrap. `initializeRemixClientI18nAsync()` takes a `RemixClientDocument` as its `document` option.                                                                                                                                                             |
+| `PALEMEDES_REMIX_ASSET_PACKAGES`                                                                 | `PALAMEDES_REMIX_ASSET_PACKAGES`.                                                                                                                                                                                                                                                       |
 
 The existing `CatalogMessages` string-map type can describe build-time data;
 `load()` accepts only `CompiledCatalogMessages`. `CompiledPalamedesI18n` aliases

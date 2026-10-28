@@ -104,13 +104,13 @@ module (`examples/react-router-cookie/app/lib/i18n.server.ts`):
 ```ts
 import path from "node:path";
 import { createScopedI18nRunner } from "@palamedes/runtime/server";
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
 import { resolveLocaleFromRequest } from "./i18n";
 
 export const serverI18n = createScopedI18nRunner(
   (request) =>
-    createViteServerI18n({
+    createBundledServerI18n({
       locale: resolveLocaleFromRequest(request).locale,
       timeZone: "Europe/Berlin",
     }),
@@ -127,19 +127,14 @@ export const catalogDelivery = createViteCatalogDelivery({
   `{ run(request, next), scope }`. `run()` resolves a fresh i18n instance for
   the request and runs `next` inside the shared server i18n scope. If the
   resolver throws, `run()` throws `new Error(failureMessage, { cause })`.
-- `createViteServerI18n` is an alias of `createBundledServerI18n` from
-  `@palamedes/runtime/server/bundled`. It loads the active locale's compiled
-  catalog from the store that the Vite plugin generates, then returns a new
-  i18n instance for that locale. Pass `timeZone` and other `createI18n`
+- `createBundledServerI18n` from `@palamedes/runtime/server/bundled` loads the
+  active locale's compiled catalog from the store that the Vite plugin
+  generates, then returns a new i18n instance for that locale. Pass `timeZone` and other `createI18n`
   options here.
 - `createViteCatalogDelivery({ clientDirectory, development?, manifestName? })`
   reads the client build's `palamedes-split-manifest.json` and the locale import
   maps it names. React Router's client build is normally `build/client`. With
   `development: true` it reads nothing and returns a `null` binding.
-
-The same delivery function is also exported as `createReactRouterCatalogDelivery`
-from `@palamedes/vite-plugin/react-router`, a compatibility export. The
-examples use `/delivery`.
 
 `clientDirectory` above is resolved against the process working directory, so
 the cookie example expects its server to start in the application directory.
@@ -351,14 +346,14 @@ helper instead of `createScopedI18nRunner`
 (`examples/react-router-route/app/lib/i18n.server.ts`):
 
 ```ts
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { createServerI18nScope } from "@palamedes/runtime/server";
 import type { Locale } from "./i18n";
 
 export const serverI18nScope = createServerI18nScope();
 
 export function createServerI18n(locale: Locale) {
-  return createViteServerI18n({ locale, timeZone: "Europe/Berlin" });
+  return createBundledServerI18n({ locale, timeZone: "Europe/Berlin" });
 }
 
 export async function runServerI18n<Result>(
@@ -460,5 +455,4 @@ pnpm verify:examples:browser --framework react-router
 - The four examples pin React Router 8.3.1 and Vite 8. Other versions are not
   verified.
 - The [stability table](../stability.md#stability-tiers) has no row for this
-  host or for the `@palamedes/vite-plugin/server`, `/delivery`, and
-  `/react-router` subpaths.
+  host or for the `@palamedes/vite-plugin/delivery` subpath.

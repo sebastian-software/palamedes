@@ -1,12 +1,12 @@
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { createServerI18nScope } from "@palamedes/runtime/server";
 import type { Locale } from "./i18n";
 
 export const serverI18nScope =
-  createServerI18nScope<Awaited<ReturnType<typeof createViteServerI18n>>>();
+  createServerI18nScope<Awaited<ReturnType<typeof createBundledServerI18n>>>();
 
 export async function createServerI18n(locale: Locale) {
-  return createViteServerI18n({ locale, timeZone: "Europe/Berlin" });
+  return createBundledServerI18n({ locale, timeZone: "Europe/Berlin" });
 }
 
 export async function activateServerI18n(locale: Locale) {

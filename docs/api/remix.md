@@ -31,9 +31,8 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `@palamedes/remix/macro`
 - `@palamedes/remix/compiled`
 - `createRemixI18nServer(options)`
-- `initializeRemixClientI18n(options)`
-- `readRemixI18nBootstrap(options?)`
-- `REMIX_I18N_BOOTSTRAP_ID`
+- `startRemixClient(loadEntry, options?)`
+- `initializeRemixClientI18nAsync(options)`
 - `createRemixI18nRequestScope(resolveI18n)`
 - `remixI18nContext`
 
@@ -106,8 +105,9 @@ Macro calls use the plain, framework-neutral getter; locale changes require
 document navigation.
 
 `includeSourceMetadata` defaults to `false` in every environment. Set
-`includeSourceMetadata: true` to retain authored text as diagnostic metadata. Missing compiled messages always throw; metadata never
-supplies replacement output.
+`includeSourceMetadata: true` to retain authored text as diagnostic metadata.
+Missing compiled messages always throw; metadata never supplies replacement
+output.
 
 `.po` imports are claimed by the hook before Node's default loader runs. They
 compile through the same catalog module path used by the Vite/Next integrations
@@ -146,20 +146,14 @@ export const assetServer = createAssetServer({
 `@palamedes/runtime`, and `@palamedes/remix`. They must be in `allowPackages`
 because transformed modules import `getI18n()` for ordinary macros and the
 Remix compiled component for rich messages. Remix rewrites those package
-imports to served asset URLs. The legacy JSON bootstrap is not executable; the
-browser must receive a generated catalog asset under #1214. If `runtimeModule`
-selects another package, allow that exact package name instead of
-`@palamedes/runtime`.
-
-Use the correctly spelled export in new code. The previous
-`PALEMEDES_REMIX_ASSET_PACKAGES` spelling remains available as a deprecated
-alias for compatibility.
+imports to served asset URLs. If `runtimeModule` selects another package, allow
+that exact package name instead of `@palamedes/runtime`.
 
 `PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
 `runtimeModule`, and `includeSourceMetadata` options. Defaults match the Node
 loader, and the asset loader rejects `keepSourceFallbacks` with the same
-migration error. Transform failures identify the source module and retain the original
-error as their cause.
+migration error. Transform failures identify the source module and retain the
+original error as their cause.
 
 The browser loader transforms script source and registers its compiled message IDs
 with the shared catalog registry. Native compilation remains on the server;
@@ -245,8 +239,7 @@ Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
 object exposes `resolveLocale(input)` for standalone locale resolution,
 `createI18n(locale)` for manual instance creation, and `get(context?)` — the
 read accessor for the active request scope, which is how handlers running
-under `middleware()` reach the current i18n instance. It also exposes
-`createClientBootstrap(locale)` and `renderClientBootstrap(locale, options?)`.
+under `middleware()` reach the current i18n instance.
 
 ## Client Catalog Assets
 
@@ -289,9 +282,7 @@ dependency resolution. Configure the actual asset server's mounts instead.
 
 The lower-level `initializeRemixClientI18nAsync()` and `startRemixClient()` are
 available for custom host integrations. Generated executable catalogs never
-cross JSON. Legacy `renderClientBootstrap()` and `readRemixI18nBootstrap()`
-remain migration diagnostics: inert ICU payloads are rejected by the runtime.
-Do not brand raw ICU maps with `defineCompiledCatalog()`; it validates native
+cross JSON. Do not brand raw ICU maps with `defineCompiledCatalog()`; it validates native
 generated constants and functions and does not compile ICU.
 
 The browser requests only the document locale. Locale changes perform a full

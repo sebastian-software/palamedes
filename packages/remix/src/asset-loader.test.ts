@@ -21,7 +21,6 @@ import {
   createPalamedesRemixAssetLoader,
   createPalamedesRemixCatalogAssetRegistry,
   PALAMEDES_REMIX_ASSET_PACKAGES,
-  PALEMEDES_REMIX_ASSET_PACKAGES,
 } from "./index";
 
 const assetLoadContext = {
@@ -47,7 +46,6 @@ describe("createPalamedesRemixAssetLoader", () => {
       "@palamedes/runtime",
       "@palamedes/remix",
     ]);
-    expect(PALEMEDES_REMIX_ASSET_PACKAGES).toBe(PALAMEDES_REMIX_ASSET_PACKAGES);
   });
 
   it.each([

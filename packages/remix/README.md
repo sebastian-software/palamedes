@@ -62,10 +62,6 @@ an asset URL. The loader does not compile `.po` imports or load Palamedes config
 those remain server-hook responsibilities. A custom `runtimeModule` package
 must be added to `allowPackages` in place of the default package constant.
 
-Use the correctly spelled `PALAMEDES_REMIX_ASSET_PACKAGES` export in new code.
-The previous `PALEMEDES_REMIX_ASSET_PACKAGES` spelling remains available as a
-deprecated alias for compatibility.
-
 ### Development source maps and invalidation
 
 Enable Remix `sourceMaps` in development as shown above. The Palamedes loader
@@ -185,10 +181,12 @@ module's selected IDs change.
 
 ## Migration From Inert Catalogs
 
-The legacy JSON bootstrap cannot carry executable compiled functions and is
-rejected by the runtime. Remove application catalog maps, `loadClientMessages`
-and manual client initialization. Use the shared registry and
-`renderClientEntry()` described above. No ICU strings are serialized into HTML.
+Palamedes 2.0 removed the 1.x JSON bootstrap, which could not carry executable
+compiled functions: `loadClientMessages`, `createClientBootstrap()`,
+`renderClientBootstrap()`, `readRemixI18nBootstrap()`, the synchronous
+`initializeRemixClientI18n()`, and `REMIX_I18N_BOOTSTRAP_ID` no longer exist.
+Remove application catalog maps and manual client initialization. Use the
+shared registry and `renderClientEntry()` described above. No ICU strings are serialized into HTML.
 Locale changes reload the document; vary its cache policy by locale inputs.
 
 Catalog/config inputs are watched in development and Node `--watch` processes.
@@ -325,11 +323,10 @@ streamed, so translated code that executes during body consumption still sees
 the same request-local i18n instance. Fetch metadata on that response, including
 `url`, `type`, and `redirected`, is preserved while the body is wrapped.
 
-`createRemixI18nServer()` also exposes `createClientBootstrap(locale)` and
-`renderClientBootstrap(locale)`. Those helpers remain available for validating
-legacy transport migrations; they do not turn raw ICU strings into executable
-messages. `catalogVersion` accepts a non-empty string or a function of
-`{ locale, messages }` and defaults to a deterministic digest.
+`catalogVersion` on `createRemixI18nServer()` overrides the version of
+executable client catalog assets. It accepts a non-empty string, or, without a
+shared registry, a function of `{ locale, messages }`; it defaults to a digest
+of the delivered module.
 
 ## Stable Version Support
 
