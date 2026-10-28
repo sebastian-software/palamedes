@@ -9,7 +9,7 @@ framework/tooling layer rather than the Palamedes runtime model.
 The `nextjs-cookie`, `nextjs-route`, `nextjs-subdomain`, and `nextjs-tld`
 examples verify:
 
-- Turbopack-based Next.js 16.2 integration
+- Turbopack-based Next.js 16.4 integration
 - provider-free Palamedes rendering in server components and client widgets
 - `.po` loading through `@palamedes/next-plugin`
 - localized `"use server"` actions
