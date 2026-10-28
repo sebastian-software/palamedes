@@ -217,3 +217,27 @@ fn file_errors_keep_the_path_and_distinguish_incompatibility_causes() {
     let text = Catalog::load(&path, "de", SCHEMA).unwrap_err().to_string();
     assert!(text.contains(path.to_str().unwrap()) && text.contains("missing field"));
 }
+
+#[test]
+fn errors_cross_threads_and_chain_their_causes() {
+    fn assert_bounds<T: std::error::Error + Send + Sync + 'static>() {}
+    assert_bounds::<Error>();
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("missing.pmd.json");
+    let error = Catalog::load(&path, "de", SCHEMA).unwrap_err();
+    let source = std::error::Error::source(&error).expect("I/O cause is chained");
+    assert!(source.is::<std::io::Error>());
+    assert_eq!(
+        error.to_string(),
+        format!("could not read catalog {}: {source}", path.display())
+    );
+
+    std::fs::write(&path, "{").unwrap();
+    let error = Catalog::load(&path, "de", SCHEMA).unwrap_err();
+    let decode = std::error::Error::source(&error).expect("load wraps the decode error");
+    assert!(decode.to_string().starts_with("invalid compiled catalog: "));
+    assert!(
+        std::error::Error::source(decode).is_some_and(|source| source.is::<serde_json::Error>())
+    );
+}

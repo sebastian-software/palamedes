@@ -2,6 +2,13 @@
 //!
 //! No catalogs, source-message fallback, or ICU parser are embedded here.
 //! `palamedes-build` generates the schema and author-facing translation macro.
+//!
+//! # Compatibility
+//!
+//! The documented API follows SemVer. [`Error`] is `#[non_exhaustive]`, so
+//! new failure kinds can arrive in minor releases. Items hidden from these
+//! docs support generated code or describe the catalog file format; they are
+//! not part of the public API. [`FORMAT_VERSION`] versions that format.
 
 mod arguments;
 mod plural;
@@ -14,6 +21,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 /// Version of the external instruction format. Not an ICU or PO input format.
+///
+/// Catalog files and exported schemas carry this version. A change to the
+/// file format raises it, and loading rejects files with another version.
 pub const FORMAT_VERSION: u32 = 2;
 
 /// Internal compile-time support for generated macros, including raw literals.
@@ -102,15 +112,24 @@ pub const fn assert_arguments(expected: &[&str], supplied: &[&str]) {
 }
 
 /// Build-generated identity and argument contract for a catalog family.
+///
+/// `palamedes-build` generates this value as `CATALOG_SCHEMA`; pass it to
+/// [`Catalog::load`] or [`Catalog::from_bytes`]. Applications do not build
+/// schemas themselves.
 #[derive(Clone, Copy, Debug)]
 pub struct Schema {
     /// Fingerprint of the message identities and their argument sets.
     pub fingerprint: &'static str,
     /// Required messages. Contains internal IDs, never source text.
+    #[doc(hidden)]
     pub messages: &'static [MessageSpec],
 }
 
 /// Build-generated signature of one message.
+///
+/// Part of the generated code and the catalog format, not of the public API;
+/// [`FORMAT_VERSION`] versions it.
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct MessageSpec {
     /// Internal compiled lookup key.
@@ -124,6 +143,10 @@ pub struct MessageSpec {
 }
 
 /// Serializable compiler output. Applications load it through [`Catalog`].
+///
+/// Describes the catalog file format, which [`FORMAT_VERSION`] versions; it
+/// is not part of the public API.
+#[doc(hidden)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CatalogArtifact {
@@ -138,6 +161,9 @@ pub struct CatalogArtifact {
 }
 
 /// A compiled literal or message program, never an unparsed ICU pattern.
+///
+/// Part of the catalog file format, not of the public API.
+#[doc(hidden)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
@@ -153,6 +179,9 @@ pub enum Message {
 }
 
 /// The supported Rust instruction set. Unsupported ICU fails at build time.
+///
+/// Part of the catalog file format, not of the public API.
+#[doc(hidden)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Instruction {
@@ -177,6 +206,9 @@ pub enum Instruction {
 }
 
 /// CLDR rule family used by a compiled plural instruction.
+///
+/// Part of the catalog file format, not of the public API.
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PluralKind {
@@ -187,7 +219,11 @@ pub enum PluralKind {
 }
 
 /// Load or rendering errors. Hosts choose how to present them.
+///
+/// New variants can appear in minor releases, so a `match` needs a wildcard
+/// arm.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// External artifact could not be read.
     #[error("could not read catalog {path}: {source}")]

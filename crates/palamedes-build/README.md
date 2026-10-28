@@ -28,6 +28,11 @@ a matching `pmds catalog compile --target rust`, without Node or an application
 build. See the [Rust application guide](https://palamedes.dev/docs/rust-applications)
 for the supported subset and failure modes.
 
+The public API follows Cargo SemVer. Fallible calls return
+`palamedes_build::Error`, which is `#[non_exhaustive]` and `Send + Sync`, and
+chains I/O and catalog compiler causes through `source()`. The MSRV policy is
+described in the [Rust guide](https://palamedes.dev/docs/rust-applications#semver-and-msrv).
+
 ## License
 
 Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

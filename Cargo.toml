@@ -38,10 +38,13 @@ workspace = true
 test-support = []
 
 [dependencies]
-ferrocat = "=3.4.2"
-ferrocat-icu = "=3.4.2"
-ferrocat-po = "=3.4.2"
-ferromark = { version = "=3.6.0", features = ["jsx"] }
+# Published crates use caret requirements so downstream graphs can resolve a
+# newer compatible Ferrocat. Cargo.lock still pins the exact versions that the
+# npm packages, the CLI, and CI build and test.
+ferrocat = "3.4.2"
+ferrocat-icu = "3.4.2"
+ferrocat-po = "3.4.2"
+ferromark = { version = "3.6.0", features = ["jsx"] }
 oxc_allocator = "0.146.0"
 oxc_ast = "0.146.0"
 oxc_ast_visit = "0.146.0"

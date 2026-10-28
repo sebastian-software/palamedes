@@ -14,7 +14,10 @@ supported entry points.
 The Rust SDK is Preview. This core, `palamedes-build`, and `palamedes-i18n`
 share the coordinated Palamedes version; no separate prerelease publication
 channel is enabled. Use the builder and runtime for applications. The core is
-a compiler dependency, with no stable low-level Rust API promise during Preview.
+a compiler dependency: only its `palamedes::sdk` module, the entry points that
+`palamedes-build` uses, follows Cargo SemVer. Every other item is hidden from
+the rustdoc output and serves the CLI and the Node binding; it can change in
+any release.
 Publication preparation and the held release lane are tracked in
 [#1309](https://github.com/sebastian-software/palamedes/issues/1309).
 
