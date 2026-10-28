@@ -1,8 +1,8 @@
-import type { SelectProps } from "@palamedes/core";
 import type {
   PluralMacroProps,
   SelectMacroProps,
   SelectOrdinalMacroProps,
+  SelectProps,
 } from "@palamedes/core/macro";
 import type { Handle, RemixNode } from "remix/component";
 

@@ -66,6 +66,16 @@
         "types": "./dist/locale.d.cts",
         "default": "./dist/locale.cjs"
       }
+    },
+    "./internal": {
+      "import": {
+        "types": "./dist/internal.d.mts",
+        "default": "./dist/internal.mjs"
+      },
+      "require": {
+        "types": "./dist/internal.d.cts",
+        "default": "./dist/internal.cjs"
+      }
     }
   },
   "publishConfig": {

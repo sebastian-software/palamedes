@@ -1,9 +1,9 @@
+import { createCompiledMessageRuntime } from "@palamedes/core/compiled";
 import {
-  createCompiledMessageRuntime,
   formatMessageArgument,
   replacePoundPlaceholders,
   stringifyValue,
-} from "@palamedes/core/compiled";
+} from "@palamedes/core/internal";
 import type {
   CompiledMessageRuntime,
   MessageMetadata,

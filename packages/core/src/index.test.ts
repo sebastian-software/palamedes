@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import * as root from "./index";
 import * as compiled from "./compiled";
+import * as internal from "./internal";
 import { createStringMessageRuntime } from "./compiledMessage";
 
 const greeting: root.CompiledMessage = (values, runtime) =>
@@ -19,6 +20,10 @@ describe("unified public compiled runtime", () => {
         "formatMessagePattern",
         "buildChoiceMessage",
         "resolveChoice",
+        // Renderer helpers live on `@palamedes/core/internal`.
+        "formatMessageArgument",
+        "replacePoundPlaceholders",
+        "stringifyValue",
       ]) {
         expect(entry).not.toHaveProperty(removed);
       }
@@ -26,6 +31,14 @@ describe("unified public compiled runtime", () => {
     for (const removed of ["parsePattern", "getMessageNodes", "getMessage", "reportError"]) {
       expect(root.createI18n()).not.toHaveProperty(removed);
     }
+  });
+
+  it("exposes only the renderer helpers on the internal entry", () => {
+    expect(Object.keys(internal).sort()).toEqual([
+      "formatMessageArgument",
+      "replacePoundPlaceholders",
+      "stringifyValue",
+    ]);
   });
 
   it("executes constants and functions, including compiled source-language fallbacks", () => {
