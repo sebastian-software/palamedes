@@ -13,11 +13,11 @@
     "@palamedes/core": "workspace:^",
     "@palamedes/example-ui": "workspace:^",
     "@palamedes/react": "workspace:^",
+    "@palamedes/react-router": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
     "@react-router/node": "8.5.0",
     "@react-router/serve": "8.5.0",
-    "isbot": "^5.2.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "8.5.0"

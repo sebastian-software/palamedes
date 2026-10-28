@@ -8,7 +8,6 @@ import { ProofPanel } from "~/components/ProofPanel";
 import { SuggestionBanner } from "~/components/SuggestionBanner";
 import { TicketPanel } from "~/components/TicketPanel";
 import { getLocaleLabel, getRouteBanner, normalizeLocale } from "~/lib/i18n";
-import { runServerI18n } from "~/lib/i18n.server";
 
 export function meta({ params }: Route.MetaArgs) {
   return [
@@ -22,23 +21,23 @@ export function meta({ params }: Route.MetaArgs) {
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const locale = normalizeLocale(params.locale);
-  return runServerI18n(locale, () => ({
+  return {
     banner: getRouteBanner(request, locale),
     locale,
     localeLabel: getLocaleLabel(locale),
-  }));
+  };
 }
 
 export async function action({ params }: Route.ActionArgs) {
   const locale = normalizeLocale(params.locale);
-  return runServerI18n(locale, () => ({
+  return {
     proof: {
       handledAt: new Date().toISOString(),
       locale,
       localeLabel: getLocaleLabel(locale),
       message: t`Server action confirmed locale ${locale}.`,
     },
-  }));
+  };
 }
 
 export default function LocaleHome({ loaderData }: Route.ComponentProps) {
