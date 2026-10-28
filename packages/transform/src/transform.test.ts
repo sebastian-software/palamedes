@@ -183,14 +183,16 @@ const message = t({
     expect(result.code).not.toContain("t({");
   });
 
-  it("rejects missing ICU values in interpolated descriptor templates", () => {
+  it("keeps braces in interpolated descriptor templates as literal text", () => {
     const code = `
 import { t } from "@palamedes/core/macro"; function message() {
 const descriptor = t({ message: \`Hello \${name}, you have {count}\` });
 }
 `;
 
-    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Missing value\(s\): count/);
+    expect(transformPalamedesMacros(code, "test.ts").code).toContain(
+      `message: "Hello {name}, you have '{count}'"`,
+    );
   });
 
   it.each(["msg", "defineMessage"])(
@@ -421,7 +423,7 @@ const literalBraces = <Trans>{"{name}"} .</Trans>;
     expect(result.code).toContain(
       'message={"Tailored to your {volume} MWh of annual electricity use in {countryName}."}',
     );
-    expect(result.code).toContain('message={"{name} ."}');
+    expect(result.code).toContain(`message={"'{name}' ."}`);
   });
 
   it("preserves leading separator spacing", () => {

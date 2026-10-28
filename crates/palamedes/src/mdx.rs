@@ -18,10 +18,11 @@ use oxc_span::SourceType;
 use serde::{Deserialize, Serialize};
 
 use crate::extract::ExtractedMessageRecord;
-use crate::icu_text::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
+use crate::icu_text::{catalog_icu_spelling, compiled_message_key, escape_icu_literal};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{JsxMessagePart, clean_jsx_whitespace, join_mdx_message_parts};
 use crate::source::{SourceComment, SourceCommentKind, SourceLocator, SourceRange};
+use crate::source_message::lowered_message_problem;
 use crate::transform::NativeTransformSourceMap;
 
 // Markdown soft line breaks separate words, including next to rich placeholders.
@@ -487,6 +488,7 @@ struct MdxCompiler<'a> {
     needs_trans: bool,
     needs_i18n: bool,
     unit: Option<RichUnit>,
+    diagnostics: Vec<MdxDiagnosticRecord>,
 }
 
 impl<'a> MdxCompiler<'a> {
@@ -505,6 +507,7 @@ impl<'a> MdxCompiler<'a> {
             needs_trans: false,
             needs_i18n: false,
             unit: None,
+            diagnostics: Vec::new(),
         }
     }
 
@@ -514,6 +517,16 @@ impl<'a> MdxCompiler<'a> {
         }
         self.blocks(&document.children);
         self.finish_unit();
+        if !self.diagnostics.is_empty() {
+            return MdxAnalysisResult {
+                messages: Vec::new(),
+                diagnostics: self.diagnostics,
+                code: None,
+                compiled_ids: Vec::new(),
+                map: None,
+                comments: Vec::new(),
+            };
+        }
 
         let mut writer = ModuleWriter::default();
         for (offset, source) in &self.esm {
@@ -1061,8 +1074,6 @@ impl<'a> MdxCompiler<'a> {
         let joined = rich_message(
             &unit.roots,
             self.options.framework,
-            IcuLiteralTarget::Runtime,
-            true,
             &mut next_component,
             &mut components,
         );
@@ -1071,19 +1082,12 @@ impl<'a> MdxCompiler<'a> {
                 .append_at(&fallback_jsx(&unit.roots), source_offset);
             return true;
         }
+        if !self.check_lowered_message(&joined.message, &unit.values, &components, source_offset) {
+            return true;
+        }
 
-        let mut ignored_source_components = Vec::new();
-        let mut source_component_index = 0usize;
-        let source_joined = rich_message(
-            &unit.roots,
-            self.options.framework,
-            IcuLiteralTarget::Catalog,
-            false,
-            &mut source_component_index,
-            &mut ignored_source_components,
-        );
         let reference = self.push_message_with_runtime(
-            source_joined.message,
+            catalog_icu_spelling(&joined.message),
             joined.message,
             unit.values.clone(),
             source_offset,
@@ -1117,13 +1121,47 @@ impl<'a> MdxCompiler<'a> {
         true
     }
 
+    /// Records a diagnostic when a lowered message references a value or tag
+    /// the generated module does not supply. Returns whether it can render.
+    fn check_lowered_message(
+        &mut self,
+        message: &str,
+        values: &BTreeMap<String, String>,
+        components: &[(String, String)],
+        source_offset: usize,
+    ) -> bool {
+        let Some(detail) = lowered_message_problem(
+            message,
+            values.keys().map(String::as_str),
+            components.iter().map(|(name, _)| name.as_str()),
+        ) else {
+            return true;
+        };
+        self.diagnostics.push(MdxDiagnosticRecord {
+            code: "UnrenderableMessage".to_owned(),
+            message: detail,
+            primary: self.locator.range(source_offset, source_offset),
+            related: None,
+        });
+        false
+    }
+
+    /// Pushes standalone literal text, such as image alt text, a translated
+    /// attribute, or a frontmatter field, as its own message.
     fn push_message(
         &mut self,
-        message: String,
+        text: String,
         placeholders: BTreeMap<String, String>,
         source_offset: usize,
     ) -> MessageReference {
-        self.push_message_with_runtime(message.clone(), message, placeholders, source_offset)
+        let runtime_message = escape_icu_literal(&text);
+        self.check_lowered_message(&runtime_message, &placeholders, &[], source_offset);
+        self.push_message_with_runtime(
+            catalog_icu_spelling(&runtime_message),
+            runtime_message,
+            placeholders,
+            source_offset,
+        )
     }
 
     fn push_message_with_runtime(
@@ -1356,26 +1394,9 @@ struct RichComponent {
     fixed: bool,
 }
 
-#[derive(Clone, Copy)]
-enum IcuLiteralTarget {
-    Catalog,
-    Runtime,
-}
-
-impl IcuLiteralTarget {
-    fn escape(self, text: &str) -> String {
-        match self {
-            Self::Catalog => text.to_owned(),
-            Self::Runtime => escape_icu_literal(text),
-        }
-    }
-}
-
 fn rich_message(
     nodes: &[RichNode],
     framework: MdxFramework,
-    target: IcuLiteralTarget,
-    collect_components: bool,
     next_component: &mut usize,
     components: &mut Vec<(String, String)>,
 ) -> crate::jsx_message::JoinedJsxMessage {
@@ -1383,7 +1404,7 @@ fn rich_message(
     for node in nodes {
         match node {
             RichNode::Text(text, _) => {
-                parts.push(JsxMessagePart::Text(target.escape(text)));
+                parts.push(JsxMessagePart::Text(text.clone()));
             }
             RichNode::Value { name, .. } => {
                 parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
@@ -1391,14 +1412,8 @@ fn rich_message(
             RichNode::Component(component) => {
                 let name = next_component.to_string();
                 *next_component += 1;
-                let joined = rich_message(
-                    &component.children,
-                    framework,
-                    target,
-                    collect_components,
-                    next_component,
-                    components,
-                );
+                let joined =
+                    rich_message(&component.children, framework, next_component, components);
                 let is_empty = component.fixed || joined.message.is_empty();
                 let value = if is_empty {
                     format!("<{name}/>")
@@ -1406,18 +1421,11 @@ fn rich_message(
                     format!("<{name}>{}</{name}>", joined.message)
                 };
                 parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
-                if collect_components {
-                    let expression = component_expression(component, framework);
-                    components.push((name, expression));
-                }
+                components.push((name, component_expression(component, framework)));
             }
         }
     }
-    let mut joined = join_mdx_message_parts(&parts);
-    if matches!(target, IcuLiteralTarget::Catalog) {
-        joined.message = escape_icu_source_literal(&joined.message);
-    }
-    joined
+    join_mdx_message_parts(&parts)
 }
 
 fn component_expression(component: &RichComponent, framework: MdxFramework) -> String {
@@ -2368,6 +2376,65 @@ const untranslated = "code";
     }
 
     #[test]
+    fn escaped_mdx_braces_stay_literal_text() {
+        let result = analyze_valid(
+            "---\ntitle: Use {x} here\n---\n\nUse \\{name\\} literally, &#123;x&#125; too.\n",
+            MdxOptions {
+                keep_source_fallbacks: true,
+                front_matter_fields: vec!["title".to_owned()],
+                ..MdxOptions::default()
+            },
+        );
+        let messages = result
+            .messages
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            messages,
+            ["Use '{x}' here", "Use '{name}' literally, '{x}' too."]
+        );
+        assert!(
+            result
+                .messages
+                .iter()
+                .all(|message| message.placeholders.is_none())
+        );
+        assert_eq!(
+            result.compiled_ids,
+            messages
+                .iter()
+                .map(|message| compiled_message_key(message, None))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn reports_literal_tags_that_icu_cannot_quote() {
+        let result = analyze_mdx(
+            "Intro.\n\nWrap &lt;tag&gt; text.\n",
+            "guide.mdx",
+            MdxOptions::default(),
+        );
+        assert!(result.code.is_none());
+        assert!(result.messages.is_empty());
+        let [diagnostic] = result.diagnostics.as_slice() else {
+            panic!("expected one diagnostic, got {:?}", result.diagnostics);
+        };
+        assert_eq!(diagnostic.code, "UnrenderableMessage");
+        assert_eq!((diagnostic.primary.line, diagnostic.primary.column), (3, 1));
+        assert!(
+            diagnostic.message.contains("ICU quoting cannot escape it"),
+            "{}",
+            diagnostic.message
+        );
+
+        // Inline code stays a fixed placeholder, so it is the MDX route for
+        // literal markup.
+        assert_eq!(messages("Wrap `<tag>` text.\n"), ["Wrap <0/> text."]);
+    }
+
+    #[test]
     fn separates_mdx_catalog_apostrophes_from_runtime_escaping() {
         let result = analyze_valid(
             "don't client's l'été It''s L'{title}",
@@ -2382,13 +2449,15 @@ const untranslated = "code";
                 .iter()
                 .map(|message| message.message.as_str())
                 .collect::<Vec<_>>(),
-            ["don't client's l'été It''s L''{title}"]
+            // A doubled authored apostrophe renders one apostrophe, so the
+            // shortest catalog spelling writes it once.
+            ["don't client's l'été It's L''{title}"]
         );
         assert_eq!(
             result.compiled_ids,
             [compiled_message_key(
-                "don't client's l'été It''s L''{title}",
-                None,
+                "don't client's l'été It's L''{title}",
+                None
             )]
         );
         let code = result.code.expect("valid MDX should compile");

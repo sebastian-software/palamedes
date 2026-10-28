@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use ferrocat_icu::{extract_argument_names, extract_tag_names};
 use oxc_ast::ast::{
     Expression, JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
     ObjectExpression, ObjectPropertyKind, TemplateLiteral,
@@ -16,6 +17,7 @@ use crate::choice::{
     jsx_offset_value, normalize_choice_option_key,
 };
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::{escape_icu_apostrophes, escape_icu_literal, parse_runtime_icu};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
@@ -128,7 +130,6 @@ pub(crate) fn lower_template(
     source: &str,
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
-    escape_literal: impl Fn(&str) -> String,
 ) -> PalamedesResult<(String, Vec<SourceValue>)> {
     let mut message = String::new();
     let mut values = Vec::new();
@@ -139,7 +140,7 @@ pub(crate) fn lower_template(
             .cooked
             .map(|value| value.as_str())
             .unwrap_or_else(|| quasi.value.raw.as_str());
-        message.push_str(&escape_literal(literal));
+        message.push_str(&escape_icu_literal(literal));
 
         if let Some(expr) = template.expressions.get(index) {
             let Some(preferred_name) = expression_name(expr) else {
@@ -215,18 +216,16 @@ fn lower_choice_branch(
     used_value_names: &mut HashMap<String, String>,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
-    escape_literal: impl Fn(&str) -> String + Copy,
 ) -> PalamedesResult<(String, Vec<SourceValue>)> {
     match value.without_parentheses() {
         Expression::StringLiteral(literal) => {
-            Ok((escape_literal(literal.value.as_str()), Vec::new()))
+            Ok((escape_icu_apostrophes(literal.value.as_str()), Vec::new()))
         }
         Expression::TemplateLiteral(template) => lower_template(
             template,
             source,
             "choice option template expression",
             used_value_names,
-            escape_literal,
         ),
         value => Err(unsupported_choice_branch(key, value, macro_name, location)),
     }
@@ -288,6 +287,70 @@ fn unsupported_choice_branch_at(
     }
 }
 
+/// Explains why a lowered message cannot render with the bindings its macro
+/// generates, or returns `None` when it can.
+///
+/// Lowering escapes literal text, so every ICU argument in the message should
+/// be a generated value and every rich-text tag a generated component. This
+/// check is the safety net for text the escaping cannot represent, such as a
+/// literal `<` before a letter, which reads as a tag and has no ICU quoting
+/// under the runtime apostrophe policy.
+pub(crate) fn lowered_message_problem<'a>(
+    message: &str,
+    values: impl IntoIterator<Item = &'a str>,
+    components: impl IntoIterator<Item = &'a str>,
+) -> Option<String> {
+    const TAG_HINT: &str = "A literal `<` before a letter, digit, or `/` reads as a rich-text tag, and ICU quoting cannot escape it; add a space after `<` or pass the text as a placeholder value (inline code in MDX).";
+
+    let parsed = match parse_runtime_icu(message) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            let hint = if message.contains('<') { TAG_HINT } else { "" };
+            return Some(format!(
+                "the lowered message `{message}` is not valid ICU ({error}). {hint}"
+            ));
+        }
+    };
+
+    let values = values.into_iter().collect::<Vec<_>>();
+    if let Some(argument) = extract_argument_names(&parsed)
+        .into_iter()
+        .find(|name| !values.contains(&name.as_str()))
+    {
+        return Some(format!(
+            "the lowered message `{message}` references `{{{argument}}}`, but the macro supplies no value named `{argument}`"
+        ));
+    }
+
+    let components = components.into_iter().collect::<Vec<_>>();
+    extract_tag_names(&parsed)
+        .into_iter()
+        .find(|name| !components.contains(&name.as_str()))
+        .map(|tag| {
+            format!(
+                "the lowered message `{message}` contains the rich-text tag `<{tag}>`, but the macro supplies no component named `{tag}`. {TAG_HINT}"
+            )
+        })
+}
+
+/// Fails with a located diagnostic when [`lowered_message_problem`] finds one.
+pub(crate) fn check_lowered_message<'a>(
+    message: &str,
+    values: impl IntoIterator<Item = &'a str>,
+    components: impl IntoIterator<Item = &'a str>,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+) -> PalamedesResult<()> {
+    match lowered_message_problem(message, values, components) {
+        Some(detail) => Err(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: macro_name.to_owned(),
+            location: location.format(),
+            detail,
+        }),
+        None => Ok(()),
+    }
+}
+
 pub(crate) fn build_icu_message(
     format: &str,
     value_name: &str,
@@ -313,7 +376,6 @@ pub(crate) fn lower_choice_options_from_object(
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
-    escape_literal: impl Fn(&str) -> String + Copy,
 ) -> PalamedesResult<LoweredChoiceOptions> {
     let mut options = Vec::new();
     let mut values = Vec::new();
@@ -344,7 +406,6 @@ pub(crate) fn lower_choice_options_from_object(
             used_value_names,
             macro_name,
             location,
-            escape_literal,
         )?;
 
         options.push((normalized_key, value));
@@ -392,7 +453,6 @@ pub(crate) fn lower_choice_options_from_jsx(
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
-    escape_literal: impl Fn(&str) -> String + Copy,
 ) -> PalamedesResult<LoweredChoiceOptions> {
     let mut options = Vec::new();
     let mut values = Vec::new();
@@ -428,7 +488,7 @@ pub(crate) fn lower_choice_options_from_jsx(
         let (value, option_values) = match attr.value.as_ref() {
             None => return Err(unsupported("missing a value", attr.span.start)),
             Some(JSXAttributeValue::StringLiteral(literal)) => (
-                escape_literal(&decode_jsx_entities(literal.value.as_str())),
+                escape_icu_apostrophes(&decode_jsx_entities(literal.value.as_str())),
                 Vec::new(),
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
@@ -442,7 +502,6 @@ pub(crate) fn lower_choice_options_from_jsx(
                     used_value_names,
                     macro_name,
                     location,
-                    escape_literal,
                 )?
             }
             Some(JSXAttributeValue::Element(element)) => {
@@ -473,7 +532,6 @@ pub(crate) fn lower_choice_options_from_jsx(
 pub(crate) fn lower_jsx_children(
     children: &[JSXChild<'_>],
     source: &str,
-    escape_literal: fn(&str) -> String,
     component_expression: impl Fn(&JSXOpeningElement<'_>) -> String,
 ) -> PalamedesResult<LoweredJsxMessage> {
     let mut used_value_names = HashMap::new();
@@ -482,7 +540,6 @@ pub(crate) fn lower_jsx_children(
     lower_jsx_children_with_state(
         children,
         source,
-        escape_literal,
         &component_expression,
         &mut used_value_names,
         &mut next_component_index,
@@ -492,7 +549,6 @@ pub(crate) fn lower_jsx_children(
 fn lower_jsx_children_with_state<F>(
     children: &[JSXChild<'_>],
     source: &str,
-    escape_literal: fn(&str) -> String,
     component_expression: &F,
     used_value_names: &mut HashMap<String, String>,
     next_component_index: &mut usize,
@@ -507,7 +563,7 @@ where
     for child in children {
         match child {
             JSXChild::Text(text) => {
-                let value = escape_literal(&clean_jsx_text(text.value.as_str()));
+                let value = clean_jsx_text(text.value.as_str());
                 if !value.is_empty() {
                     parts.push(JsxMessagePart::Text(value));
                 }
@@ -515,7 +571,7 @@ where
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::EmptyExpression(_) => {}
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(JsxMessagePart::Text(escape_literal(literal.value.as_str())));
+                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
                 expr => {
                     let Some(preferred_name) = jsx_expression_name(expr) else {
@@ -540,7 +596,6 @@ where
                 let inner = lower_jsx_children_with_state(
                     &element.children,
                     source,
-                    escape_literal,
                     component_expression,
                     used_value_names,
                     next_component_index,
@@ -563,7 +618,6 @@ where
                 let inner = lower_jsx_children_with_state(
                     &fragment.children,
                     source,
-                    escape_literal,
                     component_expression,
                     used_value_names,
                     next_component_index,
@@ -948,5 +1002,190 @@ mod choice_branch_tests {
                 transformed.code
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod literal_text_tests {
+    //! Authored text is literal text: braces in JSX text, JSX string
+    //! expressions, and template quasis render as typed instead of becoming
+    //! ICU arguments (#1373). Extraction and the transform lower each message
+    //! once, so the catalog `msgid` and the transform lookup key always agree.
+
+    use ferrocat_icu::IcuNode;
+
+    use crate::error::PalamedesError;
+    use crate::extract::extract_messages;
+    use crate::icu_text::{compiled_message_key, parse_runtime_icu};
+    use crate::transform_macros;
+
+    const FILENAME: &str = "view.tsx";
+    const BODY_LINE: usize = 4;
+    const BODY_COLUMN: usize = "  return ".len() + 1;
+
+    fn module(body: &str) -> String {
+        format!(
+            "import {{ plural, t }} from \"@palamedes/core/macro\";\nimport {{ Trans }} from \"@palamedes/react/macro\";\nexport function view(count: number, name: string, x: string) {{\n  return {body};\n}}\n"
+        )
+    }
+
+    /// Extracts the only message of `body` and checks that the transform
+    /// derives the same compiled lookup key from its own lowering.
+    fn lower(body: &str) -> String {
+        let source = module(body);
+        let extracted = extract_messages(&source, FILENAME)
+            .unwrap_or_else(|error| panic!("extraction for `{body}` failed: {error}"));
+        let [record] = extracted.as_slice() else {
+            panic!("`{body}` should extract one message, got {extracted:?}");
+        };
+        let transformed = transform_macros(&source, FILENAME, None)
+            .unwrap_or_else(|error| panic!("transform for `{body}` failed: {error}"));
+        assert_eq!(
+            transformed.compiled_ids,
+            [compiled_message_key(
+                &record.message,
+                record.context.as_deref()
+            )],
+            "extraction and transform disagree on `{body}` ({})",
+            record.message
+        );
+        record.message.clone()
+    }
+
+    /// Renders literal text as-is, each ICU argument as `[name]`, and tags.
+    fn rendered(message: &str) -> String {
+        fn render(nodes: &[IcuNode], output: &mut String) {
+            for node in nodes {
+                match node {
+                    IcuNode::Literal(text) => output.push_str(text),
+                    IcuNode::Argument { name } => output.push_str(&format!("[{name}]")),
+                    IcuNode::Tag { name, children } => {
+                        output.push_str(&format!("<{name}>"));
+                        render(children, output);
+                        output.push_str(&format!("</{name}>"));
+                    }
+                    other => panic!("unexpected node {other:?}"),
+                }
+            }
+        }
+        let parsed = parse_runtime_icu(message)
+            .unwrap_or_else(|error| panic!("`{message}` should parse: {error}"));
+        let mut output = String::new();
+        render(&parsed.nodes, &mut output);
+        output
+    }
+
+    #[test]
+    fn literal_braces_render_as_text_with_one_lookup_key() {
+        for (body, message, text) in [
+            (
+                r#"<Trans>Type {"{"}name{"}"} to insert, hi {name}</Trans>"#,
+                "Type '{name}' to insert, hi {name}",
+                "Type {name} to insert, hi [name]",
+            ),
+            (
+                "<Trans>Type &#123;name&#125; to insert, hi {name}</Trans>",
+                "Type '{name}' to insert, hi {name}",
+                "Type {name} to insert, hi [name]",
+            ),
+            (
+                "<Trans>Entity &#123;x&#125; here</Trans>",
+                "Entity '{x}' here",
+                "Entity {x} here",
+            ),
+            (
+                r#"<Trans>Close with {"}"} and <b>{"{"}x{"}"}</b></Trans>"#,
+                "Close with '}' and <0>'{x}'</0>",
+                "Close with } and <0>{x}</0>",
+            ),
+            // A fragment is lowered separately; its quote merges with the one
+            // before it instead of reading as an escaped apostrophe.
+            (
+                r#"<Trans>Use {"{"}<>{"}"}</> ok</Trans>"#,
+                "Use '{}' ok",
+                "Use {} ok",
+            ),
+            (
+                "t`It's '{literal}' ok`",
+                "It's '''{literal}''' ok",
+                "It's '{literal}' ok",
+            ),
+            (
+                "t`Use {x} or ${name}`",
+                "Use '{x}' or {name}",
+                "Use {x} or [name]",
+            ),
+            ("t({ message: `Use '{x}'` })", "Use '''{x}'''", "Use '{x}'"),
+            // The string-literal descriptor is the raw-ICU surface: the author
+            // owns the quoting, so `'{x}'` is an ICU quote.
+            ("t({ message: \"Use '{x}'\" })", "Use '{x}'", "Use {x}"),
+        ] {
+            let lowered = lower(body);
+            assert_eq!(lowered, message, "msgid for `{body}`");
+            assert_eq!(rendered(&lowered), text, "rendered text for `{body}`");
+        }
+    }
+
+    #[test]
+    fn choice_template_branches_quote_braces_but_keep_the_pound() {
+        let lowered = lower("plural(count, { one: `# {item}`, other: `# {items} for ${name}` })");
+        assert_eq!(
+            lowered,
+            "{count, plural, one {# '{item}'} other {# '{items}' for {name}}}"
+        );
+        parse_runtime_icu(&lowered).expect("lowered choice parses");
+    }
+
+    fn assert_unrenderable(body: &str, anchor: &str, detail: &str) {
+        let source = module(body);
+        let column = BODY_COLUMN + body.find(anchor).expect("anchor");
+        let location = format!("{FILENAME}:{BODY_LINE}:{column}");
+        for (consumer, error) in [
+            (
+                "extraction",
+                extract_messages(&source, FILENAME).map(|_| ()).err(),
+            ),
+            (
+                "transform",
+                transform_macros(&source, FILENAME, None).map(|_| ()).err(),
+            ),
+        ] {
+            let Some(error) = error else {
+                panic!("{consumer} should reject `{body}`");
+            };
+            assert!(
+                matches!(
+                    &error,
+                    PalamedesError::UnsupportedMacroSyntax {
+                        location: actual,
+                        detail: actual_detail,
+                        ..
+                    } if *actual == location && actual_detail.contains(detail)
+                ),
+                "{consumer} `{body}`: expected `{detail}` at {location}, got: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_lowered_messages_that_cannot_render() {
+        // `<` cannot be quoted under the runtime apostrophe policy.
+        assert_unrenderable(
+            "<Trans>Use &lt;b&gt; tags</Trans>",
+            "<Trans>",
+            "ICU quoting cannot escape it",
+        );
+        assert_unrenderable(
+            "t`Wrap <b>text</b>`",
+            "t`",
+            "rich-text tag `<b>`, but the macro supplies no component named `b`",
+        );
+        // Choice branch string literals keep ICU syntax, so an argument the
+        // macro never binds is caught before the runtime throws.
+        assert_unrenderable(
+            r##"plural(count, { one: "{x} item", other: "# items" })"##,
+            "plural(",
+            "references `{x}`, but the macro supplies no value named `x`",
+        );
     }
 }

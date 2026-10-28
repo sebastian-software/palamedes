@@ -6,7 +6,6 @@ use oxc_ast::ast::{
 use oxc_span::GetSpan;
 
 use crate::error::PalamedesResult;
-use crate::icu_text::escape_icu_literal;
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_message::{
@@ -55,7 +54,6 @@ pub(super) fn extract_choice_options(
         format,
         macro_name,
         location,
-        escape_icu_literal,
     )?;
 
     Ok(ExtractedChoiceOptions {
@@ -102,7 +100,6 @@ pub(super) fn extract_choice_options_from_jsx(
         format,
         macro_name,
         location,
-        escape_icu_literal,
     )?;
 
     Ok(ExtractedChoiceOptions {
@@ -198,7 +195,7 @@ pub(super) fn extract_jsx_children_parts(
     solid_wrappers: bool,
     replacements: &[Replacement],
 ) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
-    let lowered = lower_jsx_children(children, source, escape_icu_literal, |opening_element| {
+    let lowered = lower_jsx_children(children, source, |opening_element| {
         if solid_wrappers {
             opening_element_to_component_wrapper(opening_element, source, replacements)
         } else {
@@ -299,13 +296,7 @@ fn template_to_message_with_state(
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, Vec<ValueBinding>)> {
-    let (message, values) = lower_template(
-        template,
-        source,
-        syntax,
-        used_value_names,
-        escape_icu_literal,
-    )?;
+    let (message, values) = lower_template(template, source, syntax, used_value_names)?;
     Ok((
         message,
         values

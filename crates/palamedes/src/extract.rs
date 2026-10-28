@@ -8,7 +8,7 @@ use crate::descriptor::{
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
-use crate::icu_text::escape_icu_source_literal;
+use crate::icu_text::catalog_icu_spelling;
 use crate::jsx_message::clean_jsx_text;
 use crate::mdx::{MdxOptions, analyze_mdx};
 use crate::placeholder_name::expression_name;
@@ -21,8 +21,8 @@ use crate::source::{
 };
 use crate::source_macros::{ImportedMacro, record_macro_import_declaration};
 use crate::source_message::{
-    build_icu_message as shared_build_icu_message, expression_source, jsx_attributes,
-    lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
+    build_icu_message as shared_build_icu_message, check_lowered_message, expression_source,
+    jsx_attributes, lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
     lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
     lower_template,
 };
@@ -651,6 +651,9 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
+                &self
+                    .source_locator
+                    .indexed_location(&self.filename, it.span.start as usize),
             ) {
                 Ok(Some(message)) => {
                     let facts = self.facts(
@@ -683,6 +686,9 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
+                &self
+                    .source_locator
+                    .indexed_location(&self.filename, it.span.start as usize),
             ) {
                 Ok(Some(message)) => {
                     let facts = self.facts(
@@ -1052,7 +1058,6 @@ fn extract_choice_options_from_object(
         format,
         macro_name,
         location,
-        ToOwned::to_owned,
     )?;
 
     Ok(ExtractedChoiceOptions {
@@ -1083,7 +1088,8 @@ fn extract_from_jsx_element(
         let message = match attrs.get("message") {
             Some(message) => Some(message.clone()),
             None => {
-                let children_message = extract_jsx_children_as_message(&element.children, source)?;
+                let children_message =
+                    extract_jsx_children_as_message(&element.children, source, location)?;
                 (!children_message.is_empty()).then_some(children_message)
             }
         };
@@ -1138,6 +1144,14 @@ fn extract_from_jsx_element(
             &extracted_options.options,
             extracted_options.offset.as_deref(),
         );
+        check_lowered_message(
+            &message,
+            std::iter::once(value_name.as_str())
+                .chain(extracted_options.placeholders.keys().map(String::as_str)),
+            [],
+            macro_name,
+            location,
+        )?;
         let context = attrs.get("context").cloned();
 
         return Ok(Some(ExtractedMessageRecord {
@@ -1159,11 +1173,19 @@ fn extract_from_tagged_template(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let (message, placeholders) = template_to_message(template, source)?;
     if message.is_empty() {
         return Ok(None);
     }
+    check_lowered_message(
+        &message,
+        placeholders.keys().map(String::as_str),
+        [],
+        "t",
+        location,
+    )?;
 
     Ok(Some(ExtractedMessageRecord {
         message,
@@ -1212,7 +1234,17 @@ fn extract_from_descriptor_call(
 
     let (message, placeholders) = match message_expression.without_parentheses() {
         Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
-        Expression::TemplateLiteral(template) => template_to_message(template, source)?,
+        Expression::TemplateLiteral(template) => {
+            let (message, placeholders) = template_to_message(template, source)?;
+            check_lowered_message(
+                &message,
+                placeholders.keys().map(String::as_str),
+                [],
+                macro_name,
+                location,
+            )?;
+            (message, placeholders)
+        }
         _ => {
             return Err(unsupported_macro_syntax(
                 macro_name,
@@ -1283,6 +1315,14 @@ fn extract_from_choice_call(
         &extracted_options.options,
         extracted_options.offset.as_deref(),
     );
+    check_lowered_message(
+        &message,
+        std::iter::once(value_name.as_str())
+            .chain(extracted_options.placeholders.keys().map(String::as_str)),
+        [],
+        macro_name,
+        location,
+    )?;
 
     Ok(Some(ExtractedMessageRecord {
         message,
@@ -1414,19 +1454,13 @@ fn template_to_message_with_state(
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
-    let (message, values) = lower_template(
-        template,
-        source,
-        syntax,
-        used_value_names,
-        ToOwned::to_owned,
-    )?;
+    let (message, values) = lower_template(template, source, syntax, used_value_names)?;
     let placeholders = values
         .into_iter()
         .map(|value| (value.name, value.expression))
         .collect();
 
-    Ok((escape_icu_source_literal(&message), placeholders))
+    Ok((catalog_icu_spelling(&message), placeholders))
 }
 
 fn extract_jsx_choice_value(
@@ -1443,9 +1477,20 @@ fn extract_jsx_choice_value(
 fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
     source: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<String> {
-    let lowered = lower_jsx_children(children, source, ToOwned::to_owned, |_| String::new())?;
-    Ok(escape_icu_source_literal(&lowered.message))
+    let lowered = lower_jsx_children(children, source, |_| String::new())?;
+    check_lowered_message(
+        &lowered.message,
+        lowered.values.iter().map(|value| value.name.as_str()),
+        lowered
+            .components
+            .iter()
+            .map(|component| component.name.as_str()),
+        "Trans",
+        location,
+    )?;
+    Ok(catalog_icu_spelling(&lowered.message))
 }
 
 fn extract_choice_options_from_jsx(
@@ -1463,7 +1508,6 @@ fn extract_choice_options_from_jsx(
         format,
         macro_name,
         location,
-        ToOwned::to_owned,
     )?;
 
     Ok(ExtractedChoiceOptions {
@@ -1483,7 +1527,7 @@ fn build_icu_message(
     options: &ChoiceOptions,
     offset: Option<&str>,
 ) -> String {
-    escape_icu_source_literal(&shared_build_icu_message(
+    catalog_icu_spelling(&shared_build_icu_message(
         format, value_name, options, offset,
     ))
 }
@@ -3827,7 +3871,7 @@ const message = t({ message })
             messages[1].message,
             "Tailored to your {volume} MWh of annual electricity use in {countryName}."
         );
-        assert_eq!(messages[2].message, "{name} .");
+        assert_eq!(messages[2].message, "'{name}' .");
     }
 
     #[test]

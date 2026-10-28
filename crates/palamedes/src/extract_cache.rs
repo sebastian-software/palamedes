@@ -25,7 +25,7 @@ use crate::source::{SourceComment, SourceDiagnostic, SourceRuleOptions};
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
-const CACHE_SCHEMA: u32 = 6;
+const CACHE_SCHEMA: u32 = 7;
 
 /*
  * A file modified in the same instant it was cached cannot be distinguished

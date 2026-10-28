@@ -12,7 +12,7 @@ use crate::choice::{
 };
 use crate::descriptor::{descriptor_property_value, unsupported_macro_syntax};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_text::escape_icu_literal;
+use crate::icu_text::escape_icu_apostrophes;
 use crate::jsx_message::{JsxMessagePart, join_jsx_message_parts};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
@@ -23,6 +23,9 @@ use super::messages::{ExtractedChoiceOptions, ValueBinding};
 
 pub(super) struct LoweredTrans {
     pub components: Vec<ValueBinding>,
+    /// Whether `message` is the raw-ICU `message` property rather than
+    /// lowered children.
+    pub explicit_message: bool,
     pub message: String,
     pub values: Vec<ValueBinding>,
 }
@@ -48,6 +51,7 @@ pub(super) fn trans_from_call(
     } else {
         LoweredChildren::default()
     };
+    let has_explicit_message = explicit_message.is_some();
     let message = explicit_message
         .or_else(|| (!lowered.message.is_empty()).then_some(lowered.message))
         .ok_or_else(|| {
@@ -60,6 +64,7 @@ pub(super) fn trans_from_call(
 
     Ok(LoweredTrans {
         components: lowered.components,
+        explicit_message: has_explicit_message,
         message,
         values: lowered.values,
     })
@@ -125,7 +130,7 @@ pub(super) fn choice_from_call(
         };
         let (option, option_values) = match property.value.without_parentheses() {
             Expression::StringLiteral(literal) => {
-                (escape_icu_literal(literal.value.as_str()), Vec::new())
+                (escape_icu_apostrophes(literal.value.as_str()), Vec::new())
             }
             Expression::TemplateLiteral(template) => {
                 let (message, values) = lower_template(
@@ -133,7 +138,6 @@ pub(super) fn choice_from_call(
                     source,
                     "choice option template expression",
                     &mut used_value_names,
-                    escape_icu_literal,
                 )?;
                 (
                     message,
@@ -333,7 +337,7 @@ impl LoweringState {
         let authored_expression = expression;
         match expression.without_parentheses() {
             Expression::StringLiteral(literal) => {
-                let text = escape_icu_literal(literal.value.as_str());
+                let text = literal.value.to_string();
                 if !text.is_empty() {
                     parts.push(JsxMessagePart::Text(text));
                 }

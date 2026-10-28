@@ -1169,35 +1169,48 @@ const choice = <Plural value={count} one="item" other="items" comment={"Translat
 fn merges_interpolated_descriptor_values_with_explicit_values() {
     let result = transform_macros(
         r#"import { t } from "@palamedes/core/macro";
-const message = t({ message: `Hello ${name}, you have {count}` }, { count });
+const message = t({ message: `Hello ${name}` }, { name });
 "#,
         "test.ts",
         None,
     )
     .expect("transform should succeed");
 
-    assert!(
-        result
-            .code
-            .contains("message: \"Hello {name}, you have {count}\"")
-    );
-    assert!(result.code.contains("{ name, count }"));
+    assert!(result.code.contains("message: \"Hello {name}\""));
+    assert!(result.code.contains("{ name }"));
 }
 
 #[test]
-fn rejects_missing_icu_values_in_interpolated_descriptor_templates() {
-    let error = transform_macros(
+fn descriptor_template_braces_are_literal_text() {
+    // Template quasis are authored text, like JSX: `{count}` is quoted rather
+    // than read as an ICU argument. Raw ICU belongs in a string `message`.
+    let result = transform_macros(
         r#"import { t } from "@palamedes/core/macro";
 const message = t({ message: `Hello ${name}, you have {count}` });
 "#,
         "test.ts",
         None,
     )
-    .expect_err("implicit template values must validate all message placeholders");
+    .expect("literal braces in a template quasi transform");
+    assert!(
+        result
+            .code
+            .contains("message: \"Hello {name}, you have '{count}'\""),
+        "{}",
+        result.code
+    );
 
+    let error = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const message = t({ message: `Hello ${name}, you have {count}` }, { count });
+"#,
+        "test.ts",
+        None,
+    )
+    .expect_err("an explicit value cannot fill a literal brace");
     let message = error.to_string();
-    assert!(message.contains("Missing value(s): count"));
-    assert!(message.contains("extra value(s): none"));
+    assert!(message.contains("Missing value(s): none"), "{message}");
+    assert!(message.contains("extra value(s): count"), "{message}");
 }
 
 #[test]
@@ -1360,8 +1373,9 @@ const doubled = t`client''s l''été`;
     let transformed =
         transform_macros(source, "test.tsx", None).expect("apostrophe messages should transform");
 
-    // Catalog identities preserve natural and already doubled apostrophes.
-    // Only a literal/placeholder boundary needs escaping in persisted ICU.
+    // Catalog identities keep natural apostrophes and use the shortest
+    // spelling: a doubled authored apostrophe renders one apostrophe. Only a
+    // literal/placeholder boundary needs escaping in persisted ICU.
     assert_eq!(
         extracted
             .iter()
@@ -1372,7 +1386,7 @@ const doubled = t`client''s l''été`;
             "l''{item}",
             "{count, plural, one {''#' don't item} other {# don't items}}",
             "don't",
-            "client''s l''été",
+            "client's l'été",
         ]
     );
 
@@ -1974,7 +1988,7 @@ fn normalizes_trans_jsx_placeholder_before_punctuation() {
     assert!(result.code.contains(
         "message={\"Tailored to your {volume} MWh of annual electricity use in {countryName}.\"}"
     ));
-    assert!(result.code.contains("message={\"{name} .\"}"));
+    assert!(result.code.contains("message={\"'{name}' .\"}"));
 }
 
 #[test]
