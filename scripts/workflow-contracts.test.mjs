@@ -876,6 +876,34 @@ describe("workflow contracts", () => {
     expect(build).toContain("run: pnpm exec playwright install --with-deps chromium");
   });
 
+  it("deploys when only a site verification input changes", async () => {
+    const [deploySite, ci, packageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/deploy-site.yml"),
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("package.json").then(JSON.parse),
+    ]);
+    // Pull-request CI does not run the full route crawl, so a change to its
+    // inputs alone must still reach the Deploy Site workflow.
+    for (const path of [
+      '"package.json"',
+      '"site/**"',
+      '"scripts/*site*.mjs"',
+      '"scripts/example-matrix*.mjs"',
+    ]) {
+      expect(deploySite).toContain(`      - ${path}\n`);
+    }
+
+    // The static outline check does run in pull requests, after the build.
+    expect(packageJson.scripts["verify:site-outlines"]).toBe(
+      "node ./site/scripts/verify-progressive-outlines.mjs",
+    );
+    const validate = job(ci, "validate", "validate-rust");
+    expect(validate.indexOf("run: pnpm build:site")).toBeGreaterThan(-1);
+    expect(validate.indexOf("run: pnpm build:site")).toBeLessThan(
+      validate.indexOf("run: pnpm verify:site-outlines"),
+    );
+  });
+
   it("pins every third-party action to a commit SHA with a version comment", async () => {
     const { checked, problems } = checkWorkflowPins(repositoryRoot);
 
