@@ -312,9 +312,16 @@ any upload, whatever the PR path filters selected.
 `pnpm release:rust:dry-run` can run the SDK staging check locally without
 uploading. Once enabled, publication still rejects versions below
 `minimumMajor` and prerelease versions. After publishing, verify that every
-coordinated npm and Cargo package is available before closing #1204. Remove the
-one-time `release-as` override after 2.0.0 is released so subsequent versions
-follow conventional commits again. Run `pnpm check:release-set` and
+coordinated npm and Cargo package is available before closing #1204.
+
+`.release-please-config.json` carries two one-time overrides for 2.0.0:
+`release-as` and the top-level `last-release-sha`, which starts the 2.0.0
+changelog at the unpublished 1.25.1 release commit (tag `palamedes-v1.25.1`)
+instead of re-listing 1.x entries. Remove both after 2.0.0, in the generated
+release PR that sets the manifest to 2.0.0. `pnpm check:release-set` fails
+while `last-release-sha` remains at 2.0.0 or later.
+
+Run `pnpm check:release-set` and
 `pnpm check:workflow-contracts` when changing policy or workflow wiring.
 `pnpm check:release-wording` (run by CI and the Publish workflow) fails once the
 release version reaches 2.0.0 while held, draft, or unreleased v2 wording remains

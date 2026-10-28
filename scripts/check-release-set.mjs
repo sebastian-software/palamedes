@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { publicWorkspacePackages } from "./release-packages.mjs";
 import { readReleasePolicy } from "./release-policy.mjs";
+import { releaseOverrideProblems } from "./release-set-rules.mjs";
 
 const root = process.cwd();
 const releasePolicy = readReleasePolicy(root);
@@ -158,6 +159,14 @@ if (releaseManifest[rootReleasePath] !== expectedVersion) {
   fail(
     `release manifest tracks ${releaseManifest[rootReleasePath]}, but public packages are at ${expectedVersion}`,
   );
+}
+
+for (const problem of releaseOverrideProblems({
+  releaseConfig,
+  manifestVersion: releaseManifest[rootReleasePath],
+  minimumMajor: releasePolicy.minimumMajor,
+})) {
+  fail(problem);
 }
 
 if (rootReleaseExtraFiles.some((file) => file?.type === "toml")) {

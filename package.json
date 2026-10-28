@@ -63,7 +63,7 @@
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:published-types": "node ./scripts/check-published-types.mjs && pnpm check:core-api-reference",
     "check:core-api-reference": "node ./scripts/check-core-api-reference.mjs",
-    "check:release-set": "node ./scripts/check-release-set.mjs && node --test ./scripts/determine-release.test.mjs",
+    "check:release-set": "node ./scripts/check-release-set.mjs && node --test ./scripts/determine-release.test.mjs ./scripts/release-set-rules.test.mjs",
     "check:release-wording": "node ./scripts/check-release-wording.mjs && node --test ./scripts/check-release-wording.test.mjs",
     "check:workflow-contracts": "vitest run scripts/workflow-contracts.test.mjs scripts/native-package-contracts.test.mjs scripts/release-verification.test.mjs scripts/deploy-demo-image.test.mjs scripts/provision-component-hosts.test.mjs && pnpm --filter @palamedes/benchmark-e2e-workflow test",
     "check:workflow-pins": "node ./scripts/check-workflow-pins.mjs",
