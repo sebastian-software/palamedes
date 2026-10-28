@@ -175,6 +175,7 @@ matrix and reusable in apps:
 | `HostLocaleConfig`              | Type-only |
 | `LocaleControls`                | Type-only |
 | `LocaleControlsConfig`          | Type-only |
+| `LocaleSeoLink`                 | Type-only |
 | `LocaleSource`                  | Type-only |
 | `LocaleSuggestion`              | Type-only |
 | `LocaleSwitchItem`              | Type-only |
@@ -188,7 +189,7 @@ matrix and reusable in apps:
   labels, active state, locale, and test ids.
 - `defineLocaleControls(config)`: binds locale resolution, deliberate-choice
   cookies, canonical URLs, and suggestion decisions for cookie, route,
-  subdomain, and tld strategies. Host-carrying URLs from `canonicalUrl` and
+  domain, subdomain, and tld strategies. Host-carrying URLs from `canonicalUrl` and
   `suggest` are protocol-relative (`//host/path`) unless the config sets
   `protocol` (e.g. `"https"`), so HTTPS pages never link users to `http://`.
   Invalid configuration is rejected at construction time with field-specific
@@ -204,6 +205,23 @@ matrix and reusable in apps:
   choice matching the current locale suppresses the hint. An earlier choice for
   a different locale never replaces the browser preference; host mismatches
   remain independent of that choice.
+- `hosts: { mode: "domain", locales: { en: "product.example", de: "mein-produkt.de" } }`
+  selects **explicit language domains**: an authoritative, complete locale-to-host
+  map without path prefixes. **Top-level domain (`tld`)** mode replaces only the
+  final DNS label (`product.com` to `product.de`); domain mode can also change the
+  rest of the hostname (`my-product.com` to `mein-produkt.de`). Existing TLD sites
+  can keep their strategy.
+  Use `resolve({ strategy: "domain", requestHost })` for request detection or
+  retain the fixed locale of a static build. Hosts must identify distinct
+  locales; configured destination ports are preserved without inheriting the
+  request port. The existing `map` mode retains locale-prefixed paths.
+- `controls.seoLinks({ locale, pathname, requestHost?, search?, xDefaultLocale? })`
+  returns `LocaleSeoLink` descriptors for the canonical, configured language
+  alternates, and the default locale's `x-default`. An explicit configured
+  `xDefaultLocale` overrides it; `false` omits it. Unsupported locales throw
+  `TypeError`. Set `protocol: "https"` for absolute URLs, and supply the canonical
+  build host for TLD/subdomain prerendering. Rendering and sitemap XML stay with
+  the application.
 - `createChoiceHandoffUrl({ url, locale, currentOrigin, parameterName? })`:
   adds the selected locale to a cross-origin URL using the
   `__palamedes_locale_choice` query parameter by default and returns an absolute

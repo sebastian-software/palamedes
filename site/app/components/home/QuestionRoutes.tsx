@@ -39,7 +39,7 @@ const QUESTIONS = [
     icon: "globe-app-network",
     question: "Deciding how languages appear in URLs?",
     answer:
-      "Cookie, path, subdomain, or country domain: understand what each one costs before you wire it into the host.",
+      "Cookie, path, subdomain, TLD, or explicit language domains: compare the URL policies before you wire one into the host.",
     href: "/locale-routing",
     label: "Explore locale architecture",
     resources: [
