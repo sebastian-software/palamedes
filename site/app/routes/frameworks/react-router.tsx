@@ -11,7 +11,7 @@ const page: FrameworkLanding = {
   metaDescription:
     "Internationalize React Router Framework Mode with TypeScript macros, localized loaders and actions, PO catalogs, SSR, and verified locale switching.",
   headline: "React Router i18n for Framework Mode.",
-  lede: "Palamedes connects React Router 8 loaders, actions, SSR, and hydrated React components to one translation runtime. The Vite plugin compiles messages; route modules resolve the locale and activate the matching catalog.",
+  lede: "Palamedes connects React Router 8 loaders, actions, SSR, and hydrated React components to one translation runtime. The Vite plugin compiles messages; one root middleware activates the request's catalog for every loader, action, and render.",
   primary: {
     label: "Open the React Router demo",
     href: "https://react-router-route.examples.palamedes.dev/en",
@@ -33,8 +33,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Integration",
-      value: "@palamedes/vite-plugin",
-      note: "Macro transforms and PO loading in the route build.",
+      value: "@palamedes/react-router",
+      note: "Root middleware and server entry beside the Vite plugin.",
     },
     {
       label: "Locale models",
@@ -60,40 +60,39 @@ const page: FrameworkLanding = {
         body: "The Palamedes transform runs beside the React Router plugin, so macros and PO imports become normal modules in the Framework Mode build.",
       },
       {
-        title: "Activate inside route boundaries",
-        body: "A loader or action normalizes its locale and activates the server runtime before translated messages execute.",
+        title: "Activate once, in root middleware",
+        body: "React Router 8 route middleware wraps every loader, action, data request, and document render. The adapter's middleware resolves the app's locale policy and activates the server runtime before translated code runs.",
       },
       {
         title: "Hydrate from root locale data",
-        body: "The root route exposes the document locale. The adapter loads its compiled message dependencies before hydration and before lazy route modules run; the application client entry hydrates React normally.",
+        body: "The root loader exposes the document locale. The adapter's server entry adds that locale's catalog import map, so compiled messages load before hydration and before lazy route modules run; the client entry hydrates React normally.",
       },
     ],
   },
   code: {
-    label: "vite.config.ts + routes/locale-home.tsx",
-    caption: "Framework Mode keeps the locale close to the loader and action.",
-    source: `// vite.config.ts
-import { reactRouter } from "@react-router/dev/vite"
-import { palamedes } from "@palamedes/vite-plugin"
+    label: "lib/i18n.server.ts + root.tsx + entry.server.tsx + routes/locale-home.tsx",
+    caption: "The app owns the locale policy; the adapter owns the request scope.",
+    source: `// app/lib/i18n.server.ts
+import { createReactRouterI18n } from "@palamedes/react-router"
+import { resolveLocaleFromRequest } from "./i18n"
 
-export default {
-  plugins: [
-    palamedes(),
-    reactRouter(),
-  ],
-}
+export const i18n = createReactRouterI18n({
+  resolveLocale: resolveLocaleFromRequest,
+  i18nOptions: { timeZone: "Europe/Berlin" },
+})
 
-// routes/locale-home.tsx
-import { t } from "@palamedes/core/macro"
-import type { Route } from "./+types/locale-home"
-import { normalizeLocale } from "~/lib/i18n"
-import { runServerI18n } from "~/lib/i18n.server"
+// app/root.tsx
+export const middleware = [i18n.middleware]
 
-export async function loader({ params }: Route.LoaderArgs) {
+// app/entry.server.tsx
+export default i18n.handleRequest
+
+// app/routes/locale-home.tsx
+export async function action({ params }: Route.ActionArgs) {
   const locale = normalizeLocale(params.locale)
-  return runServerI18n(locale, () => ({ locale, title: t\`Welcome to Palamedes\` }))
+  return { message: t\`Server action confirmed locale \${locale}.\` }
 }`,
-    note: "runServerI18n() is the checked example's request helper: it creates isolated state over a shared server catalog. The adapter initializes browser fragments; the client entry calls HydratedRouter without an application-owned catalog loader. Actions use the same request helper.",
+    note: "Loaders and actions need no wrapper: the root middleware gives each request its own i18n instance over a shared server catalog. The server entry injects the locale's catalog import map; the client entry calls HydratedRouter without an application-owned catalog loader.",
   },
   strategies: {
     matrixSlug: "react-router",
@@ -136,11 +135,11 @@ export async function loader({ params }: Route.LoaderArgs) {
   faq: [
     {
       q: "Where should React Router resolve the locale?",
-      a: "At the route or request boundary that owns the policy: a root loader, a locale route loader, middleware, or a shared request helper. Activate the Palamedes server runtime before translated loader or action code executes.",
+      a: "In the resolveLocale function passed to createReactRouterI18n. It receives the request, so it can read a cookie, a path segment, or the host. The adapter's root middleware calls it once per request and activates the matching catalog before loaders and actions run.",
     },
     {
       q: "Can actions return translated messages?",
-      a: "Yes. The checked examples activate the route locale inside the action and return a message produced by a transformed Palamedes macro.",
+      a: "Yes. The root middleware also covers actions, so an action can return a message produced by a transformed Palamedes macro without any wrapper.",
     },
     {
       q: "Does client navigation keep the active catalog synchronized?",
@@ -163,8 +162,8 @@ export async function loader({ params }: Route.LoaderArgs) {
       href: "https://react-router-route.examples.palamedes.dev/en",
     },
     secondary: {
-      label: "View @palamedes/react",
-      href: NPM("@palamedes/react"),
+      label: "View @palamedes/react-router",
+      href: NPM("@palamedes/react-router"),
     },
   },
 };
