@@ -32,6 +32,7 @@ on:
       - "benchmarks/browser-runtime/results.json"
       - "scripts/*site*.mjs"
       - "scripts/benchmark-browser-runtime.mjs"
+      - "scripts/browser-runtime-source-hash.mjs"
       - "scripts/benchmark-tool-versions.mjs"
       - "scripts/*bench-data.mjs"
       - "scripts/check-example-matrix.mjs"
