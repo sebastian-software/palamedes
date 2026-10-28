@@ -2,12 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ferrocat::{
-    CompileCatalogArtifactIcuOptions, CompileCatalogArtifactOptions, CompiledKeyStrategy,
-    ParseCatalogOptions,
-};
 use palamedes::sdk::{
-    RuntimeCompiledMessage, compile_runtime_catalog_messages, parse_catalog_for_compile,
+    RuntimeCompiledMessage, compile_catalog, compile_runtime_catalog_messages, parse_catalog,
 };
 use palamedes_i18n::{CatalogArtifact, FORMAT_VERSION, Instruction, Message};
 use serde::{Deserialize, Serialize};
@@ -220,10 +216,8 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
         }
         // The JavaScript target shares this projection, which clears fuzzy
         // values so the compiler resolves them through the fallback chain.
-        let catalog = parse_catalog_for_compile(
-            ParseCatalogOptions::new(&content, &builder.source_locale).with_locale(locale),
-        )
-        .map_err(|error| parse_error(error.into()))?;
+        let catalog = parse_catalog(&content, locale, &builder.source_locale)
+            .map_err(|error| parse_error(error.into()))?;
         normalized.insert(locale.clone(), catalog);
         catalogs.insert(locale.clone(), messages);
     }
@@ -303,22 +297,16 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
             .map(String::as_str)
             .filter(|fallback| *fallback != locale && *fallback != builder.source_locale)
             .collect::<Vec<_>>();
-        let options = CompileCatalogArtifactOptions::new(locale, &builder.source_locale)
-            .with_fallback_chain(&fallback_locales)
-            .with_key_strategy(CompiledKeyStrategy::FerrocatV1)
-            .with_source_fallback(true)
-            .with_strict_icu(true)
-            .with_icu_compatibility(true)
-            .with_icu_options(
-                CompileCatalogArtifactIcuOptions::new()
-                    .with_syntax_policy(ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes),
-            );
-        let artifact =
-            ferrocat::compile_catalog_artifact(&normalized.values().collect::<Vec<_>>(), &options)
-                .map_err(|error| Error::CompileCatalog {
-                    locale: locale.clone(),
-                    source: error.into(),
-                })?;
+        let artifact = compile_catalog(
+            &normalized.values().collect::<Vec<_>>(),
+            locale,
+            &builder.source_locale,
+            &fallback_locales,
+        )
+        .map_err(|error| Error::CompileCatalog {
+            locale: locale.clone(),
+            source: error.into(),
+        })?;
         let programs = compile_runtime_catalog_messages(&artifact.messages);
         let mut messages = BTreeMap::new();
         for (source, spec) in &signature {
