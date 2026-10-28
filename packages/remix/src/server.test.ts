@@ -154,6 +154,20 @@ describe("createRemixI18nRequestScope", () => {
     ]);
   });
 
+  it("uses a custom failureMessage for resolver failures", async () => {
+    const failure = new Error("catalog is unavailable");
+    const remixI18n = createRemixI18nRequestScope(
+      async () => {
+        throw failure;
+      },
+      { failureMessage: "Custom request scope failure" },
+    );
+
+    await expect(
+      remixI18n.run(new Request("https://example.test/"), () => {}),
+    ).rejects.toMatchObject({ message: "Custom request scope failure", cause: failure });
+  });
+
   it("wraps resolver failures without entering the request callback", async () => {
     const failure = new Error("catalog is unavailable");
     const remixI18n = createRemixI18nRequestScope(async () => {
@@ -239,23 +253,111 @@ describe("createRemixI18nServer", () => {
     cookies: { locale: "locale" },
   });
 
-  it("rejects legacy message-version callbacks with executable registries", () => {
+  it("rejects the removed catalogVersion callback with a migration error", () => {
     expect(() =>
       createRemixI18nServer({
         locales,
         strategy: "cookie",
-        catalogVersion: ({ messages }) => JSON.stringify(messages),
-        catalogAssets: {
-          registry: {
-            load: async () => defineCompiledCatalog({}),
-            register: () => "test",
-            sidecarUrl: () => "/test",
-            serve() {},
-            invalidate() {},
-          },
-        },
+        loadMessages: () => defineCompiledCatalog({}),
+        // @ts-expect-error JavaScript callers of the removed callback form get the migration error.
+        catalogVersion: ({ messages }: { messages: object }) => JSON.stringify(messages),
       }),
-    ).toThrow(/Remove the legacy messages callback/);
+    ).toThrow(
+      "Palamedes v2 removed the catalogVersion callback: catalog versions derive from the executable catalog asset. Pass a deployment version string, or omit catalogVersion to use the content digest.",
+    );
+  });
+
+  it("rejects the renamed createI18n factory option with a migration error", () => {
+    expect(() =>
+      createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+        // @ts-expect-error JavaScript callers of the renamed option get the migration error.
+        createI18n: () => ({}),
+      }),
+    ).toThrow(
+      "Palamedes v2 renamed the Remix createI18n option to i18nOptions: return the createI18n options for the request, such as { timeZone }, instead of an instance. Rename the option; the adapter creates the instance.",
+    );
+  });
+
+  it("no longer offers the synchronous createI18n(locale) method", () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+
+    expect(remixI18n).not.toHaveProperty("createI18n");
+  });
+
+  it("creates each request instance with i18nOptions for its request and locale", async () => {
+    const i18nOptions = vi.fn(async (incoming: Request, locale: "en" | "de" | "es") => ({
+      timeZone: incoming.headers.get("x-time-zone") ?? (locale === "de" ? "Europe/Berlin" : "UTC"),
+    }));
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: (locale) => defineCompiledCatalog({ greeting: `hello:${locale}` }),
+      i18nOptions,
+    });
+    const request = new Request("https://example.test/", {
+      headers: { cookie: "locale=de", "x-time-zone": "Asia/Tokyo" },
+    });
+
+    await remixI18n.run(request, ({ i18n, locale }) => {
+      expect(locale).toBe("de");
+      expect(i18n.locale).toBe("de");
+      expect(i18n.timeZone).toBe("Asia/Tokyo");
+      expect(i18n._("greeting")).toBe("hello:de");
+    });
+
+    expect(i18nOptions).toHaveBeenCalledWith(request, "de");
+  });
+
+  it("accepts static i18nOptions", async () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+      i18nOptions: { timeZone: "Europe/Berlin" },
+    });
+
+    await expect(
+      remixI18n.run(new Request("https://example.test/"), ({ i18n }) => i18n.timeZone),
+    ).resolves.toBe("Europe/Berlin");
+  });
+
+  it("wraps initialization failures in failureMessage without entering the callback", async () => {
+    const failure = new Error("catalog is unavailable");
+    const callback = vi.fn();
+    const defaultMessage = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages() {
+        throw failure;
+      },
+    });
+    const customMessage = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+      i18nOptions() {
+        throw failure;
+      },
+      failureMessage: "Custom Remix failure",
+    });
+
+    await expect(
+      defaultMessage.run(new Request("https://example.test/"), callback),
+    ).rejects.toMatchObject({
+      message: "Palamedes Remix i18n initialization failed before the handler ran.",
+      cause: failure,
+    });
+    await expect(
+      customMessage.run(new Request("https://example.test/"), callback),
+    ).rejects.toMatchObject({ message: "Custom Remix failure", cause: failure });
+    expect(callback).not.toHaveBeenCalled();
   });
 
   it("resolves request locale and caches catalog messages by locale", async () => {

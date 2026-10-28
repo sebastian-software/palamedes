@@ -709,8 +709,8 @@ browser fragments and ordinary error-page recovery. Apps own locale selection
 and optional untranslated error markup. Inert ICU bootstrap payloads are rejected.
 Locale changes reload the document; only the active locale is requested. For matching
 date/time output during hydration, set `data-palamedes-time-zone="Europe/Berlin"`
-on `<html>` and use `createI18n: () => createI18n({ timeZone: "Europe/Berlin" })`
-for the server instance. The adapter reads the document zone before browser modules run.
+on `<html>` and pass `i18nOptions: { timeZone: "Europe/Berlin" }` to `createRemixI18nServer()`
+for the server instances. The adapter reads the document zone before browser modules run.
 Development watches catalog/config inputs; custom runners can use `watch: true`
 or `registry.invalidate()`. Node.js >=24.3 and remix@3.0.0 are the verified
 host. All four locale strategies have browser proofs, including Frames, interaction,

@@ -389,6 +389,14 @@ import { getI18n } from "@palamedes/runtime"
 import type { TransProps as ReactTransProps } from "@palamedes/react"
 import type { TransProps as SolidTransProps } from "@palamedes/solid"
 import type { TransProps as RemixTransProps } from "@palamedes/remix/compiled"
+import {
+  createRemixI18nServer,
+  remixI18nContext,
+  type RemixCatalogAssetConfig,
+  type RemixI18nContextKey,
+  type RemixI18nRunInput,
+} from "@palamedes/remix/server"
+import { defineLocaleControls } from "@palamedes/core/locale"
 
 export const lengths = [
   t\`Hello\`.length,
@@ -466,6 +474,29 @@ createReactRouterI18n({ resolveLocale: () => createI18n({ locale: "en" }) })
 // @ts-expect-error Adapters require the full v2 instance, not only locale and _().
 createWakuI18nInterceptor(() => ({ locale: "en", _: () => "" }))
 export const translatedText: string = getI18n()._("greeting")
+
+const remixLocales = defineLocaleControls({ locales: ["en", "de"], defaultLocale: "en" })
+export const remixCatalogConfig: RemixCatalogAssetConfig = {
+  rootDir: ".",
+  locales: ["en", "de"],
+  sourceLocale: "en",
+  catalogs: [{ path: "locales/{locale}", format: "po" }],
+}
+export const remixI18n = createRemixI18nServer({
+  locales: remixLocales,
+  strategy: "cookie",
+  i18nOptions: (_request, locale) => ({ timeZone: locale === "de" ? "Europe/Berlin" : "UTC" }),
+  catalogAssets: { config: remixCatalogConfig, resolvePath: (locale) => \`locales/\${locale}.po\` },
+  catalogVersion: "deployment-1",
+  failureMessage: "Remix i18n failed",
+})
+export const remixContextKey: RemixI18nContextKey = remixI18nContext
+export const remixRunInput: RemixI18nRunInput = { request: new Request("https://example.test/") }
+export const remixTimeZone: Promise<string | undefined> = remixI18n.run(remixRunInput, ({ i18n }) => i18n.timeZone)
+// @ts-expect-error The v1 synchronous createI18n(locale) method was removed.
+remixI18n.createI18n("de")
+// @ts-expect-error The catalogVersion callback was removed; pass a deployment version string.
+createRemixI18nServer({ locales: remixLocales, strategy: "cookie", catalogVersion: () => "v1" })
 
 export const runtimeTransProps = [
   { id: "greeting", message: "Hello" } satisfies ReactTransProps,

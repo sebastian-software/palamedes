@@ -4,16 +4,12 @@ import type { AssetServer } from "remix/assets";
 
 import {
   createI18n,
-  type CatalogMessages,
   type CompiledCatalogMessages,
+  type CreateI18nOptions,
   type PalamedesI18n,
 } from "@palamedes/core";
 import type { LocaleControls, LocaleSource } from "@palamedes/core/locale";
-import {
-  compileCatalogArtifact,
-  compileCatalogModule,
-  type CatalogArtifactConfig,
-} from "@palamedes/core-node";
+import { compileCatalogModule, type CatalogArtifactConfig } from "@palamedes/core-node";
 import type { I18nInstance } from "@palamedes/runtime";
 import {
   createScopedI18nRunner,
@@ -21,7 +17,7 @@ import {
   createServerI18nScope,
 } from "@palamedes/runtime/server";
 import { AcceptLanguage } from "remix/headers";
-import { createContextKey, type Middleware, type RequestContext } from "remix/router";
+import { createContextKey, type Middleware } from "remix/router";
 
 import type { PalamedesRemixCatalogAssetRegistry } from "./index";
 
@@ -35,6 +31,11 @@ export type RemixI18nRequestScope<T extends I18nInstance = I18nInstance> = {
   get(): T | undefined;
 };
 
+export type RemixI18nRequestScopeOptions = {
+  /** Message of the error thrown when `resolveI18n` fails; the original error is its `cause`. */
+  readonly failureMessage?: string;
+};
+
 export type RemixLocaleStrategy = "cookie" | "route" | "subdomain" | "tld";
 
 export type RemixLocaleResolutionInput = {
@@ -43,10 +44,12 @@ export type RemixLocaleResolutionInput = {
   request: Request;
 };
 
-type RemixI18nRunInput = Request | RemixLocaleResolutionInput | RequestContext<any, any>;
-type RemixContextKey<T> = {
-  defaultValue?: T;
-};
+/**
+ * What `run()` and `resolveLocale()` accept: a Fetch request, or a Remix
+ * `RequestContext` (or any `{ request, headers?, params? }` object), whose
+ * route params and mutable headers then take part in locale resolution.
+ */
+export type RemixI18nRunInput = Request | RemixLocaleResolutionInput;
 
 export type RemixResolvedLocale<TLocale extends string> = {
   locale: TLocale;
@@ -62,46 +65,93 @@ export type RemixI18nContextValue<
   source: LocaleSource;
 };
 
-export type RemixI18nServerOptions<
-  TLocale extends string,
-  T extends PalamedesI18n = PalamedesI18n,
-> = {
+/** Request-local `createI18n` options other than the locale, such as `timeZone`. */
+export type RemixI18nOptions = Omit<CreateI18nOptions, "locale">;
+
+/** Returns the `createI18n` options for one request and its resolved locale. */
+export type RemixI18nOptionsResolver<TLocale extends string = string> = (
+  request: Request,
+  locale: TLocale,
+) => RemixI18nOptions | Promise<RemixI18nOptions>;
+
+/**
+ * Catalog configuration for `catalogAssets.config`: the resolved shape of a
+ * Palamedes config that the adapter compiles browser catalog assets from.
+ * Paths resolve from `rootDir`; `format` defaults to `"po"`.
+ */
+export type RemixCatalogAssetConfig = {
+  rootDir: string;
+  locales: string[];
+  sourceLocale: string;
+  fallbackLocales?: string[] | Record<string, string[]>;
+  pseudoLocale?: string;
+  /** Catalog `include`/`exclude` select source files for extraction; asset compilation ignores them. */
+  catalogs: Array<{ path: string; format?: "po" | "fcl"; include?: string[]; exclude?: string[] }>;
+};
+
+export type RemixCatalogAssetOptions<TLocale extends string = string> = {
+  config?: RemixCatalogAssetConfig;
+  resolvePath?: (locale: TLocale) => string;
+  basePath?: string;
+  registry?: PalamedesRemixCatalogAssetRegistry;
+};
+
+export type RemixI18nServerOptions<TLocale extends string> = {
   locales: LocaleControls<TLocale>;
   strategy: RemixLocaleStrategy;
   /** Synchronous or asynchronous executable catalog loader. Omit when using a registry. */
   loadMessages?: (locale: TLocale) => CompiledCatalogMessages | Promise<CompiledCatalogMessages>;
-  /** Override the deterministic content hash used for client catalog versions. */
-  catalogVersion?: string | ((input: { locale: TLocale; messages: CatalogMessages }) => string);
+  /**
+   * Deployment version for client catalog assets. Defaults to a deterministic
+   * digest of the executable catalog asset each locale serves.
+   */
+  catalogVersion?: string;
   /**
    * Configuration for adapter-owned executable browser catalog assets. The
    * adapter compiles the requested locale into an ESM module and serves it
    * through `serveClientCatalogAsset()`; no catalog functions cross JSON.
    */
-  catalogAssets?: {
-    config?: CatalogArtifactConfig;
-    resolvePath?: (locale: TLocale) => string;
-    basePath?: string;
-    registry?: PalamedesRemixCatalogAssetRegistry;
-  };
-  createI18n?: () => T;
+  catalogAssets?: RemixCatalogAssetOptions<TLocale>;
+  /**
+   * Formatting options for each request's i18n instance, such as `timeZone`,
+   * or a function that returns them for the request and its resolved locale.
+   */
+  i18nOptions?: RemixI18nOptions | RemixI18nOptionsResolver<TLocale>;
+  /**
+   * Message of the error `run()` and `middleware()` throw when the locale,
+   * `i18nOptions`, or catalog cannot be resolved; the original error is its `cause`.
+   */
+  failureMessage?: string;
   routeParam?: string;
   cookieName?: string;
   cookieMaxAge?: number;
 };
 
-export type RemixI18nServer<TLocale extends string, T extends PalamedesI18n = PalamedesI18n> = {
+/** The key `middleware()` stores the request's {@link RemixI18nContextValue} under. */
+export type RemixI18nContextKey = {
+  readonly defaultValue?: RemixI18nContextValue<string, I18nInstance>;
+};
+
+/**
+ * A Remix `RequestContext`, or any object that reads context entries the same
+ * way. `get()` reads the value `middleware()` stored for {@link remixI18nContext}.
+ */
+export type RemixI18nContextReader = {
+  get(key: RemixI18nContextKey): unknown;
+};
+
+export type RemixI18nServer<TLocale extends string> = {
   resolveLocale(input: RemixI18nRunInput): RemixResolvedLocale<TLocale>;
-  createI18n(locale: TLocale): T;
   run<Result>(
     input: RemixI18nRunInput,
-    callback: (context: RemixI18nContextValue<TLocale, T>) => Result | Promise<Result>,
+    callback: (context: RemixI18nContextValue<TLocale, PalamedesI18n>) => Result | Promise<Result>,
   ): Promise<Result>;
   middleware(): Middleware<{
     key: typeof remixI18nContext;
-    value: RemixI18nContextValue<TLocale, T>;
+    value: RemixI18nContextValue<TLocale, PalamedesI18n>;
     property: "palamedes";
   }>;
-  get(context?: RequestContext<any, any>): RemixI18nContextValue<TLocale, T> | undefined;
+  get(context?: RemixI18nContextReader): RemixI18nContextValue<TLocale, PalamedesI18n> | undefined;
   createClientCatalogAsset(locale: TLocale): RemixClientCatalogAsset<TLocale>;
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
   /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
@@ -128,14 +178,18 @@ type CachedRemixClientCatalogAsset<TLocale extends string> = RemixClientCatalogA
   registryGeneration?: string;
 };
 
-export const remixI18nContext: RemixContextKey<RemixI18nContextValue<string, I18nInstance>> =
+export const remixI18nContext: RemixI18nContextKey =
   createContextKey<RemixI18nContextValue<string, I18nInstance>>();
+
+const DEFAULT_FAILURE_MESSAGE =
+  "Palamedes Remix i18n initialization failed before the handler ran.";
 
 export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstance>(
   resolveI18n: RemixI18nResolver<T>,
+  options: RemixI18nRequestScopeOptions = {},
 ): RemixI18nRequestScope<T> {
   const runner = createScopedI18nRunner(resolveI18n, {
-    failureMessage: "Palamedes Remix i18n initialization failed before the handler ran.",
+    failureMessage: options.failureMessage ?? DEFAULT_FAILURE_MESSAGE,
   });
 
   return {
@@ -155,26 +209,24 @@ export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstanc
   };
 }
 
-export function createRemixI18nServer<
-  TLocale extends string,
-  T extends PalamedesI18n = PalamedesI18n,
->(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
+export function createRemixI18nServer<TLocale extends string>(
+  options: RemixI18nServerOptions<TLocale>,
+): RemixI18nServer<TLocale> {
   if (options.catalogAssets && Object.hasOwn(options.catalogAssets, "clientModuleUrl")) {
     throw new TypeError(
       "Remove catalogAssets.clientModuleUrl. Pass the actual assetServer to renderClientEntry(); stable Remix resolves bootstrap URLs and import-map scopes through that server's mounts.",
     );
   }
-  if (options.catalogAssets?.registry && typeof options.catalogVersion === "function") {
-    throw new TypeError(
-      "Remix registry catalog versions are derived from executable content. Remove the legacy messages callback or provide a deployment version string.",
-    );
-  }
-  const scope = createServerI18nScope<T>();
+  assertNoRemovedRemixServerOptions(options);
+  const failureMessage = options.failureMessage ?? DEFAULT_FAILURE_MESSAGE;
+  const scope = createServerI18nScope<PalamedesI18n>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
   const clientEntries = new Map<string, string>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
-  const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
-  const createI18nInstance = options.createI18n ?? (() => createI18n() as unknown as T);
+  const scopedContexts = new WeakMap<
+    PalamedesI18n,
+    RemixI18nContextValue<TLocale, PalamedesI18n>
+  >();
   const cookieName = options.cookieName ?? "locale";
   const cookieMaxAge = options.cookieMaxAge ?? 60 * 60 * 24 * 365;
   let serverRegistryGeneration = options.catalogAssets?.registry?.generation?.();
@@ -212,28 +264,6 @@ export function createRemixI18nServer<
     clientCatalogAssetCache.clear();
   };
 
-  const getMessagesSync = (locale: TLocale): CompiledCatalogMessages => {
-    refreshRegistryGeneration();
-    const cached = catalogCache.get(locale);
-    if (cached) {
-      return cached;
-    }
-
-    if (!options.loadMessages) {
-      throw new Error(
-        "Palamedes Remix synchronous createI18n requires loadMessages. Use run(), which awaits the registry catalog, for adapter-owned async loading.",
-      );
-    }
-    const messages = options.loadMessages(locale);
-    if (isPromiseLike(messages)) {
-      throw new Error(
-        "Palamedes Remix synchronous createI18n cannot await an asynchronous catalog. Use run() or provide a synchronous loadMessages implementation.",
-      );
-    }
-    catalogCache.set(locale, messages);
-    return messages;
-  };
-
   const getMessages = async (locale: TLocale): Promise<CompiledCatalogMessages> => {
     refreshRegistryGeneration();
     const cached = catalogCache.get(locale);
@@ -250,19 +280,30 @@ export function createRemixI18nServer<
     return messages;
   };
 
-  const createScopedContext = async (input: Request | RemixLocaleResolutionInput) => {
-    const resolved = resolveLocaleFromInput(input, options);
-    const i18n = createI18nInstance();
-    i18n.load(resolved.locale, await getMessages(resolved.locale));
-    i18n.activate(resolved.locale);
+  const createScopedContext = async (
+    input: RemixI18nRunInput,
+  ): Promise<RemixI18nContextValue<TLocale, PalamedesI18n>> => {
+    try {
+      const resolved = resolveLocaleFromInput(input, options);
+      const i18nOptions =
+        typeof options.i18nOptions === "function"
+          ? await options.i18nOptions(normalizeInput(input).request, resolved.locale)
+          : options.i18nOptions;
+      const messages = await getMessages(resolved.locale);
+      const i18n = createI18n({ ...i18nOptions, locale: resolved.locale });
+      i18n.load(resolved.locale, messages);
+      i18n.activate(resolved.locale);
 
-    const context = {
-      i18n,
-      locale: resolved.locale,
-      source: resolved.source,
-    };
-    scopedContexts.set(i18n, context);
-    return context;
+      const context = {
+        i18n,
+        locale: resolved.locale,
+        source: resolved.source,
+      };
+      scopedContexts.set(i18n, context);
+      return context;
+    } catch (error) {
+      throw new Error(failureMessage, { cause: error });
+    }
   };
 
   const createClientCatalogAsset = (locale: TLocale): RemixClientCatalogAsset<TLocale> => {
@@ -288,7 +329,7 @@ export function createRemixI18nServer<
     const resourcePath = assetOptions.resolvePath?.(locale);
     const result = assetOptions.registry
       ? undefined
-      : compileCatalogModule(assetOptions.config!, resourcePath!, {
+      : compileCatalogModule(toCatalogArtifactConfig(assetOptions.config!), resourcePath!, {
           locale,
           pseudoLocale: assetOptions.config!.pseudoLocale,
           missingFailureHint:
@@ -303,9 +344,6 @@ export function createRemixI18nServer<
       locale,
       result?.code ?? `fragment-registry:${registryGeneration ?? ""}`,
       options.catalogVersion,
-      !assetOptions.registry && typeof options.catalogVersion === "function"
-        ? compileCatalogArtifact(assetOptions.config!, resourcePath!).messages
-        : undefined,
     );
     const source = assetOptions.registry
       ? `export const messages={};export default { messages };export const fragmentRegistry=true;export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`
@@ -396,7 +434,7 @@ export function createRemixI18nServer<
 
   async function run<Result>(
     input: RemixI18nRunInput,
-    callback: (context: RemixI18nContextValue<TLocale, T>) => Result | Promise<Result>,
+    callback: (context: RemixI18nContextValue<TLocale, PalamedesI18n>) => Result | Promise<Result>,
   ): Promise<Result> {
     const context = await createScopedContext(input);
     return await scope.run(context.i18n, async () =>
@@ -409,17 +447,10 @@ export function createRemixI18nServer<
       return resolveLocaleFromInput(input, options);
     },
 
-    createI18n(locale) {
-      const i18n = createI18nInstance();
-      i18n.load(locale, getMessagesSync(locale));
-      i18n.activate(locale);
-      return i18n;
-    },
-
     run,
 
     middleware() {
-      const middleware: ReturnType<RemixI18nServer<TLocale, T>["middleware"]> = async (
+      const middleware: ReturnType<RemixI18nServer<TLocale>["middleware"]> = async (
         context,
         next,
       ) =>
@@ -439,7 +470,9 @@ export function createRemixI18nServer<
 
     get(context) {
       if (context) {
-        return context.get(remixI18nContext) as RemixI18nContextValue<TLocale, T> | undefined;
+        return context.get(remixI18nContext) as
+          | RemixI18nContextValue<TLocale, PalamedesI18n>
+          | undefined;
       }
 
       const i18n = scope.get();
@@ -460,18 +493,33 @@ export function createRemixI18nServer<
   };
 }
 
+const REMOVED_CATALOG_VERSION_CALLBACK_MESSAGE =
+  "Palamedes v2 removed the catalogVersion callback: catalog versions derive from the executable catalog asset. Pass a deployment version string, or omit catalogVersion to use the content digest.";
+const RENAMED_CREATE_I18N_MESSAGE =
+  "Palamedes v2 renamed the Remix createI18n option to i18nOptions: return the createI18n options for the request, such as { timeZone }, instead of an instance. Rename the option; the adapter creates the instance.";
+
+function assertNoRemovedRemixServerOptions(options: object): void {
+  const record = options as Record<string, unknown>;
+  if (typeof record.catalogVersion === "function") {
+    throw new TypeError(REMOVED_CATALOG_VERSION_CALLBACK_MESSAGE);
+  }
+  if (record.createI18n !== undefined) {
+    throw new Error(RENAMED_CREATE_I18N_MESSAGE);
+  }
+}
+
+/** The adapter-owned config type is a structural subset of the native catalog config. */
+function toCatalogArtifactConfig(config: RemixCatalogAssetConfig): CatalogArtifactConfig {
+  return config;
+}
+
 function resolveCatalogAssetVersion<TLocale extends string>(
   locale: TLocale,
   source: string,
-  version: RemixI18nServerOptions<TLocale>["catalogVersion"],
-  messages?: CatalogMessages,
+  version: string | undefined,
 ): string {
-  const resolved =
-    typeof version === "function"
-      ? version({ locale, messages: messages ?? Object.create(null) })
-      : version;
-  if (typeof resolved === "string" && resolved.length > 0) {
-    return resolved;
+  if (typeof version === "string" && version.length > 0) {
+    return version;
   }
   // Asset sources contain executable message functions, so hash the exact
   // bytes delivered to the browser. This keeps cache invalidation stable
@@ -483,10 +531,6 @@ function resolveCatalogAssetVersion<TLocale extends string>(
 
 function escapeHtmlAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-}
-
-function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
-  return typeof value === "object" && value !== null && "then" in value;
 }
 
 function normalizeInput(input: RemixI18nRunInput): RemixLocaleResolutionInput {
