@@ -236,6 +236,37 @@ describe("Vite catalog delivery", () => {
     expect(probe.replaceChildren).toHaveBeenCalledTimes(1);
   });
 
+  it("serves HTML from the manifest of a build without messages", async () => {
+    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-empty-"));
+    fixtureDirectories.push(clientDirectory);
+    await writeFile(
+      path.join(clientDirectory, "palamedes-split-manifest.json"),
+      JSON.stringify({
+        locales: ["en", "de"],
+        importMaps: { en: "palamedes-importmap.en.json", de: "palamedes-importmap.de.json" },
+        chunkImports: {},
+      }),
+    );
+    await writeFile(path.join(clientDirectory, "palamedes-importmap.en.json"), '{"imports":{}}');
+    await writeFile(path.join(clientDirectory, "palamedes-importmap.de.json"), '{"imports":{}}');
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+
+    const binding = delivery.getLocaleBinding("de");
+    expect(binding).toStrictEqual({
+      locale: "de",
+      importMapJson: '{"imports":{}}',
+      imports: {},
+      chunkImports: {},
+    });
+    const html = await collect(
+      delivery.createDocumentTransform(binding, { lang: "de" }),
+      '<html><head><link rel="modulepreload" href="/assets/entry.js"></head><body>app</body></html>',
+    );
+    expect(html).toContain('<script type="importmap">{"imports":{}}</script>');
+    expect(html).toContain("Promise.all([].map(url=>import(url)))");
+    expect(html).toContain("<body>app</body>");
+  });
+
   it("leaves a production document unchanged when no manifest binding exists", async () => {
     const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-prod-"));
     fixtureDirectories.push(clientDirectory);
