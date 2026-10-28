@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
@@ -19,20 +20,31 @@ export type WakuMiddlewareHandler = (
   next: () => Promise<void>,
 ) => Promise<void>;
 
+/** Resolves a document request's CSP nonce, for example from the middleware context. */
+export type WakuNonceResolver = (
+  request: Request,
+  context: WakuMiddlewareContext,
+) => string | undefined;
+
 export type WakuCatalogDeliveryOptions = {
-  /** Built Vite client directory containing palamedes-split-manifest.json. */
-  clientDirectory: string;
+  /**
+   * Built Vite client directory containing palamedes-split-manifest.json.
+   * Defaults to Waku's `dist/public` in the process working directory.
+   */
+  clientDirectory?: string;
   /** Resolve the application-owned locale policy from the original request. */
   resolveLocale: (request: Request) => string;
   /** Allow running before a client build exists in development. */
   development?: boolean;
+  /** Override the generated manifest filename for a custom Vite output. */
+  manifestName?: string;
   /** Optional trusted catalog-free host UI for failed delivery. */
   errorHtml?: string;
   /**
-   * CSP nonce for the generated import map and failure probe. A function may
-   * derive the nonce from the current request when it is request-scoped.
+   * CSP nonce for the generated import map and failure probe: a fixed string,
+   * or a resolver called once per HTML document request.
    */
-  nonce?: string | ((request: Request) => string | undefined);
+  nonce?: string | WakuNonceResolver;
 };
 
 /**
@@ -44,7 +56,11 @@ export type WakuCatalogDeliveryOptions = {
 export function createWakuCatalogDeliveryMiddleware(
   options: WakuCatalogDeliveryOptions,
 ): WakuMiddlewareHandler {
-  const delivery = createViteCatalogDelivery(options);
+  const delivery = createViteCatalogDelivery({
+    clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), "dist/public"),
+    ...(options.development === undefined ? {} : { development: options.development }),
+    ...(options.manifestName ? { manifestName: options.manifestName } : {}),
+  });
 
   return async (context, next) => {
     await next();
@@ -55,7 +71,7 @@ export function createWakuCatalogDeliveryMiddleware(
 
     const binding = delivery.getLocaleBinding(options.resolveLocale(context.req.raw));
     const nonce =
-      typeof options.nonce === "function" ? options.nonce(context.req.raw) : options.nonce;
+      typeof options.nonce === "function" ? options.nonce(context.req.raw, context) : options.nonce;
     const body = response.body
       .pipeThrough(
         webTransform(

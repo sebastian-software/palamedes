@@ -80,14 +80,14 @@ resource routes, `.data` requests, and the document render.
 
 ## Options
 
-| Option            | Default                                                                            | Purpose                                                                             |
-| ----------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `resolveLocale`   | required                                                                           | `(request) => locale`. The app's cookie, route, subdomain, or TLD policy.           |
-| `i18nOptions`     | `{}`                                                                               | `createI18n` options such as `timeZone`, or `(request, locale) => options`.         |
-| `catalogDelivery` | `{}`                                                                               | `{ clientDirectory, development, manifestName, errorHtml }`, or `false` to disable. |
-| `nonce`           | none                                                                               | `(request, context) => nonce`, called once per document for all its scripts.        |
-| `streamTimeout`   | `5000`                                                                             | The entry's stream timeout in milliseconds; the render aborts one second later.     |
-| `failureMessage`  | `Palamedes React Router i18n initialization failed before the route handlers ran.` | Message of the error thrown when the catalog cannot load.                           |
+| Option            | Default                                                                            | Purpose                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `resolveLocale`   | required                                                                           | `(request) => locale`. The app's cookie, route, subdomain, or TLD policy.                 |
+| `i18nOptions`     | `{}`                                                                               | `createI18n` options such as `timeZone`, or `(request, locale) => options`.               |
+| `catalogDelivery` | `{}`                                                                               | `{ clientDirectory, development, manifestName, errorHtml }`, or `false` to disable.       |
+| `nonce`           | none                                                                               | A string, or `(request, context) => nonce` called once per document, for all its scripts. |
+| `streamTimeout`   | `5000`                                                                             | The entry's stream timeout in milliseconds; the render aborts one second later.           |
+| `failureMessage`  | `Palamedes React Router i18n initialization failed before the route handlers ran.` | Message of the error thrown when the catalog cannot load.                                 |
 
 `catalogDelivery.clientDirectory` defaults to `build/client` in the process
 working directory. `development` defaults to how Vite built the server

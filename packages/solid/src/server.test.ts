@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSolidCatalogDeliveryMiddleware } from "./server";
 
@@ -256,6 +256,79 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).toContain(
       'import("/custom/base/@id/__x00__virtual:solid-ssr-entry-client.tsx")',
     );
+  });
+
+  describe("delivery options", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function importMapFor(
+      options: Omit<Parameters<typeof createSolidCatalogDeliveryMiddleware>[0], "resolveLocale">,
+    ) {
+      const middleware = createSolidCatalogDeliveryMiddleware({
+        ...options,
+        development: false,
+        resolveLocale: () => "en",
+      });
+      const response = await middleware(
+        new Request("https://example.test/"),
+        async () =>
+          new Response("<html><head></head><body></body></html>", {
+            headers: { "content-type": "text/html" },
+          }),
+      );
+      return await response.text();
+    }
+
+    it("defaults clientDirectory to Nitro's .output/public", async () => {
+      const projectRoot = mkdtempSync(path.join(tmpdir(), "palamedes-solid-project-"));
+      mkdirSync(path.join(projectRoot, ".output"), { recursive: true });
+      renameSync(fixtureDirectory(), path.join(projectRoot, ".output", "public"));
+      vi.spyOn(process, "cwd").mockReturnValue(projectRoot);
+
+      expect(await importMapFor({})).toContain('"#pmds/catalog":"/assets/catalog.en.js"');
+    });
+
+    it("reads a custom manifestName", async () => {
+      const clientDirectory = fixtureDirectory("/assets/custom.en.js");
+      renameSync(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        path.join(clientDirectory, "custom-manifest.json"),
+      );
+
+      expect(
+        await importMapFor({ clientDirectory, manifestName: "custom-manifest.json" }),
+      ).toContain('"#pmds/catalog":"/assets/custom.en.js"');
+    });
+
+    it("resolves a nonce function once per document from the request", async () => {
+      const nonce = vi.fn((incoming: Request) => incoming.headers.get("x-nonce") ?? undefined);
+      const middleware = createSolidCatalogDeliveryMiddleware({
+        clientDirectory: fixtureDirectory(),
+        development: false,
+        nonce,
+        resolveLocale: () => "en",
+      });
+      const request = new Request("https://example.test/", { headers: { "x-nonce": "abc" } });
+
+      const response = await middleware(
+        request,
+        async () =>
+          new Response(
+            `<html><head><script type="module" src="${SOLID_CLIENT_ENTRY}"></script></head></html>`,
+            {
+              headers: { "content-type": "text/html" },
+            },
+          ),
+      );
+      const html = await response.text();
+
+      expect(html).toContain('type="importmap" nonce="abc"');
+      expect(html).toContain('<script type="module" nonce="abc">');
+      expect(nonce).toHaveBeenCalledTimes(1);
+      expect(nonce).toHaveBeenCalledWith(request);
+    });
   });
 
   it("preserves a nonce already attached to the trusted Solid entry", async () => {

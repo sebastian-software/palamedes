@@ -8,12 +8,14 @@ export type ScopedWakuI18nRunner<T extends I18nInstance> = {
   scope: ServerI18nScope<T>;
 };
 
+export const DEFAULT_WAKU_FAILURE_MESSAGE =
+  "Palamedes Waku i18n initialization failed before the handler ran.";
+
 export function createScopedWakuI18nRunner<T extends I18nInstance>(
   resolveI18n: WakuI18nResolver<T>,
+  failureMessage: string = DEFAULT_WAKU_FAILURE_MESSAGE,
 ): ScopedWakuI18nRunner<T> {
-  const runner = createScopedI18nRunner(resolveI18n, {
-    failureMessage: "Palamedes Waku i18n initialization failed before the handler ran.",
-  });
+  const runner = createScopedI18nRunner(resolveI18n, { failureMessage });
 
   return {
     run(request, next) {

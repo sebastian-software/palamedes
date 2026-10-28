@@ -20,7 +20,6 @@ export default adapter(fsRouter(modules), {
   middlewareFns: [
     () =>
       createWakuCatalogDeliveryMiddleware({
-        clientDirectory: "dist/public",
         development: process.env.NODE_ENV !== "production",
         resolveLocale: (request) =>
           resolveCookieLocale({

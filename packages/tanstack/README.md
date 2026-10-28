@@ -43,7 +43,10 @@ import { createIsomorphicFn, createStart } from "@tanstack/react-start";
 import { createTanStackServerI18nRequestMiddleware } from "@palamedes/tanstack";
 
 const palamedesI18n = createIsomorphicFn().server(() =>
-  createTanStackServerI18nRequestMiddleware((request) => resolveLocaleFromRequest(request)),
+  createTanStackServerI18nRequestMiddleware({
+    resolveLocale: (request) => resolveLocaleFromRequest(request),
+    i18nOptions: { timeZone: "Europe/Berlin" },
+  }),
 )();
 
 export const startInstance = createStart(() => ({
@@ -69,7 +72,10 @@ transport.
 
 If the resolver fails, the server function does not run and the middleware
 throws an error beginning `Palamedes TanStack i18n initialization failed`, with
-the original cause attached.
+the original cause attached. Pass `failureMessage` to change that message,
+`i18nOptions` for request-local formatting options such as `timeZone` (an
+object or `(request, locale) => options`), and `catalogDelivery` for
+`clientDirectory`, `development`, `manifestName`, `errorHtml`, and `nonce`.
 
 For a nonce-based CSP, give TanStack Router's native `ssr.nonce` option and the
 adapter's `catalogDelivery.nonce` option the same request nonce. The router

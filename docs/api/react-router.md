@@ -118,14 +118,14 @@ export const i18n = createReactRouterI18n({
 
 `createReactRouterI18n(options)` takes:
 
-| Option            | Default                                                                            | Purpose                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `resolveLocale`   | required                                                                           | `(request) => locale`, synchronous or asynchronous. The app's locale policy.                  |
-| `i18nOptions`     | `{}`                                                                               | `createI18n` options such as `timeZone`, or `(request, locale) => options`.                   |
-| `catalogDelivery` | `{}`                                                                               | `{ clientDirectory?, development?, manifestName?, errorHtml? }`, or `false` to skip delivery. |
-| `nonce`           | none                                                                               | `(request, context) => nonce` for React's scripts, the import map, and the readiness script.  |
-| `streamTimeout`   | `5000`                                                                             | The entry's stream timeout in milliseconds; the render is aborted one second later.           |
-| `failureMessage`  | `Palamedes React Router i18n initialization failed before the route handlers ran.` | Message of the error thrown when the catalog cannot load.                                     |
+| Option            | Default                                                                            | Purpose                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `resolveLocale`   | required                                                                           | `(request) => locale`, synchronous or asynchronous. The app's locale policy.                               |
+| `i18nOptions`     | `{}`                                                                               | `createI18n` options such as `timeZone`, or `(request, locale) => options`.                                |
+| `catalogDelivery` | `{}`                                                                               | `{ clientDirectory?, development?, manifestName?, errorHtml? }`, or `false` to skip delivery.              |
+| `nonce`           | none                                                                               | A string, or `(request, context) => nonce`, for React's scripts, the import map, and the readiness script. |
+| `streamTimeout`   | `5000`                                                                             | The entry's stream timeout in milliseconds; the render is aborted one second later.                        |
+| `failureMessage`  | `Palamedes React Router i18n initialization failed before the route handlers ran.` | Message of the error thrown when the catalog cannot load.                                                  |
 
 The adapter creates one server i18n scope per `createReactRouterI18n()` call and
 shares it across requests. Each request gets its own i18n instance over the
@@ -140,9 +140,11 @@ custom server that starts a production build without `NODE_ENV` still delivers
 the import map. In development the adapter reads no manifest. The examples
 start `react-router-serve` in the application directory and use both defaults.
 
-`nonce` is called once per document request, with the request and its load
-context, so a server can store a per-request nonce in that context. React's
-scripts, the import map, and the readiness script share the value.
+`nonce` is a fixed string or a resolver. The resolver is called once per
+document request, with the request and its load context, so a server can store
+a per-request nonce in that context. React's scripts, the import map, and the
+readiness script share the value. The TanStack, Waku, and Solid adapters accept
+the same `string | (request, context) => string | undefined` shape.
 
 ## Root route
 

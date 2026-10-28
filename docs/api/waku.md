@@ -58,7 +58,6 @@ import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 middlewareFns: [
   () =>
     createWakuCatalogDeliveryMiddleware({
-      clientDirectory: "dist/public",
       resolveLocale: (request) => resolveApplicationLocale(request),
       development: process.env.NODE_ENV !== "production",
       nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
@@ -67,7 +66,11 @@ middlewareFns: [
 ```
 
 `clientDirectory` points at the Vite client build containing
-`palamedes-split-manifest.json`. If an active fragment cannot be fetched or
+`palamedes-split-manifest.json`; it defaults to Waku's `dist/public` in the
+process working directory. Pass `manifestName` for a custom Vite output. The
+`nonce` option is a string or `(request, context) => string | undefined`,
+called once per HTML document with the middleware context. These names and
+shapes match the React Router, TanStack, and Solid adapters. If an active fragment cannot be fetched or
 evaluated, the middleware renders its catalog-free reload document and keeps
 the diagnostic out of the response. Set `errorHtml` to provide a trusted host
 recovery document. The `nonce` option applies only to Palamedes-generated
@@ -98,7 +101,13 @@ cookies. It resolves the application locale and delegates catalog loading and
 instance creation to `createBundledServerI18n`; the interceptor owns activation
 and cleanup. If it fails, the action
 body does not run and the server throws an error beginning `Palamedes Waku i18n
-initialization failed` with the original cause attached.
+initialization failed` with the original cause attached. Pass
+`createWakuI18nInterceptor(resolveI18n, { failureMessage })` to change that
+message.
+
+The interceptor has no `i18nOptions`: the application's resolver creates the
+instance through `createBundledServerI18n({ locale, timeZone })`, so formatting
+options are already part of that call.
 
 Waku enters the handler interceptor before its action dispatcher invokes
 `fn(...args)`. The scope therefore begins before action default-parameter

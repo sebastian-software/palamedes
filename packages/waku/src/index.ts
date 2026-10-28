@@ -15,6 +15,11 @@ export type WakuI18nResolver<T extends I18nInstance = I18nInstance> = (
   request: Request,
 ) => T | Promise<T>;
 
+export type WakuI18nInterceptorOptions = {
+  /** Message of the error thrown when `resolveI18n` fails; the original error is its `cause`. */
+  readonly failureMessage?: string;
+};
+
 /**
  * Creates a Waku handler interceptor that activates i18n around the complete
  * awaited Waku handler invocation. Place it in `src/pages/_interceptors/` when
@@ -22,8 +27,9 @@ export type WakuI18nResolver<T extends I18nInstance = I18nInstance> = (
  */
 export function createWakuI18nInterceptor<T extends I18nInstance = I18nInstance>(
   resolveI18n: WakuI18nResolver<T>,
+  options: WakuI18nInterceptorOptions = {},
 ): HandlerInterceptor {
-  const runner = createScopedWakuI18nRunner(resolveI18n);
+  const runner = createScopedWakuI18nRunner(resolveI18n, options.failureMessage);
 
   return async <Result>(next: () => Promise<Result>) => {
     let request: Request;

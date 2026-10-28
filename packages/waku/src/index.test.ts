@@ -125,6 +125,22 @@ describe("Waku i18n request scope", () => {
     });
   });
 
+  it("uses a custom failureMessage on the interceptor", async () => {
+    const failure = new Error("catalog is unavailable");
+    getRequest.mockReturnValue(new Request("https://example.test/"));
+    const interceptor = createWakuI18nInterceptor(
+      async () => {
+        throw failure;
+      },
+      { failureMessage: "Custom Waku failure" },
+    );
+
+    await expect(interceptor(async () => "handled")).rejects.toMatchObject({
+      message: "Custom Waku failure",
+      cause: failure,
+    });
+  });
+
   it("restores an outer request scope after a nested server-action invocation", async () => {
     const runner = createScopedWakuI18nRunner((request) =>
       createTestI18n(request.headers.get("x-locale") ?? "en"),

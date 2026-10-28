@@ -8,13 +8,14 @@ export type ScopedTanStackI18nRunner<T extends I18nInstance> = {
   scope: ServerI18nScope<T>;
 };
 
+export const DEFAULT_TANSTACK_FAILURE_MESSAGE =
+  "Palamedes TanStack i18n initialization failed before server-function dispatch ran.";
+
 export function createScopedTanStackI18nRunner<T extends I18nInstance>(
   resolveI18n: TanStackI18nResolver<T>,
+  failureMessage: string = DEFAULT_TANSTACK_FAILURE_MESSAGE,
 ): ScopedTanStackI18nRunner<T> {
-  const runner = createScopedI18nRunner(resolveI18n, {
-    failureMessage:
-      "Palamedes TanStack i18n initialization failed before server-function dispatch ran.",
-  });
+  const runner = createScopedI18nRunner(resolveI18n, { failureMessage });
 
   return {
     run(request, next) {

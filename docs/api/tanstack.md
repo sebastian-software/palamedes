@@ -45,7 +45,10 @@ import { createIsomorphicFn, createStart } from "@tanstack/react-start";
 import { createTanStackServerI18nRequestMiddleware } from "@palamedes/tanstack";
 
 const palamedesI18n = createIsomorphicFn().server(() =>
-  createTanStackServerI18nRequestMiddleware((request) => resolveLocaleFromRequest(request)),
+  createTanStackServerI18nRequestMiddleware({
+    resolveLocale: (request) => resolveLocaleFromRequest(request),
+    i18nOptions: { timeZone: "Europe/Berlin" },
+  }),
 )();
 
 export const startInstance = createStart(() => ({
@@ -66,6 +69,20 @@ compiled catalog for that locale and creates the fresh i18n instance;
 applications do not import catalogs or maintain loader maps. An initializer
 failure stops the server function and throws an error beginning `Palamedes
 TanStack i18n initialization failed`, with the original cause attached.
+
+| Option            | Default                                                                              | Meaning                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `resolveLocale`   | required                                                                             | `(request) => locale`, sync or async. Locale policy stays in the application.              |
+| `i18nOptions`     | `{}`                                                                                 | `createI18n` options such as `timeZone`, or `(request, locale) => options`.                |
+| `catalogDelivery` | `{}`                                                                                 | Delivery options below, or `false` when the host owns an equivalent transport.             |
+| `failureMessage`  | `Palamedes TanStack i18n initialization failed before server-function dispatch ran.` | Message of the error thrown when the locale or catalog cannot load; the cause is attached. |
+
+`catalogDelivery` accepts `clientDirectory` (default `dist/client` in the
+process working directory), `development` (default: whether Vite built the
+server as a development build), `manifestName`, `errorHtml`, and `nonce`. The
+nonce is a string, or `(request, context) => string | undefined`, called once
+per HTML document request with Start's request middleware `context`. These
+names and shapes match the React Router, Waku, and Solid adapters.
 
 Start invokes this boundary before page rendering and before decoding a server
 function. The scope stays active through awaited `next()`, including validation,
@@ -109,7 +126,7 @@ export default {
 
 ## Composable server-function middleware
 
-For selected functions, use `createTanStackI18nMiddleware(resolveI18n)` and
+For selected functions, use `createTanStackI18nMiddleware(resolveI18n, { failureMessage })` and
 install the result with `.middleware([palamedesI18n])`. It can also be added to
 `createStart({ functionMiddleware: [palamedesI18n] })` for all server
 functions. This alternative calls Start's public `getRequest()` accessor to

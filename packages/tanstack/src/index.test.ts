@@ -87,6 +87,17 @@ describe("TanStack i18n request scope", () => {
     });
   });
 
+  it("wraps initialization failures in a custom failureMessage", async () => {
+    const failure = new Error("catalog is unavailable");
+    const runner = createScopedTanStackI18nRunner(async () => {
+      throw failure;
+    }, "Custom TanStack failure");
+
+    await expect(
+      runner.run(new Request("https://example.test/_serverFn/probe"), () => {}),
+    ).rejects.toMatchObject({ message: "Custom TanStack failure", cause: failure });
+  });
+
   it("restores an outer request scope after a nested server-function invocation", async () => {
     const runner = createScopedTanStackI18nRunner((request) =>
       createTestI18n(request.headers.get("x-locale") ?? "en"),

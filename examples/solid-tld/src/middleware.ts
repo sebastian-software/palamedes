@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { StartMiddleware } from "@solidjs/vite-plugin";
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
 import {
@@ -9,7 +8,6 @@ import { createServerI18n, serverI18nScope } from "./lib/i18n.server";
 import { locales } from "./lib/i18n";
 
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
-  clientDirectory: path.resolve(process.cwd(), ".output/public"),
   development: process.env.NODE_ENV !== "production",
   nonce: process.env.PALAMEDES_CSP_NONCE,
   resolveLocale: (request) =>

@@ -380,7 +380,12 @@ export const integrityStatuses: CatalogMachineTranslationStatus[] = ["current", 
 export const authorship: CatalogMachineTranslationStatus = "human"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
-import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
+import {
+  createTanStackI18nRequestMiddleware,
+  createTanStackServerI18nRequestMiddleware,
+} from "@palamedes/tanstack"
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server"
+import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server"
 import { createReactRouterI18n, type ReactRouterHandleRequest } from "@palamedes/react-router"
 import { useCatalogAvailable, useDocumentLocale } from "@palamedes/react-router/document"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
@@ -465,6 +470,31 @@ export const reactRouterI18n = createReactRouterI18n({
   i18nOptions: { timeZone: "Europe/Berlin" },
   nonce: (request, _context) => request.headers.get("x-nonce") ?? undefined,
 })
+export const reactRouterWithFixedNonce = createReactRouterI18n({
+  resolveLocale: () => "en",
+  nonce: "fixed-nonce",
+})
+export const tanstackServerMiddleware = createTanStackServerI18nRequestMiddleware({
+  resolveLocale: (request) => request.headers.get("accept-language") ?? "en",
+  i18nOptions: (_request, locale) => ({ timeZone: locale === "de" ? "Europe/Berlin" : "UTC" }),
+  catalogDelivery: { nonce: (_request, context) => String(context.nonce ?? "") },
+  failureMessage: "TanStack i18n failed",
+})
+// @ts-expect-error The v1 positional arguments were replaced by one options object.
+createTanStackServerI18nRequestMiddleware((request: Request) => request.url)
+export const wakuDelivery = createWakuCatalogDeliveryMiddleware({
+  resolveLocale: () => "en",
+  manifestName: "palamedes-split-manifest.json",
+  nonce: (_request, context) => context.req.raw.headers.get("x-nonce") ?? undefined,
+})
+export const solidDelivery = createSolidCatalogDeliveryMiddleware({
+  resolveLocale: () => "en",
+  nonce: (request) => request.headers.get("x-nonce") ?? undefined,
+})
+export const wakuInterceptorWithMessage = createWakuI18nInterceptor(
+  (request) => createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
+  { failureMessage: "Waku i18n failed" },
+)
 export const reactRouterEntry: ReactRouterHandleRequest = reactRouterI18n.handleRequest
 export const reactRouterMiddleware = [reactRouterI18n.middleware]
 export const useReactRouterDocumentLocale: () => string | undefined = useDocumentLocale
