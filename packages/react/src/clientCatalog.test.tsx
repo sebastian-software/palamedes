@@ -88,7 +88,7 @@ describe("createClientCatalogBoundary", () => {
     })();
 
     function Greeting() {
-      return <span>{String(getI18n()._("greeting"))}</span>;
+      return <span>{getI18n()._("greeting")}</span>;
     }
 
     let view!: ReturnType<typeof render>;
@@ -250,7 +250,7 @@ describe("createClientCatalogBoundary", () => {
       ),
     );
     expect(createConfiguredI18n).toHaveBeenCalledOnce();
-    expect(getI18n<ReturnType<typeof createI18n>>().timeZone).toBe("Europe/Berlin");
+    expect(getI18n().timeZone).toBe("Europe/Berlin");
   });
 
   it("fails fast when a render tries to change the document locale", async () => {
@@ -285,7 +285,7 @@ describe("createClientCatalogBoundary", () => {
     expect(loadCatalog).toHaveBeenCalledOnce();
 
     function Greeting() {
-      return <span>{String(getI18n()._("greeting"))}</span>;
+      return <span>{getI18n()._("greeting")}</span>;
     }
 
     function boundary(retryKey: string) {

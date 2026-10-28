@@ -9,6 +9,11 @@ function createTestI18n(locale = "en"): I18nInstance {
   return {
     locale,
     _: (message: string) => message,
+    load() {},
+    activate() {},
+    renderMessage() {
+      throw new Error("renderMessage is not used by server scope tests.");
+    },
   };
 }
 

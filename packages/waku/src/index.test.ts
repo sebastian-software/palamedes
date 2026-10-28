@@ -6,6 +6,10 @@ import { createServerI18nScope } from "@palamedes/runtime/server";
 import { createWakuI18nInterceptor } from "./index";
 import { createScopedWakuI18nRunner } from "./scope";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}
+
 const getRequest = vi.hoisted(() => vi.fn());
 
 vi.mock("waku/router/server", () => ({ unstable_getRequest: getRequest }));
@@ -14,6 +18,9 @@ function createTestI18n(locale: string): I18nInstance {
   return {
     locale,
     _: (message: string) => `${locale}:${message}`,
+    load() {},
+    activate() {},
+    renderMessage: unusedRenderMessage,
   };
 }
 

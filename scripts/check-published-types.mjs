@@ -382,6 +382,8 @@ import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
 import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
+import { createI18n } from "@palamedes/core"
+import { getI18n } from "@palamedes/runtime"
 
 export const lengths = [
   t\`Hello\`.length,
@@ -439,14 +441,15 @@ t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
-export const wakuInterceptor = createWakuI18nInterceptor((request) => ({
-  locale: request.headers.get("accept-language") ?? "en",
-  _: () => "",
-}))
-export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) => ({
-  locale: request.headers.get("accept-language") ?? "en",
-  _: () => "",
-}))
+export const wakuInterceptor = createWakuI18nInterceptor((request) =>
+  createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
+)
+export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) =>
+  createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
+)
+// @ts-expect-error Adapters require the full v2 instance, not only locale and _().
+createWakuI18nInterceptor(() => ({ locale: "en", _: () => "" }))
+export const translatedText: string = getI18n()._("greeting")
 `,
   );
   checkProgram(esmFixture, {
