@@ -75,6 +75,8 @@ Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
 
 Compiled delivery follows the evaluated module graph automatically. Development
 awaits the active locale's generated fragment before running its source module.
+When an edit changes the set of messages a module uses, development refreshes
+that module's fragments through HMR, even when no catalog file changed.
 Production emits locale-bound import maps and separate executable fragments.
 Set the document's `lang` before its module entry runs; the adapter initializes
 the client instance. Locale changes require document navigation.
