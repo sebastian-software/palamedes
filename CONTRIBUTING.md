@@ -323,6 +323,13 @@ while `release-as` is not above the manifest version, so the next feat or fix
 cannot open another "release 2.0.0" PR, and while `last-release-sha` remains
 at 2.0.0 or later.
 
+`palamedes-build` inherits an exact `=` requirement on `palamedes-i18n` from
+the root `[workspace.dependencies]`, because the code it generates constructs
+hidden `palamedes-i18n` items. Release Please's Cargo updater would rewrite a
+member's `=` requirement as a caret one, so the generic `Cargo.toml`
+extra-file bumps the marked workspace line instead, and
+`pnpm check:release-set` asserts the pin matches the workspace version.
+
 Run `pnpm check:release-set` and
 `pnpm check:workflow-contracts` when changing policy or workflow wiring.
 `pnpm check:release-wording` (run by CI and the Publish workflow) fails once the

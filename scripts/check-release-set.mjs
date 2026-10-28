@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { publicWorkspacePackages } from "./release-packages.mjs";
 import { readReleasePolicy } from "./release-policy.mjs";
-import { releaseOverrideProblems } from "./release-set-rules.mjs";
+import { exactPinProblems, releaseOverrideProblems } from "./release-set-rules.mjs";
 
 const root = process.cwd();
 const releasePolicy = readReleasePolicy(root);
@@ -165,6 +165,15 @@ for (const problem of releaseOverrideProblems({
   releaseConfig,
   manifestVersion: releaseManifest[rootReleasePath],
   minimumMajor: releasePolicy.minimumMajor,
+})) {
+  fail(problem);
+}
+
+for (const problem of exactPinProblems({
+  rootCargo: readText(rootCargoPath),
+  buildCargo: readText("crates/palamedes-build/Cargo.toml"),
+  version: expectedVersion,
+  extraFiles: rootReleaseExtraFiles,
 })) {
   fail(problem);
 }

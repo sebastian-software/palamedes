@@ -66,6 +66,10 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
+          "type": "generic",
+          "path": "Cargo.toml"
+        },
+        {
           "type": "json",
           "path": "{apps,packages}/*/package.json",
           "glob": true,
