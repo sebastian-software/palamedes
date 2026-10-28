@@ -66,11 +66,19 @@ export function normalizeSourceInput(filename, bytes) {
   return bytes;
 }
 
+// Unit and type-test files sit next to the sources but are never a build
+// entry, so they cannot reach the measured bytes. Excluding them keeps a PR
+// that only adds or edits a test from invalidating the report. Real sources
+// whose names merely contain "test" (for example `server-test.ts`) do not match.
+const testFilePattern = /\.(?:test|type-test)\.[cm]?[jt]sx?$/u;
+export const isBrowserRuntimeTestFile = (filename) => testFilePattern.test(filename);
+
 export function browserRuntimeInputPaths(root) {
   const lsFiles = (...paths) =>
     execFileSync("git", ["ls-files", ...paths], { cwd: root, encoding: "utf8" })
       .trim()
-      .split("\n");
+      .split("\n")
+      .filter((filename) => !isBrowserRuntimeTestFile(filename));
   // Hash source inputs, not generated dist directories. A fresh package build
   // is required before measuring. The report separately retains every bundled
   // input.

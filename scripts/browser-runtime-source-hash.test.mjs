@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   browserRuntimeInputPaths,
   browserRuntimeSourceSha256,
+  isBrowserRuntimeTestFile,
   normalizeCargoLock,
 } from "./browser-runtime-source-hash.mjs";
 
@@ -89,6 +90,23 @@ test("a runtime source edit changes the source hash", async () => {
     await hashWith((filename, text) => (filename === source ? `${text}\n// edit\n` : undefined)),
     baseline,
   );
+});
+
+test("unit and type-test files are not hash inputs, but test-named sources are", () => {
+  for (const filename of [
+    "packages/remix/src/index.test.ts",
+    "packages/react/src/index.test.tsx",
+    "packages/remix/src/macro.type-test.tsx",
+  ])
+    assert.ok(isBrowserRuntimeTestFile(filename), filename);
+  for (const filename of [
+    "packages/runtime/src/server-test.ts",
+    "packages/runtime/src/server-test-unavailable.ts",
+    "packages/runtime/src/index.ts",
+  ])
+    assert.ok(!isBrowserRuntimeTestFile(filename), filename);
+  assert.deepEqual(inputPaths.filter(isBrowserRuntimeTestFile), []);
+  assert.ok(inputPaths.includes("packages/runtime/src/server-test.ts"));
 });
 
 test("an external dependency version in a lockfile changes the source hash", async () => {
