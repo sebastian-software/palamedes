@@ -13,8 +13,8 @@ readme = "README.md"
 include = ["/src/**", "/tests/**", "/README.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
 keywords = ["i18n", "internationalization", "gettext", "ferramenta"]
 categories = ["internationalization", "development-tools"]
-# Publication needs a reviewed release-enablement change as well as the policy gate.
-publish = false
+# Release-enabled for crates.io only; .release-policy.json still gates the lane.
+publish = ["crates-io"]
 
 [package.metadata.docs.rs]
 all-features = true

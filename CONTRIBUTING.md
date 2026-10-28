@@ -259,14 +259,16 @@ when possible, for example:
 - `docs: add troubleshooting guide`
 - `ci: expand native build matrix`
 
-During the coordinated v2 transition, `.release-policy.json` holds release
-creation and package publication, including forced package publication. Demo
+`.release-policy.json` gates release creation and package publication,
+including forced package publication. With `publicationEnabled: false`, Release
+Please does not run and the Publish workflow uploads nothing; with `true`, it
+still rejects versions below `minimumMajor` and prerelease versions. Demo
 container publication follows `main` independently; it does not authorize a
-package release. The next Release Please version is explicitly `2.0.0`; the
-current version files
-continue to describe the last release until its generated release PR lands.
-Implementation PRs can merge into `main` behind this hold. A Publish workflow
-dispatch with `dry_run` still builds and verifies artifacts without publishing.
+package release. Publication is enabled for the coordinated `2.0.0` release, and
+the next Release Please version is explicitly `2.0.0`; the current version files
+continue to describe the last release until its generated release PR lands. A
+Publish workflow dispatch with `dry_run` still builds and verifies artifacts
+without publishing.
 
 The v2 migration, representative TanStack React and Solid 2 Start Mode/Nitro
 verification, focused French examples, Node deployment proofs, and the
@@ -279,7 +281,8 @@ coordinated acceptance. The [support tiers](docs/stability.md),
 Solid Start and additional translation-assistance features are outside the v2
 release requirements.
 
-Before lifting the hold:
+The release-enablement change followed these steps. Repeat them if publication
+is ever held again and later re-enabled:
 
 1. Run `pnpm check:release-set`, `pnpm check:workflow-contracts`, and the Publish
    workflow with `dry_run` against the held source revision. This verifies the
@@ -296,9 +299,10 @@ Before lifting the hold:
    establish publication permissions.
 3. Obtain explicit release authorization before enabling `publicationEnabled`
    in a reviewed PR. Cargo publication additionally requires explicit
-   `publish = ["crates-io"]` allowlists on the three SDK crates. Keep the current
-   versions until the generated Release Please PR applies the coordinated
-   `2.0.0` version.
+   `publish = ["crates-io"]` allowlists on the three SDK crates (`palamedes-i18n`,
+   `palamedes`, and `palamedes-build`); `palamedes-cli`, `palamedes-node`, and
+   `palamedes-plugin` keep `publish = false`. Keep the current versions until the
+   generated Release Please PR applies the coordinated `2.0.0` version.
 
 After authorized enablement generates the Release Please PR, run the Publish
 workflow with `dry_run` on that PR's exact 2.0 revision before merging it. The
