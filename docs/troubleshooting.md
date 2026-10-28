@@ -290,7 +290,7 @@ Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds 
 Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.
 Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.
 Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.
-Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.
+Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.
 ```
 
 A config file with the old MDX key reports:
@@ -316,7 +316,7 @@ Fix:
 | `mdx.keep-source-fallbacks` (config files) | Rename it to `mdx.include-source-metadata`.                      |
 | `messageSplitting` (Next.js)               | Remove it. Delivery is automatic.                                |
 | `experimentalGraphSplitting` (Vite)        | Remove it, including `{ localeBinding }`. Delivery is automatic. |
-| `cwd` (Next.js `withPalamedes()`)          | Rename it to `projectRoot`.                                      |
+| `cwd` (Vite, Next.js, Remix registry)      | Rename it to `projectRoot`.                                      |
 
 See the [v2 migration guide](./migration-v2.md#replace-removed-apis).
 

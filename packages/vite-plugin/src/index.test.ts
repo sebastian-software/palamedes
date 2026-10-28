@@ -31,6 +31,9 @@ vi.mock("@palamedes/config", async (importOriginal) => {
     catalogMatchesSource: actual.catalogMatchesSource,
     catalogResourcePath: actual.catalogResourcePath,
     getConfigDependencies: actual.getConfigDependencies,
+    createPalamedesSourceFilter: actual.createPalamedesSourceFilter,
+    resolvePalamedesConfigPath: actual.resolvePalamedesConfigPath,
+    resolvePalamedesProjectRoot: actual.resolvePalamedesProjectRoot,
   };
 });
 
@@ -434,6 +437,11 @@ describe("palamedes vite plugin", () => {
       "experimentalGraphSplitting",
       { localeBinding: "embed" },
       "Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.",
+    ],
+    [
+      "cwd",
+      "/repo",
+      "Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.",
     ],
   ] as const)("rejects the removed %s option (%j) during plugin setup", (name, value, message) => {
     expect(() => palamedes({ [name]: value } as Parameters<typeof palamedes>[0])).toThrow(message);

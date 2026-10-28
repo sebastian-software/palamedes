@@ -66,8 +66,9 @@ and browser runtime.
 
 ```ts
 interface PalamedesRemixRegisterOptions {
-  include?: RegExp;
-  exclude?: RegExp;
+  include?: string | RegExp | Array<string | RegExp> | null;
+  exclude?: string | RegExp | Array<string | RegExp> | null;
+  projectRoot?: string;
   runtimeModule?: string;
   includeSourceMetadata?: boolean;
   configPath?: string;
@@ -81,10 +82,17 @@ Defaults:
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `includeSourceMetadata`: `false`
-- `configPath`: unset — `.po` imports discover the Palamedes config from the
-  imported catalog file's directory; relative paths resolve from there
+- `projectRoot`: the current working directory
+- `configPath`: unset — `.po` imports discover the Palamedes config upward from
+  the imported catalog file's directory. A relative `configPath` resolves from
+  `projectRoot`; an absolute one stays absolute
 - `failOnMissing`: `false` — missing translations warn instead of failing
   `.po` compilation
+
+`include` and `exclude` accept a glob string, a RegExp, or an array of both,
+with the same matching as the [Vite plugin](./vite-plugin.md#paths-and-filters):
+relative globs resolve from `projectRoot`, and RegExps test the absolute file
+path. `exclude` also skips matching `.po` and `.fcl` imports.
 
 Invalid and unsupported ICU always fails `.po` compilation. The load hook throws
 a migration error when it receives the removed v1 `failOnCompileError` or
@@ -150,7 +158,7 @@ imports to served asset URLs. If `runtimeModule` selects another package, allow
 that exact package name instead of `@palamedes/runtime`.
 
 `PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
-`runtimeModule`, and `includeSourceMetadata` options. Defaults match the Node
+`projectRoot`, `runtimeModule`, and `includeSourceMetadata` options. Defaults match the Node
 loader, and the asset loader rejects `keepSourceFallbacks` with the same
 migration error. Transform failures identify the source module and retain the
 original error as their cause.
@@ -165,6 +173,12 @@ Browser traces and transform diagnostics therefore resolve to authored
 TypeScript/TSX positions. Remix's watcher invalidates edited macro-bearing
 browser modules and applies its normal HMR policy: accepted boundaries update
 in place and other changes reload the document, without restarting the server.
+
+`createPalamedesRemixCatalogAssetRegistry(options?)` accepts `projectRoot`
+(default: the current working directory), `configPath`, `basePath` (default
+`"/assets"`), and `watch`. It searches for the config upward from
+`projectRoot`, and a relative `configPath` resolves from `projectRoot`. The
+removed `cwd` option throws a migration error; rename it to `projectRoot`.
 
 The catalog registry watches PO/FCL and config inputs in development and clears
 compiled caches without changing registered module URLs. Warm requests do not
