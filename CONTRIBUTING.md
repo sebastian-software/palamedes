@@ -309,6 +309,9 @@ coordinated npm and Cargo package is available before closing #1204. Remove the
 one-time `release-as` override after 2.0.0 is released so subsequent versions
 follow conventional commits again. Run `pnpm check:release-set` and
 `pnpm check:workflow-contracts` when changing policy or workflow wiring.
+`pnpm check:release-wording` (run by CI and the Publish workflow) fails once the
+release version reaches 2.0.0 while held, draft, or unreleased v2 wording remains
+in the listed public files, so the release PR must clear that wording.
 
 Do not edit generated changelog entries by hand unless the release automation
 requires a specific correction.
