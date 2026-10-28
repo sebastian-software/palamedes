@@ -74,13 +74,16 @@ export default defineConfig({
   optimizeDeps: {
     // Ardo exposes these entry points lazily. Pre-bundle them together so Vite
     // does not invalidate the browser graph mid-navigation and temporarily
-    // leave Ardo rendering against a stale React instance.
+    // leave Ardo rendering against a stale React instance. The initial scan
+    // also misses the family registry imported by site-config.tsx, so a cold
+    // dev server re-ran the optimizer for it on the first page load.
     include: [
       "@base-ui/react/accordion",
       "@base-ui/react/tabs",
       "ardo/mdx-provider",
       "ardo/runtime",
       "ardo/ui",
+      "ferramenta-family/registry",
       "lucide-react",
     ],
   },
