@@ -90,6 +90,13 @@ import {
   markPreparedNativeArgument,
   snapshotNativeArgument,
 } from "./native-loader";
+import { assertNoRemovedPalamedesOptions } from "./removedOptions";
+
+export {
+  assertNoRemovedPalamedesOptions,
+  REMOVED_PALAMEDES_OPTION_MESSAGES,
+  type RemovedPalamedesOption,
+} from "./removedOptions";
 
 export type NativeInfo = GeneratedNativeInfo;
 export type AsyncTaskOptions = {
@@ -403,11 +410,6 @@ export type CatalogModuleOptions = {
   locale: string;
   pseudoLocale?: string;
   failOnMissing?: boolean;
-  /**
-   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU.
-   * Remove this option; it no longer changes compilation behavior.
-   */
-  failOnCompileError?: boolean;
   missingFailureHint?: string;
   compileFailureHint?: string;
   diagnosticsWarningHint?: string;
@@ -1197,13 +1199,13 @@ export function compileCatalogModule(
   resourcePath: string,
   options: CatalogModuleOptions,
 ): CatalogModuleResult {
+  assertNoRemovedPalamedesOptions(options, ["failOnCompileError"]);
   const request: NativeCatalogModuleRequest = {
     config: toNativeArtifactConfig(config),
     resourcePath,
     locale: options.locale,
     pseudoLocale: options.pseudoLocale,
     failOnMissing: options.failOnMissing ?? false,
-    failOnCompileError: options.failOnCompileError,
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
@@ -1218,13 +1220,13 @@ export async function compileCatalogModuleAsync(
   options: CatalogModuleOptions,
   taskOptions?: AsyncTaskOptions,
 ): Promise<CatalogModuleResult> {
+  assertNoRemovedPalamedesOptions(options, ["failOnCompileError"]);
   const request: NativeCatalogModuleRequest = {
     config: toNativeArtifactConfig(config),
     resourcePath,
     locale: options.locale,
     pseudoLocale: options.pseudoLocale,
     failOnMissing: options.failOnMissing ?? false,
-    failOnCompileError: options.failOnCompileError,
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
@@ -1305,6 +1307,7 @@ function toNativeMdxOptions(options?: MdxOptions): GeneratedNativeMdxOptions | u
   if (!options) {
     return undefined;
   }
+  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
   const framework: GeneratedNativeMdxFramework | undefined =
     options?.framework === "solid" ? "Solid" : options?.framework === "react" ? "React" : undefined;
   return {
@@ -1362,5 +1365,6 @@ export function transformMacrosNative(
   filename: string,
   options?: NativeTransformOptions,
 ): NativeTransformResult {
+  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
   return native.transformMacros(source, filename, options);
 }

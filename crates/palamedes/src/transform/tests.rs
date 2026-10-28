@@ -22,8 +22,8 @@ fn transform_macros(
     // Most transform fixtures assert the authored fallback spelling. Keep it
     // explicitly so the tests stay focused while production-default behavior
     // is covered by dedicated cases below.
-    if options.keep_source_fallbacks.is_none() && options.strip_message_field.is_none() {
-        options.keep_source_fallbacks = Some(true);
+    if options.include_source_metadata.is_none() && options.strip_message_field.is_none() {
+        options.include_source_metadata = Some(true);
     }
     let mut result = transform_macros_raw(&scoped_source, filename, Some(options))?;
 
@@ -103,7 +103,7 @@ fn server_function_options() -> NativeTransformOptions {
             initializer_module: "@/i18n/server-action".to_string(),
             initializer_export: "initServerActionI18n".to_string(),
         }),
-        keep_source_fallbacks: Some(true),
+        include_source_metadata: Some(true),
         ..NativeTransformOptions::default()
     }
 }
@@ -548,7 +548,7 @@ function choices() {
         source,
         "test.tsx",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2152,7 +2152,7 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 "#,
         "test.tsx",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2189,7 +2189,7 @@ function message() { return t`Hello`; }
         source,
         "test.ts",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(false),
+            include_source_metadata: Some(false),
             strip_message_field: Some(false),
             ..NativeTransformOptions::default()
         }),

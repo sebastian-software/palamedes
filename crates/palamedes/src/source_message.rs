@@ -886,7 +886,7 @@ mod choice_branch_tests {
                 );
 
                 let options = NativeTransformOptions {
-                    keep_source_fallbacks: Some(true),
+                    include_source_metadata: Some(true),
                     ..NativeTransformOptions::default()
                 };
                 let transformed = transform_macros(&source, FILENAME, Some(options))
@@ -935,7 +935,7 @@ mod choice_branch_tests {
             );
 
             let options = NativeTransformOptions {
-                keep_source_fallbacks: Some(true),
+                include_source_metadata: Some(true),
                 ..NativeTransformOptions::default()
             };
             let transformed = transform_macros(&source, FILENAME, Some(options))

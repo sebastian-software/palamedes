@@ -45,7 +45,7 @@ scope around translated loaders and actions. The
 from the checked examples.
 
 For Next.js, automatic browser splitting is now the default. Remove
-`messageSplitting: false`; it is rejected rather than selecting the old path.
+`messageSplitting`; any value is rejected rather than selecting the old path.
 The plugin discovers `palamedes.server.*` for Server Function initialization,
 so the standard setup does not need an opt-in flag. Applications still supply
 the initializer and their request locale policy. The
@@ -84,8 +84,8 @@ measures that ownership with fixtures; it is not a production memory guarantee.
 ## Translation failures become visible
 
 Invalid or unsupported ICU now fails compilation in both development and
-production. The legacy `failOnCompileError` option cannot turn those errors
-into warnings.
+production. No option turns those errors into warnings: the adapters reject
+the removed `failOnCompileError` option with a migration error.
 
 A missing translation is still allowed by default: the compiler resolves the
 configured fallback languages and ultimately the source message, then compiles
@@ -150,14 +150,15 @@ V2 removes a supported execution model and changes how failures are handled.
 Applications that relied on raw runtime catalogs, parser APIs, or silent
 fallbacks need changes before upgrading.
 
-| Existing v1 integration                                                    | What to change for v2                                                                    |
-| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Load ICU string maps directly into the runtime                             | Use adapter delivery or explicitly generated compiled catalogs for a custom integration. |
-| Import runtime parser APIs or direct choice components                     | Move message authoring to macros; use build-time tooling for catalog inspection.         |
-| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data | Replace that plumbing with the host adapter's standard setup.                            |
-| Catch translation failures and return source text or an empty catalog      | Let failures reach ordinary, catalog-independent error UI.                               |
-| Disable Next.js message splitting                                          | Remove the legacy false option and use automatic delivery.                               |
-| Reuse generated v1 catalogs or a custom runtime implementation             | Regenerate artifacts and implement the v2 compiled renderer contract.                    |
+| Existing v1 integration                                                    | What to change for v2                                                                        |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Load ICU string maps directly into the runtime                             | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.     |
+| Import runtime parser APIs or direct choice components                     | Move message authoring to macros; use build-time tooling for catalog inspection.             |
+| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data | Replace that plumbing with the host adapter's standard setup.                                |
+| Catch translation failures and return source text or an empty catalog      | Let failures reach ordinary, catalog-independent error UI.                                   |
+| Disable Next.js message splitting                                          | Remove `messageSplitting` and use automatic delivery.                                        |
+| Set `failOnCompileError`, `keepSourceFallbacks`, or Next.js `cwd`          | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`. |
+| Reuse generated v1 catalogs or a custom runtime implementation             | Regenerate artifacts and implement the v2 compiled renderer contract.                        |
 
 The [v2 migration guide](./migration-v2.md) lists the exact removed APIs and
 replacements. Update coupled Palamedes packages together and verify the

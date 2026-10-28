@@ -46,15 +46,16 @@ pub struct NativeTransformOptions {
     /// Removes non-essential descriptor fields such as comments and context.
     #[serde(rename = "stripNonEssentialProps")]
     pub strip_non_essential_props: Option<bool>,
-    /// Keeps source messages in generated runtime calls and rich-text props.
+    /// Includes authored source messages in generated runtime calls and
+    /// rich-text props as diagnostic source metadata.
     ///
-    /// The native transform and v2 first-party host adapters strip source
-    /// fallbacks by default (`None` resolves to `false`). Set
-    /// `keepSourceFallbacks: true` only to retain authored source text as
+    /// The native transform and v2 first-party host adapters omit this
+    /// metadata by default (`None` resolves to `false`). Set
+    /// `includeSourceMetadata: true` only to retain authored source text as
     /// diagnostic metadata; it never supplies replacement runtime output.
-    #[serde(rename = "keepSourceFallbacks")]
-    pub keep_source_fallbacks: Option<bool>,
-    /// Legacy inverse of `keep_source_fallbacks`.
+    #[serde(rename = "includeSourceMetadata")]
+    pub include_source_metadata: Option<bool>,
+    /// Legacy inverse of `include_source_metadata`.
     ///
     /// Explicit values remain supported for compatibility. New integrations
     /// should use the positive option instead.
@@ -77,8 +78,8 @@ pub struct ServerFunctionTransformOptions {
 }
 
 impl NativeTransformOptions {
-    fn keep_source_fallbacks(&self) -> bool {
-        self.keep_source_fallbacks
+    fn include_source_metadata(&self) -> bool {
+        self.include_source_metadata
             .or_else(|| self.strip_message_field.map(|strip| !strip))
             .unwrap_or(false)
     }

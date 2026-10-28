@@ -219,14 +219,14 @@ describe("withPalamedes turbopack config", () => {
     ["development", false, false],
     ["production", false, true],
   ] as const)(
-    "sets runtime fallback metadata for the %s Turbopack mode",
-    (mode, expectedFallbacks, expectedMetadataStrip) => {
+    "sets source metadata defaults for the %s Turbopack mode",
+    (mode, expectedSourceMetadata, expectedMetadataStrip) => {
       vi.stubEnv("NODE_ENV", mode);
       const config = withPalamedes();
 
       const rule = (getRules(config)["*"] as RuleItem[])[0]!;
       expect(rule.loaders?.[0]?.options).toMatchObject({
-        keepSourceFallbacks: expectedFallbacks,
+        includeSourceMetadata: expectedSourceMetadata,
         stripNonEssentialProps: expectedMetadataStrip,
       });
     },
@@ -234,10 +234,51 @@ describe("withPalamedes turbopack config", () => {
 
   it("lets diagnostic source metadata opt in explicitly", () => {
     vi.stubEnv("NODE_ENV", "production");
-    const config = withPalamedes({}, { keepSourceFallbacks: true });
+    const config = withPalamedes({}, { includeSourceMetadata: true });
 
     const rule = (getRules(config)["*"] as RuleItem[])[0]!;
-    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: true });
+    expect(rule.loaders?.[0]?.options).toMatchObject({ includeSourceMetadata: true });
+    const webpackRule = collectWebpackRules(config, { isServer: false }).find((candidate) =>
+      candidate.use?.[0]?.loader.includes("palamedes-loader"),
+    );
+    expect(webpackRule?.use?.[0]?.options).toMatchObject({ includeSourceMetadata: true });
+  });
+
+  it.each([
+    [
+      "failOnCompileError",
+      false,
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+    ],
+    [
+      "failOnCompileError",
+      true,
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+    ],
+    [
+      "keepSourceFallbacks",
+      false,
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+    ],
+    [
+      "messageSplitting",
+      true,
+      "Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.",
+    ],
+    [
+      "messageSplitting",
+      false,
+      "Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.",
+    ],
+    [
+      "cwd",
+      "/next-app",
+      "Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.",
+    ],
+  ] as const)("rejects the removed %s option (%j)", (name, value, message) => {
+    expect(() =>
+      withPalamedes({}, { [name]: value } as Parameters<typeof withPalamedes>[1]),
+    ).toThrow(message);
   });
 
   it("translates include/exclude options into the turbopack rule condition", () => {
@@ -571,7 +612,7 @@ describe("withPalamedes webpack config", () => {
     "enables graph-split client bootstrapping with %s fragment failures set to %s in the webpack client compiler",
     (mode, clientFragmentFailureMode) => {
       vi.stubEnv("NODE_ENV", mode);
-      const configured = withPalamedes({}, { messageSplitting: true });
+      const configured = withPalamedes();
       const clientRule = collectWebpackRules(configured, { isServer: false }).find((rule) =>
         rule.use?.[0]?.loader.includes("palamedes-loader"),
       );
@@ -588,7 +629,7 @@ describe("withPalamedes webpack config", () => {
   );
 
   it("enables webpack async modules only for graph-split client builds", () => {
-    const configured = withPalamedes({}, { messageSplitting: true });
+    const configured = withPalamedes();
     const webpack = configured.webpack as unknown as (
       config: WebpackTestConfig,
       context: Record<string, unknown>,

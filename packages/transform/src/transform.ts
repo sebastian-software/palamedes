@@ -1,4 +1,8 @@
-import { transformMacrosNative, type NativeTransformResult } from "@palamedes/core-node";
+import {
+  assertNoRemovedPalamedesOptions,
+  transformMacrosNative,
+  type NativeTransformResult,
+} from "@palamedes/core-node";
 
 import type { SourceMap, TransformOptions, TransformResult } from "./types";
 import { mightContainPalamedesMacros, mightContainServerFunctions } from "./detect";
@@ -38,6 +42,7 @@ export function transformPalamedesMacros(
   filename: string,
   options: TransformOptions = {},
 ): TransformResult {
+  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
   const mightNeedServerFunctionTransform =
     options.serverFunctions !== undefined && mightContainServerFunctions(code);
 

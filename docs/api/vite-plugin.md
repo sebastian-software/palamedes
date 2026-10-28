@@ -27,13 +27,10 @@ interface PalamedesPluginOptions {
   cwd?: string;
   skipValidation?: boolean;
   failOnMissing?: boolean;
-  /** @deprecated Invalid and unsupported ICU is always fatal in v2. */
-  failOnCompileError?: boolean;
   framework?: "react" | "solid" | "none";
   runtimeModule?: string;
-  keepSourceFallbacks?: boolean;
+  includeSourceMetadata?: boolean;
   mdx?: PalamedesMdxConfig | false;
-  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
   environment?: "auto" | "server";
 }
 ```
@@ -44,14 +41,17 @@ Defaults:
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
-- `failOnCompileError`: deprecated compatibility option; it no longer
-  downgrades invalid or unsupported ICU to a warning.
 - `framework`: `"react"`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `false`
+- `includeSourceMetadata`: `false`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
-- `experimentalGraphSplitting`: deprecated; delivery is automatic and `false` is rejected
 - `environment`: `"auto"`
+
+The plugin throws a migration error during setup when it receives a removed v1
+option: `failOnCompileError`, `keepSourceFallbacks` (renamed to
+`includeSourceMetadata`), or `experimentalGraphSplitting` with any value,
+including `{ localeBinding }`. See the
+[v2 migration guide](../migration-v2.md#replace-removed-apis).
 
 `framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set
@@ -65,9 +65,10 @@ override for only the macro transform's module path.
 browser builds. Bundlers without Vite environments, such as tsdown or
 standalone Rolldown building a Node backend, need `environment: "server"`.
 
-`keepSourceFallbacks` defaults to `false` in every environment. Set
-`keepSourceFallbacks: true` to retain authored text for diagnostics. Missing
-compiled messages throw; source metadata never supplies replacement output.
+`includeSourceMetadata` defaults to `false` in every environment. Set
+`includeSourceMetadata: true` to retain authored text for diagnostics in macro
+and MDX output. Missing compiled messages throw; source metadata never supplies
+replacement output.
 Valid translation fallbacks are compiled by the native compiler.
 
 Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
@@ -83,7 +84,7 @@ the client instance. Locale changes require document navigation.
 
 Vite's resolved `base` must be root-relative, such as `/app/`, or an absolute
 URL. Relative bases are rejected because nested document URLs would resolve
-catalog URLs differently.
+import-map catalog URLs differently. No embedded-locale alternative exists.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target
 locale in each catalog whose `include` patterns cover that MDX file. This

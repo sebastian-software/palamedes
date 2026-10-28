@@ -41,7 +41,11 @@ export type PalamedesMdxConfig = {
   transModule?: string;
   runtimeModule?: string;
   ignoreDirective?: string;
-  keepSourceFallbacks?: boolean;
+  /**
+   * Include authored source messages in generated MDX modules as diagnostic
+   * source metadata. Defaults to `false`; it never supplies runtime output.
+   */
+  includeSourceMetadata?: boolean;
 };
 
 export type PalamedesSourceRuleLevel = "off" | "info" | "warning" | "error";
@@ -396,8 +400,8 @@ const MDX_DATA_CONFIG_KEYS = [
   "runtime_module",
   "ignore-directive",
   "ignore_directive",
-  "keep-source-fallbacks",
-  "keep_source_fallbacks",
+  "include-source-metadata",
+  "include_source_metadata",
 ] as const;
 
 const MDX_CONFIG_KEYS = [
@@ -407,8 +411,29 @@ const MDX_CONFIG_KEYS = [
   "transModule",
   "runtimeModule",
   "ignoreDirective",
+  "includeSourceMetadata",
+] as const;
+
+/** MDX keys that Palamedes v2 renamed to `include-source-metadata`. */
+const REMOVED_MDX_SOURCE_METADATA_KEYS = [
+  "keep-source-fallbacks",
+  "keep_source_fallbacks",
   "keepSourceFallbacks",
 ] as const;
+
+function rejectRemovedMdxSourceMetadataKeys(
+  record: Record<string, unknown>,
+  configPath: string,
+  replacement: "include-source-metadata" | "includeSourceMetadata",
+): void {
+  for (const key of REMOVED_MDX_SOURCE_METADATA_KEYS) {
+    if (key in record) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.${replacement}: it only adds diagnostic source metadata. Rename the key; the default stays false.`,
+      );
+    }
+  }
+}
 
 const LINT_CONFIG_KEYS = ["rules"] as const;
 
@@ -626,6 +651,7 @@ function normalizeMdxDataConfig(
     throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`);
   }
   const record = value as Record<string, unknown>;
+  rejectRemovedMdxSourceMetadataKeys(record, configPath, "include-source-metadata");
   if (validateDataKeys) {
     for (const [camel, kebab] of [
       ["translatableAttributes", "translatable-attributes"],
@@ -633,7 +659,7 @@ function normalizeMdxDataConfig(
       ["transModule", "trans-module"],
       ["runtimeModule", "runtime-module"],
       ["ignoreDirective", "ignore-directive"],
-      ["keepSourceFallbacks", "keep-source-fallbacks"],
+      ["includeSourceMetadata", "include-source-metadata"],
     ]) {
       if (camel in record) {
         throw new Error(
@@ -650,7 +676,7 @@ function normalizeMdxDataConfig(
   const transModule = read("trans-module", "trans_module");
   const runtimeModule = read("runtime-module", "runtime_module");
   const ignoreDirective = read("ignore-directive", "ignore_directive");
-  const keepSourceFallbacks = read("keep-source-fallbacks", "keep_source_fallbacks");
+  const includeSourceMetadata = read("include-source-metadata", "include_source_metadata");
 
   return {
     ...(framework !== undefined ? { framework: framework as "react" | "solid" } : {}),
@@ -663,8 +689,8 @@ function normalizeMdxDataConfig(
     ...(transModule !== undefined ? { transModule: transModule as string } : {}),
     ...(runtimeModule !== undefined ? { runtimeModule: runtimeModule as string } : {}),
     ...(ignoreDirective !== undefined ? { ignoreDirective: ignoreDirective as string } : {}),
-    ...(keepSourceFallbacks !== undefined
-      ? { keepSourceFallbacks: keepSourceFallbacks as boolean }
+    ...(includeSourceMetadata !== undefined
+      ? { includeSourceMetadata: includeSourceMetadata as boolean }
       : {}),
   };
 }
@@ -1134,6 +1160,7 @@ function validateMdx(value: unknown, configPath: string): void {
     throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`);
   }
   const record = value as Record<string, unknown>;
+  rejectRemovedMdxSourceMetadataKeys(record, configPath, "includeSourceMetadata");
   rejectUnknownKeys(record, configPath, "mdx.", MDX_CONFIG_KEYS);
   if (
     record.framework !== undefined &&
@@ -1167,9 +1194,12 @@ function validateMdx(value: unknown, configPath: string): void {
       );
     }
   }
-  if (record.keepSourceFallbacks !== undefined && typeof record.keepSourceFallbacks !== "boolean") {
+  if (
+    record.includeSourceMetadata !== undefined &&
+    typeof record.includeSourceMetadata !== "boolean"
+  ) {
     throw new TypeError(
-      `Invalid Palamedes config in ${configPath}: "mdx.keepSourceFallbacks" must be a boolean when provided.`,
+      `Invalid Palamedes config in ${configPath}: "mdx.includeSourceMetadata" must be a boolean when provided.`,
     );
   }
 }

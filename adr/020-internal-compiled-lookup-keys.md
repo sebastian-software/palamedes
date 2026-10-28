@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-28
 
 Compiled lookup keys are compact execution artifacts, while message identity remains source-first.
 
@@ -38,9 +38,10 @@ partially localized result as success.
 
 Internal keys may appear in developer diagnostics, never as user-facing
 message output or raw error UI. Any retained source metadata is for diagnostics,
-not an alternate runtime rendering path. The legacy `keepSourceFallbacks`
-spelling is retained only as an explicit diagnostic-metadata opt-in; v2
-first-party adapters default to `false`.
+not an alternate runtime rendering path. `includeSourceMetadata` is the
+explicit diagnostic-metadata opt-in; v2 first-party adapters default to
+`false`. Palamedes v2 rejects the v1 `keepSourceFallbacks` spelling with a
+migration error.
 
 Source code, extraction, catalog updates, parsed catalog data, and user-facing diagnostics remain source-string-first.
 
@@ -89,6 +90,6 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 ## Validation
 
 Low-level transforms and v2 first-party host adapters generate compact runtime calls without embedding the authored source message by default.
-Set `keepSourceFallbacks: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.
+Set `includeSourceMetadata: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.
 This option never enables runtime fallback. See the
 [v2 migration guide](../docs/migration-v2.md) for legacy API replacements.

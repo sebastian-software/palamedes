@@ -14,9 +14,10 @@ pub struct NativeTransformOptions {
     pub runtime_module: Option<String>,
     pub runtime_import_name: Option<String>,
     pub strip_non_essential_props: Option<bool>,
-    /// Preserve source messages as runtime fallbacks. Defaults to `false`.
-    pub keep_source_fallbacks: Option<bool>,
-    /// @deprecated Use `keepSourceFallbacks` with the inverse value.
+    /// Include authored source messages as diagnostic source metadata.
+    /// Defaults to `false`; the metadata never supplies runtime output.
+    pub include_source_metadata: Option<bool>,
+    /// @deprecated Use `includeSourceMetadata` with the inverse value.
     pub strip_message_field: Option<bool>,
     pub server_functions: Option<NativeServerFunctionTransformOptions>,
 }
@@ -54,7 +55,7 @@ impl From<NativeTransformOptions> for palamedes::NativeTransformOptions {
             runtime_module: value.runtime_module,
             runtime_import_name: value.runtime_import_name,
             strip_non_essential_props: value.strip_non_essential_props,
-            keep_source_fallbacks: value.keep_source_fallbacks,
+            include_source_metadata: value.include_source_metadata,
             strip_message_field: value.strip_message_field,
             server_functions: value.server_functions.map(|options| {
                 palamedes::ServerFunctionTransformOptions {

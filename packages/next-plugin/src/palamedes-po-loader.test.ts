@@ -127,16 +127,6 @@ describe("palamedes-po-loader.cjs", () => {
     },
   );
 
-  it("propagates strict compile failures when the removed opt-out is false", async () => {
-    compileCatalogModule.mockRejectedValue(
-      new Error("failOnCompileError no longer changes this behavior"),
-    );
-
-    await expect(runLoader({ failOnCompileError: false })).rejects.toThrow(
-      /failOnCompileError no longer changes this behavior/,
-    );
-  });
-
   it("prefers the plugin project root over a divergent loader root context", async () => {
     await runLoader({ cwd: "/next-app" }, { rootContext: "/monorepo-root" });
 
@@ -179,12 +169,10 @@ describe("palamedes-po-loader.cjs", () => {
     expect(console.warn).not.toHaveBeenCalled();
   });
 
-  it("fails compile diagnostics when configured", async () => {
+  it("always fails compile diagnostics", async () => {
     compileCatalogModule.mockRejectedValue(new Error("Compilation error for 1 translation"));
 
-    await expect(runLoader({ failOnCompileError: true })).rejects.toThrow(
-      /Compilation error for 1 translation/,
-    );
+    await expect(runLoader({})).rejects.toThrow(/Compilation error for 1 translation/);
     expect(console.warn).not.toHaveBeenCalled();
   });
 

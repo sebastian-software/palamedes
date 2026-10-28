@@ -136,8 +136,8 @@ full document reload: rejected module imports may remain cached, so a boundary
 reset alone cannot guarantee recovery. Compiled translation fallbacks are
 resolved during the build and remain independent of delivery failures.
 
-`messageSplitting` is a deprecated compatibility option. Remove it; `false`
-is rejected because automatic delivery is the v2 contract. Automatic Next
+Automatic delivery is the v2 contract; the removed `messageSplitting` option
+throws a migration error with any value. Automatic Next
 server splitting currently supports PO catalogs only. Keep server adapter
 imports behind `server-only`; they require Node and are not Edge runtime
 entry points.
@@ -242,20 +242,22 @@ module.exports = withPalamedes(
     configPath: "./palamedes.yaml",
     projectRoot: undefined,
     failOnMissing: false,
-    keepSourceFallbacks: undefined,
+    includeSourceMetadata: undefined,
     workspaceRoot: undefined,
     serverFunctions: true,
   },
 );
 ```
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `false`.
-Set it to `true` only to include diagnostic source metadata in generated calls.
+`includeSourceMetadata` defaults to `false`. Set it to `true` only to include
+diagnostic source metadata in generated calls.
 V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.
-`failOnCompileError` is deprecated: invalid or unsupported ICU always fails
-compilation, including when this legacy option is `false`.
+Invalid or unsupported ICU always fails compilation. `withPalamedes()` throws
+a migration error for the removed v1 options `failOnCompileError`,
+`keepSourceFallbacks` (now `includeSourceMetadata`), `messageSplitting`, and
+`cwd` (now `projectRoot`).
 
 `include` and `exclude` select which sources are macro-transformed, and apply
 under both bundlers: webpack uses them as the loader's `test`/`exclude`, and

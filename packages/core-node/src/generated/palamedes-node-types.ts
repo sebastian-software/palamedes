@@ -409,11 +409,6 @@ export interface CatalogModuleRequest {
   locale: string;
   pseudoLocale?: string;
   failOnMissing?: boolean;
-  /**
-   * Deprecated v1 option. v2 always rejects compile errors regardless of
-   * this value; presence is retained only for a migration diagnostic.
-   */
-  failOnCompileError?: boolean;
   missingFailureHint?: string;
   compileFailureHint?: string;
   diagnosticsWarningHint?: string;
@@ -499,8 +494,11 @@ export interface NativeMdxOptions {
   transModule?: string;
   runtimeModule?: string;
   ignoreDirective?: string;
-  /** Preserve source messages as runtime fallbacks. Defaults to `false`. */
-  keepSourceFallbacks?: boolean;
+  /**
+   * Include authored source messages as diagnostic source metadata.
+   * Defaults to `false`; the metadata never supplies runtime output.
+   */
+  includeSourceMetadata?: boolean;
 }
 export interface NativeMdxDiagnostic {
   code: string;
@@ -576,9 +574,12 @@ export interface NativeTransformOptions {
   runtimeModule?: string;
   runtimeImportName?: string;
   stripNonEssentialProps?: boolean;
-  /** Preserve source messages as runtime fallbacks. Defaults to `false`. */
-  keepSourceFallbacks?: boolean;
-  /** @deprecated Use `keepSourceFallbacks` with the inverse value. */
+  /**
+   * Include authored source messages as diagnostic source metadata.
+   * Defaults to `false`; the metadata never supplies runtime output.
+   */
+  includeSourceMetadata?: boolean;
+  /** @deprecated Use `includeSourceMetadata` with the inverse value. */
   stripMessageField?: boolean;
   serverFunctions?: NativeServerFunctionTransformOptions;
 }

@@ -234,9 +234,9 @@ Use dynamic imports such as `await import(\`../locales/${locale}.po\`)` when
 the browser only needs one locale at a time. That gives bundlers a chance to
 split catalogs into per-locale chunks.
 
-For Next.js with PO catalogs, prefer the automatic graph-split path demonstrated
-by `nextjs-cookie`: enable `messageSplitting: true` and let Palamedes deliver
-only the active locale's fragments for the evaluated client module graph.
+For Next.js with PO catalogs, use the automatic graph-split path demonstrated
+by `nextjs-cookie`: Palamedes delivers only the active locale's fragments for
+the evaluated client module graph without any option.
 
 The `nextjs-route` example combines that import with
 `createClientCatalogBoundary()` from `@palamedes/react/client`. The

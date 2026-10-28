@@ -249,15 +249,16 @@ mdx:
   translatable-attributes: [alt, title]
   front-matter-fields: [title, description]
   ignore-directive: palamedes-ignore
-  keep-source-fallbacks: true
+  include-source-metadata: true
 ```
 
 See [MDX messages](./mdx.md) for authoring semantics, framework setup, all
 options, diagnostics, and the native architecture boundary.
-`keep-source-fallbacks` (default `false`) adds the authored source text to
+`include-source-metadata` (default `false`) adds the authored source text to
 generated MDX message lookups as diagnostic metadata. It does not provide
 runtime fallbacks: a missing compiled message still throws. The Vite plugin
-replaces this value with its own `keepSourceFallbacks` option.
+replaces this value with its own `includeSourceMetadata` option. The v1 key
+`keep-source-fallbacks` is rejected with a migration error.
 
 ## Source References
 

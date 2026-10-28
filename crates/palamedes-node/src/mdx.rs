@@ -19,8 +19,9 @@ pub struct NativeMdxOptions {
     pub trans_module: Option<String>,
     pub runtime_module: Option<String>,
     pub ignore_directive: Option<String>,
-    /// Preserve source messages as runtime fallbacks. Defaults to `false`.
-    pub keep_source_fallbacks: Option<bool>,
+    /// Include authored source messages as diagnostic source metadata.
+    /// Defaults to `false`; the metadata never supplies runtime output.
+    pub include_source_metadata: Option<bool>,
 }
 
 #[napi(object)]
@@ -66,9 +67,9 @@ impl From<NativeMdxOptions> for palamedes::MdxOptions {
             trans_module: value.trans_module,
             runtime_module: value.runtime_module,
             ignore_directive: value.ignore_directive.unwrap_or(defaults.ignore_directive),
-            keep_source_fallbacks: value
-                .keep_source_fallbacks
-                .unwrap_or(defaults.keep_source_fallbacks),
+            include_source_metadata: value
+                .include_source_metadata
+                .unwrap_or(defaults.include_source_metadata),
         }
     }
 }

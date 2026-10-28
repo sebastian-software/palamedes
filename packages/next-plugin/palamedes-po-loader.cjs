@@ -25,7 +25,6 @@ module.exports = function palamedesPoLoader() {
   const callback = this.async();
   const options = typeof this.getOptions === "function" ? this.getOptions() : {};
   const failOnMissing = options.failOnMissing === true;
-  const hasFailOnCompileError = Object.hasOwn(options, "failOnCompileError");
 
   (async () => {
     const cfg = await loadConfigCached(
@@ -59,7 +58,6 @@ module.exports = function palamedesPoLoader() {
       locale,
       pseudoLocale: cfg.pseudoLocale,
       failOnMissing,
-      ...(hasFailOnCompileError ? { failOnCompileError: options.failOnCompileError } : {}),
       missingFailureHint:
         "You see this error because `failOnMissing=true` in Palamedes Next plugin configuration.",
     };

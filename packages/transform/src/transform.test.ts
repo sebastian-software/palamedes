@@ -3,8 +3,8 @@ import type { TransformOptions } from "./types";
 
 function transformPalamedesMacros(code: string, filename: string, options: TransformOptions = {}) {
   const compatibilityOptions =
-    options.keepSourceFallbacks === undefined && options.stripMessageField === undefined
-      ? { ...options, keepSourceFallbacks: true }
+    options.includeSourceMetadata === undefined && options.stripMessageField === undefined
+      ? { ...options, includeSourceMetadata: true }
       : options;
   return transformPalamedesMacrosRaw(code, filename, compatibilityOptions);
 }
@@ -452,7 +452,7 @@ function View() {
     expect(result.code).not.toContain('message={"Rich text"}');
   });
 
-  it("keeps source fallbacks when requested", () => {
+  it("includes source metadata when requested", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";
@@ -461,11 +461,24 @@ function View() {
 }
 `;
     const result = transformPalamedesMacrosRaw(code, "test.tsx", {
-      keepSourceFallbacks: true,
+      includeSourceMetadata: true,
     });
 
     expect(result.code).toContain('message: "Hello"');
     expect(result.code).toContain('message={"Rich text"}');
+  });
+
+  it("rejects the renamed keepSourceFallbacks option even without macros", () => {
+    const macroSource = 'import { t } from "@palamedes/core/macro";\nt`Hello`;';
+    for (const code of [macroSource, "const x = 1;"]) {
+      expect(() =>
+        transformPalamedesMacrosRaw(code, "test.ts", {
+          keepSourceFallbacks: true,
+        } as unknown as TransformOptions),
+      ).toThrow(
+        "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+      );
+    }
   });
 
   it("supports the legacy stripMessageField option", () => {
