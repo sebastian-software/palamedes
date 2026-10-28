@@ -8,10 +8,19 @@ function parseStableVersion(version) {
   return match ? match.slice(1, 4).map(Number) : undefined;
 }
 
-// `last-release-sha` is a one-time override for the 2.0.0 transition. A stale
-// value keeps pointing the changelog at the 1.x history, so it must leave the
-// config in the generated release PR that bumps the manifest, which is also
-// the commit the Publish workflow validates.
+function compareVersions(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index];
+  }
+  return 0;
+}
+
+// `release-as` and `last-release-sha` are one-time overrides for the 2.0.0
+// transition. release-please keeps forcing `release-as` after that version
+// ships, so the next feat or fix would open another "release 2.0.0" PR, and a
+// stale `last-release-sha` keeps pointing the changelog at the 1.x history.
+// Both must leave the config in the generated release PR that bumps the
+// manifest, which is also the commit the Publish workflow validates.
 export function releaseOverrideProblems({ releaseConfig, manifestVersion, minimumMajor }) {
   const problems = [];
   const released = parseStableVersion(manifestVersion);
@@ -22,6 +31,22 @@ export function releaseOverrideProblems({ releaseConfig, manifestVersion, minimu
   }
 
   const rootConfig = releaseConfig.packages?.["."] ?? {};
+  for (const [scope, config] of [
+    ["the top level", releaseConfig],
+    ['packages["."]', rootConfig],
+  ]) {
+    const releaseAs = config["release-as"];
+    if (releaseAs === undefined) continue;
+    const target = parseStableVersion(releaseAs);
+    if (!target) {
+      problems.push(`release-as at ${scope} must be a stable version, found ${releaseAs}`);
+    } else if (compareVersions(target, released) <= 0) {
+      problems.push(
+        `release-as ${releaseAs} at ${scope} is not above the released manifest version ${manifestVersion}; remove the one-time override so later versions follow conventional commits`,
+      );
+    }
+  }
+
   for (const [scope, config] of [
     ["the top level", releaseConfig],
     ['packages["."]', rootConfig],

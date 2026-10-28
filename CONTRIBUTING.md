@@ -319,7 +319,9 @@ coordinated npm and Cargo package is available before closing #1204.
 changelog at the unpublished 1.25.1 release commit (tag `palamedes-v1.25.1`)
 instead of re-listing 1.x entries. Remove both after 2.0.0, in the generated
 release PR that sets the manifest to 2.0.0. `pnpm check:release-set` fails
-while `last-release-sha` remains at 2.0.0 or later.
+while `release-as` is not above the manifest version, so the next feat or fix
+cannot open another "release 2.0.0" PR, and while `last-release-sha` remains
+at 2.0.0 or later.
 
 Run `pnpm check:release-set` and
 `pnpm check:workflow-contracts` when changing policy or workflow wiring.
