@@ -34,7 +34,11 @@ export type WakuCatalogDeliveryOptions = {
   clientDirectory?: string;
   /** Resolve the application-owned locale policy from the original request. */
   resolveLocale: (request: Request) => string;
-  /** Allow running before a client build exists in development. */
+  /**
+   * Allow running before a client build exists in development. Defaults to
+   * whether Vite built the server as a development build
+   * (`import.meta.env.DEV`), not to the runtime `NODE_ENV`.
+   */
   development?: boolean;
   /** Override the generated manifest filename for a custom Vite output. */
   manifestName?: string;
@@ -48,6 +52,19 @@ export type WakuCatalogDeliveryOptions = {
 };
 
 /**
+ * Whether Vite built this server as a development build. Vite replaces
+ * `import.meta.env.DEV` in both `vite dev` and `vite build`, so a production
+ * build delivers its client catalogs even when the process that serves it has
+ * no `NODE_ENV`, and a development server keeps development delivery under
+ * `NODE_ENV=production`. Outside Vite, `NODE_ENV` decides.
+ */
+function isDevelopmentBuild(): boolean {
+  // Keep the literal `import.meta.env.DEV`: bundlers replace that expression.
+  if (import.meta.env === undefined) return process.env.NODE_ENV !== "production";
+  return import.meta.env.DEV;
+}
+
+/**
  * Connects Vite's active-locale import-map delivery to Waku's HTML response.
  * Locale selection remains application-owned; this middleware only transforms
  * document responses after Waku has rendered them and leaves RSC/action
@@ -56,9 +73,10 @@ export type WakuCatalogDeliveryOptions = {
 export function createWakuCatalogDeliveryMiddleware(
   options: WakuCatalogDeliveryOptions,
 ): WakuMiddlewareHandler {
+  const development = options.development ?? isDevelopmentBuild();
   const delivery = createViteCatalogDelivery({
     clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), "dist/public"),
-    ...(options.development === undefined ? {} : { development: options.development }),
+    development,
     ...(options.manifestName ? { manifestName: options.manifestName } : {}),
   });
 
@@ -82,9 +100,7 @@ export function createWakuCatalogDeliveryMiddleware(
         ),
       )
       .pipeThrough(
-        webTransform(
-          createWakuBootstrapGateTransform({ allowMissingPromise: options.development === true }),
-        ),
+        webTransform(createWakuBootstrapGateTransform({ allowMissingPromise: development })),
       );
     const headers = new Headers(response.headers);
     headers.delete("content-length");

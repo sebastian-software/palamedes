@@ -17,7 +17,11 @@ export type SolidCatalogDeliveryOptions = {
   clientDirectory?: string;
   /** Resolve the application-owned locale policy from the original request. */
   resolveLocale: (request: Request) => string;
-  /** Allow running before a client build exists in development. */
+  /**
+   * Allow running before a client build exists in development. Defaults to
+   * whether Vite built the server as a development build
+   * (`import.meta.env.DEV`), not to the runtime `NODE_ENV`.
+   */
   development?: boolean;
   /** Override the generated manifest filename for a custom Vite output. */
   manifestName?: string;
@@ -34,6 +38,19 @@ export type SolidFetchMiddleware = (
   request: Request,
   next: () => Promise<Response>,
 ) => Promise<Response>;
+
+/**
+ * Whether Vite built this server as a development build. Vite replaces
+ * `import.meta.env.DEV` in both `vite dev` and `vite build`, so a production
+ * build delivers its client catalogs even when the process that serves it has
+ * no `NODE_ENV`, and a development server keeps development delivery under
+ * `NODE_ENV=production`. Outside Vite, `NODE_ENV` decides.
+ */
+function isDevelopmentBuild(): boolean {
+  // Keep the literal `import.meta.env.DEV`: bundlers replace that expression.
+  if (import.meta.env === undefined) return process.env.NODE_ENV !== "production";
+  return import.meta.env.DEV;
+}
 
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
@@ -55,9 +72,10 @@ const SOLID_AUTHORED_ENTRY_PATTERN =
 export function createSolidCatalogDeliveryMiddleware(
   options: SolidCatalogDeliveryOptions,
 ): SolidFetchMiddleware {
+  const development = options.development ?? isDevelopmentBuild();
   const delivery = createViteCatalogDelivery({
     clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), ".output/public"),
-    ...(options.development === undefined ? {} : { development: options.development }),
+    development,
     ...(options.manifestName ? { manifestName: options.manifestName } : {}),
   });
 
@@ -81,7 +99,7 @@ export function createSolidCatalogDeliveryMiddleware(
       .pipeThrough(
         Transform.toWeb(
           createSolidBootstrapGateTransform({
-            allowMissingPromise: options.development === true,
+            allowMissingPromise: development,
             nonce,
             trustedOrigins: binding ? trustedOriginsForBinding(binding.imports, request.url) : [],
           }),

@@ -8,7 +8,6 @@ import { createServerI18n, serverI18nScope } from "./lib/i18n.server";
 import { locales } from "./lib/i18n";
 
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
-  development: process.env.NODE_ENV !== "production",
   nonce: process.env.PALAMEDES_CSP_NONCE,
   resolveLocale: (request) =>
     locales.resolve({
