@@ -19,10 +19,9 @@ include = [
 ]
 keywords = ["i18n", "internationalization", "icu", "gettext", "ferramenta"]
 categories = ["internationalization", "development-tools", "text-processing"]
-# The Rust core ships through the npm packages today. Crates.io preparation
-# is tracked in #1309. Remove this guard only in the
-# reviewed release-enablement change; .release-policy.json also gates the lane.
-publish = false
+# Published to crates.io as the compiler behind palamedes-build (#1309). The
+# allowlist names crates.io only; .release-policy.json also gates the lane.
+publish = ["crates-io"]
 
 [package.metadata.docs.rs]
 all-features = true

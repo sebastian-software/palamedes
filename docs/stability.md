@@ -185,7 +185,8 @@ request isolation, server action, stream, catalog recovery, and CSP proofs
 before the peer range moves.
 
 This adapter tier is separate from the repository's unreleased Palamedes v2
-publication preview. The release hold applies to all v2 packages.
+publication preview. All v2 packages publish together in the coordinated 2.0.0
+release.
 
 ### Representative TanStack and Solid verification
 

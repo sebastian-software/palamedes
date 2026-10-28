@@ -7,8 +7,9 @@ languages can ship without rebuilding it.
 
 This is an experimental repository integration. Only nonfunctional `0.0.0`
 bootstrap placeholders are published on crates.io; the functional Rust SDK is
-**not released**. The publication hold in
-[#1309](https://github.com/sebastian-software/palamedes/issues/1309) still applies.
+**not released**. Publication is enabled for the coordinated 2.0.0 release
+([#1309](https://github.com/sebastian-software/palamedes/issues/1309)); the
+functional crates appear on crates.io only once that release is published.
 The current subset is text, display arguments, string selects, and cardinal and
 ordinal plurals. Localized number/date/time formatting, rich text, and translation
 contexts are rejected. This path does not yet offer the full TypeScript workflow or a stable
@@ -78,11 +79,12 @@ publication; a dry run does not request an OIDC token. A successful exchange
 shows that crates.io trusts this workflow for at least one crate. It does not
 prove the trusted-publisher configuration of each crate; only the upload does.
 
-Both `publicationEnabled: false` and the three `publish = false` manifests remain
-in effect. A reviewed release-enablement change must set the policy and explicit
-`publish = ["crates-io"]` allowlists after the v2 gates and release authorization.
-The bootstrap publications establish names and ownership, but do not verify a
-functional SDK release or an OIDC upload. Verify actual token exchange and
+The reviewed release-enablement change set `publicationEnabled: true` and the
+explicit `publish = ["crates-io"]` allowlists on the three SDK crates after
+release authorization. The CLI, Node binding, and plugin crates keep
+`publish = false`. Nothing reaches crates.io until the generated 2.0.0 release
+PR merges. The bootstrap publications establish names and ownership, but do not
+verify a functional SDK release or an OIDC upload. Verify actual token exchange and
 publication during the authorized coordinated release. A passing dry run does
 not prove trusted-publisher permissions.
 
