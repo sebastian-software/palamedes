@@ -59,8 +59,10 @@ export default defineConfig({
 });
 ```
 
-`failOnCompileError` is deprecated in v2. Invalid or unsupported ICU always
-fails catalog compilation, including when the option is `false`.
+Invalid or unsupported ICU always fails catalog compilation. The plugin
+throws a migration error for the removed v1 options `failOnCompileError`,
+`keepSourceFallbacks` (now `includeSourceMetadata`), and
+`experimentalGraphSplitting`.
 
 ```ts
 import { defineConfig } from "vite";
@@ -103,7 +105,7 @@ palamedes({
   skipValidation: false,
   failOnMissing: false,
   framework: "react",
-  keepSourceFallbacks: undefined,
+  includeSourceMetadata: undefined,
   mdx: {
     translatableAttributes: ["alt", "title"],
     frontMatterFields: ["title", "description"],
@@ -111,8 +113,8 @@ palamedes({
 });
 ```
 
-`keepSourceFallbacks` defaults to `false` in every environment. Set
-`keepSourceFallbacks: true` to retain authored text for diagnostics. Missing
+`includeSourceMetadata` defaults to `false` in every environment. Set
+`includeSourceMetadata: true` to retain authored text for diagnostics. Missing
 compiled messages throw; source metadata never supplies replacement output.
 Valid translation fallbacks are compiled by the native compiler.
 
@@ -157,10 +159,10 @@ experimental flag, application PO map, or manual client initialization is
 needed. Vite's resolved `base` must be root-relative (for example `/app/`) or
 an absolute URL.
 
-SSR adapters use `@palamedes/vite-plugin/server` to create request state from
-the shared lazy active-locale catalog, and `@palamedes/vite-plugin/delivery`
-to bind import maps before modulepreloads and modules execute. The React Router
-compatibility export remains at `@palamedes/vite-plugin/react-router`.
+SSR hosts use `createBundledServerI18n` from
+`@palamedes/runtime/server/bundled` to create request state from the shared
+lazy active-locale catalog, and `@palamedes/vite-plugin/delivery` to bind
+import maps before modulepreloads and modules execute.
 Static Vite HTML entries receive the same locale binding automatically.
 
 The package peer range remains broad because macros and catalog loading work on

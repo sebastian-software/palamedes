@@ -4,6 +4,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const RUST_SDK_PACKAGES = ["palamedes-i18n", "palamedes", "palamedes-build"];
+export const RUST_SDK_MANIFESTS = {
+  "palamedes-i18n": "crates/palamedes-i18n/Cargo.toml",
+  palamedes: "Cargo.toml",
+  "palamedes-build": "crates/palamedes-build/Cargo.toml",
+};
 export const RUST_SDK_REPOSITORY = "https://github.com/sebastian-software/palamedes";
 
 export function run(command, args, options = {}) {
@@ -42,6 +47,24 @@ export async function sdkMetadata(root) {
     throw new Error("Rust SDK package versions must match the coordinated release version");
   }
   return packages;
+}
+
+// Reads `[package] version` without Cargo, for jobs that do not install Rust.
+// check-release-set keeps these literal versions aligned with Cargo.lock.
+export function cargoManifestVersion(manifest) {
+  const section = /^\[package\]\s*$([\s\S]*?)(?=^\[|(?![\s\S]))/mu.exec(manifest)?.[1] ?? "";
+  const version = /^version\s*=\s*"([^"]+)"\s*$/mu.exec(section)?.[1];
+  if (!version) throw new Error("Cargo manifest has no literal [package] version");
+  return version;
+}
+
+export async function sdkManifestVersions(root) {
+  return Promise.all(
+    RUST_SDK_PACKAGES.map(async (name) => ({
+      name,
+      version: cargoManifestVersion(await readFile(join(root, RUST_SDK_MANIFESTS[name]), "utf8")),
+    })),
+  );
 }
 
 export function indexPath(name) {
@@ -148,7 +171,8 @@ export async function waitForRegistryVersion(
         .map((line) => JSON.parse(line))
         .find((item) => item.vers === pkg.version);
       if (entry) {
-        if (entry.yanked || entry.cksum !== checksum) {
+        // A null checksum accepts any archive; the publisher passes the exact one.
+        if (entry.yanked || (checksum !== null && entry.cksum !== checksum)) {
           throw new Error(`Registry content differs or is yanked: ${pkg.name}@${pkg.version}`);
         }
         return;

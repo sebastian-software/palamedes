@@ -329,3 +329,70 @@ fn audit_summaries_and_verdicts_pluralize_each_count_in_every_ui_language() {
         }
     }
 }
+
+/// Subcommand names listed under the `Commands:` heading of one help page.
+fn listed_subcommands(help: &str) -> Vec<String> {
+    let mut lines = help.lines();
+    if !lines.any(|line| line == "Commands:") {
+        return Vec::new();
+    }
+    lines
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.strip_prefix("  "))
+        .filter(|line| !line.starts_with(' '))
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|name| *name != "help")
+        .map(str::to_owned)
+        .collect()
+}
+
+fn with_arguments(prefix: &[String], tail: &[&str]) -> Vec<String> {
+    prefix
+        .iter()
+        .cloned()
+        .chain(tail.iter().map(|argument| (*argument).to_owned()))
+        .collect()
+}
+
+fn rendered_help(arguments: &[String], directory: &std::path::Path) -> String {
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let output = pmds(&arguments, &[("PALAMEDES_UI_LOCALE", "en")], directory);
+    let label = arguments.join(" ");
+    assert!(output.status.success(), "pmds {label}: {output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.trim().is_empty(), "pmds {label} printed no help");
+    stdout
+}
+
+#[test]
+fn every_subcommand_help_renders_through_every_entry_point() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut pending = vec![Vec::<String>::new()];
+    let mut visited = Vec::new();
+    while let Some(path) = pending.pop() {
+        let help = rendered_help(&with_arguments(&path, &["--help"]), directory.path());
+        rendered_help(&with_arguments(&path, &["-h"]), directory.path());
+        let mut help_invocation = vec!["help".to_owned()];
+        help_invocation.extend(path.iter().cloned());
+        rendered_help(&help_invocation, directory.path());
+        for child in listed_subcommands(&help) {
+            pending.push(with_arguments(&path, &[child.as_str()]));
+        }
+        visited.push(path.join(" "));
+    }
+    for expected in [
+        "extract",
+        "lint",
+        "audit",
+        "report",
+        "catalog",
+        "catalog compile",
+        "version",
+        "telemetry",
+    ] {
+        assert!(
+            visited.iter().any(|path| path.as_str() == expected),
+            "{expected} was not discovered in {visited:?}"
+        );
+    }
+}

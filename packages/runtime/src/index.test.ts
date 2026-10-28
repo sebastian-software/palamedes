@@ -16,12 +16,26 @@ import {
   setServerI18nGetter,
 } from "./index";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by runtime tests.");
+}
+
 function createTestI18n(locale = "en"): I18nInstance {
   return {
     locale,
     _: (message: string) => message,
+    load() {},
+    activate() {},
+    renderMessage: unusedRenderMessage,
   };
 }
+
+/** A plain JavaScript caller can still pass an instance without load(). */
+function createUnloadableI18n(locale = "en"): I18nInstance {
+  return { ...createTestI18n(locale), load: undefined } as unknown as I18nInstance;
+}
+
+const REGISTERED_MESSAGES_KEY = Symbol.for("palamedes.runtime.registeredMessages");
 
 describe("@palamedes/runtime", () => {
   afterEach(() => {
@@ -76,6 +90,7 @@ describe("@palamedes/runtime", () => {
         this.locale = locale;
       },
       load,
+      renderMessage: unusedRenderMessage,
     }));
 
     const first = initializeClientI18n("de", createI18n);
@@ -101,6 +116,7 @@ describe("@palamedes/runtime", () => {
         this.locale = locale;
       },
       load: vi.fn(),
+      renderMessage: unusedRenderMessage,
     }));
 
     const i18n = initializeClientI18n("de", createI18n);
@@ -221,13 +237,15 @@ describe("registerMessages", () => {
   });
 
   function createLoadableI18n(locale = "en") {
-    const loaded: Record<string, Record<string, string>[]> = {};
+    const loaded: Record<string, Record<string, unknown>[]> = {};
     return {
       locale,
       _: (message: string) => message,
-      load(loadLocale: string, messages: Record<string, string>) {
+      load(loadLocale: string, messages: Record<string, unknown>) {
         (loaded[loadLocale] ??= []).push(messages);
       },
+      activate() {},
+      renderMessage: unusedRenderMessage,
       loaded,
     };
   }
@@ -280,11 +298,42 @@ describe("registerMessages", () => {
     expect(i18n.loaded["reg-reset"]).toEqual([{ keyE: "E" }]);
   });
 
-  it("ignores instances without a load method", () => {
+  it("rejects a client instance without load once registrations exist", () => {
     (globalThis as Record<string, unknown>).window = {};
     registerMessages({ "reg-plain": { keyF: "F" } });
 
-    expect(() => setClientI18n(createTestI18n("reg-plain"))).not.toThrow();
+    expect(() => setClientI18n(createUnloadableI18n("reg-plain"))).toThrow(
+      "cannot load generated graph-split messages",
+    );
+    expect(() => getI18n()).toThrow(/No active client i18n instance/);
+  });
+
+  it("accepts a client instance without load while nothing is registered", () => {
+    (globalThis as Record<string, unknown>).window = {};
+    const state = globalThis as Record<symbol, unknown>;
+    const registered = state[REGISTERED_MESSAGES_KEY];
+    delete state[REGISTERED_MESSAGES_KEY];
+    try {
+      const i18n = createUnloadableI18n("reg-none");
+      expect(setClientI18n(i18n)).toBe(i18n);
+    } finally {
+      state[REGISTERED_MESSAGES_KEY] = registered;
+    }
+  });
+
+  it("rejects a late registration when the client instance cannot load it", () => {
+    (globalThis as Record<string, unknown>).window = {};
+    const state = globalThis as Record<symbol, unknown>;
+    const registered = state[REGISTERED_MESSAGES_KEY];
+    delete state[REGISTERED_MESSAGES_KEY];
+    try {
+      setClientI18n(createUnloadableI18n("reg-late"));
+      expect(() => registerMessages({ "reg-late": { keyR: "R" } })).toThrow(
+        "cannot load generated graph-split messages",
+      );
+    } finally {
+      state[REGISTERED_MESSAGES_KEY] = registered;
+    }
   });
 
   it("loads eager registrations into a request-local server instance", async () => {
@@ -413,7 +462,7 @@ describe("registerMessages", () => {
   });
 
   it("rejects a non-loadable instance only when graph messages exist", async () => {
-    const i18n = createTestI18n("reg-server-unloadable");
+    const i18n = createUnloadableI18n("reg-server-unloadable");
 
     await expect(loadRegisteredMessages(i18n, "reg-server-empty")).resolves.toBe(i18n);
     registerMessageLoaders("reg-server-unloadable", {
@@ -433,7 +482,7 @@ describe("registerMessages", () => {
     registerMessageLoaders("reg-server-unstarted", { "reg-server-unstarted": load });
 
     await expect(
-      loadRegisteredMessages(createTestI18n("reg-server-unstarted"), "reg-server-unstarted"),
+      loadRegisteredMessages(createUnloadableI18n("reg-server-unstarted"), "reg-server-unstarted"),
     ).rejects.toThrow("cannot load generated graph-split messages");
 
     expect(load).not.toHaveBeenCalled();

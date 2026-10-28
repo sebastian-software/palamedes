@@ -194,6 +194,12 @@ pub(crate) struct SourceLocator<'a> {
 /// calculate an error-only position.
 pub(crate) trait DiagnosticLocation {
     fn format(&self) -> String;
+
+    /// Formats another byte offset in the same file, such as one branch of a
+    /// macro call. Preformatted text cannot move, so it keeps its own position.
+    fn format_offset(&self, _offset: usize) -> String {
+        self.format()
+    }
 }
 
 impl DiagnosticLocation for str {
@@ -335,6 +341,12 @@ impl DiagnosticLocation for IndexedSourceLocation<'_, '_> {
 
         let (line, column) = self.locator.location(self.offset);
         format!("{}:{line}:{column}", self.filename)
+    }
+
+    fn format_offset(&self, offset: usize) -> String {
+        self.locator
+            .indexed_location(self.filename, offset)
+            .format()
     }
 }
 

@@ -25,12 +25,12 @@ use crate::choice::is_plural_format;
 use crate::descriptor::{descriptor_property_value, descriptor_static_property};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract::{MacroCollector, MacroResolution};
-use crate::icu_text::{compiled_message_key, escape_icu_literal};
+use crate::icu_text::compiled_message_key;
 use crate::placeholder_name::expression_name;
 use crate::source::{SourceLocator, display_filename, format_parser_diagnostics};
 use crate::source_message::{
-    build_icu_message, expression_source, lower_choice_options_from_object, lower_template,
-    make_unique_value_name,
+    build_icu_message, check_lowered_message, expression_source, lower_choice_options_from_object,
+    lower_template, make_unique_value_name,
 };
 
 /// Current manifest format version.
@@ -277,16 +277,24 @@ impl ManifestVisitor<'_, '_> {
 
     fn template(&self, template: &TemplateLiteral<'_>) -> PalamedesResult<Option<Entry>> {
         let mut used_value_names = HashMap::new();
-        let (message, _) = lower_template(
+        let (message, lowered_values) = lower_template(
             template,
             self.source,
             "template expression",
             &mut used_value_names,
-            escape_icu_literal,
         )?;
         if message.is_empty() {
             return Ok(None);
         }
+        check_lowered_message(
+            &message,
+            lowered_values.iter().map(|value| value.name.as_str()),
+            [],
+            "t",
+            &self
+                .locator
+                .indexed_location(self.filename, template.span.start as usize),
+        )?;
 
         // Replays the naming in `lower_template` per slot: values are
         // deduplicated there, but the runtime receives one value per slot.
@@ -340,8 +348,8 @@ impl ManifestVisitor<'_, '_> {
                     self.source,
                     "template expression",
                     &mut used_value_names,
-                    escape_icu_literal,
                 )?;
+                check_lowered_message(&message, [], [], "t", location.as_str())?;
                 let runtime_message = template
                     .single_quasi()
                     .map(|value| value.to_string())
@@ -381,7 +389,9 @@ impl ManifestVisitor<'_, '_> {
         } else {
             macro_name
         };
-        let location = self.location(call.span.start);
+        let location = self
+            .locator
+            .indexed_location(self.filename, call.span.start as usize);
         let mut used_value_names = HashMap::new();
         let preferred_name =
             expression_name(value).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_owned());
@@ -395,8 +405,7 @@ impl ManifestVisitor<'_, '_> {
             &mut used_value_names,
             format,
             macro_name,
-            location.as_str(),
-            escape_icu_literal,
+            &location,
         )?;
         if lowered.options.is_empty() {
             return Ok(None);
@@ -416,6 +425,7 @@ impl ManifestVisitor<'_, '_> {
             &lowered.options,
             options.get("offset").map(String::as_str),
         );
+        check_lowered_message(&message, [value_name.as_str()], [], macro_name, &location)?;
         Ok(Some(Entry::Choice(RuntimeMacroChoice {
             kind: macro_name.to_owned(),
             options,
@@ -628,10 +638,6 @@ export const f = (seats: number, role: string, place: number, name: string) => [
                 "plural(n, { one: `# night for ${guest}`, other: `# nights for ${guest}` })",
                 "interpolates a value",
             ),
-            (
-                "plural(n, { one: label, other: \"# items\" })",
-                "string literal",
-            ),
             ("t({ message: `Hello ${name}` })", "string message"),
         ] {
             let source = format!(
@@ -642,6 +648,43 @@ export const f = (seats: number, role: string, place: number, name: string) => [
                 matches!(&error, PalamedesError::RuntimeMacroUnsupported { detail: actual, .. } if actual.contains(detail)),
                 "{error}"
             );
+        }
+    }
+
+    #[test]
+    fn rejects_choice_branches_like_extraction_and_the_transform() {
+        let prefix = "export const f = (n: number, role: string, label: string) => ";
+        for (call, anchor, expected_key, nested) in [
+            (
+                "plural(n, { one: label, other: \"# items\" })",
+                "label",
+                "one",
+                false,
+            ),
+            ("plural(n, { one: ONE, other: OTHER })", "ONE", "one", false),
+            (
+                "select(role, { admin: \"Admin\", other: plural(n, { one: \"#\", other: \"#\" }) })",
+                "plural(n, { one: \"#\"",
+                "other",
+                true,
+            ),
+        ] {
+            let source = format!(
+                "import {{ plural, select }} from \"@palamedes/core/macro\";\n{prefix}{call};"
+            );
+            let column = prefix.len() + call.find(anchor).expect("anchor") + 1;
+            let expected_location = format!("a.ts:2:{column}");
+            let error = manifest(&[("a.ts", &source)]).expect_err("unsupported branch");
+            let matched = if nested {
+                matches!(&error, PalamedesError::NestedMessageMacro { location, branch: Some(key) }
+                    if *location == expected_location && key == expected_key)
+            } else {
+                matches!(&error, PalamedesError::UnsupportedMacroSyntax { macro_name, location, detail }
+                    if macro_name == "plural"
+                        && *location == expected_location
+                        && detail.contains(&format!("`{expected_key}` branch")))
+            };
+            assert!(matched, "{call}: {error}");
         }
     }
 

@@ -1,20 +1,15 @@
 #![warn(missing_docs, rustdoc::broken_intra_doc_links)]
-//! Rust core for Palamedes.
+//! Rust core for Palamedes: extraction, catalogs, ICU handling, and the
+//! macro transform behind the `pmds` CLI and the `@palamedes/core-node`
+//! Node binding.
 //!
-//! ```rust
-//! let po = palamedes::parse_po(
-//!     r#"msgid ""
-//! msgstr ""
-//! "Language: en\n"
+//! Only the [`sdk`] module is a public API covered by SemVer. It holds the
+//! compiler entry points that `palamedes-build` uses. Every other item is
+//! hidden from these docs: it is toolchain-internal for the CLI, the Node
+//! binding, and the plugin host, and can change in any release.
 //!
-//! msgid "Hello"
-//! msgstr "Hello"
-//! "#,
-//! )
-//! .expect("PO source should parse");
-//!
-//! assert_eq!(po.items[0].msgid, "Hello");
-//! ```
+//! Applications use `palamedes-build` in `build.rs` and `palamedes-i18n` at
+//! runtime instead of depending on this crate directly.
 
 use std::collections::BTreeMap;
 
@@ -43,6 +38,7 @@ mod message_metadata;
 mod placeholder_name;
 mod runtime_macro_manifest;
 mod runtime_message;
+pub mod sdk;
 mod source;
 mod source_macros;
 mod source_message;
@@ -58,47 +54,60 @@ mod vue;
 use ferrocat::{MsgStr, PoFile, PoItem, parse_po as ferrocat_parse_po};
 use serde::Serialize;
 
+#[doc(hidden)]
 pub use catalog_artifact::{
     CatalogArtifactConfig, CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity,
     CatalogArtifactMissingMessage, CatalogArtifactRequest, CatalogArtifactResult,
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogCompilationCache,
     CatalogConfig, FallbackLocales, PalamedesCatalogFormat, compile_catalog_artifact,
     compile_catalog_artifact_selected, compile_catalog_artifact_selected_cached,
-    compile_catalog_artifact_selected_cached_without_waiting, resolve_catalog_file_path,
+    compile_catalog_artifact_selected_cached_without_waiting, parse_catalog_for_compile,
+    resolve_catalog_file_path,
 };
+#[doc(hidden)]
 pub use catalog_audit::{
     CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
     CatalogAuditSummary, audit_catalogs,
 };
+#[doc(hidden)]
 pub use catalog_combine::{
     CatalogCombineInput, CatalogCombineRequest, CatalogCombineResult, CatalogCombineSelection,
     CatalogCombineStats, CatalogConflictStrategy, CatalogFileCombineRequest,
     CatalogFileCombineResult, combine_catalog_files, combine_catalogs,
 };
+#[doc(hidden)]
 pub use catalog_convert::{
     CatalogFileConvertRequest, CatalogFileConvertResult, convert_catalog_file,
 };
+#[doc(hidden)]
 pub use catalog_coverage::{
     CatalogCoverageRequest, CatalogCoverageResult, CatalogLocaleCoverageResult,
     measure_catalog_coverage,
 };
+#[doc(hidden)]
 pub use catalog_machine_translation::{
     CatalogMachineTranslationInspection, CatalogMachineTranslationInspectionRequest,
     CatalogMachineTranslationInspectionResult, inspect_catalog_machine_translations,
 };
+#[doc(hidden)]
 pub use catalog_module::render_catalog_module;
+#[doc(hidden)]
 pub use catalog_three_way::{
     CATALOG_MODIFY_DELETE_RESOLVED, CatalogFileThreeWayMergeRequest, CatalogMergeSide,
     CatalogThreeWayMergeRequest, merge_catalog_files_three_way, merge_catalogs_three_way,
 };
+#[doc(hidden)]
 pub use catalog_update::{
     AiProvenance, CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult,
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest,
     CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
     PoOutputOptions, parse_catalog, preview_catalog_file_update, update_catalog_file,
 };
+#[doc(hidden)]
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
+#[doc(hidden)]
 pub use error::{PalamedesError, PalamedesResult};
+#[doc(hidden)]
 pub use extract::{
     ExtractCatalogFileFailure, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
     ExtractCatalogMessagesResult, ExtractedMessageRecord, SourceFileAnalysisRequest,
@@ -107,12 +116,18 @@ pub use extract::{
     extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
     extract_messages, extract_messages_with_mdx_options,
 };
+#[doc(hidden)]
 pub use extract_cache::{ExtractCache, default_cache_path};
+#[doc(hidden)]
 pub use ferrocat::{CatalogMachineTranslationReview, CatalogMachineTranslationStatus};
+#[doc(hidden)]
+pub use icu_text::compiled_message_key;
+#[doc(hidden)]
 pub use mdx::{
     MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework, MdxOptions, analyze_mdx,
     extract_mdx_messages,
 };
+#[doc(hidden)]
 pub use message_metadata::{
     MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,
     MessageArgumentMetadataInput, MessageFormatStyleKind, MessageMetadata,
@@ -120,14 +135,17 @@ pub use message_metadata::{
     MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata, derive_message_metadata,
     normalize_message_metadata, validate_message_metadata,
 };
+#[doc(hidden)]
 pub use runtime_macro_manifest::{
     RUNTIME_MACRO_MANIFEST_VERSION, RuntimeMacroChoice, RuntimeMacroDescriptor,
     RuntimeMacroManifest, RuntimeMacroTemplate, collect_runtime_macro_manifest,
 };
+#[doc(hidden)]
 pub use runtime_message::{
     RuntimeCompiledMessage, RuntimeCompiledMessages, RuntimeMessageChoiceKind,
     RuntimeMessageFormat, RuntimeMessageNode, compile_runtime_catalog_messages,
 };
+#[doc(hidden)]
 pub use source::{
     SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
@@ -135,10 +153,12 @@ pub use source::{
     SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult,
     SourceRange, SourceRuleLevel, SourceRuleOptions,
 };
+#[doc(hidden)]
 pub use target_text::{
     TargetTextCheckOptions, TargetTextSpan, TranslationTargetText, TranslationTargetTextDiagnostic,
     TranslationTargetTextRequest, TranslationTargetTextResult, check_translation_targets,
 };
+#[doc(hidden)]
 pub use transform::{
     NativeTransformEdit, NativeTransformOptions, NativeTransformResult, NativeTransformSourceMap,
     ServerFunctionTransformOptions, transform_macros,
@@ -146,6 +166,7 @@ pub use transform::{
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
 pub use translation_candidates::apply_translation_patches_with_injected_write_failure;
+#[doc(hidden)]
 pub use translation_candidates::{
     DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS, TranslationCandidate, TranslationCandidateId,
     TranslationCandidateRequest, TranslationCandidateResult, TranslationMachineProvenance,
@@ -155,10 +176,15 @@ pub use translation_candidates::{
     TranslationWorkflowOrigin, apply_translation_patches, list_translation_candidates,
 };
 
-/// Published `ferrocat` version used by the Rust core.
+/// `ferrocat` version that Cargo.lock pins for the native builds.
+///
+/// The manifest uses a caret requirement, so another Cargo graph can link a
+/// newer compatible version.
+#[doc(hidden)]
 pub const FERROCAT_VERSION: &str = "3.4.2";
 
 /// Version metadata for the loaded native core.
+#[doc(hidden)]
 #[derive(Debug, Serialize)]
 pub struct NativeInfo {
     /// Current Palamedes crate version.
@@ -170,6 +196,7 @@ pub struct NativeInfo {
 }
 
 /// JSON-serializable PO file representation used by host bindings.
+#[doc(hidden)]
 #[derive(Debug, Serialize)]
 pub struct JsPoFile {
     /// File-level translator comments.
@@ -187,6 +214,7 @@ pub struct JsPoFile {
 }
 
 /// JSON-serializable PO message representation used by host bindings.
+#[doc(hidden)]
 #[derive(Debug, Serialize)]
 pub struct JsPoItem {
     /// Source gettext identifier.
@@ -265,6 +293,7 @@ impl From<PoItem> for JsPoItem {
 }
 
 /// Returns runtime version information for the core.
+#[doc(hidden)]
 #[must_use]
 pub fn get_native_info() -> NativeInfo {
     NativeInfo {
@@ -278,6 +307,7 @@ pub fn get_native_info() -> NativeInfo {
 /// # Errors
 ///
 /// Returns an error when the provided PO source cannot be parsed by Ferrocat.
+#[doc(hidden)]
 pub fn parse_po(source: &str) -> PalamedesResult<JsPoFile> {
     let po = ferrocat_parse_po(source)?;
     Ok(JsPoFile::from(po))

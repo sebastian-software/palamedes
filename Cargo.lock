@@ -1346,11 +1346,13 @@ dependencies = [
  "palamedes",
  "palamedes-i18n",
  "proc-macro2",
+ "quote",
  "serde",
  "serde_json",
  "sha2",
  "syn 2.0.119",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]

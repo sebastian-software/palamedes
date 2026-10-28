@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
       dry_run:
-        description: "Verify native and Cargo SDK artifacts without publishing anything"
+        description: "Verify native, JavaScript, and Cargo SDK artifacts without publishing anything"
         required: false
         type: boolean
         default: false
@@ -52,6 +52,58 @@ jobs:
           FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && (inputs.force_publish || inputs.dry_run) && 'true' || 'false' }}
         run: node ./scripts/determine-release.mjs
 
+  # npm and crates.io uploads run in separate jobs and cannot be rolled back.
+  # This proves the Cargo lane is ready before either registry receives
+  # anything, so npm cannot ship a release that crates.io then rejects. Every
+  # upload job depends on it. A dry run checks the registry state without
+  # requesting a crates.io token.
+  preflight-cargo:
+    needs: determine-release
+    if: needs.determine-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          pnpm-cache: "false"
+          rust-cache: "false"
+
+      # The exchange succeeds only when crates.io trusts this repository and
+      # workflow. The action revokes the token when the job ends; nothing here
+      # uploads, and the token itself never reaches the readiness check.
+      - name: Exchange GitHub OIDC for a crates.io token
+        id: crates-auth
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      - name: Check Cargo release readiness without uploading
+        env:
+          PALAMEDES_CRATES_OWNER: ${{ vars.CRATES_IO_OWNER }}
+          PALAMEDES_CRATES_TOKEN_ISSUED: ${{ steps.crates-auth.outputs.token != '' }}
+        run: node ./scripts/publish-rust-sdk.mjs --preflight ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+
+  # Example Verification only runs on pull requests and main pushes that touch
+  # its path filters, so nothing guarantees it covered the release revision.
+  # Run it here on that revision instead: the example smoke checks and the
+  # browser matrix with its TanStack, React Router, Solid, Waku, Remix, and Vite
+  # MDX delivery and failure proofs. Every upload job depends on it.
+  example-verification:
+    needs: determine-release
+    if: needs.determine-release.outputs.should_publish == 'true'
+    uses: ./.github/workflows/example-verification.yml
+    with:
+      run_browser: true
+
   validate-release:
     needs: determine-release
     if: needs.determine-release.outputs.should_publish == 'true'
@@ -84,11 +136,22 @@ jobs:
       - name: Check release package set
         run: pnpm check:release-set
 
+      - name: Check release wording
+        run: pnpm check:release-wording
+
       - name: Build packages
         run: pnpm build
 
       - name: Check published TypeScript declarations
         run: pnpm check:published-types
+
+      # Packs every JavaScript package in publish order and checks the manifests
+      # consumers receive: `workspace:*` (the native optional dependencies)
+      # becomes the exact release version and `workspace:^` becomes `^version`.
+      # This job holds no publishing credentials, and the step runs for real
+      # releases and dry runs alike, before any upload.
+      - name: Pack JavaScript packages and verify release manifests
+        run: node ./scripts/publish-package-if-needed.mjs --all-js --dry-run
 
       - name: Run tests
         run: pnpm test
@@ -108,7 +171,9 @@ jobs:
   publish-native:
     needs:
       - determine-release
+      - preflight-cargo
       - validate-release
+      - example-verification
     if: needs.determine-release.outputs.should_publish == 'true'
     strategy:
       fail-fast: false
@@ -214,7 +279,9 @@ jobs:
   publish-cargo:
     needs:
       - determine-release
+      - preflight-cargo
       - validate-release
+      - example-verification
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -337,6 +404,9 @@ jobs:
       - name: Verify every package reached the registry
         run: node ./scripts/check-published-versions.mjs
 
+      - name: Verify every Cargo SDK crate reached crates.io
+        run: node ./scripts/check-published-crates.mjs
+
   retire-release-failure:
     needs:
       - determine-release
@@ -365,7 +435,9 @@ jobs:
   notify-failure:
     needs:
       - determine-release
+      - preflight-cargo
       - validate-release
+      - example-verification
       - publish-native
       - publish-js
       - publish-cargo
@@ -394,7 +466,9 @@ jobs:
             echo "| Job | Result |"
             echo "| --- | --- |"
             echo "| determine-release | ${{ needs.determine-release.result }} |"
+            echo "| preflight-cargo | ${{ needs.preflight-cargo.result }} |"
             echo "| validate-release | ${{ needs.validate-release.result }} |"
+            echo "| example-verification | ${{ needs.example-verification.result }} |"
             echo "| publish-native | ${{ needs.publish-native.result }} |"
             echo "| publish-js | ${{ needs.publish-js.result }} |"
             echo "| publish-cargo | ${{ needs.publish-cargo.result }} |"

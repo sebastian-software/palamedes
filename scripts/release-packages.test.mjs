@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   dependencyOrderedWorkspacePackages,
+  expectedWorkspaceRange,
   isMissingFromRegistry,
   javascriptWorkspacePackages,
+  packedManifestProblems,
   publicWorkspacePackages,
 } from "./release-packages.mjs";
 
@@ -131,6 +133,62 @@ test("still rejects cycles made only from hard optional dependencies", () => {
   assert.throws(
     () => dependencyOrderedWorkspacePackages(packages),
     /dependency cycle detected among @example\/a, @example\/b/u,
+  );
+});
+
+test("packed manifests pin native packages exactly and keep caret ranges for libraries", () => {
+  const versions = new Map([
+    ["@palamedes/core", "2.0.0"],
+    ["@palamedes/core-node-linux-x64-gnu", "2.0.0"],
+  ]);
+  const source = {
+    name: "@palamedes/core-node",
+    version: "2.0.0",
+    dependencies: { "@palamedes/core": "workspace:^", picocolors: "^1.1.1" },
+    optionalDependencies: { "@palamedes/core-node-linux-x64-gnu": "workspace:*" },
+    devDependencies: { vitest: "^4.1.11" },
+  };
+  const packed = {
+    ...source,
+    dependencies: { "@palamedes/core": "^2.0.0", picocolors: "^1.1.1" },
+    optionalDependencies: { "@palamedes/core-node-linux-x64-gnu": "2.0.0" },
+  };
+
+  assert.equal(expectedWorkspaceRange("workspace:*", "2.0.0"), "2.0.0");
+  assert.equal(expectedWorkspaceRange("workspace:^", "2.0.0"), "^2.0.0");
+  assert.equal(expectedWorkspaceRange("workspace:~", "2.0.0"), "~2.0.0");
+  assert.equal(expectedWorkspaceRange("workspace:>=1.0.0", "2.0.0"), ">=1.0.0");
+  assert.deepEqual(packedManifestProblems(source, packed, versions), []);
+
+  assert.deepEqual(
+    packedManifestProblems(
+      source,
+      {
+        ...packed,
+        version: "1.25.1",
+        dependencies: { "@palamedes/core": "workspace:^", picocolors: "^1.1.1" },
+        optionalDependencies: { "@palamedes/core-node-linux-x64-gnu": "^2.0.0" },
+        devDependencies: { "@palamedes/example-ui": "workspace:*" },
+      },
+      versions,
+    ),
+    [
+      "packed version is 1.25.1, expected 2.0.0",
+      "dependencies.@palamedes/core still uses workspace:^ after packing",
+      "devDependencies.@palamedes/example-ui still uses workspace:* after packing",
+      "dependencies.@palamedes/core packed as workspace:^, expected ^2.0.0 from workspace:^",
+      "optionalDependencies.@palamedes/core-node-linux-x64-gnu packed as ^2.0.0, expected 2.0.0 from workspace:*",
+    ],
+  );
+  assert.deepEqual(
+    packedManifestProblems(
+      { ...source, peerDependencies: { "@palamedes/private": "workspace:^" } },
+      packed,
+      versions,
+    ),
+    [
+      "peerDependencies.@palamedes/private uses workspace:^, but @palamedes/private is not a public package",
+    ],
   );
 });
 

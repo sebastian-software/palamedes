@@ -17,6 +17,8 @@ export type ServerCatalogLoader<TLocale extends string = string> = (
 ) => Promise<readonly CompiledCatalogMessages[]>;
 
 export type ServerCatalogStoreStats = {
+  /** Locales the store keeps bookkeeping for: ready, loading, or invalidated. */
+  readonly trackedLocales: number;
   readonly readyLocales: number;
   readonly inFlightLocales: number;
   readonly retainedFragments: number;
@@ -51,18 +53,11 @@ export function createServerCatalogStore<TLocale extends string = string>(option
 }): ServerCatalogStore<TLocale> {
   const entries = new Map<TLocale, CatalogEntry>();
 
-  function entryFor(locale: TLocale): CatalogEntry {
-    const existing = entries.get(locale);
-    if (existing) return existing;
-    const created: CatalogEntry = { generation: 0 };
-    entries.set(locale, created);
-    return created;
-  }
-
   function load(locale: TLocale): Promise<CompiledCatalogMessages> {
-    const entry = entryFor(locale);
-    if (entry.ready) return Promise.resolve(entry.ready);
-    if (entry.inFlight) return entry.inFlight;
+    const existing = entries.get(locale);
+    if (existing?.ready) return Promise.resolve(existing.ready);
+    if (existing?.inFlight) return existing.inFlight;
+    const entry: CatalogEntry = existing ?? { generation: 0 };
 
     const generation = entry.generation;
     const attempt: Promise<CompiledCatalogMessages> = Promise.resolve()
@@ -81,16 +76,24 @@ export function createServerCatalogStore<TLocale extends string = string>(option
         const current = entries.get(locale);
         if (current?.generation === generation && current.inFlight === attempt) {
           current.inFlight = undefined;
+          // A failed first load leaves nothing worth keeping. Dropping the
+          // entry keeps request-supplied locales the loader rejects (for
+          // example unsupported ones) from growing the store. Invalidated
+          // entries stay so their generation never goes backwards.
+          if (current.generation === 0) entries.delete(locale);
         }
         throw error;
       });
     entry.inFlight = attempt;
+    entries.set(locale, entry);
     return attempt;
   }
 
   function invalidate(locale?: TLocale): void {
     if (locale !== undefined) {
-      invalidateEntry(entryFor(locale));
+      // A locale without an entry has no catalog or load to invalidate.
+      const entry = entries.get(locale);
+      if (entry) invalidateEntry(entry);
       return;
     }
     for (const entry of entries.values()) invalidateEntry(entry);
@@ -103,7 +106,7 @@ export function createServerCatalogStore<TLocale extends string = string>(option
     },
     invalidate,
     generation(locale) {
-      return entryFor(locale).generation;
+      return entries.get(locale)?.generation ?? 0;
     },
     stats() {
       let readyLocales = 0;
@@ -118,7 +121,13 @@ export function createServerCatalogStore<TLocale extends string = string>(option
         }
         if (entry.inFlight) inFlightLocales += 1;
       }
-      return { readyLocales, inFlightLocales, retainedFragments, retainedMessages };
+      return {
+        trackedLocales: entries.size,
+        readyLocales,
+        inFlightLocales,
+        retainedFragments,
+        retainedMessages,
+      };
     },
   };
 }

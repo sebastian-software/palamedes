@@ -479,73 +479,72 @@ async function reloadRemixAfterFailure(page) {
   await waitForClientReady(page);
 }
 
-test("Remix client entry shows a catalog-free error UI and recovers after reload", async () => {
-  const example = activeExample();
-  if (example.framework !== "remix") {
-    return;
-  }
+test.runIf(activeExample().framework === "remix")(
+  "Remix client entry shows a catalog-free error UI and recovers after reload",
+  async () => {
+    const example = activeExample();
+    const page = await launchPage(remixLaunchArgs(example));
+    let failure = "entry-network";
+    const cspViolations = [];
+    page.on("console", (message) => {
+      if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text())) {
+        cspViolations.push(message.text());
+      }
+    });
+    await page.route("**/assets/app/public/client.tsx", async (route) => {
+      if (failure === "entry-network") {
+        await route.abort("failed");
+        return;
+      }
+      if (failure === "entry-evaluation") {
+        await rejectModuleEvaluation(route, "injected Remix entry evaluation failure");
+        return;
+      }
+      await route.continue();
+    });
+    await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
+      if (failure === "fragment-network") {
+        await route.abort("failed");
+        return;
+      }
+      if (failure === "fragment-evaluation") {
+        await rejectModuleEvaluation(route, "injected Remix catalog fragment evaluation failure");
+        return;
+      }
+      await route.continue();
+    });
 
-  const page = await launchPage(remixLaunchArgs(example));
-  let failure = "entry-network";
-  const cspViolations = [];
-  page.on("console", (message) => {
-    if (/content security policy|unsafe-(?:inline|eval)/iu.test(message.text())) {
-      cspViolations.push(message.text());
-    }
-  });
-  await page.route("**/assets/app/public/client.tsx", async (route) => {
-    if (failure === "entry-network") {
-      await route.abort("failed");
-      return;
-    }
-    if (failure === "entry-evaluation") {
-      await rejectModuleEvaluation(route, "injected Remix entry evaluation failure");
-      return;
-    }
-    await route.continue();
-  });
-  await page.route("**/__palamedes/catalog-fragments/**", async (route) => {
-    if (failure === "fragment-network") {
-      await route.abort("failed");
-      return;
-    }
-    if (failure === "fragment-evaluation") {
-      await rejectModuleEvaluation(route, "injected Remix catalog fragment evaluation failure");
-      return;
-    }
-    await route.continue();
-  });
+    await page.goto(remixDocumentUrl(example), { waitUntil: "domcontentloaded" });
+    await page.getByRole("alert").waitFor({ state: "visible" });
+    expect(await page.getByRole("alert").textContent()).toContain("Something went wrong");
 
-  await page.goto(remixDocumentUrl(example), { waitUntil: "domcontentloaded" });
-  await page.getByRole("alert").waitFor({ state: "visible" });
-  expect(await page.getByRole("alert").textContent()).toContain("Something went wrong");
+    failure = "ok";
+    await reloadRemixAfterFailure(page);
 
-  failure = "ok";
-  await reloadRemixAfterFailure(page);
+    failure = "entry-evaluation";
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("alert").waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Reload", exact: true }).waitFor({ state: "visible" });
 
-  failure = "entry-evaluation";
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("alert").waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "Reload", exact: true }).waitFor({ state: "visible" });
+    failure = "ok";
+    await reloadRemixAfterFailure(page);
 
-  failure = "ok";
-  await reloadRemixAfterFailure(page);
+    failure = "fragment-network";
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("alert").waitFor({ state: "visible" });
 
-  failure = "fragment-network";
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("alert").waitFor({ state: "visible" });
+    failure = "ok";
+    await reloadRemixAfterFailure(page);
 
-  failure = "ok";
-  await reloadRemixAfterFailure(page);
+    failure = "fragment-evaluation";
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("alert").waitFor({ state: "visible" });
 
-  failure = "fragment-evaluation";
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("alert").waitFor({ state: "visible" });
-
-  failure = "ok";
-  await reloadRemixAfterFailure(page);
-  expect(cspViolations).toEqual([]);
-});
+    failure = "ok";
+    await reloadRemixAfterFailure(page);
+    expect(cspViolations).toEqual([]);
+  },
+);
 
 test
   .runIf(activeExample().framework === "remix")

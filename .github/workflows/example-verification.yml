@@ -51,6 +51,16 @@ on:
       - ".github/workflows/example-verification.yml"
   schedule:
     - cron: "17 5 * * 1"
+  # The Publish workflow calls this on the exact release revision, so the
+  # browser contract proofs gate every upload regardless of the path filters
+  # above. In a called workflow `github` describes the caller's run.
+  workflow_call:
+    inputs:
+      run_browser:
+        description: Run Playwright browser proofs in addition to smoke verification
+        required: false
+        default: true
+        type: boolean
   workflow_dispatch:
     inputs:
       run_browser:
@@ -78,6 +88,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
 
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace

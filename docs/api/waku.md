@@ -33,7 +33,7 @@ files from an RSC or browser module.
 
 ```ts
 // src/lib/i18n.server.ts
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { locales } from "./i18n";
 
 export function createRequestI18n(request: Request) {
@@ -42,7 +42,7 @@ export function createRequestI18n(request: Request) {
     acceptLanguageHeader: request.headers.get("accept-language"),
     cookieHeader: request.headers.get("cookie"),
   });
-  return createViteServerI18n({ locale });
+  return createBundledServerI18n({ locale });
 }
 ```
 
@@ -96,7 +96,7 @@ export default createWakuI18nInterceptor(async (request) => {
 
 The resolver receives Waku's original Fetch `Request`, including headers and
 cookies. It resolves the application locale and delegates catalog loading and
-instance creation to `createViteServerI18n`; the interceptor owns activation
+instance creation to `createBundledServerI18n`; the interceptor owns activation
 and cleanup. If it fails, the action
 body does not run and the server throws an error beginning `Palamedes Waku i18n
 initialization failed` with the original cause attached.
@@ -106,12 +106,15 @@ Waku enters the handler interceptor before its action dispatcher invokes
 evaluation and remains active through the full awaited action, including direct
 macros and synchronous, asynchronous, or cross-module helper calls.
 
-When Waku's unstable request accessor throws because no request phase is
-available, the interceptor calls `next()` unchanged: it does not resolve i18n,
-establish a scope, or wrap the accessor error. The fallback deliberately does
-not inspect the unstable error's message or shape. That keeps non-request
-handler execution compatible, but translated code on that path still needs its
-own active runtime.
+Waku runs handler interceptors inside its router request store for requests
+and static builds. If Waku's unstable request accessor still throws, the
+interceptor throws an error beginning `Palamedes Waku i18n interceptor could
+not read the Waku request` before the handler runs, with the accessor error as
+`cause`. This usually means the adapter loaded a separate copy of
+`waku/router/server`. Register `palamedes()` from `@palamedes/vite-plugin`,
+which keeps `@palamedes/waku` in Vite's server module graph, and register the
+interceptor through Waku's router. The check does not inspect the unstable
+error's message or shape.
 
 ## Streaming and runtime limits
 

@@ -303,13 +303,18 @@ and `l'été`) stay unchanged in newly extracted PO identities. An apostrophe
 immediately before generated ICU syntax is still escaped, so `` t`L'${title}` ``
 is stored as `L''{title}` and the placeholder remains live at runtime.
 
+Braces in authored text are literal: `<Trans>` children and template literals
+in `t` are quoted on extraction, so `` t`Use {name}` `` is stored as
+`Use '{name}'`. If a migrated template carries hand-written ICU, move it into a
+string `message` with an explicit values object.
+
 When an existing PO catalog uses the other spelling solely because an older
 Palamedes extractor doubled its natural apostrophes, `pmds extract` reuses the
 unique matching `(msgid, msgctxt)` entry. Its translation, translator comments,
 flags, and machine metadata survive, including with `--force-clean`, and
 repeated extraction is stable. Exact identities always win; Palamedes does not
 merge ambiguous entries or entries with different contexts. See
-[Quoting and literal text](api/core.md#quoting-and-literal-text).
+[Quoting and literal text](../packages/core/README.md#quoting-and-literal-text).
 
 ## Common Migration Errors
 

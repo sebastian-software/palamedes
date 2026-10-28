@@ -19,14 +19,24 @@ pnpm add @palamedes/core
 
 ## Minimal Example
 
+The framework adapters create the instance and load compiled catalogs for you.
+Without an adapter, load a generated catalog module before translated code
+runs. `pmds catalog compile --target js --output generated` writes one
+`<locale>.mjs` module per locale:
+
 ```ts
 import { createI18n } from "@palamedes/core";
 import { setClientI18n } from "@palamedes/runtime";
+import { messages } from "./generated/de.mjs";
 
-const i18n = createI18n();
+const i18n = createI18n({ locale: "de" });
+i18n.load("de", messages);
 
 setClientI18n(i18n);
 ```
+
+An instance without a loaded catalog throws `MissingCompiledMessageError` on
+every message lookup.
 
 ## Compiled Runtime and Errors
 
@@ -145,22 +155,10 @@ Solid execute those functions directly without browser ICU parsing or AST
 interpretation. Plural/select branches are allocated once when the module
 loads, not once per render.
 
-Use the parser-free production entrypoint when the application loads only these
-generated catalogs:
-
-```ts
-import { createI18n, type CompiledCatalogMessages } from "@palamedes/core/compiled";
-
-declare module "*.po" {
-  export const messages: CompiledCatalogMessages;
-}
-
-const i18n = createI18n();
-```
-
-Generated catalog modules, transformed `Trans` components, and compiled MDX
-select their matching `compiled` entrypoints automatically. The explicit Core
-import above keeps the parser out of the application's own i18n factory too.
+The package root and `@palamedes/core/compiled` export the same parser-free
+runtime; `compiled` remains as a compatible alias. Generated catalog modules,
+transformed `Trans` components, and compiled MDX import their matching
+`compiled` entrypoints automatically.
 
 Both public entrypoints accept only branded `CompiledCatalogMessages` at
 runtime. `CatalogMessages` remains a type for build-time string data; compile
@@ -170,16 +168,23 @@ function entries. ICU parsing belongs to authoring, validation, and compilation
 tooling, not to the application runtime.
 
 Palamedes supports the common ICU argument types that product UIs usually need
-inside translated sentences:
+inside translated sentences. Author them in macro messages:
 
 ```ts
-i18n._("Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}", {
-  amount: 12.3,
-  when: new Date(),
-});
+import { t } from "@palamedes/core/macro";
+
+export function paymentSummary(amount: number, when: Date) {
+  return t(
+    {
+      message:
+        "Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}",
+    },
+    { amount, when },
+  );
+}
 ```
 
-Supported runtime styles:
+`i18n._()` takes a compiled message ID, not an ICU string. Supported styles:
 
 - `{value, number}` plus `percent`, `integer`, and `::currency/ISO_CODE`
 - `{value, date, short|medium|long|full}`
@@ -196,14 +201,25 @@ unsupported authored style.
 
 ### Quoting And Literal Text
 
-Apostrophes in source messages need no escaping. The macros and the extractor
-escape them on the way into the catalog, so `t` messages such as `Ada's file`
-and `don't panic` simply work. The one exception is a descriptor with a
-string-literal `message` — `t({ message: "Hello {name}" })` — which is the
-raw-ICU authoring surface: placeholders and ICU quoting are written literally
-and nothing is auto-escaped there. The JSX `message` attribute
-(`<Trans message="Hello {name}" />`) is that same raw-ICU surface, while
-`<Trans>` children are authored text and are escaped.
+Authored text is literal text. `<Trans>` children, MDX text, and template
+literals in `t`, in descriptors, and in choice branches need no ICU escaping:
+the macros and the extractor quote apostrophes and braces on the way into the
+catalog. `` t`Ada's file` `` stays `Ada's file`, and `` t`Type {name} here` ``
+is stored as `Type '{name}' here` and renders `Type {name} here`. Only
+`${…}` interpolations and JSX expressions become placeholders.
+
+Two surfaces take raw ICU instead, where placeholders and ICU quoting are
+written by hand and nothing is auto-escaped: a descriptor with a
+string-literal `message` — `t({ message: "Hello {name}" }, { name })` — and the
+JSX `message` attribute (`<Trans message="Hello {name}" />`). Choice branch
+string literals such as `plural(count, { other: "# items" })` sit in between:
+apostrophes are text, while braces and `#` stay ICU syntax so a branch can hold
+a nested choice.
+
+A literal `<` before a letter, digit, or `/` reads as a rich-text tag, and ICU
+quoting cannot escape it. Extraction and the transform report such text with
+its source location; add a space after `<`, pass the text as a placeholder
+value, or use inline code in MDX.
 
 ICU quoting and plural offsets are resolved during compilation. Use authored
 macros, then run extraction and the normal framework build. Compiled renderers

@@ -1,7 +1,11 @@
-export type I18nInstance = {
-  _: (...args: any[]) => unknown;
-  locale: string;
-};
+import type { CompiledCatalogMessages, PalamedesI18n } from "@palamedes/core";
+
+/**
+ * The i18n instance shape every adapter, generated module and `getI18n()`
+ * consumer relies on. It is core's `PalamedesI18n`: `_()` returns text, and
+ * `load`, `activate`, `renderMessage` and `locale` are required.
+ */
+export type I18nInstance = PalamedesI18n;
 
 type ServerI18nGetter<T extends I18nInstance = I18nInstance> = () => T | undefined;
 
@@ -15,15 +19,6 @@ const REGISTERED_MESSAGE_LOADER_GROUPS_KEY = Symbol.for(
 );
 
 export type RegisteredMessages = Record<string, Record<string, unknown>>;
-
-type MessageLoadingI18n = I18nInstance & {
-  load?: (locale: string, messages: Record<string, unknown>) => void;
-};
-
-type InitializableClientI18n = I18nInstance & {
-  activate(locale: string): unknown;
-  load(locale: string, messages: Record<string, unknown>): unknown;
-};
 
 /**
  * One buffered eager registration. `key` identifies the registering module, so
@@ -213,12 +208,32 @@ export function registerMessages(catalogs: RegisteredMessages, key?: string): vo
     }
   }
 
-  const active = state[CLIENT_I18N_KEY] as MessageLoadingI18n | undefined;
-  if (active?.load) {
+  const active = state[CLIENT_I18N_KEY];
+  if (active) {
+    assertCanLoadMessages(active, "active client");
     for (const [locale, messages] of Object.entries(catalogs)) {
-      active.load(locale, messages);
+      loadMessages(active, locale, messages);
     }
   }
+}
+
+/**
+ * Plain JavaScript callers can still pass an instance without `load()`.
+ * Generated graph-split messages cannot reach such an instance, so fail before
+ * a later render reports a confusing missing message.
+ */
+function assertCanLoadMessages(i18n: I18nInstance, role: string): void {
+  if (typeof i18n.load !== "function") {
+    throw new TypeError(
+      `The ${role} i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages).`,
+    );
+  }
+}
+
+// Registered maps are generated compiled catalogs. They are stored untyped
+// because registration only buffers them; `load()` validates the brand.
+function loadMessages(i18n: I18nInstance, locale: string, messages: Record<string, unknown>): void {
+  i18n.load(locale, messages as CompiledCatalogMessages);
 }
 
 /**
@@ -302,7 +317,6 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
   i18n: T,
   locale: string,
 ): Promise<T> {
-  const loadable = i18n as MessageLoadingI18n;
   const registered = globalRuntimeState()[REGISTERED_MESSAGES_KEY];
   const eagerEntries = registered?.get(locale) ?? [];
   const pending: { state: RegisteredMessageLoaderState; loader: RegisteredMessageLoader }[] = [];
@@ -320,11 +334,7 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
   }
   // Rejected before any loader starts: a resource created here is cached and
   // awaited below, so throwing afterwards would leave its rejection unhandled.
-  if (!loadable.load) {
-    throw new TypeError(
-      "The active i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages).",
-    );
-  }
+  assertCanLoadMessages(i18n, "active");
 
   const lazyResources = pending.map(({ state, loader }) => {
     const existing = state.resources.get(locale);
@@ -342,23 +352,28 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
 
   const lazyMessages = await Promise.all(lazyResources);
   for (const entry of eagerEntries) {
-    loadable.load(locale, entry.messages);
+    loadMessages(i18n, locale, entry.messages);
   }
   for (const messages of lazyMessages) {
-    loadable.load(locale, messages);
+    loadMessages(i18n, locale, messages);
   }
 
   return i18n;
 }
 
+/**
+ * Install the active client instance and flush buffered message
+ * registrations into it. Throws, like `loadRegisteredMessages()`, when
+ * registrations exist and the instance cannot load them.
+ */
 export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   const state = globalRuntimeState();
   const registered = state[REGISTERED_MESSAGES_KEY];
-  const loadable = i18n as MessageLoadingI18n;
-  if (registered && loadable.load) {
+  if (registered && registered.size > 0) {
+    assertCanLoadMessages(i18n, "client");
     for (const [locale, entries] of registered) {
       for (const entry of entries) {
-        loadable.load(locale, entry.messages);
+        loadMessages(i18n, locale, entry.messages);
       }
     }
   }
@@ -371,7 +386,7 @@ export function setClientI18n<T extends I18nInstance>(i18n: T): T {
  * Multiple modules can bootstrap concurrently; the first one installs the
  * instance and every later module reuses it before loading its own fragment.
  */
-export function initializeClientI18n<T extends InitializableClientI18n>(
+export function initializeClientI18n<T extends I18nInstance>(
   locale: string,
   createI18n: () => T,
 ): T {
@@ -386,11 +401,7 @@ export function initializeClientI18n<T extends InitializableClientI18n>(
         `Palamedes client graph bootstrap requested locale "${locale}", but this client runtime was initialized for "${active.locale}". Perform a navigation or restart the worker to change locale.`,
       );
     }
-    if (typeof active.load !== "function") {
-      throw new TypeError(
-        "The active client i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages).",
-      );
-    }
+    assertCanLoadMessages(active, "active client");
     return active;
   }
 

@@ -39,16 +39,18 @@ A standalone/custom integration now loads the generated module:
 
 ```ts
 import { createI18n } from "@palamedes/core";
-import { messages } from "./generated/de.js";
+import { messages } from "./generated/de.mjs";
 
 const i18n = createI18n({ locale: "de" });
 i18n.load("de", messages);
 ```
 
-Generate that module through the existing catalog compiler, CLI or framework
-plugin. `defineCompiledCatalog()` marks compiled constants/functions; it does
-not compile an ICU string map. The standard framework path delegates loading
-to its adapter, while locale selection remains application policy.
+Generate that module with
+`pmds catalog compile --target js --output generated`, which writes one
+`<locale>.mjs` file per locale. `defineCompiledCatalog()` marks compiled
+constants/functions; it does not compile an ICU string map. The standard
+framework path delegates loading to its adapter, while locale selection remains
+application policy.
 
 ## Let the adapter own catalog delivery
 
@@ -74,12 +76,13 @@ Low-level custom integrations may load an explicitly generated
 standard host workflow and does not permit marking raw ICU maps with
 `defineCompiledCatalog()`.
 
-| Host                                   | Standard v2 migration                                                                                        | Delivery contract                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Vite + React/Solid                     | Keep macro authoring; remove application catalog maps and legacy runtime imports.                            | Adapter-owned active-locale dependencies and ordinary host error handling.                                           |
-| Next.js                                | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the legacy false option is rejected. Request server catalogs are shared and immutable. |
-| Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                 |
-| TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                       |
+| Host                                   | Standard v2 migration                                                                                        | Delivery contract                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Vite + React/Solid                     | Keep macro authoring; remove application catalog maps and legacy runtime imports.                            | Adapter-owned active-locale dependencies; the removed graph-splitting option is rejected.                                          |
+| Next.js                                | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the removed `messageSplitting` option is rejected. Request server catalogs are shared and immutable. |
+| Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                               |
+| TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                                     |
+| React Router Framework Mode            | Drop `experimentalGraphSplitting`, server `.po` maps, the manifest reader, and client `setClientI18n()`.     | No adapter package; the app wires delivery and request scopes per the [guide](./api/react-router.md).                              |
 
 Host-specific guides may expose lower-level hooks for custom servers, but the
 checked standard examples are the evidence for the transparent path. Do not
@@ -87,23 +90,62 @@ claim a host migration is complete until its initial and lazy failure proof,
 locale selection, recovery behavior, and published parser-free artifact check
 pass.
 
+### React Router Framework Mode
+
+There is no adapter package for this host; the application keeps its own
+server wiring. The v1 examples enabled
+`experimentalGraphSplitting: { localeBinding: "import-map" }`, imported every
+locale's `.po` catalog into a server map, and read
+`palamedes-split-manifest.json` to inject the import map with a hand-written
+stream transform. Their `entry.client.tsx` initialized the browser instance
+through `setClientI18n()`, and their loaders called the server scope's
+`activate()`.
+
+In v2:
+
+- call `palamedes()` without `experimentalGraphSplitting`;
+- create request i18n with `createBundledServerI18n({ locale })` from
+  `@palamedes/runtime/server/bundled` instead of importing catalogs;
+- replace the manifest reader and stream transform with
+  `createViteCatalogDelivery()` and its `createDocumentTransform()`;
+- remove the client bootstrap; the plugin initializes the browser instance from
+  `<html lang>`;
+- run loaders and actions inside the request scope with `run()` instead of
+  calling `activate()`.
+
+The [React Router Framework Mode guide](./api/react-router.md) shows the
+complete files.
+
 ### Stable Remix 3
 
-`@palamedes/remix` targets stable `remix@^3.0.0`; the four examples pin `3.0.0`.
-RC.1 and earlier prereleases are no longer supported. Replace `remix/ui` with
-`remix/component` in component, server, test, and JSX runtime imports, and in
-`jsxImportSource`. For component HMR, replace `remix/ui-hmr` with
-`remix/component-hmr` and `uiHmr()` with `componentHmr()`. Keep the Node hook
-order (`remix/node-tsx`, then `@palamedes/remix/register`) and the shared catalog
-asset registry setup. `renderClientEntry()` is now asynchronous: pass an entry
-file path and the same asset server, for example
-`await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer })`.
-The adapter emits the stable asset server's import map for both the application
-and bootstrap; supply `nonce` with a restrictive script CSP. The adapter does
-not need the separate `@remix-run/ui` primitives package. Remove the former
-`catalogAssets.clientModuleUrl` override; it now throws a migration diagnostic.
-Configure the asset server's mounts so bootstrap URLs and import-map scopes
-stay aligned. See the [Remix API guide](./api/remix.md#tested-remix-version).
+`@palamedes/remix` 1.25 accepted `remix@^3.0.0-rc.1`, imported `remix/ui`, and
+sent browser catalogs as a serialized ICU bootstrap: `loadClientMessages` on
+`createRemixI18nServer()`, `renderClientBootstrap(locale)` in the document, and
+`initializeRemixClientI18n()` in the browser entry. V2 changes this:
+
+- The peer range is `remix@^3.0.0`; RC.1 and earlier prereleases are no longer
+  supported. Replace `remix/ui` with `remix/component` in component, server,
+  test, and JSX runtime imports, and in `jsxImportSource`. If the application
+  uses component HMR, replace `remix/ui-hmr` with `remix/component-hmr` and
+  `uiHmr()` with `componentHmr()`.
+- Create one `createPalamedesRemixCatalogAssetRegistry()` and pass it to both
+  `createPalamedesRemixAssetLoader({ catalogAssets: registry })` and
+  `createRemixI18nServer({ catalogAssets: { registry } })`. With the registry,
+  `loadMessages` is optional; remove `loadClientMessages`.
+- Serve `registry.serve(request)` and `remixI18n.serveClientCatalogAsset(request)`
+  before `assetServer.fetch(request)`.
+- In the document, replace `renderClientBootstrap(locale)` with
+  `remixI18n.renderClientCatalog(locale)` and
+  `await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer })`.
+  The adapter's bootstrap initializes the locale, loads its catalog, and then
+  imports the entry, so remove `initializeRemixClientI18n()` from the entry.
+  Pass `nonce` when the page uses a script CSP.
+
+V2 removes the serialized ICU bootstrap APIs; the
+[removed APIs table](#replace-removed-apis) lists their replacements. Keep the
+Node hook order (`remix/node-tsx`, then `@palamedes/remix/register`). See the
+[Remix API guide](./api/remix.md#client-catalog-assets) and the checked
+[Remix cookie example](../examples/remix-cookie).
 
 ## Author rich text and choices with macros
 
@@ -137,24 +179,66 @@ hand-authored raw ICU in its `message` prop is not a runtime fallback.
 Dynamic values remain supported, but message text and choices must be
 extractable rather than constructed during rendering.
 
+### Literal braces in authored text get new message IDs
+
+Braces in authored text are now literal text. This covers `<Trans>` children,
+MDX text, and template literals in `t`, descriptors, and choice branches.
+Extraction quotes them in the catalog, so `` t`Use {name}` `` becomes the
+`msgid` `Use '{name}'` and renders `Use {name}`. In v1 the same text turned into
+an ICU argument that the macro never supplied, so it rendered the wrong value or
+threw at runtime.
+
+Messages with literal braces therefore get a new `msgid`. The next
+`pmds extract` marks the old entry obsolete and adds the new one, so translate
+those entries again. Two related changes move IDs as well:
+
+- A descriptor template such as ``t({ message: `Hello ${name}, {count} new` }, { count })``
+  no longer reads `{count}` as an argument. Write raw ICU as a string message
+  instead: `t({ message: "Hello {name}, {count} new" }, { name, count })`.
+- A doubled apostrophe in authored text (`` t`It''s` ``) is stored in its
+  shortest spelling, `It's`. Existing PO entries keep their old spelling and
+  their translations.
+
+A literal `<` before a letter, digit, or `/` reads as a rich-text tag, and ICU
+quoting cannot escape it. Extraction and the transform now report it with its
+source location. Add a space after `<`, pass the text as a placeholder value,
+or use inline code in MDX. See
+[Quoting and literal text](../packages/core/README.md#quoting-and-literal-text).
+
 ## Replace removed APIs
 
-| V1 API or option                                                              | V2 replacement                                                                                                                                  |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@palamedes/core/compiled` and framework `compiled` imports                   | Compatible aliases; root imports are also parser-free.                                                                                          |
-| `parseMessagePattern()`, `formatMessagePattern()`, `parsePattern()`           | Compile authoring catalogs before application execution; use macros for messages. No optional runtime parser mode exists.                       |
-| `getMessage()`, `getMessageNodes()`, parsed-node types, `resolveChoice()`     | Use `_()` for text or `renderMessage()` with the compiled renderer ABI. Use catalog inspection/audit tooling for authoring diagnostics.         |
-| `buildChoiceMessage()` and direct runtime `Plural`, `Select`, `SelectOrdinal` | Use the corresponding macro entrypoint and framework transform.                                                                                 |
-| `reportError()` and `ReportedMessageError`                                    | Let `renderMessage()` propagate errors; observe through `onError`.                                                                              |
-| `MessageMetadata.reportMissing`, `renderUncompiledPattern`                    | Removed; metadata only contains diagnostic source identity.                                                                                     |
-| `keepSourceFallbacks`                                                         | Retained legacy spelling for including diagnostic source metadata. Neither value changes runtime failure behavior. `false` omits that metadata. |
-| `failOnCompileError`                                                          | Remove it. Invalid/unsupported ICU always fails compilation; `failOnMissing` remains the separate translation-completeness policy.              |
-| `CompiledMessageRuntime.pattern()`                                            | Regenerate v1 catalog artifacts. The v2 ABI contains executable operations only.                                                                |
+| V1 API or option                                                                                 | V2 replacement                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@palamedes/core/compiled` and framework `compiled` imports                                      | Compatible aliases; root imports are also parser-free.                                                                                                                                                                                                                                  |
+| `parseMessagePattern()`, `formatMessagePattern()`, `parsePattern()`                              | Compile authoring catalogs before application execution; use macros for messages. No optional runtime parser mode exists.                                                                                                                                                               |
+| `getMessage()`, `getMessageNodes()`, parsed-node types, `resolveChoice()`                        | Use `_()` for text and the framework `Trans` macro for rich text. Use catalog inspection/audit tooling for authoring diagnostics.                                                                                                                                                       |
+| `buildChoiceMessage()` and direct runtime `Plural`, `Select`, `SelectOrdinal`                    | Use the corresponding macro entrypoint and framework transform.                                                                                                                                                                                                                         |
+| `reportError()` and `ReportedMessageError`                                                       | Let rendering failures propagate; observe them through `onError`.                                                                                                                                                                                                                       |
+| `MessageMetadata.reportMissing`, `renderUncompiledPattern`                                       | Removed; metadata only contains diagnostic source identity.                                                                                                                                                                                                                             |
+| `keepSourceFallbacks` option and `mdx.keep-source-fallbacks` config key                          | Renamed to `includeSourceMetadata` (`mdx.include-source-metadata` in data configs) in the Vite, Next.js, and Remix adapters, the transform, and config. The default changed from `true` to `false`. `true` only adds diagnostic source metadata. The old name throws a migration error. |
+| `experimentalGraphSplitting` (Vite, including `{ localeBinding }`), `messageSplitting` (Next.js) | Remove the option. Delivery is automatic; any value throws a migration error during plugin setup.                                                                                                                                                                                       |
+| `stripMessageField` (transform)                                                                  | Remove it. Use `includeSourceMetadata` with the inverse value; the default already omits source metadata. Any value throws a migration error.                                                                                                                                           |
+| Next.js `withPalamedes()` `cwd`                                                                  | Use `projectRoot`. `cwd` throws a migration error.                                                                                                                                                                                                                                      |
+| `MdxSourceRange` from `@palamedes/core-node`                                                     | `SourceRange` from the same package, with the same `start`, `end`, `line`, and `column` fields.                                                                                                                                                                                         |
+| Next.js `serverFunctions` (default `false`)                                                      | Enabled automatically when one `palamedes.server` module exists in the project root or `src`. `false` opts out; `true` makes a missing module an error.                                                                                                                                 |
+| `failOnCompileError`                                                                             | Remove it. Invalid/unsupported ICU always fails compilation, and any value throws a migration error. `failOnMissing` remains the separate translation-completeness policy.                                                                                                              |
+| `CompiledMessageRuntime.pattern()`                                                               | Regenerate v1 catalog artifacts. The compiled renderer interface is internal in v2 and has no `pattern()`.                                                                                                                                                                              |
+| `createViteServerI18n()` from `@palamedes/vite-plugin/server`                                    | `createBundledServerI18n()` from `@palamedes/runtime/server/bundled`; same options (`BundledServerI18nOptions`). The `./server` subpath is removed.                                                                                                                                     |
+| `@palamedes/vite-plugin/react-router` subpath                                                    | `createViteCatalogDelivery()` from `@palamedes/vite-plugin/delivery` (was `createReactRouterCatalogDelivery()`); the `ReactRouter*` types are named `Vite*` there.                                                                                                                      |
+| Remix `loadClientMessages`, `createClientBootstrap()`                                            | Pass a shared `createPalamedesRemixCatalogAssetRegistry()` as `catalogAssets.registry`; the adapter serves executable catalog assets.                                                                                                                                                   |
+| Remix `renderClientBootstrap()`                                                                  | `remixI18n.renderClientCatalog(locale)` and `await remixI18n.renderClientEntry(entry, { assetServer })` in the document.                                                                                                                                                                |
+| Remix `initializeRemixClientI18n()`, `readRemixI18nBootstrap()`                                  | Remove it; the `renderClientEntry()` bootstrap initializes the browser. Custom hosts use `startRemixClient()` or `initializeRemixClientI18nAsync()`.                                                                                                                                    |
+| Remix `REMIX_I18N_BOOTSTRAP_ID`, `RemixI18nBootstrap*` types                                     | Removed with the JSON bootstrap. `initializeRemixClientI18nAsync()` takes a `RemixClientDocument` as its `document` option.                                                                                                                                                             |
+| `I18nInstance` with only `_` and `locale` required (`_()` returned `unknown`)                    | Now `PalamedesI18n`: `_()` returns `string`; `load()`, `activate()`, `renderMessage()` and `locale` are required. Use `createI18n()` instances. `setClientI18n()` throws when generated registrations exist and `load()` is missing.                                                    |
+| Runtime `Trans` without `id`, or with `message` as the lookup key                                | `id` is required on runtime `Trans` props (React, Solid, Remix); `message` is diagnostic metadata only. Author with the `/macro` `Trans`; the transform injects `id`.                                                                                                                   |
+| `PALEMEDES_REMIX_ASSET_PACKAGES`                                                                 | `PALAMEDES_REMIX_ASSET_PACKAGES`.                                                                                                                                                                                                                                                       |
 
 The existing `CatalogMessages` string-map type can describe build-time data;
 `load()` accepts only `CompiledCatalogMessages`. `CompiledPalamedesI18n` aliases
-`PalamedesI18n`; custom runtimes must provide the required `renderMessage()`
-capability. No parsed-node fallback is used for older custom instances.
+`PalamedesI18n`. Create instances with `createI18n()`. The compiled renderer
+interface and the generated catalog format are internal: they change together
+with the Palamedes packages, so v2 has no extension point for custom message
+runtimes and no parsed-node fallback.
 
 ## Replace the lint adapter
 
@@ -220,7 +304,6 @@ invalid numeric/date formatter inputs and malformed compiled branch tables
 propagate failures. Compiled literal strings, including empty strings, remain
 valid and are never interpreted as ICU.
 
-Validate runtime packages with `pnpm check:runtime` after `pnpm build`, and run
-the relevant framework tests after migrating the application's authoring and
-catalog setup. Initial loading, hydration and later navigation failure recovery
-remain part of each host integration's release proof.
+After migrating the application's authoring and catalog setup, run its
+production build and its own tests. Check initial loading, hydration, and a
+later navigation that loads new translated modules.

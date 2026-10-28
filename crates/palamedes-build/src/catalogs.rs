@@ -2,16 +2,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ferrocat::{
-    CompileCatalogArtifactIcuOptions, CompileCatalogArtifactOptions, CompiledKeyStrategy,
-    ParseCatalogOptions,
+use palamedes::sdk::{
+    RuntimeCompiledMessage, compile_catalog, compile_runtime_catalog_messages, parse_catalog,
 };
-use palamedes::{RuntimeCompiledMessage, compile_runtime_catalog_messages};
 use palamedes_i18n::{CatalogArtifact, FORMAT_VERSION, Instruction, Message};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{BuildResult, CatalogBuilder, check_argument, lower};
+use crate::{BuildResult, CatalogBuilder, Error, check_argument, lower};
 
 /// An application's exported message contract. Contains no translated text.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,13 +33,12 @@ impl CatalogContract {
     /// Load and validate an exported contract before compiling an update.
     pub fn load(path: impl AsRef<Path>) -> BuildResult<Self> {
         let path = path.as_ref();
-        let contract: Self = serde_json::from_slice(&fs::read(path).map_err(|error| {
-            format!(
-                "could not read Rust catalog schema {}: {error}",
-                path.display()
-            )
-        })?)
-        .map_err(|error| format!("invalid Rust catalog schema {}: {error}", path.display()))?;
+        let bytes = fs::read(path).map_err(Error::io(path))?;
+        let contract: Self =
+            serde_json::from_slice(&bytes).map_err(|source| Error::DecodeContract {
+                path: path.to_owned(),
+                source,
+            })?;
         contract.validate()?;
         Ok(contract)
     }
@@ -49,20 +46,22 @@ impl CatalogContract {
     pub(crate) fn validate(&self) -> BuildResult<()> {
         check_locale(&self.source_locale)?;
         if self.version != FORMAT_VERSION || self.messages.is_empty() {
-            return Err("unsupported or empty Rust catalog schema".into());
+            return Err(Error::invalid_contract(
+                "unsupported version or no messages",
+            ));
         }
         for (id, spec) in &self.messages {
             if id.is_empty() || spec.literal != spec.arguments.is_empty() {
-                return Err("invalid message signature in Rust catalog schema".into());
+                return Err(Error::invalid_contract("invalid message signature"));
             }
             for argument in &spec.arguments {
-                check_argument(argument)?;
+                check_argument(argument).map_err(Error::invalid_contract)?;
             }
         }
         if self.fingerprint != fingerprint(&self.messages)? {
-            return Err(
-                "Rust catalog schema fingerprint does not match its message contract".into(),
-            );
+            return Err(Error::invalid_contract(
+                "fingerprint does not match its message contract",
+            ));
         }
         Ok(())
     }
@@ -72,15 +71,20 @@ impl CatalogContract {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissingTranslation {
+    /// Output locale whose translation is missing or fuzzy.
     pub locale: String,
+    /// The source message.
     pub message: String,
+    /// Locale whose text was compiled instead.
     pub resolved_locale: String,
 }
 
 /// A data-only catalog update and its completeness diagnostics.
 #[derive(Debug, Serialize)]
 pub struct CatalogUpdate {
+    /// One written `<locale>.pmd.json` file per requested locale.
     pub catalogs: Vec<PathBuf>,
+    /// Missing or fuzzy translations resolved through the fallback chain.
     pub missing: Vec<MissingTranslation>,
 }
 
@@ -105,12 +109,15 @@ impl PreparedCatalogs {
             .keys()
             .map(|locale| format!("{locale}.pmd.json"))
             .collect();
-        for entry in fs::read_dir(output)? {
-            let entry = entry?;
+        for entry in fs::read_dir(output).map_err(Error::io(output))? {
+            let entry = entry.map_err(Error::io(output))?;
+            let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
-            if entry.file_type()?.is_file() && name.ends_with(".pmd.json") && !names.contains(&name)
+            if entry.file_type().map_err(Error::io(&path))?.is_file()
+                && name.ends_with(".pmd.json")
+                && !names.contains(&name)
             {
-                fs::remove_file(entry.path())?;
+                fs::remove_file(&path).map_err(Error::io(&path))?;
             }
         }
         Ok(())
@@ -124,11 +131,11 @@ impl PreparedCatalogs {
             .map(|(locale, artifact)| {
                 Ok((
                     output.join(format!("{locale}.pmd.json")),
-                    serde_json::to_vec(artifact)?,
+                    serde_json::to_vec(artifact).map_err(Error::serialize)?,
                 ))
             })
             .collect::<BuildResult<Vec<_>>>()?;
-        fs::create_dir_all(output)?;
+        fs::create_dir_all(output).map_err(Error::io(output))?;
         let mut files = Vec::new();
         for (path, bytes) in serialized {
             // Readers see either the old file or the complete replacement.
@@ -140,14 +147,18 @@ impl PreparedCatalogs {
                 // Match ordinary data-file creation while respecting umask.
                 builder.permissions(fs::Permissions::from_mode(0o666));
             }
-            let mut temporary = builder.tempfile_in(output)?;
+            let mut temporary = builder.tempfile_in(output).map_err(Error::io(output))?;
             if let Ok(metadata) = fs::metadata(&path) {
                 temporary
                     .as_file()
-                    .set_permissions(metadata.permissions())?;
+                    .set_permissions(metadata.permissions())
+                    .map_err(Error::io(temporary.path()))?;
             }
-            std::io::Write::write_all(&mut temporary, &bytes)?;
-            temporary.persist(&path)?;
+            std::io::Write::write_all(&mut temporary, &bytes)
+                .map_err(Error::io(temporary.path()))?;
+            temporary
+                .persist(&path)
+                .map_err(|error| Error::io(&path)(error.error))?;
             files.push(path);
         }
         Ok(files)
@@ -158,7 +169,7 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
     if builder.locales.is_empty()
         || builder.locales.iter().collect::<BTreeSet<_>>().len() != builder.locales.len()
     {
-        return Err("output locales must be nonempty and unique".into());
+        return Err(Error::InvalidLocales);
     }
     let mut inputs = builder.locales.clone();
     for locale in builder
@@ -170,61 +181,62 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
             inputs.push(locale.clone());
         }
     }
-    let root = fs::canonicalize(&builder.directory)?;
+    let root = fs::canonicalize(&builder.directory).map_err(Error::io(&builder.directory))?;
     let mut catalogs = BTreeMap::new();
     let mut normalized = BTreeMap::new();
     for locale in &inputs {
         check_locale(locale)?;
         let path = root.join(format!("{locale}.po"));
-        let content =
-            fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
-        let mut parsed = ferrocat::po::parse_po(&content)?;
+        let content = fs::read_to_string(&path).map_err(Error::io(&path))?;
+        let parse_error = |source: Box<dyn std::error::Error + Send + Sync>| Error::ParsePo {
+            locale: locale.clone(),
+            source,
+        };
+        let invalid = |reason: String| Error::InvalidCatalog {
+            locale: locale.clone(),
+            reason,
+        };
+        let parsed = ferrocat::po::parse_po(&content).map_err(|error| parse_error(error.into()))?;
         let mut messages = BTreeMap::new();
         for item in parsed
             .items
-            .iter_mut()
+            .iter()
             .filter(|item| !item.obsolete && !item.msgid.is_empty())
         {
             if item.msgctxt.is_some() || item.msgid_plural.is_some() {
-                return Err(
-                    format!("{locale}: Rust catalogs require context-free ICU messages").into(),
-                );
+                return Err(invalid(
+                    "Rust catalogs require context-free ICU messages".into(),
+                ));
             }
             let reviewed = !item.flags.iter().any(|flag| flag == "fuzzy")
                 && item.msgstr.first().is_some_and(|value| !value.is_empty());
             if messages.insert(item.msgid.clone(), reviewed).is_some() {
-                return Err(format!("{locale}: duplicate source {:?}", item.msgid).into());
+                return Err(invalid(format!("duplicate source {:?}", item.msgid)));
             }
         }
-        // Ferrocat's ordinary normalized projection intentionally discards
-        // review flags. Clear unreviewed values before that projection so the
-        // canonical compiler resolves them through the same fallback chain.
-        for item in &mut parsed.items {
-            if item.flags.iter().any(|flag| flag == "fuzzy") {
-                item.msgstr = ferrocat::po::MsgStr::Singular(String::new());
-            }
-        }
-        let compiled_input =
-            ferrocat::po::stringify_po(&parsed, &ferrocat::po::SerializeOptions::default());
-        let catalog = ferrocat::parse_catalog(
-            ParseCatalogOptions::new(&compiled_input, &builder.source_locale).with_locale(locale),
-        )?
-        .into_normalized_view()?;
+        // The JavaScript target shares this projection, which clears fuzzy
+        // values so the compiler resolves them through the fallback chain.
+        let catalog = parse_catalog(&content, locale, &builder.source_locale)
+            .map_err(|error| parse_error(error.into()))?;
         normalized.insert(locale.clone(), catalog);
         catalogs.insert(locale.clone(), messages);
     }
     let sources = &catalogs[&builder.source_locale];
     if sources.is_empty() {
-        return Err("source catalog must contain messages".into());
+        return Err(Error::InvalidCatalog {
+            locale: builder.source_locale.clone(),
+            reason: "source catalog must contain messages".into(),
+        });
     }
     for (locale, messages) in &catalogs {
         if let Some(unknown) = messages
             .keys()
             .find(|source| !sources.contains_key(*source))
         {
-            return Err(
-                format!("{locale}: source {unknown:?} is absent from the source catalog").into(),
-            );
+            return Err(Error::InvalidCatalog {
+                locale: locale.clone(),
+                reason: format!("source {unknown:?} is absent from the source catalog"),
+            });
         }
     }
     let source_messages: BTreeMap<_, _> = sources
@@ -246,7 +258,13 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
     for source in sources.keys() {
         let id = key(source);
         let (message, arguments, literal) =
-            compile_message(&id, &source_messages, &source_programs)?;
+            compile_message(&id, &source_messages, &source_programs).map_err(|reason| {
+                Error::UnsupportedMessage {
+                    locale: builder.source_locale.clone(),
+                    message: source.clone(),
+                    reason,
+                }
+            })?;
         specifications.insert(
             id.clone(),
             ContractMessage {
@@ -279,28 +297,38 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
             .map(String::as_str)
             .filter(|fallback| *fallback != locale && *fallback != builder.source_locale)
             .collect::<Vec<_>>();
-        let options = CompileCatalogArtifactOptions::new(locale, &builder.source_locale)
-            .with_fallback_chain(&fallback_locales)
-            .with_key_strategy(CompiledKeyStrategy::FerrocatV1)
-            .with_source_fallback(true)
-            .with_strict_icu(true)
-            .with_icu_compatibility(true)
-            .with_icu_options(
-                CompileCatalogArtifactIcuOptions::new()
-                    .with_syntax_policy(ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes),
-            );
-        let artifact =
-            ferrocat::compile_catalog_artifact(&normalized.values().collect::<Vec<_>>(), &options)?;
+        let artifact = compile_catalog(
+            &normalized.values().collect::<Vec<_>>(),
+            locale,
+            &builder.source_locale,
+            &fallback_locales,
+        )
+        .map_err(|error| Error::CompileCatalog {
+            locale: locale.clone(),
+            source: error.into(),
+        })?;
         let programs = compile_runtime_catalog_messages(&artifact.messages);
         let mut messages = BTreeMap::new();
         for (source, spec) in &signature {
             let (message, arguments, literal) =
-                compile_message(&spec.id, &artifact.messages, &programs)?;
+                compile_message(&spec.id, &artifact.messages, &programs).map_err(|reason| {
+                    Error::UnsupportedMessage {
+                        locale: locale.clone(),
+                        message: source.clone(),
+                        reason,
+                    }
+                })?;
             if arguments != spec.arguments || literal != spec.literal {
-                return Err(format!("{locale}: placeholder mismatch for {source:?}").into());
+                return Err(Error::PlaceholderMismatch {
+                    locale: locale.clone(),
+                    message: source.clone(),
+                });
             }
             if !message_plural_arguments(&message).is_subset(&spec.plural_arguments) {
-                return Err(format!("{locale}: translation introduces a plural for a nonnumeric source argument in {source:?}").into());
+                return Err(Error::PluralArgument {
+                    locale: locale.clone(),
+                    message: source.clone(),
+                });
             }
             if locale != &builder.source_locale
                 && !catalogs[locale].get(source).copied().unwrap_or(false)
@@ -329,13 +357,13 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
             },
         );
     }
-    if builder.fail_on_missing && !missing.is_empty() {
-        let first = &missing[0];
-        return Err(format!(
-            "{}: missing or fuzzy translation for {:?} (fail_on_missing)",
-            first.locale, first.message
-        )
-        .into());
+    if builder.fail_on_missing
+        && let Some(first) = missing.first()
+    {
+        return Err(Error::MissingTranslation {
+            locale: first.locale.clone(),
+            message: first.message.clone(),
+        });
     }
     Ok(PreparedCatalogs {
         signature,
@@ -353,11 +381,13 @@ fn key(source: &str) -> String {
     )
 }
 
+/// Compile one message. Errors are reasons; the caller adds the locale and
+/// source message.
 fn compile_message(
     id: &str,
     messages: &BTreeMap<String, String>,
     programs: &BTreeMap<String, RuntimeCompiledMessage>,
-) -> BuildResult<(Message, BTreeSet<String>, bool)> {
+) -> Result<(Message, BTreeSet<String>, bool), String> {
     let mut arguments = BTreeSet::new();
     let message = match programs.get(id) {
         None => Message::Literal(
@@ -368,7 +398,7 @@ fn compile_message(
         ),
         Some(RuntimeCompiledMessage::Nodes(nodes)) => {
             let program = lower(nodes, &mut arguments)?;
-            palamedes_i18n::validate_program(&program)?;
+            palamedes_i18n::validate_program(&program).map_err(|error| error.to_string())?;
             if arguments.is_empty() {
                 Message::Literal(
                     program
@@ -384,7 +414,7 @@ fn compile_message(
             }
         }
         Some(RuntimeCompiledMessage::Lazy) => {
-            return Err(format!("invalid ICU for compiled message {id}").into());
+            return Err("invalid ICU".into());
         }
     };
     let literal = matches!(message, Message::Literal(_));
@@ -398,10 +428,12 @@ fn fingerprint(messages: &BTreeMap<String, ContractMessage>) -> BuildResult<Stri
         .iter()
         .map(|(id, spec)| (id, (&spec.arguments, spec.literal)))
         .collect();
-    Ok(Sha256::digest(serde_json::to_vec(&contract)?)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect())
+    Ok(
+        Sha256::digest(serde_json::to_vec(&contract).map_err(Error::serialize)?)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+    )
 }
 
 fn check_locale(locale: &str) -> BuildResult<()> {
@@ -410,7 +442,9 @@ fn check_locale(locale: &str) -> BuildResult<()> {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
     {
-        return Err(format!("invalid catalog locale: {locale}").into());
+        return Err(Error::InvalidLocale {
+            locale: locale.to_owned(),
+        });
     }
     Ok(())
 }

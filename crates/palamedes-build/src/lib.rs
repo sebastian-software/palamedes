@@ -2,22 +2,30 @@
 //!
 //! Generated macros resolve source literals during Rust constant evaluation.
 //! Application builds export a contract for later data-only translation updates.
+//!
+//! # Compatibility
+//!
+//! The public API follows SemVer. Every fallible function returns [`Error`],
+//! which is `#[non_exhaustive]`, so new failure kinds can arrive in minor
+//! releases. It is `Send + Sync + 'static` and chains I/O and compiler causes
+//! through [`std::error::Error::source`].
 
 mod catalogs;
+mod error;
 
 use std::collections::BTreeSet;
-use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use palamedes::{RuntimeMessageChoiceKind, RuntimeMessageNode};
+use palamedes::sdk::{RuntimeMessageChoiceKind, RuntimeMessageNode};
 use palamedes_i18n::{Instruction, PluralKind};
 use proc_macro2::{TokenStream, TokenTree};
 
 pub use catalogs::{CatalogContract, CatalogUpdate, MissingTranslation};
 use catalogs::{PreparedCatalogs, Signature};
+pub use error::Error;
 
-type BuildResult<T> = Result<T, Box<dyn Error>>;
+type BuildResult<T> = Result<T, Error>;
 
 struct Invocation {
     message: syn::LitStr,
@@ -66,12 +74,11 @@ pub fn extract_messages(source: &str, macro_name: &str) -> BuildResult<Vec<Sourc
                 && matches!(tokens.get(index + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!')
                 && let Some(TokenTree::Group(group)) = tokens.get(index + 2)
             {
-                let invocation: Invocation = syn::parse2(group.stream()).map_err(|_| {
-                    format!(
-                        "{name}! requires a literal source message at line {}",
-                        ident.span().start().line
-                    )
-                })?;
+                let invocation: Invocation =
+                    syn::parse2(group.stream()).map_err(|_| Error::DynamicMessage {
+                        macro_name: name.to_owned(),
+                        line: ident.span().start().line,
+                    })?;
                 output.push(SourceMessage {
                     message: invocation.message.value(),
                     line: ident.span().start().line,
@@ -83,8 +90,11 @@ pub fn extract_messages(source: &str, macro_name: &str) -> BuildResult<Vec<Sourc
         }
         Ok(())
     }
+    let tokens = syn::parse_str::<TokenStream>(source).map_err(|source| Error::RustSource {
+        source: Box::new(source),
+    })?;
     let mut messages = Vec::new();
-    walk(source.parse()?, macro_name, &mut messages)?;
+    walk(tokens, macro_name, &mut messages)?;
     Ok(messages)
 }
 
@@ -159,7 +169,8 @@ impl CatalogBuilder {
     /// Compile inside Cargo's `OUT_DIR`, tracking inputs and reporting fallback use.
     pub fn build(self) -> BuildResult<CompiledCatalogs> {
         println!("cargo:rerun-if-changed={}", self.directory.display());
-        let compiled = self.compile_to(Path::new(&std::env::var("OUT_DIR")?))?;
+        let output = std::env::var("OUT_DIR").map_err(|source| Error::OutDir { source })?;
+        let compiled = self.compile_to(Path::new(&output))?;
         for missing in &compiled.missing {
             println!(
                 "cargo:warning={}: missing translation for {:?}; compiled fallback from {}",
@@ -171,21 +182,29 @@ impl CatalogBuilder {
 
     /// Generate application definitions, an update contract, and language data.
     pub fn compile_to(self, output: &Path) -> BuildResult<CompiledCatalogs> {
-        syn::parse_str::<syn::Ident>(&self.macro_name)?;
-        syn::parse_str::<syn::Path>(&self.module_path)?;
-        if self.module_path != "crate" && !self.module_path.starts_with("crate::") {
-            return Err("generated module path must start with crate".into());
+        if syn::parse_str::<syn::Ident>(&self.macro_name).is_err() {
+            return Err(Error::InvalidMacroName {
+                name: self.macro_name,
+            });
+        }
+        if syn::parse_str::<syn::Path>(&self.module_path).is_err()
+            || (self.module_path != "crate" && !self.module_path.starts_with("crate::"))
+        {
+            return Err(Error::InvalidModulePath {
+                path: self.module_path,
+            });
         }
         let prepared = catalogs::prepare(&self)?;
         let generated = generate_module(&self.macro_name, &self.module_path, &prepared);
-        fs::create_dir_all(output)?;
+        fs::create_dir_all(output).map_err(Error::io(output))?;
         let catalog_directory = output.join("catalogs");
         prepared.write_catalogs(&catalog_directory)?;
         prepared.remove_stale_catalogs(&catalog_directory)?;
         let rust_module = output.join("messages.rs");
-        fs::write(&rust_module, generated)?;
+        fs::write(&rust_module, generated).map_err(Error::io(&rust_module))?;
         let schema_file = output.join("schema.pmd.json");
-        fs::write(&schema_file, serde_json::to_vec(&prepared.contract)?)?;
+        let schema = serde_json::to_vec(&prepared.contract).map_err(Error::serialize)?;
+        fs::write(&schema_file, schema).map_err(Error::io(&schema_file))?;
         Ok(CompiledCatalogs {
             rust_module,
             schema_file,
@@ -206,7 +225,7 @@ impl CatalogBuilder {
         contract.validate()?;
         let prepared = catalogs::prepare(&self)?;
         if prepared.contract != *contract {
-            return Err("catalog update changes the application message contract; rebuild the application and export a matching schema".into());
+            return Err(Error::ContractMismatch);
         }
         let files = prepared.write_catalogs(output)?;
         Ok(CatalogUpdate {
@@ -259,10 +278,12 @@ fn generate_module(name: &str, module_path: &str, prepared: &PreparedCatalogs) -
     generated
 }
 
+/// Lower runtime nodes to Rust instructions. Errors are reasons; the caller
+/// adds the locale and source message.
 fn lower(
     nodes: &[RuntimeMessageNode],
     arguments: &mut BTreeSet<String>,
-) -> BuildResult<Vec<Instruction>> {
+) -> Result<Vec<Instruction>, String> {
     let mut program = Vec::with_capacity(nodes.len());
     for node in nodes {
         let instruction = match node {
@@ -287,7 +308,7 @@ fn lower(
                 let options = options
                     .iter()
                     .map(|(selector, branch)| Ok((selector.clone(), lower(branch, arguments)?)))
-                    .collect::<BuildResult<_>>()?;
+                    .collect::<Result<_, String>>()?;
                 match kind {
                     RuntimeMessageChoiceKind::Select => Instruction::Select {
                         name: variable.clone(),
@@ -320,7 +341,7 @@ fn lower(
     Ok(program)
 }
 
-fn check_argument(name: &str) -> BuildResult<()> {
+fn check_argument(name: &str) -> Result<(), String> {
     syn::parse_str::<syn::Ident>(name).map_err(|_| format!("invalid Rust placeholder: {name}"))?;
     if name == "__palamedes_catalog" {
         return Err("placeholder name __palamedes_catalog is reserved by the Rust macro".into());
@@ -331,11 +352,14 @@ fn check_argument(name: &str) -> BuildResult<()> {
 impl CompiledCatalogs {
     /// Copy only this build's artifacts into a caller-selected installation directory.
     pub fn install_to(&self, directory: &Path) -> BuildResult<()> {
-        fs::create_dir_all(directory)?;
-        for entry in fs::read_dir(&self.catalog_directory)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file() {
-                fs::copy(entry.path(), directory.join(entry.file_name()))?;
+        fs::create_dir_all(directory).map_err(Error::io(directory))?;
+        let source = &self.catalog_directory;
+        for entry in fs::read_dir(source).map_err(Error::io(source))? {
+            let entry = entry.map_err(Error::io(source))?;
+            let path = entry.path();
+            if entry.file_type().map_err(Error::io(&path))?.is_file() {
+                let target = directory.join(entry.file_name());
+                fs::copy(&path, &target).map_err(Error::io(&target))?;
             }
         }
         Ok(())

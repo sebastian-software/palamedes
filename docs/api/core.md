@@ -123,10 +123,20 @@ interface PalamedesI18n {
 ```
 
 `_()` executes a compiled message as text. `renderMessage()` executes the same
-message with a host renderer created by `createCompiledMessageRuntime()`, which
-supplies shared select/plural behavior. React, Solid and Remix provide their
-own rich renderers. Later catalog loads add or override entries for that locale.
-Invalid entry types are rejected before the existing catalog is modified.
+message with a framework renderer; the React, Solid and Remix `Trans`
+components use it for rich text. Later catalog loads add or override entries
+for that locale. Invalid entry types are rejected before the existing catalog
+is modified.
+
+### Internal compiled format
+
+`CompiledMessage`, `CompiledMessageBranch`, `CompiledMessageBranches`,
+`CompiledMessageRuntime`, `ExecutableMessageRenderer`,
+`createCompiledMessageRuntime()` and the generated catalog module format are
+internal. They are exported so the first-party framework adapters can share
+them, but they are not an extension point: generated catalogs and the renderer
+interface change together with the Palamedes packages. Create instances with
+`createI18n()` and render rich text through the framework `Trans` macro.
 
 A missing compiled entry throws `MissingCompiledMessageError`. Its `id`,
 `locale` and optional `metadata` identify the failure for developer diagnostics;
@@ -259,6 +269,14 @@ the relevant i18n scope. Palamedes rejects these macros at module scope during
 transformation and extraction. Class field initializers, including instance
 fields, do not satisfy this syntactic rule; use a method or getter instead.
 
+Every `plural`, `select`, and `selectOrdinal` branch must be a string literal
+or a template literal, for example
+``plural(count, { one: "# item", other: `# items for ${name}` })``. Extraction
+and the transform reject any other branch value, such as a constant, a member
+expression, JSX, or a nested `t`, `plural`, or `select` call, with an error that
+names the branch and its source location. Write the complete sentence in each
+branch instead of composing it from other messages.
+
 ## Runtime Formatting
 
 Compiled messages support values, rich-text tags, select, plural and
@@ -268,13 +286,14 @@ formatter subset. Number styles are omitted/default, `percent`, `integer`,
 `short`, `medium`, `long`, or `full`. Invalid or unsupported ICU fails
 compilation. Invalid formatter values throw during execution.
 
-`formatMessageArgument()` exposes the same cached Intl formatting for custom
-compiled renderers. `replacePoundPlaceholders()` formats plural pound values,
-and `stringifyValue()` renders scalar values. These helpers do not parse ICU.
+`formatMessageArgument()` exposes the same cached Intl formatting that the
+framework renderers use. `replacePoundPlaceholders()` formats plural pound
+values, and `stringifyValue()` renders scalar values. These helpers do not parse
+ICU.
 
 `parseMessagePattern()`, `formatMessagePattern()`, `getMessage()`,
 `getMessageNodes()`, `parsePattern()`, parsed-node types, `resolveChoice()`,
 `buildChoiceMessage()` and `reportError()` are removed from application runtime
-exports. Compile authoring catalogs with the existing compiler/tooling APIs;
-custom renderers should implement the compiled ABI. See the
-[v2 runtime migration guide](../migration-v2.md) for concrete replacements.
+exports. Compile authoring catalogs with the existing compiler/tooling APIs.
+See the [v2 runtime migration guide](../migration-v2.md) for concrete
+replacements.

@@ -6,6 +6,10 @@ import { createServerI18nScope } from "@palamedes/runtime/server";
 import { createWakuI18nInterceptor } from "./index";
 import { createScopedWakuI18nRunner } from "./scope";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}
+
 const getRequest = vi.hoisted(() => vi.fn());
 
 vi.mock("waku/router/server", () => ({ unstable_getRequest: getRequest }));
@@ -14,6 +18,9 @@ function createTestI18n(locale: string): I18nInstance {
   return {
     locale,
     _: (message: string) => `${locale}:${message}`,
+    load() {},
+    activate() {},
+    renderMessage: unusedRenderMessage,
   };
 }
 
@@ -27,15 +34,22 @@ describe("Waku i18n request scope", () => {
     new Error("Request is not available."),
     new Error("Request context is unavailable during this phase."),
     { code: "NO_REQUEST_CONTEXT" },
-  ])("skips request-local activation for unstable accessor failure %#", async (failure) => {
+  ])("fails before the handler when the request accessor throws %#", async (failure) => {
     getRequest.mockImplementation(() => {
       throw failure;
     });
     const resolveI18n = vi.fn(() => createTestI18n("de"));
+    const handler = vi.fn(async () => "output");
     const interceptor = createWakuI18nInterceptor(resolveI18n);
 
-    await expect(interceptor(async () => "static output")).resolves.toBe("static output");
+    const result = interceptor(handler);
 
+    await expect(result).rejects.toThrow(
+      "Palamedes Waku i18n interceptor could not read the Waku request",
+    );
+    await expect(result).rejects.toThrow("separate copy of waku/router/server");
+    await expect(result).rejects.toHaveProperty("cause", failure);
+    expect(handler).not.toHaveBeenCalled();
     expect(resolveI18n).not.toHaveBeenCalled();
   });
 

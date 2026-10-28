@@ -108,6 +108,8 @@ landed in.
 
 ## [1.25.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.25.0...palamedes-v1.25.1) (2026-09-11)
 
+Not published. These changes ship with 2.0.0.
+
 
 ### Performance Improvements
 

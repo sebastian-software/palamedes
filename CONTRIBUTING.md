@@ -277,8 +277,9 @@ Before lifting the hold:
    workflow with `dry_run` against the held source revision. This verifies the
    implementation with the current manifest versions; it is not evidence for
    the future versioned 2.0 artifacts. The dry run checks package builds,
-   declarations, tests, native artifacts for all six platforms, and the staged
-   Rust SDK consumer without uploading packages.
+   declarations, tests, native artifacts for all six platforms, the packed
+   JavaScript manifests in publish order, crates.io names and ownership, and
+   the staged Rust SDK consumer without uploading packages.
 2. Resolve registry readiness separately: `node scripts/check-first-publish.mjs`
    checks that npm package names already exist; it does not verify trusted
    publisher configuration. Follow #1309 and the
@@ -294,7 +295,15 @@ Before lifting the hold:
 After authorized enablement generates the Release Please PR, run the Publish
 workflow with `dry_run` on that PR's exact 2.0 revision before merging it. The
 release PR merge triggers actual publication; a source dry run at `1.25.1` does
-not replace this versioned artifact check.
+not replace this versioned artifact check. Only a commit titled
+`chore: release main` (optionally with its pull request number) starts a
+publication. Before any upload, the actual publication also runs the Cargo
+preflight: it exchanges the workflow's OIDC identity for a crates.io token and
+checks the policy, allowlists, and ownership, so npm cannot ship a release that
+crates.io then rejects. Real releases and dry runs also call the Example
+Verification workflow on the exact release revision, so the example smoke
+checks, the browser matrix, and the framework delivery proofs must pass before
+any upload, whatever the PR path filters selected.
 
 `pnpm release:rust:dry-run` can run the SDK staging check locally without
 uploading. Once enabled, publication still rejects versions below
@@ -303,6 +312,9 @@ coordinated npm and Cargo package is available before closing #1204. Remove the
 one-time `release-as` override after 2.0.0 is released so subsequent versions
 follow conventional commits again. Run `pnpm check:release-set` and
 `pnpm check:workflow-contracts` when changing policy or workflow wiring.
+`pnpm check:release-wording` (run by CI and the Publish workflow) fails once the
+release version reaches 2.0.0 while held, draft, or unreleased v2 wording remains
+in the listed public files, so the release PR must clear that wording.
 
 Do not edit generated changelog entries by hand unless the release automation
 requires a specific correction.

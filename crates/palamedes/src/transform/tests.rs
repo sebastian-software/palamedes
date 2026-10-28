@@ -22,8 +22,8 @@ fn transform_macros(
     // Most transform fixtures assert the authored fallback spelling. Keep it
     // explicitly so the tests stay focused while production-default behavior
     // is covered by dedicated cases below.
-    if options.keep_source_fallbacks.is_none() && options.strip_message_field.is_none() {
-        options.keep_source_fallbacks = Some(true);
+    if options.include_source_metadata.is_none() {
+        options.include_source_metadata = Some(true);
     }
     let mut result = transform_macros_raw(&scoped_source, filename, Some(options))?;
 
@@ -103,7 +103,7 @@ fn server_function_options() -> NativeTransformOptions {
             initializer_module: "@/i18n/server-action".to_string(),
             initializer_export: "initServerActionI18n".to_string(),
         }),
-        keep_source_fallbacks: Some(true),
+        include_source_metadata: Some(true),
         ..NativeTransformOptions::default()
     }
 }
@@ -548,7 +548,7 @@ function choices() {
         source,
         "test.tsx",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..NativeTransformOptions::default()
         }),
     )
@@ -1169,35 +1169,48 @@ const choice = <Plural value={count} one="item" other="items" comment={"Translat
 fn merges_interpolated_descriptor_values_with_explicit_values() {
     let result = transform_macros(
         r#"import { t } from "@palamedes/core/macro";
-const message = t({ message: `Hello ${name}, you have {count}` }, { count });
+const message = t({ message: `Hello ${name}` }, { name });
 "#,
         "test.ts",
         None,
     )
     .expect("transform should succeed");
 
-    assert!(
-        result
-            .code
-            .contains("message: \"Hello {name}, you have {count}\"")
-    );
-    assert!(result.code.contains("{ name, count }"));
+    assert!(result.code.contains("message: \"Hello {name}\""));
+    assert!(result.code.contains("{ name }"));
 }
 
 #[test]
-fn rejects_missing_icu_values_in_interpolated_descriptor_templates() {
-    let error = transform_macros(
+fn descriptor_template_braces_are_literal_text() {
+    // Template quasis are authored text, like JSX: `{count}` is quoted rather
+    // than read as an ICU argument. Raw ICU belongs in a string `message`.
+    let result = transform_macros(
         r#"import { t } from "@palamedes/core/macro";
 const message = t({ message: `Hello ${name}, you have {count}` });
 "#,
         "test.ts",
         None,
     )
-    .expect_err("implicit template values must validate all message placeholders");
+    .expect("literal braces in a template quasi transform");
+    assert!(
+        result
+            .code
+            .contains("message: \"Hello {name}, you have '{count}'\""),
+        "{}",
+        result.code
+    );
 
+    let error = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const message = t({ message: `Hello ${name}, you have {count}` }, { count });
+"#,
+        "test.ts",
+        None,
+    )
+    .expect_err("an explicit value cannot fill a literal brace");
     let message = error.to_string();
-    assert!(message.contains("Missing value(s): count"));
-    assert!(message.contains("extra value(s): none"));
+    assert!(message.contains("Missing value(s): none"), "{message}");
+    assert!(message.contains("extra value(s): count"), "{message}");
 }
 
 #[test]
@@ -1360,8 +1373,9 @@ const doubled = t`client''s l''été`;
     let transformed =
         transform_macros(source, "test.tsx", None).expect("apostrophe messages should transform");
 
-    // Catalog identities preserve natural and already doubled apostrophes.
-    // Only a literal/placeholder boundary needs escaping in persisted ICU.
+    // Catalog identities keep natural apostrophes and use the shortest
+    // spelling: a doubled authored apostrophe renders one apostrophe. Only a
+    // literal/placeholder boundary needs escaping in persisted ICU.
     assert_eq!(
         extracted
             .iter()
@@ -1372,7 +1386,7 @@ const doubled = t`client''s l''été`;
             "l''{item}",
             "{count, plural, one {''#' don't item} other {# don't items}}",
             "don't",
-            "client''s l''été",
+            "client's l'été",
         ]
     );
 
@@ -1692,6 +1706,35 @@ export function View() {
 }
 
 #[test]
+fn ignores_key_in_remix_lowered_choice_props() {
+    let source = r##"import { Plural as Count, Select as Pick, SelectOrdinal as Rank } from "@palamedes/react/macro";
+import { jsx as render } from "remix/component/jsx-runtime";
+export function labels(items) {
+  return items.map((item) => [
+    render(Count, { key: item.id, value: item.count, one: "# item", other: "# items" }),
+    render(Pick, { value: item.gender, key: "x", female: "She", other: "They" }),
+    render(Rank, { value: item.position, one: "#st", other: "#th", key: `row-${item.id}` }),
+  ]);
+}
+"##;
+    let result = transform_macros(source, "choices.js", None)
+        .expect("`key` in lowered choice props should be ignored");
+
+    for message in [
+        "{count, plural, one {# item} other {# items}}",
+        "{gender, select, female {She} other {They}}",
+        "{position, selectordinal, one {#st} other {#th}}",
+    ] {
+        assert!(
+            result.code.contains(&format!("message: \"{message}\"")),
+            "expected {message}:\n{}",
+            result.code
+        );
+    }
+    assert_eq!(result.compiled_ids.len(), 3);
+}
+
+#[test]
 fn transforms_nested_icu_choices_in_remix_lowered_choice_options() {
     let source = r##"import { Plural as Count } from "@palamedes/react/macro";
 import { jsx as render } from "remix/component/jsx-runtime";
@@ -1945,7 +1988,7 @@ fn normalizes_trans_jsx_placeholder_before_punctuation() {
     assert!(result.code.contains(
         "message={\"Tailored to your {volume} MWh of annual electricity use in {countryName}.\"}"
     ));
-    assert!(result.code.contains("message={\"{name} .\"}"));
+    assert!(result.code.contains("message={\"'{name}' .\"}"));
 }
 
 #[test]
@@ -2086,7 +2129,7 @@ fn strips_message_field_when_requested() {
         "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello\", comment: \"Greeting\" });\n",
         "test.ts",
         Some(NativeTransformOptions {
-            strip_message_field: Some(true),
+            include_source_metadata: Some(false),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2115,6 +2158,62 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 }
 
 #[test]
+fn every_runtime_trans_carries_its_compiled_id_without_source_metadata() {
+    // Runtime `Trans` requires `id`; `message` is diagnostic metadata only, so
+    // every emitted element and lowered call must carry the compiled key even
+    // when source metadata is stripped.
+    let production = || {
+        Some(NativeTransformOptions {
+            include_source_metadata: Some(false),
+            ..NativeTransformOptions::default()
+        })
+    };
+    let cases = [
+        (
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
+            "children.tsx",
+            "<Trans id=\"",
+        ),
+        (
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans message=\"Hello\" context=\"greeting\" />;\n",
+            "message.tsx",
+            "<Trans id=\"",
+        ),
+        (
+            "import { Trans } from \"@palamedes/solid/macro\";\nconst el = <Trans>Hello <b>{name}</b></Trans>;\n",
+            "solid.tsx",
+            "<Trans id=\"",
+        ),
+        (
+            "import { Trans as Message } from \"@palamedes/remix/macro\";\nimport { jsxs as render } from \"remix/component/jsx-runtime\";\nconst view = render(Message, { children: [\"Hello \", name] });\n",
+            "remix.js",
+            "render(Trans, { id: \"",
+        ),
+        (
+            "import { Trans as Message } from \"@palamedes/remix/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nconst view = render(Message, { message: \"Hello\" });\n",
+            "remix-message.js",
+            "render(Trans, { id: \"",
+        ),
+    ];
+
+    for (source, filename, expected) in cases {
+        let result = transform_macros(source, filename, production())
+            .unwrap_or_else(|error| panic!("{filename} should transform: {error}"));
+        assert!(
+            result.code.contains(expected),
+            "{filename}: {}",
+            result.code
+        );
+        assert!(
+            !result.code.contains("message"),
+            "{filename}: {}",
+            result.code
+        );
+        assert_eq!(result.compiled_ids.len(), 1, "{filename}");
+    }
+}
+
+#[test]
 fn keeps_source_fallbacks_when_requested() {
     let result = transform_macros_raw(
         r#"import { t } from "@palamedes/core/macro";
@@ -2123,7 +2222,7 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 "#,
         "test.tsx",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2131,45 +2230,6 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 
     assert!(result.code.contains("message: \"Hello\""));
     assert!(result.code.contains("message={\"Rich text\"}"));
-}
-
-#[test]
-fn honors_explicit_legacy_strip_message_field_values() {
-    let source = r#"import { t } from "@palamedes/core/macro";
-function message() { return t`Hello`; }
-"#;
-    let stripped = transform_macros_raw(
-        source,
-        "test.ts",
-        Some(NativeTransformOptions {
-            strip_message_field: Some(true),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect("legacy strip transform");
-    let kept = transform_macros_raw(
-        source,
-        "test.ts",
-        Some(NativeTransformOptions {
-            strip_message_field: Some(false),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect("legacy keep transform");
-    let positive_option_wins = transform_macros_raw(
-        source,
-        "test.ts",
-        Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(false),
-            strip_message_field: Some(false),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect("positive option precedence transform");
-
-    assert!(!stripped.code.contains("message: \"Hello\""));
-    assert!(kept.code.contains("message: \"Hello\""));
-    assert!(!positive_option_wins.code.contains("message: \"Hello\""));
 }
 
 #[test]

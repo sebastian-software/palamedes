@@ -73,7 +73,7 @@ describe("Palamedes MDX Vite integration", () => {
       logLevel: "silent",
       root,
       plugins: [
-        palamedes({ configPath: path.join(root, "palamedes.yaml"), keepSourceFallbacks: true }),
+        palamedes({ configPath: path.join(root, "palamedes.yaml"), includeSourceMetadata: true }),
         {
           name: "external-mdx-runtime",
           resolveId(id) {

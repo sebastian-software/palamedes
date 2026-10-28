@@ -37,3 +37,12 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
         crate::svelte::script_blocks(source, filename)
     }
 }
+
+/// Reject macro calls in component markup, which no transform rewrites.
+pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> PalamedesResult<()> {
+    if crate::svelte::is_svelte(filename) {
+        crate::svelte::reject_markup_macro_uses(source, filename)
+    } else {
+        Ok(())
+    }
+}

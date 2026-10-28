@@ -135,9 +135,14 @@ for source-aware exemptions and span semantics.
 - `transformMacrosNative(source, filename, options?)`
 
 `analyzeMdxNative()` and `transformMacrosNative()` omit authored source-message
-fallbacks by default. Pass `keepSourceFallbacks: true` when generated runtime
-code must retain them. `stripMessageField` remains a deprecated inverse option
-for macro-transform compatibility.
+metadata by default. Pass `includeSourceMetadata: true` when generated runtime
+code must retain it for diagnostics. The v1 `keepSourceFallbacks` name throws a
+migration error, as does the removed inverse option `stripMessageField`.
+
+`assertNoRemovedPalamedesOptions(options, names)` throws the shared v2
+migration error when an options object still sets one of the named removed
+options. The first-party adapters use it so every surface reports the same
+message.
 
 `inspectCatalogMachineTranslations()` and its `Async` variant inspect stored
 PO/FCL machine claims without rewriting files. They expose Ferrocat
@@ -178,9 +183,8 @@ unsafe attribute, restricted-element, or non-render rewrites.
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party Vite, Next, and Remix `.po` loaders. Pass
 the artifact config, the resource path, and options such as `locale`, `pseudoLocale`,
-`failOnMissing`, and the deprecated `failOnCompileError` migration option. The
-deprecated option no longer controls diagnostics: invalid or unsupported ICU
-always fails in development and production. The generated module contains one map
+and `failOnMissing`. Invalid or unsupported ICU always fails in development and
+production; the removed `failOnCompileError` option throws a migration error. The generated module contains one map
 of constant strings and executable message functions lowered from Ferrocat's
 AST, so valid dynamic messages need neither ICU parsing nor AST interpretation
 in the browser.

@@ -372,7 +372,7 @@ describe("loadPalamedesConfig", () => {
           translatable-attributes: [alt, title]
           front-matter-fields: [title, description]
           ignore-directive: no-translate
-          keep-source-fallbacks: true
+          include-source-metadata: true
         catalogs:
           - path: src/locales/{locale}
             include: [src]
@@ -386,12 +386,12 @@ describe("loadPalamedesConfig", () => {
       translatableAttributes: ["alt", "title"],
       frontMatterFields: ["title", "description"],
       ignoreDirective: "no-translate",
-      keepSourceFallbacks: true,
+      includeSourceMetadata: true,
     });
   });
 
-  it("preserves shared MDX source fallbacks in data and JavaScript configs", async () => {
-    for (const key of ["keep-source-fallbacks", "keep_source_fallbacks"]) {
+  it("preserves shared MDX source metadata in data and JavaScript configs", async () => {
+    for (const key of ["include-source-metadata", "include_source_metadata"]) {
       const fixtureDir = await createTempDir();
       await writeFile(
         path.join(fixtureDir, "palamedes.yaml"),
@@ -407,19 +407,55 @@ describe("loadPalamedesConfig", () => {
       );
 
       expect((await loadPalamedesConfig({ cwd: fixtureDir })).mdx).toStrictEqual({
-        keepSourceFallbacks: true,
+        includeSourceMetadata: true,
       });
     }
 
     const javascriptDir = await createTempDir();
     await writeFile(
       path.join(javascriptDir, "palamedes.config.ts"),
-      `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mdx: { keepSourceFallbacks: true } }`,
+      `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mdx: { includeSourceMetadata: true } }`,
     );
 
     expect((await loadPalamedesConfig({ cwd: javascriptDir })).mdx).toStrictEqual({
-      keepSourceFallbacks: true,
+      includeSourceMetadata: true,
     });
+  });
+
+  it("rejects renamed MDX source fallback keys with a migration message", async () => {
+    for (const key of ["keep-source-fallbacks", "keep_source_fallbacks", "keepSourceFallbacks"]) {
+      for (const skipValidation of [false, true]) {
+        const fixtureDir = await createTempDir();
+        const configPath = path.join(fixtureDir, "palamedes.yaml");
+        await writeFile(
+          configPath,
+          `
+            locales: [en]
+            source-locale: en
+            mdx:
+              ${key}: true
+            catalogs:
+              - path: locales/{locale}
+                include: [src]
+          `,
+        );
+
+        await expect(loadPalamedesConfig({ cwd: fixtureDir, skipValidation })).rejects.toThrow(
+          `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false.`,
+        );
+      }
+    }
+
+    const javascriptDir = await createTempDir();
+    const javascriptPath = path.join(javascriptDir, "palamedes.config.ts");
+    await writeFile(
+      javascriptPath,
+      `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mdx: { keepSourceFallbacks: true } }`,
+    );
+
+    await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
+      `Invalid Palamedes config in ${javascriptPath}: Palamedes v2 renamed mdx.keepSourceFallbacks to mdx.includeSourceMetadata: it only adds diagnostic source metadata. Rename the key; the default stays false.`,
+    );
   });
 
   it("accepts the shared config-key parity fixture", async () => {
@@ -438,7 +474,7 @@ describe("loadPalamedesConfig", () => {
       transModule: "@palamedes/react/compiled",
       runtimeModule: "@palamedes/runtime",
       ignoreDirective: "palamedes-ignore",
-      keepSourceFallbacks: true,
+      includeSourceMetadata: true,
     });
     expect(config.catalogs[0]).toMatchObject({
       path: "locales/{locale}/messages",

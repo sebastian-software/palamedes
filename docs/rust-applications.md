@@ -49,17 +49,32 @@ index visibility before packaging the next crate. Registry authentication or
 server errors stop the lane. The lane requires a `CRATES_IO_OWNER` repository
 variable naming a direct owner; it checks existing names against that owner and
 repository, and checks ownership after a first upload before continuing to
-dependent crates.
+dependent crates. After every publish job, the workflow reads the crates.io
+index again and fails unless all three crates are there, unyanked, at the
+release version.
+
+Before any npm or crates.io upload starts, the `preflight-cargo` job checks the
+release policy, the `publish = ["crates-io"]` allowlists, the configured owner,
+that all three crates already exist on crates.io with this repository and
+owner, and that the release version is not yanked. It also exchanges the
+workflow's OIDC identity for a crates.io token without uploading anything. All
+upload jobs depend on it, so a Cargo lane that is not ready stops the release
+before npm receives a package. A Publish dry run runs the same registry checks
+without the token exchange. While the release hold is in place, it reports the
+policy and allowlists instead of enforcing them.
 
 Cargo publication uses [crates.io trusted publishing](https://crates.io/docs/trusted-publishing).
 Each crate must trust GitHub Actions for owner `sebastian-software`, repository
 `palamedes`, workflow `publish.yml`, with no environment constraint. The
-`publish-cargo` job grants `id-token: write` and exchanges its GitHub identity
-through the commit-pinned `rust-lang/crates-io-auth-action`. Its temporary token
-is passed as `CARGO_REGISTRY_TOKEN` only to the SDK upload step and is revoked
-by the action when the job completes. No long-lived Cargo secret or token
-fallback is used. Authentication failure stops publication; upload-free
-validation does not request an OIDC token.
+`preflight-cargo` and `publish-cargo` jobs grant `id-token: write` and exchange
+their GitHub identity through the commit-pinned `rust-lang/crates-io-auth-action`.
+The preflight passes only whether a token was issued to its readiness check. The
+publish job passes its temporary token as `CARGO_REGISTRY_TOKEN` only to the SDK
+upload step. The action revokes each token when its job completes. No long-lived
+Cargo secret or token fallback is used. Authentication failure stops
+publication; a dry run does not request an OIDC token. A successful exchange
+shows that crates.io trusts this workflow for at least one crate. It does not
+prove the trusted-publisher configuration of each crate; only the upload does.
 
 Both `publicationEnabled: false` and the three `publish = false` manifests remain
 in effect. A reviewed release-enablement change must set the policy and explicit
@@ -68,6 +83,36 @@ The bootstrap publications establish names and ownership, but do not verify a
 functional SDK release or an OIDC upload. Verify actual token exchange and
 publication during the authorized coordinated release. A passing dry run does
 not prove trusted-publisher permissions.
+
+## SemVer and MSRV
+
+The crates use the coordinated Palamedes version, and Cargo treats `2.0` to
+`2.1` as a compatible upgrade. These Rust APIs therefore follow Cargo SemVer:
+
+- the public API of `palamedes-i18n`
+- the public API of `palamedes-build`
+- the `palamedes::sdk` module, which `palamedes-build` compiles catalogs with
+
+Everything else in the `palamedes` crate is hidden from its rustdoc. It serves
+the `pmds` CLI and the Node binding and can change in any release, so depend on
+`palamedes-build` and `palamedes-i18n` rather than on `palamedes` directly.
+Items hidden from the `palamedes-i18n` docs support the generated macro or
+describe the catalog file format, which `FORMAT_VERSION` versions separately.
+
+`palamedes_i18n::Error` and `palamedes_build::Error` are `#[non_exhaustive]`.
+New failure kinds can arrive in a minor release, so a `match` on either error
+needs a wildcard arm. Both errors are `Send + Sync + 'static` and chain I/O,
+decoding, and catalog compiler causes through `std::error::Error::source`.
+Data types, such as `CompiledCatalogs`, stay exhaustive.
+
+The minimum supported Rust version (MSRV) is the `rust-version` in the
+workspace [`Cargo.toml`](../Cargo.toml). A minor release can raise it, with a
+changelog entry. The MSRV stays at least two stable Rust releases behind the
+latest stable release.
+
+The crates depend on Ferrocat with caret requirements, so your Cargo graph can
+resolve a newer compatible Ferrocat release. Palamedes's own builds and tests
+use the exact versions in its `Cargo.lock`.
 
 ## Build a Small CLI
 

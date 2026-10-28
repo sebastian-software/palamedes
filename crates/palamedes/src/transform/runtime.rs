@@ -12,6 +12,7 @@ use crate::descriptor::{
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
 use crate::source::DiagnosticLocation;
+use crate::source_message::check_lowered_message;
 
 use super::NativeTransformOptions;
 use super::imports::ImportCollector;
@@ -28,12 +29,20 @@ use super::messages::{
 pub(super) fn transform_tagged_template(
     template: &TemplateLiteral<'_>,
     source: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let (message, values) = template_to_message(template, source)?;
     if message.is_empty() {
         return Ok(None);
     }
+    check_bindings(
+        &message,
+        values.as_deref().unwrap_or_default(),
+        &[],
+        "t",
+        location,
+    )?;
 
     let lookup_key = compiled_message_key(&message, None);
     Ok(Some((
@@ -94,7 +103,9 @@ fn transform_descriptor_object(
         Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
         Expression::TemplateLiteral(template) => {
             let (message, values) = template_to_message(template, source)?;
-            (message, values.unwrap_or_default())
+            let values = values.unwrap_or_default();
+            check_bindings(&message, &values, &[], macro_name, location)?;
+            (message, values)
         }
         _ => {
             return Err(unsupported_macro_syntax(
@@ -350,6 +361,7 @@ pub(super) fn transform_choice_call(
     let lookup_key = compiled_message_key(&message, None);
     let mut values = vec![value_binding];
     append_unique_bindings(&mut values, extracted_options.values);
+    check_bindings(&message, &values, &[], macro_name, location)?;
     Ok(Some((
         build_runtime_call(
             &lookup_key,
@@ -368,6 +380,7 @@ pub(super) fn transform_trans_element(
     source: &str,
     jsx_runtime_module: &str,
     replacements: &[super::Replacement],
+    location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let attrs = jsx_attributes(&element.opening_element);
@@ -379,6 +392,9 @@ pub(super) fn transform_trans_element(
 
     let (children_message, values, components) =
         extract_jsx_children_parts(&element.children, source, solid_wrappers, replacements)?;
+    if !attrs.contains_key("message") {
+        check_bindings(&children_message, &values, &components, "Trans", location)?;
+    }
     let message = attrs
         .get("message")
         .cloned()
@@ -389,7 +405,7 @@ pub(super) fn transform_trans_element(
     let lookup_key = compiled_message_key(&message, context.as_deref());
 
     let mut attrs = vec![format!("id=\"{}\"", escape_string(&lookup_key))];
-    if options.keep_source_fallbacks() {
+    if options.include_source_metadata() {
         attrs.push(format!("message={{\"{}\"}}", escape_string(&message)));
     }
 
@@ -417,11 +433,20 @@ pub(super) fn transform_lowered_trans_call(
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let lowered = trans_from_call(call, source, imports, macro_name, location)?;
+    if !lowered.explicit_message {
+        check_bindings(
+            &lowered.message,
+            &lowered.values,
+            &lowered.components,
+            macro_name,
+            location,
+        )?;
+    }
     let props = props_object(call, macro_name, location)?;
     let context = descriptor_static_property(props, "context", macro_name, location)?;
     let lookup_key = compiled_message_key(&lowered.message, context.as_deref());
     let mut properties = vec![format!("id: \"{}\"", escape_string(&lookup_key))];
-    if options.keep_source_fallbacks() {
+    if options.include_source_metadata() {
         properties.push(format!("message: \"{}\"", escape_string(&lowered.message)));
     }
     if !lowered.components.is_empty() {
@@ -470,6 +495,7 @@ pub(super) fn transform_lowered_choice_call(
     let lookup_key = compiled_message_key(&message, context.as_deref());
     let mut values = vec![value_binding];
     append_unique_bindings(&mut values, extracted_options.values);
+    check_bindings(&message, &values, &[], macro_name, location)?;
     Ok(Some((
         build_runtime_call(
             &lookup_key,
@@ -531,6 +557,7 @@ pub(super) fn transform_choice_jsx_element(
     let lookup_key = compiled_message_key(&message, context.as_deref());
     let mut values = vec![value_binding];
     append_unique_bindings(&mut values, extracted_options.values);
+    check_bindings(&message, &values, &[], macro_name, location)?;
     Ok(Some((
         build_runtime_call(
             &lookup_key,
@@ -542,6 +569,24 @@ pub(super) fn transform_choice_jsx_element(
         ),
         lookup_key,
     )))
+}
+
+/// Rejects a lowered message that references values or components the
+/// transform does not generate.
+fn check_bindings(
+    message: &str,
+    values: &[ValueBinding],
+    components: &[ValueBinding],
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+) -> PalamedesResult<()> {
+    check_lowered_message(
+        message,
+        values.iter().map(|value| value.name.as_str()),
+        components.iter().map(|component| component.name.as_str()),
+        macro_name,
+        location,
+    )
 }
 
 fn build_runtime_call(
@@ -630,7 +675,7 @@ fn build_runtime_descriptor(
     let mut parts = Vec::new();
 
     if let Some(message) = message
-        && options.keep_source_fallbacks()
+        && options.include_source_metadata()
     {
         parts.push(format!("message: \"{}\"", escape_string(message)));
     }

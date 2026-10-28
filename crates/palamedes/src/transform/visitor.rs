@@ -220,6 +220,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     .source_locator
                     .indexed_location(self.filename, nested_start)
                     .format(),
+                branch: None,
             });
             return;
         }
@@ -242,6 +243,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     .strip_suffix("/macro")
                     .unwrap_or("@palamedes/react"),
                 &attribute_replacements,
+                &self
+                    .source_locator
+                    .indexed_location(self.filename, it.span.start as usize),
                 self.options,
             ),
             "Plural" | "Select" | "SelectOrdinal" => {
@@ -338,7 +342,10 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        match transform_tagged_template(&it.quasi, self.source, self.options) {
+        let location = self
+            .source_locator
+            .indexed_location(self.filename, it.span.start as usize);
+        match transform_tagged_template(&it.quasi, self.source, &location, self.options) {
             Ok(Some((text, compiled_id))) => {
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,

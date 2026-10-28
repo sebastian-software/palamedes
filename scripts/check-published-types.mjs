@@ -75,7 +75,7 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
     file: "adr/020-internal-compiled-lookup-keys.md",
     snippets: [
       "Low-level transforms and v2 first-party host adapters generate compact runtime calls without embedding the authored source message by default.",
-      "Set `keepSourceFallbacks: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.",
+      "Set `includeSourceMetadata: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.",
     ],
   },
   {
@@ -89,8 +89,8 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
   {
     file: "crates/palamedes/src/transform/mod.rs",
     snippets: [
-      "The native transform and v2 first-party host adapters strip source fallbacks by default (`None` resolves to `false`).",
-      "`keepSourceFallbacks: true` only to retain authored source text as diagnostic metadata; it never supplies replacement runtime output.",
+      "The native transform and v2 first-party host adapters omit this metadata by default (`None` resolves to `false`).",
+      "`includeSourceMetadata: true` only to retain authored source text as diagnostic metadata; it never supplies replacement runtime output.",
     ],
   },
 ];
@@ -215,12 +215,12 @@ function assertSourceFallbackDefaultDocumentation() {
         continue;
       }
       const text = readFileSync(file, "utf8");
-      const optionIndex = text.indexOf("keepSourceFallbacks?: boolean");
+      const optionIndex = text.indexOf("includeSourceMetadata?: boolean");
       const docStart = text.lastIndexOf("/**", optionIndex);
       const docEnd = text.indexOf("*/", docStart);
       if (optionIndex === -1 || docStart === -1 || docEnd < docStart || docEnd > optionIndex) {
         problems.push(
-          `${path.relative(root, file)} has no public TSDoc immediately before keepSourceFallbacks.`,
+          `${path.relative(root, file)} has no public TSDoc immediately before includeSourceMetadata.`,
         );
         continue;
       }
@@ -236,10 +236,10 @@ function assertSourceFallbackDefaultDocumentation() {
 
     const docsText = readFileSync(path.join(root, docs), "utf8");
     const expectedDefault = compiledOnlyDefault ? "false" : "true";
-    if (!docsText.includes(`- \`keepSourceFallbacks\`: \`${expectedDefault}\``)) {
+    if (!docsText.includes(`- \`includeSourceMetadata\`: \`${expectedDefault}\``)) {
       problems.push(`${docs} does not document the default as ${expectedDefault}.`);
     }
-    if (!compiledOnlyDefault && !docsText.includes("`keepSourceFallbacks: false`")) {
+    if (!compiledOnlyDefault && !docsText.includes("`includeSourceMetadata: false`")) {
       problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`);
     }
   }
@@ -382,6 +382,11 @@ import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
 import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
+import { createI18n } from "@palamedes/core"
+import { getI18n } from "@palamedes/runtime"
+import type { TransProps as ReactTransProps } from "@palamedes/react"
+import type { TransProps as SolidTransProps } from "@palamedes/solid"
+import type { TransProps as RemixTransProps } from "@palamedes/remix/compiled"
 
 export const lengths = [
   t\`Hello\`.length,
@@ -439,14 +444,27 @@ t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
-export const wakuInterceptor = createWakuI18nInterceptor((request) => ({
-  locale: request.headers.get("accept-language") ?? "en",
-  _: () => "",
-}))
-export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) => ({
-  locale: request.headers.get("accept-language") ?? "en",
-  _: () => "",
-}))
+export const wakuInterceptor = createWakuI18nInterceptor((request) =>
+  createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
+)
+export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) =>
+  createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
+)
+// @ts-expect-error Adapters require the full v2 instance, not only locale and _().
+createWakuI18nInterceptor(() => ({ locale: "en", _: () => "" }))
+export const translatedText: string = getI18n()._("greeting")
+
+export const runtimeTransProps = [
+  { id: "greeting", message: "Hello" } satisfies ReactTransProps,
+  { id: "greeting" } satisfies SolidTransProps,
+  { id: "greeting", comment: "Shown first" } satisfies RemixTransProps,
+]
+// @ts-expect-error Runtime Trans requires the compiled id; message is diagnostic metadata.
+const reactTransWithoutId: ReactTransProps = { message: "Hello" }
+// @ts-expect-error Runtime Trans requires the compiled id; message is diagnostic metadata.
+const solidTransWithoutId: SolidTransProps = { message: "Hello" }
+// @ts-expect-error Runtime Trans requires the compiled id; message is diagnostic metadata.
+const remixTransWithoutId: RemixTransProps = { message: "Hello" }
 `,
   );
   checkProgram(esmFixture, {

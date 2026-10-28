@@ -40,23 +40,28 @@ No active client i18n instance. Initialize @palamedes/runtime with setClientI18n
 
 Cause:
 
-Transformed code calls `getI18n()`, but the browser runtime was not initialized
+Transformed code calls `getI18n()`, but no client i18n instance was registered
 before translated UI rendered.
 
 Fix:
 
-Create the i18n instance during app startup and register it once:
+The standard framework adapters register the client instance and load the
+active locale's compiled catalog before translated modules run. Application
+code does not call `setClientI18n()` on that path.
+
+A custom integration without an adapter registers the instance itself, after
+loading a compiled catalog module such as the output of
+`pmds catalog compile --target js --output generated`:
 
 ```ts
 import { createI18n } from "@palamedes/core";
 import { setClientI18n } from "@palamedes/runtime";
+import { messages } from "./generated/de.mjs";
 
-const i18n = createI18n();
+const i18n = createI18n({ locale: "de" });
+i18n.load("de", messages);
 setClientI18n(i18n);
 ```
-
-Load the active locale's catalog and call `activate()` if it differs from the
-initial locale before rendering translated components.
 
 ## `getI18n()` Has No Server Instance
 
@@ -105,8 +110,9 @@ Fix:
 - Confirm the app build uses `@palamedes/vite-plugin` or
   `@palamedes/next-plugin`.
 - Keep `.po` files under the catalog path configured in `palamedes.yaml`.
-- In framework examples, prefer per-locale dynamic imports when only one active
-  locale should be loaded into the client bundle.
+- Check whether the import is needed. The standard framework adapters load the
+  active locale's compiled catalog themselves; application code does not
+  import `.po` files on that path.
 - Run `pnpm exec pmds extract` after adding new messages so catalogs exist.
 
 ## `failOnMissing` Breaks The Build
@@ -122,12 +128,14 @@ Missing N translation(s):
 
 Cause:
 
-The active catalog is missing translations and the plugin was configured with
-`failOnMissing: true`.
+The active catalog is missing translations, or has entries marked `fuzzy`, and
+the plugin was configured with `failOnMissing: true`. Fuzzy entries count as
+missing and compile through the fallback chain.
 
 Fix:
 
 - Add the missing translations to the locale catalog.
+- Review fuzzy entries and remove their `fuzzy` marker once they are correct.
 - Run `pnpm exec pmds extract` after changing source messages.
 - Run `pnpm exec pmds audit --fail-on error` to inspect catalog diagnostics.
 - If the locale is a generated pseudo-locale, set `pseudo-locale` in
@@ -152,10 +160,9 @@ Fix:
 - Compare the translated ICU placeholders with the source message.
 - Re-run `pnpm exec pmds audit --fail-on error` locally after editing the
   catalog.
-- Invalid and unsupported ICU is always fatal in Palamedes v2. Remove the
-  deprecated `failOnCompileError` option; setting it to `false` no longer
-  downgrades an error to a warning. The compiler includes a migration message
-  when an existing configuration still supplies the option.
+- Invalid and unsupported ICU is always fatal in Palamedes v2. No option
+  downgrades it to a warning; the removed `failOnCompileError` option is
+  rejected (see [Removed v1 Option Is Rejected](#removed-v1-option-is-rejected)).
 
 ## Native Binding Fails To Load
 
@@ -187,25 +194,131 @@ Fix:
   manager kept the `linux-x64-musl` optional dependency instead of pruning
   optional packages.
 
-## Translation Exists But Does Not Render
+## Translation Exists But Source Text Renders
 
 Symptom:
 
-Translated UI renders the original source message or an empty string even
-though the target catalog contains a translation.
+Translated UI shows the source-locale text even though the target catalog
+appears to contain a translation.
 
 Cause:
 
-The source was extracted, but the active runtime instance did not load and
-activate the compiled catalog for the active locale.
+Missing or empty target translations compile to a fallback: the configured
+fallback locales and finally the source message. The page renders without an
+error. Either the entry the code uses has no translation, or the page runs a
+different locale.
 
 Fix:
 
-- Import the `.po` module for the active locale.
-- Call `i18n.load(locale, messages)` with the compiled catalog messages.
-- Call `i18n.activate(locale)` before rendering translated UI.
 - Check whether the message uses `context`; Palamedes identifies messages by
   `message + context`, so a context mismatch is a different catalog entry.
+- Check the document's `<html lang>`. Browser catalog delivery loads the
+  catalog for that locale.
+- Set `failOnMissing: true` in the plugin options to fail the build on a
+  missing translation instead of compiling a fallback.
+
+## `MissingCompiledMessageError`
+
+Error:
+
+```text
+A required compiled message is unavailable. Reload the application or contact its maintainer.
+```
+
+The thrown error's `name` is `MissingCompiledMessageError`.
+
+Cause:
+
+`_()`, `Trans`, or another compiled lookup asked the active i18n instance for a
+message ID that no catalog loaded for the active locale contains. V2 has no
+runtime fallback to source text. Missing translations do not cause this error;
+the compiler already replaced them with a fallback.
+
+Fix:
+
+- Read the error's `id` and `locale` properties. When the plugin option
+  `includeSourceMetadata: true` is set, `metadata.message` also contains the
+  authored message.
+- With a standard framework adapter, make sure the running code and its
+  compiled catalogs come from the same build, then reload the document.
+- In a custom integration, regenerate the catalog modules after source messages
+  change, then call `i18n.load(locale, messages)` and `i18n.activate(locale)`
+  before translated code runs.
+- Handle the error in the host's ordinary error view, without translated
+  messages. `onMissing` observes the failure but cannot replace the output.
+
+## Catalog Fails To Load In The Browser
+
+Symptom:
+
+A translated page shows the host's error view instead of its content. The
+Remix default view says "Something went wrong" and offers Reload and Home. In
+Vite development, the console reports:
+
+```text
+Palamedes catalog dependency failed
+```
+
+Cause:
+
+The browser could not load or evaluate the compiled catalog for the document
+locale. The adapter stops the modules that depend on it instead of rendering
+them without translations. The Vite error keeps the original failure as its
+`cause`.
+
+Fix:
+
+- Inspect the failed catalog request in the browser's network panel.
+- Check `<html lang>`. The Vite browser entry throws
+  `Unsupported document catalog locale.` when it is not a configured locale.
+- In Remix, route `registry.serve(request)` and
+  `remixI18n.serveClientCatalogAsset(request)` before `assetServer.fetch(request)`.
+  Catalog modules are served under `/assets/__palamedes/catalog/<locale>.js` by
+  default.
+- Offer a full document reload as the recovery action, and keep the error view
+  free of translated messages. See the
+  [Vite](./api/vite-plugin.md), [Next.js](./api/next-plugin.md), and
+  [Remix](./api/remix.md#client-catalog-assets) guides for host error handling.
+
+## Removed v1 Option Is Rejected
+
+Error, depending on the option:
+
+```text
+Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.
+Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.
+Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.
+Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.
+Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.
+Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.
+```
+
+A config file with the old MDX key reports:
+
+```text
+Invalid Palamedes config in <path>: Palamedes v2 renamed mdx.keep-source-fallbacks to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false.
+```
+
+Cause:
+
+A v1 option is still set. The Vite, Next.js, and Remix adapters, the
+low-level transform, and `@palamedes/core-node` reject these options with any
+value, including `false`, during setup or on first use. Config loaders and
+`pmds` reject the old MDX key in every spelling.
+
+Fix:
+
+| Option                                     | Fix                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| `failOnCompileError`                       | Remove it. Use `failOnMissing` for translation completeness.     |
+| `keepSourceFallbacks`                      | Rename it to `includeSourceMetadata`. The default stays `false`. |
+| `stripMessageField` (transform)            | Remove it. Use `includeSourceMetadata` with the inverse value.   |
+| `mdx.keep-source-fallbacks` (config files) | Rename it to `mdx.include-source-metadata`.                      |
+| `messageSplitting` (Next.js)               | Remove it. Delivery is automatic.                                |
+| `experimentalGraphSplitting` (Vite)        | Remove it, including `{ localeBinding }`. Delivery is automatic. |
+| `cwd` (Next.js `withPalamedes()`)          | Rename it to `projectRoot`.                                      |
+
+See the [v2 migration guide](./migration-v2.md#replace-removed-apis).
 
 ## Extraction Finds Nothing
 

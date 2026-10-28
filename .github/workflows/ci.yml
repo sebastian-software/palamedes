@@ -64,6 +64,10 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm check:release-set
 
+      - name: Check release wording
+        if: ${{ matrix.full }}
+        run: pnpm check:release-wording
+
       # A floating action tag is resolved at run time, so a moved tag changes
       # what CI executes without a commit in this repository.
       - name: Check workflow action pins

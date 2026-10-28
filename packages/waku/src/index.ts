@@ -3,6 +3,13 @@ import { unstable_getRequest, type HandlerInterceptor } from "waku/router/server
 
 import { createScopedWakuI18nRunner } from "./scope";
 
+const REQUEST_UNAVAILABLE_MESSAGE =
+  "Palamedes Waku i18n interceptor could not read the Waku request: unstable_getRequest() threw. " +
+  "Waku runs handler interceptors inside its request store, so this usually means @palamedes/waku " +
+  "loaded a separate copy of waku/router/server (for example when Vite externalizes an installed " +
+  "@palamedes/waku). Register palamedes() from @palamedes/vite-plugin in the Waku Vite config and " +
+  "register the interceptor through Waku's router instead of calling it directly.";
+
 /** Creates one fresh request-local i18n instance from Waku's original Fetch request. */
 export type WakuI18nResolver<T extends I18nInstance = I18nInstance> = (
   request: Request,
@@ -22,12 +29,13 @@ export function createWakuI18nInterceptor<T extends I18nInstance = I18nInstance>
     let request: Request;
     try {
       request = unstable_getRequest();
-    } catch {
-      // Waku exposes no stable error type or code for its intentionally
-      // unstable request accessor. A throw means this interceptor is running
-      // outside a request phase, so preserve the documented pass-through path
-      // without coupling it to an upstream diagnostic sentence.
-      return await next();
+    } catch (error) {
+      // Waku invokes interceptors only inside its router request store, for
+      // both requests and static builds. A throw here therefore means the
+      // interceptor reads a different `waku/router/server` instance than the
+      // router, or was called outside Waku. Passing through would hide that
+      // cause behind a later "No active server i18n instance" error.
+      throw new Error(REQUEST_UNAVAILABLE_MESSAGE, { cause: error });
     }
     return await runner.run(request, next);
   };

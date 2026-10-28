@@ -38,6 +38,8 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `extractCatalogMessagesFromFiles(request)`
 - `extractCatalogMessagesFromFilesAsync(request, options?: AsyncTaskOptions)`
 - `transformMacrosNative(source, filename, options?)`
+- `assertNoRemovedPalamedesOptions(options, names)`
+- `REMOVED_PALAMEDES_OPTION_MESSAGES`
 - `AsyncTaskOptions`
 
 `analyzeMdxNative` returns messages, structured diagnostics, generated
@@ -221,6 +223,15 @@ inspection lets tooling see the stored claim before that write.
 Rust tooling can call `palamedes::inspect_catalog_machine_translations()` and
 consume the re-exported native `CatalogMachineTranslationReview` and
 `CatalogMachineTranslationStatus` directly.
+
+`assertNoRemovedPalamedesOptions(options, names)` throws the shared v2
+migration error from `REMOVED_PALAMEDES_OPTION_MESSAGES` when `options` sets one
+of the named removed options (`failOnCompileError`, `keepSourceFallbacks`,
+`stripMessageField`, `messageSplitting`, `experimentalGraphSplitting`, or `cwd`)
+to any value other than `undefined`. The first-party adapters call it during
+setup. The catalog module APIs reject `failOnCompileError`. The transform API
+rejects `keepSourceFallbacks` and `stripMessageField`, and the MDX APIs reject
+`keepSourceFallbacks`; use `includeSourceMetadata` instead.
 
 `analyzeSourceNative()` performs the source-level semantic analysis used by
 linting and extraction, returning extracted messages and diagnostics in one

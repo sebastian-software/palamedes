@@ -176,7 +176,7 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts src/node-macros.test.ts src/node.test.ts",
+    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/server-bundled.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts src/node-macros.test.ts src/node.test.ts",
     "stub": "unbuild --stub"
   },
   "dependencies": {

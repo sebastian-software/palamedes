@@ -48,6 +48,10 @@ import { Trans } from "@palamedes/react";
 <Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />;
 ```
 
+The runtime `Trans` requires `id`, the compiled lookup key that the transform
+injects. `message` is optional diagnostic metadata and is never used as a
+lookup key.
+
 For authoring source strings, prefer macro imports from
 `@palamedes/react/macro` so the build can extract and transform messages.
 
@@ -62,6 +66,12 @@ Choice macros take branch text as props: plural categories (`zero`, `one`,
 `two`, `few`, `many`, `other`) and exact matches spelled `_0`, `_1`, … because
 a JSX attribute cannot start with `=`. Exact matches are normalized to ICU
 `=N`, mirroring the macro transform. `other` is required.
+
+Each branch must be a string literal or a template literal, either as a plain
+attribute (`one="# item"`) or inside braces (``one={`# item for ${name}`}``).
+Extraction and the transform reject any other branch value, such as a constant,
+a member expression, a JSX element, or a nested `t`, `plural`, `select`, or
+`<Trans>`, with an error that names the branch and its source location.
 
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern. Use it for "and N others" sentences where the number shown

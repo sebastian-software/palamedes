@@ -23,8 +23,8 @@ Use `import`; CommonJS `require()` is deliberately unsupported.
 ## Compiled catalog delivery
 
 Keep catalog delivery in the server entry and leave locale selection in the
-application. Use `createViteServerI18n({ locale })` from
-`@palamedes/vite-plugin/server` to create a fresh instance backed by the shared,
+application. Use `createBundledServerI18n({ locale })` from
+`@palamedes/runtime/server/bundled` to create a fresh instance backed by the shared,
 lazily loaded compiled server catalog.
 Do not import `.po` modules from browser-facing files or serialize catalog
 functions through RSC.
@@ -82,9 +82,13 @@ actions, including default-parameter evaluation. It keeps the scope active for
 the full awaited action, including synchronous, asynchronous, and cross-module
 helpers that use transformed Palamedes macros.
 
-When Waku invokes the interceptor outside a request phase, its unstable request
-accessor throws and Palamedes calls the handler unchanged without activating
-i18n. This fallback does not depend on the wording or shape of Waku's error.
+Waku runs interceptors inside its request store for requests and static
+builds. If its unstable request accessor still throws, the interceptor throws
+an error beginning `Palamedes Waku i18n interceptor could not read the Waku
+request` before the handler runs, with Waku's error as `cause`. This usually
+means `@palamedes/waku` loaded a separate copy of `waku/router/server`; the
+Palamedes Vite plugin keeps the adapter in Vite's server module graph to avoid
+that. The check does not depend on the wording or shape of Waku's error.
 
 Initializer or catalog failures prevent the action body from running and throw
 an error beginning `Palamedes Waku i18n initialization failed`. Waku's default

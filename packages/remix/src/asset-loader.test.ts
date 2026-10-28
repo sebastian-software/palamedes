@@ -21,7 +21,6 @@ import {
   createPalamedesRemixAssetLoader,
   createPalamedesRemixCatalogAssetRegistry,
   PALAMEDES_REMIX_ASSET_PACKAGES,
-  PALEMEDES_REMIX_ASSET_PACKAGES,
 } from "./index";
 
 const assetLoadContext = {
@@ -47,7 +46,6 @@ describe("createPalamedesRemixAssetLoader", () => {
       "@palamedes/runtime",
       "@palamedes/remix",
     ]);
-    expect(PALEMEDES_REMIX_ASSET_PACKAGES).toBe(PALAMEDES_REMIX_ASSET_PACKAGES);
   });
 
   it.each([
@@ -309,7 +307,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       minify: true,
       sourceMaps: "external",
       watch: false,
-      scripts: { loaders: [createPalamedesRemixAssetLoader({ keepSourceFallbacks: true })] },
+      scripts: { loaders: [createPalamedesRemixAssetLoader({ includeSourceMetadata: true })] },
     });
 
     try {
@@ -337,7 +335,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     ].join("\n");
     const secondSource = firstSource.replace("First browser message", "Second browser message");
     const fixture = createAssetFixture("watched.ts", firstSource);
-    const transform = createPalamedesRemixAssetLoader({ keepSourceFallbacks: true });
+    const transform = createPalamedesRemixAssetLoader({ includeSourceMetadata: true });
     let loaderCalls = 0;
     const countingLoader: ModuleLoader = (url, context, nextLoad) => {
       loaderCalls += 1;

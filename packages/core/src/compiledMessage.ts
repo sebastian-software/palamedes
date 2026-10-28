@@ -8,19 +8,55 @@ import {
 
 export type MessageValues = Record<string, unknown>;
 
+/**
+ * An executable generated catalog entry.
+ *
+ * Generated catalogs and the first-party framework renderers share this
+ * format. It changes together with the Palamedes packages and is not an
+ * extension point.
+ *
+ * @internal
+ */
 export type CompiledMessage = <TResult>(
   values: MessageValues,
   runtime: CompiledMessageRuntime<TResult>,
 ) => TResult;
 
+/**
+ * One executable select/plural branch of a generated catalog entry.
+ *
+ * Generated catalogs and the first-party framework renderers share this
+ * format. It changes together with the Palamedes packages and is not an
+ * extension point.
+ *
+ * @internal
+ */
 export type CompiledMessageBranch = <TResult>(
   values: MessageValues,
   runtime: CompiledMessageRuntime<TResult>,
   pluralValue?: number,
 ) => TResult;
 
+/**
+ * Select/plural branches of a generated catalog entry, keyed by selector.
+ *
+ * Generated catalogs and the first-party framework renderers share this
+ * format. It changes together with the Palamedes packages and is not an
+ * extension point.
+ *
+ * @internal
+ */
 export type CompiledMessageBranches = Record<string, CompiledMessageBranch>;
 
+/**
+ * The operations a generated catalog entry calls while it renders.
+ *
+ * Generated catalogs and the first-party framework renderers share this
+ * format. It changes together with the Palamedes packages and is not an
+ * extension point.
+ *
+ * @internal
+ */
 export type CompiledMessageRuntime<TResult> = {
   join: (...parts: Array<string | TResult>) => TResult;
   value: (values: MessageValues, name: string) => TResult;
@@ -114,6 +150,15 @@ function getCatalogRegistryForRead(): WeakSet<object> | undefined {
   return globalCatalogState[COMPILED_CATALOG_REGISTRY_SYMBOL];
 }
 
+/**
+ * The host-specific result renderer behind a `CompiledMessageRuntime`.
+ *
+ * Generated catalogs and the first-party framework renderers share this
+ * format. It changes together with the Palamedes packages and is not an
+ * extension point.
+ *
+ * @internal
+ */
 export type ExecutableMessageRenderer<TResult> = {
   join: (...parts: Array<string | TResult>) => TResult;
   value: (value: unknown) => TResult;
@@ -125,7 +170,15 @@ export type ExecutableMessageRenderer<TResult> = {
   tag: (name: string, children: TResult) => TResult;
 };
 
-/** Adds shared select/plural execution to a host-specific result renderer. */
+/**
+ * Adds shared select/plural execution to a host-specific result renderer.
+ *
+ * Generated catalogs and the first-party framework renderers share this
+ * format. It changes together with the Palamedes packages and is not an
+ * extension point.
+ *
+ * @internal
+ */
 export function createCompiledMessageRuntime<TResult>(
   locale: string,
   renderer: ExecutableMessageRenderer<TResult>,

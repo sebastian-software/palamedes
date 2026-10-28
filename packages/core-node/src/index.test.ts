@@ -45,6 +45,7 @@ import {
   updateCatalogFile,
   updateCatalogFileAsync,
 } from "./index";
+import type { CatalogModuleOptions, MdxOptions, NativeTransformOptions } from "./index";
 import type {
   NativeBindings as GeneratedNativeBindings,
   TranslationPatchRequest as GeneratedTranslationPatchRequest,
@@ -2243,6 +2244,19 @@ function message(name) {
     expect(map.mappings).not.toBe("");
   });
 
+  it("adds authored source text only when includeSourceMetadata is true", () => {
+    const source = `import { t } from "@palamedes/core/macro";
+export function greeting() {
+  return t\`Hello world\`;
+}
+`;
+
+    expect(transformMacrosNative(source, "sample.ts").code).not.toContain("Hello world");
+    expect(
+      transformMacrosNative(source, "sample.ts", { includeSourceMetadata: true }).code,
+    ).toContain('message: "Hello world"');
+  });
+
   it("executes transformed Trans through the compiled import when an authored local shadows it", () => {
     const source = `import { Trans as MacroTrans } from "@palamedes/react/macro";
 import { Trans } from "@palamedes/react/compiled";
@@ -2430,13 +2444,9 @@ msgstr ""
       sourceLocale: "en",
       catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
     };
-    const compileOptions = {
-      locale: "de",
-      failOnCompileError: false,
-    } as const;
     let syncError: unknown;
     try {
-      compileCatalogModule(config, resourcePath, compileOptions);
+      compileCatalogModule(config, resourcePath, { locale: "de" });
     } catch (error) {
       syncError = error;
     }
@@ -2446,19 +2456,55 @@ msgstr ""
     );
     expect((syncError as Error).message).toContain("Locale: en");
     expect((syncError as Error).message).toContain("Source: Broken {name");
-    expect((syncError as Error).message).toContain(
-      "`failOnCompileError` no longer changes this behavior",
-    );
 
     expect(() =>
-      compileCatalogModule(config, resourcePath, {
-        ...compileOptions,
-        failOnMissing: true,
-      }),
+      compileCatalogModule(config, resourcePath, { locale: "de", failOnMissing: true }),
     ).toThrow(/Locale: en/);
-    await expect(compileCatalogModuleAsync(config, resourcePath, compileOptions)).rejects.toThrow(
+    await expect(compileCatalogModuleAsync(config, resourcePath, { locale: "de" })).rejects.toThrow(
       /Locale: en/,
     );
+  });
+
+  it("rejects the removed failOnCompileError option with the v2 migration error", async () => {
+    const config = {
+      rootDir: await createTempDir(),
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    };
+    const migration =
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.";
+
+    for (const failOnCompileError of [true, false]) {
+      const options = { locale: "en", failOnCompileError } as unknown as CatalogModuleOptions;
+      expect(() => compileCatalogModule(config, "messages.po", options)).toThrow(migration);
+      await expect(compileCatalogModuleAsync(config, "messages.po", options)).rejects.toThrow(
+        migration,
+      );
+    }
+  });
+
+  it("rejects removed source metadata options before native transforms", () => {
+    const migration =
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.";
+
+    expect(() =>
+      transformMacrosNative("const x = 1;", "sample.ts", {
+        keepSourceFallbacks: true,
+      } as unknown as NativeTransformOptions),
+    ).toThrow(migration);
+    expect(() =>
+      transformMacrosNative("const x = 1;", "sample.ts", {
+        stripMessageField: true,
+      } as unknown as NativeTransformOptions),
+    ).toThrow(
+      "Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.",
+    );
+    expect(() =>
+      analyzeMdxNative("# Hello", "page.mdx", {
+        keepSourceFallbacks: false,
+      } as unknown as MdxOptions),
+    ).toThrow(migration);
   });
 
   it("resolves the module locale from the catalog path, not the caller-supplied locale", async () => {
@@ -2517,6 +2563,56 @@ msgstr ""
     expect(() =>
       compileCatalogModule(pseudoConfig, resourcePath, { locale: "messages", failOnMissing: true }),
     ).not.toThrow();
+  });
+
+  it("compiles fuzzy translations as missing source fallbacks", async () => {
+    const rootDir = await createTempDir();
+    const enCatalog = path.join(rootDir, "locales", "en");
+    const deCatalog = path.join(rootDir, "locales", "de");
+
+    await mkdir(enCatalog, { recursive: true });
+    await mkdir(deCatalog, { recursive: true });
+    await writeFile(
+      path.join(enCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "Fuzzy one"
+msgstr ""
+`,
+    );
+    await writeFile(
+      path.join(deCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+#, fuzzy
+msgid "Fuzzy one"
+msgstr "Unscharf"
+`,
+    );
+
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    };
+    const resourcePath = path.join(deCatalog, "messages.po");
+    const artifact = compileCatalogArtifact(config, resourcePath);
+
+    expect(Object.values(artifact.messages)).toStrictEqual(["Fuzzy one"]);
+    expect(artifact.missing).toMatchObject([
+      { sourceKey: { message: "Fuzzy one" }, requestedLocale: "de", resolvedLocale: "en" },
+    ]);
+    expect(compileCatalogModule(config, resourcePath, { locale: "de" }).code).not.toContain(
+      "Unscharf",
+    );
+    expect(() =>
+      compileCatalogModule(config, resourcePath, { locale: "de", failOnMissing: true }),
+    ).toThrow(/Missing 1 translation\(s\)/);
   });
 
   it("renders catalog modules with the same message order as artifact objects", async () => {

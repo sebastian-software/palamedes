@@ -40,9 +40,13 @@ line above just makes the full dependency set explicit.)
 For Solid, swap the host package pair:
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
-pnpm add -D @palamedes/cli @solidjs/vite-plugin vite typescript
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web@2.0.0-rc.16 solid-js@2.0.0-rc.16
+pnpm add -D @palamedes/cli @solidjs/vite-plugin@3.0.0-next.50 vite typescript
 ```
+
+Solid 2 is still published only as prerelease versions, and an unpinned
+`solid-js` resolves to Solid 1. The commands pin the versions that the
+maintained `examples/solid-*` apps use.
 
 ## 2. Add `palamedes.yaml`
 
@@ -92,7 +96,7 @@ maps are not part of the standard flow.
 // src/App.tsx
 import { Trans } from "@palamedes/react/macro";
 
-export function App() {
+export default function App() {
   return (
     <h1>
       <Trans>Welcome to Palamedes</Trans>

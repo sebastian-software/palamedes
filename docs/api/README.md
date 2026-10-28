@@ -8,6 +8,7 @@ expected to use directly.
 - [`@palamedes/react`](./react.md)
 - [`@palamedes/solid`](./solid.md)
 - [`@palamedes/remix`](./remix.md)
+- [React Router Framework Mode](./react-router.md) (Vite plugin and server wiring; no adapter package)
 - [`@palamedes/react-router-rsc`](./react-router-rsc.md)
 - [`@palamedes/waku`](./waku.md)
 - [`@palamedes/tanstack`](./tanstack.md)

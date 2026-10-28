@@ -1,7 +1,7 @@
 import "server-only";
 
 import { defineLocaleControls } from "@palamedes/core/locale";
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 
 export type Locale = "en" | "de" | "fr";
 const controls = defineLocaleControls<Locale>({
@@ -21,5 +21,5 @@ function resolveLocale(request: Request): Locale {
 /** Resolves request policy; the Vite adapter owns lazy catalog loading. */
 export async function createRequestI18n(request: Request) {
   const locale = resolveLocale(request);
-  return createViteServerI18n({ locale });
+  return createBundledServerI18n({ locale });
 }

@@ -98,11 +98,11 @@ map.
 the generated server-catalog module performs the lazy load:
 
 ```ts
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 
 export async function createRequestI18n(request: Request) {
   const locale = request.headers.get("cookie")?.includes("locale=de") ? "de" : "en";
-  return createViteServerI18n({ locale });
+  return createBundledServerI18n({ locale });
 }
 ```
 
