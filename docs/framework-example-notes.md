@@ -142,5 +142,5 @@ Current tooling note:
   the underlying Vite/Rollup build. The example configs now filter that known
   warning so example builds stay clean while the underlying behavior remains
   documented here.
-- `@react-router/dev@8.3.1` declares `vite: ^7.0.0 || ^8.0.0` as its peer
+- `@react-router/dev@8.5.0` declares `vite: ^7.0.0 || ^8.0.0` as its peer
   range. The examples are verified on Vite 8.

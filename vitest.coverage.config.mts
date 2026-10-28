@@ -8,7 +8,6 @@ const standardPackages = [
   "core",
   "extractor",
   "next-plugin",
-  "react-router-rsc",
   "react",
   "remix",
   "runtime",

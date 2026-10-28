@@ -33,7 +33,6 @@ export async function verifyBrowserArtifacts(example) {
     waku: "dist/public",
     solid: ".output/public",
     "react-router": "build/client",
-    "react-router-rsc": "build/client",
     vite: "dist",
   };
   assert.ok(outputs[example.framework], `Unknown artifact layout: ${example.framework}`);

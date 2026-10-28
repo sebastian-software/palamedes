@@ -89,8 +89,8 @@ const MECHANISMS = [
     title: "Hosts converge on one runtime contract",
     body: "Servers load the active locale's complete compiled catalog lazily and share immutable messages across requests. Request-local locale and formatter state stays isolated. Browser adapters deliver the document locale's fragments along the module graph.",
     artifact: "Request-scope contract",
-    href: decisionHref("026-react-router-rsc-entry-request-scope"),
-    adr: ["006", "007", "026"],
+    href: decisionHref("006-universal-geti18n-runtime-model"),
+    adr: ["006", "007"],
   },
   {
     number: "10",

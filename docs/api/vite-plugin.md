@@ -124,12 +124,8 @@ export default defineConfig({
 
 Keep `palamedes()` before the React or Solid Vite plugin so the native MDX
 compiler emits JSX before the framework transform runs. React MDX parsing is
-configured automatically. Solid must use
-`solid({ extensions: [".mdx"] })`. React MDX requires Vite 8 or `rolldown-vite`
-because the generated JSX module type needs Rolldown; plain Rollup-based Vite 7
-and older projects can set `mdx: false` while keeping macros and catalog loading.
-See [MDX
-messages](../mdx.md) for authoring and configuration.
+configured automatically. Solid must use `solid({ extensions: [".mdx"] })`.
+See [MDX messages](../mdx.md) for authoring and configuration.
 
 ## Vue single-file components
 
@@ -225,9 +221,8 @@ SSR, loaders and actions. Applications do not construct catalog import maps.
 
 The adapter keeps its server entrypoints and runtime packages in Vite's SSR
 module graph automatically, including when installed from npm rather than
-linked from a workspace. On Vite 6 and newer this applies to every server
-environment, such as the `rsc` environment used by Waku and React Router RSC,
-not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
+linked from a workspace. This applies to every server
+environment, such as the `rsc` environment used by Waku, not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
 shares Waku's request store. Existing `noExternal` entries and `true` are
 preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 `resolve.noExternal` configuration.
@@ -236,7 +231,7 @@ preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 clientDirectory, development?, manifestName? })`. Server code calls
 `getLocaleBinding(locale)` on it and pipes HTML through
 `createDocumentTransform(binding, { nonce?, errorHtml? })`. The Solid, TanStack,
-Waku, and React Router RSC adapters do this internally. React Router Framework
+and Waku adapters do this internally. React Router Framework
 Mode has no adapter package, so the application makes these calls in
 `app/entry.server.tsx`; see the
 [React Router Framework Mode guide](./react-router.md). `errorHtml` is trusted,

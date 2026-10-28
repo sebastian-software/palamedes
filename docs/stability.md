@@ -66,12 +66,11 @@ release.
 | ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `@palamedes/core` runtime API                         | Stable   | `createI18n`, compiled message lookup, locale activation, and missing-message errors are app-facing.                                                                                                                                                                           |
 | `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                                                                                                                                                                   |
-| `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                                                                                                                                                                 |
-| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                                                                                                                                                                         |
-| `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.                                                                                                                                                         |
+| `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs. `@palamedes/solid` requires `solid-js@^2.0.0-rc.16`; the examples verify Solid `2.0.0-rc.16`.                                                                                                                   |
+| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8.                                                                                                                                                                        |
+| `@palamedes/waku`                                     | Stable   | ESM-only Waku handler interceptor, catalog delivery middleware, and request resolver contract for `waku@^1.0.0-rc.4`; the examples verify Waku `1.0.0-rc.4`.                                                                                                                   |
 | `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                                                                                                          |
-| `@palamedes/remix`                                    | Preview  | Full-stack Remix v3 adapter; stable Remix `3.0.0` with Node `>=24.3.0`; all four strategies have public HTTPS browser proofs; the adapter contract remains Preview for that exact upstream version.                                                                            |
-| `@palamedes/react-router-rsc`                         | Preview  | Opt-in React Router RSC Framework Mode request scope; the upstream RSC contract remains experimental.                                                                                                                                                                          |
+| `@palamedes/remix`                                    | Stable   | Full-stack Remix v3 adapter for `remix@^3.0.0`; the examples verify Remix `3.0.0` with Node `>=24.3.0`, and all four strategies have public HTTPS browser proofs.                                                                                                              |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                                                                                           |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                                                                                                                                                                   |
 | `@palamedes/extractor` and `@palamedes/transform`     | Preview  | Published advanced-tooling APIs; their integration boundaries may evolve before promotion.                                                                                                                                                                                     |
@@ -149,24 +148,23 @@ Other Nitro presets, CDN or subpath deployment, prerendering, streaming, islands
 catalog HMR, and the four-strategy example matrix are not verified. It does not
 establish support for arbitrary Vue SSR hosts.
 
-### Waku Preview contract
+### Waku contract
 
-The examples verify Waku `1.0.0-rc.3` with React, React DOM, and
+The examples verify Waku `1.0.0-rc.4` with React, React DOM, and
 `react-server-dom-webpack` `19.3.1` on Node.js 22.22 or newer. Upstream
-Waku is a release candidate, not a beta or stable 1.0 release. Its fixed public
-APIs do not cover the explicitly unstable request and nonce APIs used here.
+Waku is a release candidate, not a stable 1.0 release.
 
-`@palamedes/waku` remains **Preview**: its interceptor reads
+`@palamedes/waku` is **Stable** for `waku@^1.0.0-rc.4`. Its interceptor reads
 `unstable_getRequest`, and host CSP setup uses `unstable_setNonce` in Waku's
-render scope. The catalog middleware uses the public Hono middleware contract;
-it cannot replace request access inside that render scope. Reconsider the
-adapter's SemVer tier when Waku provides stable equivalents and request
-isolation, server actions, streams, catalog recovery, and CSP have been
-reverified. Waku reaching stable 1.0 alone does not promote the adapter.
+render scope. The catalog middleware is a handler for Waku's `middlewareFns`
+option with a structural context type, so the adapter has no Hono dependency
+of its own; it cannot replace request access inside that render scope. Because
+those Waku APIs are unstable-prefixed, a new tested Waku version must pass the
+request isolation, server action, stream, catalog recovery, and CSP proofs
+before the peer range moves.
 
 This adapter tier is separate from the repository's unreleased Palamedes v2
-publication preview. The release hold applies to all v2 packages; after v2
-publication, Waku remains Preview until that boundary is resolved.
+publication preview. The release hold applies to all v2 packages.
 
 ### Representative TanStack and Solid verification
 
@@ -192,6 +190,8 @@ Palamedes treats these as stable adoption surfaces:
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
 - TanStack Start server-function middleware documented in `@palamedes/tanstack`
+- Waku interceptor and catalog delivery middleware documented in `@palamedes/waku`
+- Remix v3 adapter APIs documented in `@palamedes/remix`
 - runtime access through `getI18n()`
 - `createI18n(options?)` and descriptor-based lookup behavior
 - React and Solid runtime components and macro package names

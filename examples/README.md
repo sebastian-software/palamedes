@@ -12,11 +12,10 @@ The matrix is a verification surface, not an assumption that one application
 uses all six frameworks. Each example is independently useful as a reference
 for its own host and locale strategy.
 
-`examples/` holds 27 apps: the 25 of the verification matrix defined in
+`examples/` holds 26 apps: the 25 of the verification matrix defined in
 [`scripts/example-matrix.mjs`](../scripts/example-matrix.mjs) — 24 server
 framework/locale-strategy combinations plus the Vite MDX proof — and the
-focused React Router RSC and Node backend fixtures described below, which are
-verified on their own.
+focused Node backend fixture described below, which is verified on its own.
 Every count on this page is derived from that file and enforced by
 `pnpm check:example-matrix`.
 
@@ -64,23 +63,12 @@ pnpm verify:examples -- --id vite-mdx
 That is the real point of the matrix. It is not a pile of demos. It is the
 evidence behind the claim that Palamedes stays coherent across frameworks.
 
-## Focused React Router RSC Proof
-
-[examples/react-router-rsc-cookie](./react-router-rsc-cookie) is intentionally
-outside the 25-app locale-strategy matrix. It is the production-built fixture
-for the experimental React Router RSC adapter: a Client Component invokes a
-real `"use server"` Server Function, then proves request-scoped localization,
-concurrent English/German isolation, and post-action revalidation.
-
-```bash
-pnpm verify:react-router-rsc
-```
-
 ## Focused Node Backend Proof
 
-[examples/node-backend](./node-backend) is a plain Node backend without a UI
-framework: an async booking service with `t` and `plural` macros, a localized
-CLI, and the same endpoint in Express and Hono. `vite build` with
+[examples/node-backend](./node-backend) is intentionally outside the 25-app
+locale-strategy matrix. It is a plain Node backend without a UI framework: an
+async booking service with `t` and `plural` macros, a localized CLI, and the
+same endpoint in Express and Hono. `vite build` with
 `@palamedes/vite-plugin` compiles the macros and bundles the catalogs,
 frameworks, and runtime into `dist/`. The tests copy `dist/` to an empty
 directory and run it with plain `node`. The same application code also runs
@@ -334,4 +322,3 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 - `4062` `remix-subdomain`
 - `4063` `remix-tld`
 - `4070` `vite-mdx`
-- `4071` `react-router-rsc` verifier

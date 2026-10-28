@@ -16,8 +16,8 @@ The four app examples use Solid 2 with the Solid Vite plugin's **Start Mode**
 and Nitro v3. Their tested versions are `solid-js` and `@solidjs/web`
 `2.0.0-rc.16`, `@solidjs/vite-plugin@3.0.0-next.50`,
 `@solidjs/router@2.0.0-next.41`, and `filesystem-routing@0.4.0`.
-This verifies Start Mode; the separate Solid Start host still needs its own
-integration verification.
+The package requires `solid-js@^2.0.0-rc.16`. This verifies Start Mode; the
+separate Solid Start host still needs its own integration verification.
 
 Start Mode middleware receives `(event, next)`. The generic catalog helper
 continues to accept a `Request`, so bridge it explicitly:

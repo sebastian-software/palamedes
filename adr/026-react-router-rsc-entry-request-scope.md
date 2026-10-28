@@ -1,73 +1,68 @@
-# ADR-026: React Router RSC Entry Request Scope
+# ADR-026: No React Router RSC Adapter
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-28
 
-React Router RSC initializes request-local i18n around the complete framework entry before Server Function dispatch.
+Palamedes does not ship an adapter for React Router's RSC mode. React Server
+Components are covered through Next.js and Waku; React Router support covers
+Framework Mode.
 
 ## Decision
 
-Publish the opt-in `@palamedes/react-router-rsc` package. Applications create
-one request scope in `app/entry.rsc.tsx` and wrap React Router's default RSC
-entry `fetch()` method. The resolver receives the original request and returns
-a fresh, activated i18n instance. The package runs the complete default entry
-inside `@palamedes/runtime/server`'s `AsyncLocalStorage` scope.
-
-Support the tested RSC Framework Mode contract and the peer ranges declared in
-the [package manifest](../packages/react-router-rsc/package.json). The pinned
-fixture owns exact verification versions. Keep the adapter Preview while the
-upstream RSC contract is experimental. Do not instrument `"use server"` bodies
-or claim RSC Data Mode support.
+Discontinue `@palamedes/react-router-rsc` with 2.0. The 1.x package stays on
+npm but gets no further releases, and no v2 package provides a React Router RSC
+entry point. React Router applications use Framework Mode without RSC, as
+described in the [React Router Framework Mode guide](../docs/api/react-router.md).
+Applications that need React Server Components use the Next.js or Waku
+adapters. The [v2 migration guide](../docs/migration-v2.md#react-router-rsc)
+describes both paths.
 
 ## Context
 
-React Router RSC Server Functions execute in an RSC request that is separate
-from ordinary Framework Mode route actions. Palamedes needs one request-local
-i18n initialization point that is active before a Server Function's arguments
-and default parameters are evaluated and survives its async rendering and
-revalidation work.
-
-React Router's generated RSC Framework Mode `entry.rsc.tsx` accepts the
-original Fetch `Request` and invokes `unstable_matchRSCServerRequest` from its
-default `fetch()` method. Its supported custom-entry convention permits
-wrapping that default method. The RSC API is experimental and explicitly may
+The 1.x adapter wrapped the `fetch()` method of React Router's custom
+`entry.rsc.tsx` in a request-local `AsyncLocalStorage` scope, so Server
+Functions saw the active locale before their arguments were evaluated. That
+entry depends on `unstable_reactRouterRSC`, `unstable_matchRSCServerRequest`,
+and the 0.x `@vitejs/plugin-rsc`. React Router states that its RSC APIs may
 break in patch or minor releases.
+
+Keeping the adapter meant pinning one exact upstream combination and rerunning
+a dedicated production verifier for every React Router release, without any
+path to a Stable contract. Next.js and Waku already exercise the same
+request-scope model for React Server Components, and Framework Mode is where
+React Router users need a supported adapter.
 
 ## Alternatives Considered
 
+### Keep the adapter as Preview
+
+Rejected. Preview still promises a maintained, verified integration. On an
+upstream contract that may break in any release, that promise would cost a
+version-pinned fixture and CI proof per upstream update and would compete with
+the Framework Mode adapter for maintenance.
+
 ### Directive-aware Server Function transform
 
-Rejected. It initializes at function-body entry, after parameter/default
-evaluation. The runtime entry is earlier and covers the complete RSC and SSR
-request without rewriting user source. Reusing the Next.js transform would
-also require its eager-default safety diagnostic for no benefit on this path.
-
-### Per-function initialization
-
-Rejected. It duplicates locale and catalog policy throughout application code,
-misses helpers before the initializer, and cannot cover default parameters.
+Rejected. It would initialize i18n at function-body entry, after parameter and
+default evaluation, and would still depend on the same unstable RSC request
+dispatch.
 
 ## Consequences
 
-- Direct macros and synchronous, asynchronous, and cross-module helpers read
-  the active locale during Server Function dispatch, rendering, and streaming.
-- Concurrent RSC and SSR graphs use isolated async contexts.
-- Resolver/catalog failures are clear server failures and prevent dispatch.
-- RSC request initialization can use a complete active-locale server catalog.
-  Browser fragment delivery does not establish module-level splitting for
-  RSC Server Function requests.
-- Node-compatible `AsyncLocalStorage` is required; Edge/Worker runtimes remain
-  unsupported without application-specific verification. `scope.run()`
-  restores its caller after the entry settles, while async resources created
-  inside the request inherit its locale if they execute later. Separately
-  initiated work without an inherited context has no active locale and needs
-  explicit data or an appropriate new scope.
+- The package, its production fixture, its verifier, and its CI step are
+  removed from the repository and the v2 release set.
+- 1.x users migrate to Framework Mode, or to Next.js or Waku for React Server
+  Components. After 2.0 the npm package is deprecated with a pointer to the
+  migration guide.
+- The runtime request-scope model is unchanged. An RSC host still needs one
+  request scope around its complete entry before Server Function dispatch, as
+  the Next.js and Waku adapters provide.
 
 ## Validation And Review Triggers
 
-The production fixture builds and browser-verifies a real client-to-server
-`"use server"` call, default parameter, helpers, concurrent locale isolation,
-and post-action revalidation. Revisit this decision when React Router changes
-custom RSC entry semantics, `unstable_matchRSCServerRequest`, the RSC request
-dispatch order, or Vite exposes an RSC server fragment manifest.
+Revisit this decision when React Router ships its RSC entry and request-matching
+APIs without the `unstable_` prefix and `@vitejs/plugin-rsc` reaches a stable
+release. A new adapter needs its own production fixture covering a real
+client-to-server Server Function call, default parameters, concurrent locale
+isolation, and post-action revalidation.

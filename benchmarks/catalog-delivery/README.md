@@ -9,9 +9,10 @@ production performance claim.
 
 The regular browser matrix covers 22 host entries. It checks the healthy
 initial document, active-locale selection, hydration, interaction, and locale
-navigation paths. The separate React Router RSC proof covers its server and
-browser graphs and request-scope behavior. The smoke gate covers all 25
-repository examples.
+navigation paths. The 2026-09-11 record also includes a separate React Router
+RSC proof of its server and browser graphs and request-scope behavior; v2
+discontinues that adapter, so its fixture and verifier are no longer part of
+the reproduction. The smoke gate covers all 25 repository examples.
 
 Fault proofs are representative by framework: cookie examples exercise
 initial and lazy catalog dependency failures, including ordinary host error UI
@@ -33,7 +34,6 @@ Run these commands from the repository root after a frozen dependency install:
 pnpm agent:check
 pnpm verify:examples:smoke
 pnpm verify:examples:browser
-pnpm verify:react-router-rsc
 pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope
 pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope:webpack
 pnpm --filter @palamedes/example-nextjs-cookie test:message-splitting:development
