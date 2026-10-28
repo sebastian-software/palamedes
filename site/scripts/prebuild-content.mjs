@@ -57,7 +57,7 @@ const DOC_GROUPS = [
     title: "Integrate and operate",
     description: "Connect a host, choose locale behavior, and keep day-to-day work predictable.",
     match:
-      /\/(locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+      /\/(locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
   },
   {
     title: "Evaluate and migrate",
@@ -82,7 +82,7 @@ const DOC_INDEX_GROUPS = [
     title: "Guides",
     description: "Start a translation workflow, connect a host, and operate it day to day.",
     match:
-      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
   },
   {
     title: "References",
@@ -98,6 +98,15 @@ const DOC_INDEX_GROUPS = [
       /\/(migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
   },
 ];
+
+/*
+ * Maintainer-only pages stay in the repository but are not published on the
+ * site. ferralk-adoption.md and shared-demo-rollout.md are deliberately absent:
+ * published pages link to them (configuration, demo-deployments, migration-v2,
+ * release-notes-v2), and unpublishing them would send those links to GitHub.
+ * Move a page onto this list only after its inbound links are gone.
+ */
+const MAINTAINER_ONLY_DOCS = ["docs/readme-theme.md", "docs/operations/"];
 
 buildTypedocPackages();
 
@@ -323,8 +332,14 @@ async function collectDocs() {
   await collectNestedDocs(entries, "docs/migrations", "/docs/migrations", 400);
   await collectNestedDocs(entries, "docs/operations", "/docs/operations", 450);
 
-  return entries.sort(
-    (left, right) => left.order - right.order || left.source.localeCompare(right.source),
+  return entries
+    .filter((entry) => !isMaintainerOnlyDoc(entry.source))
+    .sort((left, right) => left.order - right.order || left.source.localeCompare(right.source));
+}
+
+function isMaintainerOnlyDoc(source) {
+  return MAINTAINER_ONLY_DOCS.some((excluded) =>
+    excluded.endsWith("/") ? source.startsWith(excluded) : source === excluded,
   );
 }
 
@@ -403,7 +418,7 @@ async function writeDocsIndex(docs) {
   const lines = [
     "---",
     'title: "Documentation"',
-    'description: "Guides, references, operations notes, and migration material for Palamedes."',
+    'description: "Guides, references, and migration material for Palamedes."',
     "order: 0",
     "---",
     "",
