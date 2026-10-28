@@ -1,4 +1,4 @@
-import { createI18n, defineCompiledCatalog, type PalamedesI18n } from "@palamedes/core";
+import { createI18n, defineCompiledCatalog } from "@palamedes/core";
 import { getI18n, registerMessageLoaderGroup, resetI18nRuntime } from "@palamedes/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +26,7 @@ describe("Remix client catalog installation", () => {
         }),
       });
       const entry = vi.fn(() => {
-        expect(getI18n<PalamedesI18n>().timeZone).toBe(timeZone);
+        expect(getI18n().timeZone).toBe(timeZone);
         return Promise.resolve();
       });
       await startRemixClient(entry);

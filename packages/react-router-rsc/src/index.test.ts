@@ -7,10 +7,17 @@ import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime
 
 import { createReactRouterRscI18nRequestScope } from "./index";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}
+
 function createTestI18n(locale: string): I18nInstance {
   return {
     locale,
     _: (message: string) => `${locale}:${message}`,
+    load() {},
+    activate() {},
+    renderMessage: unusedRenderMessage,
   };
 }
 
@@ -81,7 +88,7 @@ describe("createReactRouterRscI18nRequestScope", () => {
                 return;
               }
               sent = true;
-              controller.enqueue(encoder.encode(String(getI18n()._("streamed"))));
+              controller.enqueue(encoder.encode(getI18n()._("streamed")));
             },
           }),
         ),

@@ -11,10 +11,15 @@ import type {
 } from "@palamedes/core/compiled";
 import { createElement, type Handle, type RemixElement, type RemixNode } from "remix/component";
 
+/**
+ * Props of the compiled runtime `Trans` component. The Palamedes transform
+ * emits these from authored `Trans` macros; application code imports `Trans`
+ * from the `/macro` entry instead.
+ */
 export type TransProps = {
-  // `id` is optional in authored source: the compiler injects it after
-  // resolving the source message and optional context.
-  id?: string;
+  /** Compiled lookup key injected by the transform. */
+  id: string;
+  /** Authored source message, kept only as diagnostic metadata. */
   message?: string;
   context?: string;
   comment?: string;
@@ -43,14 +48,13 @@ export function createTrans(useI18n: () => RendererI18n) {
     return (): RemixNode => {
       const { id, message, values, components, context, comment } = handle.props;
       const i18n = useI18n();
-      const resolvedId = id ?? message ?? "";
       const metadata: MessageMetadata = {
         message,
         context,
         comment,
       };
       const runtime = runtimeCache.get(i18n, components ?? EMPTY_COMPONENTS);
-      return renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, runtime, metadata);
+      return renderI18nMessage(i18n, id, values ?? EMPTY_VALUES, runtime, metadata);
     };
   };
 }

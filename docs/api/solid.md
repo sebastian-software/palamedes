@@ -89,6 +89,10 @@ import { Trans } from "@palamedes/solid";
 <Trans id="title" message="Welcome to Palamedes" />;
 ```
 
+The runtime `Trans` requires `id`, the compiled lookup key that the transform
+injects. `message` is optional diagnostic metadata and is never used as a
+lookup key.
+
 For source authoring, prefer macro imports from `@palamedes/solid/macro`.
 
 ## Choice macros

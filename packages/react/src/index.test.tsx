@@ -3,7 +3,12 @@ import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createI18n, defineCompiledCatalog, type CompiledMessage } from "@palamedes/core";
+import {
+  createI18n,
+  defineCompiledCatalog,
+  MissingCompiledMessageError,
+  type CompiledMessage,
+} from "@palamedes/core";
 import {
   createI18n as createCompiledI18n,
   defineCompiledCatalog as defineParserFreeCatalog,
@@ -14,7 +19,7 @@ import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime";
 import { Trans, buildLocaleSwitchItems } from "./index";
 import { Trans as CompiledTrans } from "./compiled";
 import { compileTestMessages } from "../../../scripts/test-support/compiled-messages.mjs";
-import { createReactMessageRuntimeCache, createTrans } from "./transShared";
+import { createReactMessageRuntimeCache, createTrans, type TransProps } from "./transShared";
 
 describe("@palamedes/react", () => {
   afterEach(() => {
@@ -115,6 +120,32 @@ describe("@palamedes/react", () => {
     expect(innerRuntime.tag("0", innerRuntime.join("released"))).toEqual(["released"]);
   });
 
+  it("looks messages up by id and never by the diagnostic message", () => {
+    const i18n = createI18n();
+    i18n.load(
+      "en",
+      defineCompiledCatalog({ "compiled-key": "Compiled", "Source text": "Source lookup" }),
+    );
+    setClientI18n(i18n);
+
+    expect(renderToStaticMarkup(<Trans id="compiled-key" message="Source text" />)).toBe(
+      "Compiled",
+    );
+    // Untyped callers cannot fall back to the source message as a lookup key.
+    const withoutId = { message: "Source text" } as unknown as TransProps;
+    expect(() => renderToStaticMarkup(<Trans {...withoutId} />)).toThrow(
+      MissingCompiledMessageError,
+    );
+  });
+
+  it("requires the compiled id in runtime Trans props", () => {
+    // @ts-expect-error The transform injects `id`; `message` is diagnostic metadata only.
+    const props: TransProps = { message: "Hello" };
+    // @ts-expect-error The compiled runtime Trans cannot be authored without `id`.
+    const element = <Trans message="Hello" />;
+    expect([props, isValidElement(element)]).toEqual([{ message: "Hello" }, true]);
+  });
+
   it("releases a leased renderer when a custom renderMessage throws", () => {
     const i18n = createI18n();
     i18n.load("en", defineCompiledCatalog({ Hello: "Hello" }));
@@ -122,10 +153,10 @@ describe("@palamedes/react", () => {
       throw new Error("custom renderer failed");
     });
     const CachedTrans = createTrans(() => i18n);
-    expect(() => CachedTrans({ message: "Hello", components: { 0: <strong /> } })).toThrow(
+    expect(() => CachedTrans({ id: "Hello", components: { 0: <strong /> } })).toThrow(
       "custom renderer failed",
     );
-    CachedTrans({ message: "Hello" });
+    CachedTrans({ id: "Hello" });
     const runtime = renderMessage.mock.calls[0]![2];
     expect(renderMessage.mock.calls[1]![2]).toBe(runtime);
     expect(runtime.tag("0", runtime.join("released"))).toEqual(["released"]);

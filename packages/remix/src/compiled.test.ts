@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createI18n,
   defineCompiledCatalog,
+  MissingCompiledMessageError,
   type CompiledMessage,
   type CompiledMessageBranch,
 } from "@palamedes/core/compiled";
@@ -126,6 +127,30 @@ describe("@palamedes/remix compiled rich-message runtime", () => {
     await expect(
       renderToString(createElement(Trans, { id: "malformed", message: "Source" })),
     ).rejects.toThrow("Invalid compiled message");
+  });
+
+  it("looks messages up by id and never by the diagnostic message", async () => {
+    const i18n = createI18n({ locale: "de" });
+    i18n.load(
+      "de",
+      defineCompiledCatalog({ "compiled-key": "Kompiliert", "Source text": "Source lookup" }),
+    );
+    setClientI18n(i18n);
+
+    await expect(
+      renderToString(createElement(Trans, { id: "compiled-key", message: "Source text" })),
+    ).resolves.toBe("Kompiliert");
+    // Untyped callers cannot fall back to the source message as a lookup key.
+    const withoutId = { message: "Source text" } as unknown as TransProps;
+    await expect(renderToString(createElement(Trans, withoutId))).rejects.toThrow(
+      MissingCompiledMessageError,
+    );
+  });
+
+  it("requires the compiled id in runtime Trans props", () => {
+    // @ts-expect-error The transform injects `id`; `message` is diagnostic metadata only.
+    const props: TransProps = { message: "Hello" };
+    expect(props).toEqual({ message: "Hello" });
   });
 
   it("exposes Remix-native macro component types", () => {

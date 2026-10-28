@@ -5,10 +5,17 @@ import { createServerI18nScope } from "@palamedes/runtime/server";
 
 import { createScopedTanStackI18nRunner } from "./scope";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}
+
 function createTestI18n(locale: string): I18nInstance {
   return {
     locale,
     _: (message: string) => `${locale}:${message}`,
+    load() {},
+    activate() {},
+    renderMessage: unusedRenderMessage,
   };
 }
 
