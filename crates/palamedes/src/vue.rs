@@ -209,9 +209,14 @@ fn check_template(
                 if name.starts_with("v-") || name.starts_with(':') || name.starts_with('@') {
                     let expression = if *name == "v-for" {
                         split_for(value).map_or(*value, |(_, expression)| expression)
+                    } else if value.is_empty() && name.starts_with(':') && !name.contains('[') {
+                        name[1..].split('.').next().unwrap_or_default()
                     } else {
                         *value
                     };
+                    if expression.is_empty() {
+                        continue;
+                    }
                     let start = expression.as_ptr() as usize - source.as_ptr() as usize;
                     // A v-for's collection is evaluated outside its own bindings.
                     let active_scopes = if *name == "v-for" {
@@ -649,6 +654,7 @@ mod markup_tests {
             "<button @click=\"return text\">x</button>",
             "{{ '}}' + text }}",
             "<p :[text]=\"title\">x</p>",
+            "<input :text>",
             "<input :title=\"text`Hi`\" />",
             "<button @click=\"consume(text)\">x</button>",
             "<p v-if=\"text\">x</p>",
@@ -681,6 +687,7 @@ mod markup_tests {
             "<template #default=\"{ t }\">{{ t.name }}</template>",
             "<p class=\"t\" title=\"t`Not code`\">t`Text`</p><!-- {{ t }} -->",
             "<div v-pre><p>{{t}}</p><p :title=\"t\">t</p></div>",
+            "<p v-if=\"ok\">{{title}}</p><p v-else v-once>{{title}}</p><input :title>",
             "<button @click=\"function handler(t) { return t; }\">x</button>",
         ] {
             let source =

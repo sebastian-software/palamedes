@@ -32,7 +32,8 @@ export function normalizeApiPage(doc, label) {
     })
     .join("\n");
   const firstParagraph = content.trimStart().split(/\n\s*\n/u, 1)[0];
-  const normalize = (text) => text?.replaceAll(/\s+/gu, " ").replace(/\.$/u, "").trim();
+  const normalize = (text) =>
+    text?.replaceAll("`", "").replaceAll(/\s+/gu, " ").replace(/\.$/u, "").trim();
   if (summary && normalize(firstParagraph) === normalize(summary)) {
     content = content.trimStart().slice(firstParagraph.length).trimStart();
   }
@@ -74,11 +75,24 @@ export function repairApiLinks(content, docs, out) {
       .replace(/\/$/u, "")}`.replace(/\/$/u, ""),
   );
   const known = new Set(routes);
+  const symbols = docs.flatMap((doc, index) =>
+    [...doc.content.replace(/```[\s\S]*?```/gu, "").matchAll(/^#{2,6} (.+)$/gmu)].map(
+      ([, heading]) => {
+        const slug = heading
+          .toLowerCase()
+          .replaceAll(/[^\p{L}\p{N}_ -]/gu, "")
+          .replaceAll(" ", "-");
+        return { slug, route: `${routes[index]}#${slug}` };
+      },
+    ),
+  );
   return content.replace(/\]\((\/[^\s)#]+)(#[^\s)]+)?\)/gu, (match, route, anchor = "") => {
     if (!route.startsWith(`/${out}/`) || known.has(route)) return match;
     const name = route.split("/").at(-1);
     const matches = routes.filter((candidate) => candidate.split("/").at(-1) === name);
-    return matches.length === 1 ? `](${matches[0]}${anchor})` : match;
+    if (matches.length === 1) return `](${matches[0]}${anchor})`;
+    const definitions = symbols.filter(({ slug }) => slug === name);
+    return definitions.length === 1 ? `](${definitions[0].route})` : match;
   });
 }
 

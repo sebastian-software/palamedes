@@ -110,9 +110,9 @@ test("source links resolve shared files and never reuse declaration line numbers
 
 test("component navigation follows emitted paths rather than TypeDoc's generic kind", () => {
   const docs = [
-    { path: "index.md" },
-    { path: "components/plural.md" },
-    { path: "components/trans.md" },
+    { path: "index.md", content: "" },
+    { path: "components/plural.md", content: "" },
+    { path: "components/trans.md", content: "" },
   ];
   assert.equal(
     repairApiLinks(
@@ -136,4 +136,16 @@ test("the page header owns the summary instead of repeating it in the body", () 
   assert.doesNotMatch(doc.content, /Create compiled translations/u);
   assert.match(doc.frontmatter.description, /Create compiled translations/u);
   assert.match(doc.content, /## Functions/u);
+});
+
+test("props links reach the symbol on its grouped type page", () => {
+  const docs = [{ path: "types/transshared.md", content: "# Types\n\n## TransProps\nDetails" }];
+  assert.equal(
+    repairApiLinks(
+      "[Props](/api-reference/solid/interfaces/transprops)",
+      docs,
+      "api-reference/solid",
+    ),
+    "[Props](/api-reference/solid/types/transshared#transprops)",
+  );
 });
