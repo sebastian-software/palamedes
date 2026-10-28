@@ -19,7 +19,7 @@ leftmost subdomain label can select the locale without editing DNS.
 
 ## Palamedes Files
 
-- `palamedes.yaml` declares `en`, `de`, and `es` catalogs.
+- `palamedes.yaml` declares `en`, `de`, `es`, and `fr` catalogs.
 - `app/po.d.ts` declares `.po` imports for TypeScript.
 - `app/lib/i18n.ts` wires the runtime and subdomain locale controls.
 
