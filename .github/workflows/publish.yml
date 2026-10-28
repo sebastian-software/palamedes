@@ -124,6 +124,9 @@ jobs:
       - name: Check release package set
         run: pnpm check:release-set
 
+      - name: Check release wording
+        run: pnpm check:release-wording
+
       - name: Build packages
         run: pnpm build
 
