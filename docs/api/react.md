@@ -39,17 +39,20 @@ Runtime components read the plain active runtime getter. They do not install
 external-store subscriptions or update independently after an i18n-instance
 replacement; changing locale requires a document navigation.
 
+Author rich text with the macro from `@palamedes/react/macro`:
+
 ```tsx
-import { Trans } from "@palamedes/react";
-<Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />;
+import { Trans } from "@palamedes/react/macro";
+
+<Trans>
+  Powered by <strong>Palamedes</strong>
+</Trans>;
 ```
 
-The runtime `Trans` requires `id`, the compiled lookup key that the transform
-injects. `message` is optional diagnostic metadata and is never used as a
-lookup key.
-
-For authoring source strings, prefer macro imports from
-`@palamedes/react/macro` so the build can extract and transform messages.
+The transform replaces the macro with the runtime `Trans` from
+`@palamedes/react` and injects `id`, the compiled lookup key the runtime
+component requires. Do not write runtime `Trans` elements by hand: `message` is
+optional diagnostic metadata and is never used as a lookup key.
 
 ## Choice macros
 

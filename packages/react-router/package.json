@@ -29,6 +29,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
+    },
+    "./document": {
+      "types": "./dist/document.d.ts",
+      "import": "./dist/document.mjs"
     }
   },
   "publishConfig": {

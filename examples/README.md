@@ -111,7 +111,7 @@ These examples prove:
 - first-visit locale detection from `Accept-Language`
 - cookie persistence after an explicit locale switch
 - SSR with a request-local Palamedes i18n instance
-- `.po` imports in real app builds
+- checked-in PO catalogs delivered by the adapter in real app builds
 - localized server-side actions or server functions
 
 ### Route-Derived Locale
@@ -168,12 +168,15 @@ These examples prove:
 
 ## Shared Runtime Model
 
-The five established UI-adapter families use the same public Palamedes stack:
+The five established UI-adapter families (Next.js, TanStack Start, Solid,
+Waku, and React Router) use the same public Palamedes stack:
 
 - `@palamedes/core`
 - `@palamedes/react` or `@palamedes/solid`
 - `@palamedes/runtime`
 - `@palamedes/vite-plugin` or `@palamedes/next-plugin`
+- the host adapter where the framework needs one: `@palamedes/tanstack`,
+  `@palamedes/waku`, or `@palamedes/react-router`
 
 Remix v3 uses its own UI and asset runtime rather than the React-based shared
 `@palamedes/example-ui` package, so its examples intentionally do not visually
@@ -217,23 +220,18 @@ and the suggestion decision are shared library code rather than a per-demo copy.
 
 ## Catalog Loading And Bundle Size
 
-Examples should load only the active locale catalog on client-reachable paths.
-Use dynamic imports such as `await import(\`../locales/${locale}.po\`)` when
-the browser only needs one locale at a time. That gives bundlers a chance to
-split catalogs into per-locale chunks.
+No example imports a catalog file or keeps a locale-to-loader map. The adapter
+derives each module's compiled messages from `palamedes.yaml` and the browser
+loads only the active locale's fragments, so copied app code needs no catalog
+imports either.
 
-For Next.js with PO catalogs, use the automatic graph-split path demonstrated
-by `nextjs-cookie`: Palamedes delivers only the active locale's fragments for
-the evaluated client module graph without any option.
+For Next.js with PO catalogs, the automatic graph-split path demonstrated by
+`nextjs-cookie` delivers only the active locale's fragments for the evaluated
+client module graph without any option.
 
 The other Next.js examples use the same automatic delivery. Their locale
 links deliberately use full document navigation, so they need neither live
 hooks nor static imports of every catalog.
-
-Static imports are still useful for tiny demos or server-only modules, but they
-make every imported locale reachable from that module. In copied app code with
-large catalogs, prefer the dynamic import pattern unless all locales are
-intentionally needed at once.
 
 ## Verification
 

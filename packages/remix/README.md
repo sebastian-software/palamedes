@@ -101,7 +101,7 @@ This integration is tested against `remix@3.0.0`:
 | HMR and source maps | Authored TS/TSX mappings plus Remix watch/HMR invalidation for browser source modules     |
 | Remix Frames        | Server-rendered document and direct frame requests retain independent request scope       |
 | Locale switching    | Cookie, route, subdomain, and TLD through intentional full-document navigation            |
-| Public hosting      | Repository example and CI browser proof are ready; a public live deployment is pending    |
+| Public hosting      | Live cookie, route, subdomain, and TLD demos, verified in Chromium over HTTPS             |
 
 Reactive in-document locale replacement is intentionally not supported. A
 locale change must create a new document so SSR markup, `<html lang>`, the
@@ -123,7 +123,9 @@ import {
   PALAMEDES_REMIX_ASSET_PACKAGES,
 } from "@palamedes/remix";
 
-const catalogAssets = createPalamedesRemixCatalogAssetRegistry({ cwd: import.meta.dirname });
+const catalogAssets = createPalamedesRemixCatalogAssetRegistry({
+  projectRoot: import.meta.dirname,
+});
 const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/**/public/**"],
@@ -156,7 +158,9 @@ application `loadMessages` function and let `run()` await the executable
 catalog for the resolved active locale:
 
 ```ts
-const catalogAssets = createPalamedesRemixCatalogAssetRegistry({ cwd: import.meta.dirname });
+const catalogAssets = createPalamedesRemixCatalogAssetRegistry({
+  projectRoot: import.meta.dirname,
+});
 const remixI18n = createRemixI18nServer({
   locales,
   strategy: "cookie",
@@ -349,12 +353,9 @@ pnpm verify:examples:browser -- --framework remix
 A `remix@next` run is a non-blocking canary and does not expand the supported
 peer range to prereleases.
 
-The repository example is technically ready to become a public demo when the
-published examples image contains it, the pinned smoke/browser checks are
-green, and an HTTPS deployment passes a reachability check plus locale switch,
-hydration, and browser-console verification. Only then should the framework
-matrix replace its source link with a live URL; hosting remains managed
-separately from this package.
+All four strategies run as public demos. Hosting is managed separately from
+this package; the [demo deployments](../../docs/demo-deployments.md#remix) list
+their URLs.
 
 <!-- ferramenta-family:start -->
 
@@ -380,5 +381,6 @@ standalone Frame responses, and initial/lazy catalog failure recovery under CSP.
 Route Frame URLs retain the locale prefix (`/de/frames` and
 `/de/frames/locale-summary`); host strategies retain the locale host.
 
-Public deployment remains pending. See the [deployment guide](../../docs/demo-deployments.md)
-for external-host commands and the image, routing, DNS, TLS, and caching gates.
+`node scripts/verify-hosted-examples.mjs remix-cookie remix-route remix-subdomain remix-tld`
+runs the same Chromium checks against the public deployments. The
+[demo deployments](../../docs/demo-deployments.md#remix) list their URLs.

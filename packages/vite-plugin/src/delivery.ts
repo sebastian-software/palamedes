@@ -32,7 +32,22 @@ export type ViteDocumentTransformOptions = {
   readonly nonce?: string;
   /** Trusted catalog-independent host error markup; omit for a generic reload/home view. */
   readonly errorHtml?: string;
+  /**
+   * The document locale. When set, the transform writes it to `<html lang>`,
+   * which the generated browser bootstrap reads and checks against the
+   * locale-bound catalogs. Hosts pass it when the layout cannot know the
+   * request locale for every document, such as a 404 rendered without route data.
+   */
+  readonly lang?: string;
+  /**
+   * Further attributes to set on `<html>`, such as a marker the host's browser
+   * code reads to render the same markup the server rendered. Names must be
+   * plain attribute names; values are escaped.
+   */
+  readonly htmlAttributes?: Readonly<Record<string, string>>;
 };
+
+const HTML_ATTRIBUTE_NAME = /^[a-z][a-z0-9-]*$/iu;
 
 /**
  * Owns the server half of Vite's locale-bound catalog delivery for SSR hosts
@@ -129,6 +144,11 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
     binding: ViteCatalogBinding | null,
     transformOptions: ViteDocumentTransformOptions = {},
   ): Transform {
+    for (const name of Object.keys(transformOptions.htmlAttributes ?? {})) {
+      if (!HTML_ATTRIBUTE_NAME.test(name)) {
+        throw new TypeError(`Invalid <html> attribute name ${JSON.stringify(name)}.`);
+      }
+    }
     if (!binding && !options.development) return new PassThrough();
     const nonce = transformOptions.nonce
       ? ` nonce="${escapeAttribute(transformOptions.nonce)}"`
@@ -176,10 +196,17 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
         // the locale import map exists. They resolve as `/#pmds/...` and make
         // the browser request HTML as a JavaScript module. Replace them with
         // the locale-bound asset preloads generated above.
-        const sanitizedHead = head.replace(
+        let sanitizedHead = head.replace(
           /<link\b[^>]*\brel=["']modulepreload["'][^>]*\bhref=["'][^"']*#pmds\/[^"]+["'][^>]*>\s*/giu,
           "",
         );
+        const htmlAttributes = {
+          ...transformOptions.htmlAttributes,
+          ...(transformOptions.lang === undefined ? {} : { lang: transformOptions.lang }),
+        };
+        if (Object.keys(htmlAttributes).length > 0) {
+          sanitizedHead = setHtmlAttributes(sanitizedHead, htmlAttributes);
+        }
         callback(
           null,
           `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`,
@@ -254,6 +281,25 @@ function isMissingFile(error: unknown): boolean {
 
 function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
+/** Replace or add attributes of the document's `<html>` start tag. */
+function setHtmlAttributes(head: string, attributes: Readonly<Record<string, string>>): string {
+  return head.replace(/<html(?=[\s/>])[^>]*>/iu, (tag) => {
+    let result = tag;
+    for (const [name, value] of Object.entries(attributes)) {
+      const attribute = ` ${name}="${escapeAttribute(value)}"`;
+      // The leading whitespace keeps `xml:lang` and `data-lang` apart from `lang`.
+      const existing = new RegExp(
+        `\\s${name}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'=<>\`]+))?(?=[\\s/>])`,
+        "iu",
+      );
+      result = existing.test(result)
+        ? result.replace(existing, attribute)
+        : result.replace(/^<html/iu, `<html${attribute}`);
+    }
+    return result;
+  });
 }
 
 function modulePreloads(head: string, binding: ViteCatalogBinding): string[] {

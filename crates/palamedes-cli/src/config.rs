@@ -347,7 +347,7 @@ const REMOVED_MDX_SOURCE_METADATA_KEYS: &[&str] = &[
 
 fn removed_mdx_source_metadata_key_message(key: &str) -> String {
     format!(
-        "Palamedes v2 renamed mdx.{key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false."
+        "Palamedes v2 renamed mdx.{key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the v2 default is false."
     )
 }
 
@@ -972,7 +972,7 @@ catalogs:
 
             assert!(
                 error.to_string().contains(&format!(
-                    "Palamedes v2 renamed mdx.{key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false."
+                    "Palamedes v2 renamed mdx.{key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the v2 default is false."
                 )),
                 "{key}: {error}"
             );

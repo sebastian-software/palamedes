@@ -57,7 +57,7 @@ const page: FrameworkLanding = {
     points: [
       {
         title: "Compose two Vite plugins",
-        body: "The Palamedes transform runs beside the React Router plugin, so macros and PO imports become normal modules in the Framework Mode build.",
+        body: "The Palamedes plugin runs beside the React Router plugin, so macros and the configured PO catalogs compile into normal modules in the Framework Mode build.",
       },
       {
         title: "Activate once, in root middleware",

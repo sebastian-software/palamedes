@@ -259,7 +259,7 @@ describe("withPalamedes turbopack config", () => {
     [
       "keepSourceFallbacks",
       false,
-      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the v2 default is false.",
     ],
     [
       "messageSplitting",

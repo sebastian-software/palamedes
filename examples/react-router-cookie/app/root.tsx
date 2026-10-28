@@ -1,4 +1,5 @@
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
+import { useDocumentLocale } from "@palamedes/react-router/document";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
 import type { Route } from "./+types/root";
 import { DEFAULT_LOCALE } from "~/lib/i18n";
@@ -8,15 +9,8 @@ import "@palamedes/example-ui/styles.css";
 
 export const middleware: Route.MiddlewareFunction[] = [i18n.middleware, serverI18nTestBarrier];
 
-export async function loader({ context }: Route.LoaderArgs) {
-  return {
-    locale: i18n.getLocale(context),
-  };
-}
-
 export function Layout({ children }: { children: React.ReactNode }) {
-  const loaderData = useRouteLoaderData<typeof loader>("root");
-  const locale = loaderData?.locale ?? DEFAULT_LOCALE;
+  const locale = useDocumentLocale() ?? DEFAULT_LOCALE;
 
   return (
     <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
