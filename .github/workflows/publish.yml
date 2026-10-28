@@ -340,7 +340,6 @@ jobs:
           --filter @palamedes/transform
           --filter @palamedes/extractor
           --filter @palamedes/react
-          --filter @palamedes/react-router-rsc
           --filter @palamedes/remix
           --filter @palamedes/waku
           --filter @palamedes/tanstack

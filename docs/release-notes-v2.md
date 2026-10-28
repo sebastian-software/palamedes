@@ -33,9 +33,9 @@ can bring in additional fragments as needed. Bundlers can combine multiple
 fragments into one asset.
 
 This contract covers Next.js, Vite with React or Solid, React Router Framework
-Mode, React Router RSC, Remix, TanStack Start, and Waku. The integrations retain
-their [stability tiers](./stability.md#stability-tiers): Waku, Remix, and React
-Router RSC remain Preview.
+Mode, Remix, TanStack Start, and Waku. The integrations retain their
+[stability tiers](./stability.md#stability-tiers): Waku and Remix remain
+Preview.
 
 React Router Framework Mode has no dedicated adapter package. Its integration is
 the Vite plugin plus server wiring in the application: a request-scoped server
@@ -150,15 +150,16 @@ V2 removes a supported execution model and changes how failures are handled.
 Applications that relied on raw runtime catalogs, parser APIs, or silent
 fallbacks need changes before upgrading.
 
-| Existing v1 integration                                                    | What to change for v2                                                                        |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Load ICU string maps directly into the runtime                             | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.     |
-| Import runtime parser APIs or direct choice components                     | Move message authoring to macros; use build-time tooling for catalog inspection.             |
-| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data | Replace that plumbing with the host adapter's standard setup.                                |
-| Catch translation failures and return source text or an empty catalog      | Let failures reach ordinary, catalog-independent error UI.                                   |
-| Disable Next.js message splitting                                          | Remove `messageSplitting` and use automatic delivery.                                        |
-| Set `failOnCompileError`, `keepSourceFallbacks`, or Next.js `cwd`          | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`. |
-| Reuse generated v1 catalogs or a custom runtime implementation             | Regenerate artifacts and implement the v2 compiled renderer contract.                        |
+| Existing v1 integration                                                    | What to change for v2                                                                            |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Load ICU string maps directly into the runtime                             | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.         |
+| Import runtime parser APIs or direct choice components                     | Move message authoring to macros; use build-time tooling for catalog inspection.                 |
+| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data | Replace that plumbing with the host adapter's standard setup.                                    |
+| Catch translation failures and return source text or an empty catalog      | Let failures reach ordinary, catalog-independent error UI.                                       |
+| Disable Next.js message splitting                                          | Remove `messageSplitting` and use automatic delivery.                                            |
+| Set `failOnCompileError`, `keepSourceFallbacks`, or Next.js `cwd`          | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`.     |
+| Reuse generated v1 catalogs or a custom runtime implementation             | Regenerate artifacts and implement the v2 compiled renderer contract.                            |
+| Use the React Router RSC adapter                                           | Move to React Router Framework Mode, or to Next.js or Waku for RSC; the adapter is discontinued. |
 
 The [v2 migration guide](./migration-v2.md) lists the exact removed APIs and
 replacements. Update coupled Palamedes packages together and verify the
@@ -194,8 +195,7 @@ replacing catalogs in place.
 
 The [catalog delivery evidence](../benchmarks/catalog-delivery/README.md)
 records the coordinated v2 verification: 25 smoke examples, 22 regular browser
-hosts, a separate React Router RSC proof, and Next.js request-scope checks with
-both Turbopack and webpack. Representative failure tests cover initial and
+hosts, and Next.js request-scope checks with both Turbopack and webpack. Representative failure tests cover initial and
 lazy delivery and recovery; the report identifies the locale strategies tested
 for each scenario.
 

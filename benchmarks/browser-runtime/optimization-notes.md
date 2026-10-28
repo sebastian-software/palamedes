@@ -68,7 +68,7 @@ smaller-looking generated source file.
 ## Function deduplication: no current corpus saving
 
 [catalog-functions.json](./catalog-functions.json) retains the current scan:
-120 catalogs, 4,182 messages, 1,737 emitted functions, and zero exact duplicate
+119 catalogs, 4,174 messages, 1,744 emitted functions, and zero exact duplicate
 functions within a catalog module. The scanner now uses each project's native
 artifact compiler so PO escaping and fuzzy/source fallback follow production.
 

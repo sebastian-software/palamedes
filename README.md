@@ -47,7 +47,7 @@ model and [proof](https://palamedes.dev/proof) for reproducible measurements.
 | --- | --- |
 | React and Solid | Translation components, macros, and headless locale helpers; Vite integration, including MDX. |
 | Next.js, TanStack Start, Solid Start, and React Router | Framework integration for server rendering and browser delivery. TanStack Start is verified with React; Solid uses Solid 2 Start Mode with Nitro. |
-| Remix v3, Waku, and React Router RSC | Dedicated adapters with Preview contracts. |
+| Remix v3 and Waku | Dedicated adapters with Preview contracts. |
 | Vue 3 and Svelte 5 | Preview component-script macros and catalog delivery through Vite. Template-text extraction and rich-text components are outside the current scope. |
 | Nuxt and SvelteKit | Separate Preview proofs for Node SSR, hydration, lazy loading, and request isolation. No dedicated npm packages are published. |
 | Node.js backends | Request-local i18n for Hono, Express, and custom servers. |
@@ -82,7 +82,6 @@ README; version and download badges link to npm.
 | [`@palamedes/tanstack`](packages/tanstack/README.md) | TanStack Start middleware for React | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Ftanstack)](https://www.npmjs.com/package/@palamedes/tanstack) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Ftanstack)](https://www.npmjs.com/package/@palamedes/tanstack) |
 | [`@palamedes/remix`](packages/remix/README.md) | Remix v3 adapter (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fremix)](https://www.npmjs.com/package/@palamedes/remix) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fremix)](https://www.npmjs.com/package/@palamedes/remix) |
 | [`@palamedes/waku`](packages/waku/README.md) | Waku interceptor (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fwaku)](https://www.npmjs.com/package/@palamedes/waku) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fwaku)](https://www.npmjs.com/package/@palamedes/waku) |
-| [`@palamedes/react-router-rsc`](packages/react-router-rsc/README.md) | React Router RSC request scope (Preview) | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Freact-router-rsc)](https://www.npmjs.com/package/@palamedes/react-router-rsc) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Freact-router-rsc)](https://www.npmjs.com/package/@palamedes/react-router-rsc) |
 
 ### CLI and Tooling
 

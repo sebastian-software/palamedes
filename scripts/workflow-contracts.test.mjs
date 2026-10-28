@@ -479,16 +479,16 @@ describe("workflow contracts", () => {
     expect(binarySizeCheck).toContain('crate: "palamedes-node"');
   });
 
-  it("runs the React Router RSC request-isolation proof on Linux", async () => {
+  it("runs the Remix v3 full-stack browser proof on Linux", async () => {
     const ci = await readRepositoryFile(".github/workflows/ci.yml");
     const validate = job(ci, "validate", "validate-rust");
 
-    expect(ci).toContain("- name: Verify React Router RSC request scope");
-    expect(ci).toContain("if: matrix.os == 'ubuntu-24.04' && matrix.node == 24");
-    expect(ci).toContain("run: pnpm verify:react-router-rsc");
+    expect(validate).toContain("- name: Verify Remix v3 full-stack browser path");
+    expect(validate).toContain("if: matrix.os == 'ubuntu-24.04' && matrix.node == 24");
+    expect(validate).toContain("run: pnpm verify:examples:browser -- --id remix-cookie");
     expect(validate).toContain("- name: Install Playwright Chromium");
     expect(validate.indexOf("run: pnpm exec playwright install --with-deps chromium")).toBeLessThan(
-      validate.indexOf("run: pnpm verify:react-router-rsc"),
+      validate.indexOf("run: pnpm verify:examples:browser -- --id remix-cookie"),
     );
   });
 

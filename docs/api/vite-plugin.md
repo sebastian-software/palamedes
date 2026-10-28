@@ -206,8 +206,7 @@ SSR, loaders and actions. Applications do not construct catalog import maps.
 The adapter keeps its server entrypoints and runtime packages in Vite's SSR
 module graph automatically, including when installed from npm rather than
 linked from a workspace. On Vite 6 and newer this applies to every server
-environment, such as the `rsc` environment used by Waku and React Router RSC,
-not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
+environment, such as the `rsc` environment used by Waku, not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
 shares Waku's request store. Existing `noExternal` entries and `true` are
 preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 `resolve.noExternal` configuration.
@@ -216,7 +215,7 @@ preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 clientDirectory, development?, manifestName? })`. Server code calls
 `getLocaleBinding(locale)` on it and pipes HTML through
 `createDocumentTransform(binding, { nonce?, errorHtml? })`. The Solid, TanStack,
-Waku, and React Router RSC adapters do this internally. React Router Framework
+and Waku adapters do this internally. React Router Framework
 Mode has no adapter package, so the application makes these calls in
 `app/entry.server.tsx`; see the
 [React Router Framework Mode guide](./react-router.md). `errorHtml` is trusted,

@@ -11,7 +11,7 @@ uses all of them. The goal is confidence, not hype.
 
 This repo can credibly prove five things:
 
-- all 25 examples of the verification matrix receive smoke verification on relevant pull requests and `main` pushes (the 26th app in `examples/`, the focused React Router RSC cookie fixture, has its own verifier); 25 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, Vite, and all four Remix strategies) receive Playwright verification on relevant pull requests, `main` pushes, weekly runs, and opted-in manual dispatches
+- all 25 examples of the verification matrix receive smoke verification on relevant pull requests and `main` pushes (the 26th app in `examples/`, the focused Node backend fixture, has its own verifier); 25 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, Vite, and all four Remix strategies) receive Playwright verification on relevant pull requests, `main` pushes, weekly runs, and opted-in manual dispatches
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, source analysis, catalog update, and catalog compile steps are measured locally and reproducibly

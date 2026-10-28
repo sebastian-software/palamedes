@@ -76,13 +76,13 @@ Low-level custom integrations may load an explicitly generated
 standard host workflow and does not permit marking raw ICU maps with
 `defineCompiledCatalog()`.
 
-| Host                                   | Standard v2 migration                                                                                        | Delivery contract                                                                                                                  |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Vite + React/Solid                     | Keep macro authoring; remove application catalog maps and legacy runtime imports.                            | Adapter-owned active-locale dependencies; the removed graph-splitting option is rejected.                                          |
-| Next.js                                | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the removed `messageSplitting` option is rejected. Request server catalogs are shared and immutable. |
-| Remix                                  | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                               |
-| TanStack Start, Waku, React Router RSC | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                                     |
-| React Router Framework Mode            | Drop `experimentalGraphSplitting`, server `.po` maps, the manifest reader, and client `setClientI18n()`.     | No adapter package; the app wires delivery and request scopes per the [guide](./api/react-router.md).                              |
+| Host                        | Standard v2 migration                                                                                        | Delivery contract                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Vite + React/Solid          | Keep macro authoring; remove application catalog maps and legacy runtime imports.                            | Adapter-owned active-locale dependencies; the removed graph-splitting option is rejected.                                          |
+| Next.js                     | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the removed `messageSplitting` option is rejected. Request server catalogs are shared and immutable. |
+| Remix                       | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                               |
+| TanStack Start, Waku        | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                                     |
+| React Router Framework Mode | Drop `experimentalGraphSplitting`, server `.po` maps, the manifest reader, and client `setClientI18n()`.     | No adapter package; the app wires delivery and request scopes per the [guide](./api/react-router.md).                              |
 
 Host-specific guides may expose lower-level hooks for custom servers, but the
 checked standard examples are the evidence for the transparent path. Do not
@@ -146,6 +146,24 @@ V2 removes the serialized ICU bootstrap APIs; the
 Node hook order (`remix/node-tsx`, then `@palamedes/remix/register`). See the
 [Remix API guide](./api/remix.md#client-catalog-assets) and the checked
 [Remix cookie example](../examples/remix-cookie).
+
+### React Router RSC
+
+V2 discontinues `@palamedes/react-router-rsc`. React Router's RSC mode is
+still experimental upstream (`unstable_reactRouterRSC`,
+`unstable_matchRSCServerRequest`, and the 0.x `@vitejs/plugin-rsc`), so
+Palamedes no longer ships an adapter for it. The 1.x package stays on npm, but
+it gets no further releases and does not work with v2 packages.
+
+Choose one of these paths:
+
+- To keep React Router, move the application to Framework Mode without RSC
+  and follow the [React Router Framework Mode guide](./api/react-router.md).
+  A dedicated Framework Mode adapter package is tracked in
+  [#1409](https://github.com/sebastian-software/palamedes/issues/1409).
+- To keep React Server Components, use Next.js with
+  [`@palamedes/next-plugin`](./api/next-plugin.md) or Waku with
+  [`@palamedes/waku`](./api/waku.md).
 
 ## Author rich text and choices with macros
 

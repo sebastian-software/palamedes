@@ -6,9 +6,9 @@ wiring that the application writes itself: a request-scoped server i18n
 runner, the catalog document transform in `app/entry.server.tsx`, and a scope
 around each loader and action that runs translated code.
 
-This page describes that wiring as the checked examples implement it today. For
-React Router RSC Framework Mode, use the separate
-[`@palamedes/react-router-rsc`](./react-router-rsc.md) package instead.
+This page describes that wiring as the checked examples implement it today.
+Palamedes does not support React Router's experimental RSC mode; use Next.js or
+Waku for React Server Components.
 
 | Example                                                           | Locale source                          |
 | ----------------------------------------------------------------- | -------------------------------------- |
