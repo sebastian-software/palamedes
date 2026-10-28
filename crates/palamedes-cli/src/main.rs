@@ -16,12 +16,13 @@ mod plugin_protocol;
 mod plugins;
 mod telemetry;
 mod update_check;
+mod usage_settings;
 
 use std::io::{self, Write};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    if let Some(code) = telemetry::worker_entry() {
+    if let Some(code) = usage_settings::worker_entry().or_else(telemetry::worker_entry) {
         return ExitCode::from(code);
     }
     if let Err(error) = i18n::initialize() {
@@ -47,7 +48,7 @@ fn main() -> ExitCode {
     // long-running command. Watch rebuilds and signal termination never repeat
     // this entry point, and the command does not wait for telemetry networking.
     if let Some(category) = category {
-        telemetry::record(category, cli.offline(), || cli.telemetry_context());
+        telemetry::record(category, cli.offline(), cli.telemetry_context());
     }
     if let Some(notice) = category.and_then(|_| update_check::check(cli.offline())) {
         // Advisory output must not turn a successful command into a broken-pipe

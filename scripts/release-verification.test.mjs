@@ -164,7 +164,7 @@ describe("app-tracking publication preflight", () => {
       );
     };
     await checkAppTrackingReady(fake);
-    expect(methods).toEqual(["GET", "PUT", "POST", "DELETE"]);
+    expect(methods).toEqual(["GET", "PUT", "POST", "DELETE", "PUT", "PUT", "PUT", "DELETE"]);
     broken = "missing";
     await expect(checkAppTrackingReady(fake)).rejects.toThrow("telemetry routes are not ready");
     broken = "cached";

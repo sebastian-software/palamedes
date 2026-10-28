@@ -52,31 +52,40 @@ enum Command {
 }
 
 impl Cli {
-    pub fn telemetry_context(&self) -> app_tracking::project::RepositoryContext {
+    pub fn telemetry_context(
+        &self,
+    ) -> impl FnOnce() -> app_tracking::project::RepositoryContext + Send + 'static {
         let explicit = match &self.command {
-            Command::Extract(options) => options.telemetry_config(),
-            Command::Lint(options) => options.telemetry_config(),
-            Command::Audit(options) => options.telemetry_config(),
-            Command::Report(options) => options.telemetry_config(),
+            Command::Extract(options) => {
+                Some(options.telemetry_config().map(std::path::Path::to_owned))
+            }
+            Command::Lint(options) => {
+                Some(options.telemetry_config().map(std::path::Path::to_owned))
+            }
+            Command::Audit(options) => {
+                Some(options.telemetry_config().map(std::path::Path::to_owned))
+            }
+            Command::Report(options) => {
+                Some(options.telemetry_config().map(std::path::Path::to_owned))
+            }
             Command::Catalog(options) => match &options.command {
-                CatalogSubcommand::Merge(options) => match options.telemetry_config() {
-                    Some(path) => Some(path),
-                    None => return crate::telemetry::unknown_context(),
-                },
-                CatalogSubcommand::Convert(options) => match options.telemetry_config() {
-                    Some(path) => Some(path),
-                    None => return crate::telemetry::unknown_context(),
-                },
-                CatalogSubcommand::Compile(options) => match options.telemetry_config() {
-                    Some(path) => Some(path),
-                    None => return crate::telemetry::unknown_context(),
-                },
-                CatalogSubcommand::MergeDriver(_) => return crate::telemetry::unknown_context(),
+                CatalogSubcommand::Merge(options) => {
+                    options.telemetry_config().map(|p| Some(p.to_owned()))
+                }
+                CatalogSubcommand::Convert(options) => {
+                    options.telemetry_config().map(|p| Some(p.to_owned()))
+                }
+                CatalogSubcommand::Compile(options) => {
+                    options.telemetry_config().map(|p| Some(p.to_owned()))
+                }
+                CatalogSubcommand::MergeDriver(_) => None,
             },
-            Command::Plugin(_) => return crate::telemetry::unknown_context(),
-            Command::Version | Command::Telemetry(_) => return crate::telemetry::unknown_context(),
+            Command::Plugin(_) | Command::Version | Command::Telemetry(_) => None,
         };
-        crate::telemetry::project_context(explicit)
+        move || match explicit {
+            Some(path) => crate::telemetry::project_context(path.as_deref()),
+            None => crate::telemetry::unknown_context(),
+        }
     }
 
     pub fn offline(&self) -> bool {

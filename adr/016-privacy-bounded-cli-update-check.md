@@ -105,3 +105,20 @@ own exact controls, wire values, and delivery evidence.
 - 2026-10-26: Move telemetry networking out of the command process after live
   registration attempts could not be acknowledged within the former 200-ms
   deadline. Adopt the shared bounded background worker; keep updates independent.
+
+### Additional-permission rollout (2026-10-28)
+
+The existing legacy grant remains unchanged. The additional `telemetry usage`
+settings select the unified SDK only after a fresh expanded-field grant, stop
+legacy collection, and preserve its authenticated inspection/deletion controls.
+One invocation selects one stream. Top-level withdrawal and deletion cover both.
+
+Monthly history, public publication, and local cross-tool linking require separate
+revisioned choices and pending acknowledgement. Public totals use an independently
+screened permitted population; private history is never republished implicitly.
+History withdrawal also revokes publication. Linking remains independent and cannot
+run in CI. Unlink/shared reset and ordinary deletion remain distinct. The shared
+library owns all three disclosures, choice persistence, exact acknowledgements,
+and future-only eligibility. The consumer supplies explicit notice/settings commands;
+ordinary commands never prompt or synchronize additional permissions. Dalo and
+Ferriki adoption remains outside this rollout.

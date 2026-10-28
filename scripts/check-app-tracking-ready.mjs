@@ -45,6 +45,10 @@ export async function checkAppTrackingReady(fetcher = fetch) {
     ["PUT", "/v1/installations/00000000-0000-7000-8000-000000000001"],
     ["POST", "/v1/usage-batches"],
     ["DELETE", "/v1/installations/00000000-0000-7000-8000-000000000001"],
+    ["PUT", `/v1/history-permissions/events/${"0".repeat(64)}`],
+    ["PUT", `/v1/public-permissions/events/${"0".repeat(64)}`],
+    ["PUT", `/v1/profile-links/events/${"0".repeat(64)}`],
+    ["DELETE", `/v1/shared-profiles/${"0".repeat(64)}`],
   ]) {
     const response = await fetcher(`${origin}${path}`, {
       method,
