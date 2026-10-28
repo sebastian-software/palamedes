@@ -9,7 +9,7 @@ export const REMOVED_PALAMEDES_OPTION_MESSAGES = {
   failOnCompileError:
     "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
   keepSourceFallbacks:
-    "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+    "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the v2 default is false.",
   stripMessageField:
     "Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.",
   messageSplitting:

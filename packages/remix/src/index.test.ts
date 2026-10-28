@@ -170,7 +170,7 @@ describe("createPalamedesRemixLoadHook", () => {
     [
       "keepSourceFallbacks",
       false,
-      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the v2 default is false.",
     ],
   ] as const)("rejects the removed %s option (%j) in the load hook", (name, value, message) => {
     expect(() =>
@@ -186,7 +186,7 @@ describe("createPalamedesRemixLoadHook", () => {
         typeof createPalamedesRemixAssetLoader
       >[0]),
     ).toThrow(
-      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the v2 default is false.",
     );
   });
 

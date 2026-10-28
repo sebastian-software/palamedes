@@ -11,7 +11,7 @@ examples verify:
 
 - Turbopack-based Next.js 16.4 integration
 - provider-free Palamedes rendering in server components and client widgets
-- `.po` loading through `@palamedes/next-plugin`
+- compiled PO catalog delivery through `@palamedes/next-plugin`
 - localized `"use server"` actions
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
@@ -28,7 +28,7 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 - Vite-based Palamedes integration in TanStack Start
 - request-local SSR through each fixture's explicit server-entry scope
 - localized server functions through `@palamedes/tanstack` request middleware in `tanstack-cookie`
-- `.po` loading through `@palamedes/vite-plugin`
+- compiled PO catalog delivery through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
 The route example uses a dynamic `/$locale` segment and verifies locale
@@ -70,7 +70,7 @@ The `solid-cookie`, `solid-route`, `solid-subdomain`, and
 - `@solidjs/vite-plugin@3.0.0-next.50` Start Mode and Nitro v3 output
 - `@solidjs/router@2.0.0-next.41` with `filesystem-routing@0.4.0`
 - request-local SSR plus a hook-free, document-fixed client locale
-- `.po` loading through `@palamedes/vite-plugin`
+- compiled PO catalog delivery through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
 The route example uses `[locale].tsx` for its dynamic segment, following Solid
@@ -93,7 +93,7 @@ The `waku-cookie`, `waku-route`, `waku-subdomain`, and `waku-tld` examples verif
 - Waku file-based `src/pages` routing with the default adapter path
 - Waku-native SSR with provider-free Palamedes rendering
 - request-scoped server-action interceptor coverage through `@palamedes/waku` in `waku-cookie`
-- `.po` loading through the Vite plugin path exposed via `waku.config.ts`
+- compiled PO catalog delivery through the Vite plugin path exposed via `waku.config.ts`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
 Palamedes-side fixes already baked into these examples:
@@ -130,7 +130,7 @@ The `react-router-cookie`, `react-router-route`, `react-router-subdomain`, and
 `react-router-tld` examples verify:
 
 - React Router framework mode with SSR and route actions
-- `.po` loading through `@palamedes/vite-plugin`
+- compiled PO catalog delivery through `@palamedes/vite-plugin`
 - request-scoped loaders, actions, and document rendering through the
   `@palamedes/react-router` root middleware and server entry, including
   overlapping mixed-locale requests

@@ -60,7 +60,7 @@ pnpm benchmark:framework-workflow:quick
 ```
 
 Its [reports](../benchmarks/e2e-workflow/results/frameworks/) are published separately
-from the React result below. The website's [framework tables](/proof#framework-benchmarks)
+from the React result below. The website's [framework tables](https://palamedes.dev/proof#framework-benchmarks)
 show all three corpus sizes and their medians. The homepage chart lets
 readers select a framework and uses that report's own environment and command.
 The reports were captured separately and do not establish a cross-framework ranking.

@@ -121,6 +121,12 @@ Prebuilt npm native packages do not require a local Rust toolchain.
   changes skip an unchanged cookie value and navigate to a new document.
   Applications retain responsibility for their own cookie and revalidation
   behavior.
+- **Explicit language domains and SEO links:** `defineLocaleControls` from
+  `@palamedes/core/locale` adds the opt-in `hosts.mode: "domain"` strategy,
+  which maps complete hostnames such as `mein-produkt.de` without locale path
+  prefixes. `seoLinks()` returns canonical, language-alternate, and
+  `x-default` link descriptors. Existing TLD and route host-map setups keep
+  working unchanged; see [Locale strategies](./locale-strategies.md#domain-strategy).
 - **Agent-assisted adoption:** the repository includes a
   [Palamedes skill](../skills/palamedes/SKILL.md) for Next.js App Router,
   Vite/React, and Lingui migration. It preserves existing locale policy and
@@ -146,20 +152,25 @@ outside the v2 scope.
 
 ## Why this is a major release
 
-V2 removes a supported execution model and changes how failures are handled.
-Applications that relied on raw runtime catalogs, parser APIs, or silent
-fallbacks need changes before upgrading.
+V2 removes a supported execution model, changes how failures are handled, and
+gives messages with literal braces new IDs. Applications that relied on raw
+runtime catalogs, parser APIs, or silent fallbacks need changes before
+upgrading. The Vite, Solid, Waku, and Remix adapters also raise their peer
+ranges.
 
-| Existing v1 integration                                                    | What to change for v2                                                                            |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Load ICU string maps directly into the runtime                             | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.         |
-| Import runtime parser APIs or direct choice components                     | Move message authoring to macros; use build-time tooling for catalog inspection.                 |
-| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data | Replace that plumbing with the host adapter's standard setup.                                    |
-| Catch translation failures and return source text or an empty catalog      | Let failures reach ordinary, catalog-independent error UI.                                       |
-| Disable Next.js message splitting                                          | Remove `messageSplitting` and use automatic delivery.                                            |
-| Set `failOnCompileError`, `keepSourceFallbacks`, or an adapter `cwd`       | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`.     |
-| Reuse generated v1 catalogs or a custom runtime implementation             | Regenerate artifacts and create instances with `createI18n()`; the renderer is internal.         |
-| Use the React Router RSC adapter                                           | Move to React Router Framework Mode, or to Next.js or Waku for RSC; the adapter is discontinued. |
+| Existing v1 integration                                                                  | What to change for v2                                                                                       |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Load ICU string maps directly into the runtime                                           | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.                    |
+| Import runtime parser APIs or direct choice components                                   | Move message authoring to macros; use build-time tooling for catalog inspection.                            |
+| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data               | Replace that plumbing with the host adapter's standard setup.                                               |
+| Catch translation failures and return source text or an empty catalog                    | Let failures reach ordinary, catalog-independent error UI.                                                  |
+| Disable Next.js message splitting                                                        | Remove `messageSplitting` and use automatic delivery.                                                       |
+| Set `failOnCompileError`, `keepSourceFallbacks`, or an adapter `cwd`                     | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`.                |
+| Reuse generated v1 catalogs or a custom runtime implementation                           | Regenerate artifacts and create instances with `createI18n()`; the renderer is internal.                    |
+| Use the React Router RSC adapter                                                         | Move to React Router Framework Mode, or to Next.js or Waku for RSC; the adapter is discontinued.            |
+| Write literal braces in `<Trans>` children, MDX text, or `t` templates                   | Run `pmds extract` and translate the new entries; braces are now literal text with a new `msgid`.           |
+| Run Vite 7 or older, an earlier Solid 2 release candidate, or a Remix 3 prerelease       | Upgrade to Vite 8, `solid-js@^2.0.0-rc.16`, and `remix@^3.0.0`; `@palamedes/waku` needs `waku@^1.0.0-rc.4`. |
+| Import generated-code or renderer helpers from `@palamedes/runtime` or `@palamedes/core` | Remove the imports; they moved to the Internal `/internal` subpaths that supported adapters emit.           |
 
 The [v2 migration guide](./migration-v2.md) lists the exact removed APIs and
 replacements. Update coupled Palamedes packages together and verify the
@@ -167,10 +178,12 @@ framework's supported versions before migrating.
 
 ## What stays familiar
 
-Message identity remains based on source text and context. Existing
-translations do not need a new identity scheme. PO and FCL remain catalog
-formats, subject to host-specific delivery support: automatic Next.js graph
-delivery currently requires PO.
+Message identity remains based on source text and context, so existing
+translations keep their IDs. Messages with literal braces are the exception:
+they get a new `msgid` and need translating again (see the
+[literal brace migration](./migration-v2.md#literal-braces-in-authored-text-get-new-message-ids)).
+PO and FCL remain catalog formats, subject to host-specific delivery support:
+automatic Next.js graph delivery currently requires PO.
 
 Locale selection remains application policy. Cookie, route, subdomain, and TLD
 strategies continue to have checked examples. The browser language is fixed
