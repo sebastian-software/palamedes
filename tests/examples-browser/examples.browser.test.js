@@ -510,6 +510,17 @@ async function rejectModuleEvaluation(route, message) {
   });
 }
 
+// The fixed failure UI replaces the document body, so none of the page text may
+// reveal the injected error, the catalog transport, or a Palamedes internal.
+async function expectCatalogFreeRemixFailure(page) {
+  const alert = page.getByRole("alert");
+  await alert.waitFor({ state: "visible" });
+  expect(await alert.textContent()).toContain("Something went wrong");
+  expect(await page.locator("body").innerText()).not.toMatch(
+    /injected|Palamedes|catalog|palamedes-m-|MissingCompiled|\{.*plural/iu,
+  );
+}
+
 async function reloadRemixAfterFailure(page) {
   await Promise.all([
     page.waitForNavigation({ waitUntil: "domcontentloaded" }),
@@ -554,15 +565,14 @@ test.runIf(activeExample().framework === "remix")(
     });
 
     await page.goto(remixDocumentUrl(example), { waitUntil: "domcontentloaded" });
-    await page.getByRole("alert").waitFor({ state: "visible" });
-    expect(await page.getByRole("alert").textContent()).toContain("Something went wrong");
+    await expectCatalogFreeRemixFailure(page);
 
     failure = "ok";
     await reloadRemixAfterFailure(page);
 
     failure = "entry-evaluation";
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByRole("alert").waitFor({ state: "visible" });
+    await expectCatalogFreeRemixFailure(page);
     await page.getByRole("button", { name: "Reload", exact: true }).waitFor({ state: "visible" });
 
     failure = "ok";
@@ -570,14 +580,14 @@ test.runIf(activeExample().framework === "remix")(
 
     failure = "fragment-network";
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByRole("alert").waitFor({ state: "visible" });
+    await expectCatalogFreeRemixFailure(page);
 
     failure = "ok";
     await reloadRemixAfterFailure(page);
 
     failure = "fragment-evaluation";
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByRole("alert").waitFor({ state: "visible" });
+    await expectCatalogFreeRemixFailure(page);
 
     failure = "ok";
     await reloadRemixAfterFailure(page);

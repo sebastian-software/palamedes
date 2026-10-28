@@ -22,9 +22,11 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
+# Every main push starts this workflow, so a workflow-level concurrency group
+# let the next ordinary push replace a pending release run, which GitHub then
+# cancels. Only the upload jobs serialize instead, per job (and per native
+# package), and only in release runs: their group falls back to the run id when
+# the run does not publish, so other pushes never queue against or cancel them.
 
 # The release gate installs and executes the full dependency tree, so the jobs
 # around it default to read-only; the publish jobs opt into `id-token: write`
@@ -133,7 +135,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The one-time release overrides are checked against the release tag on
+      # origin. Here an unreadable tag fails the run instead of only warning.
       - name: Check release package set
+        env:
+          PALAMEDES_RELEASE_TAGS: required
         run: pnpm check:release-set
 
       - name: Check release wording
@@ -175,6 +181,11 @@ jobs:
       - validate-release
       - example-verification
     if: needs.determine-release.outputs.should_publish == 'true'
+    # Keyed per package: one group for the whole matrix would let its legs
+    # replace and cancel each other while they wait.
+    concurrency:
+      group: ${{ needs.determine-release.outputs.should_publish == 'true' && format('publish-native-{0}-{1}', github.ref, matrix.package_name) || format('publish-native-{0}-{1}', github.run_id, matrix.package_name) }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -276,13 +287,22 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
         run: node ./scripts/publish-package-if-needed.mjs "${{ matrix.package_name }}"
 
+  # Waits for the native packages so a failed native build stops crates.io as
+  # well as npm: otherwise crates.io could ship the release while the
+  # JavaScript packages, which need every native package, do not. After the
+  # native lane, both remaining uploads are already proven by the Cargo
+  # preflight and the JavaScript pack check, so they run side by side.
   publish-cargo:
     needs:
       - determine-release
       - preflight-cargo
       - validate-release
       - example-verification
+      - publish-native
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
+    concurrency:
+      group: ${{ needs.determine-release.outputs.should_publish == 'true' && format('publish-cargo-{0}', github.ref) || format('publish-cargo-{0}', github.run_id) }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -315,6 +335,9 @@ jobs:
       - determine-release
       - publish-native
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
+    concurrency:
+      group: ${{ needs.determine-release.outputs.should_publish == 'true' && format('publish-js-{0}', github.ref) || format('publish-js-{0}', github.run_id) }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -442,7 +465,9 @@ jobs:
       - publish-js
       - publish-cargo
       - verify-release
-    if: ${{ failure() && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) && (needs.determine-release.result == 'failure' || needs.determine-release.outputs.should_publish == 'true') }}
+    # failure() misses a cancelled job, whether the whole run was cancelled or
+    # a concurrency group replaced a pending upload, so check every result.
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) && (needs.determine-release.result == 'failure' || needs.determine-release.outputs.should_publish == 'true') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -461,7 +486,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "The publish workflow failed, so this release may be only partially on npm or crates.io."
+            echo "The publish workflow failed or was cancelled, so this release may be only partially on npm or crates.io."
             echo
             echo "| Job | Result |"
             echo "| --- | --- |"

@@ -2,6 +2,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { publicWorkspacePackages } from "./release-packages.mjs";
 import { readReleasePolicy } from "./release-policy.mjs";
+import {
+  exactPinProblems,
+  hasReleaseOverrides,
+  lookupReleaseState,
+  releaseOverrideProblems,
+  releaseTagName,
+} from "./release-set-rules.mjs";
 
 const root = process.cwd();
 const releasePolicy = readReleasePolicy(root);
@@ -158,6 +165,46 @@ if (releaseManifest[rootReleasePath] !== expectedVersion) {
   fail(
     `release manifest tracks ${releaseManifest[rootReleasePath]}, but public packages are at ${expectedVersion}`,
   );
+}
+
+const manifestVersion = releaseManifest[rootReleasePath];
+// Only the overrides need the release tag, so a config without them never
+// touches the network.
+const { state: releaseState, error: lookupError } = hasReleaseOverrides(releaseConfig)
+  ? lookupReleaseState({
+      root,
+      remote: process.env.PALAMEDES_RELEASE_TAG_REMOTE ?? "origin",
+      tag: releaseTagName(releaseConfig, manifestVersion),
+    })
+  : { state: "unreleased" };
+if (releaseState === "unknown") {
+  // Publish validates the exact revision it ships and can simply be re-run, so
+  // it fails closed. Elsewhere a network or remote problem only warns: an
+  // unrelated PR should not go red on a flake, and the next main run checks
+  // again.
+  if (process.env.PALAMEDES_RELEASE_TAGS === "required") {
+    fail(`release-as and last-release-sha cannot be checked: ${lookupError}`);
+  } else {
+    console.warn(`warning: skipped the post-release override check; ${lookupError}`);
+  }
+}
+
+for (const problem of releaseOverrideProblems({
+  releaseConfig,
+  manifestVersion,
+  minimumMajor: releasePolicy.minimumMajor,
+  releaseState,
+})) {
+  fail(problem);
+}
+
+for (const problem of exactPinProblems({
+  rootCargo: readText(rootCargoPath),
+  buildCargo: readText("crates/palamedes-build/Cargo.toml"),
+  version: expectedVersion,
+  extraFiles: rootReleaseExtraFiles,
+})) {
+  fail(problem);
 }
 
 if (rootReleaseExtraFiles.some((file) => file?.type === "toml")) {
