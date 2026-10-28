@@ -5,13 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   startRemixClient,
   initializeRemixClientI18nAsync,
-  initializeRemixClientI18n,
-  readRemixI18nBootstrap,
-  REMIX_I18N_BOOTSTRAP_ID,
-  type RemixI18nBootstrapDocument,
+  type RemixClientDocument,
 } from "./client";
 
-describe("Remix client i18n bootstrap", () => {
+describe("Remix client catalog installation", () => {
   afterEach(() => {
     resetI18nRuntime();
     vi.unstubAllGlobals();
@@ -59,26 +56,12 @@ describe("Remix client i18n bootstrap", () => {
     expect(replaceChildren).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects inert document catalogs until the Remix asset pipeline is used", () => {
-    vi.stubGlobal("window", {});
-    const document = createBootstrapDocument("de", {
-      locale: "de",
-      catalogVersion: "catalog-de-v1",
-      messages: { greeting: "Hallo {name}" },
-    });
-
-    expect(() => initializeRemixClientI18n({ createI18n, document })).toThrow(
-      /inert serialized ICU catalog.*asset pipeline.*#1214/u,
-    );
-    expect(() => getI18n()).toThrow(/No active client i18n instance/u);
-  });
-
-  it("supports an explicit payload for custom document and CSP integrations", () => {
+  it("installs an explicit catalog module for custom document and CSP integrations", async () => {
     vi.stubGlobal("window", {});
 
-    initializeRemixClientI18n({
+    await initializeRemixClientI18nAsync({
       createI18n,
-      bootstrap: {
+      catalog: {
         locale: "en",
         catalogVersion: "deployment-42",
         messages: defineCompiledCatalog({ greeting: "Hello" }),
@@ -93,7 +76,7 @@ describe("Remix client i18n bootstrap", () => {
 
     await initializeRemixClientI18nAsync({
       createI18n,
-      document: createBootstrapDocument("de", undefined),
+      document: createDocument("de"),
       loadCatalog: async () => ({
         locale: "de",
         catalogVersion: "de-v2",
@@ -110,7 +93,7 @@ describe("Remix client i18n bootstrap", () => {
     await expect(
       initializeRemixClientI18nAsync({
         createI18n,
-        document: createBootstrapDocument("en", undefined),
+        document: createDocument("en"),
         loadCatalog: async () => ({ locale: "en", catalogVersion: "v1", messages: {} }),
       }),
     ).rejects.toThrow(/executable catalog asset.*compiled catalog/u);
@@ -119,7 +102,7 @@ describe("Remix client i18n bootstrap", () => {
   it("retries a failed lazy catalog sidecar after its network error recovers", async () => {
     vi.stubGlobal("window", {});
     let attempts = 0;
-    registerMessageLoaderGroup("remix-recovery", [
+    const release = registerMessageLoaderGroup("remix-recovery", [
       {
         async de() {
           attempts += 1;
@@ -132,7 +115,7 @@ describe("Remix client i18n bootstrap", () => {
     ]);
     const options = {
       createI18n,
-      document: createBootstrapDocument("de", undefined),
+      document: createDocument("de"),
       catalog: {
         locale: "de" as const,
         catalogVersion: "de-v2",
@@ -146,139 +129,95 @@ describe("Remix client i18n bootstrap", () => {
     await expect(initializeRemixClientI18nAsync(options)).resolves.toBe(getI18n());
     expect(getI18n()._("greeting")).toBe("Hallo nach Recovery");
     expect(attempts).toBe(2);
+    release();
   });
 
-  it("rejects explicit bootstrap in a server environment before installation", () => {
-    expect(() =>
-      initializeRemixClientI18n({
+  it("rejects catalog installation in a server environment", async () => {
+    await expect(
+      initializeRemixClientI18nAsync({
         createI18n,
-        bootstrap: {
-          locale: "en",
-          catalogVersion: "deployment-42",
-          messages: { greeting: "Hello" },
-        },
+        catalog: catalogModule("en", "deployment-42", "Hello"),
       }),
-    ).toThrow(/can only run in a browser environment.*createRemixI18nServer/u);
+    ).rejects.toThrow(/can only run in a browser environment/u);
 
     vi.stubGlobal("window", {});
     expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });
 
-  it("supports locale changes through a fresh full-document bootstrap", () => {
+  it("supports locale changes through a fresh full document", async () => {
     vi.stubGlobal("window", {});
 
-    initializeRemixClientI18n({
+    await initializeRemixClientI18nAsync({
       createI18n,
-      document: createBootstrapDocument("en", undefined),
-      bootstrap: {
-        locale: "en",
-        catalogVersion: "en-v1",
-        messages: defineCompiledCatalog({ greeting: "Hello" }),
-      },
+      document: createDocument("en"),
+      catalog: catalogModule("en", "en-v1", "Hello"),
     });
     expect(getI18n()._("greeting")).toBe("Hello");
 
     resetI18nRuntime();
-    initializeRemixClientI18n({
+    await initializeRemixClientI18nAsync({
       createI18n,
-      document: createBootstrapDocument("de", undefined),
-      bootstrap: {
-        locale: "de",
-        catalogVersion: "de-v1",
-        messages: defineCompiledCatalog({ greeting: "Hallo" }),
-      },
+      document: createDocument("de"),
+      catalog: catalogModule("de", "de-v1", "Hallo"),
     });
     expect(getI18n()._("greeting")).toBe("Hallo");
   });
 
-  it("requires a full navigation instead of replacing a catalog in one document", () => {
+  it("requires a full navigation instead of replacing a catalog in one document", async () => {
     vi.stubGlobal("window", {});
-    const document = createBootstrapDocument("en", undefined);
-    initializeRemixClientI18n({
+    const document = createDocument("en");
+    await initializeRemixClientI18nAsync({
       createI18n,
       document,
-      bootstrap: {
-        locale: "en",
-        catalogVersion: "en-v1",
-        messages: defineCompiledCatalog({ greeting: "Hello" }),
-      },
+      catalog: catalogModule("en", "en-v1", "Hello"),
     });
 
-    expect(() =>
-      initializeRemixClientI18n({
+    await expect(
+      initializeRemixClientI18nAsync({
         createI18n,
         document,
-        bootstrap: {
-          locale: "en",
-          catalogVersion: "en-v2",
-          messages: defineCompiledCatalog({ greeting: "Hello again" }),
-        },
+        catalog: catalogModule("en", "en-v2", "Hello again"),
       }),
-    ).toThrow(/cannot replace catalog.*full document navigation/u);
+    ).rejects.toThrow(/cannot replace catalog.*full document navigation/u);
     expect(getI18n()._("greeting")).toBe("Hello");
   });
 
-  it("rejects missing, malformed, and non-string catalog payloads", () => {
+  it("rejects an SSR document and catalog locale mismatch before installation", async () => {
     vi.stubGlobal("window", {});
 
-    expect(() =>
-      readRemixI18nBootstrap({ document: createBootstrapDocument("en", undefined) }),
-    ).toThrow(/could not find a <template/u);
-
-    expect(() =>
-      readRemixI18nBootstrap({ document: createBootstrapDocument("en", "{broken") }),
-    ).toThrow(/not valid JSON/u);
-
-    expect(() =>
-      initializeRemixClientI18n({
+    await expect(
+      initializeRemixClientI18nAsync({
         createI18n,
-        bootstrap: {
-          locale: "en",
-          catalogVersion: "v1",
-          messages: { greeting: { executable: true } },
-        },
+        document: createDocument("en"),
+        catalog: catalogModule("de", "de-v1", "Hallo"),
       }),
-    ).toThrow(/message "greeting" must be an ICU string/u);
-  });
-
-  it("rejects an SSR document and catalog locale mismatch before installation", () => {
-    vi.stubGlobal("window", {});
-    const document = createBootstrapDocument("en", {
-      locale: "de",
-      catalogVersion: "de-v1",
-      messages: { greeting: "Hallo" },
-    });
-
-    expect(() => initializeRemixClientI18n({ createI18n, document })).toThrow(
-      /locale "de" does not match document locale "en".*full document navigation/u,
-    );
+    ).rejects.toThrow(/locale "de" does not match document locale "en".*full document navigation/u);
     expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });
 
-  it("reports the missing html lang attribute before installation", () => {
+  it("reports the missing html lang attribute before installation", async () => {
     vi.stubGlobal("window", {});
-    const document = createBootstrapDocument("", {
-      locale: "en",
-      catalogVersion: "en-v1",
-      messages: { greeting: "Hello" },
-    });
 
-    expect(() => initializeRemixClientI18n({ createI18n, document })).toThrow(
-      /no <html lang> attribute.*Render <html lang=\{locale\}>/u,
-    );
+    await expect(
+      initializeRemixClientI18nAsync({
+        createI18n,
+        document: createDocument(""),
+        catalog: catalogModule("en", "en-v1", "Hello"),
+      }),
+    ).rejects.toThrow(/no <html lang> attribute.*Render <html lang=\{locale\}>/u);
     expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });
 
-  it("wraps incompatible parser-free clients with an actionable diagnostic", () => {
+  it("wraps incompatible clients with an actionable diagnostic", async () => {
     vi.stubGlobal("window", {});
 
-    expect(() =>
-      initializeRemixClientI18n({
+    await expect(
+      initializeRemixClientI18nAsync({
         createI18n: () => ({
           locale: "",
           _: () => "",
           load() {
-            throw new TypeError("parser-free");
+            throw new TypeError("incompatible");
           },
           activate() {},
           getMessage: () => "",
@@ -288,29 +227,17 @@ describe("Remix client i18n bootstrap", () => {
           },
           reportError() {},
         }),
-        bootstrap: {
-          locale: "en",
-          catalogVersion: "v1",
-          messages: { greeting: "Hello" },
-        },
+        catalog: catalogModule("en", "v1", "Hello"),
       }),
-    ).toThrow(/inert serialized ICU catalog.*#1214/u);
+    ).rejects.toThrow(/could not install compiled catalog "v1" for locale "en"/u);
     expect(() => getI18n()).toThrow(/No active client i18n instance/u);
   });
 });
 
-function createBootstrapDocument(locale: string, payload: unknown): RemixI18nBootstrapDocument {
-  return {
-    documentElement: { lang: locale },
-    getElementById(id) {
-      if (id !== REMIX_I18N_BOOTSTRAP_ID || payload === undefined) {
-        return null;
-      }
-      return {
-        content: {
-          textContent: typeof payload === "string" ? payload : JSON.stringify(payload),
-        },
-      };
-    },
-  };
+function catalogModule(locale: string, catalogVersion: string, greeting: string) {
+  return { locale, catalogVersion, messages: defineCompiledCatalog({ greeting }) };
+}
+
+function createDocument(locale: string): RemixClientDocument {
+  return { documentElement: { lang: locale } };
 }

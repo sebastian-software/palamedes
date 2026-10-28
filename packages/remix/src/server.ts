@@ -23,7 +23,6 @@ import {
 import { AcceptLanguage } from "remix/headers";
 import { createContextKey, type Middleware, type RequestContext } from "remix/router";
 
-import { REMIX_I18N_BOOTSTRAP_ID, type RemixI18nBootstrap } from "./client";
 import type { PalamedesRemixCatalogAssetRegistry } from "./index";
 
 export type RemixI18nResolver<T extends I18nInstance = I18nInstance> = (
@@ -71,8 +70,6 @@ export type RemixI18nServerOptions<
   strategy: RemixLocaleStrategy;
   /** Synchronous or asynchronous executable catalog loader. Omit when using a registry. */
   loadMessages?: (locale: TLocale) => CompiledCatalogMessages | Promise<CompiledCatalogMessages>;
-  /** Legacy inert ICU strings for migration diagnostics; #1214 replaces this with executable assets. */
-  loadClientMessages?: (locale: TLocale) => CatalogMessages;
   /** Override the deterministic content hash used for client catalog versions. */
   catalogVersion?: string | ((input: { locale: TLocale; messages: CatalogMessages }) => string);
   /**
@@ -105,8 +102,6 @@ export type RemixI18nServer<TLocale extends string, T extends PalamedesI18n = Pa
     property: "palamedes";
   }>;
   get(context?: RequestContext<any, any>): RemixI18nContextValue<TLocale, T> | undefined;
-  createClientBootstrap(locale: TLocale): RemixI18nBootstrap<TLocale>;
-  renderClientBootstrap(locale: TLocale, options?: { elementId?: string }): string;
   createClientCatalogAsset(locale: TLocale): RemixClientCatalogAsset<TLocale>;
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
   /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
@@ -177,7 +172,6 @@ export function createRemixI18nServer<
   const scope = createServerI18nScope<T>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
   const clientEntries = new Map<string, string>();
-  const clientBootstrapCache = new Map<TLocale, RemixI18nBootstrap<TLocale>>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>();
   const createI18nInstance = options.createI18n ?? (() => createI18n() as unknown as T);
@@ -215,7 +209,6 @@ export function createRemixI18nServer<
     serverRegistryGeneration = next;
     catalogCache.clear();
     serverCatalogStore.invalidate();
-    clientBootstrapCache.clear();
     clientCatalogAssetCache.clear();
   };
 
@@ -270,23 +263,6 @@ export function createRemixI18nServer<
     };
     scopedContexts.set(i18n, context);
     return context;
-  };
-
-  const createClientBootstrap = (locale: TLocale): RemixI18nBootstrap<TLocale> => {
-    refreshRegistryGeneration();
-    const cached = clientBootstrapCache.get(locale);
-    if (cached) {
-      return cached;
-    }
-
-    const messages = validateClientMessages(
-      locale,
-      options.loadClientMessages ? options.loadClientMessages(locale) : getMessagesSync(locale),
-    );
-    const catalogVersion = resolveCatalogVersion(locale, messages, options.catalogVersion);
-    const bootstrap = Object.freeze({ locale, catalogVersion, messages });
-    clientBootstrapCache.set(locale, bootstrap);
-    return bootstrap;
   };
 
   const createClientCatalogAsset = (locale: TLocale): RemixClientCatalogAsset<TLocale> => {
@@ -470,8 +446,6 @@ export function createRemixI18nServer<
       return i18n ? scopedContexts.get(i18n) : undefined;
     },
 
-    createClientBootstrap,
-
     createClientCatalogAsset,
 
     renderClientCatalog,
@@ -480,52 +454,10 @@ export function createRemixI18nServer<
 
     serveClientCatalogAsset,
 
-    renderClientBootstrap(locale, renderOptions = {}) {
-      const elementId = renderOptions.elementId ?? REMIX_I18N_BOOTSTRAP_ID;
-      return `<template id="${escapeHtmlAttribute(elementId)}">${serializeBootstrap(createClientBootstrap(locale))}</template>`;
-    },
-
     serializeLocaleCookie(locale) {
       return `${cookieName}=${locale}; Path=/; Max-Age=${cookieMaxAge}; SameSite=Lax`;
     },
   };
-}
-
-function validateClientMessages<TLocale extends string>(
-  locale: TLocale,
-  messages: unknown,
-): CatalogMessages {
-  if (!isPlainMessageObject(messages)) {
-    throw new TypeError(
-      `Palamedes Remix client catalog for locale "${locale}" must be an object containing ICU strings.`,
-    );
-  }
-
-  const serializable: CatalogMessages = Object.create(null) as CatalogMessages;
-  for (const [id, message] of Object.entries(messages)) {
-    if (typeof message !== "string") {
-      throw new TypeError(
-        `Palamedes Remix client catalog for locale "${locale}" contains non-string message "${id}". The legacy string transport cannot carry executable catalogs; migrate this host to the #1214 asset pipeline.`,
-      );
-    }
-    serializable[id] = message;
-  }
-  return Object.freeze(serializable);
-}
-
-function resolveCatalogVersion<TLocale extends string>(
-  locale: TLocale,
-  messages: CatalogMessages,
-  version: RemixI18nServerOptions<TLocale>["catalogVersion"],
-): string {
-  const resolved =
-    typeof version === "function"
-      ? version({ locale, messages })
-      : (version ?? hashCatalog(locale, messages));
-  if (typeof resolved !== "string" || resolved.length === 0) {
-    throw new TypeError("Palamedes Remix client catalog version must be a non-empty string.");
-  }
-  return resolved;
 }
 
 function resolveCatalogAssetVersion<TLocale extends string>(
@@ -549,34 +481,8 @@ function resolveCatalogAssetVersion<TLocale extends string>(
     .digest("hex");
 }
 
-function hashCatalog(locale: string, messages: CatalogMessages): string {
-  const entries = Object.entries(messages).sort(([left], [right]) =>
-    left < right ? -1 : left > right ? 1 : 0,
-  );
-  return createHash("sha256")
-    .update(JSON.stringify([locale, entries]))
-    .digest("hex");
-}
-
-function serializeBootstrap(bootstrap: RemixI18nBootstrap): string {
-  return JSON.stringify(bootstrap)
-    .replaceAll("&", "\\u0026")
-    .replaceAll("<", "\\u003c")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
-}
-
 function escapeHtmlAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-}
-
-function isPlainMessageObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
