@@ -195,6 +195,7 @@ export const EXAMPLE_MATRIX = [
         // document still carries the request locale and its import map.
         headers: { "accept-language": "de" },
         path: "/missing-page",
+        status: 404,
         htmlLang: "de",
         substrings: ['<script type="importmap">', "This page is temporarily unavailable."],
       },
@@ -222,6 +223,7 @@ export const EXAMPLE_MATRIX = [
       },
       {
         path: "/de/missing-page",
+        status: 404,
         htmlLang: "de",
         substrings: ['<script type="importmap">', "This page is temporarily unavailable."],
       },
