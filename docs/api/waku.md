@@ -17,7 +17,7 @@ See the [stability policy](../stability.md#waku-contract).
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
 
-The adapter supports `waku@^1.0.0-rc.4` and Node.js 22.22 or newer. Register the Palamedes Vite plugin for macro transformation and generated catalog
+The adapter supports `waku@^1.0.0-rc.4` and Node.js 24.3.0 or newer. Register the Palamedes Vite plugin for macro transformation and generated catalog
 delivery; application-owned catalog imports or loader maps are unnecessary.
 `@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
 unsupported.

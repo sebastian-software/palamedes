@@ -40,9 +40,12 @@ runs:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
 
-    - name: Enable Corepack
+    # Node.js 26 does not bundle Corepack. Install it before pnpm cache lookup.
+    - name: Install and enable Corepack
       shell: bash
-      run: corepack enable
+      run: |
+        npm install --global corepack@0.36.0
+        corepack enable
 
     # Corepack has to run before setup-node asks pnpm for the cache directory.
     - name: Restore pnpm cache

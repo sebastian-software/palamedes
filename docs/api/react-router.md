@@ -31,7 +31,7 @@ pnpm add -D @palamedes/cli @palamedes/config
 ```
 
 `@palamedes/react-router` needs `react-router@^8.5.0`, `@react-router/node`,
-React 19, and Node.js `>=22.22.0`. It is ESM-only. `@react-router/dev@8.5.0`
+React 19, and Node.js `>=24.3.0`. It is ESM-only. `@react-router/dev@8.5.0`
 declares `vite: ^7.0.0 || ^8.0.0` as its peer range; the examples are verified
 on Vite 8.
 

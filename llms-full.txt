@@ -52,7 +52,7 @@ When helping with Palamedes code:
 5. Avoid numeric placeholder fallback patterns. If an expression cannot be named cleanly, recommend extracting a stable named variable. Never nest `plural()`, `select()`, or `selectOrdinal()` inside a `t` template; write the complete sentence in each branch instead.
 6. Use `getI18n()`/runtime wiring instead of inventing framework-global runtime APIs.
 7. Keep host adapter examples thin. Do not move catalog semantics into framework glue.
-8. Most published packages require Node.js `>=22.0.0`; `@palamedes/react-router`, `@palamedes/tanstack`, and `@palamedes/waku` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
+8. Published Node.js packages and repository development require Node.js `>=24.3.0`. Node.js 22 is unsupported in v2; CI validates Node.js 24 and 26. The native `@palamedes/cli-*` platform shells do not require Node.js.
 9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/012-native-cli-and-yaml-first-configuration.md`).
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
 11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
@@ -720,7 +720,7 @@ see /docs/api/remix.md and /docs/demo-deployments.md for public hosts and hostin
 
 ### Waku support status
 
-Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. The adapter uses its unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. See /docs/stability.md#waku-contract and /docs/api/waku.md.
+Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=24.3.0. Upstream Waku is an RC. The adapter uses its unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. See /docs/stability.md#waku-contract and /docs/api/waku.md.
 
 ### TanStack Start, Solid, Waku, React Router
 

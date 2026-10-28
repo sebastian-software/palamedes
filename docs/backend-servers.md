@@ -113,7 +113,7 @@ export default defineConfig({
   ssr: { noExternal: true },
   build: {
     ssr: true,
-    target: "node22",
+    target: "node24.3",
     rolldownOptions: { input: { server: "src/server.ts" } },
   },
 });
@@ -143,7 +143,7 @@ import { defineConfig } from "tsdown";
 export default defineConfig({
   entry: { server: "src/server.ts" },
   platform: "node",
-  target: "node22",
+  target: "node24.3",
   plugins: [palamedes({ framework: "none", environment: "server" })],
   deps: { alwaysBundle: [/./u], onlyBundle: false },
 });

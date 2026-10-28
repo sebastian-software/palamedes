@@ -129,7 +129,7 @@ and begins before server-function validation and handler execution.
 
 `@palamedes/tanstack` uses `@palamedes/runtime/server`, which requires Node's
 `AsyncLocalStorage`. It supports the pinned TanStack Start line
-`@tanstack/react-start@^1.169.4` on Node.js 22.22 or later. Do not use this
+`@tanstack/react-start@^1.169.4` on Node.js 24.3.0 or later. Do not use this
 adapter in Edge or Worker runtimes unless their Node-compatible
 `AsyncLocalStorage` behavior has been independently verified.
 

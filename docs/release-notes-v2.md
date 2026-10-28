@@ -16,6 +16,14 @@ several integrations. V2 makes that the standard contract across supported
 hosts and removes the older runtime that interpreted ICU strings while the
 application was running.
 
+## Node.js 24.3.0 or newer
+
+V2 drops Node.js 22 support and sets a shared Node.js `>=24.3.0` floor for
+published Node.js packages and repository development. CI validates Node.js 24
+and 26. Upgrade development, CI, build images, and Node.js deployment runtimes
+before updating Palamedes. Direct native CLI binaries still run without
+Node.js. See the [migration prerequisites](./migration-v2.md#check-installation-and-tooling-prerequisites).
+
 ## Less catalog plumbing in application code
 
 The standard framework setup no longer needs hand-written catalog imports,

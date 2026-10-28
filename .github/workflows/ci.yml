@@ -28,7 +28,7 @@ jobs:
             node: 24
             full: true
           - os: ubuntu-24.04
-            node: 22
+            node: 26
             full: true
           - os: macos-latest
             node: 24

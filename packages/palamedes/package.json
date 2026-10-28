@@ -32,6 +32,6 @@
     "test": "node --test ./test/palamedes.test.mjs"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.3.0"
   }
 }

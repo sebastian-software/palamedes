@@ -10,7 +10,7 @@ pnpm add @palamedes/core @palamedes/react @palamedes/react-router @palamedes/run
 ```
 
 The adapter needs React Router `^8.5.0`, `@react-router/node`, React 19, and
-Node.js `>=22.22.0`. It is ESM-only; CommonJS `require("@palamedes/react-router")`
+Node.js `>=24.3.0`. It is ESM-only; CommonJS `require("@palamedes/react-router")`
 is not supported. React Router's experimental RSC mode is not supported.
 
 ## Setup
