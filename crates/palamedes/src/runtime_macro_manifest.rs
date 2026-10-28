@@ -280,6 +280,7 @@ impl ManifestVisitor<'_, '_> {
         let (message, lowered_values) = lower_template(
             template,
             self.source,
+            &self.collector.imported_macros,
             "template expression",
             &mut used_value_names,
         )?;
@@ -346,6 +347,7 @@ impl ManifestVisitor<'_, '_> {
                 let (message, _) = lower_template(
                     template,
                     self.source,
+                    &self.collector.imported_macros,
                     "template expression",
                     &mut used_value_names,
                 )?;
@@ -402,6 +404,7 @@ impl ManifestVisitor<'_, '_> {
         let lowered = lower_choice_options_from_object(
             object,
             self.source,
+            &self.collector.imported_macros,
             &mut used_value_names,
             format,
             macro_name,
@@ -444,6 +447,8 @@ impl ManifestVisitor<'_, '_> {
     ) -> PalamedesResult<BTreeMap<String, String>> {
         let mut options = BTreeMap::new();
         for property in &object.properties {
+            // Defensive backstop: `lower_choice_options_from_object` already
+            // rejects spread options and computed keys before this runs.
             let ObjectPropertyKind::ObjectProperty(property) = property else {
                 return Err(self.unsupported(
                     macro_name,

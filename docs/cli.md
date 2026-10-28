@@ -219,13 +219,13 @@ uses the union of the configured `catalogs[].include` and `exclude` file sets,
 deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, MDX, Vue scripts,
 and Svelte scripts.
 
-Svelte markup is not a macro surface, so a macro called there fails with a
-located error. A name that the markup binds itself shadows the macro import:
-`{#each … as t}`, snippet parameters, `let:t`, `{#await … then t}`,
-`{:catch t}`, `{@const t = …}`, and arrow or function parameters. Block and
-`let:` bindings count for the whole component and parameters for their own
-brace expression, so a macro call outside the block that reuses a shadowed name
-is not reported.
+Svelte markup is not a macro surface, so a macro called or referenced there,
+including a bare value such as `{handler(t)}`, fails with a located error. A
+name that the markup binds itself shadows the macro import: `{#each … as t}`,
+snippet parameters, `let:t`, `{#await … then t}`, `{:catch t}`, `{@const t = …}`,
+and arrow or function parameters. Block and `let:` bindings count for the whole
+component and parameters for their own brace expression, so a macro use outside
+the block that reuses a shadowed name is not reported.
 
 ```bash
 pmds lint

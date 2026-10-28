@@ -264,8 +264,11 @@ or a template literal, for example
 ``plural(count, { one: "# item", other: `# items for ${name}` })``. Extraction
 and the transform reject any other branch value, such as a constant, a member
 expression, JSX, or a nested `t`, `plural`, or `select` call, with an error that
-names the branch and its source location. Write the complete sentence in each
-branch instead of composing it from other messages.
+names the branch and its source location. A nested macro imported under another
+name, such as `plural as p`, is reported the same way. Write the complete
+sentence in each branch instead of composing it from other messages. Branch
+names must be static as well: spread options (`{ ...rest }`) and computed keys
+(`{ [key]: "…" }`) fail with a located error instead of being dropped.
 
 ## Runtime Formatting
 
