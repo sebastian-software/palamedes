@@ -115,7 +115,7 @@
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
-    "next": "^16"
+    "next": "^16.4.1"
   },
   "engines": {
     "node": ">=22.0.0"

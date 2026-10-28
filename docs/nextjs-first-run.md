@@ -16,7 +16,7 @@ pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plu
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
-The Next integration requires Next.js 16. Keep `next`, `react`, and
+The Next integration requires Next.js 16.4.1 or a later 16.x release. Keep `next`, `react`, and
 `react-dom` from the App Router application itself.
 
 ## 2. Describe the catalogs

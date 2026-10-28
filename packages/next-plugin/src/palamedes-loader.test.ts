@@ -101,6 +101,38 @@ describe("palamedes-loader.cjs", () => {
     expect(transformPalamedesMacros).toHaveBeenCalledTimes(2);
   });
 
+  it("transforms a standalone app selected by an absolute-path RegExp under Turbopack", async () => {
+    // A standalone app's Turbopack path is `src/page.tsx`, without the leading
+    // separator the monorepo layout (`examples/app/src/page.tsx`) provides.
+    const projectRoot = path.resolve("/standalone-app");
+    const config = withPalamedes(
+      {},
+      { projectRoot, include: /\/src\//, exclude: [/node_modules/, /\/src\/generated\//] },
+    );
+    const rules = config.turbopack?.rules?.["*"] as {
+      condition: TurbopackCondition;
+      loaders: { options: Record<string, unknown> }[];
+    }[];
+    const source =
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }';
+
+    const transformed: string[] = [];
+    for (const file of ["src/page.tsx", "src/generated/page.tsx", "lib/page.tsx"]) {
+      for (const browser of [true, false]) {
+        const rule = rules.find((candidate) =>
+          matchesTurbopackCondition(candidate.condition, { path: file, content: source, browser }),
+        );
+        if (!rule) continue;
+        const output = await runLoader(rule.loaders[0]!.options, {
+          resourcePath: path.join(projectRoot, file),
+        });
+        if (output !== source) transformed.push(`${file} (${browser ? "browser" : "server"})`);
+      }
+    }
+
+    expect(transformed).toEqual(["src/page.tsx (browser)", "src/page.tsx (server)"]);
+  });
+
   it("compiles fragments from a small adapter resource instead of repeating full PO inputs", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",
@@ -1063,6 +1095,32 @@ describe("palamedes-loader.cjs", () => {
     );
   });
 });
+
+type TurbopackCondition =
+  | string
+  | { all: TurbopackCondition[] }
+  | { any: TurbopackCondition[] }
+  | { not: TurbopackCondition }
+  | { path: RegExp }
+  | { content: RegExp };
+
+/*
+ * The subset of Next 16 Turbopack rule conditions withPalamedes() emits. Like
+ * Turbopack, `path` sees the project-relative module path.
+ */
+function matchesTurbopackCondition(
+  condition: TurbopackCondition,
+  module: { path: string; content: string; browser: boolean },
+): boolean {
+  if (condition === "browser") return module.browser;
+  if (condition === "foreign") return module.path.includes("node_modules/");
+  if (typeof condition === "string") throw new Error(`Unexpected condition ${condition}`);
+  if ("all" in condition) return condition.all.every((c) => matchesTurbopackCondition(c, module));
+  if ("any" in condition) return condition.any.some((c) => matchesTurbopackCondition(c, module));
+  if ("not" in condition) return !matchesTurbopackCondition(condition.not, module);
+  if ("path" in condition) return condition.path.test(module.path);
+  return condition.content.test(module.content);
+}
 
 async function runLoader(
   options: Record<string, unknown>,
