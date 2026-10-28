@@ -436,3 +436,67 @@ fn js_target_accepts_shared_messages_that_compile_identically() {
     assert!(module.contains("Öffnen"), "{module}");
     assert!(!module.contains("\"Open\""), "{module}");
 }
+
+#[test]
+fn javascript_target_compiles_fuzzy_entries_as_missing_fallbacks() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    fs::write(
+        root.join("palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::create_dir_all(root.join("locales")).unwrap();
+    fs::write(
+        root.join("locales/en.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Fuzzy one\"\nmsgstr \"\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("locales/de.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\n#, fuzzy\nmsgid \"Fuzzy one\"\nmsgstr \"Unscharf\"\n",
+    )
+    .unwrap();
+    let compile = |strict: bool| {
+        let mut command = compiler();
+        command
+            .current_dir(root)
+            .args(["catalog", "compile", "--target", "js", "--locale", "de"])
+            .args(["--output", "out", "--json"]);
+        if strict {
+            command.arg("--fail-on-missing");
+        }
+        command.output().unwrap()
+    };
+
+    let output = compile(false);
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        report["missing"],
+        serde_json::json!([
+            { "locale": "de", "message": "Fuzzy one", "resolvedLocale": "en" }
+        ])
+    );
+    let module = fs::read_to_string(root.join("out/de.mjs")).unwrap();
+    assert!(module.contains("\"Fuzzy one\""), "{module}");
+    assert!(!module.contains("Unscharf"), "{module}");
+
+    let strict = compile(true);
+    assert_eq!(strict.status.code(), Some(1), "{strict:?}");
+    let report: serde_json::Value = serde_json::from_slice(&strict.stdout)
+        .unwrap_or_else(|error| panic!("{error}: {strict:?}"));
+    let diagnostics = report["diagnostics"].as_array().unwrap();
+    assert_eq!(diagnostics.len(), 1, "{report}");
+    assert_eq!(diagnostics[0]["code"], "compile.missing_translation");
+    assert_eq!(diagnostics[0]["locale"], "de");
+    assert_eq!(diagnostics[0]["sourceKey"]["message"], "Fuzzy one");
+    assert!(
+        diagnostics[0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Missing or fuzzy translation;"),
+        "{report}"
+    );
+}

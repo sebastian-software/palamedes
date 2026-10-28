@@ -2519,6 +2519,56 @@ msgstr ""
     ).not.toThrow();
   });
 
+  it("compiles fuzzy translations as missing source fallbacks", async () => {
+    const rootDir = await createTempDir();
+    const enCatalog = path.join(rootDir, "locales", "en");
+    const deCatalog = path.join(rootDir, "locales", "de");
+
+    await mkdir(enCatalog, { recursive: true });
+    await mkdir(deCatalog, { recursive: true });
+    await writeFile(
+      path.join(enCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "Fuzzy one"
+msgstr ""
+`,
+    );
+    await writeFile(
+      path.join(deCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+#, fuzzy
+msgid "Fuzzy one"
+msgstr "Unscharf"
+`,
+    );
+
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    };
+    const resourcePath = path.join(deCatalog, "messages.po");
+    const artifact = compileCatalogArtifact(config, resourcePath);
+
+    expect(Object.values(artifact.messages)).toStrictEqual(["Fuzzy one"]);
+    expect(artifact.missing).toMatchObject([
+      { sourceKey: { message: "Fuzzy one" }, requestedLocale: "de", resolvedLocale: "en" },
+    ]);
+    expect(compileCatalogModule(config, resourcePath, { locale: "de" }).code).not.toContain(
+      "Unscharf",
+    );
+    expect(() =>
+      compileCatalogModule(config, resourcePath, { locale: "de", failOnMissing: true }),
+    ).toThrow(/Missing 1 translation\(s\)/);
+  });
+
   it("renders catalog modules with the same message order as artifact objects", async () => {
     const rootDir = await createTempDir();
     const enCatalog = path.join(rootDir, "locales", "en");
