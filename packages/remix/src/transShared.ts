@@ -1,5 +1,5 @@
-import { createCompiledMessageRuntime } from "@palamedes/core/compiled";
 import {
+  createCompiledMessageRuntime,
   formatMessageArgument,
   replacePoundPlaceholders,
   stringifyValue,

@@ -33,8 +33,14 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `createRemixI18nServer(options)`
 - `startRemixClient(loadEntry, options?)`
 - `initializeRemixClientI18nAsync(options)`
-- `createRemixI18nRequestScope(resolveI18n)`
+- `createRemixI18nRequestScope(resolveI18n, options?)`
 - `remixI18nContext`
+- Types from `@palamedes/remix/server`: `RemixI18nServerOptions`,
+  `RemixI18nServer`, `RemixI18nRunInput`, `RemixI18nOptions`,
+  `RemixI18nOptionsResolver`, `RemixCatalogAssetConfig`,
+  `RemixCatalogAssetOptions`, `RemixI18nContextKey`, `RemixI18nContextReader`,
+  `RemixI18nContextValue`, `RemixI18nRequestScopeOptions`, and the
+  client-entry and catalog-asset types
 
 ## Complete Setup Sequence
 
@@ -210,18 +216,23 @@ export const remixI18n = createRemixI18nServer({
 ```
 
 Use `remixI18n.run(context, callback)` inside Remix actions, or install
-`remixI18n.middleware()` on a fetch-router. The helper resolves the active
-locale, creates and activates a Palamedes i18n instance, caches catalog messages
-by locale at module scope, and preserves that request-local instance while a
-returned `Response.body` is streamed. Wrapping the body also preserves the
-response's `url`, `type`, and `redirected` fetch metadata.
+`remixI18n.middleware()` on a fetch-router. `run()` accepts a Fetch `Request`
+or a Remix `RequestContext` (any `RemixI18nRunInput`). The helper resolves the
+active locale, creates and activates a Palamedes i18n instance, caches catalog
+messages by locale at module scope, and preserves that request-local instance
+while a returned `Response.body` is streamed. Wrapping the body also preserves
+the response's `url`, `type`, and `redirected` fetch metadata.
+
+When the locale, `i18nOptions`, or catalog cannot be resolved, `run()` and the
+middleware throw an error whose message is `failureMessage` (default:
+`Palamedes Remix i18n initialization failed before the handler ran.`) and whose
+`cause` is the original error. The callback does not run.
 
 When the shared `catalogAssets.registry` is provided, `loadMessages` is
 optional. `run()` then loads the complete executable catalog for the resolved
 active locale on first demand, shares concurrent loads, and drops them when
 the config or catalog generation changes. This mode keeps `.po` imports and
-locale-to-catalog maps inside the adapter. The synchronous `createI18n(locale)`
-compatibility method still requires a synchronous `loadMessages` implementation.
+locale-to-catalog maps inside the adapter.
 
 Supported strategies are `cookie`, `route`, `subdomain`, and `tld`. Route
 strategy reads `context.params.locale` by default; when that param is absent,
@@ -229,31 +240,39 @@ it falls back to the request URL's first path segment. Pass `routeParam` to use
 a different param name. Cookie serialization is available through
 `remixI18n.serializeLocaleCookie(locale)`.
 
-Further `createRemixI18nServer` options: `createI18n` (factory for the
-request-local instance), `cookieName` (default `"locale"`), and `cookieMaxAge`
-(default one year, in seconds). `catalogAssets` accepts the shared compiler
-configuration and a locale-to-`.po` resolver. For browser graph splitting, pass
+Further `createRemixI18nServer` options: `i18nOptions` (the request-local
+`createI18n` options such as `timeZone`, or `(request, locale) => options`),
+`failureMessage`, `cookieName` (default `"locale"`), and `cookieMaxAge`
+(default one year, in seconds). `catalogAssets` accepts a
+`RemixCatalogAssetConfig` (the resolved catalog configuration) and a
+locale-to-`.po` resolver. For browser graph splitting, pass
 one `createPalamedesRemixCatalogAssetRegistry()` result to both the browser
 asset loader and `catalogAssets`; the loader registers each module's actual
 compiled IDs, so no hand-maintained catalog map is needed. The adapter exposes
 `createClientCatalogAsset(locale)`, `renderClientCatalog(locale)`, and
 `serveClientCatalogAsset(request)` for executable ESM delivery. `catalogVersion`
-overrides the default deterministic content digest with a deployment version string.
-Legacy message callbacks apply only to explicit `loadMessages` integrations;
-registry-backed catalogs reject them because browser assets do not carry raw messages.
+overrides the default deterministic content digest with a deployment version
+string. The v1 callback form is removed and throws a migration error.
 
-For matching date and time formatting during hydration, configure the server
-factory with `createI18n: () => createI18n({ timeZone: "Europe/Berlin" })` and render
+For matching date and time formatting during hydration, pass
+`i18nOptions: { timeZone: "Europe/Berlin" }` to the server and render
 `data-palamedes-time-zone="Europe/Berlin"` on the document's `<html>` element.
 The adapter-owned browser entry reads that IANA time zone before translated
 modules execute. Omitting the attribute preserves the runtime's default time
 zone behavior.
 
 Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
-object exposes `resolveLocale(input)` for standalone locale resolution,
-`createI18n(locale)` for manual instance creation, and `get(context?)` — the
-read accessor for the active request scope, which is how handlers running
-under `middleware()` reach the current i18n instance.
+object exposes `resolveLocale(input)` for standalone locale resolution and
+`get(context?)` — the read accessor for the active request scope, which is how
+handlers running under `middleware()` reach the current i18n instance. Pass the
+Remix `RequestContext` (a `RemixI18nContextReader`) to read the value stored
+under `remixI18nContext`, whose type is `RemixI18nContextKey`. The v1
+synchronous `createI18n(locale)` method is removed; create request instances
+through `run()` or the middleware.
+
+`renderClientEntry()` takes the request's CSP nonce as a string. The
+application calls it while rendering each document, so it already has the
+request; a resolver function would add nothing.
 
 ## Client Catalog Assets
 

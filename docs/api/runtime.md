@@ -28,6 +28,11 @@ The server subpath `@palamedes/runtime/server` exports:
 - `CreateScopedI18nRunnerOptions`
 - `ScopedI18nRunner`
 - `createScopedI18nRunner(resolveI18n, options)`
+- `createServerCatalogStore<TLocale>({ load })`
+- `ServerCatalogStore`
+- `ServerCatalogLoader`
+- `ServerCatalogLoadContext`
+- `ServerCatalogStoreStats`
 
 The build-backed subpath `@palamedes/runtime/server/bundled` exports
 `createBundledServerI18n({ locale, timeZone?, ...options })` and
@@ -150,6 +155,55 @@ enter that existing request scope without importing the Node-only server
 subpath. The helper requires `createServerI18nScope()` to have been configured
 by the server entry point; it does not create a scope or make an i18n singleton
 request-safe.
+
+## Server Catalog Store
+
+`createServerCatalogStore({ load })` shares complete compiled catalogs across
+the requests of one server process. The framework adapters and
+`createBundledServerI18n` use it; a custom server integration that loads its
+own generated catalogs can use it the same way.
+
+```ts
+import { createI18n } from "@palamedes/core";
+import { createServerCatalogStore } from "@palamedes/runtime/server";
+
+const catalogs = createServerCatalogStore<"en" | "de">({
+  // Return the generated catalog modules for one locale, in override order.
+  load: async ({ locale }) => [(await import(`./generated/${locale}.mjs`)).messages],
+});
+
+export async function createRequestI18n(locale: "en" | "de") {
+  const i18n = createI18n({ locale });
+  i18n.load(locale, await catalogs.load(locale));
+  return i18n;
+}
+```
+
+`load` receives a `ServerCatalogLoadContext` with the `locale` and its current
+`generation`, and returns the ordered `CompiledCatalogMessages` fragments for
+that locale. Later fragments override earlier ones. Fragments must be generated
+compiled catalogs; anything else rejects the load with a `TypeError`.
+
+The returned `ServerCatalogStore` has these methods:
+
+- `load(locale)` returns the merged, immutable catalog. Concurrent calls for a
+  locale share one load, and later calls reuse the result without calling the
+  loader again. A failed load is not cached, so the next call retries it.
+- `getReady(locale)` returns the catalog when it has already loaded, without
+  starting a load.
+- `invalidate(locale?)` drops one locale, or every locale, and advances its
+  generation. A load that was already running when the generation changed
+  cannot replace the newer result. Hosts call it when catalogs change in
+  development.
+- `generation(locale)` returns the locale's generation, starting at `0`.
+- `stats()` returns `ServerCatalogStoreStats`: `trackedLocales`,
+  `readyLocales`, `inFlightLocales`, `retainedFragments`, and
+  `retainedMessages`.
+
+The store retains each loaded locale until it is invalidated, so a long-lived
+process can eventually hold every locale it has served. Request instances
+share the merged catalog: `i18n.load()` keeps the reference instead of copying
+each message.
 
 ## Test Reset
 

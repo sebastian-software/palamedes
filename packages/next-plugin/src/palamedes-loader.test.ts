@@ -221,7 +221,7 @@ describe("palamedes-loader.cjs", () => {
 
     expect(loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,
-      cwd: path.resolve("/next-app"),
+      projectRoot: path.resolve("/next-app"),
     });
   });
 
@@ -230,7 +230,7 @@ describe("palamedes-loader.cjs", () => {
 
     expect(loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,
-      cwd: path.resolve("/next-app"),
+      projectRoot: path.resolve("/next-app"),
     });
   });
 

@@ -11,7 +11,7 @@ import { palamedes } from "@palamedes/vite-plugin";
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = join(siteRoot, "fragment-demo");
 const outDir = join(siteRoot, "public/fragment-demo");
-const config = await loadPalamedesConfig({ cwd: root });
+const config = await loadPalamedesConfig({ projectRoot: root });
 await build({
   configFile: false,
   root,

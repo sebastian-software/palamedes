@@ -40,12 +40,12 @@ const MIGRATION_VOCABULARY =
   /\b(?:removed|renamed|renames?|throws?|rejects?|rejected|migration|v1)\b/iu;
 
 /**
- * Removed adapter options whose name is still valid on another API. `cwd`
- * remains a `loadPalamedesConfig()` option and a Node `child_process` option.
- * The pattern must match the section heading, or the code line itself.
+ * Removed Palamedes options whose name is still valid on another API. `cwd`
+ * remains a Node `child_process` option. The pattern must match the section
+ * heading, or the code line itself.
  */
 const STILL_VALID_ELSEWHERE = {
-  cwd: /\bloadPalamedesConfig(?:Sync)?\b|\b(?:execFile|execFileSync|spawn|spawnSync|execSync)\b/u,
+  cwd: /\b(?:execFile|execFileSync|spawn|spawnSync|execSync)\b/u,
 };
 
 const SOLID_PACKAGES = ["solid-js", "@solidjs/web", "@solidjs/router", "@solidjs/vite-plugin"];

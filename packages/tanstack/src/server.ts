@@ -14,6 +14,18 @@ export type TanStackServerI18nOptions = CreateI18nOptions & {
   readonly locale: string;
 };
 
+/** The request middleware context TanStack Start passes to request middleware. */
+export type TanStackRequestContext = Readonly<Record<string, unknown>>;
+
+/**
+ * Resolves a document request's CSP nonce, for example from a value an earlier
+ * request middleware passed on through `next({ context })`.
+ */
+export type TanStackNonceResolver = (
+  request: Request,
+  context: TanStackRequestContext,
+) => string | undefined;
+
 export type TanStackCatalogDeliveryOptions = {
   /** Built client output; defaults to `dist/client` from the host process. */
   readonly clientDirectory?: string;
@@ -27,8 +39,11 @@ export type TanStackCatalogDeliveryOptions = {
   readonly manifestName?: string;
   /** Trusted catalog-independent markup rendered when a catalog fails. */
   readonly errorHtml?: string;
-  /** Resolve a CSP nonce for each request. */
-  readonly nonce?: string | ((request: Request) => string | undefined);
+  /**
+   * The CSP nonce for the import map and readiness script: a fixed string, or
+   * a resolver called once per HTML document request.
+   */
+  readonly nonce?: string | TanStackNonceResolver;
 };
 
 type TanStackResponseResult = Response | Record<string, unknown>;
@@ -70,7 +85,12 @@ export async function createTanStackServerI18n(
  */
 export function createTanStackCatalogResponseDelivery(
   options: TanStackCatalogDeliveryOptions = {},
-): (result: unknown, locale: string, request: Request) => Promise<unknown> {
+): (
+  result: unknown,
+  locale: string,
+  request: Request,
+  context?: TanStackRequestContext,
+) => Promise<unknown> {
   const resolvedOptions = {
     ...options,
     // A caller commonly supplies only a request nonce. Keep the framework's
@@ -80,15 +100,14 @@ export function createTanStackCatalogResponseDelivery(
     development: options.development ?? isDevelopmentBuild(),
   };
   const delivery = createViteCatalogDelivery(resolvedOptions);
-  return async (result, locale, request) => {
+  return async (result, locale, request, context = {}) => {
     const response = result instanceof Response ? result : getNestedResponse(result);
     if (!response || !response.body || !isHtmlResponse(response)) return result;
     const binding = delivery.getLocaleBinding(locale);
-    const nonce = resolvedOptions.nonce
-      ? typeof resolvedOptions.nonce === "function"
-        ? resolvedOptions.nonce(request)
-        : resolvedOptions.nonce
-      : undefined;
+    const nonce =
+      typeof resolvedOptions.nonce === "function"
+        ? resolvedOptions.nonce(request, context)
+        : resolvedOptions.nonce;
     if (!binding && !nonce && resolvedOptions.development !== true) return result;
     const transformOptions: ViteDocumentTransformOptions = {
       ...(resolvedOptions.errorHtml ? { errorHtml: resolvedOptions.errorHtml } : {}),

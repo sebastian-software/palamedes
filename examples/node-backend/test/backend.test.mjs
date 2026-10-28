@@ -178,7 +178,7 @@ async function cli(args, environment = {}) {
 }
 
 test("supported and default locales match palamedes.yaml", async () => {
-  const config = loadPalamedesConfigSync({ cwd: root });
+  const config = loadPalamedesConfigSync({ projectRoot: root });
   const unsupported = await cli(["--locale", "zz"]);
   assert.equal(unsupported.code, 2);
   assert.equal(

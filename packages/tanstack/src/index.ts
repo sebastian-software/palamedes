@@ -8,7 +8,12 @@ import type {
   TanStackServerI18nOptions,
 } from "./server";
 
-export type { TanStackCatalogDeliveryOptions, TanStackServerI18nOptions } from "./server";
+export type {
+  TanStackCatalogDeliveryOptions,
+  TanStackNonceResolver,
+  TanStackRequestContext,
+  TanStackServerI18nOptions,
+} from "./server";
 
 /**
  * Creates one fresh request-local i18n instance. The incoming request is the
@@ -21,15 +26,36 @@ export type TanStackI18nResolver<T extends I18nInstance = I18nInstance> = (
 /** Resolve only request policy; catalog loading remains adapter-owned. */
 export type TanStackLocaleResolver = (request: Request) => string | Promise<string>;
 
-/** Resolve optional request-local formatting settings alongside the locale. */
+/** Request-local `createI18n` options other than the locale, such as `timeZone`. */
+export type TanStackI18nOptions = Omit<TanStackServerI18nOptions, "locale">;
+
+/** Returns the `createI18n` options for one request and its resolved locale. */
 export type TanStackI18nOptionsResolver = (
   request: Request,
-) => Omit<TanStackServerI18nOptions, "locale"> | Promise<Omit<TanStackServerI18nOptions, "locale">>;
+  locale: string,
+) => TanStackI18nOptions | Promise<TanStackI18nOptions>;
 
 export type TanStackServerI18nRequestMiddlewareOptions = {
-  /** Adapter-owned production HTML catalog delivery. */
+  /** Pick the locale for a request, for example from a cookie, path segment, or host. */
+  readonly resolveLocale: TanStackLocaleResolver;
+  /** Formatting options for the request's i18n instance, or a function that returns them. */
+  readonly i18nOptions?: TanStackI18nOptions | TanStackI18nOptionsResolver;
+  /** Adapter-owned production HTML catalog delivery, or `false` to leave HTML unchanged. */
   readonly catalogDelivery?: TanStackCatalogDeliveryOptions | false;
+  /** Message of the error thrown when the request's locale or catalog cannot be loaded. */
+  readonly failureMessage?: string;
 };
+
+/** Options of the resolver-based middleware factories. */
+export type TanStackI18nMiddlewareOptions = {
+  /** Message of the error thrown when the resolver fails; the original error is its `cause`. */
+  readonly failureMessage?: string;
+};
+
+const POSITIONAL_ARGUMENTS_MESSAGE =
+  "Palamedes v2 changed createTanStackServerI18nRequestMiddleware() to take one options object: pass { resolveLocale, i18nOptions, catalogDelivery } instead of positional arguments. The former resolveOptions(request) argument is now i18nOptions(request, locale).";
+const RENAMED_RESOLVE_OPTIONS_MESSAGE =
+  "Palamedes v2 renamed resolveOptions to i18nOptions: it receives (request, locale) and returns the createI18n options, as in the other adapters. Rename the option.";
 
 /**
  * Create a global TanStack Start request middleware that activates i18n only
@@ -41,8 +67,9 @@ export type TanStackServerI18nRequestMiddlewareOptions = {
  */
 export function createTanStackI18nRequestMiddleware<T extends I18nInstance = I18nInstance>(
   resolveI18n: TanStackI18nResolver<T>,
+  options: TanStackI18nMiddlewareOptions = {},
 ) {
-  const runner = createScopedTanStackI18nRunner(resolveI18n);
+  const runner = createScopedTanStackI18nRunner(resolveI18n, options.failureMessage);
 
   return createMiddleware().server(async ({ handlerType, next, request }) => {
     if (handlerType !== "serverFn") {
@@ -59,11 +86,15 @@ export function createTanStackI18nRequestMiddleware<T extends I18nInstance = I18
  * loader supplies compiled messages for that locale.
  */
 export function createTanStackServerI18nRequestMiddleware(
-  resolveLocale: TanStackLocaleResolver,
-  resolveOptions?: TanStackI18nOptionsResolver,
-  middlewareOptions: TanStackServerI18nRequestMiddlewareOptions = {},
+  options: TanStackServerI18nRequestMiddlewareOptions,
 ) {
-  const catalogDelivery = middlewareOptions.catalogDelivery;
+  if (typeof options === "function") {
+    throw new TypeError(POSITIONAL_ARGUMENTS_MESSAGE);
+  }
+  if ((options as { resolveOptions?: unknown }).resolveOptions !== undefined) {
+    throw new Error(RENAMED_RESOLVE_OPTIONS_MESSAGE);
+  }
+  const { resolveLocale, i18nOptions, catalogDelivery } = options;
   type CatalogDelivery = ReturnType<typeof createTanStackCatalogResponseDelivery>;
   let deliveryPromise: Promise<CatalogDelivery> | undefined;
 
@@ -83,21 +114,22 @@ export function createTanStackServerI18nRequestMiddleware(
   const runner = createScopedTanStackI18nRunner(async (request) => {
     const locale = await resolveLocale(request);
     activeLocales.set(request, locale);
-    const options = resolveOptions ? await resolveOptions(request) : {};
+    const resolvedOptions =
+      typeof i18nOptions === "function" ? await i18nOptions(request, locale) : i18nOptions;
     // Keep the root middleware entry loadable without Vite. The server entry
     // imports the generated virtual catalog module and is loaded only when a
     // catalog-backed middleware is actually invoked.
     const { createTanStackServerI18n } = await import("./server");
-    return await createTanStackServerI18n({ ...options, locale });
-  });
+    return await createTanStackServerI18n({ ...resolvedOptions, locale });
+  }, options.failureMessage);
 
-  return createMiddleware().server(async ({ handlerType, next, request }) => {
+  return createMiddleware().server(async ({ context, handlerType, next, request }) => {
     const result = await runner.run(request, async () => {
       const nextResult = await next();
       const delivery = await getDelivery();
       const activeLocale = activeLocales.get(request);
       return handlerType === "router" && delivery && activeLocale
-        ? await delivery(nextResult, activeLocale, request)
+        ? await delivery(nextResult, activeLocale, request, context)
         : nextResult;
     });
     // TanStack's middleware declaration is narrower than the framework's
@@ -117,8 +149,9 @@ export function createTanStackServerI18nRequestMiddleware(
  */
 export function createTanStackI18nMiddleware<T extends I18nInstance = I18nInstance>(
   resolveI18n: TanStackI18nResolver<T>,
+  options: TanStackI18nMiddlewareOptions = {},
 ) {
-  const runner = createScopedTanStackI18nRunner(resolveI18n);
+  const runner = createScopedTanStackI18nRunner(resolveI18n, options.failureMessage);
 
   return createMiddleware({ type: "function" }).server(
     async ({ next }) => await runner.run(getRequest(), next),

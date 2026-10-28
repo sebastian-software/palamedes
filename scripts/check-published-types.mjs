@@ -380,15 +380,28 @@ export const integrityStatuses: CatalogMachineTranslationStatus[] = ["current", 
 export const authorship: CatalogMachineTranslationStatus = "human"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
-import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
+import {
+  createTanStackI18nRequestMiddleware,
+  createTanStackServerI18nRequestMiddleware,
+} from "@palamedes/tanstack"
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server"
+import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server"
 import { createReactRouterI18n, type ReactRouterHandleRequest } from "@palamedes/react-router"
 import { useCatalogAvailable, useDocumentLocale } from "@palamedes/react-router/document"
-import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
+import vitePalamedes, { palamedes, type PalamedesFramework } from "@palamedes/vite-plugin"
 import { createI18n } from "@palamedes/core"
 import { getI18n } from "@palamedes/runtime"
 import type { TransProps as ReactTransProps } from "@palamedes/react"
 import type { TransProps as SolidTransProps } from "@palamedes/solid"
 import type { TransProps as RemixTransProps } from "@palamedes/remix/compiled"
+import {
+  createRemixI18nServer,
+  remixI18nContext,
+  type RemixCatalogAssetConfig,
+  type RemixI18nContextKey,
+  type RemixI18nRunInput,
+} from "@palamedes/remix/server"
+import { defineLocaleControls } from "@palamedes/core/locale"
 
 export const lengths = [
   t\`Hello\`.length,
@@ -446,6 +459,8 @@ t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
+const viteFramework: PalamedesFramework = "solid"
+export const viteSolidPlugins = palamedes({ framework: viteFramework })
 export const wakuInterceptor = createWakuI18nInterceptor((request) =>
   createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
 )
@@ -457,6 +472,31 @@ export const reactRouterI18n = createReactRouterI18n({
   i18nOptions: { timeZone: "Europe/Berlin" },
   nonce: (request, _context) => request.headers.get("x-nonce") ?? undefined,
 })
+export const reactRouterWithFixedNonce = createReactRouterI18n({
+  resolveLocale: () => "en",
+  nonce: "fixed-nonce",
+})
+export const tanstackServerMiddleware = createTanStackServerI18nRequestMiddleware({
+  resolveLocale: (request) => request.headers.get("accept-language") ?? "en",
+  i18nOptions: (_request, locale) => ({ timeZone: locale === "de" ? "Europe/Berlin" : "UTC" }),
+  catalogDelivery: { nonce: (_request, context) => String(context.nonce ?? "") },
+  failureMessage: "TanStack i18n failed",
+})
+// @ts-expect-error The v1 positional arguments were replaced by one options object.
+createTanStackServerI18nRequestMiddleware((request: Request) => request.url)
+export const wakuDelivery = createWakuCatalogDeliveryMiddleware({
+  resolveLocale: () => "en",
+  manifestName: "palamedes-split-manifest.json",
+  nonce: (_request, context) => context.req.raw.headers.get("x-nonce") ?? undefined,
+})
+export const solidDelivery = createSolidCatalogDeliveryMiddleware({
+  resolveLocale: () => "en",
+  nonce: (request) => request.headers.get("x-nonce") ?? undefined,
+})
+export const wakuInterceptorWithMessage = createWakuI18nInterceptor(
+  (request) => createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
+  { failureMessage: "Waku i18n failed" },
+)
 export const reactRouterEntry: ReactRouterHandleRequest = reactRouterI18n.handleRequest
 export const reactRouterMiddleware = [reactRouterI18n.middleware]
 export const useReactRouterDocumentLocale: () => string | undefined = useDocumentLocale
@@ -466,6 +506,29 @@ createReactRouterI18n({ resolveLocale: () => createI18n({ locale: "en" }) })
 // @ts-expect-error Adapters require the full v2 instance, not only locale and _().
 createWakuI18nInterceptor(() => ({ locale: "en", _: () => "" }))
 export const translatedText: string = getI18n()._("greeting")
+
+const remixLocales = defineLocaleControls({ locales: ["en", "de"], defaultLocale: "en" })
+export const remixCatalogConfig: RemixCatalogAssetConfig = {
+  rootDir: ".",
+  locales: ["en", "de"],
+  sourceLocale: "en",
+  catalogs: [{ path: "locales/{locale}", format: "po" }],
+}
+export const remixI18n = createRemixI18nServer({
+  locales: remixLocales,
+  strategy: "cookie",
+  i18nOptions: (_request, locale) => ({ timeZone: locale === "de" ? "Europe/Berlin" : "UTC" }),
+  catalogAssets: { config: remixCatalogConfig, resolvePath: (locale) => \`locales/\${locale}.po\` },
+  catalogVersion: "deployment-1",
+  failureMessage: "Remix i18n failed",
+})
+export const remixContextKey: RemixI18nContextKey = remixI18nContext
+export const remixRunInput: RemixI18nRunInput = { request: new Request("https://example.test/") }
+export const remixTimeZone: Promise<string | undefined> = remixI18n.run(remixRunInput, ({ i18n }) => i18n.timeZone)
+// @ts-expect-error The v1 synchronous createI18n(locale) method was removed.
+remixI18n.createI18n("de")
+// @ts-expect-error The catalogVersion callback was removed; pass a deployment version string.
+createRemixI18nServer({ locales: remixLocales, strategy: "cookie", catalogVersion: () => "v1" })
 
 export const runtimeTransProps = [
   { id: "greeting", message: "Hello" } satisfies ReactTransProps,

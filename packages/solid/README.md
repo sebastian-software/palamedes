@@ -153,7 +153,6 @@ initial catalog fragments before importing the Solid client entry, and leaves
 the host's ordinary error UI responsible for lazy route failures:
 
 ```ts
-import path from "node:path";
 import type { StartMiddleware } from "@solidjs/vite-plugin";
 import { createServerI18nScope } from "@palamedes/runtime/server";
 import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
@@ -161,7 +160,6 @@ import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
 
 const serverI18nScope = createServerI18nScope();
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
-  clientDirectory: path.resolve(process.cwd(), ".output/public"),
   resolveLocale: (request) => resolveLocale(request),
   nonce: (request) => serverRequestContext(request).cspNonce,
 });

@@ -482,6 +482,19 @@ describe("createReactRouterI18n", () => {
     expect(html).not.toMatch(/<script(?![^>]*nonce="nonce-from-context")[^>]*>/u);
   });
 
+  it("accepts a fixed nonce string like the other adapters", async () => {
+    const clientDirectory = await createClientBuild();
+    const app = createTestApp({
+      catalogDelivery: { clientDirectory, development: false },
+      nonce: "fixed-nonce",
+    });
+
+    const html = await (await app.handler(new Request("https://example.test/?locale=de"))).text();
+
+    expect(html).toContain('<script type="importmap" nonce="fixed-nonce">');
+    expect(html).not.toMatch(/<script(?![^>]*nonce="fixed-nonce")[^>]*>/u);
+  });
+
   it("leaves HTML untouched when catalog delivery is disabled", async () => {
     const app = createTestApp({ catalogDelivery: false });
 

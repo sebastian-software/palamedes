@@ -266,6 +266,44 @@ describe("TanStack server catalog adapter", () => {
     }
   });
 
+  it("resolves a nonce function once from the request and its middleware context", async () => {
+    const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-nonce-fn-"));
+    try {
+      writeFileSync(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        JSON.stringify({ locales: ["en"], importMaps: { en: "map.json" }, chunkImports: {} }),
+      );
+      writeFileSync(path.join(clientDirectory, "map.json"), JSON.stringify({ imports: {} }));
+      const nonce = vi.fn(
+        (_request: Request, middlewareContext: Readonly<Record<string, unknown>>) =>
+          String(middlewareContext.nonce),
+      );
+      const { createTanStackCatalogResponseDelivery } = await import("./server");
+      const deliver = createTanStackCatalogResponseDelivery({
+        clientDirectory,
+        development: false,
+        nonce,
+      });
+      const request = new Request("https://example.test/");
+      const context = { nonce: "context-nonce" };
+
+      const response = (await deliver(
+        new Response("<html><head></head><body></body></html>", {
+          headers: { "content-type": "text/html" },
+        }),
+        "en",
+        request,
+        context,
+      )) as Response;
+
+      expect(await response.text()).toContain('<script type="importmap" nonce="context-nonce">');
+      expect(nonce).toHaveBeenCalledTimes(1);
+      expect(nonce).toHaveBeenCalledWith(request, context);
+    } finally {
+      rmSync(clientDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("delivers production catalogs from a production build without NODE_ENV", async () => {
     const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-prod-env-"));
     try {

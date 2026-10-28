@@ -132,7 +132,7 @@ describe("palamedes-po-loader.cjs", () => {
 
     expect(loadPalamedesConfig).toHaveBeenCalledWith({
       configPath: undefined,
-      cwd: path.resolve("/next-app"),
+      projectRoot: path.resolve("/next-app"),
     });
   });
 
@@ -141,7 +141,7 @@ describe("palamedes-po-loader.cjs", () => {
 
     expect(loadPalamedesConfig).toHaveBeenCalledWith({
       configPath: undefined,
-      cwd: path.resolve("/next-app"),
+      projectRoot: path.resolve("/next-app"),
     });
   });
 

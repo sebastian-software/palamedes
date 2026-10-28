@@ -65,11 +65,12 @@ export type CreateReactRouterI18nOptions<TLocale extends string = string> = {
   /** Catalog delivery options, or `false` when the host injects the import map itself. */
   readonly catalogDelivery?: ReactRouterCatalogDeliveryOptions | false;
   /**
-   * Resolve a CSP nonce for React's scripts, the import map, and the readiness
-   * script. Called at most once per document request; `context` is the
-   * request's load context, where a server may have stored the nonce.
+   * The CSP nonce for React's scripts, the import map, and the readiness
+   * script: a fixed string, or a resolver called at most once per document
+   * request. Its `context` is the request's load context, where a server may
+   * have stored the nonce.
    */
-  readonly nonce?: ReactRouterNonceResolver;
+  readonly nonce?: string | ReactRouterNonceResolver;
   /**
    * The server entry's stream timeout in milliseconds; defaults to 5000. The
    * render is aborted one second after it, so rejected boundaries can still
@@ -246,6 +247,7 @@ export function createReactRouterI18n<TLocale extends string = string>(
   /** The request's nonce; React's scripts and the import map must share one value. */
   function resolveNonce(request: Request, context: ReactRouterContext): string | undefined {
     if (!options.nonce) return undefined;
+    if (typeof options.nonce === "string") return options.nonce;
     const cached = context.get(nonceContext);
     if (cached) return cached.value;
     const value = options.nonce(request, context);

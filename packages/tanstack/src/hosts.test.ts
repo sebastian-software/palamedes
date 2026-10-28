@@ -14,7 +14,7 @@ function unusedRenderMessage(): never {
 }
 
 const serverModule = vi.hoisted(() => ({
-  delivered: [] as Array<{ locale: string; url: string }>,
+  delivered: [] as Array<{ locale: string; url: string; context?: object }>,
 }));
 
 vi.mock("@palamedes/runtime/server", async (importOriginal) => {
@@ -31,14 +31,15 @@ vi.mock("./server", () => ({
     _: (message: string) => `${options.locale}:${message}`,
   })),
   createTanStackCatalogResponseDelivery: vi.fn(
-    () => async (result: unknown, locale: string, request: Request) => {
-      serverModule.delivered.push({ locale, url: request.url });
+    () => async (result: unknown, locale: string, request: Request, context?: object) => {
+      serverModule.delivered.push({ locale, url: request.url, context });
       return result;
     },
   ),
 }));
 
 type RequestHandler = (options: {
+  context?: object;
   handlerType: "router" | "serverFn";
   next: () => Promise<unknown>;
   request: Request;
@@ -140,7 +141,9 @@ describe("catalog-backed request middleware", () => {
 
   it("creates one server i18n scope per middleware instead of one per request", async () => {
     const run = handler(
-      createTanStackServerI18nRequestMiddleware((request) => request.headers.get("x-locale")!),
+      createTanStackServerI18nRequestMiddleware({
+        resolveLocale: (request) => request.headers.get("x-locale")!,
+      }),
     );
     expect(createScopedI18nRunner).toHaveBeenCalledTimes(1);
 
@@ -165,14 +168,17 @@ describe("catalog-backed request middleware", () => {
     const { createTanStackServerI18n } = await import("./server");
     const delays: Record<string, number> = { de: 8, en: 1, fr: 4 };
     const run = handler(
-      createTanStackServerI18nRequestMiddleware(
-        async (request) => {
+      createTanStackServerI18nRequestMiddleware({
+        async resolveLocale(request) {
           const locale = request.headers.get("x-locale")!;
           await new Promise((resolve) => setTimeout(resolve, delays[locale]));
           return locale;
         },
-        (request) => ({ timeZone: request.headers.get("x-time-zone")! }),
-      ),
+        i18nOptions(request, locale) {
+          expect(request.headers.get("x-locale")).toBe(locale);
+          return { timeZone: request.headers.get("x-time-zone")! };
+        },
+      }),
     );
     const requests = ["de", "en", "fr", "en", "de"].map(
       (locale, index) =>
@@ -220,15 +226,13 @@ describe("catalog-backed request middleware", () => {
     const request = new Request("https://example.test/", { headers: { "x-locale": "de" } });
     const resolveLocale = (incoming: Request) => incoming.headers.get("x-locale")!;
 
-    await handler(createTanStackServerI18nRequestMiddleware(resolveLocale))({
+    await handler(createTanStackServerI18nRequestMiddleware({ resolveLocale }))({
       handlerType: "serverFn",
       request,
       next: async () => new Response("ok"),
     });
     await handler(
-      createTanStackServerI18nRequestMiddleware(resolveLocale, undefined, {
-        catalogDelivery: false,
-      }),
+      createTanStackServerI18nRequestMiddleware({ resolveLocale, catalogDelivery: false }),
     )({ handlerType: "router", request, next: async () => new Response("ok") });
 
     expect(serverModule.delivered).toEqual([]);
@@ -239,8 +243,10 @@ describe("catalog-backed request middleware", () => {
     const failure = new Error("locale policy failed");
     const next = vi.fn(async () => new Response("must not run"));
     const run = handler(
-      createTanStackServerI18nRequestMiddleware(() => {
-        throw failure;
+      createTanStackServerI18nRequestMiddleware({
+        resolveLocale() {
+          throw failure;
+        },
       }),
     );
 
@@ -251,5 +257,68 @@ describe("catalog-backed request middleware", () => {
       cause: failure,
     });
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("uses a custom failureMessage and passes static i18nOptions", async () => {
+    const { createTanStackServerI18n } = await import("./server");
+    const failure = new Error("catalog failed");
+    const failing = handler(
+      createTanStackServerI18nRequestMiddleware({
+        resolveLocale: () => "de",
+        i18nOptions() {
+          throw failure;
+        },
+        failureMessage: "Custom TanStack failure",
+      }),
+    );
+    const request = new Request("https://example.test/");
+
+    await expect(
+      failing({ handlerType: "router", request, next: async () => new Response("ok") }),
+    ).rejects.toMatchObject({ message: "Custom TanStack failure", cause: failure });
+
+    await handler(
+      createTanStackServerI18nRequestMiddleware({
+        resolveLocale: () => "de",
+        i18nOptions: { timeZone: "Europe/Berlin" },
+      }),
+    )({ handlerType: "serverFn", request, next: async () => new Response("ok") });
+    expect(createTanStackServerI18n).toHaveBeenCalledWith({
+      locale: "de",
+      timeZone: "Europe/Berlin",
+    });
+  });
+
+  it("hands the request middleware context to catalog delivery", async () => {
+    const context = { nonce: "from-earlier-middleware" };
+
+    await handler(createTanStackServerI18nRequestMiddleware({ resolveLocale: () => "de" }))({
+      context,
+      handlerType: "router",
+      request: new Request("https://example.test/"),
+      next: async () => new Response("ok"),
+    });
+
+    expect(serverModule.delivered).toEqual([
+      { locale: "de", url: "https://example.test/", context },
+    ]);
+  });
+
+  it("rejects the v1 positional arguments and resolveOptions with migration errors", () => {
+    expect(() =>
+      // @ts-expect-error JavaScript callers of the v1 positional form get the migration error.
+      createTanStackServerI18nRequestMiddleware(() => "de"),
+    ).toThrow(
+      "Palamedes v2 changed createTanStackServerI18nRequestMiddleware() to take one options object: pass { resolveLocale, i18nOptions, catalogDelivery } instead of positional arguments. The former resolveOptions(request) argument is now i18nOptions(request, locale).",
+    );
+    expect(() =>
+      createTanStackServerI18nRequestMiddleware({
+        resolveLocale: () => "de",
+        // @ts-expect-error JavaScript callers of the renamed option get the migration error.
+        resolveOptions: () => ({}),
+      }),
+    ).toThrow(
+      "Palamedes v2 renamed resolveOptions to i18nOptions: it receives (request, locale) and returns the createI18n options, as in the other adapters. Rename the option.",
+    );
   });
 });

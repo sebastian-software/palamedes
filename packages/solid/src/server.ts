@@ -1,18 +1,33 @@
+import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { Transform, type TransformCallback } from "node:stream";
 import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
 
+/**
+ * Resolves a document request's CSP nonce. Solid's Fetch middleware has no
+ * context object of its own, so the resolver receives only the request.
+ */
+export type SolidNonceResolver = (request: Request) => string | undefined;
+
 export type SolidCatalogDeliveryOptions = {
-  /** Built Nitro/Vite client directory containing palamedes-split-manifest.json. */
-  clientDirectory: string;
+  /**
+   * Built Nitro/Vite client directory containing palamedes-split-manifest.json.
+   * Defaults to Nitro's `.output/public` in the process working directory.
+   */
+  clientDirectory?: string;
   /** Resolve the application-owned locale policy from the original request. */
   resolveLocale: (request: Request) => string;
   /** Allow running before a client build exists in development. */
   development?: boolean;
+  /** Override the generated manifest filename for a custom Vite output. */
+  manifestName?: string;
   /** Optional catalog-free host UI for initial fragment failures. */
   errorHtml?: string;
-  /** CSP nonce for Palamedes-generated import maps and bootstrap scripts. */
-  nonce?: string | ((request: Request) => string | undefined);
+  /**
+   * CSP nonce for Palamedes-generated import maps and bootstrap scripts: a
+   * fixed string, or a resolver called once per HTML document request.
+   */
+  nonce?: string | SolidNonceResolver;
 };
 
 export type SolidFetchMiddleware = (
@@ -40,7 +55,11 @@ const SOLID_AUTHORED_ENTRY_PATTERN =
 export function createSolidCatalogDeliveryMiddleware(
   options: SolidCatalogDeliveryOptions,
 ): SolidFetchMiddleware {
-  const delivery = createViteCatalogDelivery(options);
+  const delivery = createViteCatalogDelivery({
+    clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), ".output/public"),
+    ...(options.development === undefined ? {} : { development: options.development }),
+    ...(options.manifestName ? { manifestName: options.manifestName } : {}),
+  });
 
   return async (request, next) => {
     const response = await next();

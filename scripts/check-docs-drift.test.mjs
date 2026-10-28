@@ -66,6 +66,8 @@ test("flags removed options set in code or described as current", () => {
     `${fence}js\nwithPalamedes({}, { keepSourceFallbacks: true });\n${fence}`,
     `${fence}tsx\n<Palamedes failOnCompileError={false} />\n${fence}`,
     "- Set `messageSplitting: false` to keep one catalog per locale.",
+    "## `loadPalamedesConfig(options?)`\n\nOptions include `cwd`, `configPath`, and `skipValidation`.",
+    `${fence}ts\nconst config = await loadPalamedesConfig({ cwd: process.cwd() });\n${fence}`,
   ];
   for (const text of cases) {
     assert.notDeepEqual(findRemovedOptionUses(text, keys), [], text);
@@ -85,8 +87,6 @@ test("allows migration guidance and APIs that still accept the name", () => {
     "- `projectRoot` (renamed from `cwd`, which throws a migration error) is the base.",
     "| `cwd` (Vite, Next.js) | Rename it to `projectRoot`. |",
     "Its v1 name `keepSourceFallbacks` is rejected.",
-    "## `loadPalamedesConfig(options?)`\n\nOptions include `cwd`, `configPath`, and `skipValidation`.",
-    `${fence}ts\nconst config = await loadPalamedesConfig({ cwd: process.cwd() });\n${fence}`,
     `${fence}ts\nexecFileSync("pmds", ["extract"], { cwd: directory });\n${fence}`,
     "Run it from `process.cwd()` or pass `projectRoot`.",
     `${fence}ts\nconst root = process.cwd();\n${fence}`,

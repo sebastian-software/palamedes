@@ -28,7 +28,8 @@ Remix Node hook searches upward from each imported catalog file. The adapter
 `include`/`exclude` options select files for the macro transform. They are
 separate from catalog `include`/`exclude`, which select source files for a
 catalog and resolve from the config file directory. Palamedes v2 renamed the
-adapter `cwd` option to `projectRoot`; `cwd` throws a migration error.
+adapter and `@palamedes/config` loader `cwd` option to `projectRoot`; `cwd`
+throws a migration error.
 
 ## Minimal Config
 

@@ -169,11 +169,9 @@ const remixI18n = createRemixI18nServer({
 ```
 
 Server loads are lazy, shared by concurrent requests for the same locale, and
-discarded when the config or catalog generation changes. `createI18n(locale)`
-remains a synchronous compatibility API and therefore requires an explicit
-synchronous `loadMessages`; request handlers should use `run()` with a shared
-registry. Applications do not import `.po` files or maintain locale-to-catalog
-maps in this mode.
+discarded when the config or catalog generation changes. Request handlers use
+`run()` or the middleware with a shared registry. Applications do not import
+`.po` files or maintain locale-to-catalog maps in this mode.
 
 Only the active locale module and selected executable fragments are requested.
 Each module exports the locale, content digest, and branded compiled functions;
@@ -321,16 +319,23 @@ export default createController(routes, {
 })
 ```
 
-`createRemixI18nRequestScope()` remains available for lower-level integrations.
+Pass `i18nOptions` for request-local formatting options such as
+`{ timeZone: "Europe/Berlin" }`, or a `(request, locale) => options` function.
+When the locale, options, or catalog cannot be resolved, `run()` throws an error
+with `failureMessage` (default `Palamedes Remix i18n initialization failed
+before the handler ran.`) and the original error as its `cause`.
+
+`createRemixI18nRequestScope(resolveI18n, { failureMessage })` remains available
+for lower-level integrations.
 Both APIs preserve the active i18n scope while a returned `Response.body` is
 streamed, so translated code that executes during body consumption still sees
 the same request-local i18n instance. Fetch metadata on that response, including
 `url`, `type`, and `redirected`, is preserved while the body is wrapped.
 
 `catalogVersion` on `createRemixI18nServer()` overrides the version of
-executable client catalog assets. It accepts a non-empty string, or, without a
-shared registry, a function of `{ locale, messages }`; it defaults to a digest
-of the delivered module.
+executable client catalog assets with a non-empty deployment string; it
+defaults to a digest of the delivered module. The v1 callback form throws a
+migration error.
 
 ## Stable Version Support
 

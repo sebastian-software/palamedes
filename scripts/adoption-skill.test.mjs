@@ -58,7 +58,7 @@ function assertPreservedMigration(directory, locale) {
 }
 
 async function assertCompiledOutput(directory, locale, migration) {
-  const config = loadPalamedesConfigSync({ cwd: directory });
+  const config = loadPalamedesConfigSync({ projectRoot: directory });
   const result = compileCatalogModule(config, catalog(directory, locale), {
     locale,
     failOnMissing: true,

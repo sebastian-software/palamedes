@@ -1,19 +1,25 @@
+import path from "node:path";
 import { Transform } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import { createWakuCatalogDeliveryMiddleware } from "./server";
 
+const deliveryOptions = vi.hoisted(() => [] as unknown[]);
+
 vi.mock("@palamedes/vite-plugin/delivery", () => ({
-  createViteCatalogDelivery: () => ({
-    getLocaleBinding: () => ({ locale: "en" }),
-    createDocumentTransform: () =>
-      new Transform({
-        transform(chunk, _encoding, callback) {
-          this.push(chunk);
-          callback();
-        },
-      }),
-  }),
+  createViteCatalogDelivery(options: unknown) {
+    deliveryOptions.push(options);
+    return {
+      getLocaleBinding: () => ({ locale: "en" }),
+      createDocumentTransform: () =>
+        new Transform({
+          transform(chunk, _encoding, callback) {
+            this.push(chunk);
+            callback();
+          },
+        }),
+    };
+  },
 }));
 
 async function transformHtml(input: string, splitAt: number[], nonce?: string): Promise<string> {
@@ -45,6 +51,37 @@ async function transformHtml(input: string, splitAt: number[], nonce?: string): 
 }
 
 describe("Waku catalog document delivery", () => {
+  it("defaults clientDirectory to dist/public and forwards manifestName", () => {
+    deliveryOptions.length = 0;
+    createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    createWakuCatalogDeliveryMiddleware({
+      clientDirectory: "/srv/client",
+      manifestName: "custom-manifest.json",
+      development: true,
+      resolveLocale: () => "en",
+    });
+
+    expect(deliveryOptions).toEqual([
+      { clientDirectory: path.resolve(process.cwd(), "dist/public") },
+      { clientDirectory: "/srv/client", development: true, manifestName: "custom-manifest.json" },
+    ]);
+  });
+
+  it("resolves a nonce function once from the request and the middleware context", async () => {
+    const nonce = vi.fn(() => "context-nonce");
+    const middleware = createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en", nonce });
+    const context = {
+      req: { raw: new Request("https://example.test/") },
+      res: new Response("<html></html>", { headers: { "content-type": "text/html" } }),
+    };
+
+    await middleware(context, async () => {});
+    await context.res.text();
+
+    expect(nonce).toHaveBeenCalledTimes(1);
+    expect(nonce).toHaveBeenCalledWith(context.req.raw, context);
+  });
+
   it("rewrites a split UTF-8 Waku bootstrap without dropping bytes or the gate", async () => {
     const input = `prefix 😀 <script id="_R_">window.addEventListener('vite:preloadError', function (e) {
 var key = 'waku:preload-error-build-id';

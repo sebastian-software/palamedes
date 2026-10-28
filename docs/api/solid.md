@@ -23,12 +23,10 @@ Start Mode middleware receives `(event, next)`. The generic catalog helper
 continues to accept a `Request`, so bridge it explicitly:
 
 ```ts
-import path from "node:path";
 import type { StartMiddleware } from "@solidjs/vite-plugin";
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
 
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
-  clientDirectory: path.resolve(process.cwd(), ".output/public"),
   resolveLocale: (request) => resolveLocale(request),
 });
 
@@ -44,8 +42,17 @@ virtual catalog imports stay in Vite's module graph without extra config. The
 plugin's generated entries handle SSR and hydration; use Solid's public
 `Errored` and `Loading` components for error and loading boundaries.
 
+`clientDirectory` defaults to Nitro's `.output/public` in the process working
+directory, and `manifestName` overrides the generated manifest filename, as in
+the other Vite-based adapters. The helper has no `i18nOptions` or
+`failureMessage`: the application's own middleware creates the request
+instance, for example with `createBundledServerI18n({ locale, timeZone })`.
+
 For a nonce-based CSP, give the catalog helper the host's trusted request nonce
-and set `event.nonce` to that same value before `next()`. Start Mode forwards
+as a string or a `(request) => string | undefined` resolver, called once per
+HTML document. Start Mode's Fetch middleware has no context object to pass, so
+the resolver receives only the request. Set `event.nonce` to that same value
+before `next()`. Start Mode forwards
 it to the renderer. Custom Documents must also pass the script nonce from
 `getRequestEvent()?.nonce` to `HydrationScript`. See the
 [Solid package guide](https://github.com/sebastian-software/palamedes/tree/main/packages/solid#ssr-and-split-catalogs)

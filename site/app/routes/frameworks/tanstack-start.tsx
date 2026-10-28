@@ -90,9 +90,11 @@ import { createIsomorphicFn, createStart } from "@tanstack/react-start"
 import { createTanStackServerI18nRequestMiddleware } from "@palamedes/tanstack"
 
 const i18nMiddleware = createIsomorphicFn().server(() =>
-  createTanStackServerI18nRequestMiddleware(async (request) => {
-    const { resolveLocaleFromRequest } = await import("./lib/i18n.server")
-    return resolveLocaleFromRequest(request)
+  createTanStackServerI18nRequestMiddleware({
+    async resolveLocale(request) {
+      const { resolveLocaleFromRequest } = await import("./lib/i18n.server")
+      return resolveLocaleFromRequest(request)
+    },
   }),
 )()!
 

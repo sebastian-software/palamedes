@@ -18,7 +18,8 @@ const catalogs = [];
 const configs = new Map();
 for (const file of files) {
   const project = file.split("/").slice(0, 2).join("/");
-  if (!configs.has(project)) configs.set(project, loadPalamedesConfigSync({ cwd: project }));
+  if (!configs.has(project))
+    configs.set(project, loadPalamedesConfigSync({ projectRoot: project }));
   const artifact = compileCatalogArtifact(configs.get(project), path.resolve(file));
   assert.deepEqual(artifact.diagnostics, [], `${file}: catalog compilation must succeed`);
   const code = renderCatalogModule(artifact.messages);

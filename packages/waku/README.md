@@ -37,7 +37,6 @@ import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 middlewareFns: [
   () =>
     createWakuCatalogDeliveryMiddleware({
-      clientDirectory: "dist/public",
       resolveLocale: (request) => resolveApplicationLocale(request),
       development: process.env.NODE_ENV !== "production",
       nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
@@ -49,8 +48,12 @@ The middleware transforms HTML document streams after Waku renders them. RSC
 and action responses pass through unchanged. If an active fragment cannot be
 loaded before hydration, it presents a catalog-free reload/home document and
 does not expose internal module diagnostics. The middleware accepts no locale
-policy; `resolveLocale` remains the host application's responsibility. The `nonce` option applies only to Palamedes-generated import-map and readiness
-scripts. Set Waku's framework nonce with `unstable_setNonce` from
+policy; `resolveLocale` remains the host application's responsibility.
+`clientDirectory` defaults to `dist/public` in the process working directory,
+and `manifestName` overrides the generated manifest filename. The `nonce`
+option is a string or `(request, context) => string | undefined`, called once
+per HTML document, and applies only to Palamedes-generated import-map and
+readiness scripts. Set Waku's framework nonce with `unstable_setNonce` from
 `waku/router/server` in the host request interceptor before rendering. Existing
 framework nonces are preserved; application and external scripts are never
 automatically authorized. Configure the host CSP for the selected nonce and
@@ -90,7 +93,8 @@ Palamedes Vite plugin keeps the adapter in Vite's server module graph to avoid
 that. The check does not depend on the wording or shape of Waku's error.
 
 Initializer or catalog failures prevent the action body from running and throw
-an error beginning `Palamedes Waku i18n initialization failed`. Waku's default
+an error beginning `Palamedes Waku i18n initialization failed`; pass
+`{ failureMessage }` as the interceptor's second argument to change it. Waku's default
 production handler returns its generic 500 response for uncaught errors; keep
 server logs available to retain the error cause.
 
