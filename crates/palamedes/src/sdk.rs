@@ -127,7 +127,11 @@ pub struct MissingMessage {
 ///
 /// # Errors
 ///
-/// Returns an error when a catalog is missing or a message has invalid ICU.
+/// Returns an error when a catalog is missing, two catalogs share a locale,
+/// `fallback_locales` repeats `locale` or `source_locale`, or a message has
+/// invalid ICU. The source locale is always the last resort, so callers that
+/// take a user-supplied chain filter both locales out first, as
+/// `palamedes-build` does.
 pub fn compile_catalog(
     catalogs: &[&ParsedCatalog],
     locale: &str,

@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
 use crate::descriptor::{
-    descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
+    descriptor_property_value, descriptor_static_property, resolve_descriptor_values,
+    unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
@@ -21,8 +22,9 @@ use crate::source::{
 };
 use crate::source_macros::{ImportedMacro, record_macro_import_declaration};
 use crate::source_message::{
-    build_icu_message as shared_build_icu_message, check_lowered_message, expression_source,
-    jsx_attributes, lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
+    SourceValue, build_icu_message as shared_build_icu_message, check_lowered_message,
+    expression_source, jsx_attributes,
+    lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
     lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
     lower_template,
 };
@@ -1232,8 +1234,8 @@ fn extract_from_descriptor_call(
         ));
     };
 
-    let (message, placeholders) = match message_expression.without_parentheses() {
-        Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
+    let (message, placeholders, template) = match message_expression.without_parentheses() {
+        Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new(), false),
         Expression::TemplateLiteral(template) => {
             let (message, placeholders) = template_to_message(template, source)?;
             check_lowered_message(
@@ -1243,7 +1245,7 @@ fn extract_from_descriptor_call(
                 macro_name,
                 location,
             )?;
-            (message, placeholders)
+            (message, placeholders, true)
         }
         _ => {
             return Err(unsupported_macro_syntax(
@@ -1255,6 +1257,23 @@ fn extract_from_descriptor_call(
     };
     let comment = descriptor_static_property(object, "comment", macro_name, location)?;
     let context = descriptor_static_property(object, "context", macro_name, location)?;
+    // The transform rejects values that do not match the placeholders, so
+    // extraction and lint report the same located error up front.
+    resolve_descriptor_values(
+        call,
+        source,
+        &message,
+        template,
+        placeholders
+            .iter()
+            .map(|(name, expression)| SourceValue {
+                name: name.clone(),
+                expression: expression.clone(),
+            })
+            .collect(),
+        macro_name,
+        location,
+    )?;
 
     Ok(Some(ExtractedMessageRecord {
         message,

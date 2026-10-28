@@ -1,13 +1,8 @@
-use std::collections::BTreeSet;
-
-use oxc_ast::ast::{
-    Argument, CallExpression, Expression, JSXElement, ObjectExpression, ObjectPropertyKind,
-    TemplateLiteral,
-};
-use oxc_span::GetSpan;
+use oxc_ast::ast::{CallExpression, Expression, JSXElement, ObjectExpression, TemplateLiteral};
 
 use crate::descriptor::{
-    descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
+    DescriptorValues, descriptor_property_value, descriptor_static_property,
+    resolve_descriptor_values, unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
@@ -21,7 +16,7 @@ use super::lowered_jsx::{
 };
 use super::messages::{
     ValueBinding, append_unique_bindings, build_icu_message, choice_expression_binding,
-    escape_string, expression_source, extract_choice_options, extract_choice_options_from_jsx,
+    escape_string, extract_choice_options, extract_choice_options_from_jsx,
     extract_jsx_children_parts, extract_jsx_value_binding, first_argument_object, jsx_attributes,
     template_to_message,
 };
@@ -99,13 +94,13 @@ fn transform_descriptor_object(
     // Descriptor string literals are the raw-ICU authoring surface: the author
     // owns the quoting, so the text is embedded verbatim. Only the lookup key
     // is derived from its canonical form, to match the compiled catalog.
-    let (message, implicit_values) = match message_expression.without_parentheses() {
-        Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
+    let (message, implicit_values, template) = match message_expression.without_parentheses() {
+        Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new(), false),
         Expression::TemplateLiteral(template) => {
             let (message, values) = template_to_message(template, source)?;
             let values = values.unwrap_or_default();
             check_bindings(&message, &values, &[], macro_name, location)?;
-            (message, values)
+            (message, values, true)
         }
         _ => {
             return Err(unsupported_macro_syntax(
@@ -119,14 +114,19 @@ fn transform_descriptor_object(
     let comment = descriptor_static_property(object, "comment", macro_name, location)?;
 
     let lookup_key = compiled_message_key(&message, context.as_deref());
-    let values_text = descriptor_values_argument(
+    let values_text = match resolve_descriptor_values(
         call,
         source,
         &message,
+        template,
         implicit_values,
         macro_name,
         location,
-    )?;
+    )? {
+        DescriptorValues::None => None,
+        DescriptorValues::Bindings(bindings) => Some(render_values_object(&bindings)),
+        DescriptorValues::Raw(values) => Some(values),
+    };
     Ok(Some((
         build_runtime_call_with_values_text(
             &lookup_key,
@@ -138,176 +138,6 @@ fn transform_descriptor_object(
         ),
         lookup_key,
     )))
-}
-
-enum DescriptorValues {
-    Bindings(Vec<ValueBinding>),
-    Raw(String),
-}
-
-fn descriptor_values_argument(
-    call: &CallExpression<'_>,
-    source: &str,
-    message: &str,
-    implicit_values: Vec<ValueBinding>,
-    macro_name: &str,
-    location: &(impl DiagnosticLocation + ?Sized),
-) -> PalamedesResult<Option<String>> {
-    let Some(argument) = call.arguments.get(1) else {
-        if implicit_values.is_empty() {
-            return Ok(None);
-        }
-        validate_message_values(message, &implicit_values)?;
-        return Ok(Some(render_values_object(&implicit_values)));
-    };
-
-    match extract_descriptor_values(argument, source) {
-        DescriptorValues::Bindings(explicit_values) => {
-            let bindings =
-                merge_descriptor_values(implicit_values, explicit_values, macro_name, location)?;
-            validate_message_values(message, &bindings)?;
-            Ok(Some(render_values_object(&bindings)))
-        }
-        DescriptorValues::Raw(source) if implicit_values.is_empty() => Ok(Some(source)),
-        DescriptorValues::Raw(_) => Err(unsupported_macro_syntax(
-            macro_name,
-            location,
-            "interpolated descriptor templates can only be combined with an object-literal values argument",
-        )),
-    }
-}
-
-fn merge_descriptor_values(
-    mut implicit_values: Vec<ValueBinding>,
-    explicit_values: Vec<ValueBinding>,
-    macro_name: &str,
-    location: &(impl DiagnosticLocation + ?Sized),
-) -> PalamedesResult<Vec<ValueBinding>> {
-    for binding in explicit_values {
-        if let Some(existing) = implicit_values
-            .iter()
-            .find(|existing| existing.name == binding.name)
-        {
-            if existing.expression == binding.expression {
-                continue;
-            }
-            return Err(unsupported_macro_syntax(
-                macro_name,
-                location,
-                format!(
-                    "the explicit value `{}` conflicts with the expression captured by the message template",
-                    binding.name
-                ),
-            ));
-        }
-        implicit_values.push(binding);
-    }
-    Ok(implicit_values)
-}
-
-fn extract_descriptor_values(argument: &Argument<'_>, source: &str) -> DescriptorValues {
-    let Argument::ObjectExpression(object) = argument else {
-        return DescriptorValues::Raw(argument_source(argument, source));
-    };
-
-    let mut bindings = Vec::new();
-
-    for property in &object.properties {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            return DescriptorValues::Raw(argument_source(argument, source));
-        };
-        let Some(key) = property.key.static_name() else {
-            return DescriptorValues::Raw(argument_source(argument, source));
-        };
-
-        bindings.push(ValueBinding {
-            name: key.into_owned(),
-            expression: expression_source(&property.value, source),
-        });
-    }
-
-    DescriptorValues::Bindings(bindings)
-}
-
-fn argument_source(argument: &Argument<'_>, source: &str) -> String {
-    let span = argument.span();
-    source[span.start as usize..span.end as usize].to_string()
-}
-
-fn validate_message_values(message: &str, values: &[ValueBinding]) -> PalamedesResult<()> {
-    let placeholders = collect_message_placeholders(message);
-    let value_names = values
-        .iter()
-        .map(|binding| binding.name.clone())
-        .collect::<BTreeSet<_>>();
-    let missing = placeholders
-        .difference(&value_names)
-        .cloned()
-        .collect::<Vec<_>>();
-    let extra = value_names
-        .difference(&placeholders)
-        .cloned()
-        .collect::<Vec<_>>();
-
-    if missing.is_empty() && extra.is_empty() {
-        return Ok(());
-    }
-
-    Err(PalamedesError::MacroValuesMismatch {
-        missing: format_names(&missing),
-        extra: format_names(&extra),
-    })
-}
-
-fn collect_message_placeholders(message: &str) -> BTreeSet<String> {
-    if let Ok(metadata) = ferrocat::derive_message_metadata_from_icu(message, None) {
-        return metadata
-            .args
-            .into_keys()
-            .filter(|name| is_placeholder_name(name.as_str()))
-            .collect();
-    }
-
-    collect_message_placeholders_from_braces(message)
-}
-
-fn collect_message_placeholders_from_braces(message: &str) -> BTreeSet<String> {
-    let mut placeholders = BTreeSet::new();
-    let mut index = 0usize;
-
-    while let Some(relative_start) = message[index..].find('{') {
-        let start = index + relative_start + 1;
-        let Some(relative_end) = message[start..].find([',', '}']) else {
-            break;
-        };
-        let end = start + relative_end;
-        let name = message[start..end].trim();
-        if is_placeholder_name(name) {
-            placeholders.insert(name.to_string());
-        }
-        index = end + 1;
-    }
-
-    placeholders
-}
-
-fn is_placeholder_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    if !(first == '_' || first == '$' || first.is_ascii_alphabetic()) {
-        return false;
-    }
-    chars.all(|ch| ch == '_' || ch == '$' || ch.is_ascii_alphanumeric())
-}
-
-fn format_names(names: &[String]) -> String {
-    if names.is_empty() {
-        "none".to_string()
-    } else {
-        names.join(", ")
-    }
 }
 
 pub(super) fn transform_choice_call(

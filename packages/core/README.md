@@ -205,8 +205,11 @@ Authored text is literal text. `<Trans>` children, MDX text, and template
 literals in `t`, in descriptors, and in choice branches need no ICU escaping:
 the macros and the extractor quote apostrophes and braces on the way into the
 catalog. `` t`Ada's file` `` stays `Ada's file`, and `` t`Type {name} here` ``
-is stored as `Type '{name}' here` and renders `Type {name} here`. Only
-`${…}` interpolations and JSX expressions become placeholders.
+is stored as `Type '{name}' here` and renders `Type {name} here`. Brace groups
+separated only by apostrophes share one quote, with the apostrophe escaped as
+`''` inside it: `` t`Type {a}'{b}` `` is stored as `Type '{a}''{b}'` and renders
+`Type {a}'{b}`. Only `${…}` interpolations and JSX expressions become
+placeholders.
 
 Two surfaces take raw ICU instead, where placeholders and ICU quoting are
 written by hand and nothing is auto-escaped: a descriptor with a

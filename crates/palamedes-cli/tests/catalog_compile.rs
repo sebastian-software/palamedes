@@ -500,3 +500,154 @@ fn javascript_target_compiles_fuzzy_entries_as_missing_fallbacks() {
         "{report}"
     );
 }
+
+#[test]
+fn js_target_judges_missing_translations_on_the_merged_module() {
+    let project = js_project(
+        &["en", "de"],
+        &[
+            (
+                "first",
+                &[
+                    ("en", &[("Save", "Save"), ("Open", "Open")]),
+                    ("de", &[("Save", ""), ("Open", "")]),
+                ],
+            ),
+            (
+                "second",
+                &[
+                    ("en", &[("Save", "Save")]),
+                    ("de", &[("Save", "Speichern")]),
+                ],
+            ),
+        ],
+    );
+    let output = compile_js(project.path(), &["--locale", "de", "--json"]);
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    // `Save` is translated by the second catalog, so only `Open` is missing.
+    assert_eq!(
+        report["missing"],
+        serde_json::json!([{ "locale": "de", "message": "Open", "resolvedLocale": "en" }]),
+        "{report}"
+    );
+
+    let output = compile_js(
+        project.path(),
+        &["--locale", "de", "--fail-on-missing", "--json"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let diagnostics = report["diagnostics"].as_array().unwrap();
+    assert_eq!(diagnostics.len(), 1, "{report}");
+    assert_eq!(diagnostics[0]["code"], "compile.missing_translation");
+    assert_eq!(diagnostics[0]["sourceKey"]["message"], "Open");
+
+    fs::write(
+        project.path().join("locales/first/de.po"),
+        po("de", &[("Save", ""), ("Open", "Öffnen")]),
+    )
+    .unwrap();
+    let output = compile_js(project.path(), &["--locale", "de", "--fail-on-missing"]);
+    assert!(output.status.success(), "{output:?}");
+    let module = fs::read_to_string(project.path().join("out/de.mjs")).unwrap();
+    assert!(module.contains("Speichern"), "{module}");
+}
+
+#[test]
+fn js_target_reports_message_context_of_missing_translations() {
+    let project = js_project(&["en", "de"], &[]);
+    let catalogs = project.path().join("locales");
+    fs::create_dir_all(&catalogs).unwrap();
+    fs::write(
+        project.path().join("palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\n",
+    )
+    .unwrap();
+    fs::write(
+        catalogs.join("en.po"),
+        "msgid \"Save\"\nmsgstr \"Save\"\n\nmsgctxt \"menu\"\nmsgid \"Save\"\nmsgstr \"Save\"\n",
+    )
+    .unwrap();
+    fs::write(
+        catalogs.join("de.po"),
+        "msgid \"Save\"\nmsgstr \"Speichern\"\n\nmsgctxt \"menu\"\nmsgid \"Save\"\nmsgstr \"\"\n",
+    )
+    .unwrap();
+
+    let output = compile_js(project.path(), &["--locale", "de", "--json"]);
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        report["missing"],
+        serde_json::json!([{
+            "locale": "de",
+            "message": "Save",
+            "context": "menu",
+            "resolvedLocale": "en"
+        }]),
+        "{report}"
+    );
+
+    let output = compile_js(project.path(), &["--locale", "de"]);
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("missing translation for \"Save\" (msgctxt \"menu\")"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn js_target_reports_unreadable_catalogs_in_the_json_document() {
+    let project = js_project(
+        &["en", "de"],
+        &[(
+            "app",
+            &[
+                ("en", &[("Save", "Save")]),
+                ("de", &[("Save", "Speichern"), ("Save", "Sichern")]),
+            ],
+        )],
+    );
+    let output = compile_js(project.path(), &["--locale", "de", "--json"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
+    let diagnostics = report["diagnostics"].as_array().unwrap();
+    assert_eq!(diagnostics.len(), 1, "{report}");
+    assert_eq!(diagnostics[0]["code"], "compile.invalid_catalog");
+    assert_eq!(diagnostics[0]["locale"], "de");
+    reported_catalog_path(
+        &diagnostics[0]["catalogPath"],
+        project.path(),
+        "locales/app/de.po",
+    );
+    assert!(!project.path().join("out/de.mjs").exists());
+
+    let output = compile_js(project.path(), &["--locale", "de"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("[compile.invalid_catalog]"), "{stderr}");
+}
+
+#[test]
+fn js_target_rejects_repeated_locales() {
+    let project = js_project(
+        &["en", "de"],
+        &[(
+            "app",
+            &[
+                ("en", &[("Save", "Save")]),
+                ("de", &[("Save", "Speichern")]),
+            ],
+        )],
+    );
+    let output = compile_js(project.path(), &["--locale", "de", "--locale", "de"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--locale de is given more than once"),
+        "{output:?}"
+    );
+    assert!(!project.path().join("out/de.mjs").exists());
+}

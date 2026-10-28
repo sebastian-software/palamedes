@@ -18,11 +18,9 @@ use crate::source_message::{
 
 use super::Replacement;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ValueBinding {
-    pub expression: String,
-    pub name: String,
-}
+/// One named runtime value; shared with extraction so both sides check
+/// descriptor values with the same code.
+pub(super) use crate::source_message::SourceValue as ValueBinding;
 
 pub(super) struct ExtractedChoiceOptions {
     pub options: Vec<(String, String)>,
@@ -242,10 +240,6 @@ pub(super) fn append_unique_bindings(
     for binding in incoming {
         push_unique_binding(bindings, binding);
     }
-}
-
-pub(super) fn expression_source(expr: &Expression<'_>, source: &str) -> String {
-    shared_expression_source(expr, source).unwrap_or_default()
 }
 
 pub(super) fn jsx_attributes(
