@@ -226,13 +226,9 @@ For Next.js with PO catalogs, use the automatic graph-split path demonstrated
 by `nextjs-cookie`: Palamedes delivers only the active locale's fragments for
 the evaluated client module graph without any option.
 
-The `nextjs-route` example combines that import with
-`createClientCatalogBoundary()` from `@palamedes/react/client`. The
-boundary begins loading the document locale before hydration, holds hydration
-until the module is ready, and initializes the hook-free runtime before any
-translated Client Component renders. Its locale links deliberately use full
-document navigation, so it needs neither live hooks nor static imports of every
-catalog.
+The other Next.js examples use the same automatic delivery. Their locale
+links deliberately use full document navigation, so they need neither live
+hooks nor static imports of every catalog.
 
 Static imports are still useful for tiny demos or server-only modules, but they
 make every imported locale reachable from that module. In copied app code with

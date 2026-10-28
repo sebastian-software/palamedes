@@ -67,16 +67,6 @@
         "default": "./dist/compiled.cjs"
       }
     },
-    "./client": {
-      "import": {
-        "types": "./dist/client.d.mts",
-        "default": "./dist/client.mjs"
-      },
-      "require": {
-        "types": "./dist/client.d.cts",
-        "default": "./dist/client.cjs"
-      }
-    },
     "./macro": {
       "import": {
         "types": "./dist/macro.d.mts",
@@ -93,7 +83,7 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.tsx src/clientCatalog.test.tsx src/clientCatalogServer.test.tsx && node --test scripts/exports.test.mjs",
+    "test": "vitest run --globals src/index.test.tsx && node --test scripts/exports.test.mjs",
     "stub": "unbuild --stub"
   },
   "dependencies": {

@@ -41,8 +41,9 @@ report retains two import selections for each UI runtime:
   `getI18n`, and `initializeClientI18n`, plus `Trans` for the UI profiles. Unused
   public exports can disappear. The `*-client.mjs` fixtures define this boundary;
   the homepage displays these rows.
-- `profiles`: every export of the compiled Core, universal runtime, and selected
-  compiled UI entry point. These full API references remain available for
+- `profiles`: every export of the compiled Core, universal runtime, their
+  `/internal` renderer and generated-code entries, and the selected compiled UI
+  entry point. These full API references remain available for
   comparison; they include registration, server binding, reset, locale-switch,
   and standalone formatter APIs where exported.
 

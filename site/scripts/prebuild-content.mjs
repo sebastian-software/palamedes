@@ -778,11 +778,7 @@ function typedocPackages() {
       label: "React",
       packageDir: "react",
       position: 40,
-      entryPoints: [
-        "packages/react/src/index.tsx",
-        "packages/react/src/client.tsx",
-        "packages/react/src/macro.ts",
-      ],
+      entryPoints: ["packages/react/src/index.tsx", "packages/react/src/macro.ts"],
     },
     {
       slug: "solid",

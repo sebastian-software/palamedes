@@ -119,7 +119,7 @@ function clientMessageBootstrap(config, sourcePath, compiledIds) {
   return `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
 const ${identifier}_modules = await Promise.all([
   import("@palamedes/core/compiled"),
-  import("@palamedes/runtime"),
+  import("@palamedes/runtime/internal"),
 ]);
 const ${identifier}_locale = document.documentElement.lang;
 const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => Object.hasOwn(loaders, ${identifier}_locale) ? loaders[${identifier}_locale] : undefined);
@@ -405,7 +405,7 @@ function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatch
     }
     return {
       code:
-        `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime";\n` +
+        `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime/internal";\n` +
         `registerMessageLoaderGroup(${JSON.stringify(moduleKey)}, []);\n`,
       matchesCatalog: false,
     };
@@ -426,7 +426,7 @@ function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatch
 
   return {
     code:
-      `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime";\n` +
+      `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime/internal";\n` +
       `const __pmds_releaseMessageLoaders = registerMessageLoaderGroup(${JSON.stringify(moduleKey)}, [${registrations.join(", ")}]);\n` +
       `if (import.meta.webpackHot) import.meta.webpackHot.dispose(__pmds_releaseMessageLoaders);\n`,
     matchesCatalog: true,

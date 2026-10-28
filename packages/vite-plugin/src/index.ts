@@ -1096,7 +1096,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
           const initialize =
             `import { createI18n } from "@palamedes/core";\n` +
-            `import { initializeClientI18n } from "@palamedes/runtime";\n` +
+            `import { initializeClientI18n } from "@palamedes/runtime/internal";\n` +
             `const locale = document.documentElement.lang;\n` +
             `if (!${JSON.stringify(locales)}.includes(locale)) throw new Error("Unsupported document catalog locale.");\n` +
             `const i18n = initializeClientI18n(locale, () => createI18n({ locale, timeZone: document.documentElement.dataset.palamedesTimeZone }));\n`;
