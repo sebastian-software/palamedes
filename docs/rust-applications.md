@@ -5,24 +5,21 @@ language from a file when your Rust CLI or service runs. Every language, includi
 English, stays outside the executable. Compatible translation edits and additional
 languages can ship without rebuilding it.
 
-This is an experimental repository integration. Only nonfunctional `0.0.0`
-bootstrap placeholders are published on crates.io; the functional Rust SDK is
-**not released**. The publication hold in
-[#1309](https://github.com/sebastian-software/palamedes/issues/1309) still applies.
+The Rust SDK is published on crates.io from Palamedes 2.0.0 as `palamedes-i18n`,
+`palamedes`, and `palamedes-build`. It is in the **Preview** tier: the public APIs
+follow [Cargo SemVer](#semver-and-msrv), and Preview describes the feature scope.
 The current subset is text, display arguments, string selects, and cardinal and
 ordinal plurals. Localized number/date/time formatting, rich text, and translation
-contexts are rejected. This path does not yet offer the full TypeScript workflow or a stable
-Rust SDK contract. See the [stability guide](./stability.md).
+contexts are rejected. This path does not yet offer the full TypeScript workflow.
+See the [stability guide](./stability.md).
 
 ## Preview and Publication
 
-The Rust SDK is Preview. The runtime, builder, and core compiler stay in the
-coordinated Palamedes release set; they do not use separate SDK versions or an
-independent prerelease publishing channel. The shared release policy allows only
-stable v2-or-later versions after explicit release authorization. The current
-`1.25.1` manifests describe the previous coordinated release, not an available
-Rust SDK release. Keep Git installation instructions until the matching registry
-versions actually exist.
+The Rust SDK is Preview. The runtime, builder, and core compiler ship in the
+coordinated Palamedes release set at the shared version; they do not use
+separate SDK versions or an independent prerelease publishing channel. The
+shared release policy allows only stable v2-or-later versions. Use the same
+registry version for `palamedes-i18n` and `palamedes-build`.
 
 `pnpm verify:rust-sdk` packages the three crates in dependency order and inspects
 all archive file lists, license texts, READMEs, packaged builds, and rustdoc. A
@@ -37,8 +34,8 @@ and installation paths are recorded there for inspection.
 
 `pnpm release:rust:dry-run` runs the same verification without uploading. The
 Publish workflow uses it before any publication and CI runs the proof on the
-pinned Rust toolchain. Staging matters before the first release: the builder's
-functional registry dependency versions do not exist on crates.io yet, so a
+pinned Rust toolchain. Staging matters because the builder depends on SDK
+versions that reach crates.io only when the same release uploads them, so a
 crates.io publish dry run cannot verify that graph. No archive/build verification
 is bypassed.
 
@@ -62,7 +59,7 @@ upload jobs depend on it, so a Cargo lane that is not ready stops the release
 before npm receives a package. The Cargo upload also waits for every native npm
 package, so a failed native build stops crates.io as well as the JavaScript
 packages. A Publish dry run runs the same registry checks
-without the token exchange. While the release hold is in place, it reports the
+without the token exchange. When publication is not enabled, it reports the
 policy and allowlists instead of enforcing them.
 
 Cargo publication uses [crates.io trusted publishing](https://crates.io/docs/trusted-publishing).
@@ -78,13 +75,11 @@ publication; a dry run does not request an OIDC token. A successful exchange
 shows that crates.io trusts this workflow for at least one crate. It does not
 prove the trusted-publisher configuration of each crate; only the upload does.
 
-Both `publicationEnabled: false` and the three `publish = false` manifests remain
-in effect. A reviewed release-enablement change must set the policy and explicit
-`publish = ["crates-io"]` allowlists after the v2 gates and release authorization.
-The bootstrap publications establish names and ownership, but do not verify a
-functional SDK release or an OIDC upload. Verify actual token exchange and
-publication during the authorized coordinated release. A passing dry run does
-not prove trusted-publisher permissions.
+Publication needs both `publicationEnabled: true` in the release policy and
+explicit `publish = ["crates-io"]` allowlists in the three manifests. The
+`0.0.0` bootstrap publications established the crate names and ownership. A
+passing dry run does not prove trusted-publisher permissions; only an upload
+does.
 
 ## SemVer and MSRV
 
@@ -135,8 +130,7 @@ greeting-cli/
 ```
 
 Use a Rust toolchain compatible with the workspace's `rust-version` in
-[`Cargo.toml`](../Cargo.toml). Pin both Git dependencies to the same reviewed
-revision. This example pins the implementation used by this guide:
+[`Cargo.toml`](../Cargo.toml). Use the same version for both crates:
 
 ### `Cargo.toml`
 
@@ -147,10 +141,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-palamedes-i18n = { git = "https://github.com/sebastian-software/palamedes", rev = "439f1bfaf28fca9792ea9e95359e3a95116fb913" }
+palamedes-i18n = "2.0.0"
 
 [build-dependencies]
-palamedes-build = { git = "https://github.com/sebastian-software/palamedes", rev = "439f1bfaf28fca9792ea9e95359e3a95116fb913" }
+palamedes-build = "2.0.0"
 ```
 
 Inside the Palamedes workspace, path dependencies are also possible. There is no
@@ -380,8 +374,8 @@ application when needed.
 
 ## Update Translations Without Building the Application
 
-Use a matching native `pmds` build from the pinned repository revision; the
-published 1.x CLI does not have this experimental command. Its own
+Use the native `pmds` CLI from the same Palamedes release as your crates, for
+example `@palamedes/cli` 2.0.0; the 1.x CLI does not have this command. Its own
 [external UI catalogs](./cli.md#output-language) must be installed alongside it.
 The update command itself does not invoke Cargo or rustc for your application.
 

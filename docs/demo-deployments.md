@@ -84,8 +84,8 @@ batch. The cookie read checks observe real Chromium response headers, including
 image-update submission alone does not establish live acceptance.
 
 First-day and first-week resource, restart, and billing observations remain open.
-Keep the old server and saved DNS values available until operational acceptance;
-the package release hold is unchanged. Rollout history is recorded in [#1261](https://github.com/sebastian-software/palamedes/issues/1261).
+Keep the old server and saved DNS values available until operational acceptance.
+Rollout history is recorded in [#1261](https://github.com/sebastian-software/palamedes/issues/1261).
 
 ## Repeat Verification
 
@@ -252,7 +252,7 @@ rollback path. Do not retire the server during the first-day observation.
 [`publish-examples-container.yml`](../.github/workflows/publish-examples-container.yml)
 builds Linux amd64, starts and smoke-tests all 41 servers, and publishes
 `ghcr.io/sebastian-software/palamedes-examples` on image-relevant `main` pushes or
-manual dispatches. Publication is independent of the package release hold.
+manual dispatches. Publication is independent of package releases.
 Branch dispatches require `dry_run` and never publish. Deploy the immutable
 pushed digest and recorded source revision rather than inferring identity from
 `latest`.

@@ -27,14 +27,12 @@ longer part of the supported surface. The verified app examples pin Solid and
 They use the Vite plugin's **Start Mode** with Nitro v3, rather than the
 separate Solid Start host.
 
-> **Breaking minor release at `1.18.0`:** `@palamedes/solid` moved from Solid 1
-> to Solid 2 while Palamedes packages continued their lockstep `1.x` releases.
-> A dependency range such as `^1.17.3` can therefore upgrade a Solid 1 app to a
-> Solid 2 adapter and lose Solid 1 compatibility. If your app must stay on
-> Solid 1, pin `@palamedes/solid` to the last Solid 1-compatible release,
-> `1.17.3`, and keep the matching Solid 1 compiler setup. To use a newer
-> adapter, migrate the app and its compiler/tooling to Solid 2 first, then use
-> `@palamedes/solid` `1.18.0` or newer.
+> **Solid 1 apps:** `@palamedes/solid` moved from Solid 1 to Solid 2 in the
+> `1.18.0` minor release, and Palamedes 2.0 supports Solid 2 only. A range such
+> as `^1.17.3` can still pull a Solid 1 app onto the Solid 2 adapter. If your
+> app must stay on Solid 1, pin `@palamedes/solid` to the last Solid
+> 1-compatible release, `1.17.3`, and keep the matching Solid 1 compiler setup.
+> To use 2.0, migrate the app and its compiler/tooling to Solid 2 first.
 
 ## Install
 

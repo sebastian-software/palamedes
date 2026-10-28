@@ -62,9 +62,9 @@ When helping with Palamedes code:
 The repository-owned `skills/palamedes/SKILL.md` routes agent-assisted setup and
 verification for Next.js 16 App Router on Node and Vite/React browser apps, plus
 Lingui-to-Palamedes migration. See [/docs/agent-skill.md](/docs/agent-skill.md).
-Its recipes require a target with the compiled v2 adapter contract; check
-installed capabilities and matching release docs rather than assuming registry
-`latest` supports the current repository. Preserve locale policy and map old
+Its recipes require the compiled v2 adapter contract, which Palamedes 2.0.0
+and later provide; check installed capabilities and matching release docs
+before applying them, and upgrade a 1.x install first. Preserve locale policy and map old
 IDs to source text plus context in every locale before extraction or removal.
 
 ## Package map
@@ -452,8 +452,8 @@ Platform packages install catalogs in `bin/pmds-locales/` beside the executable;
 loaded. Missing/corrupt/incompatible catalogs fail before execution without
 another-language or source-text recovery. See `docs/cli.md#output-language`.
 
-Experimental, unpublished workspace crates `palamedes-build` and `palamedes-i18n`
-expose the Rust application path. A Cargo build script uses `CatalogBuilder` to
+The Preview crates `palamedes-build` and `palamedes-i18n`, published on crates.io
+from 2.0.0, expose the Rust application path. A Cargo build script uses `CatalogBuilder` to
 write generated `macro_rules!` definitions/schema and external catalogs. Rustc
 expands source-first calls through one sorted const table and binary search into
 internal-ID lookups. Each call expands a small lookup, not the whole catalog.
@@ -498,9 +498,8 @@ refresh old target/profile sidecars: rebuild the native platform package or poin
 PALAMEDES_UI_CATALOG_DIR at the current CLI build-script out_dir/catalogs reported
 by cargo build -p palamedes-cli --message-format=json. Human fallback warnings
 quote source messages like build.rs; JSON keeps the raw message text.
-The crates.io hold
-remains in force. See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
-The Preview Rust SDK stays in the coordinated version set and is not published on crates.io. `pnpm verify:rust-sdk` checks actual Cargo archives, rustdoc, a staged-registry version-only consumer, and an unchanged binary after a native CLI translation update. `pnpm release:rust:dry-run` uploads nothing; the Cargo lane requires both policy and manifest publication guards to be explicitly enabled in an authorized release change.
+See `docs/rust-applications.md` and `crates/palamedes-i18n/examples/cli`.
+The Preview Rust SDK (`palamedes-i18n`, `palamedes`, `palamedes-build`) is published on crates.io from 2.0.0 at the coordinated Palamedes version. `pnpm verify:rust-sdk` checks actual Cargo archives, rustdoc, a staged-registry version-only consumer, and an unchanged binary after a native CLI translation update. `pnpm release:rust:dry-run` runs the same checks and uploads nothing.
 
 Unbundled Node code (native type stripping, plain `tsc` output, scripts, tests)
 can keep the `t`, `plural`, `select`, and `selectOrdinal` macros from
@@ -721,7 +720,7 @@ see /docs/api/remix.md and /docs/demo-deployments.md for public hosts and hostin
 
 ### Waku support status
 
-Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. The adapter uses its unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. This tier is independent of the unreleased Palamedes v2 publication preview. See /docs/stability.md#waku-contract and /docs/api/waku.md.
+Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. The adapter uses its unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. See /docs/stability.md#waku-contract and /docs/api/waku.md.
 
 ### TanStack Start, Solid, Waku, React Router
 

@@ -18,10 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Availability and compatibility
 
-The Rust SDK is Preview and not published on crates.io yet. The builder, runtime,
-and core compiler share the coordinated Palamedes version. Pin the builder and
-runtime to the same reviewed revision until registry versions exist. No
-prerelease publishing channel is enabled. Catalog format version 2 is independent
+The Rust SDK is Preview and published on crates.io from Palamedes 2.0.0. The
+builder, runtime, and core compiler share the coordinated Palamedes version; use
+the same version for the builder and runtime. No prerelease publishing channel
+is enabled. Catalog format version 2 is independent
 of the crate version; changing message IDs or argument contracts requires an
 application rebuild. Compatible translation updates use the exported schema and
 a matching `pmds catalog compile --target rust`, without Node or an application

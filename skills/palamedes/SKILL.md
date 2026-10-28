@@ -28,15 +28,14 @@ points, and catalog samples before editing. Record the starting revision and
 existing failing checks. Respect repository instructions and preserve unrelated
 changes.
 
-These recipes use the **compiled v2 adapter contract**. Repository manifests
-can retain an older version while a coordinated release is held; a version
-number alone does not prove capability. Check the target's package exports,
+These recipes use the **compiled v2 adapter contract**, which Palamedes 2.0.0
+and later provide. A 1.x install does not have it, and a version number alone
+does not prove capability. Check the target's package exports,
 types, matching release documentation, native platform support, Node engines,
 and host peer dependencies. For Next.js, confirm `withPalamedes` and
 `createNextServerI18n` exist and the host is Next.js 16 App Router on Node.
 For Vite, confirm `palamedes()` supports automatic compiled fragment delivery.
-Do not assume registry `latest` implements the repository's current docs. If
-the required contract is unavailable, report the gap and request a compatible
+If the required contract is unavailable, report the gap and request a compatible
 target; do not invent loaders, silently upgrade the framework, or change a
 release policy. Pages Router, Edge, Vite SSR, and other hosts need their own
 verified integration and are outside these recipes.

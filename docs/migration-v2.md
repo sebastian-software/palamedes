@@ -8,8 +8,6 @@ For an overview of the improvements and their practical impact, read the
 
 Implementation and host verification are recorded in the
 [catalog delivery evidence](../benchmarks/catalog-delivery/README.md).
-Publication remains held pending release authorization and the current release
-gates; these documents do not announce an available 2.0 release.
 
 ## Check installation and tooling prerequisites
 

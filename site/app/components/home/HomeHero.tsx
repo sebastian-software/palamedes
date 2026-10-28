@@ -41,8 +41,7 @@ export function HomeHero() {
             </ButtonLink>
           </div>
           <p className="mt-6 max-w-[36rem] text-[13.5px] leading-relaxed text-ink/70">
-            Try the current implementation through the repository examples. npm currently supplies
-            1.x.{" "}
+            Palamedes 2.0 is out.{" "}
             <a
               href="/docs/release-notes-v2"
               className="text-accent underline underline-offset-4 hover:text-ink"

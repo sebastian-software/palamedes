@@ -11,10 +11,9 @@ rebuilding the application. The runtime has no Node, PO, or ICU parser dependenc
 
 ## Availability and compatibility
 
-The Rust SDK is Preview and not published on crates.io yet. The three SDK crates
-share the coordinated Palamedes version. Pin the builder and runtime to the same
-reviewed revision until registry versions are published. No prerelease publishing
-channel is enabled. Catalog format version 2 is separate from the crate version:
+The Rust SDK is Preview and published on crates.io from Palamedes 2.0.0. The
+three SDK crates share the coordinated Palamedes version; use the same version
+for the builder and runtime. No prerelease publishing channel is enabled. Catalog format version 2 is separate from the crate version:
 upgrade incompatible schemas, catalogs, and executables together. Within an
 unchanged contract, translation edits and new locales do not require a rebuild.
 See the [Rust application guide](https://palamedes.dev/docs/rust-applications)

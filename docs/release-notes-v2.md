@@ -1,14 +1,10 @@
 # Palamedes 2.0 release notes
 
-**Draft for the planned 2.0 release.** These notes describe the implementation
-on `main`. Publication remains held; they do not announce an available release.
+Palamedes 2.0 is out. These notes explain what changed and why. To upgrade an
+existing application, follow the [v2 migration guide](./migration-v2.md).
 
-The migration and representative integration verification are complete.
 TanStack Start with React and Solid 2 Start Mode with Nitro are checked demos
 and executable integration tests. TanStack Solid Start is outside the v2 scope.
-The [v2 acceptance issue](https://github.com/sebastian-software/palamedes/issues/1204)
-tracks final release verification and publication; see
-[Contributing](../CONTRIBUTING.md#releases) for the release gates.
 
 Palamedes 2.0 makes translation delivery part of the framework integration.
 You still write messages next to your code and keep translations in catalogs.
@@ -234,5 +230,4 @@ Update notices work without telemetry consent. Automatic checks run before comma
 interactive stderr terminal outside CI; `PALAMEDES_UPDATE_CHECK=1` explicitly
 enables CI/noninteractive checks. Consented invocation counts are saved before
 execution, so a watch session counts once even when stopped with Ctrl-C. See the
-[telemetry guide](./telemetry.md) for controls and limits. A release must verify the production telemetry service
-before enabling network reporting in published artifacts.
+[telemetry guide](./telemetry.md) for controls and limits.

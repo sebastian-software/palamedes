@@ -73,26 +73,23 @@ test("gates later majors and treats a 2.0.0 prerelease as below the gate", () =>
   assert.equal(findPrereleaseWording({ version: "2.0.0-rc.1", files }).status, "skipped");
 });
 
-test("finds the current pre-release wording in the v2 release notes", () => {
+test("finds no pre-release wording in the listed files at 2.0.0", () => {
   const result = findPrereleaseWording({ version: "2.0.0", files: currentFiles() });
 
-  assert.equal(result.status, "failed");
-  assert.ok(
-    result.hits.some(
-      (hit) =>
-        hit.file === "docs/release-notes-v2.md" && hit.phrase === "Draft for the planned 2.0",
-    ),
+  assert.deepEqual(
+    result.hits.map((hit) => `${hit.file}:${hit.line}: ${hit.phrase}`),
+    [],
   );
+  assert.equal(result.status, "ok");
 });
 
-test("keeps every listed phrase tied to text that exists today", () => {
-  const { hits } = findPrereleaseWording({ version: "2.0.0", files: currentFiles() });
-
+test("still detects every listed phrase", () => {
   for (const phrase of PRERELEASE_WORDING_PHRASES) {
-    assert.ok(
-      hits.some((hit) => hit.phrase === phrase),
-      `no current file matches "${phrase}"`,
-    );
+    const { hits } = findPrereleaseWording({
+      version: "2.0.0",
+      files: { "docs/sample.md": `Before. ${phrase}. After.\n` },
+    });
+    assert.deepEqual(hits, [{ file: "docs/sample.md", line: 1, phrase }]);
   }
 });
 

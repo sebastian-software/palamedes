@@ -7,9 +7,9 @@ import { pathToFileURL } from "node:url";
 export const RELEASE_WORDING_GATE = "2.0.0";
 
 // Phrases that describe v2 as held, draft, unreleased, or as a 1.x-only registry
-// state. They were copied from the files below as they read today, so each one
-// matches current text. Matching is case-insensitive and line by line: a phrase
-// must sit on one line of its file.
+// state. They were copied from the files below as they read before the 2.0.0
+// wording sweep (#1382). Matching is case-insensitive and line by line: a
+// phrase must sit on one line of its file.
 export const PRERELEASE_WORDING_PHRASES = Object.freeze([
   "Draft for the planned 2.0",
   "Publication remains held",
