@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source-map-js";
@@ -9,7 +9,11 @@ import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source
 import type * as CoreNode from "@palamedes/core-node";
 import type * as PalamedesConfigModule from "@palamedes/config";
 
-import { createPalamedesRemixAssetLoader, createPalamedesRemixLoadHook } from "./index";
+import {
+  createPalamedesRemixAssetLoader,
+  createPalamedesRemixCatalogAssetRegistry,
+  createPalamedesRemixLoadHook,
+} from "./index";
 
 const mocks = vi.hoisted(() => ({
   compileCatalogModule: vi.fn(),
@@ -382,6 +386,87 @@ describe("createPalamedesRemixLoadHook", () => {
     );
 
     expect(String(loaded.source)).toContain("getI18n()._(");
+  });
+
+  it("resolves a relative configPath from projectRoot, not the catalog directory", () => {
+    const projectRoot = path.resolve("/workspace/web");
+    expect(process.cwd()).not.toBe(projectRoot);
+    const load = createPalamedesRemixLoadHook({
+      projectRoot,
+      configPath: "config/palamedes.yaml",
+    });
+
+    load(new URL("file:///repo/app/locales/de.po").href, loadContext, vi.fn());
+
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
+      cwd: path.dirname(fileURLToPath("file:///repo/app/locales/de.po")),
+      configPath: path.join(projectRoot, "config", "palamedes.yaml"),
+    });
+  });
+
+  it("applies string, RegExp, and array include/exclude patterns from projectRoot", () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }';
+    const projectRoot = fileURLToPath("file:///repo/");
+    const load = createPalamedesRemixLoadHook({
+      projectRoot,
+      include: ["app/**/*.tsx", /\.custom\.ts$/u],
+      exclude: ["app/legacy/**", /\.gen\./u],
+    });
+
+    const transformed = [
+      "app/routes/home.tsx",
+      "lib/page.custom.ts",
+      "app/legacy/old.tsx",
+      "app/routes/page.gen.tsx",
+      "lib/page.tsx",
+    ].filter((file) => {
+      const loaded = load(pathToFileURL(path.join(projectRoot, file)).href, loadContext, () => ({
+        format: "module",
+        source,
+      }));
+      return String(loaded.source).includes("getI18n()._(");
+    });
+
+    expect(transformed).toEqual(["app/routes/home.tsx", "lib/page.custom.ts"]);
+  });
+});
+
+describe("createPalamedesRemixCatalogAssetRegistry", () => {
+  it("rejects the renamed cwd option with the v2 migration error", () => {
+    mocks.loadPalamedesConfigSync.mockClear();
+    expect(() =>
+      createPalamedesRemixCatalogAssetRegistry({ cwd: "/repo" } as Parameters<
+        typeof createPalamedesRemixCatalogAssetRegistry
+      >[0]),
+    ).toThrow(
+      "Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.",
+    );
+    expect(mocks.loadPalamedesConfigSync).not.toHaveBeenCalled();
+  });
+
+  it("resolves a relative configPath from projectRoot", () => {
+    const projectRoot = path.resolve("/workspace/web");
+    mocks.loadPalamedesConfigSync.mockReset().mockReturnValue({
+      configDependencies: [],
+      configPath: path.join(projectRoot, "config", "palamedes.yaml"),
+      rootDir: projectRoot,
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    });
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot,
+      configPath: "config/palamedes.yaml",
+      watch: false,
+    });
+    registry.close?.();
+
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
+      cwd: projectRoot,
+      configPath: path.join(projectRoot, "config", "palamedes.yaml"),
+    });
   });
 });
 

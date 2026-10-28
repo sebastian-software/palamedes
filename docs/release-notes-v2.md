@@ -157,7 +157,7 @@ fallbacks need changes before upgrading.
 | Maintain client catalog maps, boundaries, or serialized ICU bootstrap data | Replace that plumbing with the host adapter's standard setup.                                |
 | Catch translation failures and return source text or an empty catalog      | Let failures reach ordinary, catalog-independent error UI.                                   |
 | Disable Next.js message splitting                                          | Remove `messageSplitting` and use automatic delivery.                                        |
-| Set `failOnCompileError`, `keepSourceFallbacks`, or Next.js `cwd`          | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`. |
+| Set `failOnCompileError`, `keepSourceFallbacks`, or an adapter `cwd`       | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`. |
 | Reuse generated v1 catalogs or a custom runtime implementation             | Regenerate artifacts and implement the v2 compiled renderer contract.                        |
 
 The [v2 migration guide](./migration-v2.md) lists the exact removed APIs and

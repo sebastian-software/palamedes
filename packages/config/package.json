@@ -43,7 +43,7 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/loadConfig.test.ts",
+    "test": "vitest run --globals src/loadConfig.test.ts src/projectPaths.test.ts",
     "stub": "unbuild --stub"
   },
   "dependencies": {

@@ -26,7 +26,7 @@ export const normalizeLocale = locales.normalizeLocale;
 
 const EXAMPLE_ROOT = path.resolve(import.meta.dirname, "..");
 export const catalogAssetRegistry = createPalamedesRemixCatalogAssetRegistry({
-  cwd: EXAMPLE_ROOT,
+  projectRoot: EXAMPLE_ROOT,
 });
 
 export function getLocaleLabel(locale: Locale): string {

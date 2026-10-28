@@ -273,7 +273,7 @@ describe("withPalamedes turbopack config", () => {
     [
       "cwd",
       "/next-app",
-      "Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.",
+      "Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.",
     ],
   ] as const)("rejects the removed %s option (%j)", (name, value, message) => {
     expect(() =>
@@ -291,6 +291,45 @@ describe("withPalamedes turbopack config", () => {
 
     expect(conditions).toContainEqual({ path: include });
     expect(conditions).toContainEqual({ not: { path: exclude } });
+  });
+
+  it("resolves a relative configPath from an explicit projectRoot, not the working directory", () => {
+    const projectRoot = path.resolve("/workspace/apps/web");
+    expect(process.cwd()).not.toBe(projectRoot);
+
+    const config = withPalamedes({}, { projectRoot, configPath: "config/palamedes.yaml" });
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
+
+    expect(rule.loaders?.[0]?.options).toMatchObject({
+      cwd: projectRoot,
+      configPath: path.join(projectRoot, "config", "palamedes.yaml"),
+    });
+  });
+
+  it("forwards string, RegExp, and array include/exclude patterns to the loader filter", () => {
+    const projectRoot = path.resolve("/workspace/apps/web");
+    const config = withPalamedes(
+      {},
+      {
+        projectRoot,
+        include: ["src/**/*.ts", /\.custom$/u],
+        exclude: "src/legacy/**",
+      },
+    );
+    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
+
+    expect(rule.loaders?.[0]?.options?.sourceFilter).toStrictEqual({
+      projectRoot,
+      include: ["src/**/*.ts", { regexp: "\\.custom$", flags: "u" }],
+      exclude: ["src/legacy/**"],
+    });
+    // Globs resolve from projectRoot in the loader, so only RegExp-only
+    // includes narrow Turbopack's project-relative path condition.
+    expect(
+      conditionList(rule).some(
+        (condition) => typeof condition === "object" && condition !== null && "path" in condition,
+      ),
+    ).toBe(false);
   });
 
   it("matches all macro packages in the content pre-filter", () => {
@@ -461,7 +500,7 @@ describe("withPalamedes turbopack config", () => {
 });
 
 type WebpackRule = {
-  test?: RegExp;
+  test?: RegExp | ((resource: string) => boolean);
   exclude?: RegExp;
   type?: string;
   use?: { loader: string; options?: Record<string, unknown> }[];
@@ -492,10 +531,11 @@ describe("withPalamedes webpack config", () => {
       (rule) =>
         rule.type === "javascript/auto" && rule.use?.[0]?.loader.includes("palamedes-po-loader"),
     );
-    expect(
-      fragmentRule?.test?.test("node_modules/@palamedes/next-plugin/catalog-fragment.cjs"),
-    ).toBe(true);
-    expect(fragmentRule?.test?.test("src/catalog-fragment.cjs")).toBe(false);
+    const fragmentTest = fragmentRule?.test as RegExp;
+    expect(fragmentTest.test("node_modules/@palamedes/next-plugin/catalog-fragment.cjs")).toBe(
+      true,
+    );
+    expect(fragmentTest.test("src/catalog-fragment.cjs")).toBe(false);
     expect(fragmentRule).toMatchObject({ type: "javascript/auto" });
   });
 
@@ -504,10 +544,13 @@ describe("withPalamedes webpack config", () => {
       rule.use?.[0]?.loader.includes("palamedes-loader"),
     );
 
+    const matches = transformRule?.test as (resource: string) => boolean;
+
     for (const file of ["page.ts", "page.tsx", "page.js", "page.jsx", "page.mjs", "page.cjs"]) {
-      expect(transformRule?.test?.test(file)).toBe(true);
+      expect(matches(path.resolve("/app/src", file))).toBe(true);
     }
-    expect(transformRule?.test?.test("page.css")).toBe(false);
+    expect(matches(path.resolve("/app/src/page.css"))).toBe(false);
+    expect(matches(path.resolve("/app/node_modules/pkg/page.ts"))).toBe(false);
   });
 
   it("re-resolves config and Server Function modules from Next's webpack project directory", async () => {
@@ -568,6 +611,30 @@ describe("withPalamedes webpack config", () => {
     expect(webpackConfig.resolve.alias).toMatchObject({
       [serverEntryModule]: path.join(appRoot, "src", "palamedes.server.ts"),
     });
+  });
+
+  it("applies string, RegExp, and array include/exclude patterns from projectRoot", () => {
+    const projectRoot = path.resolve("/workspace/apps/web");
+    const rules = collectWebpackRules(
+      withPalamedes(
+        {},
+        {
+          projectRoot,
+          include: ["src/**/*.ts", /\.custom$/u],
+          exclude: ["src/legacy/**", /\.gen\./u],
+        },
+      ),
+    );
+    const transformRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-loader"));
+    const matches = transformRule?.test as (resource: string) => boolean;
+    const file = (relative: string) => path.join(projectRoot, relative);
+
+    expect(matches(file("src/page.ts"))).toBe(true);
+    expect(matches(file("pages/page.custom"))).toBe(true);
+    expect(matches(file("src/legacy/old.ts"))).toBe(false);
+    expect(matches(file("src/page.gen.ts"))).toBe(false);
+    expect(matches(file("lib/page.ts"))).toBe(false);
+    expect(transformRule).not.toHaveProperty("exclude");
   });
 
   it("uses Next's project directory for webpack loader options", () => {
@@ -644,12 +711,12 @@ describe("withPalamedes webpack config", () => {
   });
 
   it("excludes node_modules from the po loader rule", () => {
-    const poRule = collectWebpackRules(withPalamedes()).find((rule) =>
-      rule.test?.source.includes("po"),
+    const poRule = collectWebpackRules(withPalamedes()).find(
+      (rule) => rule.test instanceof RegExp && rule.test.source.includes("po"),
     );
 
     expect(poRule).toBeDefined();
-    expect(poRule?.test?.test("/app/locales/de/messages.fcl")).toBe(true);
+    expect((poRule!.test as RegExp).test("/app/locales/de/messages.fcl")).toBe(true);
     expect(poRule?.exclude).toBeInstanceOf(RegExp);
     expect(poRule?.exclude?.test("/app/node_modules/some-dep/messages/de.po")).toBe(true);
     expect(poRule?.exclude?.test("/app/src/locales/de.po")).toBe(false);
@@ -657,6 +724,8 @@ describe("withPalamedes webpack config", () => {
 
   it("omits the po loader rule when disabled", () => {
     const rules = collectWebpackRules(withPalamedes({}, { enablePoLoader: false }));
-    expect(rules.some((rule) => rule.test?.source.includes("po"))).toBe(false);
+    expect(
+      rules.some((rule) => rule.test instanceof RegExp && rule.test.source.includes("po")),
+    ).toBe(false);
   });
 });

@@ -656,6 +656,13 @@ active-locale compiled delivery, shared server catalog storage and ordinary host
 applications do not serialize raw ICU or maintain catalog maps. See
 `/docs/migration-v2.md`.
 
+The Vite, Next.js, and Remix adapters share one path contract. `projectRoot`
+is the base for config discovery, a relative `configPath`, and relative
+`include`/`exclude` globs; Vite defaults it to its resolved `root`. The v1
+`cwd` option throws a migration error. `include`/`exclude` accept a glob, a
+RegExp, or an array of both; RegExps test the absolute file path. See
+`/docs/configuration.md#adapter-paths`.
+
 ### Vite
 
 Use `@palamedes/vite-plugin`. Put `palamedes()` in the Vite plugin list alongside the host framework plugin.

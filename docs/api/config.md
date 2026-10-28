@@ -12,6 +12,9 @@
 - `expandFallbackLocales(locales, fallbackLocales?)`
 - `resolveCatalogPath(config, catalogPath, locale)`
 - `resolveConfigPattern(config, pattern)`
+- `resolvePalamedesProjectRoot(projectRoot?, fallback?)`
+- `resolvePalamedesConfigPath(projectRoot, configPath?)`
+- `createPalamedesSourceFilter(include, exclude, { projectRoot })`
 - `LoadPalamedesConfigOptions`
 - `PalamedesConfig`
 - `LoadedPalamedesConfig`
@@ -23,6 +26,9 @@
 - `PalamedesLintConfig`
 - `PalamedesSourceRuleLevel`
 - `PalamedesPluginDeclaration`
+- `PalamedesFilterPattern`
+- `PalamedesSourceFilter`
+- `PalamedesSourceFilterOptions`
 
 ## Config Files
 
@@ -98,6 +104,30 @@ Synchronous variant of `loadPalamedesConfig` with the same options, return
 shape, and file support (including legacy `palamedes.config.ts`/`.js`). Use it
 in hosts that cannot await, such as synchronous loader hooks — the Remix
 register hook loads its config this way.
+
+## Shared adapter path helpers
+
+The Vite, Next.js, and Remix adapters resolve their path options through these
+helpers, so all three follow the same
+[adapter path rules](../configuration.md#adapter-paths).
+
+`resolvePalamedesProjectRoot(projectRoot?, fallback?)` resolves a relative
+`projectRoot` from the current working directory and returns `fallback`
+(default: the working directory) when it is unset.
+
+`resolvePalamedesConfigPath(projectRoot, configPath?)` resolves a relative
+`configPath` from `projectRoot` and keeps an absolute one. It returns
+`undefined` without a `configPath`, so the caller keeps automatic discovery.
+
+`createPalamedesSourceFilter(include, exclude, { projectRoot })` returns the
+`(id) => boolean` filter behind every adapter's `include` and `exclude`
+options. A `PalamedesFilterPattern` is a glob string, a RegExp, an array of
+both, `null`, or `undefined`. Relative globs resolve from `projectRoot`; globs
+that start with `**` and absolute globs match as written. RegExps test the
+file path with forward slashes. IDs containing a NUL byte never match, an
+`exclude` match wins, and an empty `include` accepts every file that is not
+excluded. This mirrors Vite's `createFilter()` with `projectRoot` as its glob
+base.
 
 ## Shared dependency and digest helpers
 

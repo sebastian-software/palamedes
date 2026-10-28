@@ -480,7 +480,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     const sourcePath = path.join(rootDir, "app", "routes", "fragment.ts");
     mkdirSync(path.dirname(sourcePath), { recursive: true });
     writeFileSync(sourcePath, "export const fragment = true;\n");
-    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
     const compiledIds = transformPalamedesMacros(
       'import { t } from "@palamedes/core/macro"; export function text() { return t`Greeting`; }',
       sourcePath,
@@ -556,7 +556,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo {name}"\n',
     );
 
-    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
     const [first, second] = await Promise.all([registry.load?.("de"), registry.load?.("de")]);
     expect(first).toBeDefined();
     expect(first).toBe(second);
@@ -592,7 +592,7 @@ describe("createPalamedesRemixAssetLoader", () => {
         );
       }
     }
-    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
     const messages = await registry.load?.("de");
     expect(Object.values(messages ?? {}).sort()).toEqual([
       "de-first",
@@ -615,7 +615,10 @@ describe("createPalamedesRemixAssetLoader", () => {
         path.join(rootDir, "locales", `${locale}.po`),
         'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Before"\n',
       );
-    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir, watch: true });
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: rootDir,
+      watch: true,
+    });
     try {
       const sourcePath = path.join(rootDir, "app", "message.ts");
       const ids = transformPalamedesMacros(
@@ -650,7 +653,10 @@ describe("createPalamedesRemixAssetLoader", () => {
       path.join(rootDir, "palamedes.yaml"),
       "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/nested/messages.po\n    include: [app]\n",
     );
-    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir, watch: true });
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: rootDir,
+      watch: true,
+    });
     try {
       const generation = registry.generation?.();
       await expect(registry.load?.("de")).rejects.toThrow(/catalog|file|os error 2/iu);
@@ -692,7 +698,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello"\n',
     );
 
-    const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: rootDir });
+    const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
     const first = await registry.load?.("de");
     const generation = registry.generation?.();
 

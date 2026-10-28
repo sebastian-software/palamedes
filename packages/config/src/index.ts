@@ -8,6 +8,15 @@ import picomatch from "picomatch";
 import { parse as parseToml } from "smol-toml";
 import { parse as parseYaml } from "yaml";
 
+export {
+  createPalamedesSourceFilter,
+  resolvePalamedesConfigPath,
+  resolvePalamedesProjectRoot,
+  type PalamedesFilterPattern,
+  type PalamedesSourceFilter,
+  type PalamedesSourceFilterOptions,
+} from "./projectPaths";
+
 export const CONFIG_FILENAMES = [
   "palamedes.yaml",
   "palamedes.yml",
