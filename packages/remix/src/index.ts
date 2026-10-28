@@ -326,7 +326,8 @@ export function createPalamedesRemixCatalogAssetRegistry(
         const fragmentUrl = `${thisSidecarUrl(basePath, key)}fragment=1&locale=`;
         const source =
           `import{defineCompiledCatalog as __define}from"@palamedes/core/compiled";` +
-          `import{getI18n as __getI18n,loadRegisteredMessages as __load,registerMessageLoaderGroup as __register}from"@palamedes/runtime";` +
+          `import{getI18n as __getI18n}from"@palamedes/runtime";` +
+          `import{loadRegisteredMessages as __load,registerMessageLoaderGroup as __register}from"@palamedes/runtime/internal";` +
           `const __locale=document.documentElement.lang;` +
           `__register(${JSON.stringify(key)},[{[__locale]:async()=>` +
           `__define((await import(${JSON.stringify(fragmentUrl)}+encodeURIComponent(__locale))).messages)}]);` +
@@ -634,7 +635,8 @@ export function createPalamedesRemixAssetLoader(
     const sidecarImport = `${sidecar}?fragment=1&locale=`;
     const catalogPrelude =
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
-      `import{getI18n as __palamedesGetI18n,loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup}from"@palamedes/runtime";\n` +
+      `import{getI18n as __palamedesGetI18n}from"@palamedes/runtime";` +
+      `import{loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup}from"@palamedes/runtime/internal";\n` +
       `const __palamedesLocale=document.documentElement.lang;` +
       `const __palamedesMessages=__palamedesDefineCompiledCatalog((await import(new URL(${JSON.stringify(sidecarImport)}+encodeURIComponent(__palamedesLocale),document.baseURI)).catch(__error=>{globalThis.dispatchEvent(new CustomEvent("palamedes:catalog-error",{detail:__error}));throw __error})).messages);` +
       `__palamedesRegisterMessageLoaderGroup(${JSON.stringify(key)},[{[__palamedesLocale]:async()=>__palamedesMessages}]);` +
