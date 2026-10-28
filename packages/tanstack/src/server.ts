@@ -147,6 +147,28 @@ export function createTanStackCatalogResponseDelivery(
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 
+let driftWarned = false;
+
+const DRIFT_MESSAGE =
+  "Palamedes found a TanStack Start module script under /assets/ but none matching assets/index-*.js, " +
+  "so the catalog readiness gate was not applied and the app may hydrate over a failed catalog. " +
+  "The installed TanStack Start version probably changed its entry naming; check that @palamedes/tanstack supports it.";
+
+/**
+ * The bootstrap gate matches upstream output by name. When a built entry-like
+ * module script is present but none was gated, the gate is silently off.
+ * Development fails the response; production keeps serving the page and logs
+ * one warning per process.
+ */
+function reportBootstrapDrift(development: boolean): Error | undefined {
+  if (development) return new Error(DRIFT_MESSAGE);
+  if (!driftWarned) {
+    driftWarned = true;
+    console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
+  }
+  return undefined;
+}
+
 /**
  * TanStack Start emits its browser entry as a module script rather than an
  * inline bootstrap. Gate that exact entry on the delivery probe's shared
@@ -160,6 +182,8 @@ function createTanStackBootstrapGateTransform(options: {
 }): Transform {
   const decoder = new StringDecoder("utf8");
   let buffered = "";
+  let gatedEntries = 0;
+  let unmatchedAssetScripts = 0;
 
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
@@ -168,7 +192,17 @@ function createTanStackBootstrapGateTransform(options: {
     },
     flush(callback) {
       buffered += decoder.end();
-      callback(null, flushMarkup(true));
+      const output = flushMarkup(true);
+      const drift =
+        gatedEntries === 0 && unmatchedAssetScripts > 0
+          ? reportBootstrapDrift(options.development)
+          : undefined;
+      if (drift) {
+        this.push(output);
+        callback(drift);
+      } else {
+        callback(null, output);
+      }
     },
   });
 
@@ -204,6 +238,10 @@ function createTanStackBootstrapGateTransform(options: {
       const candidate = readTagAttribute(openingTag, "src");
       const source =
         candidate && isTanStackEntryScript(openingTag, candidate, options) ? candidate : undefined;
+      if (source) gatedEntries += 1;
+      else if (candidate && isBuiltAssetModuleScript(openingTag, candidate, options)) {
+        unmatchedAssetScripts += 1;
+      }
       output += source
         ? gateTanStackEntry(openingTag, source, options)
         : buffered.slice(open, closingEnd + 1);
@@ -224,6 +262,19 @@ function isTanStackEntryScript(
     type?.toLowerCase() === "module" &&
     isAllowedScriptOrigin(source, options) &&
     /(?:^|\/)assets\/index-[^/?#]+\.js(?:[?#].*)?$/iu.test(source)
+  );
+}
+
+/** A same-origin module script from the build's assets directory that is not the entry. */
+function isBuiltAssetModuleScript(
+  openingTag: string,
+  source: string,
+  options: { allowedOrigins: ReadonlySet<string>; baseOrigin: string },
+): boolean {
+  return (
+    readTagAttribute(openingTag, "type")?.toLowerCase() === "module" &&
+    isAllowedScriptOrigin(source, options) &&
+    /(?:^|\/)assets\/[^/?#]+\.js(?:[?#].*)?$/iu.test(source)
   );
 }
 

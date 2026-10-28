@@ -50,9 +50,81 @@ async function transformHtml(input: string, splitAt: number[], nonce?: string): 
   return context.res.text();
 }
 
+async function driftHarness(html: string, development: boolean) {
+  // The one-warning-per-process flag lives in module state.
+  vi.resetModules();
+  const { createWakuCatalogDeliveryMiddleware: create } = await import("./server");
+  const middleware = create({
+    clientDirectory: "dist/public",
+    development,
+    resolveLocale: () => "en",
+  });
+  const context = {
+    req: { raw: new Request("https://example.test/") },
+    res: new Response(html, { headers: { "content-type": "text/html" } }),
+  } as Parameters<typeof middleware>[0];
+  await middleware(context, async () => {});
+  return context.res;
+}
+
 describe("Waku catalog document delivery", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("stays silent when the bootstrap entry is rewritten", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await driftHarness(
+      '<script id="_R_">import("/assets/index-abc.js")</script>',
+      false,
+    );
+    await expect(response.text()).resolves.toContain("document-catalogs-ready-promise");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("stays silent for documents without the framework bootstrap", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const development of [false, true]) {
+      const response = await driftHarness(
+        '<p>import("/assets/index-x.js")</p><script>window.ok = true;</script>',
+        development,
+      );
+      await expect(response.text()).resolves.toContain("window.ok");
+    }
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns once per process and keeps serving the page when production output drifts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.resetModules();
+    const { createWakuCatalogDeliveryMiddleware: create } = await import("./server");
+    const middleware = create({
+      clientDirectory: "dist/public",
+      development: false,
+      resolveLocale: () => "en",
+    });
+    const drifted = '<html><script id="_R_">startWaku("/assets/main-abc.js")</script></html>';
+    for (let request = 0; request < 3; request += 1) {
+      const context = {
+        req: { raw: new Request("https://example.test/") },
+        res: new Response(drifted, { headers: { "content-type": "text/html" } }),
+      } as Parameters<typeof middleware>[0];
+      await middleware(context, async () => {});
+      await expect(context.res.text()).resolves.toContain("startWaku");
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain("Waku");
+  });
+
+  it("fails the response loudly in development when the bootstrap output drifts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await driftHarness(
+      '<script id="_R_">startWaku("/assets/main-abc.js")</script>',
+      true,
+    );
+    await expect(response.text()).rejects.toThrow(/Waku's inline bootstrap/u);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("defaults clientDirectory to dist/public and forwards manifestName", () => {

@@ -382,4 +382,78 @@ describe("TanStack server catalog adapter", () => {
       rmSync(clientDirectory, { recursive: true, force: true });
     }
   });
+
+  describe("bootstrap drift", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    async function deliverDocument(html: string, development: boolean) {
+      const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-drift-"));
+      try {
+        writeFileSync(
+          path.join(clientDirectory, "palamedes-split-manifest.json"),
+          JSON.stringify({
+            locales: ["en"],
+            importMaps: { en: "assets/map.json" },
+            chunkImports: {},
+          }),
+        );
+        mkdirSync(path.join(clientDirectory, "assets"), { recursive: true });
+        writeFileSync(
+          path.join(clientDirectory, "assets/map.json"),
+          JSON.stringify({ imports: {} }),
+        );
+        // The one-warning-per-process flag lives in module state.
+        vi.resetModules();
+        const { createTanStackCatalogResponseDelivery } = await import("./server");
+        const deliver = createTanStackCatalogResponseDelivery({ clientDirectory, development });
+        return (await deliver(
+          new Response(html, { headers: { "content-type": "text/html" } }),
+          "en",
+          new Request("https://example.test/"),
+        )) as Response;
+      } finally {
+        rmSync(clientDirectory, { recursive: true, force: true });
+      }
+    }
+
+    it("stays silent when the entry is gated", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const response = await deliverDocument(
+        '<html><head></head><body><script type="module" src="/assets/index-abc.js"></script></body></html>',
+        false,
+      );
+      expect(await response.text()).toContain("document-catalogs-ready-promise");
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("stays silent for documents without a built module script", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      for (const development of [false, true]) {
+        const response = await deliverDocument(
+          '<html><head></head><body><script>window.ok = true;</script><script type="module" src="/src/entry.tsx"></script></body></html>',
+          development,
+        );
+        expect(await response.text()).toContain("window.ok");
+      }
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("warns once per process and keeps serving the page when production output drifts", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const html =
+        '<html><head></head><body><script type="module" src="/assets/main-abc.js"></script></body></html>';
+      const response = await deliverDocument(html, false);
+      expect(await response.text()).toContain('src="/assets/main-abc.js"');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("TanStack");
+    });
+
+    it("fails the response loudly in development when the entry naming drifts", async () => {
+      const response = await deliverDocument(
+        '<html><head></head><body><script type="module" src="/assets/main-abc.js"></script></body></html>',
+        true,
+      );
+      await expect(response.text()).rejects.toThrow(/assets\/index-\*\.js/u);
+    });
+  });
 });

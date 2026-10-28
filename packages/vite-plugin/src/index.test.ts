@@ -1224,6 +1224,58 @@ describe("automatic graph splitting", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"));
   });
 
+  describe("duplicate compiled IDs across catalogs", () => {
+    function twoCatalogs(first: Record<string, string>, second: Record<string, string>) {
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: "/repo/palamedes.yaml",
+        rootDir: "/repo",
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: "src/locales/{locale}", include: ["src/**/*"] },
+          { path: "src/other/{locale}", include: ["src/**/*"] },
+        ],
+      });
+      mocks.compileCatalogArtifactSelected.mockImplementation(
+        (_config: unknown, resourcePath: string) => ({
+          messages: resourcePath.includes("other") ? second : first,
+          missing: [],
+          diagnostics: [],
+          watchFiles: [],
+          resolvedLocaleChain: [],
+        }),
+      );
+    }
+
+    it("warns once per ID when catalogs disagree and keeps the last catalog's value", async () => {
+      twoCatalogs({ "id-a": "Hallo", same: "Gleich" }, { "id-a": "Servus", same: "Gleich" });
+      const warn = vi.fn();
+      const { load, key } = await runSidecarLoad(["id-a", "same"], { warn });
+
+      const first = await load(`\0palamedes:messages/${key}/de`);
+      const second = await load(`\0palamedes:messages/${key}/de`);
+
+      expect(mocks.renderCatalogModule).toHaveBeenLastCalledWith({
+        "id-a": "Servus",
+        same: "Gleich",
+      });
+      expect(second?.code).toBe(first?.code);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('"id-a"'));
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('"same"'));
+    });
+
+    it("stays silent when catalogs repeat an ID with the same value", async () => {
+      twoCatalogs({ "id-a": "Hallo" }, { "id-a": "Hallo" });
+      const warn = vi.fn();
+      const { load, key } = await runSidecarLoad(["id-a"], { warn });
+
+      await load(`\0palamedes:messages/${key}/de`);
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   function nativeModuleShape(map: string): string {
     return (
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
