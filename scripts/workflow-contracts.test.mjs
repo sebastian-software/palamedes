@@ -715,7 +715,6 @@ describe("workflow contracts", () => {
     expect(publishJs).toContain("publish-package-if-needed.mjs --all-js");
     expect(publishJs).not.toContain("publish_package @palamedes/");
     expect(notifyFailure).toContain("issues: write");
-    expect(notifyFailure).toContain("failure()");
     expect(notifyFailure).toContain("scripts/open-or-refresh-issue.mjs");
     expect(retireFailure).toContain("issues: write");
     expect(retireFailure).toContain("needs.verify-release.result == 'success'");
@@ -731,9 +730,70 @@ describe("workflow contracts", () => {
       "example-verification",
       "publish-native",
       "publish-js",
+      "publish-cargo",
       "verify-release",
     ]) {
       expect(notifyFailure).toContain(`needs.${jobName}.result`);
+    }
+  });
+
+  it("reports a cancelled release job as well as a failed one", async () => {
+    const jobs = workflowJobs(await readRepositoryFile(".github/workflows/publish.yml"));
+    const notify = jobs.get("notify-failure");
+    const releaseJobs = [...jobs.keys()].filter(
+      (name) => !["notify-failure", "retire-release-failure"].includes(name),
+    );
+
+    // failure() is false when a job was cancelled, so the notifier must run
+    // under always() and inspect every needed job's result itself.
+    expect(notify.needs.sort()).toEqual(releaseJobs.sort());
+    expect(notify.if).toMatch(/^\$\{\{ always\(\) && /u);
+    expect(notify.if).toContain(
+      "(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))",
+    );
+    expect(notify.if).toContain("(github.event_name != 'workflow_dispatch' || !inputs.dry_run)");
+    expect(notify.if).toContain(
+      "(needs.determine-release.result == 'failure' || needs.determine-release.outputs.should_publish == 'true')",
+    );
+  });
+
+  it("serializes only release uploads, so an ordinary main push cannot cancel a pending release", async () => {
+    const publish = await readRepositoryFile(".github/workflows/publish.yml");
+    const jobs = workflowJobs(publish);
+
+    // A workflow-level group admits every main push; the next push then
+    // replaces a pending release run, and GitHub cancels it.
+    expect(publish.slice(0, publish.indexOf("\njobs:\n"))).not.toMatch(/^concurrency:/mu);
+
+    const releaseOnly = "needs.determine-release.outputs.should_publish == 'true'";
+    const groups = {
+      "publish-native": [
+        "format('publish-native-{0}-{1}', github.ref, matrix.package_name)",
+        "format('publish-native-{0}-{1}', github.run_id, matrix.package_name)",
+      ],
+      "publish-cargo": [
+        "format('publish-cargo-{0}', github.ref)",
+        "format('publish-cargo-{0}', github.run_id)",
+      ],
+      "publish-js": [
+        "format('publish-js-{0}', github.ref)",
+        "format('publish-js-{0}', github.run_id)",
+      ],
+    };
+    for (const [name, releaseJob] of jobs) {
+      const concurrency =
+        /^ {4}concurrency:\n {6}group: (.+)\n {6}cancel-in-progress: (.+)$/mu.exec(releaseJob.text);
+      if (!groups[name]) {
+        expect(releaseJob.text, name).not.toMatch(/^ {4}concurrency:/mu);
+        continue;
+      }
+      const [releaseGroup, runGroup] = groups[name];
+      expect(releaseJob.if, name).toContain(releaseOnly);
+      expect(concurrency?.[1], name).toBe(
+        `\${{ ${releaseOnly} && ${releaseGroup} || ${runGroup} }}`,
+      );
+      // Waiting, never cancelling: a cancelled upload leaves a partial release.
+      expect(concurrency?.[2], name).toBe("false");
     }
   });
 
