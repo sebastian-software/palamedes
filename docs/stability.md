@@ -191,7 +191,7 @@ and they can change in any release.
 | ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
 | `@palamedes/core/compiled`                        | Stable   | Alias of the package root; the transform and generated catalogs import it.                  |
 | `@palamedes/core/macro`                           | Stable   | `t`, `plural`, `select`, `selectOrdinal`, and the choice prop types.                        |
-| `@palamedes/core/locale`                          | Stable   | Locale negotiation and locale-switch helpers.                                               |
+| `@palamedes/core/locale`                          | Stable   | Locale negotiation, locale controls, switch items, and SEO links.                           |
 | `@palamedes/core/internal`                        | Internal | Renderer helpers for the React, Solid, and Remix `Trans` components.                        |
 | `@palamedes/runtime/server`                       | Stable   | Request-local server scopes and the server catalog store.                                   |
 | `@palamedes/runtime/server/bundled`               | Stable   | `createBundledServerI18n` for server code built by `@palamedes/vite-plugin`.                |

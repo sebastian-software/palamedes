@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "measuredAt": "2026-10-28T10:50:41.451Z",
-  "sourceCommit": "2b1f85903a43ecd0bc8d26e0f26ef7d084927a7d",
-  "worktreeDirty": false,
-  "sourceSha256": "bb9f1f2965a70e8fa5808d0bd4ede6da30f3af5f8a3b8ba0a0febb79d358445e",
+  "measuredAt": "2026-10-28T11:14:14.853Z",
+  "sourceCommit": "540d98dbcc4f23ae3dd844d7873afe528c12731d",
+  "worktreeDirty": true,
+  "sourceSha256": "38a312ed33c50634e8e347be4b580df85d1608ccddd1d77d9dcf65e1f0089368",
   "environment": {
     "node": "v24.22.1",
     "vite": "8.2.4",
@@ -127,7 +127,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "1498a18b2133788cdbf401a365cf822253a5b4e9e951a75b629ca961c1806361"
+          "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
           "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
@@ -200,7 +200,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "1498a18b2133788cdbf401a365cf822253a5b4e9e951a75b629ca961c1806361"
+          "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
           "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",

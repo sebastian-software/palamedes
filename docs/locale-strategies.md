@@ -1,8 +1,28 @@
-# Locale Strategies In The Example Matrix
+# Locale Strategies And URL Policies
 
-The example matrix proves four authoritative locale strategies — cookie, route,
-subdomain, and tld — plus one derived host mapping behavior on top of the route
-strategy.
+Locale controls support five authoritative strategies: cookie, route, domain,
+subdomain, and tld. The example matrix proves cookie, route, subdomain, and tld
+integrations plus derived host mapping on top of the route strategy. Domain
+mapping and SEO link generation have focused core contract tests.
+
+## Choosing A Strategy
+
+| Strategy                             | Example URL               | Locale policy                                                                       |
+| ------------------------------------ | ------------------------- | ----------------------------------------------------------------------------------- |
+| Cookie (`cookie`)                    | `example.com/pricing`     | Read a stored choice, then browser preferences.                                     |
+| Route prefix (`route`)               | `example.com/de/pricing`  | Read the locale from the path.                                                      |
+| Subdomain (`subdomain`)              | `de.example.com/pricing`  | Read and replace the leftmost DNS label.                                            |
+| Top-level domain (`tld`)             | `product.de/pricing`      | Read and replace the rightmost DNS label, keeping the rest of the hostname.         |
+| Explicit language domains (`domain`) | `mein-produkt.de/pricing` | Look up the complete hostname in a configured map; names may differ across locales. |
+
+Use `tld` for `product.com` and `product.de`: the hostname changes only in its
+final label. Use `domain` for `my-product.com` and `mein-produkt.de`, or any other
+explicit set of language hosts. Both emit paths without locale prefixes. Domain
+mode is an additional option; existing TLD deployments can keep their strategy.
+
+The separate `hosts.mode: "map"` option is advisory host mapping for the route
+strategy. It retains `/en/...` and `/de/...` paths; it is not the authoritative
+`domain` strategy described here.
 
 ## Language Preference Matching
 
@@ -101,9 +121,10 @@ Route examples follow this rule set:
 
 This is the verified path for SEO-oriented or shareable locale URLs.
 
-## Domain And Host Mapping
+## Advisory Host Mapping For Routes
 
-Domain-based locale selection is modeled as an extension of the route strategy.
+`hosts.mode: "map"` adds host validation to the route strategy. The route locale
+remains authoritative.
 
 The examples treat host mapping as:
 
@@ -114,6 +135,61 @@ The examples treat host mapping as:
 When host mapping disagrees with the rendered locale, the example shows the same
 info bar used for `Accept-Language` mismatches, but the CTA points to the
 canonical host plus path for the recommended locale.
+
+## Domain Strategy
+
+Use `hosts.mode: "domain"` when each locale has an explicit canonical host and
+paths have no language prefix. This strategy is called **explicit language
+domains**: it maps complete hostnames instead of deriving them from a shared
+name as `tld` does. The domains may have unrelated names:
+
+```ts
+import { defineLocaleControls } from "@palamedes/core/locale";
+
+const locales = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+  protocol: "https",
+  hosts: {
+    mode: "domain",
+    locales: { en: "product.example", de: "mein-produkt.de" },
+  },
+});
+
+locales.resolve({ strategy: "domain", requestHost: "mein-produkt.de" });
+// { locale: "de", source: "host" }
+locales.canonicalUrl({ locale: "de", pathname: "/pricing" });
+// https://mein-produkt.de/pricing
+locales.seoLinks({ locale: "de", pathname: "/pricing" });
+// canonical, en/de alternates, and the English x-default
+```
+
+Every configured locale must have a distinct host. Host matching ignores DNS
+case and request ports. Destination URLs use the configured host and its optional
+port; a development request's port is never copied to another domain. Unknown
+hosts fall back to `Accept-Language` and then `defaultLocale`. Applications can
+keep a prerendered build's locale authoritative instead of calling `resolve()`.
+
+This is an opt-in strategy. Existing `hosts.mode: "map"` integrations continue
+to use locale-prefixed paths and host mismatch suggestions. Switching to domain
+mode changes public URLs, so move existing prefixed URLs with application-owned
+redirects when adopting it. Language changes still load a new document.
+
+### SEO link descriptors
+
+`seoLinks()` returns framework-neutral descriptors with `href`, `rel`, and, for
+alternates, `hrefLang`. It uses exactly the URL policy of `canonicalUrl()` and
+orders links as the current canonical, one alternate per configured locale, and
+an `x-default` pointing to `defaultLocale`. Set `xDefaultLocale` to another
+configured locale or `false` to omit that link. Unsupported locale inputs throw
+`TypeError`. Query strings are included only when passed as `search`.
+
+Set `protocol: "https"` for absolute production SEO URLs. Without an explicit
+protocol, host-based URLs remain protocol-relative; route-only configurations
+return paths. For TLD and subdomain strategies, pass the canonical build host as
+`requestHost` during prerendering so previews cannot change the public SEO URLs.
+The caller owns page availability, rendering the descriptors, sitemap XML, and
+any application-specific path normalization.
 
 ## Subdomain Strategy
 
@@ -139,10 +215,9 @@ Subdomain examples follow this rule set:
   `hreflang` alternates, or sitemaps. See
   [`defineLocaleControls`](api/core.md#locale-controls).
 
-This is distinct from the host mapping above. Host mapping is a _validation
+This is distinct from advisory host mapping. Host mapping is a _validation
 signal on top of_ the route strategy, matched against fully configured per-locale
-hosts. The subdomain strategy is a third _authoritative_ resolution source
-alongside cookie and route, and needs no per-locale host map: the same
+hosts. The authoritative subdomain strategy needs no per-locale host map: the same
 `hosts: { mode: "subdomain" }` configuration works unchanged across `lvh.me`
 locally and `*.examples.palamedes.dev` in production, because the locale is read
 from the label rather than compared to a fixed host.
@@ -263,7 +338,7 @@ persist a preference or navigate.
 
 ## Switching Locale
 
-Locale _strategy_ (cookie, route, subdomain, or TLD) is independent from the
+Locale _strategy_ (cookie, route, subdomain, TLD, or explicit language domains) is independent from the
 browser lifecycle. Palamedes treats the selected locale as immutable document
 bootstrap state. A switch updates the strategy input and loads a new document:
 write the cookie and call `window.location.assign(...)`, submit a normal form,

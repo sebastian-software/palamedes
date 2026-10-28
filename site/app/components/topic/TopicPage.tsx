@@ -98,7 +98,10 @@ export function TopicPage({ topic }: { topic: Topic }) {
         ) : (
           <dl className="hairline-grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
             {topic.evidence.items.map((item) => (
-              <div key={item.label} className="bg-paper px-5 py-5">
+              <div
+                key={item.label}
+                className={`bg-paper px-5 py-5 ${topic.evidence.items.length % 4 === 1 ? "last:col-span-full" : ""}`}
+              >
                 <dt className="micro text-[11px] tracking-label text-gray-spec">{item.label}</dt>
                 <dd>
                   <span className="mono-nums mt-3 block text-[24px] text-accent">{item.value}</span>

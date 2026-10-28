@@ -161,7 +161,7 @@ const ROUTE_EXPECTATIONS = [
     path: "/icu-messageformat",
     h1: "'Supports ICU' is not a yes-or-no answer.",
   },
-  { path: "/locale-routing", h1: "Four ways to carry a locale." },
+  { path: "/locale-routing", h1: "Five ways to carry a locale." },
   { path: "/blog", h1: "Building i18n tooling in the" },
   {
     path: "/blog/measuring-palamedes-honestly",
@@ -1215,8 +1215,8 @@ async function checkProgressiveDocsOutline(browser) {
     fail("progressive docs outline: missing on a long direct-entry page");
   } else {
     const links = outline.locator('a[href^="#"]');
-    if ((await links.count()) !== 11) {
-      fail(`progressive docs outline: expected 11 anchor links, got ${await links.count()}`);
+    if ((await links.count()) !== 12) {
+      fail(`progressive docs outline: expected 12 anchor links, got ${await links.count()}`);
     }
     const details = outline.locator("details");
     if (await details.evaluate((element) => element.hasAttribute("open"))) {
@@ -1242,7 +1242,7 @@ async function checkProgressiveDocsOutline(browser) {
   const noJsOutline = noJsPage.locator(".pmds-progressive-outline");
   if (
     (await noJsOutline.count()) !== 1 ||
-    (await noJsOutline.locator('a[href^="#"]').count()) !== 11
+    (await noJsOutline.locator('a[href^="#"]').count()) !== 12
   ) {
     fail("progressive docs outline: direct no-JS entry lost its anchors");
   }

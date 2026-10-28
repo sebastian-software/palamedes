@@ -20,6 +20,8 @@ export type LocaleSource =
  * - `mode: "map"` (default): each locale maps to a full, canonical host, matched
  *   exactly against the request host. Used by the route examples as a validation
  *   signal on top of `/:locale/...`.
+ * - `mode: "domain"`: a complete locale-to-host map is authoritative, without
+ *   adding locale path prefixes. Hosts may use unrelated domain names.
  * - `mode: "subdomain"`: the leftmost DNS label of the request host *is* the
  *   locale (`de.example.com` -> `de`). Base-domain-independent, so it needs no
  *   per-locale host map and works unchanged across `lvh.me` and production.
@@ -33,7 +35,7 @@ export type LocaleSource =
  *   which has no authoritative TLD of its own (`en` -> `.com`).
  */
 export type HostLocaleConfig<TLocale extends string> = {
-  mode?: "map" | "subdomain" | "tld";
+  mode?: "map" | "domain" | "subdomain" | "tld";
   locales?: Partial<Record<TLocale, string>>;
   defaultHost?: string | null;
   /**
@@ -78,6 +80,11 @@ export type LocaleControlsConfig<TLocale extends string> = {
    */
   protocol?: string;
 };
+
+/** Framework-neutral link descriptors suitable for document heads and sitemaps. */
+export type LocaleSeoLink<TLocale extends string = string> =
+  | { href: string; rel: "canonical"; hrefLang?: never }
+  | { href: string; rel: "alternate"; hrefLang: TLocale | "x-default" };
 
 export type LocaleSwitchItem<TLocale extends string = string> = {
   active: boolean;
@@ -307,6 +314,26 @@ function isDnsHost(value: string): boolean {
   return port === undefined || (Number(port) >= 1 && Number(port) <= 65_535);
 }
 
+function assertDomainHosts<TLocale extends string>(
+  hosts: HostLocaleConfig<TLocale>,
+  locales: readonly TLocale[],
+): void {
+  const seenHosts = new Set<string>();
+  for (const locale of locales) {
+    const host = hosts.locales?.[locale];
+    if (!host) {
+      throw new TypeError(
+        `defineLocaleControls: hosts.locales.${locale} is required in domain mode.`,
+      );
+    }
+    const normalized = stripPort(host)?.toLowerCase() ?? "";
+    if (seenHosts.has(normalized)) {
+      throw new TypeError("defineLocaleControls: domain hosts must identify distinct locales.");
+    }
+    seenHosts.add(normalized);
+  }
+}
+
 function assertLocaleControlsConfig<TLocale extends string>(
   config: LocaleControlsConfig<TLocale>,
 ): void {
@@ -365,8 +392,10 @@ function assertLocaleControlsConfig<TLocale extends string>(
   if (!hosts || typeof hosts !== "object" || Array.isArray(hosts)) {
     throw new TypeError("defineLocaleControls: hosts must be an object.");
   }
-  if (hosts.mode !== undefined && !["map", "subdomain", "tld"].includes(hosts.mode)) {
-    throw new TypeError('defineLocaleControls: hosts.mode must be "map", "subdomain", or "tld".');
+  if (hosts.mode !== undefined && !["map", "domain", "subdomain", "tld"].includes(hosts.mode)) {
+    throw new TypeError(
+      'defineLocaleControls: hosts.mode must be "map", "domain", "subdomain", or "tld".',
+    );
   }
 
   if (hosts.defaultHost !== undefined && hosts.defaultHost !== null) {
@@ -394,6 +423,8 @@ function assertLocaleControlsConfig<TLocale extends string>(
       }
     }
   }
+
+  if (hosts.mode === "domain") assertDomainHosts(hosts, config.locales);
 
   if (hosts.defaultTld !== undefined) {
     if (typeof hosts.defaultTld !== "string" || !isDnsLabel(hosts.defaultTld)) {
@@ -461,7 +492,7 @@ export type LocaleControls<TLocale extends string> = {
 
   /** Resolve the active locale for a request, per strategy. */
   resolve(options: {
-    strategy: "cookie" | "route" | "subdomain" | "tld";
+    strategy: "cookie" | "route" | "domain" | "subdomain" | "tld";
     acceptLanguageHeader?: string | null;
     cookieHeader?: string | null;
     routeLocale?: string | null;
@@ -493,6 +524,16 @@ export type LocaleControls<TLocale extends string> = {
     requestHost?: string | null;
     search?: string | null;
   }): string;
+
+  /** Canonical URL, configured language alternates, and an optional x-default. */
+  seoLinks(options: {
+    locale: TLocale;
+    pathname: string;
+    requestHost?: string | null;
+    search?: string | null;
+    /** Defaults to defaultLocale; false omits the x-default link. */
+    xDefaultLocale?: TLocale | false;
+  }): Array<LocaleSeoLink<TLocale>>;
 
   replaceLocaleInPath(pathname: string, locale: TLocale): string;
   extractLocaleFromPath(pathname: string): TLocale | null;
@@ -692,7 +733,7 @@ export function defineLocaleControls<TLocale extends string>(
   };
 
   const resolve = (options: {
-    strategy: "cookie" | "route" | "subdomain" | "tld";
+    strategy: "cookie" | "route" | "domain" | "subdomain" | "tld";
     acceptLanguageHeader?: string | null;
     cookieHeader?: string | null;
     routeLocale?: string | null;
@@ -703,6 +744,16 @@ export function defineLocaleControls<TLocale extends string>(
         if (isLocale(options.routeLocale)) {
           return { locale: options.routeLocale, source: "route" };
         }
+        break;
+      }
+      case "domain": {
+        if (config.hosts?.mode !== "domain") {
+          throw new TypeError(
+            'defineLocaleControls: strategy "domain" requires hosts.mode "domain".',
+          );
+        }
+        const hostLocale = resolveHostLocale(options.requestHost);
+        if (hostLocale) return { locale: hostLocale, source: "host" };
         break;
       }
       case "subdomain": {
@@ -766,19 +817,22 @@ export function defineLocaleControls<TLocale extends string>(
       return extractTldLocale(requestHost);
     }
 
-    const normalizedHost = stripPort(requestHost);
+    const normalizedHost = stripPort(requestHost)?.toLowerCase();
     if (!normalizedHost) {
       return null;
     }
 
     const hostLocales: Partial<Record<TLocale, string>> = config.hosts.locales ?? {};
     for (const locale of config.locales) {
-      if (stripPort(hostLocales[locale]) === normalizedHost) {
+      if (stripPort(hostLocales[locale])?.toLowerCase() === normalizedHost) {
         return locale;
       }
     }
 
-    if (config.hosts.defaultHost && normalizedHost === stripPort(config.hosts.defaultHost)) {
+    if (
+      config.hosts.defaultHost &&
+      normalizedHost === stripPort(config.hosts.defaultHost)?.toLowerCase()
+    ) {
       return config.defaultLocale;
     }
 
@@ -792,6 +846,14 @@ export function defineLocaleControls<TLocale extends string>(
 
     if (config.hosts?.mode === "tld") {
       return swapTldLabel(fallbackHost, locale);
+    }
+
+    if (config.hosts?.mode === "domain") {
+      const host = config.hosts.locales?.[locale];
+      if (!isLocale(locale) || !host) {
+        throw new TypeError("defineLocaleControls: domain URLs require a configured locale host.");
+      }
+      return host;
     }
 
     return (
@@ -808,16 +870,20 @@ export function defineLocaleControls<TLocale extends string>(
     requestHost?: string | null;
     search?: string | null;
   }): string => {
-    // In subdomain and tld mode the locale lives in the host, not the path, so the
-    // path is kept as-is; every other mode carries the locale in the URL prefix.
+    // Domain, subdomain, and TLD modes carry locale in the host; the existing
+    // map mode remains an additional signal on top of locale-prefixed paths.
     const canonicalPath =
-      config.hosts?.mode === "subdomain" || config.hosts?.mode === "tld"
+      config.hosts?.mode === "domain" ||
+      config.hosts?.mode === "subdomain" ||
+      config.hosts?.mode === "tld"
         ? options.pathname
         : replaceLocaleInPath(options.pathname, options.locale);
     const canonicalHost = config.hosts
       ? getCanonicalHost(options.locale, options.requestHost)
       : null;
-    const requestPort = getPort(options.requestHost);
+    // Explicit domain destinations own their ports; a preview request must not
+    // transfer its development port to a production domain.
+    const requestPort = config.hosts?.mode === "domain" ? null : getPort(options.requestHost);
 
     if (!canonicalHost) {
       return `${canonicalPath}${options.search ?? ""}`;
@@ -832,6 +898,38 @@ export function defineLocaleControls<TLocale extends string>(
     // http://; an explicit `protocol` config produces absolute URLs.
     const scheme = config.protocol ? `${config.protocol.replace(/:$/, "")}:` : "";
     return `${scheme}//${hostWithPort}${canonicalPath}${options.search ?? ""}`;
+  };
+
+  const seoLinks = (options: {
+    locale: TLocale;
+    pathname: string;
+    requestHost?: string | null;
+    search?: string | null;
+    xDefaultLocale?: TLocale | false;
+  }): Array<LocaleSeoLink<TLocale>> => {
+    if (!isLocale(options.locale)) {
+      throw new TypeError("defineLocaleControls: SEO locale must be configured.");
+    }
+    const xDefaultLocale = options.xDefaultLocale ?? config.defaultLocale;
+    if (xDefaultLocale !== false && !isLocale(xDefaultLocale)) {
+      throw new TypeError("defineLocaleControls: SEO xDefaultLocale must be configured or false.");
+    }
+    const links: Array<LocaleSeoLink<TLocale>> = [
+      { href: canonicalUrl(options), rel: "canonical" },
+      ...config.locales.map((locale): LocaleSeoLink<TLocale> => ({
+        href: canonicalUrl({ ...options, locale }),
+        hrefLang: locale,
+        rel: "alternate",
+      })),
+    ];
+    if (xDefaultLocale !== false) {
+      links.push({
+        href: canonicalUrl({ ...options, locale: xDefaultLocale }),
+        hrefLang: "x-default",
+        rel: "alternate",
+      });
+    }
+    return links;
   };
 
   const suggest = (options: {
@@ -903,6 +1001,7 @@ export function defineLocaleControls<TLocale extends string>(
     serializeChoice,
     suggest,
     canonicalUrl,
+    seoLinks,
     replaceLocaleInPath,
     extractLocaleFromPath,
     switchItems,

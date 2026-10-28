@@ -28,7 +28,7 @@ export default function Frameworks() {
       <PageHero
         kicker="Frameworks"
         title="Built for the framework you already use."
-        lede="React, Vue, Svelte, Solid, and Remix share the same message model. Connect Next.js, Nuxt, SvelteKit, TanStack Start, Waku, React Router, or Vite. Ten framework families cover all four locale strategies, with the same booking demo in four languages."
+        lede="React, Vue, Svelte, Solid, and Remix share the same message model. Connect Next.js, Nuxt, SvelteKit, TanStack Start, Waku, React Router, or Vite. Ten framework families cover the four matrix strategies: cookie, route prefix, subdomain, and TLD, with the same booking demo in four languages."
         actions={
           <>
             <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>
@@ -41,7 +41,7 @@ export default function Frameworks() {
 
       <Section
         num="01 — Matrix"
-        title="Every framework, every URL strategy — running as an app."
+        title="Four URL strategies per framework — running as apps."
         lede={`${contentStats.demoFrameworkCount} frameworks × ${contentStats.localeStrategyCount} locale strategies. Open a live demo, or read the source of the exact app behind each cell.`}
         id="frontend-frameworks"
       >
@@ -74,6 +74,13 @@ export default function Frameworks() {
         title="Pick the locale strategy your product needs — not the one your framework dictates."
       >
         <FeatureGrid cards={STRATEGY_CARDS} columns={4} />
+        <p className="mt-6 max-w-[52em] text-[15.5px] leading-relaxed text-ink/80">
+          Explicit language domains are a fifth option in the shared locale controls. Map
+          my-product.com to English and mein-produkt.de to German, with no locale path prefix. TLD
+          mode changes only the final DNS label; domain mode maps the complete hostname. This
+          additional option and SEO link generation have focused core tests; the live matrix above
+          covers cookie, route prefix, subdomain, and TLD.
+        </p>
         <div className="mt-6 space-y-2">
           <Link
             to="/locale-routing"
