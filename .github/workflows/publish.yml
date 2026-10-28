@@ -135,7 +135,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The one-time release overrides are checked against the release tag on
+      # origin. Here an unreadable tag fails the run instead of only warning.
       - name: Check release package set
+        env:
+          PALAMEDES_RELEASE_TAGS: required
         run: pnpm check:release-set
 
       - name: Check release wording

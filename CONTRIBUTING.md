@@ -317,11 +317,17 @@ coordinated npm and Cargo package is available before closing #1204.
 `.release-please-config.json` carries two one-time overrides for 2.0.0:
 `release-as` and the top-level `last-release-sha`, which starts the 2.0.0
 changelog at the unpublished 1.25.1 release commit (tag `palamedes-v1.25.1`)
-instead of re-listing 1.x entries. Remove both after 2.0.0, in the generated
-release PR that sets the manifest to 2.0.0. `pnpm check:release-set` fails
-while `release-as` is not above the manifest version, so the next feat or fix
-cannot open another "release 2.0.0" PR, and while `last-release-sha` remains
-at 2.0.0 or later.
+instead of re-listing 1.x entries. Leave both in place through the generated
+release PR: Release Please rebuilds that PR from the config on `main` and
+force-pushes its branch, so edits there do not last. Once 2.0.0 is released,
+remove both in a normal follow-up PR on `main`. `pnpm check:release-set` asks
+`origin` for the `palamedes-v<manifest version>` tag. While that tag points at
+a commit other than the one being checked, it fails if `release-as` is still
+at the manifest version, so the next feat or fix cannot open another
+"release 2.0.0" PR, and if `last-release-sha` remains. A fix for a failed
+release that you publish with `force_publish` therefore has to remove them
+too. If the tag cannot be read, the check only warns in CI but fails in the
+Publish workflow's release validation.
 
 `palamedes-build` inherits an exact `=` requirement on `palamedes-i18n` from
 the root `[workspace.dependencies]`, because the code it generates constructs

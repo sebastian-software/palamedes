@@ -1,57 +1,100 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { exactPinProblems, releaseOverrideProblems } from "./release-set-rules.mjs";
+import {
+  exactPinProblems,
+  lookupReleaseState,
+  releaseOverrideProblems,
+  releaseTagName,
+  releaseTagState,
+} from "./release-set-rules.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const readRepositoryFile = (file) => readFileSync(path.join(root, file), "utf8");
 
-function overrides(releaseConfig, manifestVersion) {
-  return releaseOverrideProblems({ releaseConfig, manifestVersion, minimumMajor: 2 });
+// The transition config as it sits on main until the 2.0.0 release ships.
+const transitionConfig = {
+  "include-component-in-tag": true,
+  "tag-separator": "-",
+  "last-release-sha": "294295b4",
+  packages: { ".": { "release-type": "rust", "release-as": "2.0.0", component: "palamedes" } },
+};
+
+function overrides(releaseConfig, manifestVersion, releaseState = "unreleased") {
+  return releaseOverrideProblems({
+    releaseConfig,
+    manifestVersion,
+    minimumMajor: 2,
+    releaseState,
+  });
 }
 
-test("accepts the pending 2.0.0 transition with both one-time overrides", () => {
+test("names the release tag the way release-please does", () => {
+  assert.equal(releaseTagName(transitionConfig, "2.0.0"), "palamedes-v2.0.0");
+  assert.equal(
+    releaseTagName(JSON.parse(readRepositoryFile(".release-please-config.json")), "1.25.1"),
+    "palamedes-v1.25.1",
+  );
+});
+
+test("classifies the commit against the manifest version's release tag", () => {
+  assert.equal(releaseTagState({ readable: true, headCommit: "a" }), "unreleased");
+  // The release commit itself carries the tag once release-please creates it.
+  assert.equal(releaseTagState({ readable: true, tagCommit: "a", headCommit: "a" }), "unreleased");
+  assert.equal(releaseTagState({ readable: true, tagCommit: "a", headCommit: "b" }), "released");
+  assert.equal(releaseTagState({ readable: false }), "unknown");
+});
+
+test("accepts both overrides while main waits for the 2.0.0 release PR", () => {
+  // palamedes-v1.25.1 exists, so the 1.25.1 manifest counts as released.
+  assert.deepEqual(overrides(transitionConfig, "1.25.1", "released"), []);
+});
+
+test("accepts both overrides in the generated release PR and on the release commit", () => {
+  // The release PR bumps only the manifest, and release-please rebuilds and
+  // force-pushes its branch from main's config, so the overrides stay.
+  assert.deepEqual(overrides(transitionConfig, "2.0.0", "unreleased"), []);
+});
+
+test("fails after the release until a follow-up PR removes both overrides", () => {
+  const problems = overrides(transitionConfig, "2.0.0", "released");
+  assert.equal(problems.length, 2);
+  assert.match(
+    problems[0],
+    /release-as 2\.0\.0 at packages\["\."\] was released as palamedes-v2\.0\.0/u,
+  );
+  assert.match(problems[1], /remove it now that palamedes-v2\.0\.0 exists/u);
+  // A later version on main, with the stale overrides still in place.
+  assert.equal(overrides(transitionConfig, "2.1.0", "released").length, 2);
+
+  const { "last-release-sha": _sha, ...cleaned } = transitionConfig;
+  const { "release-as": _target, ...rootPackage } = cleaned.packages["."];
   assert.deepEqual(
-    overrides(
-      { "last-release-sha": "294295b4", packages: { ".": { "release-as": "2.0.0" } } },
-      "1.25.1",
-    ),
+    overrides({ ...cleaned, packages: { ".": rootPackage } }, "2.0.0", "released"),
     [],
   );
 });
 
-test("rejects a release-as override that is not above the manifest version", () => {
-  for (const manifestVersion of ["2.0.0", "2.1.0"]) {
-    const [problem, ...rest] = overrides(
-      { packages: { ".": { "release-as": "2.0.0" } } },
-      manifestVersion,
-    );
-    assert.match(problem, /release-as 2\.0\.0 at packages\["\."\] is not above/u);
-    assert.deepEqual(rest, []);
-  }
+test("skips the post-release checks when the tags cannot be read", () => {
+  assert.deepEqual(overrides(transitionConfig, "2.0.0", "unknown"), []);
+});
+
+test("rejects release-as targets that can never be right", () => {
   assert.match(
-    overrides({ "release-as": "1.25.1", packages: { ".": {} } }, "1.25.1")[0],
-    /release-as 1\.25\.1 at the top level is not above/u,
+    overrides({ "release-as": "1.25.0", packages: { ".": {} } }, "1.25.1")[0],
+    /release-as 1\.25\.0 at the top level is below the manifest version 1\.25\.1/u,
   );
-  assert.deepEqual(overrides({ packages: { ".": { "release-as": "2.0.1" } } }, "2.0.0"), []);
+  assert.deepEqual(
+    overrides({ packages: { ".": { "release-as": "2.0.1" } } }, "2.0.0", "released"),
+    [],
+  );
   assert.match(
     overrides({ packages: { ".": { "release-as": "2.0.0-rc.1" } } }, "1.25.1")[0],
     /must be a stable version/u,
-  );
-});
-
-test("requires removing last-release-sha once the manifest reaches the minimum major", () => {
-  const [problem, ...rest] = overrides(
-    { "last-release-sha": "294295b4", packages: { ".": {} } },
-    "2.0.0",
-  );
-  assert.match(problem, /remove it now that the manifest is at 2\.0\.0/u);
-  assert.deepEqual(rest, []);
-  assert.equal(
-    overrides({ "last-release-sha": "294295b4", packages: { ".": {} } }, "2.3.1").length,
-    1,
   );
 });
 
@@ -62,14 +105,46 @@ test("keeps last-release-sha at the top level, where release-please reads it", (
   );
 });
 
-test("the generated 2.0.0 release PR fails until it drops both overrides", () => {
-  // The release PR bumps only the manifest; the config keeps the overrides.
-  const transitionConfig = {
-    "last-release-sha": "294295b4",
-    packages: { ".": { "release-type": "rust", "release-as": "2.0.0" } },
-  };
-  assert.equal(overrides(transitionConfig, "2.0.0").length, 2);
-  assert.deepEqual(overrides({ packages: { ".": { "release-type": "rust" } } }, "2.0.0"), []);
+test("reads lightweight and annotated release tags from the remote", (t) => {
+  const scratch = mkdtempSync(path.join(os.tmpdir(), "palamedes-release-tags-"));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const git = (cwd, ...args) =>
+    execFileSync("git", ["-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false", ...args], {
+      cwd,
+      encoding: "utf8",
+    }).trim();
+  const remote = path.join(scratch, "remote.git");
+  const work = path.join(scratch, "work");
+  git(scratch, "init", "--quiet", "--bare", remote);
+  git(scratch, "init", "--quiet", "--initial-branch=main", work);
+  git(work, "config", "user.email", "test@example.com");
+  git(work, "config", "user.name", "Test");
+  writeFileSync(path.join(work, "file"), "release\n");
+  git(work, "add", ".");
+  git(work, "commit", "--quiet", "-m", "chore: release main");
+  const releaseCommit = git(work, "rev-parse", "HEAD");
+  git(work, "tag", "palamedes-v2.0.0");
+  git(work, "tag", "-a", "-m", "annotated", "palamedes-v2.0.0-annotated");
+  git(work, "push", "--quiet", remote, "main", "--tags");
+  // Only the remote knows the tags, like a shallow CI checkout.
+  git(work, "tag", "-d", "palamedes-v2.0.0", "palamedes-v2.0.0-annotated");
+
+  const lookup = (tag) => lookupReleaseState({ root: work, remote, tag }).state;
+  assert.equal(lookup("palamedes-v2.0.0"), "unreleased");
+  assert.equal(lookup("palamedes-v2.0.0-annotated"), "unreleased");
+  assert.equal(lookup("palamedes-v2.0.1"), "unreleased");
+
+  writeFileSync(path.join(work, "file"), "later\n");
+  git(work, "commit", "--quiet", "-am", "fix: later change");
+  assert.notEqual(git(work, "rev-parse", "HEAD"), releaseCommit);
+  assert.equal(lookup("palamedes-v2.0.0"), "released");
+  assert.equal(lookup("palamedes-v2.0.0-annotated"), "released");
+  // A prefix match such as palamedes-v2.0.0-annotated must not count as v2.0.
+  assert.equal(lookup("palamedes-v2.0"), "unreleased");
+
+  const missing = lookupReleaseState({ root: work, remote: path.join(scratch, "nope"), tag: "x" });
+  assert.equal(missing.state, "unknown");
+  assert.match(missing.error, /could not read x from/u);
 });
 
 const pinnedRootCargo = (version, marker = " # x-release-please-version") =>

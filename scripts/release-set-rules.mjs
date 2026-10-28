@@ -1,5 +1,6 @@
-// Pure release-set rules that check-release-set.mjs applies to the repository
-// files. Each function returns a list of problems; an empty list passes.
+// Release-set rules that check-release-set.mjs applies to the repository files.
+// Each *Problems function returns a list of problems; an empty list passes.
+import { execFileSync } from "node:child_process";
 
 const stableVersionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 
@@ -15,22 +16,91 @@ function compareVersions(left, right) {
   return 0;
 }
 
+// The tag release-please creates for a version of the root package, for
+// example palamedes-v2.0.0.
+export function releaseTagName(releaseConfig, version) {
+  const rootConfig = releaseConfig.packages?.["."] ?? {};
+  const component = rootConfig.component ?? releaseConfig.component;
+  const includeComponent =
+    rootConfig["include-component-in-tag"] ?? releaseConfig["include-component-in-tag"] ?? true;
+  const separator = rootConfig["tag-separator"] ?? releaseConfig["tag-separator"] ?? "-";
+  const includeV = rootConfig["include-v-in-tag"] ?? releaseConfig["include-v-in-tag"] ?? true;
+  const versionPart = `${includeV ? "v" : ""}${version}`;
+  return includeComponent && component ? `${component}${separator}${versionPart}` : versionPart;
+}
+
+// Where the checked-out commit stands relative to the manifest version's
+// release. The generated release PR already carries the new manifest version
+// but has no tag yet, and the release commit is the tagged commit itself (or is
+// checked before release-please tags it): "unreleased". Only a later commit
+// sees the tag on another commit: "released". "unknown": tags were unreadable.
+export function releaseTagState({ readable, tagCommit, headCommit }) {
+  if (!readable) return "unknown";
+  if (!tagCommit || tagCommit === headCommit) return "unreleased";
+  return "released";
+}
+
+// Reads the release tag from the remote. CI and Publish check out a shallow
+// commit without tags, so this asks for the one tag instead of fetching all.
+export function lookupReleaseState({ root, remote, tag }) {
+  const git = (args) =>
+    execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 60_000,
+    });
+  try {
+    const headCommit = git(["rev-parse", "HEAD"]).trim();
+    const refs = new Map(
+      git(["ls-remote", "--tags", remote, `refs/tags/${tag}*`])
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.split("\t").reverse()),
+    );
+    // An annotated tag also lists its peeled commit as `<ref>^{}`.
+    const tagCommit = refs.get(`refs/tags/${tag}^{}`) ?? refs.get(`refs/tags/${tag}`);
+    return { state: releaseTagState({ readable: true, tagCommit, headCommit }) };
+  } catch (error) {
+    const detail = error.stderr?.toString().trim() || error.message;
+    return {
+      state: releaseTagState({ readable: false }),
+      error: `could not read ${tag} from ${remote}: ${detail}`,
+    };
+  }
+}
+
+export function hasReleaseOverrides(releaseConfig) {
+  const rootConfig = releaseConfig.packages?.["."] ?? {};
+  return [releaseConfig, rootConfig].some(
+    (config) => config["release-as"] !== undefined || config["last-release-sha"] !== undefined,
+  );
+}
+
 // `release-as` and `last-release-sha` are one-time overrides for the 2.0.0
-// transition. release-please keeps forcing `release-as` after that version
-// ships, so the next feat or fix would open another "release 2.0.0" PR, and a
-// stale `last-release-sha` keeps pointing the changelog at the 1.x history.
-// Both must leave the config in the generated release PR that bumps the
-// manifest, which is also the commit the Publish workflow validates.
-export function releaseOverrideProblems({ releaseConfig, manifestVersion, minimumMajor }) {
+// transition. They stay through the generated release PR and the release
+// commit: release-please rebuilds that PR from main's config and force-pushes
+// its branch, so edits there do not last. Once the release exists,
+// release-please keeps forcing `release-as`, so the next feat or fix would open
+// another "release 2.0.0" PR, and a stale `last-release-sha` keeps pointing the
+// changelog at the 1.x history. A follow-up PR on main removes both; until it
+// lands, this check fails on every later commit.
+export function releaseOverrideProblems({
+  releaseConfig,
+  manifestVersion,
+  minimumMajor,
+  releaseState,
+}) {
   const problems = [];
-  const released = parseStableVersion(manifestVersion);
-  if (!released) {
+  const manifest = parseStableVersion(manifestVersion);
+  if (!manifest) {
     return [
       `release manifest version ${manifestVersion} is not a stable MAJOR.MINOR.PATCH version`,
     ];
   }
-
+  const tag = releaseTagName(releaseConfig, manifestVersion);
   const rootConfig = releaseConfig.packages?.["."] ?? {};
+
   for (const [scope, config] of [
     ["the top level", releaseConfig],
     ['packages["."]', rootConfig],
@@ -40,24 +110,30 @@ export function releaseOverrideProblems({ releaseConfig, manifestVersion, minimu
     const target = parseStableVersion(releaseAs);
     if (!target) {
       problems.push(`release-as at ${scope} must be a stable version, found ${releaseAs}`);
-    } else if (compareVersions(target, released) <= 0) {
+      continue;
+    }
+    const comparison = compareVersions(target, manifest);
+    if (comparison < 0) {
       problems.push(
-        `release-as ${releaseAs} at ${scope} is not above the released manifest version ${manifestVersion}; remove the one-time override so later versions follow conventional commits`,
+        `release-as ${releaseAs} at ${scope} is below the manifest version ${manifestVersion}`,
+      );
+    } else if (comparison === 0 && releaseState === "released") {
+      problems.push(
+        `release-as ${releaseAs} at ${scope} was released as ${tag}; remove the one-time override so later versions follow conventional commits`,
       );
     }
   }
 
-  for (const [scope, config] of [
-    ["the top level", releaseConfig],
-    ['packages["."]', rootConfig],
-  ]) {
-    if (config["last-release-sha"] !== undefined && released[0] >= minimumMajor) {
-      problems.push(
-        `last-release-sha at ${scope} only bridges the unpublished 1.25.1 release; remove it now that the manifest is at ${manifestVersion}`,
-      );
-    }
+  if (
+    releaseConfig["last-release-sha"] !== undefined &&
+    manifest[0] >= minimumMajor &&
+    releaseState === "released"
+  ) {
+    problems.push(
+      `last-release-sha only bridged the unpublished 1.25.1 release; remove it now that ${tag} exists`,
+    );
   }
-  if (rootConfig["last-release-sha"] !== undefined && released[0] < minimumMajor) {
+  if (rootConfig["last-release-sha"] !== undefined) {
     problems.push(
       'last-release-sha must sit at the top level of .release-please-config.json; release-please ignores it under packages["."]',
     );

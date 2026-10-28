@@ -797,6 +797,26 @@ describe("workflow contracts", () => {
     }
   });
 
+  it("fails closed on unreadable release tags only in the Publish release check", async () => {
+    const [publish, ci] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/workflows/ci.yml"),
+    ]);
+    const releaseSetStep = (workflow) =>
+      [...workflowJobs(workflow).values()]
+        .flatMap((releaseJob) => releaseJob.steps)
+        .filter((step) => step.text.includes("run: pnpm check:release-set"));
+
+    const [publishStep, ...otherPublishSteps] = releaseSetStep(publish);
+    expect(otherPublishSteps).toEqual([]);
+    expect(publishStep.text).toContain("PALAMEDES_RELEASE_TAGS: required");
+    // PR and main CI only warn, so a network flake cannot fail unrelated work.
+    for (const step of releaseSetStep(ci)) {
+      expect(step.text).not.toContain("PALAMEDES_RELEASE_TAGS");
+    }
+    expect(releaseSetStep(ci).length).toBeGreaterThan(0);
+  });
+
   it("holds crates.io until every native package has shipped", async () => {
     const jobs = workflowJobs(await readRepositoryFile(".github/workflows/publish.yml"));
 
