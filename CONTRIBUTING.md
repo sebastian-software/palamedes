@@ -332,10 +332,11 @@ remove both in a normal follow-up PR on `main`. `pnpm check:release-set` asks
 `origin` for the `palamedes-v<manifest version>` tag. While that tag points at
 a commit other than the one being checked, it fails if `release-as` is still
 at the manifest version, so the next feat or fix cannot open another
-"release 2.0.0" PR, and if `last-release-sha` remains. A fix for a failed
-release that you publish with `force_publish` therefore has to remove them
-too. If the tag cannot be read, the check only warns in CI but fails in the
-Publish workflow's release validation.
+"release 2.0.0" PR, and if `last-release-sha` remains. A corrective follow-up
+commit must remove them too, but that cleanup does not make an already-published
+version reusable; follow [partial-release recovery](#recovering-a-partial-release).
+If the tag cannot be read, the check only warns in CI but fails in the Publish
+workflow's release validation.
 
 `palamedes-build` inherits an exact `=` requirement on `palamedes-i18n` from
 the root `[workspace.dependencies]`, because the code it generates constructs
@@ -352,5 +353,34 @@ in the listed public files, so the release PR must clear that wording.
 
 Do not edit generated changelog entries by hand unless the release automation
 requires a specific correction.
+
+### Recovering a Partial Release
+
+Check the failed Publish run's commit and job results, then inspect which npm
+and Cargo versions reached their registries. Uploads cannot be rolled back as a
+coordinated set.
+
+For a transient failure or a registry configuration fix that needs no repository
+change, re-run the original Publish run with **Re-run all jobs**, or
+`gh run rerun RUN_ID` with that run's ID. [GitHub re-runs preserve the original
+commit and ref](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+The workflow rebuilds and verifies that revision. npm skips versions that already
+exist; Cargo skips a version only when its rebuilt archive has the exact published
+checksum and is not yanked. If the archive still differs, stop and investigate
+the build inputs instead of bypassing the checksum check.
+
+Do not use `force_publish` on a newer commit to replace published packages.
+Cargo embeds the source commit in `.cargo_vcs_info.json`, so even a commit that
+only changes files outside a crate changes its archive. The Cargo lane rejects
+that mismatch, while npm skips the existing version without comparing its
+contents. Neither path updates an already-published package. `force_publish`
+only bypasses release-commit detection; policy, version, ownership, and archive
+checks still apply.
+
+If recovery requires a source or workflow commit after any package was uploaded,
+merge the correction and remove stale release overrides, then use Release Please
+to prepare a new coordinated version. Run the Publish dry run on that release
+PR's exact revision before merging it. Verify that the new version is available
+for the complete npm and Cargo release set before closing the failure issue.
 
 #
