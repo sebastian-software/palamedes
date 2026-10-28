@@ -447,7 +447,11 @@ describe("workflow contracts", () => {
     expect(setupWorkspace).toContain("rust:");
     expect(setupWorkspace).toContain("rust-cache:");
     expect(setupWorkspace).toContain("registry-url:");
+    expect(setupWorkspace).toContain("if ! command -v corepack >/dev/null 2>&1; then");
     expect(setupWorkspace).toContain("npm install --global corepack@0.36.0");
+    expect(setupWorkspace.indexOf("command -v corepack")).toBeLessThan(
+      setupWorkspace.indexOf("npm install --global corepack@0.36.0"),
+    );
     expect(setupWorkspace.indexOf("npm install --global corepack@0.36.0")).toBeLessThan(
       setupWorkspace.indexOf("corepack enable"),
     );
