@@ -8,6 +8,7 @@ use oxc_span::GetSpan;
 use crate::error::PalamedesResult;
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
+use crate::source_macros::MacroImports;
 use crate::source_message::{
     build_icu_message as shared_build_icu_message, expression_source as shared_expression_source,
     jsx_attributes as shared_jsx_attributes,
@@ -40,6 +41,7 @@ pub(super) fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
 pub(super) fn extract_choice_options(
     object: &ObjectExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
@@ -48,6 +50,7 @@ pub(super) fn extract_choice_options(
     let lowered = lower_choice_options_from_object(
         object,
         source,
+        macros,
         used_value_names,
         format,
         macro_name,
@@ -86,6 +89,7 @@ pub(super) fn extract_jsx_value_binding(
 pub(super) fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
@@ -94,6 +98,7 @@ pub(super) fn extract_choice_options_from_jsx(
     let lowered = shared_lower_choice_options_from_jsx(
         opening_element,
         source,
+        macros,
         used_value_names,
         format,
         macro_name,
@@ -190,10 +195,11 @@ fn source_range_with_replacements(
 pub(super) fn extract_jsx_children_parts(
     children: &[JSXChild<'_>],
     source: &str,
+    macros: &MacroImports,
     solid_wrappers: bool,
     replacements: &[Replacement],
 ) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
-    let lowered = lower_jsx_children(children, source, |opening_element| {
+    let lowered = lower_jsx_children(children, source, macros, |opening_element| {
         if solid_wrappers {
             opening_element_to_component_wrapper(opening_element, source, replacements)
         } else {
@@ -265,11 +271,13 @@ pub(super) fn choice_expression_binding(
 pub(super) fn template_to_message(
     template: &TemplateLiteral<'_>,
     source: &str,
+    macros: &MacroImports,
 ) -> PalamedesResult<(String, Option<Vec<ValueBinding>>)> {
     let mut used_value_names = HashMap::<String, String>::new();
     let (message, values) = template_to_message_with_state(
         template,
         source,
+        macros,
         "template expression",
         &mut used_value_names,
     )?;
@@ -287,10 +295,11 @@ pub(super) fn template_to_message(
 fn template_to_message_with_state(
     template: &TemplateLiteral<'_>,
     source: &str,
+    macros: &MacroImports,
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, Vec<ValueBinding>)> {
-    let (message, values) = lower_template(template, source, syntax, used_value_names)?;
+    let (message, values) = lower_template(template, source, macros, syntax, used_value_names)?;
     Ok((
         message,
         values

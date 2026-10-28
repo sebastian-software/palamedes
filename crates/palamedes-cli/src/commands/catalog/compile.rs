@@ -19,7 +19,7 @@ use palamedes::{
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
 
-use crate::command::{Command, Context, render_json};
+use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 
@@ -28,6 +28,9 @@ enum CompileTarget {
     Rust,
     Js,
 }
+
+/// Version of the `pmds catalog compile --json` document shape (`schemaVersion`).
+const COMPILE_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct CompileOptions {
@@ -53,9 +56,9 @@ pub struct CompileOptions {
 
 /// The compilation result, rendered as text or as the `--json` document.
 ///
-/// Catalog-level failures of the JavaScript target are reported as
-/// `diagnostics` instead of an early error, so `--json` callers receive them
-/// in the same document. No module is written while any diagnostic exists.
+/// Compilation failures are reported as `diagnostics` instead of an early
+/// error, so `--json` callers receive them in the same document. No module or
+/// language file is written while any diagnostic exists.
 #[derive(Debug, Serialize)]
 pub struct CompileReport {
     #[serde(flatten)]
@@ -65,6 +68,10 @@ pub struct CompileReport {
 }
 
 /// One catalog failure, shaped like the catalog audit diagnostics.
+///
+/// The JavaScript target always knows the catalog and both locales. A Rust
+/// target failure carries only what its build error names, so those fields
+/// are omitted when the error does not identify them.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CompileDiagnostic {
@@ -72,12 +79,15 @@ struct CompileDiagnostic {
     code: String,
     message: String,
     /// The catalog file that holds the failing message.
-    catalog_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    catalog_path: Option<String>,
     /// The locale of that catalog, which differs from `requested_locale` when
     /// the message was reached through a fallback.
-    locale: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    locale: Option<String>,
     /// The locale whose module was being compiled.
-    requested_locale: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_locale: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     source_key: Option<CatalogArtifactSourceKey>,
     /// For `compile.conflicting_message`, the catalog that compiled the same
@@ -89,6 +99,14 @@ struct CompileDiagnostic {
 const MISSING_TRANSLATION: &str = "compile.missing_translation";
 const CONFLICTING_MESSAGE: &str = "compile.conflicting_message";
 const INVALID_CATALOG: &str = "compile.invalid_catalog";
+const INVALID_LOCALE: &str = "compile.invalid_locale";
+const INVALID_SCHEMA: &str = "compile.invalid_schema";
+const CONTRACT_MISMATCH: &str = "compile.contract_mismatch";
+const UNSUPPORTED_MESSAGE: &str = "compile.unsupported_message";
+const PLACEHOLDER_MISMATCH: &str = "compile.placeholder_mismatch";
+const PLURAL_ARGUMENT: &str = "compile.plural_argument";
+const IO_ERROR: &str = "compile.io_error";
+const COMPILE_FAILED: &str = "compile.failed";
 
 impl Command for CompileOptions {
     type Output = CompileReport;
@@ -96,9 +114,20 @@ impl Command for CompileOptions {
     fn run(&self, context: &Context) -> Result<Self::Output, CliError> {
         let cwd = context.cwd()?;
         match self.target {
-            CompileTarget::Rust => self.compile_rust(&cwd).map(|update| CompileReport {
-                update,
-                diagnostics: Vec::new(),
+            CompileTarget::Rust => Ok(match self.compile_rust(&cwd) {
+                Ok(update) => CompileReport {
+                    update,
+                    diagnostics: Vec::new(),
+                },
+                // A failed update writes nothing, so the document reports no
+                // catalogs and the one error that stopped the build.
+                Err(error) => CompileReport {
+                    update: CatalogUpdate {
+                        catalogs: Vec::new(),
+                        missing: Vec::new(),
+                    },
+                    diagnostics: vec![rust_diagnostic(&error, &self.rust_catalog_dir(&cwd))],
+                },
             }),
             CompileTarget::Js => {
                 let config = context.load_config(self.config.as_deref())?;
@@ -116,7 +145,7 @@ impl Command for CompileOptions {
 
     fn render(&self, output: &Self::Output) -> Result<(), CliError> {
         if self.json {
-            return render_json(output);
+            return render_json(&VersionedJson::new(COMPILE_JSON_SCHEMA_VERSION, output));
         }
         // The verdict reports the diagnostics; nothing was compiled.
         if !output.diagnostics.is_empty() {
@@ -156,6 +185,18 @@ impl Command for CompileOptions {
         if output.diagnostics.is_empty() {
             return Ok(());
         }
+        if self.target == CompileTarget::Rust {
+            // The message is the build error's own text, so stderr reads the
+            // same with and without `--json`.
+            return Err(CliError::CatalogCompilation {
+                message: output
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+            });
+        }
         Err(CliError::JsCatalogCompilation {
             message: output
                 .diagnostics
@@ -168,37 +209,125 @@ impl Command for CompileOptions {
 }
 
 impl CompileOptions {
-    fn compile_rust(&self, cwd: &Path) -> Result<CatalogUpdate, CliError> {
-        let compile = || -> Result<CatalogUpdate, palamedes_build::Error> {
-            // Clap requires both paths for the Rust target.
-            let schema = self.schema.as_deref().unwrap_or(Path::new(""));
-            let catalog_dir = self.catalog_dir.as_deref().unwrap_or(Path::new(""));
-            let contract = CatalogContract::load(cwd.join(schema))?;
-            CatalogBuilder::new(cwd.join(catalog_dir), &contract.source_locale)
-                .locales(&self.locale.iter().map(String::as_str).collect::<Vec<_>>())
-                .fallback_locales(
-                    &self
-                        .fallback_locale
-                        .iter()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>(),
-                )
-                .fail_on_missing(self.fail_on_missing)
-                .compile_updates(&contract, &cwd.join(&self.output))
-        };
-        compile().map_err(|source| CliError::CatalogCompilation {
-            message: source.to_string(),
+    fn rust_catalog_dir(&self, cwd: &Path) -> PathBuf {
+        // Clap requires the catalog directory for the Rust target.
+        cwd.join(self.catalog_dir.as_deref().unwrap_or(Path::new("")))
+    }
+
+    fn compile_rust(&self, cwd: &Path) -> Result<CatalogUpdate, palamedes_build::Error> {
+        // Clap requires the schema for the Rust target.
+        let schema = self.schema.as_deref().unwrap_or(Path::new(""));
+        let contract = CatalogContract::load(cwd.join(schema))?;
+        CatalogBuilder::new(self.rust_catalog_dir(cwd), &contract.source_locale)
+            .locales(&self.locale.iter().map(String::as_str).collect::<Vec<_>>())
+            .fallback_locales(
+                &self
+                    .fallback_locale
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            )
+            .fail_on_missing(self.fail_on_missing)
+            .compile_updates(&contract, &cwd.join(&self.output))
+    }
+}
+
+/// Maps a Rust catalog build error onto the diagnostic shape of the
+/// JavaScript target.
+///
+/// The build error has no codes of its own, so each kind gets a stable one
+/// here; kinds the JavaScript target shares keep its codes. Only what the
+/// error names is filled in: its locale, its source message, and the file it
+/// read. A PO catalog is always `<catalog-dir>/<locale>.po`, so errors about
+/// one catalog's content name that file. The message is the error's own text.
+fn rust_diagnostic(error: &palamedes_build::Error, catalog_dir: &Path) -> CompileDiagnostic {
+    use palamedes_build::Error;
+
+    let catalog = |locale: &str| {
+        Some(
+            catalog_dir
+                .join(format!("{locale}.po"))
+                .to_string_lossy()
+                .into_owned(),
+        )
+    };
+    let source_key = |message: &str| {
+        Some(CatalogArtifactSourceKey {
+            message: message.to_owned(),
+            context: None,
         })
+    };
+    let (code, catalog_path, locale, source_key) = match error {
+        Error::Io { path, .. } => (
+            IO_ERROR,
+            Some(path.to_string_lossy().into_owned()),
+            None,
+            None,
+        ),
+        Error::InvalidLocales => (INVALID_LOCALE, None, None, None),
+        Error::InvalidLocale { locale } => (INVALID_LOCALE, None, Some(locale), None),
+        Error::ParsePo { locale, .. } | Error::InvalidCatalog { locale, .. } => {
+            (INVALID_CATALOG, catalog(locale), Some(locale), None)
+        }
+        Error::CompileCatalog { locale, .. } => (INVALID_CATALOG, None, Some(locale), None),
+        Error::UnsupportedMessage {
+            locale, message, ..
+        } => (UNSUPPORTED_MESSAGE, None, Some(locale), source_key(message)),
+        Error::PlaceholderMismatch { locale, message } => (
+            PLACEHOLDER_MISMATCH,
+            None,
+            Some(locale),
+            source_key(message),
+        ),
+        Error::PluralArgument { locale, message } => {
+            (PLURAL_ARGUMENT, None, Some(locale), source_key(message))
+        }
+        Error::MissingTranslation { locale, message } => (
+            MISSING_TRANSLATION,
+            catalog(locale),
+            Some(locale),
+            source_key(message),
+        ),
+        Error::ContractMismatch => (CONTRACT_MISMATCH, None, None, None),
+        Error::DecodeContract { path, .. } => (
+            INVALID_SCHEMA,
+            Some(path.to_string_lossy().into_owned()),
+            None,
+            None,
+        ),
+        Error::InvalidContract { .. } => (INVALID_SCHEMA, None, None, None),
+        // Serialization failures and errors of build-script-only entry points;
+        // new kinds land here until they get a code of their own.
+        _ => (COMPILE_FAILED, None, None, None),
+    };
+    CompileDiagnostic {
+        severity: CatalogArtifactDiagnosticSeverity::Error,
+        code: code.to_owned(),
+        message: error.to_string(),
+        catalog_path,
+        locale: locale.cloned(),
+        requested_locale: None,
+        source_key,
+        conflicting_catalog_path: None,
     }
 }
 
 impl CompileDiagnostic {
     /// Mirrors the bundler's compile errors: catalog, locale, then source.
     fn render(&self) -> String {
-        let mut text = format!("{}: {} [{}]", self.catalog_path, self.message, self.code);
-        text.push_str(&format!("\nLocale: {}", self.locale));
-        if self.locale != self.requested_locale {
-            text.push_str(&format!(" (fallback for {})", self.requested_locale));
+        let mut text = match &self.catalog_path {
+            Some(catalog_path) => format!("{catalog_path}: {} [{}]", self.message, self.code),
+            None => format!("{} [{}]", self.message, self.code),
+        };
+        if let Some(locale) = &self.locale {
+            text.push_str(&format!("\nLocale: {locale}"));
+            if let Some(requested) = self
+                .requested_locale
+                .as_ref()
+                .filter(|requested| *requested != locale)
+            {
+                text.push_str(&format!(" (fallback for {requested})"));
+            }
         }
         if let Some(source_key) = &self.source_key {
             text.push_str(&format!("\nSource: {}", source_key.message));
@@ -291,9 +420,9 @@ fn compile_js(
                         severity: CatalogArtifactDiagnosticSeverity::Error,
                         code: INVALID_CATALOG.to_owned(),
                         message: error.to_string(),
-                        catalog_path: resource_path.clone(),
-                        locale: locale.clone(),
-                        requested_locale: locale.clone(),
+                        catalog_path: Some(resource_path.clone()),
+                        locale: Some(locale.clone()),
+                        requested_locale: Some(locale.clone()),
                         source_key: None,
                         conflicting_catalog_path: None,
                     });
@@ -315,9 +444,9 @@ fn compile_js(
                     severity: diagnostic.severity,
                     code: diagnostic.code.clone(),
                     message: diagnostic.message.clone(),
-                    catalog_path,
-                    locale: diagnostic.locale.clone(),
-                    requested_locale: locale.clone(),
+                    catalog_path: Some(catalog_path),
+                    locale: Some(diagnostic.locale.clone()),
+                    requested_locale: Some(locale.clone()),
                     source_key: Some(clone_source_key(&diagnostic.source_key)),
                     conflicting_catalog_path: None,
                 });
@@ -383,9 +512,9 @@ fn compile_js(
                                 "Compiles differently than in {}; one locale module cannot hold both translations of a shared message.",
                                 existing.catalog_path
                             ),
-                            catalog_path: resource_path.clone(),
-                            locale: locale.clone(),
-                            requested_locale: locale.clone(),
+                            catalog_path: Some(resource_path.clone()),
+                            locale: Some(locale.clone()),
+                            requested_locale: Some(locale.clone()),
                             source_key: find_source_key(config, catalog, &resource, locale, entry.key()),
                             conflicting_catalog_path: Some(existing.catalog_path.clone()),
                         });
@@ -417,9 +546,9 @@ fn compile_js(
                     message: format!(
                         "Missing or fuzzy translation; --fail-on-missing rejects the fallback from {resolved_locale}."
                     ),
-                    catalog_path: catalog_path.clone(),
-                    locale: locale.clone(),
-                    requested_locale: locale.clone(),
+                    catalog_path: Some(catalog_path.clone()),
+                    locale: Some(locale.clone()),
+                    requested_locale: Some(locale.clone()),
                     source_key: Some(clone_source_key(&fallback.source_key)),
                     conflicting_catalog_path: None,
                 });

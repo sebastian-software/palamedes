@@ -37,7 +37,6 @@ middlewareFns: [
   () =>
     createWakuCatalogDeliveryMiddleware({
       resolveLocale: (request) => resolveApplicationLocale(request),
-      development: process.env.NODE_ENV !== "production",
       nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
     }),
 ];
@@ -49,7 +48,10 @@ loaded before hydration, it presents a catalog-free reload/home document and
 does not expose internal module diagnostics. The middleware accepts no locale
 policy; `resolveLocale` remains the host application's responsibility.
 `clientDirectory` defaults to `dist/public` in the process working directory,
-and `manifestName` overrides the generated manifest filename. The `nonce`
+and `manifestName` overrides the generated manifest filename. `development`
+defaults to how Vite built the server (`import.meta.env.DEV`), not to the
+runtime `NODE_ENV`, so a production build delivers its import map even when the
+server starts without `NODE_ENV`. Pass it only to override that default. The `nonce`
 option is a string or `(request, context) => string | undefined`, called once
 per HTML document, and applies only to Palamedes-generated import-map and
 readiness scripts. Set Waku's framework nonce with `unstable_setNonce` from

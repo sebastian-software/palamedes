@@ -10,10 +10,13 @@ use palamedes::{
 };
 use serde::Serialize;
 
-use crate::command::{Command, Context, render_json};
+use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::commands::extract::cache::{load_extract_cache, persist_extract_cache};
 use crate::commands::extract::sources::{collect_source_files, sort_and_dedupe_paths};
 use crate::error::CliError;
+
+/// Version of the `pmds lint --json` document shape (`schemaVersion`).
+const LINT_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct LintOptions {
@@ -199,7 +202,7 @@ impl Command for LintOptions {
 
     fn render(&self, output: &Self::Output) -> Result<(), CliError> {
         if self.json {
-            return render_json(output);
+            return render_json(&VersionedJson::new(LINT_JSON_SCHEMA_VERSION, output));
         }
 
         for diagnostic in &output.diagnostics {

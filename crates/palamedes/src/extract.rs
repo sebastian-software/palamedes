@@ -20,13 +20,16 @@ use crate::source::{
     SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
     SourceRange, SourceRuleOptions, display_filename, format_parser_diagnostics,
 };
-use crate::source_macros::{ImportedMacro, record_macro_import_declaration};
+use crate::source_macros::{
+    ImportedMacro, MacroImports, create_element_macro_error, create_element_type,
+    record_macro_import_declaration,
+};
 use crate::source_message::{
     SourceValue, build_icu_message as shared_build_icu_message, check_lowered_message,
     expression_source, jsx_attributes,
     lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
     lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
-    lower_template,
+    lower_template, reject_jsx_choice_spread,
 };
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
@@ -586,6 +589,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
+                self.imported_macros,
                 &self
                     .source_locator
                     .indexed_location(&self.filename, it.span.start as usize),
@@ -653,6 +657,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
+                self.imported_macros,
                 &self
                     .source_locator
                     .indexed_location(&self.filename, it.span.start as usize),
@@ -688,6 +693,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
+                self.imported_macros,
                 &self
                     .source_locator
                     .indexed_location(&self.filename, it.span.start as usize),
@@ -717,6 +723,19 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             return;
         }
 
+        if let Some((type_name, type_span)) = create_element_type(it)
+            && let Some(macro_name) = self.imported_macro_name(
+                type_name,
+                type_span,
+                &["Trans", "Plural", "Select", "SelectOrdinal"],
+            )
+        {
+            let error =
+                create_element_macro_error(macro_name, self.location(it.span.start as usize));
+            self.fail(error);
+            return;
+        }
+
         if let Some((callee_name, callee_span)) = identifier_name(&it.callee)
             && let Some(macro_name) = self
                 .imported_macro_name(
@@ -738,6 +757,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     self.origin(it.span.start as usize),
                     self.current_scope(),
                     self.source,
+                    self.imported_macros,
                     &self
                         .source_locator
                         .indexed_location(&self.filename, it.span.start as usize),
@@ -748,6 +768,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     self.origin(it.span.start as usize),
                     self.current_scope(),
                     self.source,
+                    self.imported_macros,
                     &self
                         .source_locator
                         .indexed_location(&self.filename, it.span.start as usize),
@@ -1048,6 +1069,7 @@ fn extract_object_properties(object: &ObjectExpression<'_>) -> BTreeMap<String, 
 fn extract_choice_options_from_object(
     object: &ObjectExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
@@ -1056,6 +1078,7 @@ fn extract_choice_options_from_object(
     let lowered = lower_choice_options_from_object(
         object,
         source,
+        macros,
         used_value_names,
         format,
         macro_name,
@@ -1079,6 +1102,7 @@ fn extract_from_jsx_element(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let attrs = jsx_attributes(&element.opening_element);
@@ -1091,7 +1115,7 @@ fn extract_from_jsx_element(
             Some(message) => Some(message.clone()),
             None => {
                 let children_message =
-                    extract_jsx_children_as_message(&element.children, source, location)?;
+                    extract_jsx_children_as_message(&element.children, source, macros, location)?;
                 (!children_message.is_empty()).then_some(children_message)
             }
         };
@@ -1116,6 +1140,7 @@ fn extract_from_jsx_element(
         if attrs.contains_key("id") {
             return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
+        reject_jsx_choice_spread(&element.opening_element, macro_name, location)?;
         let Some((value_name, value_expression)) =
             extract_jsx_choice_value(&element.opening_element, source)?
         else {
@@ -1131,6 +1156,7 @@ fn extract_from_jsx_element(
         let extracted_options = extract_choice_options_from_jsx(
             &element.opening_element,
             source,
+            macros,
             &mut used_value_names,
             format,
             macro_name,
@@ -1175,9 +1201,10 @@ fn extract_from_tagged_template(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
-    let (message, placeholders) = template_to_message(template, source)?;
+    let (message, placeholders) = template_to_message(template, source, macros)?;
     if message.is_empty() {
         return Ok(None);
     }
@@ -1205,6 +1232,7 @@ fn extract_from_descriptor_call(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
@@ -1237,7 +1265,7 @@ fn extract_from_descriptor_call(
     let (message, placeholders, template) = match message_expression.without_parentheses() {
         Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new(), false),
         Expression::TemplateLiteral(template) => {
-            let (message, placeholders) = template_to_message(template, source)?;
+            let (message, placeholders) = template_to_message(template, source, macros)?;
             check_lowered_message(
                 &message,
                 placeholders.keys().map(String::as_str),
@@ -1291,6 +1319,7 @@ fn extract_from_choice_call(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(value_arg) = call.arguments.first() else {
@@ -1319,6 +1348,7 @@ fn extract_from_choice_call(
     let extracted_options = extract_choice_options_from_object(
         object,
         source,
+        macros,
         &mut used_value_names,
         format,
         macro_name,
@@ -1457,11 +1487,13 @@ fn binding_identifier_name(pattern: &BindingPattern<'_>) -> Option<String> {
 fn template_to_message(
     template: &TemplateLiteral<'_>,
     source: &str,
+    macros: &MacroImports,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
     let mut used_value_names = HashMap::new();
     template_to_message_with_state(
         template,
         source,
+        macros,
         "template expression",
         &mut used_value_names,
     )
@@ -1470,10 +1502,11 @@ fn template_to_message(
 fn template_to_message_with_state(
     template: &TemplateLiteral<'_>,
     source: &str,
+    macros: &MacroImports,
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
-    let (message, values) = lower_template(template, source, syntax, used_value_names)?;
+    let (message, values) = lower_template(template, source, macros, syntax, used_value_names)?;
     let placeholders = values
         .into_iter()
         .map(|value| (value.name, value.expression))
@@ -1496,9 +1529,10 @@ fn extract_jsx_choice_value(
 fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
     source: &str,
+    macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<String> {
-    let lowered = lower_jsx_children(children, source, |_| String::new())?;
+    let lowered = lower_jsx_children(children, source, macros, |_| String::new())?;
     check_lowered_message(
         &lowered.message,
         lowered.values.iter().map(|value| value.name.as_str()),
@@ -1515,6 +1549,7 @@ fn extract_jsx_children_as_message(
 fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
@@ -1523,6 +1558,7 @@ fn extract_choice_options_from_jsx(
     let lowered = shared_lower_choice_options_from_jsx(
         opening_element,
         source,
+        macros,
         used_value_names,
         format,
         macro_name,

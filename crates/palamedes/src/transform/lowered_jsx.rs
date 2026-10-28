@@ -16,6 +16,7 @@ use crate::icu_text::escape_icu_apostrophes;
 use crate::jsx_message::{JsxMessagePart, join_jsx_message_parts};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
+use crate::source_macros::MacroImports;
 use crate::source_message::{lower_template, make_unique_value_name};
 
 use super::imports::{ImportCollector, RemixJsxBinding};
@@ -73,6 +74,7 @@ pub(super) fn trans_from_call(
 pub(super) fn choice_from_call(
     call: &CallExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
@@ -136,6 +138,7 @@ pub(super) fn choice_from_call(
                 let (message, values) = lower_template(
                     template,
                     source,
+                    macros,
                     "choice option template expression",
                     &mut used_value_names,
                 )?;

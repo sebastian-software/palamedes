@@ -258,6 +258,64 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     );
   });
 
+  describe("delivery mode", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    async function deliver(options: { development?: boolean; clientDirectory: string }) {
+      const middleware = createSolidCatalogDeliveryMiddleware({
+        ...options,
+        resolveLocale: () => "en",
+      });
+      const response = await middleware(
+        new Request("https://example.test/"),
+        async () =>
+          new Response(
+            `<html><head><script type="module" src="${SOLID_CLIENT_ENTRY}"></script></head><body></body></html>`,
+            { headers: { "content-type": "text/html" } },
+          ),
+      );
+      return response.text();
+    }
+
+    it("delivers production catalogs from a production build without NODE_ENV", async () => {
+      // Vite replaces `import.meta.env.DEV` in the server build; a custom
+      // server may start that build without NODE_ENV.
+      vi.stubEnv("DEV", false);
+      vi.stubEnv("NODE_ENV", undefined);
+
+      const output = await deliver({ clientDirectory: fixtureDirectory() });
+
+      expect(output).toContain('"#pmds/catalog":"/assets/catalog.en.js"');
+      expect(output).toContain(
+        'globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import(',
+      );
+      expect(output).not.toContain("showPalamedesDevCatalogError");
+    });
+
+    it("keeps development delivery for a development build under NODE_ENV=production", async () => {
+      vi.stubEnv("DEV", true);
+      vi.stubEnv("NODE_ENV", "production");
+
+      // A development build reads no manifest, so a missing client build is fine.
+      const output = await deliver({ clientDirectory: "/missing/client" });
+
+      expect(output).toContain("showPalamedesDevCatalogError");
+      expect(output).not.toContain("importmap");
+    });
+
+    it("lets an explicit development option override the build", async () => {
+      vi.stubEnv("DEV", true);
+      const production = await deliver({ clientDirectory: fixtureDirectory(), development: false });
+      expect(production).toContain('"#pmds/catalog":"/assets/catalog.en.js"');
+
+      vi.stubEnv("DEV", false);
+      const development = await deliver({ clientDirectory: "/missing/client", development: true });
+      expect(development).toContain("showPalamedesDevCatalogError");
+    });
+  });
+
   describe("delivery options", () => {
     afterEach(() => {
       vi.restoreAllMocks();

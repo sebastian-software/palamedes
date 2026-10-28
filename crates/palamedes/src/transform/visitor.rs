@@ -9,6 +9,7 @@ use oxc_span::GetSpan;
 
 use crate::error::PalamedesError;
 use crate::source::{DiagnosticLocation, SourceLocator};
+use crate::source_macros::{create_element_macro_error, create_element_type};
 
 use super::imports::ImportCollector;
 use super::runtime::{
@@ -238,6 +239,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             "Trans" => transform_trans_element(
                 it,
                 self.source,
+                &self.imports.macro_imports,
                 macro_info
                     .source
                     .strip_suffix("/macro")
@@ -255,6 +257,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 transform_choice_jsx_element(
                     it,
                     self.source,
+                    &self.imports.macro_imports,
                     &macro_info.imported_name,
                     &location,
                     self.options,
@@ -345,7 +348,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         let location = self
             .source_locator
             .indexed_location(self.filename, it.span.start as usize);
-        match transform_tagged_template(&it.quasi, self.source, &location, self.options) {
+        match transform_tagged_template(
+            &it.quasi,
+            self.source,
+            &self.imports.macro_imports,
+            &location,
+            self.options,
+        ) {
             Ok(Some((text, compiled_id))) => {
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
@@ -378,6 +387,24 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
+        if let Some((type_name, type_span)) = create_element_type(it)
+            && let Some((macro_info, _)) = self.imports.macro_at(type_name, type_span)
+            && matches!(
+                macro_info.imported_name.as_str(),
+                "Trans" | "Plural" | "Select" | "SelectOrdinal"
+            )
+        {
+            let location = self
+                .source_locator
+                .indexed_location(self.filename, it.span.start as usize)
+                .format();
+            self.fail(create_element_macro_error(
+                &macro_info.imported_name,
+                location,
+            ));
+            return;
+        }
+
         let Some((local_name, callee_span)) = identifier_name_and_span(&it.callee) else {
             walk::walk_call_expression(self, it);
             return;
@@ -404,6 +431,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 match transform_descriptor_call(
                     it,
                     self.source,
+                    &self.imports.macro_imports,
                     &macro_info.imported_name,
                     &location,
                     self.options,
@@ -439,6 +467,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 match transform_choice_call(
                     it,
                     self.source,
+                    &self.imports.macro_imports,
                     &macro_info.imported_name,
                     &location,
                     self.options,
@@ -519,6 +548,7 @@ impl TransformVisitor<'_> {
             transform_lowered_choice_call(
                 call,
                 self.source,
+                &self.imports.macro_imports,
                 &macro_info.imported_name,
                 &location,
                 self.options,

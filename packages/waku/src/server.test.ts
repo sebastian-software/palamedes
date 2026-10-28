@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Transform } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createWakuCatalogDeliveryMiddleware } from "./server";
 
@@ -51,8 +51,13 @@ async function transformHtml(input: string, splitAt: number[], nonce?: string): 
 }
 
 describe("Waku catalog document delivery", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("defaults clientDirectory to dist/public and forwards manifestName", () => {
     deliveryOptions.length = 0;
+    vi.stubEnv("DEV", false);
     createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
     createWakuCatalogDeliveryMiddleware({
       clientDirectory: "/srv/client",
@@ -62,9 +67,49 @@ describe("Waku catalog document delivery", () => {
     });
 
     expect(deliveryOptions).toEqual([
-      { clientDirectory: path.resolve(process.cwd(), "dist/public") },
+      { clientDirectory: path.resolve(process.cwd(), "dist/public"), development: false },
       { clientDirectory: "/srv/client", development: true, manifestName: "custom-manifest.json" },
     ]);
+  });
+
+  it("decides the delivery mode from the Vite build, not from the runtime NODE_ENV", async () => {
+    // Vite replaces `import.meta.env.DEV` in the server build; a custom server
+    // may start that build without NODE_ENV, or a dev server may see it set.
+    deliveryOptions.length = 0;
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("NODE_ENV", undefined);
+    createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("NODE_ENV", "production");
+    createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    // An explicit option still overrides the build.
+    createWakuCatalogDeliveryMiddleware({ development: false, resolveLocale: () => "en" });
+    vi.stubEnv("DEV", false);
+    createWakuCatalogDeliveryMiddleware({ development: true, resolveLocale: () => "en" });
+
+    expect(
+      deliveryOptions.map((options) => (options as { development: boolean }).development),
+    ).toEqual([false, true, false, true]);
+  });
+
+  it("gates the Waku entry on the readiness promise in a production build without NODE_ENV", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("NODE_ENV", undefined);
+    const middleware = createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    const context = {
+      req: { raw: new Request("https://example.test/") },
+      res: new Response(
+        '<script id="_R_">import("/assets/index-abc.js").catch((err) => { throw err; });</script>',
+        { headers: { "content-type": "text/html" } },
+      ),
+    };
+    await middleware(context, async () => {});
+
+    const output = await context.res.text();
+    expect(output).toContain(
+      'globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/assets/index-abc.js"))',
+    );
+    expect(output).not.toContain("? globalThis[Symbol.for");
   });
 
   it("resolves a nonce function once from the request and the middleware context", async () => {

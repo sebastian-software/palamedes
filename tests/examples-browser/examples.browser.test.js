@@ -424,11 +424,10 @@ async function expectTanStackServerFunctionMessages(page, locale) {
   }
 }
 
+// Only call this for Remix examples. Every caller lives in
+// `verifyRemixBrowserContract`, which the matrix test enters only when
+// `example.framework === "remix"`, so a non-Remix run never reaches this proof.
 async function expectRemixClientProof(page, locale, count) {
-  if (activeExample().framework !== "remix") {
-    return;
-  }
-
   const messages = {
     en: {
       heading: "Palamedes is active in the browser",

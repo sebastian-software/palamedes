@@ -1324,6 +1324,76 @@ describe("automatic graph splitting", () => {
     expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] });
   });
 
+  it("emits an empty manifest for a client build without any messages", async () => {
+    const { plugins, sidecarPlugin } = buildPlugins();
+    const bundle = {
+      "assets/index-abc.js": { type: "chunk", imports: ["assets/vendor.js"] },
+      "assets/vendor.js": { type: "chunk", imports: [] },
+    };
+    const emitted = await emitImportMap(sidecarPlugin, "", bundle);
+
+    // No sidecar assets, but one import map per locale and the manifest itself.
+    expect(emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))).toHaveLength(
+      0,
+    );
+    const maps = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-importmap."));
+    expect(maps).toHaveLength(3);
+    for (const map of maps) {
+      expect(JSON.parse(map.source)).toEqual({ imports: {} });
+    }
+    const manifest = emitted.find((file) => file.fileName === "palamedes-split-manifest.json");
+    const parsed = JSON.parse(manifest!.source);
+    expect(parsed.locales).toEqual(["en", "de", "pseudo"]);
+    expect(Object.keys(parsed.importMaps)).toEqual(["en", "de", "pseudo"]);
+    expect(parsed.chunkImports).toEqual({});
+    expect(bundle["assets/index-abc.js"].imports).toEqual(["assets/vendor.js"]);
+
+    // The output is deterministic across runs.
+    expect(await emitImportMap(sidecarPlugin, "", bundle)).toEqual(emitted);
+
+    // Static HTML stays as built: an empty import map has nothing to delay for.
+    const htmlPlugin = plugins.find((plugin) => plugin.name === "palamedes:html-delivery");
+    const html =
+      '<html lang="en"><body><script type="module" src="/assets/index-abc.js"></script></body></html>';
+    const outputs: Record<string, any> = {
+      "palamedes-split-manifest.json": {
+        type: "asset",
+        fileName: "palamedes-split-manifest.json",
+        source: manifest!.source,
+      },
+      "index.html": { type: "asset", fileName: "index.html", source: html },
+    };
+    for (const map of maps) {
+      outputs[map.fileName] = { type: "asset", fileName: map.fileName, source: map.source };
+    }
+    const emitHtmlFile = vi.fn();
+    const generateHtml =
+      typeof htmlPlugin?.generateBundle === "function"
+        ? htmlPlugin.generateBundle
+        : htmlPlugin?.generateBundle?.handler;
+    await generateHtml?.call(
+      { emitFile: emitHtmlFile } as never,
+      {} as never,
+      outputs as never,
+      false,
+    );
+    expect(outputs["index.html"].source).toBe(html);
+    expect(emitHtmlFile).not.toHaveBeenCalled();
+  });
+
+  it("still skips the manifest for a server build without any messages", async () => {
+    const { sidecarPlugin } = buildPlugins();
+    const emitFile = vi.fn();
+
+    await sidecarPlugin.generateBundle.call(
+      { environment: { name: "ssr" }, emitFile, warn: vi.fn() } as never,
+      {},
+      {},
+    );
+
+    expect(emitFile).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["/app", "/app/"],
     ["/app/", "/app/"],
@@ -1592,10 +1662,23 @@ async function runSidecarLoad(
   };
 }
 
+function buildPlugins() {
+  const plugins = palamedes({});
+  const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
+  if (typeof macroPlugin?.config === "function") {
+    macroPlugin.config.call({} as any, {} as any, { command: "build", mode: "production" } as any);
+  }
+  if (typeof macroPlugin?.configResolved === "function") {
+    macroPlugin.configResolved.call({} as any, { base: "/", build: { ssr: false } } as any);
+  }
+  const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
+  return { plugins, sidecarPlugin: sidecarPlugin as any };
+}
+
 async function emitImportMap(
   sidecarPlugin: any,
   key: string,
-  bundle = {
+  bundle: Record<string, { type: string; imports?: string[] }> = {
     "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
     "assets/vendor.js": { type: "chunk", imports: [] },
     "assets/style.css": { type: "asset" },

@@ -836,6 +836,48 @@ plural(count, { invalid: "broken", other: "# items" });
     ).toThrow(/`invalid` is not a valid plural category/);
   });
 
+  it("rejects choice macro shapes it cannot read with a located error", () => {
+    const cases: Array<[string, RegExp]> = [
+      [
+        `plural(count, { ...rest, other: "# items" })`,
+        /Unsupported `plural` macro usage at test\.tsx:3:24: spread options/,
+      ],
+      [
+        `plural(count, { [key]: "# item", other: "# items" })`,
+        /Unsupported `plural` macro usage at test\.tsx:3:24: a computed option name/,
+      ],
+      [
+        `<Plural value={count} {...props} other="# items" />`,
+        /Unsupported `Plural` macro usage at test\.tsx:3:30: spread attributes/,
+      ],
+      [
+        `select(gender, { male: "he", other: p(count, { one: "#", other: "#" }) })`,
+        /Nested i18n macro is not extractable as a single message at test\.tsx:3:44/,
+      ],
+      [
+        `createElement(Plural, { value: count, other: "# items" })`,
+        /Unsupported `Plural` macro usage at test\.tsx:3:8: `createElement\(Plural, …\)` is not a macro form/,
+      ],
+    ];
+
+    for (const [expression, error] of cases) {
+      const code = `import { plural, select, plural as p } from "@palamedes/core/macro";
+import { Plural } from "@palamedes/react/macro"; import { createElement } from "react"; function message() {
+return ${expression};
+}
+`;
+      expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(error);
+    }
+  });
+
+  it("rejects bare macro references in Svelte markup", () => {
+    const source =
+      "<script>\nimport { t } from '@palamedes/core/macro';\nimport { handler } from './handler';\n</script>\n<button onclick={handler(t)}>Open</button>";
+    expect(() => transformPalamedesMacros(source, "View.svelte")).toThrow(
+      /Unsupported `t` macro usage at View\.svelte:5:26: .*ReferenceError/,
+    );
+  });
+
   it("accepts defaulted JSX choice values", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro"; function message() {
