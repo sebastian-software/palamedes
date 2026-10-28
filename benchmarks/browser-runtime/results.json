@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-10-28T15:06:03.224Z",
-  "sourceCommit": "70aa8497f4b154d18fe1b243f3b7eb7511320ef5",
+  "measuredAt": "2026-10-28T15:46:11.678Z",
+  "sourceCommit": "3afdb7341ac09a761bedd6ca38759dfe1f325dab",
   "worktreeDirty": false,
-  "sourceSha256": "26ea19950c3a5b8de7d98490f3083c9a298ef72ed42c5d501fedcbd97219c656",
+  "sourceSha256": "4a2ad66186fd1c7f5d9bab6cd16b4f463eca2baa2363c9ca6579e04fb843b6af",
   "environment": {
     "node": "v24.22.1",
     "vite": "8.2.4",
@@ -26,10 +26,10 @@
       "id": "core",
       "bytes": {
         "raw": 12927,
-        "gzip": 4412,
-        "brotli": 3898
+        "gzip": 4415,
+        "brotli": 3910
       },
-      "sha256": "b43be3606845777d41c91f58614369afdd0fe92b8484669d1b3f51009d3b689f",
+      "sha256": "67937396d2477e0ba0b4af94bd753a31aeceb8527d61cfe4b47dbcb410712f13",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -61,11 +61,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -85,10 +85,10 @@
       "id": "react",
       "bytes": {
         "raw": 15215,
-        "gzip": 5168,
-        "brotli": 4582
+        "gzip": 5178,
+        "brotli": 4604
       },
-      "sha256": "0a30777d71e0007b9d071381c7828bd7844601df2aae528ff08e0fb19269a458",
+      "sha256": "62b5ebdbbf60dc10371e3d289e46f9cd107c83a8f599d309296738b984577dc8",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -123,23 +123,23 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
           "path": "packages/core/dist/locale.mjs",
           "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/react/dist/compiled.mjs",
-          "sha256": "74670bd681b64c5fef8dca457a3917fccdbaeff9b6ee4de86c11c83b8a76008d"
+          "sha256": "f35de695eab0957b70b9d9013ec634c908e45c87b072bcc321416ca83d460b11"
         },
         {
-          "path": "packages/react/dist/shared/react.EvnCpRq9.mjs",
-          "sha256": "c78b2be80a47d8488f3f8a4c82bb31123e4ecbb16d71d67bee4f53bba5d348a4"
+          "path": "packages/react/dist/shared/react.DJ5zhTD4.mjs",
+          "sha256": "9acab32f911fe63a3fe7f7f61fd2f25ac2852db7a3da6f74b9c250edb0e52f0c"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -159,10 +159,10 @@
       "id": "solid",
       "bytes": {
         "raw": 14527,
-        "gzip": 4884,
-        "brotli": 4336
+        "gzip": 4892,
+        "brotli": 4334
       },
-      "sha256": "77e02026998dbd95ef1c41d14f277fd1993aff2bbe7e66feaf91ca3e8be6c34c",
+      "sha256": "aacb3c6b05e987cb82516e7adc6b56d52b0a5a211ca1882c4373ecc057b84154",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -196,15 +196,15 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
           "path": "packages/core/dist/locale.mjs",
           "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -220,7 +220,7 @@
         },
         {
           "path": "packages/solid/dist/compiled.mjs",
-          "sha256": "b73daf97389d11e7985f11040b52e99fb36525d57c9d13df0e161452fed825a4"
+          "sha256": "6c7990952f037ed2a25a04a7adc40a59d7ab0c05a26a842beeabcddfad115aa4"
         }
       ]
     },
@@ -228,10 +228,10 @@
       "id": "remix",
       "bytes": {
         "raw": 14907,
-        "gzip": 5014,
-        "brotli": 4469
+        "gzip": 5017,
+        "brotli": 4467
       },
-      "sha256": "dc2199d44f64e4b6f589d70ff2613600fc60d79170abb93f58f969e19b25d7f3",
+      "sha256": "41908a7dc1e04c509e91237fe2a8ec3a90d208acf2d66c174b76007cd589f8f7",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -265,15 +265,15 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/remix/dist/compiled.mjs",
-          "sha256": "be6f0eb3a57c25be6a9944c6523d3484c1576a49023a5c5319f89ab698a81851"
+          "sha256": "85bf522d8a07c3d53ec191ddaa1fd4d6175adfcf6e43d7630c7b5ca31f164441"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -294,11 +294,11 @@
     {
       "id": "core",
       "bytes": {
-        "raw": 9896,
-        "gzip": 3539,
-        "brotli": 3140
+        "raw": 9841,
+        "gzip": 3536,
+        "brotli": 3145
       },
-      "sha256": "4e3e4f29eddcd3787c6cdc5b31e018ece1157ebeab2c25edb0a1c8f418be1acf",
+      "sha256": "304e692f04305e5401b22df1d6fe8dde1914bd38d3f5c78d1fb603aabb14e678",
       "exports": ["createI18n", "defineCompiledCatalog", "getI18n", "initializeClientI18n"],
       "imports": [],
       "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
@@ -309,11 +309,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -332,11 +332,11 @@
     {
       "id": "react",
       "bytes": {
-        "raw": 11859,
-        "gzip": 4180,
-        "brotli": 3713
+        "raw": 11804,
+        "gzip": 4182,
+        "brotli": 3721
       },
-      "sha256": "de41e9e81ce6c5b38c79a29c0870db48fae97984dac4c3e63dda5d13a5d2c15e",
+      "sha256": "2d9f523df29433223f1528c928a06c81e0d801d8f9cc7259949a4a3c02b52ed2",
       "exports": [
         "Trans",
         "createI18n",
@@ -353,19 +353,19 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/react/dist/compiled.mjs",
-          "sha256": "74670bd681b64c5fef8dca457a3917fccdbaeff9b6ee4de86c11c83b8a76008d"
+          "sha256": "f35de695eab0957b70b9d9013ec634c908e45c87b072bcc321416ca83d460b11"
         },
         {
-          "path": "packages/react/dist/shared/react.EvnCpRq9.mjs",
-          "sha256": "c78b2be80a47d8488f3f8a4c82bb31123e4ecbb16d71d67bee4f53bba5d348a4"
+          "path": "packages/react/dist/shared/react.DJ5zhTD4.mjs",
+          "sha256": "9acab32f911fe63a3fe7f7f61fd2f25ac2852db7a3da6f74b9c250edb0e52f0c"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -384,11 +384,11 @@
     {
       "id": "solid",
       "bytes": {
-        "raw": 11203,
+        "raw": 11148,
         "gzip": 3906,
-        "brotli": 3468
+        "brotli": 3466
       },
-      "sha256": "6f34f0c2b861c88fef79c94c738bb99b0505fd68bcc4054c44d52122006ad542",
+      "sha256": "34808ac88e8017f954ac1293f00fed8f6739dd97384bcd2eaacd6836f5653c3a",
       "exports": [
         "Trans",
         "createI18n",
@@ -405,11 +405,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -425,18 +425,18 @@
         },
         {
           "path": "packages/solid/dist/compiled.mjs",
-          "sha256": "b73daf97389d11e7985f11040b52e99fb36525d57c9d13df0e161452fed825a4"
+          "sha256": "6c7990952f037ed2a25a04a7adc40a59d7ab0c05a26a842beeabcddfad115aa4"
         }
       ]
     },
     {
       "id": "remix",
       "bytes": {
-        "raw": 11836,
-        "gzip": 4126,
-        "brotli": 3673
+        "raw": 11781,
+        "gzip": 4128,
+        "brotli": 3677
       },
-      "sha256": "11ae90a4e9a06c9e437193c66fe21276f7494d8c95f40acebc82fab2e93adfdc",
+      "sha256": "4d4060ef25dac3ba480df511a0180057cd6dc56f4eab398bd96c9b600a64a945",
       "exports": [
         "Trans",
         "createI18n",
@@ -453,15 +453,15 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "sha256": "305fd124bf01f86e0ae490e7807a08e62f20dd25a8878b4bdd14a735faeea03a"
         },
         {
-          "path": "packages/core/dist/shared/core.DAlH7F1v.mjs",
-          "sha256": "0ad92f6891a812503d102f909e0c09607770f92481fd13ea30782a1e9c9ad760"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         },
         {
           "path": "packages/remix/dist/compiled.mjs",
-          "sha256": "be6f0eb3a57c25be6a9944c6523d3484c1576a49023a5c5319f89ab698a81851"
+          "sha256": "85bf522d8a07c3d53ec191ddaa1fd4d6175adfcf6e43d7630c7b5ca31f164441"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -482,11 +482,11 @@
     "catalogOnly": {
       "id": "catalog-only",
       "bytes": {
-        "raw": 734,
-        "gzip": 445,
-        "brotli": 372
+        "raw": 692,
+        "gzip": 424,
+        "brotli": 356
       },
-      "sha256": "b337ef1c78ac87aa263a5904aed9149f3248596ed2fe58cd9bc7d274b7668133",
+      "sha256": "6c98e04af5679e3d2f057c3b603b4fd450c925e82258d392ecede3dea5e24095",
       "exports": ["defineCompiledCatalog"],
       "imports": [],
       "retainedIntl": [],
@@ -496,8 +496,8 @@
           "sha256": "f223935884db73454d3bec0a52f0d4843f04b4d987fe65cd4ea29e8dd82d0e5c"
         },
         {
-          "path": "packages/core/dist/compiled.mjs",
-          "sha256": "c805445ebed567834d3b6f95a16910e0bd41b331c20c349adba0d8aba122299f"
+          "path": "packages/core/dist/shared/core.BRQ4LCGL.mjs",
+          "sha256": "311aaa70e56879eecce033f454ed12893c0bf86cf4f6e08a729362dbeea3bd7a"
         }
       ]
     }
@@ -509,9 +509,9 @@
     "bytes": {
       "raw": 2406,
       "gzip": 1297,
-      "brotli": 1136
+      "brotli": 1129
     },
-    "sha256": "3c7e10b3aad3ef66edc528ba50554e71c2a417f955d541c7b063bfb958e4d74e",
+    "sha256": "d1bfe0379ff97cb65ef929eb48f7a44e8881c364ad0c36ae254dcddc1f923039",
     "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
   }
 }
