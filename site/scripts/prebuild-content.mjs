@@ -810,11 +810,7 @@ function typedocPackages() {
       label: "Vite Plugin",
       packageDir: "vite-plugin",
       position: 60,
-      entryPoints: [
-        "packages/vite-plugin/src/index.ts",
-        "packages/vite-plugin/src/server.ts",
-        "packages/vite-plugin/src/delivery.ts",
-      ],
+      entryPoints: ["packages/vite-plugin/src/index.ts", "packages/vite-plugin/src/delivery.ts"],
     },
     {
       slug: "next-plugin",

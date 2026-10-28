@@ -104,8 +104,8 @@ through `setClientI18n()`, and their loaders called the server scope's
 In v2:
 
 - call `palamedes()` without `experimentalGraphSplitting`;
-- create request i18n with `createViteServerI18n({ locale })` from
-  `@palamedes/vite-plugin/server` instead of importing catalogs;
+- create request i18n with `createBundledServerI18n({ locale })` from
+  `@palamedes/runtime/server/bundled` instead of importing catalogs;
 - replace the manifest reader and stream transform with
   `createViteCatalogDelivery()` and its `createDocumentTransform()`;
 - remove the client bootstrap; the plugin initializes the browser instance from
@@ -195,6 +195,8 @@ extractable rather than constructed during rendering.
 | Next.js `serverFunctions` (default `false`)                                     | Enabled automatically when one `palamedes.server` module exists in the project root or `src`. `false` opts out; `true` makes a missing module an error.                       |
 | `failOnCompileError`                                                            | Remove it. Invalid/unsupported ICU always fails compilation; `failOnMissing` remains the separate translation-completeness policy.                                            |
 | `CompiledMessageRuntime.pattern()`                                              | Regenerate v1 catalog artifacts. The v2 ABI contains executable operations only.                                                                                              |
+| `createViteServerI18n()` from `@palamedes/vite-plugin/server`                   | `createBundledServerI18n()` from `@palamedes/runtime/server/bundled`; same options (`BundledServerI18nOptions`). The `./server` subpath is removed.                           |
+| `@palamedes/vite-plugin/react-router` subpath                                   | `createViteCatalogDelivery()` from `@palamedes/vite-plugin/delivery` (was `createReactRouterCatalogDelivery()`); the `ReactRouter*` types are named `Vite*` there.            |
 
 The existing `CatalogMessages` string-map type can describe build-time data;
 `load()` accepts only `CompiledCatalogMessages`. `CompiledPalamedesI18n` aliases

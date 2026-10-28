@@ -179,8 +179,8 @@ async function createFixture(): Promise<string> {
   await writeFile(
     path.join(root, "entry.ts"),
     `
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
-export async function locale() { return (await createViteServerI18n({ locale: "de" })).locale; }
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
+export async function locale() { return (await createBundledServerI18n({ locale: "de" })).locale; }
 `,
   );
   await mkdir(path.join(root, "locales"));

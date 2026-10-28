@@ -41,16 +41,6 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./react-router": {
-      "import": {
-        "types": "./dist/react-router.d.mts",
-        "default": "./dist/react-router.mjs"
-      },
-      "require": {
-        "types": "./dist/react-router.d.cts",
-        "default": "./dist/react-router.cjs"
-      }
-    },
     "./delivery": {
       "import": {
         "types": "./dist/delivery.d.mts",
@@ -59,16 +49,6 @@
       "require": {
         "types": "./dist/delivery.d.cts",
         "default": "./dist/delivery.cjs"
-      }
-    },
-    "./server": {
-      "import": {
-        "types": "./dist/server.d.mts",
-        "default": "./dist/server.mjs"
-      },
-      "require": {
-        "types": "./dist/server.d.cts",
-        "default": "./dist/server.cjs"
       }
     }
   },
