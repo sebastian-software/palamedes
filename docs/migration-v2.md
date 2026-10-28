@@ -239,8 +239,10 @@ Messages with literal braces therefore get a new `msgid`. The next
 those entries again. Two related changes move IDs as well:
 
 - A descriptor template such as ``t({ message: `Hello ${name}, {count} new` }, { count })``
-  no longer reads `{count}` as an argument. Write raw ICU as a string message
-  instead: `t({ message: "Hello {name}, {count} new" }, { name, count })`.
+  no longer reads `{count}` as an argument. Extraction, `pmds lint`, and the
+  transform reject the unused `count` value with the same located error and
+  point to the string form. Write raw ICU as a string message instead:
+  `t({ message: "Hello {name}, {count} new" }, { name, count })`.
 - A doubled apostrophe in authored text (`` t`It''s` ``) is stored in its
   shortest spelling, `It's`. Existing PO entries keep their old spelling and
   their translations.

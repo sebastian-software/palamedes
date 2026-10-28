@@ -38,10 +38,12 @@ export const BUDGETS = [
     // optimized away; it did not bound published CLI artifacts. The shared
     // telemetry API also keeps that transport reachable in a source build.
     // Linux x64/Rust 1.96 measured 12,286,272 B before enabling the release-only
-    // notice path; a 12.5 MB cap leaves bounded headroom for that actual variant.
-    // Same-toolchain macOS ARM64 production variants measured 9,997,168 B at
-    // 89a6a5f3 and 10,465,984 B here (+468,816 B, 4.7%). Keep the addon cap.
-    maxBytes: 12_500_000,
+    // notice path. Same-toolchain macOS ARM64 production variants measured
+    // 9,997,168 B at 89a6a5f3 and 10,465,984 B there (+468,816 B, 4.7%).
+    // The 12.5 MB cap was exhausted at 12,494,688 B; #1427's fixes measured
+    // 12,569,056 B. The cap is 15 MB per maintainer decision: the gate only
+    // needs to catch large dependency bloat, not small feature growth.
+    maxBytes: 15_000_000,
     buildEnvironment: {
       PALAMEDES_UPDATE_ENDPOINT:
         "https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable",

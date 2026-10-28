@@ -88,6 +88,7 @@ struct CompileDiagnostic {
 
 const MISSING_TRANSLATION: &str = "compile.missing_translation";
 const CONFLICTING_MESSAGE: &str = "compile.conflicting_message";
+const INVALID_CATALOG: &str = "compile.invalid_catalog";
 
 impl Command for CompileOptions {
     type Output = CompileReport;
@@ -134,12 +135,16 @@ impl Command for CompileOptions {
         };
         println!("{summary}");
         for missing in &output.update.missing {
+            let message = match &missing.context {
+                Some(context) => format!("{:?} (msgctxt {context:?})", missing.message),
+                None => format!("{:?}", missing.message),
+            };
             eprintln!(
                 "{}",
                 tr!(
                     "{locale}: missing translation for {message}; compiled fallback from {resolved}.",
                     locale = missing.locale,
-                    message = format!("{:?}", missing.message),
+                    message = message,
                     resolved = missing.resolved_locale
                 )
             );
@@ -209,14 +214,24 @@ impl CompileDiagnostic {
 struct MergedMessage {
     code: String,
     catalog_path: String,
-    /// Compiled from a fallback locale because the catalog lacks a translation.
-    fallback: bool,
+    /// Set when the message was compiled from a fallback locale because the
+    /// catalog lacks a translation.
+    fallback: Option<Fallback>,
+}
+
+/// The source message behind a fallback and the locale that supplied it.
+struct Fallback {
+    source_key: CatalogArtifactSourceKey,
+    resolved_locale: String,
 }
 
 /// Writes `<output>/<locale>.mjs` for every requested locale, merging all
 /// configured catalogs of that locale into one module. Fallbacks come from the
 /// configuration, as in the bundler plugins, unless `--fallback-locale`
 /// replaces them with one shared chain, as for the Rust target.
+///
+/// Missing translations are judged on the merged module: a message that one
+/// catalog lacks but another translates is complete.
 fn compile_js(
     config: &LoadedConfig,
     locales: &[String],
@@ -229,6 +244,15 @@ fn compile_js(
     } else {
         locales.to_vec()
     };
+    let mut requested = BTreeSet::new();
+    if let Some(repeated) = locales
+        .iter()
+        .find(|locale| !requested.insert(locale.as_str()))
+    {
+        return Err(format!(
+            "--locale {repeated} is given more than once; each locale compiles to one module."
+        ));
+    }
     if let Some(unknown) = fallback_locales
         .iter()
         .find(|fallback| !config.locales.contains(fallback))
@@ -255,11 +279,27 @@ fn compile_js(
                 artifact_config.fallback_locales =
                     Some(FallbackLocales::Shared(fallback_locales.to_vec()));
             }
-            let artifact = compile_catalog_artifact(&CatalogArtifactRequest {
+            let artifact = match compile_catalog_artifact(&CatalogArtifactRequest {
                 config: artifact_config,
                 resource_path: resource_path.clone(),
-            })
-            .map_err(|error| error.to_string())?;
+            }) {
+                Ok(artifact) => artifact,
+                // A catalog that does not parse or normalize, such as one with
+                // a duplicate msgid, is a diagnostic so `--json` reports it.
+                Err(error) => {
+                    diagnostics.push(CompileDiagnostic {
+                        severity: CatalogArtifactDiagnosticSeverity::Error,
+                        code: INVALID_CATALOG.to_owned(),
+                        message: error.to_string(),
+                        catalog_path: resource_path.clone(),
+                        locale: locale.clone(),
+                        requested_locale: locale.clone(),
+                        source_key: None,
+                        conflicting_catalog_path: None,
+                    });
+                    continue;
+                }
+            };
 
             let errors_before = diagnostics.len();
             for diagnostic in &artifact.diagnostics {
@@ -283,46 +323,31 @@ fn compile_js(
                 });
             }
 
-            let mut fallback_ids = BTreeSet::new();
-            if config.pseudo_locale.as_deref() != Some(locale.as_str()) {
-                for missing in &artifact.missing {
-                    fallback_ids.insert(missing.compiled_id.as_str());
-                    let resolved_locale = missing
-                        .resolved_locale
-                        .clone()
-                        .unwrap_or_else(|| config.source_locale.clone());
-                    if fail_on_missing {
-                        diagnostics.push(CompileDiagnostic {
-                            severity: CatalogArtifactDiagnosticSeverity::Error,
-                            code: MISSING_TRANSLATION.to_owned(),
-                            message: format!(
-                                "Missing or fuzzy translation; --fail-on-missing rejects the fallback from {resolved_locale}."
-                            ),
-                            catalog_path: resource_path.clone(),
-                            locale: locale.clone(),
-                            requested_locale: locale.clone(),
-                            source_key: Some(clone_source_key(&missing.source_key)),
-                            conflicting_catalog_path: None,
-                        });
-                        continue;
-                    }
-                    update.missing.push(MissingTranslation {
-                        locale: locale.clone(),
-                        message: missing.source_key.message.clone(),
-                        resolved_locale,
-                    });
-                }
-            }
             if diagnostics.len() > errors_before {
                 continue;
             }
+            let mut fallbacks = BTreeMap::new();
+            if config.pseudo_locale.as_deref() != Some(locale.as_str()) {
+                for missing in &artifact.missing {
+                    fallbacks.insert(
+                        missing.compiled_id.as_str(),
+                        Fallback {
+                            source_key: clone_source_key(&missing.source_key),
+                            resolved_locale: missing
+                                .resolved_locale
+                                .clone()
+                                .unwrap_or_else(|| config.source_locale.clone()),
+                        },
+                    );
+                }
+            }
 
-            for (id, code) in artifact.messages {
-                let fallback = fallback_ids.contains(id.as_str());
-                match messages.entry(id) {
+            for (id, code) in &artifact.messages {
+                let fallback = fallbacks.remove(id.as_str());
+                match messages.entry(id.clone()) {
                     Entry::Vacant(entry) => {
                         entry.insert(MergedMessage {
-                            code,
+                            code: code.clone(),
                             catalog_path: resource_path.clone(),
                             fallback,
                         });
@@ -333,12 +358,19 @@ fn compile_js(
                         // one runtime ID. Identical output is the normal case,
                         // and a translation wins over another catalog's
                         // fallback for the same message.
-                        if existing.code == code || (fallback && !existing.fallback) {
+                        if existing.code == *code
+                            || (fallback.is_some() && existing.fallback.is_none())
+                        {
+                            // A translation that happens to match the
+                            // fallback text still completes the message.
+                            if fallback.is_none() {
+                                entry.get_mut().fallback = None;
+                            }
                             continue;
                         }
-                        if existing.fallback && !fallback {
+                        if existing.fallback.is_some() && fallback.is_none() {
                             entry.insert(MergedMessage {
-                                code,
+                                code: code.clone(),
                                 catalog_path: resource_path.clone(),
                                 fallback,
                             });
@@ -359,6 +391,45 @@ fn compile_js(
                         });
                     }
                 }
+            }
+        }
+
+        // Only fallbacks that no catalog translates are missing.
+        let mut fallbacks = messages
+            .values()
+            .filter_map(|message| {
+                message
+                    .fallback
+                    .as_ref()
+                    .map(|fallback| (fallback, &message.catalog_path))
+            })
+            .collect::<Vec<_>>();
+        fallbacks.sort_by(|(left, _), (right, _)| {
+            (&left.source_key.message, &left.source_key.context)
+                .cmp(&(&right.source_key.message, &right.source_key.context))
+        });
+        for (fallback, catalog_path) in fallbacks {
+            let resolved_locale = &fallback.resolved_locale;
+            if fail_on_missing {
+                diagnostics.push(CompileDiagnostic {
+                    severity: CatalogArtifactDiagnosticSeverity::Error,
+                    code: MISSING_TRANSLATION.to_owned(),
+                    message: format!(
+                        "Missing or fuzzy translation; --fail-on-missing rejects the fallback from {resolved_locale}."
+                    ),
+                    catalog_path: catalog_path.clone(),
+                    locale: locale.clone(),
+                    requested_locale: locale.clone(),
+                    source_key: Some(clone_source_key(&fallback.source_key)),
+                    conflicting_catalog_path: None,
+                });
+            } else {
+                update.missing.push(MissingTranslation {
+                    locale: locale.clone(),
+                    message: fallback.source_key.message.clone(),
+                    context: fallback.source_key.context.clone(),
+                    resolved_locale: resolved_locale.clone(),
+                });
             }
         }
 

@@ -219,6 +219,14 @@ uses the union of the configured `catalogs[].include` and `exclude` file sets,
 deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, MDX, Vue scripts,
 and Svelte scripts.
 
+Svelte markup is not a macro surface, so a macro called there fails with a
+located error. A name that the markup binds itself shadows the macro import:
+`{#each … as t}`, snippet parameters, `let:t`, `{#await … then t}`,
+`{:catch t}`, `{@const t = …}`, and arrow or function parameters. Block and
+`let:` bindings count for the whole component and parameters for their own
+brace expression, so a macro call outside the block that reuses a shadowed name
+is not reported.
+
 ```bash
 pmds lint
 pmds lint --json
@@ -479,7 +487,8 @@ pmds catalog compile --target js --output .palamedes/catalogs
 ```
 
 Each module exports `messages` for `i18n.load()`. Configured catalogs of the
-same locale are merged, and `--locale` limits the output. Fallbacks follow the
+same locale are merged, and `--locale` limits the output; naming a locale twice
+is an error. Fallbacks follow the
 configuration; `--fallback-locale` replaces the configured `fallback-locales`
 with one shared chain, and each locale it names must be listed in `locales`.
 `--config`, `--fail-on-missing`, and `--json` work as below; `--schema` and
@@ -488,14 +497,20 @@ with one shared chain, and each locale it names must be listed in `locales`.
 A source message that appears in several catalogs compiles to one runtime ID.
 Identical output is kept once, and a translation takes precedence over another
 catalog's fallback for the same message. Two different compilations of the same
-message fail with `compile.conflicting_message`, naming both catalogs.
+message fail with `compile.conflicting_message`, naming both catalogs. Missing
+translations are judged on the merged module, so a message that one catalog
+lacks but another translates is neither reported as missing nor rejected by
+`--fail-on-missing`. Each missing record has `locale`, `message`, `context` when
+the entry has a `msgctxt`, and `resolvedLocale`.
 
 No module is written while any catalog fails. Each failure names the catalog
 file that holds the message, that file's locale (a fallback locale when the
-message was reached through one), and the source message. Invalid or
-unsupported ICU fails with the compiler's code, such as
-`compile.invalid_icu_message`; `--fail-on-missing` reports each missing or
-fuzzy translation as `compile.missing_translation`. With `--json`, the document also
+message was reached through one), and the source message. A catalog that
+cannot be read, for example because it repeats a msgid, fails with
+`compile.invalid_catalog`. Invalid or unsupported ICU fails with the compiler's
+code, such as `compile.invalid_icu_message`; `--fail-on-missing` reports each
+missing or fuzzy translation as `compile.missing_translation`. With `--json`,
+the document also
 contains a `diagnostics` array whose entries have `severity`, `code`,
 `message`, `catalogPath`, `locale`, `requestedLocale`, `sourceKey` when the
 source message is known, and `conflictingCatalogPath` for conflicts. The command

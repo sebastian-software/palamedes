@@ -98,18 +98,29 @@ const fn is_icu_brace(character: char) -> bool {
 /// at `start` covers.
 ///
 /// A `{` covers everything up to its matching `}`, so `{name}` is quoted as
-/// one unit; any other brace covers itself. A span directly followed by
-/// another brace absorbs that brace's span too, because two adjacent quotes
-/// would read as one quote with an escaped apostrophe inside.
+/// one unit; any other brace covers itself. A span followed by another brace,
+/// directly or after a run of apostrophes, absorbs that brace's span and the
+/// apostrophes too. Two separate quotes would otherwise touch through their
+/// closing and opening apostrophes, and the runtime would read the whole run
+/// as escaped apostrophes inside one quote: `'{a}'` + `''` + `'{b}'` renders
+/// `{a}''{b}`, while the single quote `'{a}''{b}'` renders `{a}'{b}`.
 fn quote_span_end(characters: &[char], start: usize) -> usize {
     let mut end = single_quote_span_end(characters, start);
-    while characters
-        .get(end + 1)
-        .is_some_and(|character| is_icu_brace(*character))
-    {
-        end = single_quote_span_end(characters, end + 1);
+    loop {
+        let next = end
+            + 1
+            + characters[end + 1..]
+                .iter()
+                .take_while(|character| **character == '\'')
+                .count();
+        if !characters
+            .get(next)
+            .is_some_and(|character| is_icu_brace(*character))
+        {
+            return end;
+        }
+        end = single_quote_span_end(characters, next);
     }
-    end
 }
 
 fn single_quote_span_end(characters: &[char], start: usize) -> usize {
@@ -205,12 +216,20 @@ pub(crate) fn catalog_icu_spelling(message: &str) -> String {
 /// When `left` ends with a closing quote and `right` starts with an opening
 /// one, plain concatenation would read `''` as an escaped apostrophe inside a
 /// single quote. The two quotes merge into one instead: `'{a}'` followed by
-/// `'{b}'` becomes `'{a}{b}'`.
+/// `'{b}'` becomes `'{a}{b}'`. Escaped apostrophes between the two quotes
+/// move inside the merged quote, where `''` still reads as one apostrophe:
+/// `'{a}'` followed by `'''{b}'` becomes `'{a}''{b}'`.
 pub(crate) fn append_icu(left: &mut String, right: &str) {
-    let right_opens_quote = right.starts_with("'{") || right.starts_with("'}");
+    let escaped_apostrophes = right.bytes().take_while(|byte| *byte == b'\'').count();
+    // An even run is escaped apostrophes; one more apostrophe opens a quote
+    // when a brace follows it.
+    let pairs = escaped_apostrophes - escaped_apostrophes % 2;
+    let right_opens_quote = escaped_apostrophes % 2 == 1
+        && matches!(right.as_bytes().get(escaped_apostrophes), Some(b'{' | b'}'));
     if right_opens_quote && ends_with_quote_close(left) {
         left.pop();
-        left.push_str(&right[1..]);
+        left.push_str(&right[..pairs]);
+        left.push_str(&right[pairs + 1..]);
     } else {
         left.push_str(right);
     }
@@ -331,6 +350,40 @@ mod tests {
         let mut message = "don''t ''".to_owned();
         append_icu(&mut message, "'{b}'");
         assert_eq!(message, "don''t '''{b}'");
+
+        // Escaped apostrophes between the two quotes move inside the merge.
+        let mut message = escape_icu_literal("{a}");
+        append_icu(&mut message, &escape_icu_literal("'{b}"));
+        assert_eq!(message, "'{a}''{b}'");
+        assert_eq!(rendered_literal(&message), "{a}'{b}");
+
+        // Apostrophes after a closing quote without a following quote stay
+        // outside any merge and still render once.
+        let mut message = escape_icu_literal("{a}");
+        append_icu(&mut message, &escape_icu_literal("'x"));
+        assert_eq!(rendered_literal(&message), "{a}'x");
+    }
+
+    #[test]
+    fn apostrophes_between_brace_spans_stay_inside_one_quote() {
+        assert_eq!(escape_icu_literal("{a}'{b}"), "'{a}''{b}'");
+        assert_eq!(escape_icu_literal("}'}"), "'}''}'");
+        assert_eq!(escape_icu_literal("{a}''{b}"), "'{a}''{b}'");
+        assert_eq!(escape_icu_literal("{a}'''{b}"), "'{a}''''{b}'");
+        assert_eq!(escape_icu_literal("{a}' {b}"), "'{a}''' '{b}'");
+        for (authored, rendered) in [
+            ("Type {a}'{b} to swap", "Type {a}'{b} to swap"),
+            ("Close }'} here", "Close }'} here"),
+            ("{'}'{'}", "{'}'{'}"),
+            ("{a}''{b}", "{a}'{b}"),
+            ("{a}'''{b}", "{a}''{b}"),
+            ("{a}'{#}", "{a}'{#}"),
+            ("{a}' {b}'", "{a}' {b}'"),
+        ] {
+            for message in [escape_icu_literal(authored), catalog_literal(authored)] {
+                assert_eq!(rendered_literal(&message), rendered, "{authored:?}");
+            }
+        }
     }
 
     #[test]

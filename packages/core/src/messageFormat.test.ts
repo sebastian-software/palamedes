@@ -137,6 +137,12 @@ describe("formatMessagePattern", () => {
     );
   });
 
+  it("renders an apostrophe between literal braces once inside one quote", () => {
+    // The extractor and transform emit one quote across both brace groups.
+    expect(formatMessagePattern("Type '{a}''{b}' to swap")).toBe("Type {a}'{b} to swap");
+    expect(formatMessagePattern("Close '}''}' {n}", { n: 1 })).toBe("Close }'} 1");
+  });
+
   it("renders a self-closing placeholder as empty text", () => {
     expect(formatMessagePattern("Line one<0/>Line two")).toBe("Line oneLine two");
   });

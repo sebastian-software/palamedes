@@ -2413,6 +2413,35 @@ const untranslated = "code";
     }
 
     #[test]
+    fn apostrophes_between_escaped_mdx_braces_stay_in_one_quote() {
+        let result = analyze_valid(
+            "---\ntitle: Type {a}'{b} here\n---\n\nPress \\{x\\}'\\{y\\} to swap.\n",
+            MdxOptions {
+                front_matter_fields: vec!["title".to_owned()],
+                ..MdxOptions::default()
+            },
+        );
+        let messages = result
+            .messages
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>();
+        // One quote spans both brace groups, so the apostrophe between them
+        // renders once instead of `{a}''{b}`.
+        assert_eq!(
+            messages,
+            ["Type '{a}''{b}' here", "Press '{x}''{y}' to swap."]
+        );
+        assert_eq!(
+            result.compiled_ids,
+            messages
+                .iter()
+                .map(|message| compiled_message_key(message, None))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn reports_literal_tags_that_icu_cannot_quote() {
         let result = analyze_mdx(
             "Intro.\n\nWrap &lt;tag&gt; text.\n",
