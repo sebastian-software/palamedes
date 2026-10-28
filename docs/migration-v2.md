@@ -87,7 +87,7 @@ standard host workflow and does not permit marking raw ICU maps with
 | Next.js                     | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the removed `messageSplitting` option is rejected. Request server catalogs are shared and immutable. |
 | Remix                       | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                               |
 | TanStack Start, Waku        | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                                     |
-| React Router Framework Mode | Drop `experimentalGraphSplitting`, server `.po` maps, the manifest reader, and client `setClientI18n()`.     | No adapter package; the app wires delivery and request scopes per the [guide](./api/react-router.md).                              |
+| React Router Framework Mode | Replace v1 hand-wiring with `@palamedes/react-router`: root middleware plus its server entry.                | The adapter owns request scopes and import-map delivery; the app keeps locale policy. See the [guide](./api/react-router.md).      |
 
 Host-specific guides may expose lower-level hooks for custom servers, but the
 checked standard examples are the evidence for the transparent path. Do not
@@ -97,8 +97,7 @@ pass.
 
 ### React Router Framework Mode
 
-There is no adapter package for this host; the application keeps its own
-server wiring. The v1 examples enabled
+V2 adds the `@palamedes/react-router` adapter. The v1 examples enabled
 `experimentalGraphSplitting: { localeBinding: "import-map" }`, imported every
 locale's `.po` catalog into a server map, and read
 `palamedes-split-manifest.json` to inject the import map with a hand-written
@@ -106,19 +105,18 @@ stream transform. Their `entry.client.tsx` initialized the browser instance
 through `setClientI18n()`, and their loaders called the server scope's
 `activate()`.
 
-In v2:
+| v1 hand-wiring                                                               | v2 with `@palamedes/react-router`                                                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `experimentalGraphSplitting` in `palamedes()`                                | Remove the option; `palamedes()` delivers catalogs without it.                                                      |
+| Server map of every locale's `.po` catalog, a server scope, a request helper | `createReactRouterI18n({ resolveLocale, i18nOptions })` in `app/lib/i18n.server.ts`; it loads the compiled catalog. |
+| `activate()` or a `run()` wrapper in each loader and action                  | `export const middleware = [i18n.middleware]` in `app/root.tsx`; loaders and actions need no wrapper.               |
+| Manifest reader and stream transform in `app/entry.server.tsx`               | `export default i18n.handleRequest` in `app/entry.server.tsx`.                                                      |
+| `setClientI18n()` in `app/entry.client.tsx`                                  | Remove it; the plugin initializes the browser instance from `<html lang>`.                                          |
 
-- call `palamedes()` without `experimentalGraphSplitting`;
-- create request i18n with `createBundledServerI18n({ locale })` from
-  `@palamedes/runtime/server/bundled` instead of importing catalogs;
-- replace the manifest reader and stream transform with
-  `createViteCatalogDelivery()` and its `createDocumentTransform()`;
-- remove the client bootstrap; the plugin initializes the browser instance from
-  `<html lang>`;
-- run loaders and actions inside the request scope with `run()` instead of
-  calling `activate()`.
-
-The [React Router Framework Mode guide](./api/react-router.md) shows the
+Pre-release v2 code that already called `createScopedI18nRunner()`,
+`createServerI18nScope()`, or `createViteCatalogDelivery()` directly can keep
+working, but the adapter replaces all three for this host. The
+[React Router Framework Mode guide](./api/react-router.md) shows the
 complete files.
 
 ### Stable Remix 3

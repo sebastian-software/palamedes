@@ -33,16 +33,16 @@ can bring in additional fragments as needed. Bundlers can combine multiple
 fragments into one asset.
 
 This contract covers Next.js, Vite with React or Solid, React Router Framework
-Mode, Remix, TanStack Start, and Waku. The Waku and Remix adapters are Stable
-in 2.0; the [stability tiers](./stability.md#stability-tiers) list the tested
-upstream versions.
+Mode, Remix, TanStack Start, and Waku. The Waku, Remix, and React Router
+adapters are Stable in 2.0; the [stability tiers](./stability.md#stability-tiers)
+list the tested upstream versions.
 
-React Router Framework Mode has no dedicated adapter package. Its integration is
-the Vite plugin plus server wiring in the application: a request-scoped server
-i18n runner, the catalog document transform in `app/entry.server.tsx`, and a
-scope around translated loaders and actions. The
-[React Router Framework Mode guide](./api/react-router.md) shows that wiring
-from the checked examples.
+React Router Framework Mode gets a new adapter package, `@palamedes/react-router`.
+A root route middleware runs every loader, action, and document render in the
+request's i18n scope, and its server entry injects the catalog import map. The
+application keeps only its locale policy; loaders and actions no longer need a
+scope wrapper. The [React Router Framework Mode guide](./api/react-router.md)
+shows the setup from the checked examples.
 
 For Next.js, automatic browser splitting is now the default. Remove
 `messageSplitting`; any value is rejected rather than selecting the old path.
