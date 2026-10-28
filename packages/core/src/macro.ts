@@ -3,8 +3,11 @@ import type { PluralProps, SelectOrdinalProps, SelectProps } from "./choice";
 export type {
   ChoiceMacroMetadata,
   PluralMacroProps,
+  PluralProps,
   SelectMacroProps,
   SelectOrdinalMacroProps,
+  SelectOrdinalProps,
+  SelectProps,
 } from "./choice";
 
 type MessageDescriptor = {

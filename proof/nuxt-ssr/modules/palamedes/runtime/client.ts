@@ -1,6 +1,6 @@
 import { defineNuxtPlugin, useState as nuxtState } from "#app";
 import { createI18n } from "@palamedes/core";
-import { initializeClientI18n } from "@palamedes/runtime";
+import { initializeClientI18n } from "@palamedes/runtime/internal";
 
 export default defineNuxtPlugin({
   name: "palamedes",

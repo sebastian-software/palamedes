@@ -1,5 +1,6 @@
 import { createI18n, defineCompiledCatalog } from "@palamedes/core";
-import { getI18n, registerMessageLoaderGroup, resetI18nRuntime } from "@palamedes/runtime";
+import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
+import { registerMessageLoaderGroup } from "@palamedes/runtime/internal";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {

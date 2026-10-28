@@ -2,19 +2,22 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as runtimeRoot from "./index";
 import {
   type I18nInstance,
   getI18n,
-  initializeClientI18n,
   isServerEnvironment,
-  loadRegisteredMessages,
-  registerMessageLoaderGroup,
-  registerMessageLoaders,
-  registerMessages,
   resetI18nRuntime,
   setClientI18n,
   setServerI18nGetter,
 } from "./index";
+import {
+  initializeClientI18n,
+  loadRegisteredMessages,
+  registerMessageLoaderGroup,
+  registerMessageLoaders,
+  registerMessages,
+} from "./internal";
 
 function unusedRenderMessage(): never {
   throw new Error("renderMessage is not used by runtime tests.");
@@ -46,6 +49,17 @@ describe("@palamedes/runtime", () => {
     delete state.importScripts;
     delete state.WorkerGlobalScope;
     delete state.self;
+  });
+
+  it("keeps generated-code plumbing off the public root", () => {
+    expect(Object.keys(runtimeRoot).sort()).toEqual([
+      "activateServerI18n",
+      "getI18n",
+      "isServerEnvironment",
+      "resetI18nRuntime",
+      "setClientI18n",
+      "setServerI18nGetter",
+    ]);
   });
 
   it("fails loudly when no server instance is configured", () => {

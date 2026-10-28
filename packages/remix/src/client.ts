@@ -5,7 +5,8 @@ import {
   type CompiledCatalogMessages,
   type PalamedesI18n,
 } from "@palamedes/core";
-import { isServerEnvironment, loadRegisteredMessages, setClientI18n } from "@palamedes/runtime";
+import { isServerEnvironment, setClientI18n } from "@palamedes/runtime";
+import { loadRegisteredMessages } from "@palamedes/runtime/internal";
 
 const initializedDocuments = new WeakMap<
   RemixClientDocument,

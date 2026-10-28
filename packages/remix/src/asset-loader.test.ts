@@ -152,7 +152,7 @@ describe("createPalamedesRemixAssetLoader", () => {
         "const __palamedesDefineCompiledCatalog=(value)=>value;\n",
       )
       .replace(
-        /import\{getI18n as __palamedesGetI18n,loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup\}from"@palamedes\/runtime";\n/u,
+        /import\{getI18n as __palamedesGetI18n\}from"@palamedes\/runtime";import\{loadRegisteredMessages as __palamedesLoadRegisteredMessages,registerMessageLoaderGroup as __palamedesRegisterMessageLoaderGroup\}from"@palamedes\/runtime\/internal";\n/u,
         'const __palamedesGetI18n=()=>{throw new Error("No active client i18n instance")};const __palamedesLoadRegisteredMessages=async()=>{};const __palamedesRegisterMessageLoaderGroup=()=>{};\n',
       )
       .replace(/^import\s+(?:\{[^;]+\}|[^;]+)\s+from\s+["'][^"']+["'];\s*\n?/gmu, "");

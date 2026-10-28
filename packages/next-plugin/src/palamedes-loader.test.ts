@@ -166,7 +166,9 @@ describe("palamedes-loader.cjs", () => {
       { addDependency: (file: string) => dependencies.push(file) },
     );
 
-    expect(output).toContain('import { registerMessageLoaderGroup } from "@palamedes/runtime";');
+    expect(output).toContain(
+      'import { registerMessageLoaderGroup } from "@palamedes/runtime/internal";',
+    );
     expect(output).toContain(catalogQuery("src/locales/en.po"));
     expect(output).toContain(catalogQuery("src/locales/de.po"));
     expect(output).toContain(".then(({ messages }) => messages)");
@@ -367,7 +369,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => i18n };
         }
-        if (specifier === "@palamedes/runtime") {
+        if (specifier === "@palamedes/runtime/internal") {
           return { initializeClientI18n: () => i18n };
         }
         if (specifier.includes(catalogQuery("src/locales/de.po"))) {
@@ -420,7 +422,7 @@ describe("palamedes-loader.cjs", () => {
       await expect(
         executeGeneratedClientModule(output, async (specifier) => {
           if (specifier === "@palamedes/core/compiled") return { createI18n: vi.fn() };
-          if (specifier === "@palamedes/runtime")
+          if (specifier === "@palamedes/runtime/internal")
             return { getI18n: () => i18n, initializeClientI18n };
           if (specifier.includes(catalogQuery("src/locales/de.po")))
             return { messages: { id: "translated" } };
@@ -456,7 +458,7 @@ describe("palamedes-loader.cjs", () => {
       await expect(
         executeGeneratedClientModule(output, async (specifier) => {
           if (specifier === "@palamedes/core/compiled") return { createI18n: vi.fn() };
-          if (specifier === "@palamedes/runtime")
+          if (specifier === "@palamedes/runtime/internal")
             return {
               getI18n() {
                 throw new Error("No active client i18n");
@@ -526,7 +528,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => i18n };
         }
-        if (specifier === "@palamedes/runtime") {
+        if (specifier === "@palamedes/runtime/internal") {
           return { initializeClientI18n: () => i18n };
         }
         if (specifier.includes(catalogQuery("src/locales/de.po"))) {
@@ -589,7 +591,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => i18n };
         }
-        if (specifier === "@palamedes/runtime") {
+        if (specifier === "@palamedes/runtime/internal") {
           return { initializeClientI18n: () => i18n };
         }
         if (specifier.includes(catalogQuery("src/locales/de.po"))) {
@@ -646,7 +648,8 @@ describe("palamedes-loader.cjs", () => {
         await expect(
           executeGeneratedClientModule(output, async (specifier) => {
             if (specifier === "@palamedes/core/compiled") return { createI18n: () => i18n };
-            if (specifier === "@palamedes/runtime") return { initializeClientI18n: () => i18n };
+            if (specifier === "@palamedes/runtime/internal")
+              return { initializeClientI18n: () => i18n };
             // The first loader group resolves last, so a registration order that
             // followed resolution order would invert the two catalogs.
             if (specifier.includes(catalogQuery("src/locales/de.po"))) {
@@ -698,7 +701,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => ({}) };
         }
-        if (specifier === "@palamedes/runtime") {
+        if (specifier === "@palamedes/runtime/internal") {
           return { initializeClientI18n: () => ({}) };
         }
         if (specifier.includes(catalogQuery("src/locales/de.po"))) {
@@ -738,7 +741,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => ({}) };
         }
-        if (specifier === "@palamedes/runtime") {
+        if (specifier === "@palamedes/runtime/internal") {
           return { initializeClientI18n: () => ({}) };
         }
         if (specifier.includes(catalogQuery("src/locales/de.po"))) {
@@ -777,7 +780,7 @@ describe("palamedes-loader.cjs", () => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => ({}) };
         }
-        if (specifier === "@palamedes/runtime") {
+        if (specifier === "@palamedes/runtime/internal") {
           throw bootstrapError;
         }
         throw new Error(`Unexpected import: ${specifier}`);
@@ -1026,7 +1029,9 @@ describe("palamedes-loader.cjs", () => {
         },
       );
 
-      expect(output).toContain('import { registerMessageLoaderGroup } from "@palamedes/runtime";');
+      expect(output).toContain(
+        'import { registerMessageLoaderGroup } from "@palamedes/runtime/internal";',
+      );
       expect(warnings).toEqual([]);
     } finally {
       await rm(fixtureDirectory, { force: true, recursive: true });
