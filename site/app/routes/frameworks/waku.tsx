@@ -29,7 +29,7 @@ const page: FrameworkLanding = {
     {
       label: "Verified against",
       value: "Waku 1 RC",
-      note: "React 19.3.1 Server Components on 1.0.0-rc.3.",
+      note: "React 19.3.1 Server Components on 1.0.0-rc.4.",
     },
     {
       label: "Rendering",
@@ -126,7 +126,7 @@ export default async function LocalePage() {
   },
   boundary: {
     title: "Current proof follows Waku's RC API.",
-    body: "The matrix pins Waku 1.0.0-rc.3 with React 19.3.1. The adapter remains Preview because request access and host CSP nonces require unstable_getRequest and unstable_setNonce. Re-evaluate after stable equivalents and regression proofs; upstream 1.0 alone does not promote this SemVer tier. This is separate from the unreleased Palamedes v2 publication preview.",
+    body: "The matrix pins Waku 1.0.0-rc.4 with React 19.3.1. The adapter is Stable for waku@^1.0.0-rc.4. Request access and host CSP nonces use unstable_getRequest and unstable_setNonce, so each new tested Waku version reruns the regression proofs before the peer range moves. This is separate from the unreleased Palamedes v2 publication preview.",
     link: {
       label: "Read the RSC i18n guide",
       href: "/react-server-components-i18n",
@@ -147,7 +147,7 @@ export default async function LocalePage() {
     },
     {
       q: "Is Waku support production-stable?",
-      a: "The adapter is Preview and the verified Waku 1.0.0-rc.3 host is an upstream release candidate. Required unstable request and nonce APIs keep the adapter outside Palamedes' Stable SemVer contract. This tier is independent of the unreleased v2 publication preview.",
+      a: "The adapter is Stable for waku@^1.0.0-rc.4, verified with Waku 1.0.0-rc.4, which is an upstream release candidate. It uses Waku's unstable request and nonce APIs, so the peer range moves only after a new Waku version passes the regression proofs. This tier is independent of the unreleased v2 publication preview.",
     },
   ],
   related: [

@@ -33,8 +33,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Version range",
-      value: "Vite 3–8",
-      note: "The current matrix itself runs on Vite 8.",
+      value: "Vite 8",
+      note: "The plugin requires Vite 8, which the matrix runs on.",
     },
     {
       label: "Catalog workflow",

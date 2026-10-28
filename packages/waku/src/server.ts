@@ -1,7 +1,23 @@
 import { Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
-import type { MiddlewareHandler } from "hono";
 import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
+
+/**
+ * The part of the middleware context this adapter reads and writes. Waku
+ * registers `middlewareFns` handlers on its Hono app, and Hono's context is
+ * structurally compatible with this shape, so the adapter needs no Hono
+ * dependency of its own.
+ */
+export type WakuMiddlewareContext = {
+  readonly req: { readonly raw: Request };
+  res: Response;
+};
+
+/** A handler that Waku's `middlewareFns` factories can return. */
+export type WakuMiddlewareHandler = (
+  context: WakuMiddlewareContext,
+  next: () => Promise<void>,
+) => Promise<void>;
 
 export type WakuCatalogDeliveryOptions = {
   /** Built Vite client directory containing palamedes-split-manifest.json. */
@@ -27,7 +43,7 @@ export type WakuCatalogDeliveryOptions = {
  */
 export function createWakuCatalogDeliveryMiddleware(
   options: WakuCatalogDeliveryOptions,
-): MiddlewareHandler {
+): WakuMiddlewareHandler {
   const delivery = createViteCatalogDelivery(options);
 
   return async (context, next) => {

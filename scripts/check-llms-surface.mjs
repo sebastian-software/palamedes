@@ -235,7 +235,7 @@ function verifyPackages(read, listDirectories) {
    * time, which is how the floors drifted apart (#1155).
    */
   const nodeSupportContract =
-    "Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`.";
+    "Most published packages require Node.js `>=22.0.0`; `@palamedes/waku` and `@palamedes/tanstack` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`.";
   for (const file of ["llms.txt", "llms-full.txt"])
     assertContains(read(file), nodeSupportContract, `${file} Node support contract`);
   assertContains(
@@ -249,12 +249,7 @@ function verifyPackages(read, listDirectories) {
     .map(({ name, nodeEngine }) => `${name}: ${nodeEngine}`);
   assertSameInventory(
     nodeEngineExceptions,
-    [
-      "@palamedes/react-router-rsc: >=22.22.0",
-      "@palamedes/remix: >=24.3.0",
-      "@palamedes/tanstack: >=22.22.0",
-      "@palamedes/waku: >=22.22.0",
-    ],
+    ["@palamedes/remix: >=24.3.0", "@palamedes/tanstack: >=22.22.0", "@palamedes/waku: >=22.22.0"],
     "Published package Node.js engine exceptions",
   );
 

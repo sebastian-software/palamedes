@@ -105,9 +105,9 @@ TLS validation. Loopback and simulated local hosts do not replace public proof.
 The controlled `verify-hosts` workflow additionally checks the immutable image
 and retains hosted logs as artifacts; see the runbook for the deployment gate.
 
-Remix remains a Preview adapter for the exact tested upstream Remix 3.0.0
-contract. Completing public hosting does not change its compatibility or SemVer
-tier; see [Stability and Versioning](./stability.md).
+The Remix adapter is Stable for `remix@^3.0.0` and verified with Remix
+3.0.0. Public hosting adds deployment evidence; it does not widen the tested
+version contract. See [Stability and Versioning](./stability.md).
 
 ## Live Reference URLs
 

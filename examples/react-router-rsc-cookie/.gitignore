@@ -1,7 +1,0 @@
-.DS_Store
-.env
-/node_modules/
-
-# React Router generated output
-/.react-router/
-/build/

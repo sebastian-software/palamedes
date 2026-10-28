@@ -45,8 +45,7 @@
   },
   "dependencies": {
     "@palamedes/runtime": "workspace:^",
-    "@palamedes/vite-plugin": "workspace:^",
-    "hono": "^4.13.11"
+    "@palamedes/vite-plugin": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -56,10 +55,10 @@
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11",
-    "waku": "1.0.0-rc.3"
+    "waku": "1.0.0-rc.4"
   },
   "peerDependencies": {
-    "waku": "^1.0.0-rc.3"
+    "waku": "^1.0.0-rc.4"
   },
   "engines": {
     "node": ">=22.22.0"

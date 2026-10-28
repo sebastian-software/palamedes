@@ -33,7 +33,6 @@ const NPM_PACKAGES = [
   "@palamedes/next-plugin",
   "@palamedes/vite-plugin",
   "@palamedes/remix",
-  "@palamedes/react-router-rsc",
   "@palamedes/tanstack",
   "@palamedes/solid",
   "@palamedes/waku",
@@ -782,16 +781,6 @@ function typedocPackages() {
         "packages/react/src/index.tsx",
         "packages/react/src/client.tsx",
         "packages/react/src/macro.ts",
-      ],
-    },
-    {
-      slug: "react-router-rsc",
-      label: "React Router RSC",
-      packageDir: "react-router-rsc",
-      position: 45,
-      entryPoints: [
-        "packages/react-router-rsc/src/index.ts",
-        "packages/react-router-rsc/src/client.ts",
       ],
     },
     {

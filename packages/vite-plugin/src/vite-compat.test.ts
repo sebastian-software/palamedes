@@ -3,29 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as PalamedesConfigModule from "@palamedes/config";
 import type * as PalamedesCoreNodeModule from "@palamedes/core-node";
 import type * as PalamedesTransformModule from "@palamedes/transform";
-import type * as ViteModule from "vite";
 import type { palamedes as PalamedesFactory } from "./index";
 
 const mocks = vi.hoisted(() => ({
   analyzeMdxNative: vi.fn(),
   loadPalamedesConfig: vi.fn(),
-  rolldownVersion: undefined as string | undefined,
   transformPalamedesMacros: vi.fn(),
-  viteVersion: "7.4.0",
 }));
-
-vi.mock("vite", async (importOriginal) => {
-  const actual = await importOriginal<typeof ViteModule>();
-  return {
-    ...actual,
-    get version() {
-      return mocks.viteVersion;
-    },
-    get rolldownVersion() {
-      return mocks.rolldownVersion;
-    },
-  };
-});
 
 vi.mock("@palamedes/config", async (importOriginal) => {
   const actual = await importOriginal<typeof PalamedesConfigModule>();
@@ -47,18 +31,12 @@ vi.mock("@palamedes/transform", async (importOriginal) => ({
 
 let palamedes: typeof PalamedesFactory;
 
-async function loadPalamedes(version = "7.4.0") {
-  mocks.viteVersion = version;
-  vi.resetModules();
-  return (await import("./index")).palamedes;
-}
-
 beforeEach(async () => {
-  mocks.rolldownVersion = undefined;
   mocks.analyzeMdxNative.mockReset();
   mocks.loadPalamedesConfig.mockReset();
   mocks.transformPalamedesMacros.mockReset();
-  palamedes = await loadPalamedes();
+  vi.resetModules();
+  palamedes = (await import("./index")).palamedes;
 });
 
 function mdxTransform(options: Parameters<typeof palamedes>[0] = {}) {
@@ -80,8 +58,8 @@ function mdxConfig(options: Parameters<typeof palamedes>[0] = {}) {
   return config;
 }
 
-describe("React MDX compatibility with Rollup-based Vite", () => {
-  it("does not pass Rolldown-only module types to Vite 7", async () => {
+describe("MDX module types on Vite 8", () => {
+  it("enables the React MDX module type", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
       configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
@@ -89,40 +67,6 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
       sourceLocale: "en",
       catalogs: [],
     });
-
-    await expect(mdxConfig().call({} as any, {} as any, {} as any)).resolves.toBeUndefined();
-  });
-
-  it("stops React MDX on Vite 7 before generated JSX reaches Rollup", async () => {
-    mocks.loadPalamedesConfig.mockResolvedValue({
-      configPath: "/repo/palamedes.yaml",
-      rootDir: "/repo",
-      locales: ["en"],
-      sourceLocale: "en",
-      catalogs: [],
-    });
-    const error = vi.fn((message: string) => {
-      throw new Error(message);
-    });
-
-    await expect(
-      mdxTransform().call({ addWatchFile() {}, error } as any, "# Welcome", "/repo/page.mdx"),
-    ).rejects.toThrow(
-      "Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files.",
-    );
-    expect(mocks.analyzeMdxNative).not.toHaveBeenCalled();
-  });
-
-  it("enables React MDX module types on rolldown-vite 7", async () => {
-    mocks.rolldownVersion = "1.0.0";
-    mocks.loadPalamedesConfig.mockResolvedValue({
-      configPath: "/repo/palamedes.yaml",
-      rootDir: "/repo",
-      locales: ["en"],
-      sourceLocale: "en",
-      catalogs: [],
-    });
-    mocks.analyzeMdxNative.mockClear();
     mocks.analyzeMdxNative.mockReturnValue({
       code: "export default function Page() {}",
       compiledIds: [],
@@ -143,7 +87,7 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
     expect(mocks.analyzeMdxNative).toHaveBeenCalledOnce();
   });
 
-  it("keeps Solid MDX available on Vite 7 without React's module type", async () => {
+  it("keeps Solid MDX without React's module type", async () => {
     mocks.loadPalamedesConfig.mockResolvedValue({
       configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
@@ -158,6 +102,9 @@ describe("React MDX compatibility with Rollup-based Vite", () => {
       map: null,
     });
 
+    await expect(
+      mdxConfig({ mdx: { framework: "solid" } }).call({} as any, {} as any, {} as any),
+    ).resolves.toBeUndefined();
     await expect(
       mdxTransform({ mdx: { framework: "solid" } }).call(
         { addWatchFile() {} } as any,
@@ -218,39 +165,22 @@ describe("declarative macro transform filters", () => {
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledOnce();
   });
 
-  it("keeps the handler fallback for Vite 6.2, which ignores filter metadata", async () => {
-    const vite6Palamedes = await loadPalamedes("6.2.0");
-    const hook = vite6Palamedes({ mdx: false }).find(
+  it("keeps the handler check when a host ignores filter metadata", async () => {
+    const hook = palamedes({ mdx: false }).find(
       (candidate) => candidate.name === "palamedes:transform",
     )?.transform;
     if (!hook || typeof hook === "function") {
       throw new TypeError("Expected an object-form macro transform hook");
     }
 
-    // Vite 6.2 invokes the object-form handler without applying its unknown
-    // `filter` property; the handler's includes() check must still reject it.
+    // A host that calls the handler without applying `filter` still gets the
+    // handler's own macro-import check.
     expect(
       await hook.handler.call(
         { error: vi.fn() } as never,
         "export const answer = 42;",
         "/repo/page.ts",
       ),
-    ).toBeNull();
-    expect(mocks.transformPalamedesMacros).not.toHaveBeenCalled();
-  });
-
-  it("keeps function-form transform hooks for Vite 3", async () => {
-    const vite3Palamedes = await loadPalamedes("3.2.10");
-    const hook = vite3Palamedes({ mdx: false }).find(
-      (candidate) => candidate.name === "palamedes:transform",
-    )?.transform;
-    expect(typeof hook).toBe("function");
-    if (typeof hook !== "function") {
-      throw new TypeError("Expected a function-form macro transform hook for Vite 3");
-    }
-
-    expect(
-      await hook.call({ error: vi.fn() } as never, "export const answer = 42;", "/repo/page.ts"),
     ).toBeNull();
     expect(mocks.transformPalamedesMacros).not.toHaveBeenCalled();
   });

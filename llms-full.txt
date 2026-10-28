@@ -52,7 +52,7 @@ When helping with Palamedes code:
 5. Avoid numeric placeholder fallback patterns. If an expression cannot be named cleanly, recommend extracting a stable named variable. Never nest `plural()`, `select()`, or `selectOrdinal()` inside a `t` template; write the complete sentence in each branch instead.
 6. Use `getI18n()`/runtime wiring instead of inventing framework-global runtime APIs.
 7. Keep host adapter examples thin. Do not move catalog semantics into framework glue.
-8. Most published packages require Node.js `>=22.0.0`; `@palamedes/waku`, `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
+8. Most published packages require Node.js `>=22.0.0`; `@palamedes/waku` and `@palamedes/tanstack` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
 9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/012-native-cli-and-yaml-first-configuration.md`).
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
 11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
@@ -202,7 +202,7 @@ export default defineConfig({
 ```
 
 The same `palamedes.yaml`, runtime model, `.po` loading, and extraction flow
-apply. First-class MDX compilation requires Vite 7 or newer. React module
+apply. First-class MDX compilation uses Vite 8. React module
 parsing is configured by Palamedes; Solid needs the explicit `.mdx` extension
 shown above. React development output is lowered through Vite after native
 macro transforms so `.mdx` edits can rebuild without an additional MDX plugin.
@@ -715,13 +715,9 @@ reloads, and initial/lazy catalog recovery under CSP. External verification uses
 see /docs/api/remix.md and /docs/demo-deployments.md for public hosts and hosting evidence.
 
 
-### React Router RSC
-
-Use `@palamedes/react-router-rsc` only for the exact tested experimental React Router RSC Framework Mode contract. Configure a custom `app/entry.rsc.tsx` that wraps the default RSC entry with `createReactRouterRscI18nRequestScope(createRequestI18n)`. It receives the original request and activates a fresh i18n instance before Server Function argument evaluation, dispatch, revalidation, SSR, and streams. `scope.run()` restores its caller after dispatch settles, but async resources created inside it retain the request locale when they run later; separately initiated work without an inherited context has no active locale and needs explicit data or a new scope. RSC Data Mode, Edge/Worker runtimes, and graph-split server message fragments are not supported. See `/docs/api/react-router-rsc.md`.
-
 ### Waku support status
 
-Waku support is Preview, verified with Waku 1.0.0-rc.3 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. Required unstable_getRequest and host CSP unstable_setNonce APIs keep the adapter outside the Stable SemVer contract independently of the unreleased Palamedes v2 publication preview. Re-evaluate after stable equivalents exist and request/action/stream/catalog recovery/CSP proofs pass; stable upstream 1.0 alone does not promote it. See /docs/stability.md#waku-preview-contract and /docs/api/waku.md.
+Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. The adapter uses its unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. This tier is independent of the unreleased Palamedes v2 publication preview. See /docs/stability.md#waku-contract and /docs/api/waku.md.
 
 ### TanStack Start, Solid, Waku, React Router
 

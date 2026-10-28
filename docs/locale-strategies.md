@@ -101,8 +101,7 @@ The shared browser contract checks missing, unsupported, and stored cookies in
 the TanStack Start, Solid, Waku, React Router, and Remix cookie examples. It
 checks read-only response headers, first-time persistence, unchanged selections,
 the server mutation guard, and document navigation after a real switch. Next.js
-and React Router RSC have focused production verifiers for their Server Function
-transports. Frameworks may refresh route data after a Server Function; the common
+has focused production verifiers for its Server Function transports. Frameworks may refresh route data after a Server Function; the common
 contract requires read-only locale resolution without cookie mutation.
 
 ## Route Strategy

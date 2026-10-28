@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "7c0536ff3668b96a336c33fa80b630fc19adef48",
+  "sourceCommit": "b7174b327bb6ae0d17cc9be84944398383d28788",
   "roots": [
     "examples",
     "proof/vue-vite",
@@ -8,9 +8,9 @@
     "proof/sveltekit-ssr"
   ],
   "summary": {
-    "catalogs": 120,
-    "messages": 4182,
-    "functions": 1737,
+    "catalogs": 119,
+    "messages": 4174,
+    "functions": 1744,
     "duplicates": 0
   },
   "catalogs": [
@@ -129,6 +129,12 @@
       "duplicates": 0
     },
     {
+      "file": "examples/node-backend/src/locales/fr.po",
+      "messages": 8,
+      "functions": 7,
+      "duplicates": 0
+    },
+    {
       "file": "examples/react-router-cookie/app/locales/de.po",
       "messages": 42,
       "functions": 16,
@@ -174,18 +180,6 @@
       "file": "examples/react-router-route/app/locales/fr.po",
       "messages": 34,
       "functions": 15,
-      "duplicates": 0
-    },
-    {
-      "file": "examples/react-router-rsc-cookie/app/locales/de.po",
-      "messages": 8,
-      "functions": 0,
-      "duplicates": 0
-    },
-    {
-      "file": "examples/react-router-rsc-cookie/app/locales/en.po",
-      "messages": 8,
-      "functions": 0,
       "duplicates": 0
     },
     {

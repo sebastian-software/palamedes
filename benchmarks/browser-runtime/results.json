@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "measuredAt": "2026-10-28T10:32:14.420Z",
-  "sourceCommit": "0f81e5a5953cd54946db02f5719043b8b42ff2e0",
-  "worktreeDirty": false,
-  "sourceSha256": "db3f69d17739fb0776bfb5f4dfe7ad7e9e3ed1e57f389dea1bdade23f2a113ec",
+  "measuredAt": "2026-10-28T10:30:13.428Z",
+  "sourceCommit": "a3f0e7758722668b02cc111eaa6ce426c34c8403",
+  "worktreeDirty": true,
+  "sourceSha256": "d5d86262ecbb677225f6a823dab42a3d4a44dd79e8b1e69eab0d959b985a76a2",
   "environment": {
     "node": "v24.22.1",
     "vite": "8.2.4",
@@ -115,7 +115,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
+          "sha256": "1498a18b2133788cdbf401a365cf822253a5b4e9e951a75b629ca961c1806361"
         },
         {
           "path": "packages/react/dist/compiled.mjs",
@@ -176,7 +176,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
+          "sha256": "1498a18b2133788cdbf401a365cf822253a5b4e9e951a75b629ca961c1806361"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -411,11 +411,11 @@
     "locale": "en",
     "messages": 38,
     "bytes": {
-      "raw": 2378,
-      "gzip": 1276,
-      "brotli": 1105
+      "raw": 2406,
+      "gzip": 1296,
+      "brotli": 1130
     },
-    "sha256": "d97ce22d25aeeec5cc273bfe96abe1af4bd756068628d6c4fdfb5c777c774703",
+    "sha256": "608f231c9f92222722298a37c0445828d9f0a56e16bb6ecd730191fbe9672cf4",
     "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
   }
 }
