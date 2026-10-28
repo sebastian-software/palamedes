@@ -5,10 +5,13 @@ use std::path::PathBuf;
 use clap::Args;
 use palamedes::{CatalogCoverageRequest, CatalogCoverageResult, measure_catalog_coverage};
 
-use crate::command::{Command, Context, render_json};
+use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::commands::normalize_locale_list;
 use crate::config::LoadedConfig;
 use crate::error::CliError;
+
+/// Version of the `pmds report --json` document shape (`schemaVersion`).
+const REPORT_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct ReportOptions {
@@ -45,7 +48,7 @@ impl Command for ReportOptions {
 
     fn render(&self, output: &Self::Output) -> Result<(), CliError> {
         if self.json {
-            return render_json(output);
+            return render_json(&VersionedJson::new(REPORT_JSON_SCHEMA_VERSION, output));
         }
         print_report(output);
         Ok(())

@@ -58,7 +58,7 @@ fn real_po_updates_run_in_a_copied_binary_and_changed_contracts_preserve_old_dat
     };
     let result = compile();
     assert!(result.status.success(), "{result:?}");
-    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    let report = versioned_json(&result);
     assert_eq!(report["catalogs"].as_array().unwrap().len(), 1);
     assert!(report["missing"].as_array().unwrap().is_empty());
     let result = common::output(
@@ -199,6 +199,156 @@ fn fallback_diagnostics_quote_source_messages_and_leave_json_raw() {
     );
 }
 
+/// Parses a `--json` document after checking that `schemaVersion` leads it.
+fn versioned_json(output: &Output) -> serde_json::Value {
+    assert!(
+        output.stdout.starts_with(b"{\n  \"schemaVersion\": 1,\n"),
+        "schemaVersion is not the first field: {output:?}"
+    );
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {output:?}"))
+}
+
+fn compile_rust(catalog_dir: &Path, output: &Path, extra: &[&str]) -> Output {
+    compiler()
+        .args([
+            "catalog",
+            "compile",
+            "--target",
+            "rust",
+            "--schema",
+            concat!(env!("OUT_DIR"), "/schema.pmd.json"),
+            "--catalog-dir",
+        ])
+        .arg(catalog_dir)
+        .args(["--locale", "de", "--output"])
+        .arg(output)
+        .args(extra)
+        .output()
+        .unwrap()
+}
+
+/// Parses a failed Rust-target `--json` run and returns its one diagnostic,
+/// after checking that nothing was compiled and stderr kept the plain text.
+fn rust_failure(output: &Output) -> serde_json::Value {
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let report = versioned_json(output);
+    assert_eq!(report["catalogs"], serde_json::json!([]), "{report}");
+    assert_eq!(report["missing"], serde_json::json!([]), "{report}");
+    let diagnostics = report["diagnostics"].as_array().unwrap();
+    assert_eq!(diagnostics.len(), 1, "{report}");
+    let diagnostic = diagnostics[0].clone();
+    assert_eq!(diagnostic["severity"], "error");
+    assert!(diagnostic.get("requestedLocale").is_none(), "{diagnostic}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "Could not compile Rust language catalogs: {}",
+            diagnostic["message"].as_str().unwrap()
+        )),
+        "{stderr}"
+    );
+    diagnostic
+}
+
+#[test]
+fn rust_target_reports_contract_mismatches_as_json_diagnostics() {
+    let directory = tempfile::tempdir().unwrap();
+    let po = directory.path().join("po");
+    fs::create_dir(&po).unwrap();
+    let english =
+        fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/locales/en.po")).unwrap();
+    fs::write(
+        po.join("en.po"),
+        format!("{english}\nmsgid \"A new source message\"\nmsgstr \"A new source message\"\n"),
+    )
+    .unwrap();
+    fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/locales/de.po"),
+        po.join("de.po"),
+    )
+    .unwrap();
+    let out = directory.path().join("out");
+
+    let output = compile_rust(&po, &out, &["--json"]);
+    let diagnostic = rust_failure(&output);
+    assert_eq!(diagnostic["code"], "compile.contract_mismatch");
+    assert!(
+        diagnostic["message"]
+            .as_str()
+            .unwrap()
+            .contains("changes the application message contract"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.get("catalogPath").is_none(), "{diagnostic}");
+    assert!(diagnostic.get("locale").is_none(), "{diagnostic}");
+    assert!(!out.join("de.pmd.json").exists());
+
+    // Without --json the failure stays plain text with the same exit code.
+    let plain = compile_rust(&po, &out, &[]);
+    assert_eq!(plain.status.code(), Some(1), "{plain:?}");
+    assert!(plain.stdout.is_empty(), "{plain:?}");
+    assert!(
+        String::from_utf8_lossy(&plain.stderr).contains(
+            "Could not compile Rust language catalogs: catalog update changes the application message contract"
+        ),
+        "{plain:?}"
+    );
+}
+
+#[test]
+fn rust_target_reports_missing_translations_with_locale_catalog_and_source() {
+    let directory = tempfile::tempdir().unwrap();
+    let po = directory.path().join("po");
+    fs::create_dir(&po).unwrap();
+    fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/locales/en.po"),
+        po.join("en.po"),
+    )
+    .unwrap();
+    fs::write(po.join("de.po"), "").unwrap();
+
+    let output = compile_rust(
+        &po,
+        &directory.path().join("out"),
+        &["--fail-on-missing", "--json"],
+    );
+    let diagnostic = rust_failure(&output);
+    assert_eq!(diagnostic["code"], "compile.missing_translation");
+    assert_eq!(diagnostic["locale"], "de");
+    assert!(
+        diagnostic["sourceKey"]["message"].is_string(),
+        "{diagnostic}"
+    );
+    assert!(diagnostic["sourceKey"].get("context").is_none());
+    assert_eq!(
+        fs::canonicalize(diagnostic["catalogPath"].as_str().unwrap()).unwrap(),
+        fs::canonicalize(po.join("de.po")).unwrap()
+    );
+}
+
+#[test]
+fn rust_target_reports_unreadable_catalogs_with_their_path() {
+    let directory = tempfile::tempdir().unwrap();
+    let po = directory.path().join("po");
+    fs::create_dir(&po).unwrap();
+    fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/locales/en.po"),
+        po.join("en.po"),
+    )
+    .unwrap();
+
+    let output = compile_rust(&po, &directory.path().join("out"), &["--json"]);
+    let diagnostic = rust_failure(&output);
+    assert_eq!(diagnostic["code"], "compile.io_error");
+    assert!(
+        diagnostic["catalogPath"]
+            .as_str()
+            .unwrap()
+            .ends_with("de.po"),
+        "{diagnostic}"
+    );
+}
+
 type Entries<'a> = &'a [(&'a str, &'a str)];
 type CatalogFiles<'a> = &'a [(&'a str, Entries<'a>)];
 
@@ -280,8 +430,7 @@ fn js_icu_diagnostics_name_the_catalog_locale_and_source_that_failed() {
     );
     let output = compile_js(project.path(), &["--locale", "de", "--json"]);
     assert_eq!(output.status.code(), Some(1), "{output:?}");
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
+    let report = versioned_json(&output);
     assert_eq!(report["catalogs"], serde_json::json!([]), "{report}");
     let diagnostics = report["diagnostics"].as_array().unwrap();
     assert_eq!(diagnostics.len(), 1, "{report}");

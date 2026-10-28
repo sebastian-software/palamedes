@@ -9,9 +9,12 @@ use palamedes::{
     audit_catalogs,
 };
 
-use crate::command::{Command, Context, render_json};
+use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::commands::normalize_locale_list;
 use crate::error::CliError;
+
+/// Version of the `pmds audit --json` document shape (`schemaVersion`).
+const AUDIT_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct AuditOptions {
@@ -51,7 +54,7 @@ impl Command for AuditOptions {
 
     fn render(&self, output: &Self::Output) -> Result<(), CliError> {
         if self.json {
-            return render_json(output);
+            return render_json(&VersionedJson::new(AUDIT_JSON_SCHEMA_VERSION, output));
         }
         print_audit_result(output, self.fail_on);
         Ok(())
