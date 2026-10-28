@@ -47,16 +47,17 @@ const result = transformPalamedesMacros(
   "example.ts",
   {
     runtimeModule: "@palamedes/runtime",
-    keepSourceFallbacks: false,
+    includeSourceMetadata: false,
   },
 );
 
 console.log(result.code);
 ```
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `false`
-here. It only controls diagnostic source metadata in generated calls. Set
-`keepSourceFallbacks: false` for compact output without authored source text.
+`includeSourceMetadata` defaults to `false` here. It only controls diagnostic
+source metadata in generated calls. Set `includeSourceMetadata: true` to add
+authored source text; the v1 `keepSourceFallbacks` name and the removed
+inverse option `stripMessageField` throw a migration error.
 V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.

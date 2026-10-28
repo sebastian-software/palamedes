@@ -75,7 +75,7 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
     file: "adr/020-internal-compiled-lookup-keys.md",
     snippets: [
       "Low-level transforms and v2 first-party host adapters generate compact runtime calls without embedding the authored source message by default.",
-      "Set `keepSourceFallbacks: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.",
+      "Set `includeSourceMetadata: true` only when authored source text is needed as diagnostic metadata; `false` is the default and produces compact, hash-only output.",
     ],
   },
   {
@@ -89,8 +89,8 @@ const SOURCE_FALLBACK_POLICY_TARGETS = [
   {
     file: "crates/palamedes/src/transform/mod.rs",
     snippets: [
-      "The native transform and v2 first-party host adapters strip source fallbacks by default (`None` resolves to `false`).",
-      "`keepSourceFallbacks: true` only to retain authored source text as diagnostic metadata; it never supplies replacement runtime output.",
+      "The native transform and v2 first-party host adapters omit this metadata by default (`None` resolves to `false`).",
+      "`includeSourceMetadata: true` only to retain authored source text as diagnostic metadata; it never supplies replacement runtime output.",
     ],
   },
 ];
@@ -215,12 +215,12 @@ function assertSourceFallbackDefaultDocumentation() {
         continue;
       }
       const text = readFileSync(file, "utf8");
-      const optionIndex = text.indexOf("keepSourceFallbacks?: boolean");
+      const optionIndex = text.indexOf("includeSourceMetadata?: boolean");
       const docStart = text.lastIndexOf("/**", optionIndex);
       const docEnd = text.indexOf("*/", docStart);
       if (optionIndex === -1 || docStart === -1 || docEnd < docStart || docEnd > optionIndex) {
         problems.push(
-          `${path.relative(root, file)} has no public TSDoc immediately before keepSourceFallbacks.`,
+          `${path.relative(root, file)} has no public TSDoc immediately before includeSourceMetadata.`,
         );
         continue;
       }
@@ -236,10 +236,10 @@ function assertSourceFallbackDefaultDocumentation() {
 
     const docsText = readFileSync(path.join(root, docs), "utf8");
     const expectedDefault = compiledOnlyDefault ? "false" : "true";
-    if (!docsText.includes(`- \`keepSourceFallbacks\`: \`${expectedDefault}\``)) {
+    if (!docsText.includes(`- \`includeSourceMetadata\`: \`${expectedDefault}\``)) {
       problems.push(`${docs} does not document the default as ${expectedDefault}.`);
     }
-    if (!compiledOnlyDefault && !docsText.includes("`keepSourceFallbacks: false`")) {
+    if (!compiledOnlyDefault && !docsText.includes("`includeSourceMetadata: false`")) {
       problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`);
     }
   }

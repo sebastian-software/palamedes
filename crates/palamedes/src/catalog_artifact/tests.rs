@@ -1626,7 +1626,7 @@ const colliding = <Trans>{user.name} vs {team.name}</Trans>;
         &scoped_source,
         "test.tsx",
         Some(crate::transform::NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..crate::transform::NativeTransformOptions::default()
         }),
     )

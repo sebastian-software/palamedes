@@ -646,8 +646,9 @@ See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
 Package roots and existing `compiled` aliases use one parser-free v2 runtime.
 Missing compiled entries throw `MissingCompiledMessageError`; execution failures
 also propagate to host error handling. `onMissing`/`onError` are observers, not
-fallback handlers. `keepSourceFallbacks` is a legacy option name that retains
-diagnostic source metadata only; it cannot restore source rendering. Missing
+fallback handlers. `includeSourceMetadata` retains diagnostic source metadata
+only; it cannot restore source rendering. Its v1 name `keepSourceFallbacks`
+throws a migration error. Missing
 translations instead use the compiler's fallback chain. Its v2 default is
 `false` (v1 adapters defaulted to `true`), which omits that diagnostic metadata
 and keeps output compact. Standard adapters provide adapter-owned
@@ -663,8 +664,8 @@ Use `@palamedes/vite-plugin`. Put `palamedes()` in the Vite plugin list alongsid
 
 Use `@palamedes/next-plugin`. Keep Next-specific behavior in the adapter; do
 not move catalog semantics into application code. Client messages follow the
-Next module graph automatically; do not set the deprecated `messageSplitting`
-option, and note that `messageSplitting: false` throws. Request-local i18n for
+Next module graph automatically; do not set the removed `messageSplitting`
+option, which throws a migration error with any value. Request-local i18n for
 recognized Server Functions and Actions is enabled automatically when exactly
 one `palamedes.server` module exists in the project root or `src`; it must
 export `initializeServerFunctionI18n`. `serverFunctions: false` opts out;

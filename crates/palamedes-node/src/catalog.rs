@@ -727,9 +727,6 @@ pub struct CatalogModuleRequest {
     pub locale: String,
     pub pseudo_locale: Option<String>,
     pub fail_on_missing: Option<bool>,
-    /// Deprecated v1 option. v2 always rejects compile errors regardless of
-    /// this value; presence is retained only for a migration diagnostic.
-    pub fail_on_compile_error: Option<bool>,
     pub missing_failure_hint: Option<String>,
     pub compile_failure_hint: Option<String>,
     pub diagnostics_warning_hint: Option<String>,
@@ -748,10 +745,6 @@ struct CatalogModuleRenderOptions {
     resource_path: String,
     pseudo_locale: Option<String>,
     fail_on_missing: bool,
-    /// Whether the removed v1 `failOnCompileError` option was supplied. The
-    /// option no longer controls fatal diagnostics, but retaining presence
-    /// lets v2 emit an actionable migration message for existing configs.
-    fail_on_compile_error: Option<bool>,
     missing_failure_hint: Option<String>,
     compile_failure_hint: Option<String>,
     diagnostics_warning_hint: Option<String>,
@@ -2316,8 +2309,9 @@ pub fn compile_catalog_artifact_async(
 ///
 /// # Errors
 ///
-/// Returns an error when catalog compilation fails, missing translations are
-/// configured as fatal, or compile diagnostics are configured as fatal.
+/// Returns an error when catalog compilation fails, an error diagnostic such
+/// as invalid or unsupported ICU is reported, or missing translations are
+/// configured as fatal.
 pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult> {
     compile_catalog_module_impl(request)
 }
@@ -2329,7 +2323,6 @@ fn compile_catalog_module_impl(request: CatalogModuleRequest) -> Result<CatalogM
         locale,
         pseudo_locale,
         fail_on_missing,
-        fail_on_compile_error,
         missing_failure_hint,
         compile_failure_hint,
         diagnostics_warning_hint,
@@ -2339,7 +2332,6 @@ fn compile_catalog_module_impl(request: CatalogModuleRequest) -> Result<CatalogM
         resource_path: resource_path.clone(),
         pseudo_locale: pseudo_locale.or_else(|| config.pseudo_locale.clone()),
         fail_on_missing: fail_on_missing.unwrap_or(false),
-        fail_on_compile_error,
         missing_failure_hint,
         compile_failure_hint,
         diagnostics_warning_hint,
@@ -2481,13 +2473,12 @@ fn create_catalog_module_result(
             .collect::<Vec<_>>();
 
         if !error_diagnostics.is_empty() {
-            let mut message =
+            let message =
                 create_compile_error_message(&locale, &options.resource_path, &error_diagnostics);
-            message = append_hint(message, options.compile_failure_hint.as_deref());
-            if options.fail_on_compile_error.is_some() {
-                message = append_hint(message, Some(FAIL_ON_COMPILE_ERROR_MIGRATION));
-            }
-            return Err(napi::Error::from_reason(message));
+            return Err(napi::Error::from_reason(append_hint(
+                message,
+                options.compile_failure_hint.as_deref(),
+            )));
         }
 
         warnings.push(append_hint(
@@ -2504,10 +2495,6 @@ fn create_catalog_module_result(
             create_missing_error_message(&locale, &options.resource_path, &artifact.missing),
             options.missing_failure_hint.as_deref(),
         )));
-    }
-
-    if options.fail_on_compile_error.is_some() {
-        warnings.push(FAIL_ON_COMPILE_ERROR_MIGRATION.to_owned());
     }
 
     Ok(CatalogModuleResult {
@@ -2607,8 +2594,6 @@ fn create_compile_error_message(
         lines.join("\n\n")
     )
 }
-
-const FAIL_ON_COMPILE_ERROR_MIGRATION: &str = "Palamedes v2 always rejects invalid or unsupported ICU during catalog compilation; `failOnCompileError` no longer changes this behavior. Remove the option from the host configuration.";
 
 fn render_diagnostic_severity(severity: &palamedes::CatalogArtifactDiagnosticSeverity) -> &str {
     match severity {

@@ -7,7 +7,7 @@ mdx:
   trans-module: "@palamedes/react/compiled"
   runtime-module: "@palamedes/runtime"
   ignore-directive: palamedes-ignore
-  keep-source-fallbacks: true
+  include-source-metadata: true
 catalogs:
   - path: locales/{locale}/messages
     format: po

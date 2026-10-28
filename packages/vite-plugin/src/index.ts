@@ -22,6 +22,7 @@ import {
 } from "@palamedes/config";
 import {
   analyzeMdxNative,
+  assertNoRemovedPalamedesOptions,
   compileCatalogArtifactSelectedAsync,
   compileCatalogModuleAsync,
   renderCatalogModule,
@@ -167,7 +168,7 @@ function assertImportMapBase(base: string): void {
   }
 
   throw new Error(
-    `Palamedes graph splitting with localeBinding: "import-map" requires Vite's resolved base to be root-relative (for example "/app/") or an absolute URL. Relative base ${JSON.stringify(base)} resolves import-map entries against each document URL and breaks on nested routes. Set Vite base to "/" or an absolute deployment path/URL, or use localeBinding: "embed".`,
+    `Palamedes catalog delivery uses an import map and requires Vite's resolved base to be root-relative (for example "/app/") or an absolute URL. Relative base ${JSON.stringify(base)} resolves import-map entries against each document URL and breaks on nested routes. Set Vite base to "/" or an absolute deployment path/URL.`,
   );
 }
 
@@ -299,13 +300,6 @@ export type PalamedesPluginOptions = {
   failOnMissing?: boolean;
 
   /**
-   * If true, fail compilation on message compilation errors.
-   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU;
-   * remove this option.
-   */
-  failOnCompileError?: boolean;
-
-  /**
    * UI framework this app compiles for. Selects the component contract for
    * generated MDX modules. Use `"none"` for a project that is neither React
    * nor Solid.
@@ -322,24 +316,18 @@ export type PalamedesPluginOptions = {
   runtimeModule?: string;
 
   /**
-   * Preserve authored source messages as diagnostic metadata only.
+   * Include authored source messages as diagnostic source metadata.
    * Defaults to `false` in every environment. Set to `true` to retain
    * authored source text for diagnostics.
    * V2 runtime misses throw; this metadata never provides replacement output.
    */
-  keepSourceFallbacks?: boolean;
+  includeSourceMetadata?: boolean;
 
   /**
    * Override MDX analysis options from the Palamedes config, or disable MDX.
    * @default configuration `mdx` values with React framework defaults
    */
   mdx?: PalamedesMdxConfig | false;
-
-  /**
-   * @deprecated Compiled graph delivery is automatic in every environment.
-   * Legacy enabled forms use active-locale delivery. `false` is rejected.
-   */
-  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" };
 
   /**
    * Build target of every module this plugin sees. `"auto"` reads the Vite
@@ -355,17 +343,20 @@ export type PalamedesPluginOptions = {
  * Create the Palamedes Vite plugin
  */
 export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
+  assertNoRemovedPalamedesOptions(options, [
+    "failOnCompileError",
+    "keepSourceFallbacks",
+    "experimentalGraphSplitting",
+  ]);
   const {
     include = [PALAMEDES_BUNDLER_TRANSFORM_INCLUDE, COMPONENT_FILE_REGEX],
     exclude = /node_modules/,
     enablePoLoader = true,
     failOnMissing = false,
-    failOnCompileError,
     framework = "react",
     runtimeModule,
-    keepSourceFallbacks,
+    includeSourceMetadata,
     mdx: mdxOverride,
-    experimentalGraphSplitting,
     environment = "auto",
     ...configLoaderOptions
   } = options;
@@ -378,14 +369,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const isServer = (context: unknown, ssr = false, legacy = false) =>
     environment === "server" || isServerEnvironment(context, ssr, legacy);
   const transformIncludes = include == null ? [] : Array.isArray(include) ? include : [include];
-  if (experimentalGraphSplitting === false) {
-    throw new Error(
-      "Palamedes v2 delivers compiled catalogs automatically. Remove experimentalGraphSplitting: false.",
-    );
-  }
   const graphSplitting = true;
-  const importMapBinding = true;
-  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false;
+  let resolvedIncludeSourceMetadata = includeSourceMetadata ?? false;
   let stripNonEssentialProps = true;
   let isBuildCommand = false;
   let resolvedBase = "/";
@@ -651,7 +636,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
         const mdx = {
           ...resolveMdxOptions(cfg),
-          keepSourceFallbacks: resolvedKeepSourceFallbacks,
+          includeSourceMetadata: resolvedIncludeSourceMetadata,
         };
         if ((mdx.framework ?? "react") !== "react" || !viteSupportsReactMdxModuleType()) {
           return;
@@ -691,7 +676,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cfg = await getConfigLazy();
         const mdx = {
           ...resolveMdxOptions(cfg),
-          keepSourceFallbacks: resolvedKeepSourceFallbacks,
+          includeSourceMetadata: resolvedIncludeSourceMetadata,
         };
         if ((mdx.framework ?? "react") === "react" && !viteSupportsReactMdxModuleType()) {
           this.error(REACT_MDX_VITE_REQUIREMENT);
@@ -795,7 +780,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     config(viteConfig, env) {
       // Authored source text is diagnostic metadata only and is omitted by
       // default. A missing compiled message throws whether or not it is kept.
-      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false;
+      resolvedIncludeSourceMetadata = includeSourceMetadata ?? false;
       stripNonEssentialProps = env.command === "build";
       isBuildCommand = env.command === "build";
       const ids = new Set(PALAMEDES_MACRO_PACKAGES);
@@ -886,7 +871,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           try {
             const result = transformPalamedesMacros(code, cleanId, {
               runtimeModule: `${VIRTUAL_MESSAGES_PREFIX}${key}`,
-              keepSourceFallbacks: resolvedKeepSourceFallbacks,
+              includeSourceMetadata: resolvedIncludeSourceMetadata,
               stripNonEssentialProps,
             });
             if (!result.hasChanged) return null;
@@ -901,7 +886,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       try {
         const result = transformPalamedesMacros(code, cleanId, {
           runtimeModule: macroRuntimeModule,
-          keepSourceFallbacks: resolvedKeepSourceFallbacks,
+          includeSourceMetadata: resolvedIncludeSourceMetadata,
           stripNonEssentialProps,
         });
 
@@ -1156,11 +1141,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
 
       async generateBundle(_options, bundle) {
-        if (
-          !importMapBinding ||
-          isServer(this, false, legacyBuildSsr) ||
-          sidecarModules.size === 0
-        ) {
+        if (isServer(this, false, legacyBuildSsr) || sidecarModules.size === 0) {
           return;
         }
 
@@ -1389,7 +1370,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           locale,
           pseudoLocale: cfg.pseudoLocale,
           failOnMissing,
-          ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
           missingFailureHint:
             "You see this error because `failOnMissing=true` in Vite plugin configuration.",
         });

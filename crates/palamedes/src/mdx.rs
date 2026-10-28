@@ -80,9 +80,13 @@ pub struct MdxOptions {
     /// Explicit opt-out marker used in an immediately preceding comment.
     #[serde(alias = "ignore-directive", alias = "ignore_directive")]
     pub ignore_directive: String,
-    /// Preserve source messages as runtime fallbacks in generated modules.
-    #[serde(alias = "keep-source-fallbacks", alias = "keep_source_fallbacks")]
-    pub keep_source_fallbacks: bool,
+    /// Include authored source messages in generated modules as diagnostic
+    /// source metadata.
+    ///
+    /// Defaults to `false`. The metadata is never rendered as runtime output;
+    /// a missing compiled message still fails at runtime.
+    #[serde(alias = "include-source-metadata", alias = "include_source_metadata")]
+    pub include_source_metadata: bool,
 }
 
 impl Default for MdxOptions {
@@ -94,7 +98,7 @@ impl Default for MdxOptions {
             trans_module: None,
             runtime_module: None,
             ignore_directive: DEFAULT_IGNORE_DIRECTIVE.to_owned(),
-            keep_source_fallbacks: false,
+            include_source_metadata: false,
         }
     }
 }
@@ -461,8 +465,8 @@ struct MessageReference {
     id: String,
 }
 
-fn runtime_lookup_arguments(reference: &MessageReference, keep_source_fallbacks: bool) -> String {
-    if keep_source_fallbacks {
+fn runtime_lookup_arguments(reference: &MessageReference, include_source_metadata: bool) -> String {
+    if include_source_metadata {
         format!(
             "{}, undefined, {{ message: {} }}",
             js_string(&reference.id),
@@ -600,7 +604,7 @@ impl<'a> MdxCompiler<'a> {
             writer.append(&format!(
                 ", {}: __i18n._({})",
                 js_string(key),
-                runtime_lookup_arguments(reference, self.options.keep_source_fallbacks)
+                runtime_lookup_arguments(reference, self.options.include_source_metadata)
             ));
         }
         writer.append(" };\n}\n");
@@ -1018,7 +1022,7 @@ impl<'a> MdxCompiler<'a> {
                 self.needs_i18n = true;
                 format!(
                     "__palamedesGetI18n()._({})",
-                    runtime_lookup_arguments(reference, self.options.keep_source_fallbacks)
+                    runtime_lookup_arguments(reference, self.options.include_source_metadata)
                 )
             },
         );
@@ -1090,7 +1094,7 @@ impl<'a> MdxCompiler<'a> {
         );
         self.needs_trans = true;
         let mut props = vec![format!("id={{{}}}", js_string(&reference.id))];
-        if self.options.keep_source_fallbacks {
+        if self.options.include_source_metadata {
             props.push(format!("message={{{}}}", js_string(&reference.message)));
         }
         if !unit.values.is_empty() {
@@ -1209,7 +1213,7 @@ impl<'a> MdxCompiler<'a> {
                 end - range.start as usize,
                 format!(
                     "{{__palamedesGetI18n()._({})}}",
-                    runtime_lookup_arguments(&reference, self.options.keep_source_fallbacks)
+                    runtime_lookup_arguments(&reference, self.options.include_source_metadata)
                 ),
             ));
         }
@@ -2172,7 +2176,7 @@ mod tests {
             source,
             MdxOptions {
                 translatable_attributes: vec!["title".into()],
-                keep_source_fallbacks: true,
+                include_source_metadata: true,
                 ..MdxOptions::default()
             },
         );
@@ -2207,7 +2211,7 @@ mod tests {
         let result = analyze_valid(
             source,
             MdxOptions {
-                keep_source_fallbacks: true,
+                include_source_metadata: true,
                 ..MdxOptions::default()
             },
         );
@@ -2284,7 +2288,7 @@ mod tests {
         let result = analyze_valid(
             source,
             MdxOptions {
-                keep_source_fallbacks: true,
+                include_source_metadata: true,
                 ..MdxOptions::default()
             },
         );
@@ -2372,7 +2376,7 @@ const untranslated = "code";
         let result = analyze_valid(
             "don't client's l'été It''s L'{title}",
             MdxOptions {
-                keep_source_fallbacks: true,
+                include_source_metadata: true,
                 ..MdxOptions::default()
             },
         );
@@ -2524,7 +2528,7 @@ Visible fallback phrase.
         let kept = analyze_valid(
             source,
             MdxOptions {
-                keep_source_fallbacks: true,
+                include_source_metadata: true,
                 ..options
             },
         )

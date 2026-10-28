@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-28
 
 Compilation validates formatter support before messages reach the application runtime.
 
@@ -88,5 +88,5 @@ contract explicit and reviewable in catalog artifacts.
 
 Module compilation rejects unsupported formatter kinds and styles. Artifact
 inspection returns structured diagnostics without claiming to produce an
-executable module. The deprecated `failOnCompileError` option cannot downgrade
-an error. See the [Core API reference](../docs/api/core.md).
+executable module. Host adapters reject the removed v1 `failOnCompileError`
+option with a migration error, so no option can downgrade an error. See the [Core API reference](../docs/api/core.md).

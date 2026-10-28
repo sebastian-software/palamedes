@@ -22,8 +22,8 @@ fn transform_macros(
     // Most transform fixtures assert the authored fallback spelling. Keep it
     // explicitly so the tests stay focused while production-default behavior
     // is covered by dedicated cases below.
-    if options.keep_source_fallbacks.is_none() && options.strip_message_field.is_none() {
-        options.keep_source_fallbacks = Some(true);
+    if options.include_source_metadata.is_none() {
+        options.include_source_metadata = Some(true);
     }
     let mut result = transform_macros_raw(&scoped_source, filename, Some(options))?;
 
@@ -103,7 +103,7 @@ fn server_function_options() -> NativeTransformOptions {
             initializer_module: "@/i18n/server-action".to_string(),
             initializer_export: "initServerActionI18n".to_string(),
         }),
-        keep_source_fallbacks: Some(true),
+        include_source_metadata: Some(true),
         ..NativeTransformOptions::default()
     }
 }
@@ -548,7 +548,7 @@ function choices() {
         source,
         "test.tsx",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2115,7 +2115,7 @@ fn strips_message_field_when_requested() {
         "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello\", comment: \"Greeting\" });\n",
         "test.ts",
         Some(NativeTransformOptions {
-            strip_message_field: Some(true),
+            include_source_metadata: Some(false),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2152,7 +2152,7 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 "#,
         "test.tsx",
         Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(true),
+            include_source_metadata: Some(true),
             ..NativeTransformOptions::default()
         }),
     )
@@ -2160,45 +2160,6 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 
     assert!(result.code.contains("message: \"Hello\""));
     assert!(result.code.contains("message={\"Rich text\"}"));
-}
-
-#[test]
-fn honors_explicit_legacy_strip_message_field_values() {
-    let source = r#"import { t } from "@palamedes/core/macro";
-function message() { return t`Hello`; }
-"#;
-    let stripped = transform_macros_raw(
-        source,
-        "test.ts",
-        Some(NativeTransformOptions {
-            strip_message_field: Some(true),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect("legacy strip transform");
-    let kept = transform_macros_raw(
-        source,
-        "test.ts",
-        Some(NativeTransformOptions {
-            strip_message_field: Some(false),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect("legacy keep transform");
-    let positive_option_wins = transform_macros_raw(
-        source,
-        "test.ts",
-        Some(NativeTransformOptions {
-            keep_source_fallbacks: Some(false),
-            strip_message_field: Some(false),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect("positive option precedence transform");
-
-    assert!(!stripped.code.contains("message: \"Hello\""));
-    assert!(kept.code.contains("message: \"Hello\""));
-    assert!(!positive_option_wins.code.contains("message: \"Hello\""));
 }
 
 #[test]

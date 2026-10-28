@@ -412,7 +412,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
   try {
     result = transformPalamedesMacros(String(source), this.resourcePath, {
       runtimeModule: options.runtimeModule,
-      keepSourceFallbacks: options.keepSourceFallbacks,
+      includeSourceMetadata: options.includeSourceMetadata,
       stripNonEssentialProps: options.stripNonEssentialProps,
       serverFunctions: options.serverFunctions,
       sourceMap: this.sourceMap,

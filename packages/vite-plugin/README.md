@@ -59,8 +59,10 @@ export default defineConfig({
 });
 ```
 
-`failOnCompileError` is deprecated in v2. Invalid or unsupported ICU always
-fails catalog compilation, including when the option is `false`.
+Invalid or unsupported ICU always fails catalog compilation. The plugin
+throws a migration error for the removed v1 options `failOnCompileError`,
+`keepSourceFallbacks` (now `includeSourceMetadata`), and
+`experimentalGraphSplitting`.
 
 ```ts
 import { defineConfig } from "vite";
@@ -103,7 +105,7 @@ palamedes({
   skipValidation: false,
   failOnMissing: false,
   framework: "react",
-  keepSourceFallbacks: undefined,
+  includeSourceMetadata: undefined,
   mdx: {
     translatableAttributes: ["alt", "title"],
     frontMatterFields: ["title", "description"],
@@ -111,8 +113,8 @@ palamedes({
 });
 ```
 
-`keepSourceFallbacks` defaults to `false` in every environment. Set
-`keepSourceFallbacks: true` to retain authored text for diagnostics. Missing
+`includeSourceMetadata` defaults to `false` in every environment. Set
+`includeSourceMetadata: true` to retain authored text for diagnostics. Missing
 compiled messages throw; source metadata never supplies replacement output.
 Valid translation fallbacks are compiled by the native compiler.
 

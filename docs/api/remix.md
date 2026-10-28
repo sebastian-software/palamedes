@@ -69,11 +69,9 @@ interface PalamedesRemixRegisterOptions {
   include?: RegExp;
   exclude?: RegExp;
   runtimeModule?: string;
-  keepSourceFallbacks?: boolean;
+  includeSourceMetadata?: boolean;
   configPath?: string;
   failOnMissing?: boolean;
-  /** @deprecated Invalid and unsupported ICU is always fatal in v2. */
-  failOnCompileError?: boolean;
 }
 ```
 
@@ -82,14 +80,17 @@ Defaults:
 - `include`: `/\.(tsx?|jsx?|mjs|mts)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `false`
+- `includeSourceMetadata`: `false`
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
 - `failOnMissing`: `false` — missing translations warn instead of failing
   `.po` compilation
-- `failOnCompileError`: deprecated compatibility option. Invalid and
-  unsupported ICU always fails `.po` compilation; the option no longer
-  downgrades errors.
+
+Invalid and unsupported ICU always fails `.po` compilation. The load hook throws
+a migration error when it receives the removed v1 `failOnCompileError` or
+`keepSourceFallbacks` option; `keepSourceFallbacks` is now
+`includeSourceMetadata`. See the
+[v2 migration guide](../migration-v2.md#replace-removed-apis).
 
 The default intentionally excludes `.cjs` and `.cts` because the macro
 transform injects ESM imports. Pass a custom `include` only if your hook also
@@ -103,10 +104,10 @@ passing them through a bundler. ESM-typed `.mts` files use the Remix default.
 Macro calls use the plain, framework-neutral getter; locale changes require
 document navigation.
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `false`
-in every environment. Set `keepSourceFallbacks: true` to retain authored text
-as diagnostic metadata. Missing compiled messages always throw; metadata never
-supplies replacement output.
+`includeSourceMetadata` defaults to `false` in every environment. Set
+`includeSourceMetadata: true` to retain authored text as diagnostic metadata.
+Missing compiled messages always throw; metadata never supplies replacement
+output.
 
 `.po` imports are claimed by the hook before Node's default loader runs. They
 compile through the same catalog module path used by the Vite/Next integrations
@@ -149,9 +150,10 @@ imports to served asset URLs. If `runtimeModule` selects another package, allow
 that exact package name instead of `@palamedes/runtime`.
 
 `PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
-`runtimeModule`, and `keepSourceFallbacks` options. Defaults match the Node
-loader. Transform failures identify the source module and retain the original
-error as their cause.
+`runtimeModule`, and `includeSourceMetadata` options. Defaults match the Node
+loader, and the asset loader rejects `keepSourceFallbacks` with the same
+migration error. Transform failures identify the source module and retain the
+original error as their cause.
 
 The browser loader transforms script source and registers its compiled message IDs
 with the shared catalog registry. Native compilation remains on the server;

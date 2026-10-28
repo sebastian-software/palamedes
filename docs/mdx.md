@@ -130,10 +130,11 @@ hook-free. The plugin's `runtimeModule` option applies to macros only — use
 `mdx.runtime-module` to point MDX at a different custom runtime explicitly.
 
 Generated MDX message lookups pass only the compiled message ID by default. Set
-`keepSourceFallbacks: true` on `palamedes()` to also pass the authored source
+`includeSourceMetadata: true` on `palamedes()` to also pass the authored source
 text as diagnostic metadata; a missing compiled message still throws.
-`MdxOptions` accepts the same key in data config, but the Vite plugin overwrites
-it with its own setting, so configure the plugin option when using Vite.
+`MdxOptions` accepts the same setting in data config as
+`include-source-metadata`, but the Vite plugin overwrites it with its own
+setting, so configure the plugin option when using Vite.
 
 The Vite plugin's top-level `framework: "none"` option drops the plugin's own
 MDX framework selection; it does not disable MDX compilation. The compiler then
