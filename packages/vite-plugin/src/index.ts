@@ -482,7 +482,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     if (!config) {
       const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, configPath);
       config = await loadPalamedesConfig({
-        cwd: projectRoot,
+        projectRoot,
         ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
         ...(skipValidation === undefined ? {} : { skipValidation }),
       });

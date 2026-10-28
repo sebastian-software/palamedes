@@ -224,7 +224,7 @@ describe("createPalamedesRemixLoadHook", () => {
     );
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,
-      cwd: "/repo/app/locales",
+      projectRoot: "/repo/app/locales",
     });
     expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
@@ -399,7 +399,7 @@ describe("createPalamedesRemixLoadHook", () => {
     load(new URL("file:///repo/app/locales/de.po").href, loadContext, vi.fn());
 
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
-      cwd: path.dirname(fileURLToPath("file:///repo/app/locales/de.po")),
+      projectRoot: path.dirname(fileURLToPath("file:///repo/app/locales/de.po")),
       configPath: path.join(projectRoot, "config", "palamedes.yaml"),
     });
   });
@@ -464,7 +464,7 @@ describe("createPalamedesRemixCatalogAssetRegistry", () => {
     registry.close?.();
 
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
-      cwd: projectRoot,
+      projectRoot,
       configPath: path.join(projectRoot, "config", "palamedes.yaml"),
     });
   });

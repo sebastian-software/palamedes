@@ -81,17 +81,20 @@ export default defineConfig({
 
 ## `loadPalamedesConfig(options?)`
 
-Searches from `cwd` for a supported config file unless `configPath` is passed.
-The returned object includes `configPath`, `rootDir`, `sourceReferenceRoot`,
-and the resolved `referenceScopes` boolean.
+Searches upward from `projectRoot` (default: the current working directory)
+for a supported config file unless `configPath` is passed. A relative
+`configPath` resolves from `projectRoot`, as in the framework adapters. The
+returned object includes `configPath`, `rootDir`, `sourceReferenceRoot`, and
+the resolved `referenceScopes` boolean.
 
 ```ts
-const config = await loadPalamedesConfig({ cwd: process.cwd() });
+const config = await loadPalamedesConfig({ projectRoot: process.cwd() });
 ```
 
-Options include `cwd`, `configPath`, and `skipValidation`. Use
+Options include `projectRoot`, `configPath`, and `skipValidation`. Use
 `skipValidation` only for tooling that needs to inspect partially-authored
-config files.
+config files. The removed `cwd` option throws the shared v2 migration error;
+rename it to `projectRoot`.
 
 `plugins` is returned in declaration order. Each entry is a package specifier
 or `[specifier, options]`; the native CLI resolves binary plugins relative to a

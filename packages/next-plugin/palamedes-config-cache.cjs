@@ -4,32 +4,32 @@ const { digestConfig: sharedDigestConfig } = require("@palamedes/config");
 
 const configCache = new Map();
 
-function loadConfigCachedSync(configPath, loadConfig, cwd) {
-  const cacheKey = getCacheKey(configPath, cwd);
+function loadConfigCachedSync(configPath, loadConfig, projectRoot) {
+  const cacheKey = getCacheKey(configPath, projectRoot);
   const cached = getCachedConfig(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const config = loadConfig({ configPath, cwd });
+  const config = loadConfig({ configPath, projectRoot });
   cacheConfig(cacheKey, config);
   return config;
 }
 
-async function loadConfigCached(configPath, loadConfig, cwd) {
-  const cacheKey = getCacheKey(configPath, cwd);
+async function loadConfigCached(configPath, loadConfig, projectRoot) {
+  const cacheKey = getCacheKey(configPath, projectRoot);
   const cached = getCachedConfig(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const config = await loadConfig({ configPath, cwd });
+  const config = await loadConfig({ configPath, projectRoot });
   cacheConfig(cacheKey, config);
   return config;
 }
 
-function getCacheKey(configPath, cwd) {
-  return JSON.stringify([configPath ?? "", cwd ?? process.cwd()]);
+function getCacheKey(configPath, projectRoot) {
+  return JSON.stringify([configPath ?? "", projectRoot ?? process.cwd()]);
 }
 
 function getCachedConfig(cacheKey) {

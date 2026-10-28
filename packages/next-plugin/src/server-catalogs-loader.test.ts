@@ -46,7 +46,7 @@ it("generates lazy complete server catalogs in config order and watches imported
   });
   expect(dependencies).toEqual(config.configDependencies);
   expect(loadPalamedesConfigSync).toHaveBeenCalledWith({
-    cwd: "/project",
+    projectRoot: "/project",
     configPath: config.configPath,
   });
   const imports: string[] = [];

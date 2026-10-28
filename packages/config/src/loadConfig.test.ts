@@ -51,7 +51,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: nestedDir });
+    const config = await loadPalamedesConfig({ projectRoot: nestedDir });
 
     expect(config.rootDir).toBe(fixtureDir);
     expect(config.sourceLocale).toBe("en");
@@ -80,7 +80,7 @@ describe("loadPalamedesConfig", () => {
     await writeFile(settingsPath, 'export { locales } from "./locales"\n');
     await writeFile(localesPath, 'export const locales = ["en", "de"]\n');
 
-    const first = loadPalamedesConfigSync({ cwd: fixtureDir });
+    const first = loadPalamedesConfigSync({ projectRoot: fixtureDir });
     expect(first.locales).toStrictEqual(["en", "de"]);
     expect(first.configDependencies).toStrictEqual([
       await realpath(configPath),
@@ -89,7 +89,7 @@ describe("loadPalamedesConfig", () => {
     ]);
 
     await writeFile(localesPath, 'export const locales = ["en", "fr"]\n');
-    const second = await loadPalamedesConfig({ cwd: fixtureDir });
+    const second = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(second.locales).toStrictEqual(["en", "fr"]);
     expect(second.configDependencies).toStrictEqual([
@@ -159,7 +159,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+    const config = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(config.rootDir).toBe(fixtureDir);
     expect(config.sourceLocale).toBe("en");
@@ -195,7 +195,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+    const config = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(config.lint).toStrictEqual({
       rules: {
@@ -223,7 +223,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const jsConfig = await loadPalamedesConfig({ cwd: jsDir });
+    const jsConfig = await loadPalamedesConfig({ projectRoot: jsDir });
     expect(jsConfig.catalogs[0]?.po).toStrictEqual({ lineBreaks: "off" });
 
     const dataDir = await createTempDir();
@@ -240,7 +240,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const dataConfig = loadPalamedesConfigSync({ cwd: dataDir });
+    const dataConfig = loadPalamedesConfigSync({ projectRoot: dataDir });
     expect(dataConfig.catalogs[0]?.po).toStrictEqual({ lineBreaks: "off" });
   });
 
@@ -262,7 +262,7 @@ describe("loadPalamedesConfig", () => {
       }),
     );
 
-    const config = loadPalamedesConfigSync({ cwd: dataDir });
+    const config = loadPalamedesConfigSync({ projectRoot: dataDir });
     expect(config.catalogs[0]?.po).toStrictEqual({ lineBreaks: "off" });
   });
 
@@ -294,7 +294,7 @@ describe("loadPalamedesConfig", () => {
 
       await expect(
         loadPalamedesConfig({
-          cwd: fixtureDir,
+          projectRoot: fixtureDir,
           configPath: `palamedes.config.${name}.ts`,
         }),
       ).rejects.toThrow(expected);
@@ -316,7 +316,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
       /unknown key "catalogs\[0\]\.po\.lineBreaks".*"catalogs\[0\]\.po\.line-breaks"/,
     );
   });
@@ -353,7 +353,7 @@ describe("loadPalamedesConfig", () => {
       const fixtureDir = await createTempDir();
       await writeFile(path.join(fixtureDir, filename), content);
 
-      await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+      await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
         /unknown key "catalogs\[0\]\.po\.line-?break"/i,
       );
     }
@@ -379,7 +379,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+    const config = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(config.mdx).toStrictEqual({
       framework: "solid",
@@ -406,7 +406,7 @@ describe("loadPalamedesConfig", () => {
         `,
       );
 
-      expect((await loadPalamedesConfig({ cwd: fixtureDir })).mdx).toStrictEqual({
+      expect((await loadPalamedesConfig({ projectRoot: fixtureDir })).mdx).toStrictEqual({
         includeSourceMetadata: true,
       });
     }
@@ -417,7 +417,7 @@ describe("loadPalamedesConfig", () => {
       `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mdx: { includeSourceMetadata: true } }`,
     );
 
-    expect((await loadPalamedesConfig({ cwd: javascriptDir })).mdx).toStrictEqual({
+    expect((await loadPalamedesConfig({ projectRoot: javascriptDir })).mdx).toStrictEqual({
       includeSourceMetadata: true,
     });
   });
@@ -440,7 +440,9 @@ describe("loadPalamedesConfig", () => {
           `,
         );
 
-        await expect(loadPalamedesConfig({ cwd: fixtureDir, skipValidation })).rejects.toThrow(
+        await expect(
+          loadPalamedesConfig({ projectRoot: fixtureDir, skipValidation }),
+        ).rejects.toThrow(
           `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the v2 default is false.`,
         );
       }
@@ -453,7 +455,7 @@ describe("loadPalamedesConfig", () => {
       `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mdx: { keepSourceFallbacks: true } }`,
     );
 
-    await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: javascriptDir })).rejects.toThrow(
       `Invalid Palamedes config in ${javascriptPath}: Palamedes v2 renamed mdx.keepSourceFallbacks to mdx.includeSourceMetadata: it only adds diagnostic source metadata. Rename the key; the v2 default is false.`,
     );
   });
@@ -465,7 +467,7 @@ describe("loadPalamedesConfig", () => {
       await readFile(sharedConfigKeyFixture, "utf8"),
     );
 
-    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+    const config = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(config.mdx).toMatchObject({
       framework: "react",
@@ -499,10 +501,12 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    expect(() => loadPalamedesConfigSync({ cwd: fixtureDir })).toThrow(
+    expect(() => loadPalamedesConfigSync({ projectRoot: fixtureDir })).toThrow(
       /unknown key "partially-authored"\./,
     );
-    expect(() => loadPalamedesConfigSync({ cwd: fixtureDir, skipValidation: true })).not.toThrow();
+    expect(() =>
+      loadPalamedesConfigSync({ projectRoot: fixtureDir, skipValidation: true }),
+    ).not.toThrow();
   });
 
   it("accepts reserved top-level metadata in data configs", async () => {
@@ -523,11 +527,11 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    await expect(loadPalamedesConfig({ cwd: fixtureDir })).resolves.toMatchObject({
+    await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).resolves.toMatchObject({
       locales: ["en"],
       sourceLocale: "en",
     });
-    expect(loadPalamedesConfigSync({ cwd: fixtureDir })).toMatchObject({
+    expect(loadPalamedesConfigSync({ projectRoot: fixtureDir })).toMatchObject({
       locales: ["en"],
       sourceLocale: "en",
     });
@@ -603,14 +607,16 @@ describe("loadPalamedesConfig", () => {
     for (const testCase of cases) {
       const dataDir = await createTempDir();
       await writeFile(path.join(dataDir, "palamedes.json"), JSON.stringify(testCase.data()));
-      expect(() => loadPalamedesConfigSync({ cwd: dataDir })).toThrow(testCase.dataExpected);
+      expect(() => loadPalamedesConfigSync({ projectRoot: dataDir })).toThrow(
+        testCase.dataExpected,
+      );
 
       const javascriptDir = await createTempDir();
       await writeFile(
         path.join(javascriptDir, "palamedes.config.ts"),
         `export default ${JSON.stringify(testCase.javascript())}`,
       );
-      await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
+      await expect(loadPalamedesConfig({ projectRoot: javascriptDir })).rejects.toThrow(
         testCase.javascriptExpected,
       );
     }
@@ -630,8 +636,10 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    expect(() => loadPalamedesConfigSync({ cwd: dataDir })).toThrow(/unknown key "mystery"\./);
-    expect(() => loadPalamedesConfigSync({ cwd: dataDir })).toThrow(
+    expect(() => loadPalamedesConfigSync({ projectRoot: dataDir })).toThrow(
+      /unknown key "mystery"\./,
+    );
+    expect(() => loadPalamedesConfigSync({ projectRoot: dataDir })).toThrow(
       /unknown key "mystery"\.(?! Did you mean)/,
     );
 
@@ -640,7 +648,7 @@ describe("loadPalamedesConfig", () => {
       path.join(javascriptDir, "palamedes.config.ts"),
       `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mystery: true }`,
     );
-    await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: javascriptDir })).rejects.toThrow(
       /unknown key "mystery"\.(?! Did you mean)/,
     );
   });
@@ -664,7 +672,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = loadPalamedesConfigSync({ cwd: fixtureDir });
+    const config = loadPalamedesConfigSync({ projectRoot: fixtureDir });
     expect(config.fallbackLocales).toStrictEqual({ de: ["en"] });
     expect(config.plugins).toStrictEqual([
       ["@acme/palamedes-workflows", { "custom-option": "enabled" }],
@@ -675,7 +683,7 @@ describe("loadPalamedesConfig", () => {
       `export default { ...${JSON.stringify(baseJavaScriptConfig())}, fallbackLocale: ["en"] }`,
     );
     await expect(
-      loadPalamedesConfig({ cwd: fixtureDir, configPath: "palamedes.config.ts" }),
+      loadPalamedesConfig({ projectRoot: fixtureDir, configPath: "palamedes.config.ts" }),
     ).rejects.toThrow(/unknown key "fallbackLocale"\. Did you mean "fallbackLocales"\?/);
 
     await writeFile(
@@ -689,9 +697,9 @@ describe("loadPalamedesConfig", () => {
             include: [src]
       `,
     );
-    expect(() => loadPalamedesConfigSync({ cwd: fixtureDir, configPath: "camel.yaml" })).toThrow(
-      /unknown key "pseudoLocale"\. Data configs use kebab-case: "pseudo-locale"\./,
-    );
+    expect(() =>
+      loadPalamedesConfigSync({ projectRoot: fixtureDir, configPath: "camel.yaml" }),
+    ).toThrow(/unknown key "pseudoLocale"\. Data configs use kebab-case: "pseudo-locale"\./);
   });
 
   it("loads a palamedes.yaml file synchronously with the same normalization", async () => {
@@ -709,7 +717,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = loadPalamedesConfigSync({ cwd: fixtureDir });
+    const config = loadPalamedesConfigSync({ projectRoot: fixtureDir });
 
     expect(config.rootDir).toBe(fixtureDir);
     expect(config.sourceLocale).toBe("en");
@@ -736,7 +744,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
       /"catalogs\[0\]\.format" value "ndjson" is no longer supported; use "fcl"/,
     );
   });
@@ -758,7 +766,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+    const config = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.toml"));
     expect(config.sourceLocale).toBe("en");
@@ -784,7 +792,7 @@ describe("loadPalamedesConfig", () => {
       }),
     );
 
-    const config = await loadPalamedesConfig({ cwd: fixtureDir });
+    const config = await loadPalamedesConfig({ projectRoot: fixtureDir });
 
     expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.json"));
     expect(config.sourceLocale).toBe("en");
@@ -815,13 +823,21 @@ describe("loadPalamedesConfig", () => {
     );
 
     const config = loadPalamedesConfigSync({
-      cwd: fixtureDir,
+      projectRoot: fixtureDir,
       configPath: "./custom.config.ts",
     });
 
     expect(config.configPath).toBe(configPath);
     expect(config.pseudoLocale).toBe("pseudo");
     expect(config.catalogs[0]?.exclude).toStrictEqual(["src/ignore"]);
+  });
+
+  it("rejects the removed cwd option with the shared migration error", async () => {
+    const options = { cwd: process.cwd() } as unknown as Parameters<typeof loadPalamedesConfig>[0];
+    const message = /Palamedes v2 renamed cwd to projectRoot/;
+
+    await expect(loadPalamedesConfig(options)).rejects.toThrow(message);
+    expect(() => loadPalamedesConfigSync(options)).toThrow(message);
   });
 
   it("loads an explicitly provided config path", async () => {
@@ -847,7 +863,7 @@ describe("loadPalamedesConfig", () => {
     );
 
     const config = await loadPalamedesConfig({
-      cwd: fixtureDir,
+      projectRoot: fixtureDir,
       configPath: "./custom.config.ts",
     });
 
@@ -878,7 +894,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: appDir });
+    const config = await loadPalamedesConfig({ projectRoot: appDir });
 
     expect(config.rootDir).toBe(appDir);
     expect(config.sourceReferenceRoot).toBe(fixtureDir);
@@ -907,7 +923,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    const config = await loadPalamedesConfig({ cwd: appDir });
+    const config = await loadPalamedesConfig({ projectRoot: appDir });
 
     expect(config.rootDir).toBe(appDir);
     expect(config.sourceReferenceRoot).toBe(appDir);
@@ -926,7 +942,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
       /"sourceLocale" must be included in "locales"/,
     );
   });
@@ -945,7 +961,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
       /"referenceScopes" must be a boolean/,
     );
   });
@@ -964,7 +980,7 @@ describe("loadPalamedesConfig", () => {
       `,
     );
 
-    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+    await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
       /"plugins\[0\]" must be a non-empty package specifier or \[specifier, options\]/,
     );
   });

@@ -143,7 +143,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
   const projectRoot = resolvePalamedesProjectRoot(options.projectRoot);
   const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, options.configPath);
   const configLoaderOptions = {
-    cwd: projectRoot,
+    projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
   };
   let config = loadPalamedesConfigSync(configLoaderOptions);
@@ -768,14 +768,14 @@ function getPalamedesConfigForCatalog(
 ): LoadedPalamedesConfig {
   // `configPath` is already absolute (resolved from projectRoot). Without it,
   // each catalog discovers its config from its own directory upward.
-  const cwd = path.dirname(resourcePath);
-  const cacheKey = configPath ?? `${cwd}\0`;
+  const catalogDirectory = path.dirname(resourcePath);
+  const cacheKey = configPath ?? `${catalogDirectory}\0`;
   const cached = configCache.get(cacheKey);
   if (cached && isCurrentConfig(cached)) {
     return cached.config;
   }
 
-  const config = loadPalamedesConfigSync({ cwd, configPath });
+  const config = loadPalamedesConfigSync({ projectRoot: catalogDirectory, configPath });
   cacheConfig(configCache, cacheKey, config);
   return config;
 }

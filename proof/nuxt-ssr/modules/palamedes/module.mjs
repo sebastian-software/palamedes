@@ -73,7 +73,7 @@ export default defineNuxtModule({
         const delivery = createViteCatalogDelivery({
           clientDirectory: path.join(nuxt.options.buildDir, "dist/client"),
         });
-        const { locales } = loadPalamedesConfigSync({ cwd: nuxt.options.rootDir });
+        const { locales } = loadPalamedesConfigSync({ projectRoot: nuxt.options.rootDir });
         return `export default ${JSON.stringify(Object.fromEntries(locales.map((locale) => [locale, delivery.getLocaleBinding(locale)])))};`;
       };
     });

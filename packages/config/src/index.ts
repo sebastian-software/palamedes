@@ -144,10 +144,30 @@ export function digestConfig(config: ConfigDependencyInput): string {
 }
 
 export type LoadPalamedesConfigOptions = {
-  cwd?: string;
+  /**
+   * Directory where config discovery starts and that a relative `configPath`
+   * resolves from. Defaults to the current working directory.
+   */
+  projectRoot?: string;
+  /** Explicit config file, absolute or relative to `projectRoot`. */
   configPath?: string;
   skipValidation?: boolean;
 };
+
+/**
+ * Same text as `REMOVED_PALAMEDES_OPTION_MESSAGES.cwd` in `@palamedes/core-node`.
+ * The config loader cannot depend on the native package; a parity test in
+ * `@palamedes/vite-plugin` keeps the two messages identical.
+ */
+const REMOVED_CWD_OPTION_MESSAGE =
+  "Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.";
+
+function resolveLoaderProjectRoot(options: LoadPalamedesConfigOptions): string {
+  if ((options as { cwd?: unknown }).cwd !== undefined) {
+    throw new Error(REMOVED_CWD_OPTION_MESSAGE);
+  }
+  return path.resolve(options.projectRoot ?? process.cwd());
+}
 
 export function defineConfig(config: PalamedesConfig): PalamedesConfig {
   return config;
@@ -156,8 +176,8 @@ export function defineConfig(config: PalamedesConfig): PalamedesConfig {
 export async function loadPalamedesConfig(
   options: LoadPalamedesConfigOptions = {},
 ): Promise<LoadedPalamedesConfig> {
-  const cwd = path.resolve(options.cwd ?? process.cwd());
-  const configPath = await resolveConfigPath(cwd, options.configPath);
+  const projectRoot = resolveLoaderProjectRoot(options);
+  const configPath = await resolveConfigPath(projectRoot, options.configPath);
   const loaded = await loadConfigFile(configPath, !options.skipValidation);
 
   if (!options.skipValidation) {
@@ -170,8 +190,8 @@ export async function loadPalamedesConfig(
 export function loadPalamedesConfigSync(
   options: LoadPalamedesConfigOptions = {},
 ): LoadedPalamedesConfig {
-  const cwd = path.resolve(options.cwd ?? process.cwd());
-  const configPath = resolveConfigPathSync(cwd, options.configPath);
+  const projectRoot = resolveLoaderProjectRoot(options);
+  const configPath = resolveConfigPathSync(projectRoot, options.configPath);
   const loaded = loadConfigFileSync(configPath, !options.skipValidation);
 
   if (!options.skipValidation) {
@@ -875,14 +895,14 @@ export function expandFallbackLocales(
   );
 }
 
-async function resolveConfigPath(cwd: string, explicitPath?: string): Promise<string> {
+async function resolveConfigPath(projectRoot: string, explicitPath?: string): Promise<string> {
   if (explicitPath) {
-    const resolved = path.resolve(cwd, explicitPath);
+    const resolved = path.resolve(projectRoot, explicitPath);
     await assertFileExists(resolved);
     return resolved;
   }
 
-  let current = cwd;
+  let current = projectRoot;
 
   while (true) {
     for (const name of CONFIG_FILENAMES) {
@@ -904,14 +924,14 @@ async function resolveConfigPath(cwd: string, explicitPath?: string): Promise<st
   );
 }
 
-function resolveConfigPathSync(cwd: string, explicitPath?: string): string {
+function resolveConfigPathSync(projectRoot: string, explicitPath?: string): string {
   if (explicitPath) {
-    const resolved = path.resolve(cwd, explicitPath);
+    const resolved = path.resolve(projectRoot, explicitPath);
     assertFileExistsSync(resolved);
     return resolved;
   }
 
-  let current = cwd;
+  let current = projectRoot;
 
   while (true) {
     for (const name of CONFIG_FILENAMES) {

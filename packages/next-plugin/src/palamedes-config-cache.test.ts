@@ -11,13 +11,13 @@ const { clearConfigCache, loadConfigCached, loadConfigCachedSync } =
     clearConfigCache(): void;
     loadConfigCached<T>(
       configPath: string | undefined,
-      loadConfig: (options: { configPath?: string; cwd?: string }) => Promise<T>,
-      cwd?: string,
+      loadConfig: (options: { configPath?: string; projectRoot?: string }) => Promise<T>,
+      projectRoot?: string,
     ): Promise<T>;
     loadConfigCachedSync<T>(
       configPath: string | undefined,
-      loadConfig: (options: { configPath?: string; cwd?: string }) => T,
-      cwd?: string,
+      loadConfig: (options: { configPath?: string; projectRoot?: string }) => T,
+      projectRoot?: string,
     ): T;
   };
 
@@ -83,8 +83,8 @@ describe("palamedes-config-cache.cjs", () => {
     const firstPath = path.join(firstRoot, "palamedes.yaml");
     const secondPath = path.join(secondRoot, "palamedes.yaml");
     await Promise.all([writeFile(firstPath, "first"), writeFile(secondPath, "second")]);
-    const loadConfig = vi.fn(({ cwd }: { cwd?: string }) =>
-      cwd === firstRoot
+    const loadConfig = vi.fn(({ projectRoot }: { projectRoot?: string }) =>
+      projectRoot === firstRoot
         ? { configPath: firstPath, value: "first" }
         : { configPath: secondPath, value: "second" },
     );
