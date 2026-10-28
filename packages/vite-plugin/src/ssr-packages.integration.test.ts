@@ -76,6 +76,20 @@ describe("installed Palamedes server packages", () => {
     await expect(entry.locale()).resolves.toBe("de");
   });
 
+  it("loads server catalogs through an installed React Router adapter", async () => {
+    // The adapter imports `@palamedes/runtime/server/bundled`, whose virtual
+    // catalog import Node cannot resolve if Vite externalizes the adapter.
+    const root = await createFixture();
+    await createReactRouterFixture(root);
+    server = await createServer({
+      ...config(root),
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+    const entry = await server.ssrLoadModule("/react-router-entry.ts");
+    await expect(entry.locale()).resolves.toBe("de");
+  });
+
   it("builds an executable server without external virtual imports", async () => {
     const root = await createFixture();
     await build({
@@ -121,6 +135,7 @@ describe("installed Palamedes server packages", () => {
         ...(Array.isArray(noExternal) ? noExternal : [noExternal]),
         "@palamedes/runtime",
         "@palamedes/vite-plugin",
+        "@palamedes/react-router",
         "@palamedes/waku",
       ]);
     }
@@ -141,7 +156,12 @@ describe("installed Palamedes server packages", () => {
       },
       "build",
     );
-    const packages = ["@palamedes/runtime", "@palamedes/vite-plugin", "@palamedes/waku"];
+    const packages = [
+      "@palamedes/runtime",
+      "@palamedes/vite-plugin",
+      "@palamedes/react-router",
+      "@palamedes/waku",
+    ];
     expect(resolved.environments.ssr?.resolve.noExternal).toEqual(packages);
     expect(resolved.environments.rsc?.resolve.noExternal).toEqual(["custom-package", ...packages]);
     expect(resolved.environments.worker?.resolve.noExternal).toBe(true);
@@ -195,6 +215,38 @@ export async function locale() { return (await createBundledServerI18n({ locale:
     );
   }
   return root;
+}
+
+// Installs the React Router adapter's build next to its router and React peers.
+async function createReactRouterFixture(root: string): Promise<void> {
+  const adapterSource = path.join(packageRoot, "react-router");
+  const adapter = path.join(root, "node_modules/@palamedes/react-router");
+  await mkdir(adapter);
+  await cp(path.join(adapterSource, "package.json"), path.join(adapter, "package.json"));
+  await cp(path.join(adapterSource, "dist"), path.join(adapter, "dist"), { recursive: true });
+  for (const name of ["react-router", "@react-router/node", "react", "react-dom", "isbot"]) {
+    const target = path.join(root, "node_modules", name);
+    await mkdir(path.dirname(target), { recursive: true });
+    await symlink(
+      await realpath(path.join(adapterSource, "node_modules", name)),
+      target,
+      "junction",
+    );
+  }
+  await writeFile(
+    path.join(root, "react-router-entry.ts"),
+    `
+import { getI18n } from "@palamedes/runtime";
+import { createReactRouterI18n } from "@palamedes/react-router";
+import { RouterContextProvider } from "react-router";
+const i18n = createReactRouterI18n({ resolveLocale: () => "de", catalogDelivery: false });
+export function locale() {
+  return i18n.run(new Request("https://example.test/"), new RouterContextProvider(), () =>
+    getI18n().locale,
+  );
+}
+`,
+  );
 }
 
 // Models the module-local request store of `waku/router/server`.
