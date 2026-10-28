@@ -5,11 +5,10 @@
 //! A macro called from markup is rejected with a located error instead of
 //! silently surviving as a reference to an import the transform removes.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use oxc_allocator::Allocator;
-use oxc_ast::ast::BindingIdentifier;
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
@@ -51,25 +50,32 @@ pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> Palamede
     let scan = scan(source, filename)?;
     let mut markup_bindings = scan.bindings;
     let mut calls = Vec::new();
+    let mut local = Vec::new();
     for &start in &scan.expressions {
-        let mut expression_calls = Vec::new();
-        let end = expression_scan(source, start, &mut |word_start, word_end| {
+        let first_call = calls.len();
+        let Some(end) = expression_scan(source, start, &mut |word_start, word_end| {
             if is_call_shape(source.as_bytes(), word_start, word_end) {
-                expression_calls.push(word_start..word_end);
+                calls.push(word_start..word_end);
             }
-        });
-        // Parsing for bindings only pays off for a call or a block header.
-        let bindings = end
-            .map(|end| &source[start + 1..end - 1])
-            .filter(|text| !expression_calls.is_empty() || binds_block_names(text))
-            .map(expression_bindings);
-        if let Some(bindings) = &bindings {
-            expression_calls.retain(|call| !bindings.local.contains(&source[call.clone()]));
+        }) else {
+            continue;
+        };
+        local.clear();
+        expression_bindings(
+            &source[start + 1..end - 1],
+            &mut local,
+            &mut markup_bindings,
+        );
+        let mut index = first_call;
+        while index < calls.len() {
+            if local.contains(&&source[calls[index].clone()]) {
+                calls.remove(index);
+            } else {
+                index += 1;
+            }
         }
-        calls.extend(expression_calls);
-        markup_bindings.extend(bindings.into_iter().flat_map(|bindings| bindings.block));
     }
-    calls.retain(|call| !markup_bindings.contains(&source[call.clone()]));
+    calls.retain(|call| !markup_bindings.contains(&&source[call.clone()]));
     if calls.is_empty() {
         return Ok(());
     }
@@ -125,18 +131,18 @@ fn is_call_shape(bytes: &[u8], word_start: usize, word_end: usize) -> bool {
     !is_member && matches!(after, Some(b'`' | b'('))
 }
 
-struct Scan {
+struct Scan<'a> {
     scripts: Vec<ScriptBlock>,
     /// Start offsets of markup and attribute brace expressions.
     expressions: Vec<usize>,
     /// Names bound by `let:` directives.
-    bindings: HashSet<String>,
+    bindings: Vec<&'a str>,
 }
 
-fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
+fn scan<'a>(source: &'a str, filename: &str) -> PalamedesResult<Scan<'a>> {
     let mut scripts = Vec::new();
     let mut expressions = Vec::new();
-    let mut bindings = HashSet::new();
+    let mut bindings = Vec::new();
     let mut cursor = 0;
     let mut elements = 0_usize;
     let mut blocks = 0_usize;
@@ -173,12 +179,12 @@ fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
             expressions.extend_from_slice(&tag.expressions);
             for (key, value) in &tag.attributes {
                 if let Some(name) = key.strip_prefix("let:") {
-                    bindings.insert(name.to_owned());
+                    bindings.push(name);
                     if let Some(pattern) = value
                         .strip_prefix('{')
                         .and_then(|value| value.strip_suffix('}'))
                     {
-                        bindings.extend(pattern_bindings(pattern));
+                        identifier_words(pattern, &mut bindings);
                     }
                 }
             }
@@ -290,105 +296,106 @@ fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
     })
 }
 
-/// Names one markup brace expression binds.
-#[derive(Default)]
-struct ExpressionBindings {
-    /// Arrow and function parameters, visible within the expression.
-    local: HashSet<String>,
-    /// Block, snippet, and `@const` bindings, visible to enclosed markup.
-    block: HashSet<String>,
-}
-
-/// Whether a markup brace expression is a header that binds names for the
-/// markup it encloses.
-fn binds_block_names(text: &str) -> bool {
-    let text = text.trim_start();
-    ["#each", "#snippet", "#await", ":then", ":catch", "@const"]
-        .iter()
-        .any(|prefix| text.starts_with(prefix))
-}
-
 /// Collects the names a markup brace expression binds; `text` is the content
-/// between its braces.
-fn expression_bindings(text: &str) -> ExpressionBindings {
-    let mut bindings = ExpressionBindings::default();
+/// between its braces. Arrow and function parameters go to `local`, visible
+/// within the expression; block, snippet, and `@const` bindings go to `block`,
+/// visible to the enclosed markup.
+///
+/// The reading is lexical, without a JavaScript parser: every identifier in a
+/// binding pattern or parameter list counts as bound, including property keys,
+/// defaults, and type annotations. That over-approximation only suppresses
+/// reports, and it keeps the check small in the shipped binaries.
+fn expression_bindings<'a>(text: &'a str, local: &mut Vec<&'a str>, block: &mut Vec<&'a str>) {
     let text = text.trim();
     if let Some(rest) = text.strip_prefix("#each") {
         let (iterable, pattern) = split_top_level_word(rest, "as");
-        bindings.local = javascript_bindings(&format!("({iterable});")).unwrap_or_default();
+        parameter_names(iterable, local);
         if let Some(pattern) = pattern {
-            bindings.block = pattern_bindings(strip_each_key(pattern));
+            identifier_words(strip_each_key(pattern), block);
         }
     } else if let Some(rest) = text.strip_prefix("#snippet") {
-        bindings.block = javascript_bindings(&format!("function {rest} {{}}"))
-            .unwrap_or_else(|| identifier_words(rest));
+        // The snippet name and its parameters.
+        identifier_words(rest, block);
     } else if let Some(rest) = text.strip_prefix("#await") {
         let (promise, then) = split_top_level_word(rest, "then");
         let (promise, pattern) = match then {
             Some(pattern) => (promise, Some(pattern)),
             None => split_top_level_word(promise, "catch"),
         };
-        bindings.local = javascript_bindings(&format!("({promise});")).unwrap_or_default();
+        parameter_names(promise, local);
         if let Some(pattern) = pattern {
-            bindings.block = pattern_bindings(pattern);
+            identifier_words(pattern, block);
         }
     } else if let Some(pattern) = text
         .strip_prefix(":then")
         .or_else(|| text.strip_prefix(":catch"))
     {
-        bindings.block = pattern_bindings(pattern);
+        identifier_words(pattern, block);
     } else if let Some(rest) = text.strip_prefix("@const") {
-        bindings.block = javascript_bindings(&format!("const {rest};")).unwrap_or_else(|| {
-            identifier_words(rest.split_once('=').map_or(rest, |(pattern, _)| pattern))
-        });
+        let (pattern, value) = rest.split_once('=').unwrap_or((rest, ""));
+        identifier_words(pattern, block);
+        parameter_names(value, local);
     } else {
-        let expression = [
-            "#if", "#key", ":else if", ":else", "@html", "@render", "@debug",
-        ]
-        .iter()
-        .find_map(|keyword| text.strip_prefix(keyword))
-        .unwrap_or(text);
-        bindings.local = javascript_bindings(&format!("({expression});")).unwrap_or_default();
+        parameter_names(text, local);
     }
-    bindings
 }
 
-/// Names bound by a destructuring pattern or parameter list; every identifier
-/// in the text when it does not parse, which errs toward fewer reports.
-fn pattern_bindings(pattern: &str) -> HashSet<String> {
-    javascript_bindings(&format!("({pattern}) => 0;")).unwrap_or_else(|| identifier_words(pattern))
-}
-
-/// Binding identifiers declared anywhere in a JavaScript snippet, or `None`
-/// when the snippet does not parse.
-fn javascript_bindings(snippet: &str) -> Option<HashSet<String>> {
-    struct Collector(HashSet<String>);
-    impl<'a> Visit<'a> for Collector {
-        fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-            self.0.insert(it.name.to_string());
+/// Identifiers in the parameter lists of arrow functions and function
+/// expressions in `text`.
+fn parameter_names<'a>(text: &'a str, names: &mut Vec<&'a str>) {
+    let mut search = 0;
+    while let Some(offset) = text[search..].find("=>") {
+        let arrow = search + offset;
+        search = arrow + 2;
+        let before = text[..arrow].trim_end();
+        let parameters = if before.ends_with(')') {
+            matching_open_paren(before).map_or("", |open| &before[open..])
+        } else {
+            let start = before
+                .char_indices()
+                .rev()
+                .find(|(_, character)| !is_identifier_char(*character))
+                .map_or(0, |(index, character)| index + character.len_utf8());
+            &before[start..]
+        };
+        identifier_words(parameters, names);
+    }
+    let mut search = 0;
+    while let Some(offset) = text[search..].find("function") {
+        let after = &text[search + offset..];
+        search += offset + "function".len();
+        if let Some(open) = after.find('(') {
+            let close = after[open..]
+                .find(')')
+                .map_or(after.len(), |end| open + end);
+            identifier_words(&after[open..close], names);
         }
     }
-
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, snippet, SourceType::ts()).parse();
-    if !parsed.diagnostics.is_empty() {
-        return None;
-    }
-    let mut collector = Collector(HashSet::new());
-    collector.visit_program(&parsed.program);
-    Some(collector.0)
 }
 
-/// Every identifier-like word in `text`.
-fn identifier_words(text: &str) -> HashSet<String> {
-    text.split(|character: char| !(character.is_alphanumeric() || matches!(character, '_' | '$')))
-        .filter(|word| {
-            word.chars()
-                .next()
-                .is_some_and(|first| !first.is_ascii_digit())
-        })
-        .map(ToOwned::to_owned)
-        .collect()
+fn is_identifier_char(character: char) -> bool {
+    character.is_alphanumeric() || matches!(character, '_' | '$')
+}
+
+/// Appends every identifier-like word in `text` to `names`.
+fn identifier_words<'a>(text: &'a str, names: &mut Vec<&'a str>) {
+    let mut start = None;
+    for (index, character) in text.char_indices() {
+        if is_identifier_char(character) {
+            start.get_or_insert(index);
+        } else if let Some(word_start) = start.take() {
+            push_word(text, word_start, index, names);
+        }
+    }
+    if let Some(word_start) = start {
+        push_word(text, word_start, text.len(), names);
+    }
+}
+
+fn push_word<'a>(text: &'a str, start: usize, end: usize, names: &mut Vec<&'a str>) {
+    if !text.as_bytes()[start].is_ascii_digit() {
+        names.push(&text[start..end]);
+    }
 }
 
 /// Splits `text` at the last occurrence of `word` outside brackets, strings,
@@ -443,20 +450,25 @@ fn strip_each_key(pattern: &str) -> &str {
     if !trimmed.ends_with(')') {
         return trimmed;
     }
+    matching_open_paren(trimmed).map_or(trimmed, |open| &trimmed[..open])
+}
+
+/// The index of the `(` that matches the `)` ending `text`.
+fn matching_open_paren(text: &str) -> Option<usize> {
     let mut depth = 0_usize;
-    for (index, byte) in trimmed.bytes().enumerate().rev() {
+    for (index, byte) in text.bytes().enumerate().rev() {
         match byte {
             b')' => depth += 1,
             b'(' => {
-                depth -= 1;
+                depth = depth.checked_sub(1)?;
                 if depth == 0 {
-                    return &trimmed[..index];
+                    return Some(index);
                 }
             }
             _ => {}
         }
     }
-    trimmed
+    None
 }
 
 struct Tag<'a> {

@@ -18,6 +18,9 @@ use crate::plugins;
 
 #[derive(Debug, Parser)]
 #[command(name = "pmds")]
+// Usage lines name `pmds` on every platform instead of the executable file
+// name, which is `pmds.exe` on Windows.
+#[command(bin_name = "pmds")]
 #[command(version)]
 #[command(about = tr!("Palamedes CLI for extraction, source lint, audits, reports, and catalogs"))]
 pub struct Cli {
