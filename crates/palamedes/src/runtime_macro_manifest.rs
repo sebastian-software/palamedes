@@ -280,6 +280,7 @@ impl ManifestVisitor<'_, '_> {
         let (message, lowered_values) = lower_template(
             template,
             self.source,
+            &self.collector.imported_macros,
             "template expression",
             &mut used_value_names,
         )?;
@@ -346,6 +347,7 @@ impl ManifestVisitor<'_, '_> {
                 let (message, _) = lower_template(
                     template,
                     self.source,
+                    &self.collector.imported_macros,
                     "template expression",
                     &mut used_value_names,
                 )?;
@@ -402,6 +404,7 @@ impl ManifestVisitor<'_, '_> {
         let lowered = lower_choice_options_from_object(
             object,
             self.source,
+            &self.collector.imported_macros,
             &mut used_value_names,
             format,
             macro_name,

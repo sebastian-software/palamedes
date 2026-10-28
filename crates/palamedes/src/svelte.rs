@@ -2,8 +2,9 @@
 //!
 //! Markup expressions, attributes, comments, styles, and nested HTML scripts are
 //! not extraction surfaces. OXC owns all JavaScript/TypeScript macro semantics.
-//! A macro called from markup is rejected with a located error instead of
-//! silently surviving as a reference to an import the transform removes.
+//! A macro called or referenced from markup is rejected with a located error
+//! instead of silently surviving as a reference to an import the transform
+//! removes.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -29,18 +30,19 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
     scan(source, filename).map(|scan| scan.scripts)
 }
 
-/// Reject a Palamedes macro called from Svelte markup.
+/// Reject a Palamedes macro called or referenced from Svelte markup, including
+/// a bare value such as `{handler(t)}`.
 ///
 /// Markup is not an extraction or transform surface, but the script transform
 /// still removes the macro import. Without this check the component would
 /// compile and then fail at runtime with a `ReferenceError`.
 ///
-/// A name that markup binds itself shadows the import, so its calls are the
+/// A name that markup binds itself shadows the import, so its uses are the
 /// author's own: `{#each items as t}`, `{#snippet row(t)}`, `let:t`,
 /// `{#await … then t}`, `{:catch t}`, and `{@const t = …}`. The check
 /// approximates Svelte's scoping: a block or `let:` binding exempts the name in
 /// all markup of the component, and an arrow or function parameter exempts it
-/// within the same brace expression. A macro call outside the binding's real
+/// within the same brace expression. A macro use outside the binding's real
 /// scope that reuses a shadowed name therefore goes unreported; the check
 /// prefers that rare miss over rejecting valid markup.
 pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> PalamedesResult<()> {
@@ -48,14 +50,24 @@ pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> Palamede
         return Ok(());
     }
     let scan = scan(source, filename)?;
+    if scan.expressions.is_empty() {
+        return Ok(());
+    }
+    let macros = imported_macros(source, &scan.scripts);
+    if macros.is_empty() {
+        return Ok(());
+    }
     let mut markup_bindings = scan.bindings;
-    let mut calls = Vec::new();
+    let mut references = Vec::new();
+    let mut expression_references = Vec::new();
     let mut local = Vec::new();
     for &start in &scan.expressions {
-        let first_call = calls.len();
+        expression_references.clear();
         let Some(end) = expression_scan(source, start, &mut |word_start, word_end| {
-            if is_call_shape(source.as_bytes(), word_start, word_end) {
-                calls.push(word_start..word_end);
+            if macros.contains_key(&source[word_start..word_end])
+                && is_reference_shape(source.as_bytes(), word_start, word_end)
+            {
+                expression_references.push(word_start..word_end);
             }
         }) else {
             continue;
@@ -66,35 +78,29 @@ pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> Palamede
             &mut local,
             &mut markup_bindings,
         );
-        let mut index = first_call;
-        while index < calls.len() {
-            if local.contains(&&source[calls[index].clone()]) {
-                calls.remove(index);
-            } else {
-                index += 1;
-            }
-        }
+        references.extend(
+            expression_references
+                .drain(..)
+                .filter(|reference| !local.contains(&&source[reference.clone()])),
+        );
     }
-    calls.retain(|call| !markup_bindings.contains(&&source[call.clone()]));
-    if calls.is_empty() {
-        return Ok(());
-    }
-    let macros = imported_macros(source, &scan.scripts);
-    let Some((offset, macro_name)) = calls
+    let Some(reference) = references
         .into_iter()
-        .filter_map(|call| {
-            macros
-                .get(&source[call.clone()])
-                .map(|imported_name| (call.start, imported_name))
-        })
-        .min_by_key(|(offset, _)| *offset)
+        .filter(|reference| !markup_bindings.contains(&&source[reference.clone()]))
+        .min_by_key(|reference| reference.start)
     else {
         return Ok(());
     };
+    let macro_name = &macros[&source[reference.clone()]];
+    let detail = if is_call_shape(source.as_bytes(), reference.end) {
+        "Svelte markup is not a macro surface, so this call would be neither extracted nor transformed; move the macro call into the component <script> block and render the resulting value"
+    } else {
+        "Svelte markup is not a macro surface, and the transform removes the macro import, so this reference would throw a ReferenceError; call the macro in the component <script> block and pass the resulting value instead"
+    };
     Err(PalamedesError::UnsupportedMacroSyntax {
         macro_name: macro_name.clone(),
-        location: source_location(source, display_filename(filename), offset),
-        detail: "Svelte markup is not a macro surface, so this call would be neither extracted nor transformed; move the macro call into the component <script> block and render the resulting value".to_string(),
+        location: source_location(source, display_filename(filename), reference.start),
+        detail: detail.to_owned(),
     })
 }
 
@@ -118,17 +124,43 @@ fn imported_macros(source: &str, scripts: &[ScriptBlock]) -> HashMap<String, Str
     macros
 }
 
-/// A tagged template or call on a plain identifier, not a member access.
-fn is_call_shape(bytes: &[u8], word_start: usize, word_end: usize) -> bool {
+/// A plain identifier reference: a call, a tagged template, or a bare value
+/// such as `{handler(t)}`. Member names (`obj.t`, `obj?.t`), object literal
+/// keys (`{ t: 1 }`), and pieces of a longer non-ASCII identifier are not
+/// references to the binding.
+fn is_reference_shape(bytes: &[u8], word_start: usize, word_end: usize) -> bool {
+    // The scanner splits words at non-ASCII bytes, so `tä` arrives as `t`.
+    if bytes.get(word_end).is_some_and(|byte| *byte >= 0x80)
+        || word_start
+            .checked_sub(1)
+            .is_some_and(|index| bytes[index] >= 0x80 || bytes[index].is_ascii_digit())
+    {
+        return false;
+    }
     let before = bytes[..word_start]
         .iter()
         .rposition(|byte| !byte.is_ascii_whitespace());
     let is_member = before
         .is_some_and(|index| bytes[index] == b'.' && (index == 0 || bytes[index - 1] != b'.'));
-    let after = bytes[word_end..]
+    // A ternary branch (`a ? t : b`) follows `?`, so only a word after `{` or
+    // `,` and before `:` reads as a key.
+    let is_object_key = next_byte(bytes, word_end) == Some(b':')
+        && before.is_some_and(|index| matches!(bytes[index], b'{' | b','));
+    !is_member && !is_object_key
+}
+
+/// Whether the reference ending at `word_end` is called or tags a template.
+fn is_call_shape(bytes: &[u8], word_end: usize) -> bool {
+    matches!(next_byte(bytes, word_end), Some(b'`' | b'('))
+}
+
+/// The first non-whitespace byte at or after `index`.
+fn next_byte(bytes: &[u8], index: usize) -> Option<u8> {
+    bytes
+        .get(index..)?
         .iter()
-        .find(|byte| !byte.is_ascii_whitespace());
-    !is_member && matches!(after, Some(b'`' | b'('))
+        .find(|byte| !byte.is_ascii_whitespace())
+        .copied()
 }
 
 struct Scan<'a> {
@@ -939,6 +971,50 @@ mod tests {
             assert_eq!(name, macro_name, "{markup}");
             assert!(location.starts_with("View.svelte:1:"), "{location}");
         }
+    }
+
+    #[test]
+    fn svelte_markup_bare_macro_references_fail_with_a_located_error() {
+        let script = "<script>\nimport { t, plural } from '@palamedes/core/macro';\nimport { handler, fn } from './handlers';\nlet ok = true;\n</script>\n";
+        for (markup, macro_name, column) in [
+            ("<p>{handler(t)}</p>", "t", 13),
+            ("<p>{fn(plural)}</p>", "plural", 8),
+            ("<p>{ok ? t : null}</p>", "t", 10),
+            ("<p>{[ok, t]}</p>", "t", 10),
+            ("<p>{fn({ t })}</p>", "t", 10),
+            ("<p>{fn({ ...plural })}</p>", "plural", 13),
+            ("<Card {t} />", "t", 8),
+            ("<button onclick={t}>x</button>", "t", 18),
+            ("<p>{`${handler(t)}`}</p>", "t", 16),
+        ] {
+            let (name, location) = markup_macro_error(&format!("{script}{markup}"));
+            assert_eq!(name, macro_name, "{markup}");
+            assert_eq!(location, format!("View.svelte:6:{column}"), "{markup}");
+            let error = transform_macros(&format!("{script}{markup}"), "View.svelte", None)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("ReferenceError"), "{markup}: {error}");
+        }
+    }
+
+    #[test]
+    fn svelte_markup_names_that_only_resemble_macros_keep_working() {
+        let script = "<script>\nimport { t, plural } from '@palamedes/core/macro';\nimport { fn } from './handlers';\nconst { obj, tooltip, t2, tä, plurals } = $props();\nconst label = t`Label`;\n</script>\n";
+        let markup = "<p>{obj.t} {obj?.plural} {obj . t} {tooltip} {t2} {tä} {plurals} {fn({ t: 1, plural: 2 })} {fn({ a: 1, t: 2 })} {'t'} {label}</p>";
+        let source = format!("{script}{markup}");
+        assert_eq!(
+            extract_messages(&source, "View.svelte")
+                .unwrap_or_else(|error| panic!("{error}"))
+                .len(),
+            1
+        );
+        assert_eq!(
+            transform_macros(&source, "View.svelte", None)
+                .unwrap_or_else(|error| panic!("{error}"))
+                .compiled_ids
+                .len(),
+            1
+        );
     }
 
     #[test]
