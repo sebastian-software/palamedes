@@ -54,7 +54,7 @@ export default defineNuxtModule({
       config.rollupConfig.plugins ||= [];
       config.rollupConfig.plugins.push(
         ...palamedes({
-          cwd: nuxt.options.rootDir,
+          projectRoot: nuxt.options.rootDir,
           framework: "none",
           mdx: false,
           failOnMissing: true,
