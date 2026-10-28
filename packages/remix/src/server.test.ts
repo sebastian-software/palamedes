@@ -56,18 +56,138 @@ describe("stable Remix client entries", () => {
       expect.stringContaining(path.join("remix", "dist", "client.mjs")),
     ]);
     const mapSource = html.match(/<script type="importmap"[^>]*>(.*?)<\/script>/u)?.[1];
-    expect(JSON.parse(mapSource!)).toEqual(importMap);
+    const entryUrl = html.match(/src="([^"]+)"/u)?.[1];
+    expect(JSON.parse(mapSource!)).toEqual({
+      ...importMap,
+      scopes: {
+        ...importMap.scopes,
+        [entryUrl!]: { "@palamedes/remix/client": "/assets/remix/client.hash.js" },
+      },
+    });
     expect(mapSource).not.toContain("</script>");
     expect(html.match(/nonce="request&quot;nonce"/gu)).toHaveLength(2);
-    const entryUrl = html.match(/src="([^"]+)"/u)?.[1];
     const response = remixI18n.serveClientCatalogAsset(
       new Request(`https://example.test${entryUrl}`),
     );
     expect(response?.status).toBe(200);
     const source = await response?.text();
-    expect(source).toContain('from"/assets/remix/client.hash.js"');
-    expect(source).toContain('import("/assets/app/client.hash.js")');
-    expect(source).toContain('"errorHtml":"<p>Reload</p>"');
+    expect(source).toContain('from "@palamedes/remix/client"');
+    expect(html).toContain('data-palamedes-entry="/assets/app/client.hash.js"');
+    expect(html).toContain('data-palamedes-error-html="&lt;p>Reload&lt;/p>"');
+  });
+
+  it("serves identical bootstrap bytes from cold workers and restarted adapters", async () => {
+    const createWorker = () =>
+      createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+        catalogAssets: { basePath: "/custom/assets/" },
+      });
+    const first = createWorker();
+    const cold = createWorker();
+    const assetServer = {
+      getHref: async (file: string) =>
+        `/custom/assets/${file.endsWith(".tsx") ? "app" : "client"}.js`,
+      getImportMap: async () => ({ imports: {}, scopes: {} }),
+    };
+    const html = await first.renderClientEntry("app/public/client.tsx", { assetServer });
+    const src = html.match(/src="([^"]+)"/u)![1];
+    const request = new Request(`https://example.test${src}`);
+    const expected = await first.serveClientCatalogAsset(request)!.text();
+    for (const worker of [cold, createWorker()]) {
+      const response = worker.serveClientCatalogAsset(request)!;
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("application/javascript; charset=utf-8");
+      expect(await response.text()).toBe(expected);
+    }
+    expect(
+      cold.serveClientCatalogAsset(
+        new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
+      )?.status,
+    ).toBe(404);
+  });
+
+  it("keeps distinct entries isolated and escapes their URL and error markup", async () => {
+    const worker = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+    const entryUrl = '/assets/app.js?value="<&';
+    const errorHtml = '<p title="retry & reload">Failure</p></script>';
+    const options = {
+      assetServer: {
+        getHref: async (file: string) => (file.endsWith(".tsx") ? entryUrl : "/assets/client.js"),
+        getImportMap: async () => ({ imports: {}, scopes: {} }),
+      },
+      errorHtml,
+    };
+    const html = await worker.renderClientEntry("app/public/client.tsx", options);
+    expect(html).toContain('data-palamedes-entry="/assets/app.js?value=&quot;&lt;&amp;"');
+    expect(html).toContain(
+      'data-palamedes-error-html="&lt;p title=&quot;retry &amp; reload&quot;>Failure&lt;/p>&lt;/script>"',
+    );
+    expect(html.match(/<script /gu)).toHaveLength(2);
+    const src = html.match(/src="([^"]+)"/u)![1];
+    const otherHtml = await worker.renderClientEntry("app/public/client.tsx", {
+      ...options,
+      errorHtml: "Other entry",
+    });
+    expect(otherHtml.match(/src="([^"]+)"/u)![1]).not.toBe(src);
+    const source = await worker
+      .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
+      .text();
+    expect(source).not.toContain(entryUrl);
+    expect(source).not.toContain(errorHtml);
+  });
+
+  it("executes the bootstrap using its own script data when other entries precede it", async () => {
+    const worker = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+    const html = await worker.renderClientEntry("app/public/client.tsx", {
+      assetServer: {
+        getHref: async () => "/assets/client.js",
+        getImportMap: async () => ({ imports: {}, scopes: {} }),
+      },
+    });
+    const src = html.match(/src="([^"]+)"/u)![1];
+    const source = await worker
+      .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
+      .text();
+    const client = `data:text/javascript,${encodeURIComponent("export const startRemixClient = (...args) => globalThis.startTestRemixClient(...args);")}`;
+    const moduleUrl = `data:text/javascript,${encodeURIComponent(source.replace('"@palamedes/remix/client"', JSON.stringify(client)))}`;
+    const start = vi.fn(
+      async (loadEntry: () => Promise<{ default: string }>, options: { errorHtml?: string }) => {
+        expect((await loadEntry()).default).toBe("own entry");
+        expect(options.errorHtml).toBe('<p title="retry & reload">Failure</p>');
+      },
+    );
+    vi.stubGlobal("startTestRemixClient", start);
+    vi.stubGlobal("document", {
+      querySelectorAll: () => [
+        {
+          src: "https://example.test/another-entry.js",
+          dataset: { palamedesEntry: "must-not-load" },
+        },
+        {
+          src: moduleUrl,
+          dataset: {
+            palamedesEntry: 'data:text/javascript,export default "own entry"',
+            palamedesErrorHtml: '<p title="retry & reload">Failure</p>',
+          },
+        },
+      ],
+    });
+    try {
+      await import(/* @vite-ignore */ moduleUrl);
+      expect(start).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("propagates asset graph compilation failures before rendering an entry", async () => {

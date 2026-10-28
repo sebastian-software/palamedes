@@ -181,6 +181,18 @@ type CachedRemixClientCatalogAsset<TLocale extends string> = RemixClientCatalogA
 export const remixI18nContext: RemixI18nContextKey =
   createContextKey<RemixI18nContextValue<string, I18nInstance>>();
 
+// Each entry URL serves the same module on every worker. The URL digest keeps
+// distinct application entries separate in the browser module cache; document
+// attributes carry the request-specific data without generating JavaScript.
+const CLIENT_ENTRY_SOURCE = `import { startRemixClient } from "@palamedes/remix/client";
+const script = [...document.querySelectorAll("script[data-palamedes-entry]")]
+  .find((element) => element.src === import.meta.url);
+if (!script) throw new Error("Palamedes Remix application entry script is missing.");
+await startRemixClient(() => import(script.dataset.palamedesEntry), {
+  errorHtml: script.dataset.palamedesErrorHtml,
+});
+`;
+
 const DEFAULT_FAILURE_MESSAGE =
   "Palamedes Remix i18n initialization failed before the handler ran.";
 
@@ -221,7 +233,6 @@ export function createRemixI18nServer<TLocale extends string>(
   const failureMessage = options.failureMessage ?? DEFAULT_FAILURE_MESSAGE;
   const scope = createServerI18nScope<PalamedesI18n>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
-  const clientEntries = new Map<string, string>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<
     PalamedesI18n,
@@ -374,13 +385,23 @@ export function createRemixI18nServer<TLocale extends string>(
       entryOptions.assetServer.getHref(clientPath),
       entryOptions.assetServer.getImportMap([entryPath, clientPath]),
     ]);
-    const source = `import{startRemixClient}from${JSON.stringify(clientUrl)};await startRemixClient(()=>import(${JSON.stringify(entryUrl)}),${JSON.stringify({ errorHtml: entryOptions.errorHtml })});`;
-    const key = createHash("sha256").update(source).digest("hex");
-    clientEntries.set(key, source);
+    const key = createHash("sha256")
+      .update(JSON.stringify([CLIENT_ENTRY_SOURCE, clientUrl, entryUrl, entryOptions.errorHtml]))
+      .digest("hex");
     const src = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/${key}.js`;
     const nonce = entryOptions.nonce ? ` nonce="${escapeHtmlAttribute(entryOptions.nonce)}"` : "";
-    const serializedImportMap = JSON.stringify(importMap).replace(/</gu, "\\u003c");
-    return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}"${nonce}></script>`;
+    const serializedImportMap = JSON.stringify({
+      ...importMap,
+      scopes: {
+        ...importMap.scopes,
+        [src]: { "@palamedes/remix/client": clientUrl },
+      },
+    }).replace(/</gu, "\\u003c");
+    const errorHtml =
+      entryOptions.errorHtml === undefined
+        ? ""
+        : ` data-palamedes-error-html="${escapeHtmlAttribute(entryOptions.errorHtml)}"`;
+    return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}" data-palamedes-entry="${escapeHtmlAttribute(entryUrl)}"${errorHtml}${nonce}></script>`;
   };
 
   const serveClientCatalogAsset = (request: Request): Response | undefined => {
@@ -388,10 +409,10 @@ export function createRemixI18nServer<TLocale extends string>(
     const pathname = new URL(request.url).pathname;
     const entryPrefix = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/`;
     if (pathname.startsWith(entryPrefix) && pathname.endsWith(".js")) {
-      const source = clientEntries.get(pathname.slice(entryPrefix.length, -3));
-      return source === undefined
+      const key = pathname.slice(entryPrefix.length, -3);
+      return !/^[a-f0-9]{64}$/u.test(key)
         ? new Response("Unknown application entry.", { status: 404 })
-        : new Response(source, {
+        : new Response(CLIENT_ENTRY_SOURCE, {
             headers: {
               "content-type": "application/javascript; charset=utf-8",
               "cache-control": "no-cache",
