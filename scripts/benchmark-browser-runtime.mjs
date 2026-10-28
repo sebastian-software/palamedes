@@ -98,7 +98,10 @@ if (process.argv.includes("--verify-report")) {
   const { build, version: viteVersion } = await import(viteRequire.resolve("vite"));
   const alias = [
     "core/compiled",
+    "core/internal",
     "core/locale",
+    // Subpaths before the bare package: string aliases also match `find/…`.
+    "runtime/internal",
     "runtime",
     "react/compiled",
     "solid/compiled",
@@ -334,7 +337,7 @@ if (process.argv.includes("--verify-report")) {
         brotliQuality: 11,
         repeatedBuilds: 2,
         scope:
-          "All exports of compiled core + universal runtime, plus the selected compiled UI entry. Framework peers, host bootstrap, application code, catalogs, and Intl polyfills are excluded.",
+          "All exports of compiled core + universal runtime, including their internal renderer and generated-code entries, plus the selected compiled UI entry. Framework peers, host bootstrap, application code, catalogs, and Intl polyfills are excluded.",
         treeShakenScope:
           "Named client imports only: createI18n, defineCompiledCatalog, getI18n, initializeClientI18n, and Trans for UI profiles. Unused registration, server binding, reset, locale-switch, and standalone formatter exports can be removed. The complete default string runtime remains reachable through createI18n.",
       },
