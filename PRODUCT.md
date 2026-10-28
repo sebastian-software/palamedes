@@ -40,10 +40,14 @@ executable. The application build exports a message contract; `pmds catalog
 compile --target rust` checks PO updates against it and produces compatible
 language files independently of the application build. Give Rust the same discovery
 prominence as the other application paths, with its own guide and example;
-keep its supported scope explicit. The crates remain
-unpublished, and the current subset is text, display arguments, string selects, and cardinal/ordinal plurals.
-Keep those limits beside the claim that compatible translations can ship without
-rebuilding an application.
+keep its supported scope explicit. The SDK ships on crates.io from Palamedes
+2.0.0 as `palamedes-i18n`, `palamedes`, and `palamedes-build`. Its public APIs
+follow Cargo SemVer; Preview describes the feature scope. The current subset
+is text, display arguments, string selects, and cardinal/ordinal plurals.
+Localized number/date/time formatting, rich text, and translation contexts are
+rejected. Keep those limits beside the claim that compatible translations can
+ship without rebuilding an application, and link to the
+[Rust application guide](docs/rust-applications.md).
 
 ## Product And Marketing Narrative
 
@@ -116,9 +120,10 @@ item. Comparisons do not define the homepage's identity.
   demo availability distinct. Example counts describe evidence, not additional
   framework support. The homepage lists implemented integrations without release-tier badges.
   Framework guides and reference docs own API stability and exact verification limits.
-- Distinguish the implementation on `main` from available registry releases.
-  During the v2 publication hold, explain that the current implementation runs
-  through repository examples while npm supplies 1.x, and link to the release notes.
+- Describe Palamedes 2.0 as the current release and link to the
+  [release notes](docs/release-notes-v2.md) and
+  [migration guide](docs/migration-v2.md). Distinguish later implementation on
+  `main` from available registry releases; label unreleased changes explicitly.
 - Bound performance claims by the measured workflow, corpus, environment, and
   report date. Keep extraction, browser delivery, and server memory evidence
   separate. Use the presentation policy in

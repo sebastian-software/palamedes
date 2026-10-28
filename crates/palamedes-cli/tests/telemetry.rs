@@ -465,3 +465,261 @@ fn repository_identity_matches_clones_and_explicit_config_context() {
         b["open_rows"][0]["project_id"]
     );
 }
+
+fn unified_status(profile: &Path, project: &Path) -> Value {
+    let output = run(profile, project, &["telemetry", "usage", "status"], &[]);
+    assert!(output.status.success(), "{output:?}");
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+fn unified_enable(profile: &Path, project: &Path) {
+    let output = run(
+        profile,
+        project,
+        &[
+            "telemetry",
+            "usage",
+            "enable",
+            "--accept",
+            "palamedes-events-v1",
+        ],
+        &[],
+    );
+    assert!(output.status.success(), "{output:?}");
+}
+#[test]
+fn additional_notices_do_not_create_state_or_import_a_legacy_grant() {
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    for scope in ["usage", "history", "profile"] {
+        let output = run(
+            profile.path(),
+            project.path(),
+            &["telemetry", scope, "enable"],
+            &[],
+        );
+        assert!(output.status.success(), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("Sebastian Software GmbH"));
+        assert_eq!(fs::read_dir(profile.path()).unwrap().count(), 0);
+    }
+    enable(profile.path(), project.path());
+    let before = unified_status(profile.path(), project.path());
+    assert_eq!(before["usage"]["decision"], "undecided");
+    let rejected = run(
+        profile.path(),
+        project.path(),
+        &[
+            "telemetry",
+            "history",
+            "enable",
+            "--accept",
+            "monthly-history-v1",
+        ],
+        &[],
+    );
+    assert!(!rejected.status.success());
+    assert_eq!(
+        unified_status(profile.path(), project.path())["history"]["decision"],
+        "undecided"
+    );
+}
+#[test]
+fn unified_cutover_counts_once_and_never_grants_additional_permissions() {
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    enable(profile.path(), project.path());
+    run(profile.path(), project.path(), &["report"], &[]);
+    unified_enable(profile.path(), project.path());
+    run(profile.path(), project.path(), &["report"], &[]);
+    assert_eq!(
+        status(profile.path(), project.path())["unsent_invocations"],
+        0
+    );
+    let state = unified_status(profile.path(), project.path());
+    assert_eq!(state["usage"]["decision"], "granted");
+    assert_eq!(state["history"]["decision"], "undecided");
+    assert_eq!(state["profile"]["decision"], "undecided");
+    let preview = run(
+        profile.path(),
+        project.path(),
+        &["telemetry", "usage", "preview"],
+        &[],
+    );
+    let preview: Value = serde_json::from_slice(&preview.stdout).unwrap();
+    assert_eq!(preview["open"].as_array().unwrap().len(), 1);
+    assert_eq!(preview["open"][0]["count"], 1);
+    assert!(!preview.to_string().contains("token"));
+    assert!(
+        !preview
+            .to_string()
+            .contains(project.path().to_str().unwrap())
+    );
+}
+#[test]
+fn additional_choices_are_independent_and_offline_withdrawal_remains_pending() {
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    unified_enable(profile.path(), project.path());
+    for (scope, revision) in [
+        ("history", "monthly-history-v1"),
+        ("profile", "profile-linking-v1"),
+    ] {
+        let result = run(
+            profile.path(),
+            project.path(),
+            &["telemetry", scope, "enable", "--accept", revision],
+            &[],
+        );
+        assert!(result.status.success(), "{result:?}");
+    }
+    let granted = unified_status(profile.path(), project.path());
+    assert_eq!(granted["history"]["decision"], "granted");
+    assert_eq!(granted["history"]["pending"], true);
+    assert_eq!(granted["profile"]["decision"], "granted");
+    run(
+        profile.path(),
+        project.path(),
+        &["telemetry", "history", "disable"],
+        &[],
+    );
+    let declined = unified_status(profile.path(), project.path());
+    assert_eq!(declined["history"]["decision"], "declined");
+    assert_eq!(declined["history"]["pending"], true);
+    assert_eq!(declined["profile"]["decision"], "granted");
+    assert_eq!(declined["usage"]["collect_opt_in"], true);
+    let reset = run(
+        profile.path(),
+        project.path(),
+        &["telemetry", "profile", "reset", "--all-tools"],
+        &[],
+    );
+    assert!(reset.status.success(), "{reset:?}");
+    assert_eq!(
+        unified_status(profile.path(), project.path())["profile_reset_pending"],
+        true
+    );
+    run(
+        profile.path(),
+        project.path(),
+        &["telemetry", "disable"],
+        &[],
+    );
+    let stopped = unified_status(profile.path(), project.path());
+    assert_eq!(stopped["usage"]["collect_opt_in"], false);
+    assert_eq!(stopped["profile"]["decision"], "declined");
+    assert_eq!(stopped["profile"]["pending"], true);
+}
+#[test]
+fn legacy_environment_consent_never_enables_expanded_fields_or_profile_linking() {
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    run(
+        profile.path(),
+        project.path(),
+        &["report"],
+        &[("APP_TRACKING_CONSENT", "telemetry-v1")],
+    );
+    assert_eq!(
+        unified_status(profile.path(), project.path())["usage"]["decision"],
+        "undecided"
+    );
+    unified_enable(profile.path(), project.path());
+    let denied = run(
+        profile.path(),
+        project.path(),
+        &[
+            "telemetry",
+            "profile",
+            "enable",
+            "--accept",
+            "profile-linking-v1",
+        ],
+        &[("CI", "1"), ("APP_TRACKING_CI", "telemetry-v1")],
+    );
+    assert!(!denied.status.success());
+    assert_eq!(
+        unified_status(profile.path(), project.path())["profile"]["decision"],
+        "undecided"
+    );
+    run(
+        profile.path(),
+        project.path(),
+        &["report"],
+        &[("DO_NOT_TRACK", "1")],
+    );
+    assert_eq!(
+        unified_status(profile.path(), project.path())["usage"]["open_dimensions"],
+        0
+    );
+}
+
+#[test]
+fn publication_needs_a_third_choice_and_withdrawal_preserves_private_history() {
+    let profile = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let notice = run(
+        profile.path(),
+        project.path(),
+        &["telemetry", "publication", "enable"],
+        &[],
+    );
+    assert!(notice.status.success());
+    assert!(String::from_utf8_lossy(&notice.stdout).contains("cannot recall copies"));
+    assert_eq!(fs::read_dir(profile.path()).unwrap().count(), 0);
+    unified_enable(profile.path(), project.path());
+    let rejected = run(
+        profile.path(),
+        project.path(),
+        &[
+            "telemetry",
+            "publication",
+            "enable",
+            "--accept",
+            "public-usage-v1",
+        ],
+        &[],
+    );
+    assert!(!rejected.status.success());
+    run(
+        profile.path(),
+        project.path(),
+        &[
+            "telemetry",
+            "history",
+            "enable",
+            "--accept",
+            "monthly-history-v1",
+        ],
+        &[],
+    );
+    assert_eq!(
+        unified_status(profile.path(), project.path())["publication"]["decision"],
+        "undecided"
+    );
+    let granted = run(
+        profile.path(),
+        project.path(),
+        &[
+            "telemetry",
+            "publication",
+            "enable",
+            "--accept",
+            "public-usage-v1",
+        ],
+        &[],
+    );
+    assert!(granted.status.success(), "{granted:?}");
+    let state = unified_status(profile.path(), project.path());
+    assert_eq!(state["publication"]["decision"], "granted");
+    assert_eq!(state["publication"]["pending"], true);
+    run(
+        profile.path(),
+        project.path(),
+        &["telemetry", "publication", "disable"],
+        &[],
+    );
+    let state = unified_status(profile.path(), project.path());
+    assert_eq!(state["publication"]["decision"], "declined");
+    assert_eq!(state["publication"]["pending"], true);
+    assert_eq!(state["history"]["decision"], "granted");
+    assert_eq!(state["usage"]["collect_opt_in"], true);
+}

@@ -102,8 +102,16 @@ export async function preflightRustSdk(
 }
 
 export function assertPublishedArchive(version, checksum, pkg) {
-  if (version.yanked || version.checksum !== checksum) {
-    throw new Error(`Already-published archive differs or is yanked: ${pkg.name}@${pkg.version}`);
+  if (version.yanked) {
+    throw new Error(`Already-published version is yanked: ${pkg.name}@${pkg.version}`);
+  }
+  if (version.checksum !== checksum) {
+    throw new Error(
+      `Already-published archive differs: ${pkg.name}@${pkg.version}. ` +
+        "Cargo records the source commit in .cargo_vcs_info.json, so even a commit outside the crate can change its checksum. " +
+        "Retry the original release revision with an identical archive, or release a new coordinated version if changes are required. " +
+        "See CONTRIBUTING.md#recovering-a-partial-release.",
+    );
   }
 }
 
