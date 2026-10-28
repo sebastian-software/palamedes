@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -33,7 +35,7 @@ fn real_po_updates_run_in_a_copied_binary_and_changed_contracts_preserve_old_dat
     let executable = directory
         .path()
         .join(format!("pmds{}", std::env::consts::EXE_SUFFIX));
-    fs::copy(env!("CARGO_BIN_EXE_pmds"), &executable).unwrap();
+    common::install_pmds_copy(&executable);
     let before = fs::read(&executable).unwrap();
     let output = directory.path().join("pmds-locales");
     let compile = || {
@@ -59,15 +61,15 @@ fn real_po_updates_run_in_a_copied_binary_and_changed_contracts_preserve_old_dat
     let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(report["catalogs"].as_array().unwrap().len(), 1);
     assert!(report["missing"].as_array().unwrap().is_empty());
-    let result = Command::new(&executable)
-        .arg("version")
-        .env("PATH", "")
-        .env_remove("PALAMEDES_UI_CATALOG_DIR")
-        .env("PALAMEDES_UI_LOCALE", "de")
-        .env("PALAMEDES_UPDATE_CHECK", "0")
-        .current_dir(directory.path())
-        .output()
-        .unwrap();
+    let result = common::output(
+        Command::new(&executable)
+            .arg("version")
+            .env("PATH", "")
+            .env_remove("PALAMEDES_UI_CATALOG_DIR")
+            .env("PALAMEDES_UI_LOCALE", "de")
+            .env("PALAMEDES_UPDATE_CHECK", "0")
+            .current_dir(directory.path()),
+    );
     assert!(result.status.success(), "{result:?}");
     assert!(String::from_utf8_lossy(&result.stdout).contains("Aktualisierte i18n-Werkzeuge"));
     assert_eq!(fs::read(&executable).unwrap(), before);

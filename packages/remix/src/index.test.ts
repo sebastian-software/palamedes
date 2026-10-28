@@ -233,6 +233,27 @@ describe("createPalamedesRemixLoadHook", () => {
     );
   });
 
+  it("forwards failOnMissing to the catalog compiler and defaults it to false", () => {
+    const catalogUrl = new URL("file:///repo/app/locales/de.po").href;
+
+    createPalamedesRemixLoadHook({ failOnMissing: true })(catalogUrl, loadContext, vi.fn());
+    expect(mocks.compileCatalogModule).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "/repo/app/locales/de.po",
+      expect.objectContaining({
+        failOnMissing: true,
+        missingFailureHint: expect.stringContaining("failOnMissing=true"),
+      }),
+    );
+
+    createPalamedesRemixLoadHook()(catalogUrl, loadContext, vi.fn());
+    expect(mocks.compileCatalogModule).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "/repo/app/locales/de.po",
+      expect.objectContaining({ failOnMissing: false }),
+    );
+  });
+
   it("propagates catalog compile failures", () => {
     mocks.compileCatalogModule.mockImplementation(() => {
       throw new Error("Compilation error for 1 translation");

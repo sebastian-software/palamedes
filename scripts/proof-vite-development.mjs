@@ -74,13 +74,25 @@ try {
     "Lazy route did not load its own fragment",
   );
   assert(original.includes('msgstr "Sprache"'));
+  // The proof never reloads the page itself: the dev server has to notice the
+  // `.po` edit and push it to the open page. The React Router host has no module
+  // level HMR boundary for catalogs, so Vite delivers the change as a server
+  // pushed full reload; the browser still receives it without any client action.
   writeFileSync(
     catalogPath,
     original.replaceAll('msgstr "Sprache"', 'msgstr "Katalog aktualisiert"'),
   );
-  await page.waitForTimeout(500);
-  await page.reload();
-  await page.getByText("Katalog aktualisiert", { exact: true }).first().waitFor();
+  try {
+    await page.getByText("Katalog aktualisiert", { exact: true }).first().waitFor({
+      timeout: 15_000,
+    });
+  } catch (error) {
+    throw new Error(
+      "Editing the .po catalog did not update the open page within 15s " +
+        "(the dev server must push the change; this proof does not reload the page)",
+      { cause: error },
+    );
+  }
 
   const catalogUrl = /palamedes:messages\/[^/]+\/de(?:\?|$)/u;
   const runFailureCase = async ({ phase, evaluation }) => {
