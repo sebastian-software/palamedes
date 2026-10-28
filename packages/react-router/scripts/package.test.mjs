@@ -50,11 +50,24 @@ test("the packed package exposes a loadable ESM entry and no CommonJS entry", (c
   renameSync(path.join(consumerRoot, "package"), packedPackage);
 
   const packedManifest = JSON.parse(readFileSync(path.join(packedPackage, "package.json"), "utf8"));
-  assert.deepEqual(Object.keys(packedManifest.exports), ["."]);
+  assert.deepEqual(Object.keys(packedManifest.exports), [".", "./document"]);
   assert.deepEqual(packedManifest.exports["."], {
     types: "./dist/index.d.ts",
     import: "./dist/index.mjs",
   });
+  assert.deepEqual(packedManifest.exports["./document"], {
+    types: "./dist/document.d.ts",
+    import: "./dist/document.mjs",
+  });
+  // Route modules import this entry in the browser, so it must stay free of
+  // the server entry's Node and router dependencies.
+  const documentEntry = readFileSync(path.join(packedPackage, "dist", "document.mjs"), "utf8");
+  for (const specifier of documentEntry.matchAll(/from\s+["']([^"']+)["']/gu)) {
+    assert.ok(
+      specifier[1] === "react" || specifier[1].startsWith("./shared/"),
+      `dist/document.mjs imports ${specifier[1]}`,
+    );
+  }
   assert.equal(packedManifest.main, undefined);
   assert.equal(packedManifest.module, undefined);
   // The router, its Node stream helper, and React belong to the application.
@@ -85,6 +98,10 @@ test("the packed package exposes a loadable ESM entry and no CommonJS entry", (c
 const i18n = createReactRouterI18n({ resolveLocale: () => "en", catalogDelivery: false })
 if (typeof i18n.middleware !== "function" || typeof i18n.handleRequest !== "function") {
   throw new Error("The ESM entry did not create the middleware and server entry")
+}
+const { useCatalogAvailable, useDocumentLocale } = await import("@palamedes/react-router/document")
+if (typeof useDocumentLocale !== "function" || typeof useCatalogAvailable !== "function") {
+  throw new Error("The document entry did not export its hooks")
 }
 `,
   );

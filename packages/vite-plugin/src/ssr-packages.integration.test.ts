@@ -90,6 +90,63 @@ describe("installed Palamedes server packages", () => {
     await expect(entry.locale()).resolves.toBe("de");
   });
 
+  it("keeps React Router development delivery in the dev server under NODE_ENV=production", async () => {
+    const root = await createFixture();
+    await createReactRouterFixture(root);
+    server = await createServer({
+      ...config(root),
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+    const nodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const entry = await server.ssrLoadModule("/react-router-document.ts");
+      const html: string = await entry.render();
+      expect(html).toContain("palamedes:catalogError");
+      expect(html).not.toContain("importmap");
+      expect(html).toContain('<html lang="de">');
+    } finally {
+      process.env.NODE_ENV = nodeEnv;
+    }
+  });
+
+  it("delivers React Router production catalogs from a build served without NODE_ENV", async () => {
+    // `react-router build` runs Vite with NODE_ENV=production; a custom
+    // `createRequestHandler` server may then start without it.
+    const root = await createFixture();
+    await createReactRouterFixture(root);
+    const nodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      await build({
+        ...config(root),
+        build: {
+          ssr: path.join(root, "react-router-document.ts"),
+          outDir: path.join(root, "dist"),
+          rollupOptions: { output: { entryFileNames: "server.mjs" } },
+        },
+      });
+    } finally {
+      process.env.NODE_ENV = nodeEnv;
+    }
+    const moduleUrl = pathToFileURL(path.join(root, "dist/server.mjs")).href;
+    const { NODE_ENV: _omitted, ...environment } = process.env;
+    const html = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `const entry = await import(${JSON.stringify(moduleUrl)}); console.log(await entry.render());`,
+      ],
+      { cwd: root, encoding: "utf8", env: environment },
+    );
+    expect(html).toContain(
+      '<script type="importmap">{"imports":{"#pmds/root":"/assets/root.de.js"}}</script>',
+    );
+    expect(html).toContain('<html lang="de">');
+  });
+
   it("builds an executable server without external virtual imports", async () => {
     const root = await createFixture();
     await build({
@@ -244,6 +301,50 @@ export function locale() {
   return i18n.run(new Request("https://example.test/"), new RouterContextProvider(), () =>
     getI18n().locale,
   );
+}
+`,
+  );
+  // A production client build for the document transform.
+  const clientDirectory = path.join(root, "client");
+  await mkdir(clientDirectory);
+  await writeFile(
+    path.join(clientDirectory, "palamedes-split-manifest.json"),
+    JSON.stringify({
+      locales: ["en", "de"],
+      importMaps: { en: "palamedes-importmap.en.json", de: "palamedes-importmap.de.json" },
+      chunkImports: {},
+    }),
+  );
+  for (const locale of ["en", "de"]) {
+    await writeFile(
+      path.join(clientDirectory, `palamedes-importmap.${locale}.json`),
+      JSON.stringify({ imports: { "#pmds/root": `/assets/root.${locale}.js` } }),
+    );
+  }
+  // No explicit `development`: the adapter decides from the Vite build.
+  await writeFile(
+    path.join(root, "react-router-document.ts"),
+    `
+import { createReactRouterI18n } from "@palamedes/react-router";
+import { RouterContextProvider } from "react-router";
+const i18n = createReactRouterI18n({
+  resolveLocale: () => "de",
+  catalogDelivery: { clientDirectory: ${JSON.stringify(clientDirectory)} },
+});
+export async function render(): Promise<string> {
+  const transform = await i18n.createDocumentTransform(
+    new Request("https://example.test/"),
+    new RouterContextProvider(),
+  );
+  const chunks: string[] = [];
+  transform.on("data", (chunk) => chunks.push(String(chunk)));
+  const done = new Promise((resolve, reject) => {
+    transform.once("end", resolve);
+    transform.once("error", reject);
+  });
+  transform.end('<html lang="en"><head></head><body></body></html>');
+  await done;
+  return chunks.join("");
 }
 `,
   );

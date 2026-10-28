@@ -105,6 +105,47 @@ describe("Vite catalog delivery", () => {
     expect(chunks.indexOf("importmap")).toBeLessThan(chunks.indexOf('rel="modulepreload"'));
   });
 
+  it.each([
+    ['<html lang="en" data-time-zone="UTC">', '<html lang="de" data-time-zone="UTC">'],
+    ["<html lang='en'>", '<html lang="de">'],
+    ['<html data-lang="x" xml:lang="en">', '<html lang="de" data-lang="x" xml:lang="en">'],
+    ["<html>", '<html lang="de">'],
+  ])("writes the bound locale to %s", async (htmlTag, expected) => {
+    const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"), {
+      lang: "de",
+    });
+    const html = await collect(
+      transform,
+      `<!DOCTYPE html>${htmlTag}<head></head><body lang="en">app</body></html>`,
+    );
+    expect(html.startsWith(`<!DOCTYPE html>${expected}<head><script type="importmap">`)).toBe(true);
+    expect(html).toContain('<body lang="en">');
+  });
+
+  it("sets further <html> attributes and rejects invalid names", async () => {
+    const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
+    const binding = delivery.getLocaleBinding("de");
+    const html = await collect(
+      delivery.createDocumentTransform(binding, {
+        lang: "de",
+        htmlAttributes: { "data-state": 'a"b', "data-palamedes-flag": "" },
+      }),
+      '<html lang="en" data-state="old"><head></head><body>app</body></html>',
+    );
+    expect(html).toContain('<html data-palamedes-flag="" lang="de" data-state="a&quot;b">');
+    expect(() =>
+      delivery.createDocumentTransform(binding, { htmlAttributes: { "on click": "x" } }),
+    ).toThrow("Invalid <html> attribute name");
+  });
+
+  it("keeps the document language unless a locale is passed", async () => {
+    const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+    const html = await collect(transform, '<html lang="en"><head></head><body>app</body></html>');
+    expect(html).toContain('<html lang="en">');
+  });
+
   it("removes bare catalog preload hints before adding locale-bound assets", async () => {
     const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
     const binding = delivery.getLocaleBinding("de");
