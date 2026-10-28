@@ -266,6 +266,63 @@ describe("TanStack server catalog adapter", () => {
     }
   });
 
+  it("delivers production catalogs from a production build without NODE_ENV", async () => {
+    const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-prod-env-"));
+    try {
+      writeFileSync(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        JSON.stringify({
+          locales: ["de"],
+          importMaps: { de: "palamedes-importmap.de.json" },
+          chunkImports: {},
+        }),
+      );
+      writeFileSync(
+        path.join(clientDirectory, "palamedes-importmap.de.json"),
+        JSON.stringify({ imports: { "#pmds/greeting": "/assets/greeting.de.js" } }),
+      );
+      // Vite replaces `import.meta.env.DEV` in the server build; a custom
+      // server may start that build without NODE_ENV.
+      vi.stubEnv("DEV", false);
+      vi.stubEnv("NODE_ENV", undefined);
+      const { createTanStackCatalogResponseDelivery } = await import("./server");
+      const deliver = createTanStackCatalogResponseDelivery({ clientDirectory });
+      const response = (await deliver(
+        new Response("<html><head></head><body></body></html>", {
+          headers: { "content-type": "text/html" },
+        }),
+        "de",
+        new Request("https://example.test/"),
+      )) as Response;
+      expect(await response.text()).toContain(
+        '<script type="importmap">{"imports":{"#pmds/greeting":"/assets/greeting.de.js"}}</script>',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(clientDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps development delivery for a development build under NODE_ENV=production", async () => {
+    try {
+      vi.stubEnv("DEV", true);
+      vi.stubEnv("NODE_ENV", "production");
+      const { createTanStackCatalogResponseDelivery } = await import("./server");
+      // A development build reads no manifest, so a missing client build is fine.
+      const deliver = createTanStackCatalogResponseDelivery({ clientDirectory: "/missing/client" });
+      const response = (await deliver(
+        new Response("<html><head></head><body></body></html>", {
+          headers: { "content-type": "text/html" },
+        }),
+        "en",
+        new Request("https://example.test/"),
+      )) as Response;
+      expect(await response.text()).toContain("showPalamedesDevCatalogError");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("installs the development failure transform without a manifest or nonce", async () => {
     const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-dev-"));
     try {
