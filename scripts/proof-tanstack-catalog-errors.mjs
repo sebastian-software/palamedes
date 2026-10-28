@@ -108,7 +108,9 @@ try {
           await page.locator('main[role="alert"]').waitFor({ state: "visible" });
         }
         assert(injected, `${locale} ${phase} ${failure}: sidecar was not intercepted`);
-        assert.match(await page.locator('main[role="alert"]').innerText(), /Reload page/u);
+        const errorText = await page.locator('main[role="alert"]').innerText();
+        assert.match(errorText, /Reload page/u);
+        assert.doesNotMatch(errorText, /INJECTED|MissingCompiled|palamedes-m-|\{.*plural/u);
         assert.equal(await page.getByTestId("lazy-feature").count(), 0);
         assert.equal(await page.locator("html").getAttribute("data-tanstack-lazy-body"), null);
         armed = false;
