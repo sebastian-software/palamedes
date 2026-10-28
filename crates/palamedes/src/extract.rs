@@ -1875,6 +1875,7 @@ fn analyze_source_in(
             result.diagnostics.extend(analyzed.diagnostics);
             result.comments.extend(analyzed.comments);
         }
+        crate::component::reject_markup_macro_uses(source, filename)?;
         return Ok(result);
     }
 
