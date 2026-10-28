@@ -62,7 +62,7 @@ for (const example of CONTAINER_EXAMPLES) {
         new URL(headers.location, `http://127.0.0.1:${example.port}`).pathname,
         check.redirectTo,
       );
-    } else assert.equal(status, 200, `${example.id} ${check.path} status`);
+    } else assert.equal(status, check.status ?? 200, `${example.id} ${check.path} status`);
     if (check.htmlLang) {
       assert.equal(
         body.match(/<html\b[^>]*\blang=["']([^"']+)["']/iu)?.[1],

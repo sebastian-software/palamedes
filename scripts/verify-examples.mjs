@@ -168,6 +168,10 @@ async function verifySmokeCheck(example, check) {
         `Expected ${example.id} response for ${check.path} to redirect to ${check.redirectTo}, received status ${response.statusCode} and location ${JSON.stringify(location)}`,
       );
     }
+  } else if (response.statusCode !== (check.status ?? 200)) {
+    throw new Error(
+      `Expected ${example.id} response for ${check.path} to have status ${check.status ?? 200}, received ${response.statusCode}`,
+    );
   }
 
   if (check.expectedBarrierId) {
