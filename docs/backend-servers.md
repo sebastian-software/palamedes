@@ -90,8 +90,7 @@ Application code depends only on `@palamedes/runtime`; the plugin, a build-time
 dependency, supplies the `virtual:palamedes/server-catalogs` module behind that
 import. Outside a Palamedes build the import fails to resolve, and an
 unsupported locale or a failed chunk rejects rather than falling back to source
-text. `createViteServerI18n` from `@palamedes/vite-plugin/server` remains as an
-alias of the same function. Configure the build:
+text. Configure the build:
 
 ```ts
 import { palamedes } from "@palamedes/vite-plugin";

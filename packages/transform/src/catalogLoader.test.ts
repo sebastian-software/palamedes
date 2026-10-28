@@ -10,6 +10,7 @@ import {
   createMissingErrorMessage,
   renderCatalogModule,
   type CatalogCompileArtifactResult,
+  type CatalogLoaderOptions,
 } from "./catalogLoader";
 
 const baseResult: CatalogCompileArtifactResult = {
@@ -165,7 +166,7 @@ describe("catalog loader helpers", () => {
     ).toBe(renderCatalogModule(baseResult.messages));
   });
 
-  it("always fails compile diagnostics and explains the removed opt-out", () => {
+  it("always fails compile diagnostics and rejects the removed opt-out", () => {
     const result: CatalogCompileArtifactResult = {
       ...baseResult,
       diagnostics: [
@@ -179,12 +180,16 @@ describe("catalog loader helpers", () => {
       ],
     };
 
-    expect(() =>
-      createCatalogLoaderResult(result, {
-        locale: "de",
-        failOnCompileError: false,
-      }),
-    ).toThrow(/failOnCompileError no longer changes this behavior/);
+    for (const failOnCompileError of [true, false]) {
+      expect(() =>
+        createCatalogLoaderResult(result, {
+          locale: "de",
+          failOnCompileError,
+        } as unknown as CatalogLoaderOptions),
+      ).toThrow(
+        "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+      );
+    }
 
     expect(() =>
       createCatalogLoaderResult(result, {
@@ -212,10 +217,9 @@ describe("catalog loader helpers", () => {
       createCatalogLoaderResult(result, {
         locale: "de",
         failOnMissing: true,
-        failOnCompileError: false,
         missingFailureHint: "missing hint",
       }),
-    ).toThrow(/compile\.invalid_icu_message[\s\S]*Locale: en[\s\S]*failOnCompileError/);
+    ).toThrow(/compile\.invalid_icu_message[\s\S]*Locale: en/);
   });
 
   it("omits compile failure guidance when warning diagnostics do not fail the build", () => {

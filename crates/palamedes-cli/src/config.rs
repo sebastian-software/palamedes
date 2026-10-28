@@ -338,6 +338,19 @@ fn levenshtein_distance(left: &str, right: &str) -> usize {
     previous[right.len()]
 }
 
+/// MDX keys that Palamedes v2 renamed to `include-source-metadata`.
+const REMOVED_MDX_SOURCE_METADATA_KEYS: &[&str] = &[
+    "keep-source-fallbacks",
+    "keep_source_fallbacks",
+    "keepSourceFallbacks",
+];
+
+fn removed_mdx_source_metadata_key_message(key: &str) -> String {
+    format!(
+        "Palamedes v2 renamed mdx.{key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false."
+    )
+}
+
 fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), ConfigError> {
     const MDX_CAMEL_CASE_KEYS: &[(&str, &str)] = &[
         ("translatableAttributes", "translatable-attributes"),
@@ -345,7 +358,7 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
         ("transModule", "trans-module"),
         ("runtimeModule", "runtime-module"),
         ("ignoreDirective", "ignore-directive"),
-        ("keepSourceFallbacks", "keep-source-fallbacks"),
+        ("includeSourceMetadata", "include-source-metadata"),
     ];
     const MDX_KEYS: &[&str] = &[
         "framework",
@@ -359,8 +372,8 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
         "runtime_module",
         "ignore-directive",
         "ignore_directive",
-        "keep-source-fallbacks",
-        "keep_source_fallbacks",
+        "include-source-metadata",
+        "include_source_metadata",
     ];
     const CATALOG_KEYS: &[&str] = &["path", "format", "po", "include", "exclude"];
     const LINT_KEYS: &[&str] = &["rules"];
@@ -378,6 +391,11 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
     const PO_KEYS: &[&str] = &["line-breaks", "line_breaks"];
 
     if let Some(mdx) = value.get("mdx").and_then(serde_json::Value::as_object) {
+        for key in REMOVED_MDX_SOURCE_METADATA_KEYS {
+            if mdx.contains_key(*key) {
+                return invalid(path, &removed_mdx_source_metadata_key_message(key));
+            }
+        }
         for (camel, kebab) in MDX_CAMEL_CASE_KEYS {
             if mdx.contains_key(*camel) {
                 return invalid(
@@ -901,9 +919,9 @@ catalogs:
     }
 
     #[test]
-    fn loads_both_mdx_source_fallback_aliases() {
-        for key in ["keep-source-fallbacks", "keep_source_fallbacks"] {
-            let app = temp_dir("mdx-source-fallbacks");
+    fn loads_both_mdx_source_metadata_spellings() {
+        for key in ["include-source-metadata", "include_source_metadata"] {
+            let app = temp_dir("mdx-source-metadata");
             fs::write(
                 app.join(CONFIG_FILENAME),
                 format!(
@@ -922,7 +940,42 @@ catalogs:
 
             let config = load_config(&app, None).expect("load config");
 
-            assert!(config.mdx.keep_source_fallbacks, "{key}");
+            assert!(config.mdx.include_source_metadata, "{key}");
+        }
+    }
+
+    #[test]
+    fn rejects_removed_mdx_source_fallback_keys_with_migration_message() {
+        for key in [
+            "keep-source-fallbacks",
+            "keep_source_fallbacks",
+            "keepSourceFallbacks",
+        ] {
+            let app = temp_dir("mdx-removed-source-fallbacks");
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    r#"
+locales: [en]
+source-locale: en
+mdx:
+  {key}: true
+catalogs:
+  - path: src/locales/{{locale}}
+    include: [src]
+"#
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("removed key must be rejected");
+
+            assert!(
+                error.to_string().contains(&format!(
+                    "Palamedes v2 renamed mdx.{key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false."
+                )),
+                "{key}: {error}"
+            );
         }
     }
 

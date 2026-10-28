@@ -33,16 +33,11 @@ interface WithPalamedesOptions {
   enablePoLoader?: boolean;
   configPath?: string;
   projectRoot?: string;
-  /** @deprecated Use projectRoot. */
-  cwd?: string;
   failOnMissing?: boolean;
-  /** @deprecated Invalid and unsupported ICU is always fatal in v2. */
-  failOnCompileError?: boolean;
   runtimeModule?: string;
-  keepSourceFallbacks?: boolean;
+  includeSourceMetadata?: boolean;
   workspaceRoot?: string;
   serverFunctions?: boolean;
-  messageSplitting?: boolean;
 }
 ```
 
@@ -52,28 +47,30 @@ Defaults:
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
-- `failOnCompileError`: deprecated compatibility option; it no longer
-  downgrades invalid or unsupported ICU to a warning.
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `false`
+- `includeSourceMetadata`: `false`
 - `serverFunctions`: automatic discovery of `palamedes.server.*`
-- `messageSplitting`: deprecated; automatic delivery is always enabled, `false` throws
+
+`withPalamedes()` throws a migration error when it receives a removed v1
+option: `failOnCompileError`, `keepSourceFallbacks` (renamed to
+`includeSourceMetadata`), `messageSplitting` with any value, or `cwd` (use
+`projectRoot`). See the
+[v2 migration guide](../migration-v2.md#replace-removed-apis).
 
 `projectRoot` is the Next application directory used for Palamedes config
 discovery, `palamedes.server.*` resolution, loader cache keys, and workspace
 root detection. With `next dev apps/web` or `next build apps/web`, it is derived
 from the Next CLI directory; webpack and Turbopack loaders use their Next root
 context when available. Relative `configPath` values resolve from this root.
-For custom hosts or ambiguous invocation, set `projectRoot` explicitly. `cwd`
-is a deprecated alias.
+For custom hosts or ambiguous invocation, set `projectRoot` explicitly.
 
 Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
 1.17.1 this behavior is shared with the Vite integration, so a matching source
 file below a dot-directory is transformed and participates in
 `failOnMissing` validation.
 
-`keepSourceFallbacks` retains its legacy option name and defaults to `false`.
-Set it to `true` only for diagnostic source metadata in generated calls.
+`includeSourceMetadata` defaults to `false`. Set it to `true` only for
+diagnostic source metadata in generated calls.
 V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.
@@ -168,7 +165,7 @@ Set `<html lang>` from the server locale policy. Optional
 `data-palamedes-time-zone` preserves the selected client formatting time zone.
 Locale changes require a full document navigation. Raw ICU catalogs are never
 accepted by application runtimes. PO is currently required for automatic Next
-graph delivery; the legacy `messageSplitting: false` option throws instead of
+graph delivery; the removed `messageSplitting` option throws instead of
 selecting an older mode.
 
 Required fragment failures stop dependent module execution in both development

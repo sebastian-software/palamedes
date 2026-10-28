@@ -18,6 +18,7 @@ import {
 } from "@palamedes/config";
 import { isCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core/compiled";
 import {
+  assertNoRemovedPalamedesOptions,
   compileCatalogArtifactSelected,
   compileCatalogModule,
   compileCatalogModuleAsync,
@@ -50,12 +51,12 @@ export type PalamedesRemixRegisterOptions = {
   runtimeModule?: string;
 
   /**
-   * Preserve authored source messages as diagnostic metadata only.
+   * Include authored source messages as diagnostic source metadata.
    * Defaults to `false` in every environment. Set to `true` for diagnostic
    * metadata when deployment skew makes authored source text useful.
    * V2 runtime misses throw; this metadata never provides replacement output.
    */
-  keepSourceFallbacks?: boolean;
+  includeSourceMetadata?: boolean;
 
   /**
    * Optional Palamedes config path used for `.po` catalog imports.
@@ -68,19 +69,12 @@ export type PalamedesRemixRegisterOptions = {
    * @default false
    */
   failOnMissing?: boolean;
-
-  /**
-   * Fail `.po` catalog compilation when catalog diagnostics include errors.
-   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU;
-   * remove this option.
-   */
-  failOnCompileError?: boolean;
 };
 
 /** Options shared by Remix browser asset macro transforms. */
 export type PalamedesRemixAssetLoaderOptions = Pick<
   PalamedesRemixRegisterOptions,
-  "include" | "exclude" | "runtimeModule" | "keepSourceFallbacks"
+  "include" | "exclude" | "runtimeModule" | "includeSourceMetadata"
 > & {
   /** Optional graph-split registry for executable locale fragments. */
   catalogAssets?: PalamedesRemixCatalogAssetRegistry;
@@ -118,9 +112,6 @@ export const PALAMEDES_REMIX_ASSET_PACKAGES = [
   "@palamedes/runtime",
   "@palamedes/remix",
 ] as const;
-
-/** @deprecated Use PALAMEDES_REMIX_ASSET_PACKAGES. */
-export const PALEMEDES_REMIX_ASSET_PACKAGES = PALAMEDES_REMIX_ASSET_PACKAGES;
 
 export function createPalamedesRemixCatalogAssetRegistry(
   options: CreatePalamedesRemixCatalogAssetRegistryOptions = {},
@@ -536,7 +527,7 @@ type CachedPalamedesConfig = {
 type ResolvedMacroTransformOptions = {
   exclude: RegExp;
   include: RegExp;
-  keepSourceFallbacks: boolean;
+  includeSourceMetadata: boolean;
   runtimeModule: string;
   stripNonEssentialProps: boolean;
 };
@@ -544,6 +535,7 @@ type ResolvedMacroTransformOptions = {
 export function createPalamedesRemixLoadHook(
   options: PalamedesRemixRegisterOptions = {},
 ): LoadHook {
+  assertNoRemovedPalamedesOptions(options, ["failOnCompileError", "keepSourceFallbacks"]);
   const transformOptions = resolveMacroTransformOptions(options);
   const configCache = new Map<string, CachedPalamedesConfig>();
 
@@ -578,6 +570,7 @@ export function createPalamedesRemixLoadHook(
 export function createPalamedesRemixAssetLoader(
   options: PalamedesRemixAssetLoaderOptions = {},
 ): ModuleLoader {
+  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
   const transformOptions = resolveMacroTransformOptions(options);
 
   return (url, context, nextLoad) => {
@@ -625,7 +618,7 @@ function resolveMacroTransformOptions(
     runtimeModule: resolveMacroRuntimeModule(options.runtimeModule),
     // Authored source text is diagnostic metadata only and is omitted by
     // default. A missing compiled message throws whether or not it is kept.
-    keepSourceFallbacks: options.keepSourceFallbacks ?? false,
+    includeSourceMetadata: options.includeSourceMetadata ?? false,
     stripNonEssentialProps: process.env.NODE_ENV === "production",
   };
 }
@@ -643,7 +636,7 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
   try {
     result = transformPalamedesMacros(source, filePath, {
       runtimeModule: options.runtimeModule,
-      keepSourceFallbacks: options.keepSourceFallbacks,
+      includeSourceMetadata: options.includeSourceMetadata,
       stripNonEssentialProps: options.stripNonEssentialProps,
     });
   } catch (error) {
@@ -683,10 +676,7 @@ function shouldLoadCatalogUrl(url: string, exclude: RegExp): boolean {
 
 function loadCatalogModule(
   url: string,
-  options: Pick<
-    PalamedesRemixRegisterOptions,
-    "configPath" | "failOnMissing" | "failOnCompileError"
-  >,
+  options: Pick<PalamedesRemixRegisterOptions, "configPath" | "failOnMissing">,
   configCache: Map<string, CachedPalamedesConfig>,
 ): LoadResult {
   const resourcePath = fileURLToPath(url);
@@ -713,9 +703,6 @@ function loadCatalogModule(
       locale,
       pseudoLocale: config.pseudoLocale,
       failOnMissing: options.failOnMissing === true,
-      ...(options.failOnCompileError === undefined
-        ? {}
-        : { failOnCompileError: options.failOnCompileError }),
       missingFailureHint:
         "You see this error because `failOnMissing=true` in Palamedes Remix register options.",
     },

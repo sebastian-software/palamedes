@@ -1,12 +1,12 @@
 import path from "node:path";
 import { createScopedI18nRunner } from "@palamedes/runtime/server";
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
 import { resolveLocaleFromRequest } from "./i18n";
 
 export const serverI18n = createScopedI18nRunner(
   (request) =>
-    createViteServerI18n({
+    createBundledServerI18n({
       locale: resolveLocaleFromRequest(request).locale,
       timeZone: "Europe/Berlin",
     }),

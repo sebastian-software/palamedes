@@ -160,10 +160,9 @@ Fix:
 - Compare the translated ICU placeholders with the source message.
 - Re-run `pnpm exec pmds audit --fail-on error` locally after editing the
   catalog.
-- Invalid and unsupported ICU is always fatal in Palamedes v2. Remove the
-  deprecated `failOnCompileError` option; setting it to `false` no longer
-  downgrades an error to a warning. The compiler includes a migration message
-  when an existing configuration still supplies the option.
+- Invalid and unsupported ICU is always fatal in Palamedes v2. No option
+  downgrades it to a warning; the removed `failOnCompileError` option is
+  rejected (see [Removed v1 Option Is Rejected](#removed-v1-option-is-rejected)).
 
 ## Native Binding Fails To Load
 
@@ -238,7 +237,7 @@ the compiler already replaced them with a fallback.
 Fix:
 
 - Read the error's `id` and `locale` properties. When the plugin option
-  `keepSourceFallbacks: true` is set, `metadata.message` also contains the
+  `includeSourceMetadata: true` is set, `metadata.message` also contains the
   authored message.
 - With a standard framework adapter, make sure the running code and its
   compiled catalogs come from the same build, then reload the document.
@@ -281,31 +280,45 @@ Fix:
   [Vite](./api/vite-plugin.md), [Next.js](./api/next-plugin.md), and
   [Remix](./api/remix.md#client-catalog-assets) guides for host error handling.
 
-## `messageSplitting: false` Or `experimentalGraphSplitting: false` Is Rejected
+## Removed v1 Option Is Rejected
 
-Error:
+Error, depending on the option:
 
 ```text
-Palamedes v2 delivers compiled catalogs automatically. Remove messageSplitting: false.
+Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.
+Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.
+Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.
+Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.
+Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.
+Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.
 ```
 
-or:
+A config file with the old MDX key reports:
 
 ```text
-Palamedes v2 delivers compiled catalogs automatically. Remove experimentalGraphSplitting: false.
+Invalid Palamedes config in <path>: Palamedes v2 renamed mdx.keep-source-fallbacks to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false.
 ```
 
 Cause:
 
-A v1 configuration selects the old delivery path. `withPalamedes()` in Next.js
-and `palamedes()` in Vite reject `false` because v2 always delivers compiled
-catalogs through the module graph.
+A v1 option is still set. The Vite, Next.js, and Remix adapters, the
+low-level transform, and `@palamedes/core-node` reject these options with any
+value, including `false`, during setup or on first use. Config loaders and
+`pmds` reject the old MDX key in every spelling.
 
 Fix:
 
-Remove the option. Enabled values are still accepted but are deprecated and
-have no effect, so remove them as well. See the
-[v2 migration guide](./migration-v2.md#replace-removed-apis).
+| Option                                     | Fix                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| `failOnCompileError`                       | Remove it. Use `failOnMissing` for translation completeness.     |
+| `keepSourceFallbacks`                      | Rename it to `includeSourceMetadata`. The default stays `false`. |
+| `stripMessageField` (transform)            | Remove it. Use `includeSourceMetadata` with the inverse value.   |
+| `mdx.keep-source-fallbacks` (config files) | Rename it to `mdx.include-source-metadata`.                      |
+| `messageSplitting` (Next.js)               | Remove it. Delivery is automatic.                                |
+| `experimentalGraphSplitting` (Vite)        | Remove it, including `{ localeBinding }`. Delivery is automatic. |
+| `cwd` (Next.js `withPalamedes()`)          | Rename it to `projectRoot`.                                      |
+
+See the [v2 migration guide](./migration-v2.md#replace-removed-apis).
 
 ## Extraction Finds Nothing
 

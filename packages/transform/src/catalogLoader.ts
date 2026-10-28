@@ -1,4 +1,7 @@
-import { renderCatalogModule as renderNativeCatalogModule } from "@palamedes/core-node";
+import {
+  assertNoRemovedPalamedesOptions,
+  renderCatalogModule as renderNativeCatalogModule,
+} from "@palamedes/core-node";
 
 export type CatalogSourceKey = {
   message: string;
@@ -29,11 +32,6 @@ export type CatalogLoaderOptions = {
   locale: string;
   pseudoLocale?: string;
   failOnMissing?: boolean;
-  /**
-   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU.
-   * Remove this option; it no longer changes compilation behavior.
-   */
-  failOnCompileError?: boolean;
   missingFailureHint?: string;
   compileFailureHint?: string;
   diagnosticsWarningHint?: string;
@@ -48,11 +46,11 @@ export function createCatalogLoaderResult(
   result: CatalogCompileArtifactResult,
   options: CatalogLoaderOptions,
 ): CatalogLoaderResult {
+  assertNoRemovedPalamedesOptions(options, ["failOnCompileError"]);
   const warnings: string[] = [];
   const {
     pseudoLocale,
     failOnMissing = false,
-    failOnCompileError,
     missingFailureHint,
     compileFailureHint,
     diagnosticsWarningHint,
@@ -71,14 +69,9 @@ export function createCatalogLoaderResult(
     );
 
     if (errorDiagnostics.length > 0) {
-      let message = appendHint(
-        createCompileErrorMessage(locale, errorDiagnostics),
-        compileFailureHint,
+      throw new Error(
+        appendHint(createCompileErrorMessage(locale, errorDiagnostics), compileFailureHint),
       );
-      if (failOnCompileError !== undefined) {
-        message = appendHint(message, FAIL_ON_COMPILE_ERROR_MIGRATION);
-      }
-      throw new Error(message);
     }
 
     warnings.push(
@@ -90,10 +83,6 @@ export function createCatalogLoaderResult(
     throw new Error(
       appendHint(createMissingErrorMessage(locale, result.missing), missingFailureHint),
     );
-  }
-
-  if (failOnCompileError !== undefined) {
-    warnings.push(FAIL_ON_COMPILE_ERROR_MIGRATION);
   }
 
   return {
@@ -138,9 +127,6 @@ function renderSourceKey(sourceKey: CatalogSourceKey): string {
     ? `${sourceKey.message} [context: ${sourceKey.context}]`
     : sourceKey.message;
 }
-
-const FAIL_ON_COMPILE_ERROR_MIGRATION =
-  "Palamedes v2 always rejects invalid or unsupported ICU during catalog compilation; failOnCompileError no longer changes this behavior. Remove the option from the host configuration.";
 
 function appendHint(message: string, hint: string | undefined): string {
   return hint ? `${message}\n\n${hint}` : message;

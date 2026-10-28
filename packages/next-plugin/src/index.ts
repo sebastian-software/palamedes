@@ -11,6 +11,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
+import { assertNoRemovedPalamedesOptions } from "@palamedes/core-node";
+
 import {
   PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
   PALAMEDES_MACRO_PACKAGES,
@@ -138,12 +140,8 @@ export type WithPalamedesOptions = {
   /**
    * Absolute or relative Next project directory. Set this when Next's project
    * directory cannot be derived automatically, for example in a custom host.
-   * `cwd` is an alias for compatibility with loader terminology.
    */
   projectRoot?: string;
-
-  /** @deprecated Use projectRoot instead. */
-  cwd?: string;
 
   /**
    * If true, fail compilation on missing translations.
@@ -152,25 +150,18 @@ export type WithPalamedesOptions = {
   failOnMissing?: boolean;
 
   /**
-   * If true, fail compilation on message compilation errors.
-   * @deprecated Palamedes v2 always rejects invalid and unsupported ICU;
-   * remove this option.
-   */
-  failOnCompileError?: boolean;
-
-  /**
    * Advanced override for the module that exports the runtime getter.
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string;
 
   /**
-   * Preserve authored source messages as diagnostic metadata only.
+   * Include authored source messages as diagnostic source metadata.
    * Defaults to `false` in every environment. Set to `true` to include
    * authored source text in generated calls for diagnostics.
    * V2 runtime misses throw; this metadata never provides replacement output.
    */
-  keepSourceFallbacks?: boolean;
+  includeSourceMetadata?: boolean;
 
   /**
    * Monorepo workspace root to use for Turbopack and output file tracing.
@@ -187,15 +178,6 @@ export type WithPalamedesOptions = {
    * Automatically enabled when the conventional entry exists.
    */
   serverFunctions?: boolean;
-
-  /**
-   * Split client messages with the Next.js module graph. Each transformed
-   * browser module loads only its own compiled fragment for the document
-   * locale before evaluating its body or resolving to importers.
-   *
-   * @deprecated Catalog delivery is automatic in v2. Remove this option.
-   */
-  messageSplitting?: boolean;
 };
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
@@ -258,21 +240,12 @@ type NextConfigWithResolvedPath = NextConfig & { configFile?: string };
 type WebpackContextWithDir = { dir?: unknown };
 
 function resolveProjectRoot(
-  options: Pick<WithPalamedesOptions, "projectRoot" | "cwd">,
+  options: Pick<WithPalamedesOptions, "projectRoot">,
   baseConfig: NextConfig,
   context?: WebpackContextWithDir,
 ): string {
-  const explicitProjectRoot = options.projectRoot;
-  const explicitCwd = options.cwd;
-  if (explicitProjectRoot && explicitCwd) {
-    const projectRoot = path.resolve(explicitProjectRoot);
-    const cwd = path.resolve(explicitCwd);
-    if (projectRoot !== cwd) {
-      throw new TypeError("withPalamedes projectRoot and cwd must resolve to the same directory.");
-    }
-  }
-  if (explicitProjectRoot || explicitCwd) {
-    return path.resolve(explicitProjectRoot ?? explicitCwd!);
+  if (options.projectRoot) {
+    return path.resolve(options.projectRoot);
   }
 
   if (typeof context?.dir === "string" && context.dir.length > 0) {
@@ -432,36 +405,31 @@ export function withPalamedes(
   baseConfig: NextConfig = {},
   options: WithPalamedesOptions = {},
 ): NextConfig {
+  assertNoRemovedPalamedesOptions(options, [
+    "failOnCompileError",
+    "keepSourceFallbacks",
+    "messageSplitting",
+    "cwd",
+  ]);
   const {
     include = PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     exclude = /node_modules/,
     enablePoLoader = true,
     configPath,
     failOnMissing = false,
-    failOnCompileError,
     runtimeModule: explicitRuntimeModule,
-    keepSourceFallbacks: explicitKeepSourceFallbacks,
+    includeSourceMetadata: explicitIncludeSourceMetadata,
     projectRoot: explicitProjectRoot,
-    cwd: explicitCwd,
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
-    messageSplitting: legacyMessageSplitting,
   } = options;
 
-  if (legacyMessageSplitting === false) {
-    throw new Error(
-      "Palamedes v2 delivers compiled catalogs automatically. Remove messageSplitting: false.",
-    );
-  }
   const messageSplitting = true;
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Source metadata is optional diagnostics; compiled catalogs supply all message output.
-  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? false;
+  const includeSourceMetadata = explicitIncludeSourceMetadata ?? false;
   const stripNonEssentialProps = process.env.NODE_ENV === "production";
-  const projectRoot = resolveProjectRoot(
-    { projectRoot: explicitProjectRoot, cwd: explicitCwd },
-    baseConfig,
-  );
+  const projectRoot = resolveProjectRoot({ projectRoot: explicitProjectRoot }, baseConfig);
   const resolvedConfigPath = configPath ? path.resolve(projectRoot, configPath) : undefined;
   const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions, projectRoot);
   const serverFunctions = serverFunctionEntry
@@ -486,13 +454,12 @@ export function withPalamedes(
     require.resolve("@palamedes/next-plugin/palamedes-server-catalogs-loader");
   const poLoaderOptions = {
     failOnMissing,
-    ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
     cwd: projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
   };
   const transformLoaderOptions = {
     runtimeModule,
-    keepSourceFallbacks,
+    includeSourceMetadata,
     stripNonEssentialProps,
     cwd: projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
@@ -611,7 +578,7 @@ export function withPalamedes(
     // Webpack configuration
     webpack(config, context) {
       const webpackProjectRoot = resolveProjectRoot(
-        { projectRoot: explicitProjectRoot, cwd: explicitCwd },
+        { projectRoot: explicitProjectRoot },
         baseConfig,
         context as WebpackContextWithDir,
       );
@@ -627,7 +594,7 @@ export function withPalamedes(
         : undefined;
       const webpackTransformLoaderOptions = {
         runtimeModule,
-        keepSourceFallbacks,
+        includeSourceMetadata,
         stripNonEssentialProps,
         cwd: webpackProjectRoot,
         ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
@@ -635,7 +602,6 @@ export function withPalamedes(
       };
       const webpackPoLoaderOptions = {
         failOnMissing,
-        ...(failOnCompileError === undefined ? {} : { failOnCompileError }),
         cwd: webpackProjectRoot,
         ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
       };

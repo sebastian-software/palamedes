@@ -7,6 +7,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as PalamedesConfigModule from "@palamedes/config";
+import type * as PalamedesCoreNodeModule from "@palamedes/core-node";
 import type * as PalamedesTransformModule from "@palamedes/transform";
 import type { Plugin } from "vite";
 
@@ -33,7 +34,9 @@ vi.mock("@palamedes/config", async (importOriginal) => {
   };
 });
 
-vi.mock("@palamedes/core-node", () => ({
+vi.mock("@palamedes/core-node", async (importOriginal) => ({
+  assertNoRemovedPalamedesOptions: (await importOriginal<typeof PalamedesCoreNodeModule>())
+    .assertNoRemovedPalamedesOptions,
   analyzeMdxNative: mocks.analyzeMdxNative,
   compileCatalogArtifactSelectedAsync: mocks.compileCatalogArtifactSelected,
   compileCatalogModuleAsync: mocks.compileCatalogModule,
@@ -401,14 +404,39 @@ describe("palamedes vite plugin", () => {
     },
   );
 
-  it("propagates strict compile failures when the removed opt-out is false", async () => {
-    mocks.compileCatalogModule.mockRejectedValue(
-      new Error("failOnCompileError no longer changes this behavior"),
-    );
-
-    await expect(runPoTransform({}, { failOnCompileError: false })).rejects.toThrow(
-      /failOnCompileError no longer changes this behavior/,
-    );
+  it.each([
+    [
+      "failOnCompileError",
+      false,
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+    ],
+    [
+      "failOnCompileError",
+      true,
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+    ],
+    [
+      "keepSourceFallbacks",
+      true,
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+    ],
+    [
+      "experimentalGraphSplitting",
+      true,
+      "Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.",
+    ],
+    [
+      "experimentalGraphSplitting",
+      false,
+      "Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.",
+    ],
+    [
+      "experimentalGraphSplitting",
+      { localeBinding: "embed" },
+      "Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.",
+    ],
+  ] as const)("rejects the removed %s option (%j) during plugin setup", (name, value, message) => {
+    expect(() => palamedes({ [name]: value } as Parameters<typeof palamedes>[0])).toThrow(message);
   });
 
   it("fails missing translations when configured", async () => {
@@ -692,38 +720,47 @@ describe("palamedes vite plugin", () => {
     ["build", false, true],
     ["serve", false, false],
   ] as const)(
-    "sets runtime fallback metadata for Vite %s",
-    (command, expectedFallbacks, expectedMetadataStrip) => {
+    "sets source metadata defaults for Vite %s",
+    (command, expectedSourceMetadata, expectedMetadataStrip) => {
       runMacroTransform({}, command);
 
       expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
         expect.objectContaining({
-          keepSourceFallbacks: expectedFallbacks,
+          includeSourceMetadata: expectedSourceMetadata,
           stripNonEssentialProps: expectedMetadataStrip,
         }),
       );
     },
   );
 
-  it("lets keepSourceFallbacks opt out of the Vite default", () => {
-    runMacroTransform({ keepSourceFallbacks: false }, "build");
+  it("passes includeSourceMetadata to macro transforms", () => {
+    runMacroTransform({ includeSourceMetadata: true }, "build");
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ keepSourceFallbacks: false }),
+      expect.objectContaining({ includeSourceMetadata: true }),
     );
   });
 
-  it("applies the source fallback mode to compiled MDX", async () => {
+  it("applies the source metadata mode to compiled MDX", async () => {
     await runMdxTransform({}, {}, "build");
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
       "/repo/src/guide.mdx",
-      expect.objectContaining({ keepSourceFallbacks: false }),
+      expect.objectContaining({ includeSourceMetadata: false }),
+    );
+
+    mocks.analyzeMdxNative.mockClear();
+    await runMdxTransform({}, { includeSourceMetadata: true }, "build");
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ includeSourceMetadata: true }),
     );
   });
 
@@ -784,7 +821,6 @@ describe("automatic graph splitting", () => {
     const plugins = palamedes({
       mdx: false,
       enablePoLoader: false,
-      experimentalGraphSplitting: true,
     });
     const transformPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
     const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
@@ -847,10 +883,9 @@ describe("automatic graph splitting", () => {
   });
 
   it("appends a sidecar import to modules that reference messages", async () => {
-    const result = (await runMacroTransform({ experimentalGraphSplitting: true }, undefined, [
-      "id-a",
-      "id-b",
-    ])) as { code?: string } | null;
+    const result = (await runMacroTransform({}, undefined, ["id-a", "id-b"])) as {
+      code?: string;
+    } | null;
 
     expect(result?.code).toMatch(
       /^transformed\nimport "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/,
@@ -876,7 +911,7 @@ describe("automatic graph splitting", () => {
       const result = await runSidecarLoad(
         ["id-a"],
         {},
-        { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", sourceId },
+        { pluginOptions: {}, command: "build", sourceId },
       );
       return {
         transformedCode: result.transformedCode,
@@ -901,7 +936,7 @@ describe("automatic graph splitting", () => {
     });
 
     const result = (await runMacroTransform(
-      { experimentalGraphSplitting: true },
+      {},
       undefined,
       ["id-a"],
       "c:\\checkout\\project\\src\\label.ts",
@@ -921,12 +956,9 @@ describe("automatic graph splitting", () => {
     });
 
     const sourceId = "/checkout/shared/label.ts";
-    const result = (await runMacroTransform(
-      { experimentalGraphSplitting: true },
-      undefined,
-      ["id-a"],
-      sourceId,
-    )) as { code?: string } | null;
+    const result = (await runMacroTransform({}, undefined, ["id-a"], sourceId)) as {
+      code?: string;
+    } | null;
     const expectedKey = createHash("sha256")
       .update("../shared/label.ts")
       .digest("hex")
@@ -946,12 +978,7 @@ describe("automatic graph splitting", () => {
     });
 
     await expect(
-      runMacroTransform(
-        { experimentalGraphSplitting: true },
-        undefined,
-        ["id-a"],
-        "C:\\shared\\label.ts",
-      ),
+      runMacroTransform({}, undefined, ["id-a"], "C:\\shared\\label.ts"),
     ).rejects.toThrow(
       /Palamedes transform error in C:\\shared\\label\.ts:.*different filesystem volume/,
     );
@@ -960,9 +987,9 @@ describe("automatic graph splitting", () => {
   it("wraps asynchronous sidecar config failures with the transformed file", async () => {
     mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"));
 
-    await expect(
-      runMacroTransform({ experimentalGraphSplitting: true }, undefined, ["id-a"]),
-    ).rejects.toThrow("Palamedes transform error in /repo/src/label.ts: Invalid Palamedes config");
+    await expect(runMacroTransform({}, undefined, ["id-a"])).rejects.toThrow(
+      "Palamedes transform error in /repo/src/label.ts: Invalid Palamedes config",
+    );
   });
 
   it("rejects Windows UNC sources on a different share before deriving a relative key", async () => {
@@ -975,12 +1002,7 @@ describe("automatic graph splitting", () => {
     });
 
     await expect(
-      runMacroTransform(
-        { experimentalGraphSplitting: true },
-        undefined,
-        ["id-a"],
-        "\\\\checkout-server\\shared\\label.ts",
-      ),
+      runMacroTransform({}, undefined, ["id-a"], "\\\\checkout-server\\shared\\label.ts"),
     ).rejects.toThrow(/different filesystem volume/);
   });
 
@@ -1002,18 +1024,12 @@ describe("automatic graph splitting", () => {
       });
 
       try {
-        const source = (await runMacroTransform(
-          { experimentalGraphSplitting: true },
-          undefined,
-          ["id-a"],
-          sourceId,
-        )) as { code?: string } | null;
-        const symlink = (await runMacroTransform(
-          { experimentalGraphSplitting: true },
-          undefined,
-          ["id-a"],
-          symlinkId,
-        )) as { code?: string } | null;
+        const source = (await runMacroTransform({}, undefined, ["id-a"], sourceId)) as {
+          code?: string;
+        } | null;
+        const symlink = (await runMacroTransform({}, undefined, ["id-a"], symlinkId)) as {
+          code?: string;
+        } | null;
 
         expect(symlink?.code).toBe(source?.code);
       } finally {
@@ -1023,28 +1039,18 @@ describe("automatic graph splitting", () => {
   );
 
   it("keeps distinct in-root modules in distinct sidecars", async () => {
-    const first = (await runMacroTransform(
-      { experimentalGraphSplitting: true },
-      undefined,
-      ["id-a"],
-      "/repo/src/first.ts",
-    )) as { code?: string } | null;
-    const second = (await runMacroTransform(
-      { experimentalGraphSplitting: true },
-      undefined,
-      ["id-a"],
-      "/repo/src/second.ts",
-    )) as { code?: string } | null;
+    const first = (await runMacroTransform({}, undefined, ["id-a"], "/repo/src/first.ts")) as {
+      code?: string;
+    } | null;
+    const second = (await runMacroTransform({}, undefined, ["id-a"], "/repo/src/second.ts")) as {
+      code?: string;
+    } | null;
 
     expect(first?.code).not.toBe(second?.code);
   });
 
   it("leaves modules without message references untouched", async () => {
-    const result = (await runMacroTransform(
-      { experimentalGraphSplitting: true },
-      undefined,
-      [],
-    )) as { code?: string } | null;
+    const result = (await runMacroTransform({}, undefined, [])) as { code?: string } | null;
 
     expect(result?.code).toBe("transformed");
   });
@@ -1096,7 +1102,7 @@ describe("automatic graph splitting", () => {
   });
 
   it("appends a sidecar import to MDX modules that reference messages", async () => {
-    const result = (await runMdxTransform({}, { experimentalGraphSplitting: true })) as {
+    const result = (await runMdxTransform({}, {})) as {
       code?: string;
     } | null;
 
@@ -1115,9 +1121,7 @@ describe("automatic graph splitting", () => {
       catalogs: [],
     });
 
-    await expect(
-      runMdxTransform({}, { experimentalGraphSplitting: true }, undefined, "C:\\shared\\guide.mdx"),
-    ).rejects.toThrow(
+    await expect(runMdxTransform({}, {}, undefined, "C:\\shared\\guide.mdx")).rejects.toThrow(
       /Palamedes transform error in C:\\shared\\guide\.mdx:.*different filesystem volume/,
     );
   });
@@ -1131,7 +1135,7 @@ describe("automatic graph splitting", () => {
       map: null,
     });
 
-    const result = (await runMdxTransform({}, { experimentalGraphSplitting: true })) as {
+    const result = (await runMdxTransform({}, {})) as {
       code?: string;
     } | null;
 
@@ -1212,10 +1216,6 @@ describe("automatic graph splitting", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"));
   });
 
-  const IMPORT_MAP_OPTIONS = {
-    experimentalGraphSplitting: { localeBinding: "import-map" as const },
-  };
-
   function nativeModuleShape(map: string): string {
     return (
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
@@ -1246,7 +1246,7 @@ describe("automatic graph splitting", () => {
     const { load, key } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "serve" },
+      { pluginOptions: {}, command: "serve" },
     );
     const result = await load(`\0palamedes:messages/${key}`, { ssr: false });
 
@@ -1283,7 +1283,7 @@ describe("automatic graph splitting", () => {
     const { key, sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+      { pluginOptions: {}, command: "build" },
     );
     const bundle = {
       "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
@@ -1331,7 +1331,7 @@ describe("automatic graph splitting", () => {
         ["id-a"],
         {},
         {
-          pluginOptions: IMPORT_MAP_OPTIONS,
+          pluginOptions: {},
           command: "build",
           rawBase,
           finalBase,
@@ -1356,7 +1356,7 @@ describe("automatic graph splitting", () => {
         ["id-a"],
         {},
         {
-          pluginOptions: IMPORT_MAP_OPTIONS,
+          pluginOptions: {},
           command: "build",
           finalBase,
         },
@@ -1383,7 +1383,7 @@ describe("automatic graph splitting", () => {
       ["id-a"],
       {},
       {
-        pluginOptions: { ...IMPORT_MAP_OPTIONS, failOnMissing: true },
+        pluginOptions: { failOnMissing: true },
         command: "build",
       },
     );
@@ -1414,7 +1414,7 @@ describe("automatic graph splitting", () => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" },
+      { pluginOptions: {}, command: "build" },
     );
     const warn = vi.fn();
     await sidecarPlugin.generateBundle.call(
@@ -1435,7 +1435,7 @@ describe("automatic graph splitting", () => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", buildSsr },
+      { pluginOptions: {}, command: "build", buildSsr },
     );
     const emitFile = vi.fn();
     await sidecarPlugin.generateBundle.call(
@@ -1457,7 +1457,7 @@ describe("automatic graph splitting", () => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
-      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", buildSsr: false },
+      { pluginOptions: {}, command: "build", buildSsr: false },
     );
     const emitFile = vi.fn();
 
@@ -1475,7 +1475,7 @@ describe("automatic graph splitting", () => {
       const { sidecarPlugin } = await runSidecarLoad(
         ["id-a"],
         {},
-        { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", buildSsr },
+        { pluginOptions: {}, command: "build", buildSsr },
       );
       const emitFile = vi.fn();
 
@@ -1517,7 +1517,7 @@ async function runSidecarLoad(
     compiledIds,
     map: null,
   });
-  const plugins = palamedes(setup.pluginOptions ?? { experimentalGraphSplitting: true });
+  const plugins = palamedes(setup.pluginOptions ?? {});
   const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform");
   const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars");
   const transform = transformHandler(macroPlugin?.transform);

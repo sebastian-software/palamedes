@@ -87,8 +87,8 @@ export const featureNarrative = {
   extractCheck: ["pmds extract --check --json", "--fail-on-empty-catalog", "--no-cache"],
   mergeDriver: ["deletion-aware", "three-way merge"],
   binaryPlugins: ["binary-only", "binary plugin protocol"],
-  adapterSourceFallbacks: [
-    "keepSourceFallbacks",
+  adapterSourceMetadata: [
+    "includeSourceMetadata",
     "diagnostic metadata",
     "parser-free",
     "onMissing",
@@ -100,7 +100,7 @@ export const featureNarrative = {
     "ordinary host error",
   ],
   nextAdvancedOptions: [
-    "messageSplitting: false",
+    "messageSplitting",
     "serverFunctions: false",
     "palamedes.server",
     "initializeServerFunctionI18n",

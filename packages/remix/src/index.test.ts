@@ -9,7 +9,7 @@ import { SourceMapConsumer, SourceMapGenerator, type RawSourceMap } from "source
 import type * as CoreNode from "@palamedes/core-node";
 import type * as PalamedesConfigModule from "@palamedes/config";
 
-import { createPalamedesRemixLoadHook } from "./index";
+import { createPalamedesRemixAssetLoader, createPalamedesRemixLoadHook } from "./index";
 
 const mocks = vi.hoisted(() => ({
   compileCatalogModule: vi.fn(),
@@ -127,7 +127,7 @@ describe("createPalamedesRemixLoadHook", () => {
     },
   );
 
-  it("keeps source fallbacks opt-in in production", () => {
+  it("keeps source metadata opt-in in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     const source = [
       'import { t } from "@palamedes/core/macro"',
@@ -141,15 +141,49 @@ describe("createPalamedesRemixLoadHook", () => {
       loadContext,
       () => ({ format: "module", source }),
     );
-    const loadCompact = createPalamedesRemixLoadHook({ keepSourceFallbacks: false });
-    const stripped = loadCompact(
+    const loadWithMetadata = createPalamedesRemixLoadHook({ includeSourceMetadata: true });
+    const withMetadata = loadWithMetadata(
       new URL("file:///repo/app/routes/home.tsx").href,
       loadContext,
       () => ({ format: "module", source }),
     );
 
     expect(String(preserved.source)).not.toContain('message: "Production fallback"');
-    expect(String(stripped.source)).not.toContain('message: "Production fallback"');
+    expect(String(withMetadata.source)).toContain('message: "Production fallback"');
+  });
+
+  it.each([
+    [
+      "failOnCompileError",
+      false,
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+    ],
+    [
+      "failOnCompileError",
+      true,
+      "Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.",
+    ],
+    [
+      "keepSourceFallbacks",
+      false,
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+    ],
+  ] as const)("rejects the removed %s option (%j) in the load hook", (name, value, message) => {
+    expect(() =>
+      createPalamedesRemixLoadHook({ [name]: value } as Parameters<
+        typeof createPalamedesRemixLoadHook
+      >[0]),
+    ).toThrow(message);
+  });
+
+  it("rejects the renamed keepSourceFallbacks option in the asset loader", () => {
+    expect(() =>
+      createPalamedesRemixAssetLoader({ keepSourceFallbacks: true } as Parameters<
+        typeof createPalamedesRemixAssetLoader
+      >[0]),
+    ).toThrow(
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.",
+    );
   });
 
   it("targets the hook-free runtime", () => {
@@ -195,15 +229,15 @@ describe("createPalamedesRemixLoadHook", () => {
     );
   });
 
-  it("propagates strict compile failures when the removed opt-out is false", () => {
+  it("propagates catalog compile failures", () => {
     mocks.compileCatalogModule.mockImplementation(() => {
-      throw new Error("failOnCompileError no longer changes this behavior");
+      throw new Error("Compilation error for 1 translation");
     });
-    const load = createPalamedesRemixLoadHook({ failOnCompileError: false });
+    const load = createPalamedesRemixLoadHook();
 
     expect(() =>
       load(new URL("file:///repo/app/locales/de.po").href, loadContext, vi.fn()),
-    ).toThrow(/failOnCompileError no longer changes this behavior/);
+    ).toThrow(/Compilation error for 1 translation/);
   });
 
   it("loads configured FCL paths with the correct locale", () => {

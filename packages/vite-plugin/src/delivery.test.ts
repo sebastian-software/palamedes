@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createReactRouterCatalogDelivery } from "./react-router";
+import { createViteCatalogDelivery } from "./delivery";
 
 const fixtureDirectories: string[] = [];
 
@@ -16,10 +16,10 @@ afterEach(async () => {
   );
 });
 
-describe("React Router catalog delivery", () => {
+describe("Vite catalog delivery", () => {
   it("loads an active-locale binding from Vite's manifest", async () => {
     const clientDirectory = await createFixture();
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const delivery = createViteCatalogDelivery({ clientDirectory });
 
     expect(delivery.getLocaleBinding("de")).toStrictEqual({
       locale: "de",
@@ -31,7 +31,7 @@ describe("React Router catalog delivery", () => {
 
   it("reloads catalog-only manifest changes without process restart", async () => {
     const clientDirectory = await createFixture();
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const delivery = createViteCatalogDelivery({ clientDirectory });
 
     expect(delivery.getLocaleBinding("de")?.imports["#pmds/route"]).toBe("/app/assets/route.de.js");
     await writeFile(
@@ -54,21 +54,19 @@ describe("React Router catalog delivery", () => {
 
   it("ignores stale production assets while the development server owns dependencies", async () => {
     const clientDirectory = await createFixture();
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory, development: true });
+    const delivery = createViteCatalogDelivery({ clientDirectory, development: true });
     expect(delivery.getLocaleBinding("de")).toBeNull();
   });
 
   it("fails closed for missing production assets and permits a pre-build dev server", async () => {
-    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-empty-"));
+    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-empty-"));
     fixtureDirectories.push(clientDirectory);
 
-    expect(() =>
-      createReactRouterCatalogDelivery({ clientDirectory }).getLocaleBinding("en"),
-    ).toThrow(/client manifest is required/);
+    expect(() => createViteCatalogDelivery({ clientDirectory }).getLocaleBinding("en")).toThrow(
+      /client manifest is required/,
+    );
     expect(
-      createReactRouterCatalogDelivery({ clientDirectory, development: true }).getLocaleBinding(
-        "en",
-      ),
+      createViteCatalogDelivery({ clientDirectory, development: true }).getLocaleBinding("en"),
     ).toBeNull();
   });
 
@@ -84,14 +82,14 @@ describe("React Router catalog delivery", () => {
       JSON.stringify(value),
     );
 
-    expect(() =>
-      createReactRouterCatalogDelivery({ clientDirectory }).getLocaleBinding("en"),
-    ).toThrow(/invalid (?:importMaps|chunkImports)/u);
+    expect(() => createViteCatalogDelivery({ clientDirectory }).getLocaleBinding("en")).toThrow(
+      /invalid (?:importMaps|chunkImports)/u,
+    );
   });
 
   it("injects a nonce-bearing import map and active chunk preloads for non-root bases", async () => {
     const clientDirectory = await createFixture();
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const delivery = createViteCatalogDelivery({ clientDirectory });
     const binding = delivery.getLocaleBinding("de");
     const transform = delivery.createDocumentTransform(binding, { nonce: "nonce&value" });
     const chunks = await collect(
@@ -108,7 +106,7 @@ describe("React Router catalog delivery", () => {
   });
 
   it("removes bare catalog preload hints before adding locale-bound assets", async () => {
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory: await createFixture() });
+    const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
     const binding = delivery.getLocaleBinding("de");
     const transform = delivery.createDocumentTransform(binding);
     const html = await collect(
@@ -121,7 +119,7 @@ describe("React Router catalog delivery", () => {
 
   it("observes catalog dependencies of a module entry without modulepreload hints", async () => {
     const clientDirectory = await createFixture();
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const delivery = createViteCatalogDelivery({ clientDirectory });
     const binding = delivery.getLocaleBinding("de");
     const transform = delivery.createDocumentTransform(binding);
     const html = await collect(
@@ -134,7 +132,7 @@ describe("React Router catalog delivery", () => {
   });
 
   it("preserves UTF-8 across streamed chunk boundaries", async () => {
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory: await createFixture() });
+    const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
     const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
     const chunks: Buffer[] = [];
     transform.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
@@ -153,9 +151,9 @@ describe("React Router catalog delivery", () => {
   });
 
   it("installs a catalog-independent development failure probe without a manifest", async () => {
-    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-dev-"));
+    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-dev-"));
     fixtureDirectories.push(clientDirectory);
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory, development: true });
+    const delivery = createViteCatalogDelivery({ clientDirectory, development: true });
     const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("en"));
     const html = await collect(
       transform,
@@ -198,9 +196,9 @@ describe("React Router catalog delivery", () => {
   });
 
   it("leaves a production document unchanged when no manifest binding exists", async () => {
-    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-prod-"));
+    const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-prod-"));
     fixtureDirectories.push(clientDirectory);
-    const delivery = createReactRouterCatalogDelivery({ clientDirectory });
+    const delivery = createViteCatalogDelivery({ clientDirectory });
     const transform = delivery.createDocumentTransform(null);
     await expect(collect(transform, "<html><head></head><body>prod</body></html>")).resolves.toBe(
       "<html><head></head><body>prod</body></html>",
@@ -209,7 +207,7 @@ describe("React Router catalog delivery", () => {
 });
 
 async function createFixture(): Promise<string> {
-  const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-client-"));
+  const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-client-"));
   fixtureDirectories.push(clientDirectory);
   await writeFile(
     path.join(clientDirectory, "palamedes-split-manifest.json"),
@@ -244,9 +242,9 @@ async function collect(stream: Transform, value: string): Promise<string> {
 }
 
 async function createDevelopmentProbe() {
-  const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-react-router-probe-"));
+  const clientDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-probe-"));
   fixtureDirectories.push(clientDirectory);
-  const delivery = createReactRouterCatalogDelivery({ clientDirectory, development: true });
+  const delivery = createViteCatalogDelivery({ clientDirectory, development: true });
   const html = await collect(
     delivery.createDocumentTransform(null),
     "<html><head></head><body>app</body></html>",

@@ -405,7 +405,7 @@ pub(super) fn transform_trans_element(
     let lookup_key = compiled_message_key(&message, context.as_deref());
 
     let mut attrs = vec![format!("id=\"{}\"", escape_string(&lookup_key))];
-    if options.keep_source_fallbacks() {
+    if options.include_source_metadata() {
         attrs.push(format!("message={{\"{}\"}}", escape_string(&message)));
     }
 
@@ -446,7 +446,7 @@ pub(super) fn transform_lowered_trans_call(
     let context = descriptor_static_property(props, "context", macro_name, location)?;
     let lookup_key = compiled_message_key(&lowered.message, context.as_deref());
     let mut properties = vec![format!("id: \"{}\"", escape_string(&lookup_key))];
-    if options.keep_source_fallbacks() {
+    if options.include_source_metadata() {
         properties.push(format!("message: \"{}\"", escape_string(&lowered.message)));
     }
     if !lowered.components.is_empty() {
@@ -675,7 +675,7 @@ fn build_runtime_descriptor(
     let mut parts = Vec::new();
 
     if let Some(message) = message
-        && options.keep_source_fallbacks()
+        && options.include_source_metadata()
     {
         parts.push(format!("message: \"{}\"", escape_string(message)));
     }

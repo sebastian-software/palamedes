@@ -94,7 +94,7 @@ describe("palamedes-loader.cjs", () => {
   it("forwards the source fallback policy to the native transform", async () => {
     const output = await runLoader({
       runtimeModule: "@acme/custom-runtime",
-      keepSourceFallbacks: false,
+      includeSourceMetadata: false,
       stripNonEssentialProps: true,
       serverFunctions: {
         initializerModule: "@/i18n/server-action",
@@ -108,7 +108,7 @@ describe("palamedes-loader.cjs", () => {
       "/repo/src/page.tsx",
       expect.objectContaining({
         runtimeModule: "@acme/custom-runtime",
-        keepSourceFallbacks: false,
+        includeSourceMetadata: false,
         stripNonEssentialProps: true,
         serverFunctions: {
           initializerModule: "@/i18n/server-action",
