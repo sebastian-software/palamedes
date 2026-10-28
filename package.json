@@ -9,9 +9,9 @@
     "url": "git+https://github.com/sebastian-software/palamedes.git"
   },
   "scripts": {
-    "test:llms": "node --test ./scripts/check-llms-surface.test.mjs",
+    "test:llms": "node --test ./scripts/check-llms-surface.test.mjs ./scripts/check-docs-drift.test.mjs",
     "test:nextjs-first-run": "node --test ./scripts/check-nextjs-first-run.mjs",
-    "check:llms": "node ./scripts/check-llms-surface.mjs && pnpm test:llms",
+    "check:llms": "node ./scripts/check-llms-surface.mjs && node ./scripts/check-docs-drift.mjs && pnpm test:llms",
     "test:core-api-reference": "node --test ./scripts/check-core-api-reference.test.mjs",
     "readme:family": "node ./scripts/readme-family.mjs --write",
     "readme:family:check": "node ./scripts/readme-family.mjs --check",
