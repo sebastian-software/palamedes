@@ -1151,13 +1151,26 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
 
       async generateBundle(_options, bundle) {
-        if (isServer(this, false, legacyBuildSsr) || sidecarModules.size === 0) {
+        // Client builds always emit the manifest, even with no sidecars: an app
+        // that has not written its first message yet still needs one for
+        // delivery to serve HTML. It then carries an empty import map per locale.
+        if (isServer(this, false, legacyBuildSsr)) {
           return;
         }
 
-        assertImportMapBase(resolvedBase);
+        // Import-map URLs only exist for sidecar assets, so an app without any
+        // can use a base the map could not express (such as a relative one).
+        if (sidecarModules.size > 0) assertImportMapBase(resolvedBase);
 
-        const cfg = await getConfigLazy();
+        let cfg: LoadedPalamedesConfig;
+        try {
+          cfg = await getConfigLazy();
+        } catch (error) {
+          // A project that uses the plugin without a config and without any
+          // messages (for example for MDX alone) has no locales to describe.
+          if (sidecarModules.size === 0 && isMissingAutoConfig(error)) return;
+          throw error;
+        }
         const locales = cfg.locales;
         const importMaps = new Map<string, Record<string, string>>(
           locales.map((locale) => [locale, {}]),
@@ -1284,6 +1297,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return [locale, JSON.parse(String(asset.source))];
         }),
       );
+      // With no message sidecars every map is empty. There is nothing to bind,
+      // so leave the HTML as built rather than delaying its entry behind a
+      // locale check that gains nothing.
+      if (Object.values(maps).every((map) => Object.keys(map.imports ?? {}).length === 0)) return;
       for (const output of Object.values(bundle)) {
         if (output.type !== "asset" || !output.fileName.endsWith(".html")) continue;
         const entries: string[] = [];
