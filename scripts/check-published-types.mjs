@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import ts from "typescript";
+import { packedFilePathsFromJson } from "./npm-pack-files.mjs";
 import { assertDualExportsUseFormatSpecificTargets } from "./published-export-contracts.mjs";
 import { publicWorkspacePackages } from "./release-packages.mjs";
 
@@ -181,7 +182,7 @@ function assertExportTargetsExist(packages) {
 function assertDeclarationTargetsArePacked(packages) {
   const problems = [];
   for (const { directory, manifest } of packages) {
-    const packedFiles = packedFilePaths(path.join(root, directory));
+    const packedFiles = packedFilePaths(path.join(root, directory), manifest.name);
     for (const target of advertisedTargets(manifest)) {
       if (!/\.d\.(?:cts|mts|ts)$/u.test(target)) continue;
       if (packedFiles.has(target.slice(2))) continue;
@@ -261,7 +262,7 @@ function assertSourceFallbackDefaultDocumentation() {
   }
 }
 
-function packedFilePaths(packageDirectory) {
+function packedFilePaths(packageDirectory, packageName) {
   const result = spawnSync(npmCommand, ["pack", "--dry-run", "--json", "--ignore-scripts"], {
     cwd: packageDirectory,
     encoding: "utf8",
@@ -273,8 +274,7 @@ function packedFilePaths(packageDirectory) {
     throw new Error(`npm pack failed in ${packageDirectory}:\n${result.stderr}`);
   }
 
-  const [{ files }] = JSON.parse(result.stdout);
-  return new Set(files.map(({ path: filePath }) => filePath));
+  return packedFilePathsFromJson(result.stdout, packageName);
 }
 
 function linkPackage(name) {
