@@ -148,11 +148,9 @@ a module through the Palamedes catalog loader.
 
 `.mdx` modules are compiled before the React or Solid JSX plugin. Catalog
 extraction discovers the same files automatically, and both paths share the
-native semantic analyzer. React MDX requires Vite 8 or `rolldown-vite`: its
-Rolldown pipeline recognizes the generated module type. Plain Rollup-based Vite
-7 projects can continue to use macros and catalog loading with `mdx: false`, or
-compile MDX for Solid with `solid({ extensions: [".mdx"] })`. React parsing is
-configured automatically, while Solid requires that explicit extension setting.
+native semantic analyzer. Vite 8's Rolldown pipeline recognizes the generated
+React module type, so React parsing is configured automatically. Solid requires
+`solid({ extensions: [".mdx"] })`.
 
 Compiled graph delivery is automatic in development and production. No
 experimental flag, application PO map, or manual client initialization is
@@ -165,15 +163,11 @@ lazy active-locale catalog, and `@palamedes/vite-plugin/delivery` to bind
 import maps before modulepreloads and modules execute.
 Static Vite HTML entries receive the same locale binding automatically.
 
-The package peer range remains broad because macros and catalog loading work on
-supported Vite releases independently of the React MDX compiler.
-On Vite 6.3 and newer, the macro transform declares `id` and `code` hook filters
-so files without a Palamedes macro import are skipped before the JavaScript hook
-runs. The handler keeps the same `includes()` check as a fallback for Vite 4
-through 6.2, which support object-form hooks but ignore filter metadata. Vite 3
-continues to use the function-form hook because it does not support object-form
-hooks. The MDX hook also declares an `.mdx` ID filter and retains its handler
-checks for compatibility.
+The package requires Vite 8. The macro transform declares `id` and `code` hook
+filters so files without a Palamedes macro import are skipped before the
+JavaScript hook runs. The handler keeps the same `includes()` check for hosts
+that ignore filter metadata. The MDX hook also declares an `.mdx` ID filter and
+retains its handler checks.
 Hook filters allow query suffixes such as `page.ts?view=preview` and
 `page.mdx?view=preview`. Configured `include` and `exclude` patterns are still
 checked against the file path without its query inside the handler.

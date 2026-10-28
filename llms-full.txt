@@ -201,7 +201,7 @@ export default defineConfig({
 ```
 
 The same `palamedes.yaml`, runtime model, `.po` loading, and extraction flow
-apply. First-class MDX compilation requires Vite 7 or newer. React module
+apply. First-class MDX compilation uses Vite 8. React module
 parsing is configured by Palamedes; Solid needs the explicit `.mdx` extension
 shown above. React development output is lowered through Vite after native
 macro transforms so `.mdx` edits can rebuild without an additional MDX plugin.
@@ -709,7 +709,7 @@ see /docs/api/remix.md and /docs/demo-deployments.md for public hosts and hostin
 
 ### Waku support status
 
-Waku support is Preview, verified with Waku 1.0.0-rc.3 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. Required unstable_getRequest and host CSP unstable_setNonce APIs keep the adapter outside the Stable SemVer contract independently of the unreleased Palamedes v2 publication preview. Re-evaluate after stable equivalents exist and request/action/stream/catalog recovery/CSP proofs pass; stable upstream 1.0 alone does not promote it. See /docs/stability.md#waku-preview-contract and /docs/api/waku.md.
+Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1 on Node.js >=22.22.0. Upstream Waku is an RC. The adapter uses its unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. This tier is independent of the unreleased Palamedes v2 publication preview. See /docs/stability.md#waku-contract and /docs/api/waku.md.
 
 ### TanStack Start, Solid, Waku, React Router
 

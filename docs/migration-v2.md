@@ -18,6 +18,11 @@ with the v2 toolchain. Keep the previous dependency lockfile and generated
 artifacts together if you need to roll back to the previous application build;
 v1 and v2 catalog artifacts are not interchangeable.
 
+V2 also raises the peer ranges to the tested versions: `@palamedes/vite-plugin`
+requires Vite 8, `@palamedes/solid` requires `solid-js@^2.0.0-rc.16`,
+`@palamedes/waku` requires `waku@^1.0.0-rc.4`, and `@palamedes/remix` declares
+`remix` as a required peer.
+
 Prebuilt npm packages do not require Rust. Check the
 [platform support table](./platform-support.md) for the Node.js floor and native
 targets; Remix requires Node.js 24.3 or newer. Building from Rust source requires

@@ -25,7 +25,7 @@ try {
         type: "module",
         dependencies: {
           "@palamedes/waku": overrides["@palamedes/waku"],
-          waku: "1.0.0-rc.3",
+          waku: "1.0.0-rc.4",
           react: "~19.3.1",
           "react-dom": "~19.3.1",
           "react-server-dom-webpack": "~19.3.1",
@@ -46,12 +46,14 @@ try {
   });
   assert.equal(Object.hasOwn(manifest, "main"), false);
   assert.equal(Object.hasOwn(manifest, "module"), false);
+  // Waku owns its Hono app; the adapter only needs a structural middleware type.
+  assert.equal(Object.hasOwn(manifest.dependencies ?? {}, "hono"), false);
   assert.equal(existsSync(path.join(installedWaku, "dist", "index.cjs")), false);
   assert.equal(
     JSON.parse(
       readFileSync(path.join(consumerRoot, "node_modules", "waku", "package.json"), "utf8"),
     ).version,
-    "1.0.0-rc.3",
+    "1.0.0-rc.4",
   );
 
   assert.deepEqual(manifest.exports["./server"], {

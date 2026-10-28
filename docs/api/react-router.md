@@ -22,7 +22,7 @@ The snippets below come from `react-router-cookie`.
 
 ## Installation
 
-The examples depend on these Palamedes packages next to React Router 8.3.1,
+The examples depend on these Palamedes packages next to React Router 8.5.1,
 React 19, and Vite 8:
 
 ```sh
@@ -30,7 +30,7 @@ pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plu
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
-`@react-router/dev@8.3.1` declares `vite: ^7.0.0 || ^8.0.0` as its peer range;
+`@react-router/dev@8.5.1` declares `vite: ^7.0.0 || ^8.0.0` as its peer range;
 the examples are verified on Vite 8.
 
 ## Configuration
@@ -452,7 +452,7 @@ pnpm verify:examples:browser --framework react-router
 - Locale changes require a new document; there is no in-place switch.
 - Production delivery needs the client build: a missing manifest or import map
   for a configured locale throws.
-- The four examples pin React Router 8.3.1 and Vite 8. Other versions are not
+- The four examples pin React Router 8.5.1 and Vite 8. Other versions are not
   verified.
 - The [stability table](../stability.md#stability-tiers) has no row for this
   host or for the `@palamedes/vite-plugin/delivery` subpath.

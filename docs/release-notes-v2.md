@@ -33,9 +33,9 @@ can bring in additional fragments as needed. Bundlers can combine multiple
 fragments into one asset.
 
 This contract covers Next.js, Vite with React or Solid, React Router Framework
-Mode, Remix, TanStack Start, and Waku. The integrations retain their
-[stability tiers](./stability.md#stability-tiers): Waku and Remix remain
-Preview.
+Mode, Remix, TanStack Start, and Waku. The Waku and Remix adapters are Stable
+in 2.0; the [stability tiers](./stability.md#stability-tiers) list the tested
+upstream versions.
 
 React Router Framework Mode has no dedicated adapter package. Its integration is
 the Vite plugin plus server wiring in the application: a request-scoped server

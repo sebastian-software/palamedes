@@ -20,7 +20,7 @@ This package is part of the verified Solid story in the example matrix. It
 shares the same catalog model, runtime semantics, and Vite plugin path as the
 React integrations while swapping only the JSX adapter layer.
 
-The current adapter targets Solid 2, starting with `2.0.0-rc.3`. Solid 1 is no
+The current adapter requires `solid-js@^2.0.0-rc.16`. Solid 1 is no
 longer part of the supported surface. The verified app examples pin Solid and
 `@solidjs/web` to `2.0.0-rc.16`, `@solidjs/vite-plugin` to `3.0.0-next.50`,
 `@solidjs/router` to `2.0.0-next.41`, and `filesystem-routing` to `0.4.0`.

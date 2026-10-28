@@ -141,8 +141,8 @@ const assets = createAssetServer({
     ],
   },
   boundary: {
-    title: "The browser locale is document-scoped; the adapter remains Preview.",
-    body: "Locale changes intentionally perform a full document navigation; reactive same-document catalog replacement and browser PO imports are not supported. The Node integration requires Node.js 24.3 or newer. All four public HTTPS demos pass locale, hydration, Frames, interaction, and catalog recovery checks. The adapter remains Preview for the exact tested Remix 3.0.0 contract; hosting completion does not broaden that version contract.",
+    title: "The browser locale is document-scoped.",
+    body: "Locale changes intentionally perform a full document navigation; reactive same-document catalog replacement and browser PO imports are not supported. The Node integration requires Node.js 24.3 or newer. All four public HTTPS demos pass locale, hydration, Frames, interaction, and catalog recovery checks. The adapter is Stable for remix@^3.0.0 and verified with Remix 3.0.0.",
     link: {
       label: "Read the Remix package scope",
       href: docsHref("api/remix"),
@@ -163,7 +163,7 @@ const assets = createAssetServer({
     },
     {
       q: "Is Remix support production-ready?",
-      a: "Treat it as a preview integration for the exact tested Remix 3.0.0 contract. All four strategies are verified in CI and on public HTTPS hosts, including Chromium interaction, Frames, and recovery. The adapter remains Preview for that exact upstream contract.",
+      a: "Yes. The adapter is Stable for remix@^3.0.0 and verified with Remix 3.0.0. All four strategies are verified in CI and on public HTTPS hosts, including Chromium interaction, Frames, and recovery.",
     },
   ],
   related: [
