@@ -6,7 +6,9 @@ use ferrocat::{
     CompileCatalogArtifactIcuOptions, CompileCatalogArtifactOptions, CompiledKeyStrategy,
     ParseCatalogOptions,
 };
-use palamedes::{RuntimeCompiledMessage, compile_runtime_catalog_messages};
+use palamedes::{
+    RuntimeCompiledMessage, compile_runtime_catalog_messages, parse_catalog_for_compile,
+};
 use palamedes_i18n::{CatalogArtifact, FORMAT_VERSION, Instruction, Message};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -178,11 +180,11 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
         let path = root.join(format!("{locale}.po"));
         let content =
             fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
-        let mut parsed = ferrocat::po::parse_po(&content)?;
+        let parsed = ferrocat::po::parse_po(&content)?;
         let mut messages = BTreeMap::new();
         for item in parsed
             .items
-            .iter_mut()
+            .iter()
             .filter(|item| !item.obsolete && !item.msgid.is_empty())
         {
             if item.msgctxt.is_some() || item.msgid_plural.is_some() {
@@ -196,20 +198,11 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
                 return Err(format!("{locale}: duplicate source {:?}", item.msgid).into());
             }
         }
-        // Ferrocat's ordinary normalized projection intentionally discards
-        // review flags. Clear unreviewed values before that projection so the
-        // canonical compiler resolves them through the same fallback chain.
-        for item in &mut parsed.items {
-            if item.flags.iter().any(|flag| flag == "fuzzy") {
-                item.msgstr = ferrocat::po::MsgStr::Singular(String::new());
-            }
-        }
-        let compiled_input =
-            ferrocat::po::stringify_po(&parsed, &ferrocat::po::SerializeOptions::default());
-        let catalog = ferrocat::parse_catalog(
-            ParseCatalogOptions::new(&compiled_input, &builder.source_locale).with_locale(locale),
-        )?
-        .into_normalized_view()?;
+        // The JavaScript target shares this projection, which clears fuzzy
+        // values so the compiler resolves them through the fallback chain.
+        let catalog = parse_catalog_for_compile(
+            ParseCatalogOptions::new(&content, &builder.source_locale).with_locale(locale),
+        )?;
         normalized.insert(locale.clone(), catalog);
         catalogs.insert(locale.clone(), messages);
     }

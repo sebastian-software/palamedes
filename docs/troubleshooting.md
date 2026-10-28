@@ -128,12 +128,14 @@ Missing N translation(s):
 
 Cause:
 
-The active catalog is missing translations and the plugin was configured with
-`failOnMissing: true`.
+The active catalog is missing translations, or has entries marked `fuzzy`, and
+the plugin was configured with `failOnMissing: true`. Fuzzy entries count as
+missing and compile through the fallback chain.
 
 Fix:
 
 - Add the missing translations to the locale catalog.
+- Review fuzzy entries and remove their `fuzzy` marker once they are correct.
 - Run `pnpm exec pmds extract` after changing source messages.
 - Run `pnpm exec pmds audit --fail-on error` to inspect catalog diagnostics.
 - If the locale is a generated pseudo-locale, set `pseudo-locale` in

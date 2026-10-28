@@ -296,7 +296,7 @@ fn compile_js(
                             severity: CatalogArtifactDiagnosticSeverity::Error,
                             code: MISSING_TRANSLATION.to_owned(),
                             message: format!(
-                                "Missing translation; --fail-on-missing rejects the fallback from {resolved_locale}."
+                                "Missing or fuzzy translation; --fail-on-missing rejects the fallback from {resolved_locale}."
                             ),
                             catalog_path: resource_path.clone(),
                             locale: locale.clone(),

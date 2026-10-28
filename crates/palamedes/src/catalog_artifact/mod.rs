@@ -21,6 +21,7 @@ use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 pub use self::cache::CatalogCompilationCache;
 use self::compile::{build_artifact_result, runtime_icu_options};
 use self::load::LocaleCatalogs;
+pub use self::load::parse_catalog_for_compile;
 use self::resolve::{ferrocat_fallback_chain, prepare_compilation};
 pub use self::types::{
     CatalogArtifactConfig, CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity,
