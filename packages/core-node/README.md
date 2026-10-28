@@ -137,8 +137,7 @@ for source-aware exemptions and span semantics.
 `analyzeMdxNative()` and `transformMacrosNative()` omit authored source-message
 metadata by default. Pass `includeSourceMetadata: true` when generated runtime
 code must retain it for diagnostics. The v1 `keepSourceFallbacks` name throws a
-migration error. `stripMessageField` remains a deprecated inverse option for
-macro-transform compatibility.
+migration error, as does the removed inverse option `stripMessageField`.
 
 `assertNoRemovedPalamedesOptions(options, names)` throws the shared v2
 migration error when an options object still sets one of the named removed

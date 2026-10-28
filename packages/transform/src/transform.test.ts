@@ -3,7 +3,7 @@ import type { TransformOptions } from "./types";
 
 function transformPalamedesMacros(code: string, filename: string, options: TransformOptions = {}) {
   const compatibilityOptions =
-    options.includeSourceMetadata === undefined && options.stripMessageField === undefined
+    options.includeSourceMetadata === undefined
       ? { ...options, includeSourceMetadata: true }
       : options;
   return transformPalamedesMacrosRaw(code, filename, compatibilityOptions);
@@ -481,19 +481,20 @@ function View() {
     }
   });
 
-  it("supports the legacy stripMessageField option", () => {
-    const code = `
-import { t } from "@palamedes/core/macro";
-function message() {
-const msg = t({ message: "Hello" });
-}
-`;
-    const result = transformPalamedesMacros(code, "test.ts", {
-      stripMessageField: true,
-    });
-
-    expect(result.code).toContain('getI18n()._("');
-    expect(result.code).not.toContain('message: "Hello"');
+  it("rejects the removed stripMessageField option", () => {
+    const macroSource =
+      'import { t } from "@palamedes/core/macro";\nfunction message() { return t`Hello`; }';
+    for (const code of [macroSource, "const x = 1;"]) {
+      for (const stripMessageField of [true, false]) {
+        expect(() =>
+          transformPalamedesMacrosRaw(code, "test.ts", {
+            stripMessageField,
+          } as unknown as TransformOptions),
+        ).toThrow(
+          "Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.",
+        );
+      }
+    }
   });
 
   it("emits parseable JSX for <Trans> messages containing double quotes", () => {

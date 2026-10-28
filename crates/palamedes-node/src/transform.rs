@@ -17,8 +17,6 @@ pub struct NativeTransformOptions {
     /// Include authored source messages as diagnostic source metadata.
     /// Defaults to `false`; the metadata never supplies runtime output.
     pub include_source_metadata: Option<bool>,
-    /// @deprecated Use `includeSourceMetadata` with the inverse value.
-    pub strip_message_field: Option<bool>,
     pub server_functions: Option<NativeServerFunctionTransformOptions>,
 }
 
@@ -56,7 +54,6 @@ impl From<NativeTransformOptions> for palamedes::NativeTransformOptions {
             runtime_import_name: value.runtime_import_name,
             strip_non_essential_props: value.strip_non_essential_props,
             include_source_metadata: value.include_source_metadata,
-            strip_message_field: value.strip_message_field,
             server_functions: value.server_functions.map(|options| {
                 palamedes::ServerFunctionTransformOptions {
                     initializer_module: options.initializer_module,

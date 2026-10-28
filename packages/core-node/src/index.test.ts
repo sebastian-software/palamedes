@@ -2484,7 +2484,7 @@ msgstr ""
     }
   });
 
-  it("rejects the renamed keepSourceFallbacks option before native transforms", () => {
+  it("rejects removed source metadata options before native transforms", () => {
     const migration =
       "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.";
 
@@ -2493,6 +2493,13 @@ msgstr ""
         keepSourceFallbacks: true,
       } as unknown as NativeTransformOptions),
     ).toThrow(migration);
+    expect(() =>
+      transformMacrosNative("const x = 1;", "sample.ts", {
+        stripMessageField: true,
+      } as unknown as NativeTransformOptions),
+    ).toThrow(
+      "Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.",
+    );
     expect(() =>
       analyzeMdxNative("# Hello", "page.mdx", {
         keepSourceFallbacks: false,

@@ -42,7 +42,7 @@ export function transformPalamedesMacros(
   filename: string,
   options: TransformOptions = {},
 ): TransformResult {
-  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
+  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks", "stripMessageField"]);
   const mightNeedServerFunctionTransform =
     options.serverFunctions !== undefined && mightContainServerFunctions(code);
 

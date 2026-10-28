@@ -579,8 +579,6 @@ export interface NativeTransformOptions {
    * Defaults to `false`; the metadata never supplies runtime output.
    */
   includeSourceMetadata?: boolean;
-  /** @deprecated Use `includeSourceMetadata` with the inverse value. */
-  stripMessageField?: boolean;
   serverFunctions?: NativeServerFunctionTransformOptions;
 }
 export interface NativeTransformEdit {

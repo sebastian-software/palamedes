@@ -68,6 +68,5 @@ V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.
 
-`stripMessageField` is the deprecated inverse compatibility option. An explicit
-`includeSourceMetadata` value takes precedence; new integrations should use only
-the positive option.
+The v1 inverse option `stripMessageField` was removed and also throws a
+migration error. Use `includeSourceMetadata` instead.

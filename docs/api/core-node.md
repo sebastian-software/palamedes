@@ -227,9 +227,10 @@ consume the re-exported native `CatalogMachineTranslationReview` and
 `assertNoRemovedPalamedesOptions(options, names)` throws the shared v2
 migration error from `REMOVED_PALAMEDES_OPTION_MESSAGES` when `options` sets one
 of the named removed options (`failOnCompileError`, `keepSourceFallbacks`,
-`messageSplitting`, `experimentalGraphSplitting`, or `cwd`) to any value other
-than `undefined`. The first-party adapters call it during setup. The catalog
-module APIs reject `failOnCompileError`, and the transform and MDX APIs reject
+`stripMessageField`, `messageSplitting`, `experimentalGraphSplitting`, or `cwd`)
+to any value other than `undefined`. The first-party adapters call it during
+setup. The catalog module APIs reject `failOnCompileError`. The transform API
+rejects `keepSourceFallbacks` and `stripMessageField`, and the MDX APIs reject
 `keepSourceFallbacks`; use `includeSourceMetadata` instead.
 
 `analyzeSourceNative()` performs the source-level semantic analysis used by

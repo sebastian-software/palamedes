@@ -1365,6 +1365,6 @@ export function transformMacrosNative(
   filename: string,
   options?: NativeTransformOptions,
 ): NativeTransformResult {
-  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
+  assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks", "stripMessageField"]);
   return native.transformMacros(source, filename, options);
 }

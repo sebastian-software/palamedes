@@ -287,6 +287,7 @@ Error, depending on the option:
 ```text
 Palamedes v2 removed failOnCompileError: invalid ICU always fails compilation. Remove the option; use failOnMissing for translation completeness.
 Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.
+Palamedes v2 removed stripMessageField: use includeSourceMetadata instead, with the inverse value. Remove the option; source metadata is already omitted by default.
 Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.
 Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.
 Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.
@@ -311,6 +312,7 @@ Fix:
 | ------------------------------------------ | ---------------------------------------------------------------- |
 | `failOnCompileError`                       | Remove it. Use `failOnMissing` for translation completeness.     |
 | `keepSourceFallbacks`                      | Rename it to `includeSourceMetadata`. The default stays `false`. |
+| `stripMessageField` (transform)            | Remove it. Use `includeSourceMetadata` with the inverse value.   |
 | `mdx.keep-source-fallbacks` (config files) | Rename it to `mdx.include-source-metadata`.                      |
 | `messageSplitting` (Next.js)               | Remove it. Delivery is automatic.                                |
 | `experimentalGraphSplitting` (Vite)        | Remove it, including `{ localeBinding }`. Delivery is automatic. |

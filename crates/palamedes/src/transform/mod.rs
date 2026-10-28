@@ -55,12 +55,6 @@ pub struct NativeTransformOptions {
     /// diagnostic metadata; it never supplies replacement runtime output.
     #[serde(rename = "includeSourceMetadata")]
     pub include_source_metadata: Option<bool>,
-    /// Legacy inverse of `include_source_metadata`.
-    ///
-    /// Explicit values remain supported for compatibility. New integrations
-    /// should use the positive option instead.
-    #[serde(rename = "stripMessageField")]
-    pub strip_message_field: Option<bool>,
     /// Instruments recognized Server Functions with a request initializer.
     #[serde(rename = "serverFunctions")]
     pub server_functions: Option<ServerFunctionTransformOptions>,
@@ -79,9 +73,7 @@ pub struct ServerFunctionTransformOptions {
 
 impl NativeTransformOptions {
     fn include_source_metadata(&self) -> bool {
-        self.include_source_metadata
-            .or_else(|| self.strip_message_field.map(|strip| !strip))
-            .unwrap_or(false)
+        self.include_source_metadata.unwrap_or(false)
     }
 }
 
