@@ -161,7 +161,7 @@ const ROUTE_EXPECTATIONS = [
     path: "/icu-messageformat",
     h1: "'Supports ICU' is not a yes-or-no answer.",
   },
-  { path: "/locale-routing", h1: "Four ways to carry a locale." },
+  { path: "/locale-routing", h1: "Five ways to carry a locale." },
   { path: "/blog", h1: "Building i18n tooling in the" },
   {
     path: "/blog/measuring-palamedes-honestly",

@@ -138,7 +138,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
       >
         <StrategyGrid page={page} />
         <Link to="/locale-routing" viewTransition className="pmds-arrow-link mt-6">
-          Compare the four locale strategies →
+          Compare locale strategies →
         </Link>
       </Section>
 

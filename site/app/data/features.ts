@@ -75,8 +75,8 @@ export const STRATEGY_CARDS: StrategyCard[] = [
   {
     slug: "tld",
     icon: "flag",
-    title: "Top-level domain",
-    body: "example.de vs example.com. Maximum market trust; Palamedes maps each domain to its locale.",
+    title: "Top-level domain (TLD)",
+    body: "product.com to product.de. Palamedes replaces the final DNS label and keeps the rest of the hostname; paths have no locale prefix.",
   },
 ];
 
@@ -90,8 +90,8 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
   {
     icon: "compass",
     title: "Pick a locale strategy",
-    body: "Cookie, route, subdomain, or TLD — with checked application examples and public demos where hosting is available.",
-    href: "/frameworks",
+    body: "Choose cookie, route prefix, subdomain, TLD, or explicit language domains. Compare the URL policies and their verification coverage.",
+    href: "/locale-routing",
   },
   {
     icon: "server",

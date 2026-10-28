@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "measuredAt": "2026-10-28T10:55:01.648Z",
-  "sourceCommit": "9ce92bd90cde8f7302eb7ea0c8f81107c4cf058e",
+  "measuredAt": "2026-10-28T11:19:09.260Z",
+  "sourceCommit": "7382f94163387eb9c3be7c22ca23516e10774978",
   "worktreeDirty": true,
-  "sourceSha256": "b7aa9eca097de4a461b9d2ab745b8bb3bca92b0f1ab19b1de8121de2f48dbda8",
+  "sourceSha256": "ce8f4fb06636736f1727361a3dd417310095f05d03f1ae2e1f823d883d798e38",
   "environment": {
     "node": "v24.22.1",
     "vite": "8.2.4",
@@ -115,7 +115,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "1498a18b2133788cdbf401a365cf822253a5b4e9e951a75b629ca961c1806361"
+          "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
           "path": "packages/react/dist/compiled.mjs",
@@ -176,7 +176,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "1498a18b2133788cdbf401a365cf822253a5b4e9e951a75b629ca961c1806361"
+          "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
