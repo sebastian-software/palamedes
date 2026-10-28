@@ -208,6 +208,10 @@ package unless the row says otherwise. Internal subpaths exist for generated
 code, framework renderers, or build wiring; applications do not import them,
 and they can change in any release.
 
+`pnpm check:published-types` runs `scripts/check-subpath-tiers.mjs`, which
+fails when a published package exports a subpath that has no row here, or
+when a row names a subpath that no package exports.
+
 | Subpath                                           | Tier     | Notes                                                                                       |
 | ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
 | `@palamedes/core/compiled`                        | Stable   | Alias of the package root; the transform and generated catalogs import it.                  |
@@ -229,7 +233,7 @@ and they can change in any release.
 | `@palamedes/next-plugin/server`                   | Stable   | `createNextServerI18n` and `createNextServerI18nScope`.                                     |
 | Other `@palamedes/next-plugin/*` subpaths         | Internal | Loaders, server-function entries, and catalog modules that `withPalamedes()` wires by path. |
 | `@palamedes/tanstack/server`                      | Stable   | `createTanStackServerI18n` and catalog response delivery for React Start.                   |
-| `@palamedes/react-router`                         | Stable   | Root entry only: `createReactRouterI18n`, its middleware, and server entry; no subpaths.    |
+| `@palamedes/react-router/document`                | Stable   | `useDocumentLocale` and `useCatalogAvailable` for the root `Layout`.                        |
 | `@palamedes/waku/server`                          | Stable   | Waku catalog delivery middleware.                                                           |
 | `@palamedes/remix/server`, `/client`, `/register` | Stable   | Server, browser, and Node loader entry points.                                              |
 | `@palamedes/remix/compiled`, `/macro`             | Stable   | Transform target and compile-time components.                                               |
