@@ -150,23 +150,19 @@ const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 let driftWarned = false;
 
 const DRIFT_MESSAGE =
-  "Palamedes found a TanStack Start module script under /assets/ but none matching assets/index-*.js, " +
-  "so the catalog readiness gate was not applied and the app may hydrate over a failed catalog. " +
-  "The installed TanStack Start version probably changed its entry naming; check that @palamedes/tanstack supports it.";
+  "@palamedes/tanstack found a built module script under /assets/ but none matching assets/index-*.js to gate, " +
+  "so client catalogs may load late and pages may flash untranslated text. " +
+  "The installed TanStack Start version probably changed its entry naming; please report this at https://github.com/sebastian-software/palamedes/issues.";
 
 /**
- * The bootstrap gate matches upstream output by name. When a built entry-like
- * module script is present but none was gated, the gate is silently off.
- * Development fails the response; production keeps serving the page and logs
- * one warning per process.
+ * The bootstrap gate matches upstream output by name. When a built module
+ * script is present but none was gated, the gate is silently off. Keep serving
+ * the page and log one warning per process.
  */
-function reportBootstrapDrift(development: boolean): Error | undefined {
-  if (development) return new Error(DRIFT_MESSAGE);
-  if (!driftWarned) {
-    driftWarned = true;
-    console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
-  }
-  return undefined;
+function reportBootstrapDrift(): void {
+  if (driftWarned) return;
+  driftWarned = true;
+  console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
 }
 
 /**
@@ -193,16 +189,8 @@ function createTanStackBootstrapGateTransform(options: {
     flush(callback) {
       buffered += decoder.end();
       const output = flushMarkup(true);
-      const drift =
-        gatedEntries === 0 && unmatchedAssetScripts > 0
-          ? reportBootstrapDrift(options.development)
-          : undefined;
-      if (drift) {
-        this.push(output);
-        callback(drift);
-      } else {
-        callback(null, output);
-      }
+      if (gatedEntries === 0 && unmatchedAssetScripts > 0) reportBootstrapDrift();
+      callback(null, output);
     },
   });
 

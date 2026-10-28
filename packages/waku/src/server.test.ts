@@ -117,14 +117,19 @@ describe("Waku catalog document delivery", () => {
     expect(String(warn.mock.calls[0]?.[0])).toContain("Waku");
   });
 
-  it("fails the response loudly in development when the bootstrap output drifts", async () => {
+  it("warns instead of failing the page when development output drifts", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const response = await driftHarness(
       '<script id="_R_">startWaku("/assets/main-abc.js")</script>',
       true,
     );
-    await expect(response.text()).rejects.toThrow(/Waku's inline bootstrap/u);
-    expect(warn).not.toHaveBeenCalled();
+    await expect(response.text()).resolves.toContain("startWaku");
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0]?.[0]);
+    expect(message).toContain("@palamedes/waku");
+    expect(message).toContain("entry import");
+    expect(message).toContain("flash untranslated");
+    expect(message).toContain("please report");
   });
 
   it("defaults clientDirectory to dist/public and forwards manifestName", () => {

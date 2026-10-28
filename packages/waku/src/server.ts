@@ -100,12 +100,7 @@ export function createWakuCatalogDeliveryMiddleware(
         ),
       )
       .pipeThrough(
-        webTransform(
-          createWakuBootstrapGateTransform({
-            allowMissingPromise: development,
-            failOnDrift: development,
-          }),
-        ),
+        webTransform(createWakuBootstrapGateTransform({ allowMissingPromise: development })),
       );
     const headers = new Headers(response.headers);
     headers.delete("content-length");
@@ -131,23 +126,19 @@ const TAIL_SIZE = 192;
 let driftWarned = false;
 
 const DRIFT_MESSAGE =
-  'Palamedes could not find the entry import in Waku\'s inline bootstrap script (<script id="_R_">), ' +
-  "so the catalog readiness gate was not applied and Waku may hydrate over a failed catalog. " +
-  "The installed Waku version probably changed its bootstrap output; check that @palamedes/waku supports it.";
+  '@palamedes/waku found Waku\'s inline bootstrap script (<script id="_R_">) but could not find its entry import to gate, ' +
+  "so client catalogs may load late and pages may flash untranslated text. " +
+  "The installed Waku version probably changed its bootstrap output; please report this at https://github.com/sebastian-software/palamedes/issues.";
 
 /**
  * The bootstrap gate is a textual rewrite of upstream output. When the Waku
  * bootstrap is present but the entry import was not rewritten, the gate is
- * silently off. Development fails the response; production keeps serving the
- * page and logs one warning per process.
+ * silently off. Keep serving the page and log one warning per process.
  */
-function reportBootstrapDrift(failOnDrift: boolean): Error | undefined {
-  if (failOnDrift) return new Error(DRIFT_MESSAGE);
-  if (!driftWarned) {
-    driftWarned = true;
-    console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
-  }
-  return undefined;
+function reportBootstrapDrift(): void {
+  if (driftWarned) return;
+  driftWarned = true;
+  console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
 }
 
 /**
@@ -156,13 +147,9 @@ function reportBootstrapDrift(failOnDrift: boolean): Error | undefined {
  * This keeps Waku from mounting over the host error document when an initial
  * fragment fails, without timing delays or app-owned DOM handling.
  */
-function createWakuBootstrapGateTransform(options: {
-  allowMissingPromise: boolean;
-  failOnDrift: boolean;
-}): Transform {
+function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolean }): Transform {
   const decoder = new StringDecoder("utf8");
   let tail = "";
-  let driftError: Error | undefined;
 
   function gateWakuEntry(value: string): string {
     const importExpression = (source: string) =>
@@ -179,7 +166,7 @@ function createWakuBootstrapGateTransform(options: {
         entryRewrites += 1;
         return importExpression(source);
       });
-    if (entryRewrites === 0) driftError ??= reportBootstrapDrift(options.failOnDrift);
+    if (entryRewrites === 0) reportBootstrapDrift();
     return gated;
   }
 
@@ -192,7 +179,7 @@ function createWakuBootstrapGateTransform(options: {
     flush(callback) {
       tail += decoder.end();
       flushSafePrefix(this, true);
-      callback(driftError);
+      callback();
     },
   });
 

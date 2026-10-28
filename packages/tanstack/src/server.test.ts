@@ -448,12 +448,19 @@ describe("TanStack server catalog adapter", () => {
       expect(String(warn.mock.calls[0]?.[0])).toContain("TanStack");
     });
 
-    it("fails the response loudly in development when the entry naming drifts", async () => {
+    it("warns instead of failing the page when development entry naming drifts", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const response = await deliverDocument(
         '<html><head></head><body><script type="module" src="/assets/main-abc.js"></script></body></html>',
         true,
       );
-      await expect(response.text()).rejects.toThrow(/assets\/index-\*\.js/u);
+      expect(await response.text()).toContain('src="/assets/main-abc.js"');
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0]?.[0]);
+      expect(message).toContain("@palamedes/tanstack");
+      expect(message).toContain("assets/index-*.js");
+      expect(message).toContain("flash untranslated");
+      expect(message).toContain("please report");
     });
   });
 });
