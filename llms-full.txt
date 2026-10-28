@@ -208,7 +208,7 @@ parsing is configured by Palamedes; Solid needs the explicit `.mdx` extension
 shown above. React development output is lowered through Vite after native
 macro transforms so `.mdx` edits can rebuild without an additional MDX plugin.
 
-MDX parsing uses Ferromark 3.6.0's source-ranged AST with strict JavaScript/JSX
+MDX parsing uses Ferromark 3.7.0's source-ranged AST with strict JavaScript/JSX
 validation. Image alt text includes the complete accessible description,
 including inline-code words. Separate paragraphs inside JSX remain separate
 messages. Structured alt metadata provides original source references, and
