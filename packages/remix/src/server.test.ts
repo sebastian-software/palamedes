@@ -61,19 +61,28 @@ describe("stable Remix client entries", () => {
       ...importMap,
       scopes: {
         ...importMap.scopes,
-        [entryUrl!]: { "@palamedes/remix/client": "/assets/remix/client.hash.js" },
+        [entryUrl!]: {
+          "@palamedes/remix/client": "/assets/remix/client.hash.js",
+          "@palamedes/remix/entry-data": encodeEntryData({
+            entry: "/assets/app/client.hash.js",
+            errorHtml: "<p>Reload</p>",
+          }),
+        },
       },
     });
     expect(mapSource).not.toContain("</script>");
     expect(html.match(/nonce="request&quot;nonce"/gu)).toHaveLength(2);
+    expect(html).not.toContain("data-palamedes-entry");
+    expect(html).not.toContain("data-palamedes-error-html");
     const response = remixI18n.serveClientCatalogAsset(
       new Request(`https://example.test${entryUrl}`),
     );
     expect(response?.status).toBe(200);
     const source = await response?.text();
     expect(source).toContain('from "@palamedes/remix/client"');
-    expect(html).toContain('data-palamedes-entry="/assets/app/client.hash.js"');
-    expect(html).toContain('data-palamedes-error-html="&lt;p>Reload&lt;/p>"');
+    expect(source).toContain('import.meta.resolve("@palamedes/remix/entry-data")');
+    expect(source).not.toContain("querySelector");
+    expect(source).not.toContain("dataset");
   });
 
   it("serves identical bootstrap bytes from cold workers and restarted adapters", async () => {
@@ -93,6 +102,7 @@ describe("stable Remix client entries", () => {
     };
     const html = await first.renderClientEntry("app/public/client.tsx", { assetServer });
     const src = html.match(/src="([^"]+)"/u)![1];
+    expect(src).toMatch(/^\/custom\/assets\/__palamedes\/entry\/[a-f0-9]{64}\.js$/u);
     const request = new Request(`https://example.test${src}`);
     const expected = await first.serveClientCatalogAsset(request)!.text();
     for (const worker of [cold, createWorker()]) {
@@ -101,6 +111,8 @@ describe("stable Remix client entries", () => {
       expect(response.headers.get("content-type")).toBe("application/javascript; charset=utf-8");
       expect(await response.text()).toBe(expected);
     }
+    // Any worker renders the same scoped entry data for the same build.
+    expect(await cold.renderClientEntry("app/public/client.tsx", { assetServer })).toBe(html);
     expect(
       cold.serveClientCatalogAsset(
         new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
@@ -115,7 +127,7 @@ describe("stable Remix client entries", () => {
       loadMessages: () => defineCompiledCatalog({}),
     });
     const entryUrl = '/assets/app.js?value="<&';
-    const errorHtml = '<p title="retry & reload">Failure</p></script>';
+    const errorHtml = '<p title="retry & reload">Failure</p></script>\r\n\u2028%';
     const options = {
       assetServer: {
         getHref: async (file: string) => (file.endsWith(".tsx") ? entryUrl : "/assets/client.js"),
@@ -124,12 +136,14 @@ describe("stable Remix client entries", () => {
       errorHtml,
     };
     const html = await worker.renderClientEntry("app/public/client.tsx", options);
-    expect(html).toContain('data-palamedes-entry="/assets/app.js?value=&quot;&lt;&amp;"');
-    expect(html).toContain(
-      'data-palamedes-error-html="&lt;p title=&quot;retry &amp; reload&quot;>Failure&lt;/p>&lt;/script>"',
-    );
     expect(html.match(/<script /gu)).toHaveLength(2);
+    expect(html).not.toContain("Failure</p>");
     const src = html.match(/src="([^"]+)"/u)![1];
+    const entryData = parseEntryScope(html, src)["@palamedes/remix/entry-data"]!;
+    expect(decodeEntryData(entryData)).toEqual({ entry: entryUrl, errorHtml });
+    // Browsers normalize import-map addresses with the URL parser; the encoded
+    // data must survive that normalization unchanged.
+    expect(new URL(entryData).href).toBe(entryData);
     const otherHtml = await worker.renderClientEntry("app/public/client.tsx", {
       ...options,
       errorHtml: "Other entry",
@@ -142,52 +156,120 @@ describe("stable Remix client entries", () => {
     expect(source).not.toContain(errorHtml);
   });
 
-  it("executes the bootstrap using its own script data when other entries precede it", async () => {
-    const worker = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: () => defineCompiledCatalog({}),
-    });
-    const html = await worker.renderClientEntry("app/public/client.tsx", {
-      assetServer: {
-        getHref: async () => "/assets/client.js",
-        getImportMap: async () => ({ imports: {}, scopes: {} }),
-      },
-    });
-    const src = html.match(/src="([^"]+)"/u)![1];
-    const source = await worker
-      .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
-      .text();
-    const client = `data:text/javascript,${encodeURIComponent("export const startRemixClient = (...args) => globalThis.startTestRemixClient(...args);")}`;
-    const moduleUrl = `data:text/javascript,${encodeURIComponent(source.replace('"@palamedes/remix/client"', JSON.stringify(client)))}`;
-    const start = vi.fn(
-      async (loadEntry: () => Promise<{ default: string }>, options: { errorHtml?: string }) => {
-        expect((await loadEntry()).default).toBe("own entry");
-        expect(options.errorHtml).toBe('<p title="retry & reload">Failure</p>');
-      },
-    );
-    vi.stubGlobal("startTestRemixClient", start);
-    vi.stubGlobal("document", {
-      querySelectorAll: () => [
-        {
-          src: "https://example.test/another-entry.js",
-          dataset: { palamedesEntry: "must-not-load" },
+  describe("bootstrap execution", () => {
+    const ownEntry = 'data:text/javascript,export default "own entry"';
+    const forgedEntry = "data:text/javascript,export default 'forged entry'";
+    const forgedErrorHtml = '<img src="x" onerror="alert(1)">';
+
+    const renderAndRun = async (
+      errorHtml: string | undefined,
+      resolveEntryData: (scopedEntryData: string) => string | null,
+    ) => {
+      const worker = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+      });
+      const html = await worker.renderClientEntry("app/public/client.tsx", {
+        assetServer: {
+          getHref: async (file: string) => (file.endsWith(".tsx") ? ownEntry : "/assets/client.js"),
+          getImportMap: async () => ({ imports: {}, scopes: {} }),
         },
+        ...(errorHtml === undefined ? {} : { errorHtml }),
+      });
+      const src = html.match(/src="([^"]+)"/u)![1];
+      const scopedEntryData = parseEntryScope(html, src)["@palamedes/remix/entry-data"]!;
+      const source = await worker
+        .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
+        .text();
+      // Node has no import maps: route both scoped specifiers through test doubles
+      // that model the import-map scope this document rendered for the bootstrap.
+      const client = `data:text/javascript,${encodeURIComponent("export const startRemixClient = (...args) => globalThis.startTestRemixClient(...args);")}`;
+      const testSource = source
+        .replace('"@palamedes/remix/client"', JSON.stringify(client))
+        .replace("import.meta.resolve(", "globalThis.resolveTestSpecifier(");
+      const moduleUrl = `data:text/javascript,${encodeURIComponent(`${testSource}\n// ${crypto.randomUUID()}`)}`;
+      const calls: Array<{ entry: unknown; errorHtml: string | undefined }> = [];
+      vi.stubGlobal(
+        "startTestRemixClient",
+        async (loadEntry: () => Promise<{ default: unknown }>, options: { errorHtml?: string }) => {
+          try {
+            calls.push({ entry: (await loadEntry()).default, errorHtml: options.errorHtml });
+          } catch (error) {
+            calls.push({ entry: error, errorHtml: options.errorHtml });
+          }
+        },
+      );
+      vi.stubGlobal("resolveTestSpecifier", (specifier: string) => {
+        expect(specifier).toBe("@palamedes/remix/entry-data");
+        const resolved = resolveEntryData(scopedEntryData);
+        if (resolved === null) throw new TypeError(`Unmapped specifier ${specifier}`);
+        return resolved;
+      });
+      // Injected, non-executing markup precedes the real script and claims its
+      // URL. The bootstrap must not consult the document for its data at all.
+      const forgedScripts = [
+        { src: moduleUrl, dataset: { palamedesEntry: forgedEntry } },
         {
           src: moduleUrl,
-          dataset: {
-            palamedesEntry: 'data:text/javascript,export default "own entry"',
-            palamedesErrorHtml: '<p title="retry & reload">Failure</p>',
-          },
+          dataset: { palamedesEntry: forgedEntry, palamedesErrorHtml: forgedErrorHtml },
         },
-      ],
+        { src: moduleUrl, dataset: { palamedesEntry: ownEntry } },
+      ];
+      const documentLookup = vi.fn(() => forgedScripts);
+      vi.stubGlobal("document", {
+        querySelector: documentLookup,
+        querySelectorAll: documentLookup,
+        getElementsByTagName: documentLookup,
+        get scripts() {
+          return documentLookup();
+        },
+        get currentScript() {
+          return documentLookup()[0];
+        },
+      });
+      try {
+        await import(/* @vite-ignore */ moduleUrl);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(documentLookup).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+      return calls[0]!;
+    };
+
+    it("loads the entry and error markup scoped to its own URL, ignoring forged siblings", async () => {
+      await expect(
+        renderAndRun('<p title="retry & reload">Failure</p>', (data) => data),
+      ).resolves.toEqual({
+        entry: "own entry",
+        errorHtml: '<p title="retry & reload">Failure</p>',
+      });
     });
-    try {
-      await import(/* @vite-ignore */ moduleUrl);
-      expect(start).toHaveBeenCalledOnce();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+
+    it("keeps the default error markup when forged siblings carry error markup", async () => {
+      await expect(renderAndRun(undefined, (data) => data)).resolves.toEqual({
+        entry: "own entry",
+        errorHtml: undefined,
+      });
+    });
+
+    it.each([
+      ["is not mapped", () => null],
+      ["resolves outside its scope", () => "https://evil.test/@palamedes/remix/entry-data"],
+      ["is malformed", () => "data:application/json,%7Bnot-json"],
+      ["has no entry", () => `data:application/json,${encodeURIComponent('{"errorHtml":"x"}')}`],
+    ])(
+      "fails visibly through the default error path when entry data %s",
+      async (_label, resolveEntryData) => {
+        const call = await renderAndRun("<p>Configured</p>", resolveEntryData);
+        expect(call.errorHtml).toBeUndefined();
+        expect(call.entry).toBeInstanceOf(Error);
+        expect((call.entry as Error).message).toBe(
+          "Palamedes Remix application entry data is missing from the import map.",
+        );
+      },
+    );
   });
 
   it("propagates asset graph compilation failures before rendering an entry", async () => {
@@ -709,4 +791,20 @@ import path from "node:path";
 
 function unusedRenderMessage(): never {
   throw new Error("renderMessage is not used by request-scope tests.");
+}
+
+const ENTRY_DATA_PREFIX = "data:application/json,";
+
+function encodeEntryData(data: { entry: string; errorHtml: string | null }): string {
+  return `${ENTRY_DATA_PREFIX}${encodeURIComponent(JSON.stringify(data))}`;
+}
+
+function decodeEntryData(value: string): unknown {
+  expect(value.startsWith(ENTRY_DATA_PREFIX)).toBe(true);
+  return JSON.parse(decodeURIComponent(value.slice(ENTRY_DATA_PREFIX.length)));
+}
+
+function parseEntryScope(html: string, src: string): Record<string, string> {
+  const mapSource = html.match(/<script type="importmap"[^>]*>(.*?)<\/script>/u)![1]!;
+  return (JSON.parse(mapSource) as { scopes: Record<string, Record<string, string>> }).scopes[src]!;
 }

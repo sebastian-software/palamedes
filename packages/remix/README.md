@@ -147,10 +147,11 @@ const entry = await remixI18n.renderClientEntry("app/public/client.tsx", { asset
 ```
 
 Every server worker can serve the external bootstrap immediately, including
-before it renders its first document. The document carries the entry URL and
-optional error markup in escaped script attributes; serving the bootstrap
-does not require per-worker entry registration. Workers must use the same
-application build and asset mounts.
+before it renders its first document. The entry URL and optional error markup
+travel in the nonce-protected import map, scoped to the bootstrap's own URL, so
+injected page markup cannot redirect the entry or replace the error UI. Serving
+the bootstrap does not require per-worker entry registration. Workers must use
+the same application build and asset mounts.
 
 The adapter renders the stable Remix import map for both the entry and its own
 bootstrap, followed by an external script. It also delivers ordinary

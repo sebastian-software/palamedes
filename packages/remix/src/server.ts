@@ -182,15 +182,30 @@ export const remixI18nContext: RemixI18nContextKey =
   createContextKey<RemixI18nContextValue<string, I18nInstance>>();
 
 // Each entry URL serves the same module on every worker. The URL digest keeps
-// distinct application entries separate in the browser module cache; document
-// attributes carry the request-specific data without generating JavaScript.
+// distinct application entries separate in the browser module cache. The
+// request-specific entry URL and error markup reach the module only through
+// the nonce-protected import map, scoped to this exact module URL; document
+// attributes are never trusted, so injected markup cannot redirect the import
+// or replace the error UI.
+const CLIENT_ENTRY_DATA_SPECIFIER = "@palamedes/remix/entry-data";
+const CLIENT_ENTRY_DATA_PREFIX = "data:application/json,";
 const CLIENT_ENTRY_SOURCE = `import { startRemixClient } from "@palamedes/remix/client";
-const script = [...document.querySelectorAll("script[data-palamedes-entry]")]
-  .find((element) => element.src === import.meta.url);
-if (!script) throw new Error("Palamedes Remix application entry script is missing.");
-await startRemixClient(() => import(script.dataset.palamedesEntry), {
-  errorHtml: script.dataset.palamedesErrorHtml,
-});
+let data;
+try {
+  const resolved = import.meta.resolve(${JSON.stringify(CLIENT_ENTRY_DATA_SPECIFIER)});
+  if (resolved.startsWith(${JSON.stringify(CLIENT_ENTRY_DATA_PREFIX)})) {
+    const parsed = JSON.parse(decodeURIComponent(resolved.slice(${CLIENT_ENTRY_DATA_PREFIX.length})));
+    if (typeof parsed?.entry === "string") data = parsed;
+  }
+} catch {}
+// Missing entry data still reaches the default error UI instead of a blank page.
+await startRemixClient(
+  () =>
+    data === undefined
+      ? Promise.reject(new Error("Palamedes Remix application entry data is missing from the import map."))
+      : import(data.entry),
+  { errorHtml: typeof data?.errorHtml === "string" ? data.errorHtml : undefined },
+);
 `;
 
 const DEFAULT_FAILURE_MESSAGE =
@@ -394,14 +409,15 @@ export function createRemixI18nServer<TLocale extends string>(
       ...importMap,
       scopes: {
         ...importMap.scopes,
-        [src]: { "@palamedes/remix/client": clientUrl },
+        [src]: {
+          "@palamedes/remix/client": clientUrl,
+          [CLIENT_ENTRY_DATA_SPECIFIER]: `${CLIENT_ENTRY_DATA_PREFIX}${encodeURIComponent(
+            JSON.stringify({ entry: entryUrl, errorHtml: entryOptions.errorHtml ?? null }),
+          )}`,
+        },
       },
     }).replace(/</gu, "\\u003c");
-    const errorHtml =
-      entryOptions.errorHtml === undefined
-        ? ""
-        : ` data-palamedes-error-html="${escapeHtmlAttribute(entryOptions.errorHtml)}"`;
-    return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}" data-palamedes-entry="${escapeHtmlAttribute(entryUrl)}"${errorHtml}${nonce}></script>`;
+    return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}"${nonce}></script>`;
   };
 
   const serveClientCatalogAsset = (request: Request): Response | undefined => {
