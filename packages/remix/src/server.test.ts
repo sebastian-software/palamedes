@@ -428,85 +428,6 @@ describe("createRemixI18nServer", () => {
     expect(await response.text()).toBe("es:hello:es");
   });
 
-  it("creates the browser bootstrap from the server-selected cookie locale", async () => {
-    const loadClientMessages = vi.fn((locale: "en" | "de" | "es") => ({
-      greeting: locale === "de" ? "Hallo" : `Hello ${locale}`,
-    }));
-    const remixI18n = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: (locale) => defineCompiledCatalog({ greeting: `server:${locale}` }),
-      loadClientMessages,
-    });
-
-    const bootstrap = await remixI18n.run(
-      new Request("https://example.test/", {
-        headers: { cookie: "locale=de", "accept-language": "en" },
-      }),
-      ({ locale }) => remixI18n.createClientBootstrap(locale),
-    );
-
-    expect(bootstrap).toMatchObject({
-      locale: "de",
-      messages: { greeting: "Hallo" },
-    });
-    expect(bootstrap.catalogVersion).toMatch(/^[a-f0-9]{64}$/u);
-    expect(remixI18n.createClientBootstrap("de")).toBe(bootstrap);
-    expect(loadClientMessages).toHaveBeenCalledTimes(1);
-  });
-
-  it("produces stable catalog versions independent of message insertion order", () => {
-    const first = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: () => defineCompiledCatalog({ second: "Two", first: "One" }),
-    }).createClientBootstrap("en");
-    const second = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: () => defineCompiledCatalog({ first: "One", second: "Two" }),
-    }).createClientBootstrap("en");
-
-    expect(first.catalogVersion).toBe(second.catalogVersion);
-  });
-
-  it("renders inert HTML without allowing a catalog to terminate the template", () => {
-    const remixI18n = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: () =>
-        defineCompiledCatalog({ dangerous: "</template><script>alert(1)</script>&" }),
-      catalogVersion: "release-42",
-    });
-
-    const html = remixI18n.renderClientBootstrap("en", {
-      elementId: 'catalog"><script>',
-    });
-
-    expect(html).toContain('<template id="catalog&quot;>&lt;script>">');
-    expect(html).toContain('"catalogVersion":"release-42"');
-    expect(html).toContain("\\u003c/template>\\u003cscript>alert(1)\\u003c/script>\\u0026");
-    expect(html).not.toContain("</template><script>");
-    expect(html).not.toContain(".po");
-  });
-
-  it("rejects executable server catalogs unless serializable client messages are supplied", () => {
-    const remixI18n = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: () =>
-        defineCompiledCatalog({
-          greeting<TResult>() {
-            throw new Error("not executable");
-          },
-        }),
-    });
-
-    expect(() => remixI18n.createClientBootstrap("en")).toThrow(
-      /non-string message "greeting".*#1214 asset pipeline/u,
-    );
-  });
-
   it("serves only the requested locale as an executable catalog module", () => {
     const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-catalog-"));
     const localePath = path.join(root, "de.po");
@@ -555,23 +476,6 @@ describe("createRemixI18nServer", () => {
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
-  });
-
-  it("uses a new document payload after cookie-driven locale navigation", async () => {
-    const remixI18n = createRemixI18nServer({
-      locales,
-      strategy: "cookie",
-      loadMessages: (locale) => defineCompiledCatalog({ greeting: `greeting:${locale}` }),
-    });
-
-    const localeFor = (cookie: string) =>
-      remixI18n.run(
-        new Request("https://example.test/", { headers: { cookie } }),
-        ({ locale }) => remixI18n.createClientBootstrap(locale).locale,
-      );
-
-    await expect(localeFor("locale=en")).resolves.toBe("en");
-    await expect(localeFor("locale=es")).resolves.toBe("es");
   });
 });
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

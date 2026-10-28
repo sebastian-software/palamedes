@@ -119,9 +119,6 @@ export const PALAMEDES_REMIX_ASSET_PACKAGES = [
   "@palamedes/remix",
 ] as const;
 
-/** @deprecated Use PALAMEDES_REMIX_ASSET_PACKAGES. */
-export const PALEMEDES_REMIX_ASSET_PACKAGES = PALAMEDES_REMIX_ASSET_PACKAGES;
-
 export function createPalamedesRemixCatalogAssetRegistry(
   options: CreatePalamedesRemixCatalogAssetRegistryOptions = {},
 ): PalamedesRemixCatalogAssetRegistry {

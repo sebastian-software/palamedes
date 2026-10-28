@@ -188,11 +188,11 @@ query-locale deployment and remains separate from the supported server matrix.
 
 ## Server and document delivery
 
-`@palamedes/vite-plugin/server` exports
-`createViteServerI18n({ locale, timeZone?, ...options })`, an alias of
-`createBundledServerI18n` from `@palamedes/runtime/server/bundled`. Application
-code can import the runtime subpath so it does not depend on the build plugin
-at runtime. In server builds the plugin also resolves `@palamedes/runtime/node`
+Server code creates request state with
+`createBundledServerI18n({ locale, timeZone?, ...options })` from
+`@palamedes/runtime/server/bundled`; the plugin supplies the catalog store
+behind that import, so application code does not depend on the build plugin at
+runtime. In server builds the plugin also resolves `@palamedes/runtime/node`
 to that bundled store, so Node backends can share one i18n module with their
 unbundled runtime-macro path. It awaits the shared,
 immutable complete catalog for the active locale and returns fresh request

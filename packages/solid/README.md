@@ -156,8 +156,8 @@ the host's ordinary error UI responsible for lazy route failures:
 import path from "node:path";
 import type { StartMiddleware } from "@solidjs/vite-plugin";
 import { createServerI18nScope } from "@palamedes/runtime/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
 
 const serverI18nScope = createServerI18nScope();
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
@@ -172,23 +172,23 @@ export default [
   async (event, next) => {
     event.nonce = serverRequestContext(event.request).cspNonce;
     const locale = resolveLocale(event.request);
-    const i18n = await createViteServerI18n({ locale });
+    const i18n = await createBundledServerI18n({ locale });
     return serverI18nScope.run(i18n, next);
   },
 ] satisfies StartMiddleware[];
 ```
 
-Keep `@palamedes/runtime` and `@palamedes/vite-plugin` in Vite's SSR module
-graph so their virtual catalog imports resolve during development:
+Keep `@palamedes/runtime` in Vite's SSR module graph so its virtual catalog
+import resolves during development:
 
 ```ts
 // vite.config.ts
 export default {
-  ssr: { noExternal: ["@palamedes/runtime", "@palamedes/vite-plugin"] },
+  ssr: { noExternal: ["@palamedes/runtime"] },
 };
 ```
 
-`createViteServerI18n` owns the lazy server catalog store and keeps request
+`createBundledServerI18n` owns the lazy server catalog store and keeps request
 state isolated while sharing compiled catalog content between requests. The
 delivery middleware's default initial error document contains only a reload
 and home link; pass trusted `errorHtml` when the host needs a different
