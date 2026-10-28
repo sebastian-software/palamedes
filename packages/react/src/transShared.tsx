@@ -14,10 +14,15 @@ import type {
   PalamedesI18n,
 } from "@palamedes/core/compiled";
 
+/**
+ * Props of the compiled runtime `Trans` component. The Palamedes transform
+ * emits these from authored `Trans` macros; application code imports `Trans`
+ * from the `/macro` entry instead.
+ */
 export type TransProps = {
-  // `id` is optional in authored source: components are written with `message`
-  // and the Palamedes compiler transform injects the resolved id at build time.
-  id?: string;
+  /** Compiled lookup key injected by the transform. */
+  id: string;
+  /** Authored source message, kept only as diagnostic metadata. */
   message?: string;
   context?: string;
   comment?: string;
@@ -51,7 +56,6 @@ export function createTrans(useI18n: () => RendererI18n) {
     comment,
   }: TransProps): ReactNode {
     const i18n = useI18n();
-    const resolvedId = id ?? message ?? "";
     const metadata: MessageMetadata = {
       message,
       context,
@@ -59,9 +63,7 @@ export function createTrans(useI18n: () => RendererI18n) {
     };
     const lease = runtimeCache.acquire(i18n, components ?? EMPTY_COMPONENTS);
     try {
-      return (
-        <>{renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, lease.runtime, metadata)}</>
-      );
+      return <>{renderI18nMessage(i18n, id, values ?? EMPTY_VALUES, lease.runtime, metadata)}</>;
     } finally {
       runtimeCache.release(lease);
     }

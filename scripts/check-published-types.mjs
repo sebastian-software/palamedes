@@ -384,6 +384,9 @@ import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 import { createI18n } from "@palamedes/core"
 import { getI18n } from "@palamedes/runtime"
+import type { TransProps as ReactTransProps } from "@palamedes/react"
+import type { TransProps as SolidTransProps } from "@palamedes/solid"
+import type { TransProps as RemixTransProps } from "@palamedes/remix/compiled"
 
 export const lengths = [
   t\`Hello\`.length,
@@ -450,6 +453,18 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
 // @ts-expect-error Adapters require the full v2 instance, not only locale and _().
 createWakuI18nInterceptor(() => ({ locale: "en", _: () => "" }))
 export const translatedText: string = getI18n()._("greeting")
+
+export const runtimeTransProps = [
+  { id: "greeting", message: "Hello" } satisfies ReactTransProps,
+  { id: "greeting" } satisfies SolidTransProps,
+  { id: "greeting", comment: "Shown first" } satisfies RemixTransProps,
+]
+// @ts-expect-error Runtime Trans requires the compiled id; message is diagnostic metadata.
+const reactTransWithoutId: ReactTransProps = { message: "Hello" }
+// @ts-expect-error Runtime Trans requires the compiled id; message is diagnostic metadata.
+const solidTransWithoutId: SolidTransProps = { message: "Hello" }
+// @ts-expect-error Runtime Trans requires the compiled id; message is diagnostic metadata.
+const remixTransWithoutId: RemixTransProps = { message: "Hello" }
 `,
   );
   checkProgram(esmFixture, {
