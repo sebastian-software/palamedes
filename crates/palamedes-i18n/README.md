@@ -20,6 +20,11 @@ unchanged contract, translation edits and new locales do not require a rebuild.
 See the [Rust application guide](https://palamedes.dev/docs/rust-applications)
 for the supported subset and installation workflow.
 
+The documented API follows Cargo SemVer. `palamedes_i18n::Error` is
+`#[non_exhaustive]`. Items hidden from the rustdoc output support generated
+code or describe the catalog file format and are not covered. The MSRV policy
+is described in the [Rust guide](https://palamedes.dev/docs/rust-applications#semver-and-msrv).
+
 ## License
 
 Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

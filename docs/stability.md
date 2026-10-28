@@ -28,6 +28,30 @@ Preview, Internal, and Reserved surfaces are not SemVer-stable adoption
 contracts. They should still receive migration notes when practical, but they
 may change faster than Stable surfaces.
 
+### Rust crates
+
+`palamedes-i18n`, `palamedes`, and `palamedes-build` ship to crates.io with the
+coordinated 2.0 release, at the shared Palamedes version. Cargo treats `2.0` to
+`2.1` as a compatible upgrade, so these Rust APIs follow Cargo SemVer even
+though their tier below is Preview:
+
+- the public API of `palamedes-i18n`
+- the public API of `palamedes-build`
+- the `palamedes::sdk` module
+
+For these crates, Preview describes the message feature scope, which grows in
+minor releases without breaking existing code. `palamedes_i18n::Error` and
+`palamedes_build::Error` are `#[non_exhaustive]`, so new failure kinds can
+arrive in a minor release and a `match` on them needs a wildcard arm. Data
+types stay exhaustive. Items hidden from the rustdoc output are not covered.
+This includes every `palamedes` item outside `sdk`; the CLI and the Node
+binding use those internally.
+
+The minimum supported Rust version (MSRV) is the `rust-version` in the
+workspace `Cargo.toml`. A minor release can raise it, with a changelog entry.
+The MSRV stays at least two stable Rust releases behind the latest stable
+release.
+
 ## Stability Tiers
 
 - **Stable**: app-facing surface covered by SemVer.
@@ -38,30 +62,32 @@ may change faster than Stable surfaces.
 - **Reserved**: package name or surface intentionally held for future work, with
   no supported adoption path yet.
 
-| Surface                                               | Tier     | Notes                                                                                                                                                                                               |
-| ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@palamedes/core` runtime API                         | Stable   | `createI18n`, compiled message lookup, locale activation, and missing-message errors are app-facing.                                                                                                |
-| `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                                                                                        |
-| `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                                                                                      |
-| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                                                                                              |
-| `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.                                                                              |
-| `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                               |
-| `@palamedes/remix`                                    | Preview  | Full-stack Remix v3 adapter; stable Remix `3.0.0` with Node `>=24.3.0`; all four strategies have public HTTPS browser proofs; the adapter contract remains Preview for that exact upstream version. |
-| `@palamedes/react-router-rsc`                         | Preview  | Opt-in React Router RSC Framework Mode request scope; the upstream RSC contract remains experimental.                                                                                               |
-| `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                |
-| `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                                                                                        |
-| `@palamedes/extractor` and `@palamedes/transform`     | Preview  | Published advanced-tooling APIs; their integration boundaries may evolve before promotion.                                                                                                          |
-| `pmds` binary plugin protocol                         | Preview  | Protocol v1 is version-negotiated; native package resolution and capabilities may evolve before promotion.                                                                                          |
-| Source-string-first PO catalogs                       | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                                                                                           |
-| FCL catalog storage                                   | Preview  | Supported through config, CLI, and native catalog APIs; app-facing framework imports remain PO-loader based for now.                                                                                |
-| Macro syntax                                          | Stable   | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target.                                                                                               |
-| `@palamedes/core-node`                                | Preview  | It is usable directly, but primarily exists as the JS boundary to the Rust core. Generated type details may change in minors.                                                                       |
-| `@palamedes/core-node-*` platform packages            | Internal | Optional dependency carriers for native Node addons; apps should not import them directly.                                                                                                          |
-| `@palamedes/cli-*` platform packages                  | Internal | Optional dependency carriers for native CLI executables; apps should not import them directly.                                                                                                      |
-| `palamedes` and `create-palamedes`                    | Reserved | Placeholder top-level packages exist, but there is no supported first-run entry yet.                                                                                                                |
-| Compiled catalog artifact internals                   | Preview  | Public loaders can consume them; the internal representation may evolve in minors.                                                                                                                  |
-| `palamedes-build` and `palamedes-i18n` Rust crates    | Preview  | Experimental, unpublished Cargo integration and external catalog runtime. Text, display arguments, string selects, and cardinal/ordinal plurals; see the [Rust guide](./rust-applications.md).      |
-| Other `crates/*` Rust APIs                            | Preview  | Primarily toolchain APIs; no separately stable public Rust SDK contract is promised.                                                                                                                |
+| Surface                                               | Tier     | Notes                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@palamedes/core` runtime API                         | Stable   | `createI18n`, compiled message lookup, locale activation, and missing-message errors are app-facing.                                                                                                                                                                           |
+| `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                                                                                                                                                                   |
+| `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                                                                                                                                                                 |
+| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                                                                                                                                                                         |
+| `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.                                                                                                                                                         |
+| `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                                                                                                          |
+| `@palamedes/remix`                                    | Preview  | Full-stack Remix v3 adapter; stable Remix `3.0.0` with Node `>=24.3.0`; all four strategies have public HTTPS browser proofs; the adapter contract remains Preview for that exact upstream version.                                                                            |
+| `@palamedes/react-router-rsc`                         | Preview  | Opt-in React Router RSC Framework Mode request scope; the upstream RSC contract remains experimental.                                                                                                                                                                          |
+| `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                                                                                           |
+| `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                                                                                                                                                                   |
+| `@palamedes/extractor` and `@palamedes/transform`     | Preview  | Published advanced-tooling APIs; their integration boundaries may evolve before promotion.                                                                                                                                                                                     |
+| `pmds` binary plugin protocol                         | Preview  | Protocol v1 is version-negotiated; native package resolution and capabilities may evolve before promotion.                                                                                                                                                                     |
+| Source-string-first PO catalogs                       | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                                                                                                                                                                      |
+| FCL catalog storage                                   | Preview  | Supported through config, CLI, and native catalog APIs; app-facing framework imports remain PO-loader based for now.                                                                                                                                                           |
+| Macro syntax                                          | Stable   | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target.                                                                                                                                                                          |
+| `@palamedes/core-node`                                | Preview  | It is usable directly, but primarily exists as the JS boundary to the Rust core. Generated type details may change in minors.                                                                                                                                                  |
+| `@palamedes/core-node-*` platform packages            | Internal | Optional dependency carriers for native Node addons; apps should not import them directly.                                                                                                                                                                                     |
+| `@palamedes/cli-*` platform packages                  | Internal | Optional dependency carriers for native CLI executables; apps should not import them directly.                                                                                                                                                                                 |
+| `palamedes` and `create-palamedes`                    | Reserved | Placeholder top-level packages exist, but there is no supported first-run entry yet.                                                                                                                                                                                           |
+| Compiled catalog artifact internals                   | Preview  | Public loaders can consume them; the internal representation may evolve in minors.                                                                                                                                                                                             |
+| `palamedes-build` and `palamedes-i18n` Rust crates    | Preview  | Cargo integration and external catalog runtime, published to crates.io with the coordinated 2.0 release. Text, display arguments, string selects, and cardinal/ordinal plurals. Public APIs follow [Cargo SemVer](#rust-crates); see the [Rust guide](./rust-applications.md). |
+| `palamedes::sdk` Rust module                          | Preview  | Compiler entry points that `palamedes-build` uses; follows [Cargo SemVer](#rust-crates).                                                                                                                                                                                       |
+| Other `palamedes` crate items                         | Internal | Hidden from rustdoc. Toolchain APIs for the CLI and the Node binding; not covered by SemVer.                                                                                                                                                                                   |
+| Other `crates/*` Rust APIs                            | Preview  | Unpublished toolchain crates, including the `pmds` plugin SDK; no separately stable Rust contract is promised.                                                                                                                                                                 |
 
 ### Vue SFC Preview contract
 
