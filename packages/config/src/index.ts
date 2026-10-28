@@ -438,7 +438,7 @@ function rejectRemovedMdxSourceMetadataKeys(
   for (const key of REMOVED_MDX_SOURCE_METADATA_KEYS) {
     if (key in record) {
       throw new Error(
-        `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.${replacement}: it only adds diagnostic source metadata. Rename the key; the default stays false.`,
+        `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.${replacement}: it only adds diagnostic source metadata. Rename the key; the v2 default is false.`,
       );
     }
   }

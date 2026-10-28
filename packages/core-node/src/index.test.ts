@@ -2486,7 +2486,7 @@ msgstr ""
 
   it("rejects removed source metadata options before native transforms", () => {
     const migration =
-      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the default stays false.";
+      "Palamedes v2 renamed keepSourceFallbacks to includeSourceMetadata: it only adds diagnostic source metadata. Rename the option; the v2 default is false.";
 
     expect(() =>
       transformMacrosNative("const x = 1;", "sample.ts", {

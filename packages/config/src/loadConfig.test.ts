@@ -441,7 +441,7 @@ describe("loadPalamedesConfig", () => {
         );
 
         await expect(loadPalamedesConfig({ cwd: fixtureDir, skipValidation })).rejects.toThrow(
-          `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the default stays false.`,
+          `Invalid Palamedes config in ${configPath}: Palamedes v2 renamed mdx.${key} to mdx.include-source-metadata: it only adds diagnostic source metadata. Rename the key; the v2 default is false.`,
         );
       }
     }
@@ -454,7 +454,7 @@ describe("loadPalamedesConfig", () => {
     );
 
     await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
-      `Invalid Palamedes config in ${javascriptPath}: Palamedes v2 renamed mdx.keepSourceFallbacks to mdx.includeSourceMetadata: it only adds diagnostic source metadata. Rename the key; the default stays false.`,
+      `Invalid Palamedes config in ${javascriptPath}: Palamedes v2 renamed mdx.keepSourceFallbacks to mdx.includeSourceMetadata: it only adds diagnostic source metadata. Rename the key; the v2 default is false.`,
     );
   });
 
