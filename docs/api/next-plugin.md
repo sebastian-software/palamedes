@@ -18,11 +18,13 @@ for the storage/import boundary.
 - `WithPalamedesOptions`
 - `createNextServerI18n({ locale, timeZone?, ...options })` from `@palamedes/next-plugin/server`
 - `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
-- `@palamedes/next-plugin/server-function-initializer`
-- `@palamedes/next-plugin/server-function-entry`
-- internal loader subpaths used by plugin wiring:
-  `@palamedes/next-plugin/palamedes-loader` and
-  `@palamedes/next-plugin/palamedes-po-loader`
+
+`withPalamedes()` also wires these **Internal** subpaths into the Next.js
+build by path: `server-function-initializer`, `server-function-entry`,
+`server-catalogs`, `palamedes-loader`, `palamedes-po-loader`,
+`palamedes-server-catalogs-loader`, and `catalog-fragment`. Applications do
+not import them, and they are not covered by SemVer. See the
+[stability table](../stability.md#subpath-tiers).
 
 ## Options
 
