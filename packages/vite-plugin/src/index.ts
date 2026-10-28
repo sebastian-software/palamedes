@@ -38,8 +38,14 @@ import {
   PALAMEDES_MACRO_PACKAGES,
   mdxFrameworkFor,
   resolveMacroRuntimeModule,
-  type PalamedesFramework,
 } from "@palamedes/transform";
+
+/**
+ * UI framework the plugin compiles for. It selects the component contract for
+ * generated MDX modules. The Stable plugin owns this type; the Preview
+ * transform package accepts the same union.
+ */
+export type PalamedesFramework = "react" | "solid" | "none";
 
 const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;

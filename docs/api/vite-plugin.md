@@ -15,6 +15,8 @@ formats](../catalog-formats.md) for the storage/import boundary.
 - `palamedes(options?)`
 - default export `palamedes`
 - `PalamedesPluginOptions`
+- `PalamedesFramework`: `"react" | "solid" | "none"`, the type of the
+  `framework` option
 
 ## Options
 
@@ -27,7 +29,7 @@ interface PalamedesPluginOptions {
   projectRoot?: string;
   skipValidation?: boolean;
   failOnMissing?: boolean;
-  framework?: "react" | "solid" | "none";
+  framework?: PalamedesFramework; // "react" | "solid" | "none"
   runtimeModule?: string;
   includeSourceMetadata?: boolean;
   mdx?: PalamedesMdxConfig | false;

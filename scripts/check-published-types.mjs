@@ -388,7 +388,7 @@ import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server"
 import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server"
 import { createReactRouterI18n, type ReactRouterHandleRequest } from "@palamedes/react-router"
 import { useCatalogAvailable, useDocumentLocale } from "@palamedes/react-router/document"
-import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
+import vitePalamedes, { palamedes, type PalamedesFramework } from "@palamedes/vite-plugin"
 import { createI18n } from "@palamedes/core"
 import { getI18n } from "@palamedes/runtime"
 import type { TransProps as ReactTransProps } from "@palamedes/react"
@@ -459,6 +459,8 @@ t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
+const viteFramework: PalamedesFramework = "solid"
+export const viteSolidPlugins = palamedes({ framework: viteFramework })
 export const wakuInterceptor = createWakuI18nInterceptor((request) =>
   createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
 )
