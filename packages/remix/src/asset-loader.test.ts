@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  symlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -454,6 +455,180 @@ describe("createPalamedesRemixAssetLoader", () => {
     );
   });
 
+  it("serves post-compile TSX fragments on cold workers at different deployment roots", async () => {
+    const source = [
+      'import { t } from "@palamedes/core/macro";',
+      'import { Trans } from "@palamedes/remix/macro";',
+      "export const greeting = (name: string) => t`Greeting`;",
+      "export const rich = <Trans>Hello</Trans>;",
+    ].join("\n");
+    const first = createAssetFixture("message.tsx", source);
+    const second = createAssetFixture("message.tsx", source);
+    for (const fixture of [first, second]) {
+      writeFragmentCatalogFixture(fixture.rootDir);
+      copyFileSync(
+        path.resolve(import.meta.dirname, "../dist/compiled.mjs"),
+        path.join(fixture.rootDir, "node_modules", "@palamedes", "remix", "compiled.js"),
+      );
+      writeFileSync(
+        path.join(fixture.rootDir, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: { jsx: "react-jsx", jsxImportSource: "remix/component" },
+        }),
+      );
+      symlinkSync(
+        path.resolve(import.meta.dirname, "../node_modules/remix"),
+        path.join(fixture.rootDir, "node_modules", "remix"),
+        "junction",
+      );
+    }
+    const workerA = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: first.rootDir,
+      watch: false,
+    });
+    const workerB = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: second.rootDir,
+      watch: false,
+    });
+    const registration = vi.spyOn(workerA, "register");
+    const assetServer = createAssetServer({
+      rootDir: first.rootDir,
+      basePath: "/assets",
+      mounts: {
+        app: "app",
+        npm: "node_modules",
+        vendor: path.relative(
+          first.rootDir,
+          path.resolve(import.meta.dirname, "../../../node_modules"),
+        ),
+      },
+      allowFiles: ["app/**/public/**"],
+      allowPackages: ["remix", ...PALAMEDES_REMIX_ASSET_PACKAGES],
+      watch: false,
+      scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets: workerA })] },
+    });
+    try {
+      const module = await assetServer.fetch(
+        new Request("https://example.test/assets/app/public/message.tsx"),
+      );
+      expect(module?.status).toBe(200);
+      const key = registration.mock.results[0]?.value as string;
+      expect(key).toBeTypeOf("string");
+      const url = workerA.sidecarUrl(key);
+      expect(await module?.text()).toContain(url);
+      for (const suffix of ["", "?fragment=1&locale=de"]) {
+        const request = new Request(`https://example.test${url}${suffix}`);
+        const firstResponse = workerA.serve(request);
+        const coldResponse = workerB.serve(request);
+        expect(coldResponse?.status).toBe(200);
+        expect(await coldResponse?.text()).toBe(await firstResponse?.text());
+      }
+      const fragmentRequest = new Request(`https://example.test${url}?fragment=1&locale=de`);
+      const fragment = workerB.serve(fragmentRequest)!;
+      const text = await fragment.text();
+      expect(text).toContain("Grüße");
+      expect(text).toContain("Hallo");
+      expect(text).not.toContain("Unrelated secret");
+      expect(
+        workerB.serve(
+          new Request(fragmentRequest, {
+            headers: { "if-none-match": fragment.headers.get("etag")! },
+          }),
+        )?.status,
+      ).toBe(304);
+      expect(
+        workerB.serve(new Request(`https://example.test${url}?fragment=1&locale=unknown`))?.status,
+      ).toBe(400);
+      expect(workerB.register(second.modulePath, registration.mock.calls[0]![1])).toBe(key);
+      const restarted = createPalamedesRemixCatalogAssetRegistry({
+        projectRoot: second.rootDir,
+        watch: false,
+      });
+      expect(restarted.serve(fragmentRequest)?.status).toBe(200);
+      restarted.close?.();
+      writeFileSync(second.modulePath, source.replace("Greeting", "Changed"));
+      workerB.invalidate(second.modulePath);
+      expect(workerB.serve(fragmentRequest)?.status).toBe(404);
+    } finally {
+      workerA.close?.();
+      workerB.close?.();
+      await assetServer.close();
+    }
+  });
+
+  it("rejects malformed, unconfigured, aliased, and forged fragment identities", () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
+    const key = registry.register(fixture.modulePath, ids);
+    const digest = key.split(".").at(-1);
+    const request = (candidate: string) =>
+      new Request(`https://example.test${registry.sidecarUrl(candidate)}?fragment=1&locale=de`);
+    mkdirSync(path.join(fixture.rootDir, "private"));
+    writeFileSync(path.join(fixture.rootDir, "private", "secret.ts"), source);
+    if (process.platform !== "win32")
+      symlinkSync(
+        path.join(fixture.rootDir, "private", "secret.ts"),
+        path.join(fixture.rootDir, "app", "public", "escape.ts"),
+      );
+    for (const sourcePath of [
+      "/etc/passwd",
+      "C:/secret.ts",
+      "../../secret.ts",
+      "private/secret.ts",
+      "app/public/escape.ts",
+      "app/../app/public/message.ts",
+      "app/public/message.ts\0",
+    ]) {
+      const candidate = `v1.${Buffer.from(sourcePath).toString("base64url")}.${digest}`;
+      expect(registry.serve(request(candidate))?.status).toBe(404);
+    }
+    for (const candidate of [
+      "invalid",
+      `${key}.extra`,
+      key.replace(/.$/u, digest?.endsWith("0") ? "1" : "0"),
+      `v1.${"a".repeat(8200)}.${digest}`,
+    ])
+      expect(registry.serve(request(candidate))?.status).toBe(404);
+    expect(() => registry.register(fixture.modulePath, ["request-supplied-id"])).toThrow(
+      "preserve the authored message IDs",
+    );
+    expect(registry.serve(request(key))?.status).toBe(200);
+    registry.close?.();
+  });
+
+  it("reconstructs explicitly included sibling workspace modules", () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-workspace-"));
+    tempDirectories.push(rootDir);
+    const projectRoot = path.join(rootDir, "web");
+    const shared = path.join(rootDir, "shared");
+    mkdirSync(shared);
+    mkdirSync(projectRoot);
+    writeFragmentCatalogFixture(projectRoot, "../shared");
+    const sourcePath = path.join(shared, "message.ts");
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    writeFileSync(sourcePath, source);
+    const first = createPalamedesRemixCatalogAssetRegistry({ projectRoot, watch: false });
+    const cold = createPalamedesRemixCatalogAssetRegistry({ projectRoot, watch: false });
+    const key = first.register(
+      sourcePath,
+      transformPalamedesMacros(source, sourcePath).compiledIds,
+    );
+    expect(
+      cold.serve(new Request(`https://example.test${first.sidecarUrl(key)}?fragment=1&locale=de`))
+        ?.status,
+    ).toBe(200);
+    first.close?.();
+    cold.close?.();
+  });
+
   it("serves locale fragments selected by a module and invalidates stale generations", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-fragments-"));
     tempDirectories.push(rootDir);
@@ -479,7 +654,10 @@ describe("createPalamedesRemixAssetLoader", () => {
     );
     const sourcePath = path.join(rootDir, "app", "routes", "fragment.ts");
     mkdirSync(path.dirname(sourcePath), { recursive: true });
-    writeFileSync(sourcePath, "export const fragment = true;\n");
+    writeFileSync(
+      sourcePath,
+      'import { t } from "@palamedes/core/macro"; export function text() { return t`Greeting`; }',
+    );
     const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
     const compiledIds = transformPalamedesMacros(
       'import { t } from "@palamedes/core/macro"; export function text() { return t`Greeting`; }',
@@ -519,7 +697,17 @@ describe("createPalamedesRemixAssetLoader", () => {
       )?.status,
     ).toBe(200);
 
-    const secondKey = registry.register(sourcePath, ["stale-generation-proof"]);
+    const changedSource =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Other`;';
+    writeFileSync(sourcePath, changedSource);
+    registry.invalidate(sourcePath);
+    expect(
+      registry.serve(new Request(`https://example.test${registry.sidecarUrl(firstKey)}`))?.status,
+    ).toBe(404);
+    const secondKey = registry.register(
+      sourcePath,
+      transformPalamedesMacros(changedSource, sourcePath).compiledIds,
+    );
     expect(secondKey).not.toBe(firstKey);
     expect(
       registry.serve(
@@ -625,6 +813,10 @@ describe("createPalamedesRemixAssetLoader", () => {
         'import { t } from "@palamedes/core/macro"; export const message=()=>t`Greeting`;',
         sourcePath,
       ).compiledIds;
+      writeFileSync(
+        sourcePath,
+        'import { t } from "@palamedes/core/macro"; export const message=()=>t`Greeting`;',
+      );
       const key = registry.register(sourcePath, ids);
       const first = await registry.load?.("de");
       writeFileSync(
@@ -713,8 +905,12 @@ describe("createPalamedesRemixAssetLoader", () => {
       'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
     );
     expect(await registry.load?.("de")).toBe(first);
-    for (let index = 0; index < 100; index += 1)
-      registry.register(path.join(rootDir, "app", "warm.tsx"), ["greeting"]);
+    const sourcePath = path.join(rootDir, "app", "warm.tsx");
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    writeFileSync(sourcePath, source);
+    const ids = transformPalamedesMacros(source, sourcePath).compiledIds;
+    for (let index = 0; index < 100; index += 1) registry.register(sourcePath, ids);
     expect(registry.generation?.()).toBe(generation);
     expect(await registry.load?.("de")).toBe(first);
 
@@ -742,6 +938,19 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(load("/repo/app/public/excluded/skip.js").source).toBe(source);
   });
 });
+
+function writeFragmentCatalogFixture(rootDir: string, include = "app"): void {
+  mkdirSync(path.join(rootDir, "locales"), { recursive: true });
+  writeFileSync(
+    path.join(rootDir, "palamedes.yaml"),
+    `locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [${include}]\n`,
+  );
+  for (const locale of ["en", "de"])
+    writeFileSync(
+      path.join(rootDir, "locales", `${locale}.po`),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Grüße"\n\nmsgid "Hello"\nmsgstr "Hallo"\n\nmsgid "Other"\nmsgstr "Unrelated secret"\n',
+    );
+}
 
 function createAssetFixture(
   fileName: string,
@@ -781,7 +990,7 @@ function createAssetFixture(
       exports: { "./compiled": "./compiled.js" },
     }),
   );
-  return { modulePath: realpathSync(modulePath), rootDir };
+  return { modulePath: realpathSync(modulePath), rootDir: realpathSync(rootDir) };
 }
 
 function findGeneratedPosition(source: string, needle: string): { column: number; line: number } {

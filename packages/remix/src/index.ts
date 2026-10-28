@@ -98,6 +98,7 @@ export type PalamedesRemixAssetLoaderOptions = Pick<
 };
 
 export type PalamedesRemixCatalogAssetRegistry = {
+  /** Register the IDs present in an authored source module, unchanged by custom loaders. */
   register(sourcePath: string, compiledIds: readonly string[]): string;
   /** Load the complete executable catalog for one active server locale. */
   load?(locale: string): Promise<CompiledCatalogMessages>;
@@ -200,6 +201,8 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = catalogDigest(config);
     serverCatalogStore.invalidate();
     fragmentAssets.clear();
+    entries.clear();
+    keysBySource.clear();
   };
 
   const refreshCatalogGeneration = (): void => {
@@ -212,19 +215,74 @@ export function createPalamedesRemixCatalogAssetRegistry(
     fragmentAssets.clear();
   };
 
-  const register = (sourcePath: string, compiledIds: readonly string[]): string => {
+  const readSourceEntry = (sourcePath: string) => {
     const source = canonicalSourcePath(sourcePath);
-    const normalizedIds = [...new Set(compiledIds)].sort();
-    const key = createCatalogKey(source, normalizedIds);
-    const previousKey = keysBySource.get(source);
+    const relativeSource = path
+      .relative(canonicalSourcePath(config.rootDir), source)
+      .split(path.sep)
+      .join("/");
+    if (
+      !relativeSource ||
+      path.isAbsolute(relativeSource) ||
+      !DEFAULT_INCLUDE.test(source) ||
+      !config.catalogs.some((catalog) => catalogMatchesSource(config, catalog, source))
+    ) {
+      throw new Error(
+        `Palamedes source module "${source}" is not included in a configured catalog.`,
+      );
+    }
+    const compiledIds = normalizeCompiledIds(
+      transformPalamedesMacros(readFileSync(source, "utf8"), source).compiledIds,
+    );
+    return { sourcePath: source, relativeSource, compiledIds };
+  };
+
+  const rememberEntry = (entry: ReturnType<typeof readSourceEntry>): string => {
+    const key = createCatalogKey(entry.relativeSource, entry.compiledIds);
+    const previousKey = keysBySource.get(entry.sourcePath);
     if (previousKey && previousKey !== key) {
       entries.delete(previousKey);
       for (const assetKey of fragmentAssets.keys())
         if (assetKey.startsWith(`${previousKey}:`)) fragmentAssets.delete(assetKey);
     }
-    keysBySource.set(source, key);
-    entries.set(key, { sourcePath: source, compiledIds: normalizedIds });
+    keysBySource.set(entry.sourcePath, key);
+    entries.set(key, entry);
     return key;
+  };
+
+  const register = (sourcePath: string, compiledIds: readonly string[]): string => {
+    const entry = readSourceEntry(sourcePath);
+    if (JSON.stringify(entry.compiledIds) !== JSON.stringify(normalizeCompiledIds(compiledIds))) {
+      throw new Error(
+        `Palamedes Remix catalog fragments require custom loaders to preserve the authored message IDs in "${entry.sourcePath}". The post-compile selection differs from the source module.`,
+      );
+    }
+    return rememberEntry(entry);
+  };
+
+  const resolveEntry = (key: string) => {
+    const cached = entries.get(key);
+    if (cached) return cached;
+    const relativeSource = decodeCatalogSource(key);
+    if (!relativeSource) return;
+    try {
+      const sourcePath = canonicalSourcePath(path.resolve(config.rootDir, relativeSource));
+      if (
+        path.relative(canonicalSourcePath(config.rootDir), sourcePath).split(path.sep).join("/") !==
+        relativeSource
+      )
+        return;
+      const currentKey = keysBySource.get(sourcePath);
+      if (currentKey) return currentKey === key ? entries.get(currentKey) : undefined;
+      const entry = readSourceEntry(sourcePath);
+      // Canonical spelling rejects alternate traversal and symlink aliases.
+      // Explicit ../workspace includes remain governed by the catalog filters.
+      if (entry.relativeSource !== relativeSource) return;
+      return rememberEntry(entry) === key ? entry : undefined;
+    } catch {
+      // Untrusted locators never expose filesystem or transform diagnostics.
+      return;
+    }
   };
 
   const refreshCatalogState = (): void => {
@@ -317,7 +375,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
       }
 
       const key = url.pathname.slice(prefix.length, -3);
-      const entry = entries.get(key);
+      const entry = resolveEntry(key);
       if (!entry) {
         return new Response(`Unknown Palamedes catalog fragment "${key}".`, { status: 404 });
       }
@@ -402,12 +460,16 @@ export function createPalamedesRemixCatalogAssetRegistry(
       if (sourcePath === undefined) {
         serverCatalogStore.invalidate();
         fragmentAssets.clear();
+        entries.clear();
+        keysBySource.clear();
       } else {
         const source = canonicalSourcePath(sourcePath);
         const key = keysBySource.get(source);
         if (key) {
           entries.delete(key);
           keysBySource.delete(source);
+          for (const assetKey of fragmentAssets.keys())
+            if (assetKey.startsWith(`${key}:`)) fragmentAssets.delete(assetKey);
         }
       }
     },
@@ -441,13 +503,30 @@ function thisSidecarUrl(basePath: string, key: string): string {
   return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/${key}.js?`;
 }
 
-function createCatalogKey(sourcePath: string, compiledIds: readonly string[]): string {
-  return createHash("sha256")
-    .update(path.resolve(sourcePath))
-    .update("\0")
-    .update(JSON.stringify(compiledIds))
-    .digest("hex")
-    .slice(0, 16);
+function normalizeCompiledIds(compiledIds: readonly string[]): string[] {
+  return [...new Set(compiledIds)].sort();
+}
+
+function createCatalogKey(relativeSource: string, compiledIds: readonly string[]): string {
+  const digest = createHash("sha256").update(JSON.stringify(compiledIds)).digest("hex");
+  return `v1.${Buffer.from(relativeSource).toString("base64url")}.${digest}`;
+}
+
+function decodeCatalogSource(key: string): string | undefined {
+  // Keep request metadata bounded, independent of the number of messages.
+  if (key.length > 8192) return;
+  const match = /^v1\.([A-Za-z0-9_-]+)\.[a-f0-9]{64}$/u.exec(key);
+  if (!match) return;
+  const source = Buffer.from(match[1]!, "base64url").toString("utf8");
+  if (
+    Buffer.from(source).toString("base64url") !== match[1] ||
+    source.includes("\0") ||
+    source.includes("\\") ||
+    path.posix.isAbsolute(source) ||
+    path.win32.isAbsolute(source)
+  )
+    return;
+  return source;
 }
 
 function catalogDigest(config: LoadedPalamedesConfig): string {
