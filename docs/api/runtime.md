@@ -11,14 +11,7 @@ macro output.
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
-- `registerMessages(catalogs, key?)`
-- `registerMessageLoaders(key, loaders)`
-- `registerMessageLoaderGroup(key, loaderGroups)`
-- `loadRegisteredMessages(i18n, locale)`
-- `initializeClientI18n(locale, createI18n)`
 - `I18nInstance`
-- `RegisteredMessages`
-- `RegisteredMessageLoader`
 - `CreateServerI18nScopeOptions`
 - `ServerI18nScope`
 
@@ -44,7 +37,8 @@ generates for server builds and returns a fresh instance. Import it only from
 code built by that plugin; elsewhere it fails to resolve instead of falling
 back to source text.
 
-The Node-only test subpath `@palamedes/runtime/server/test` exports
+The Node-only test subpath `@palamedes/runtime/server/test` is
+**Internal** and test-only. It exports
 `waitForServerI18nTestBarrier(request)`,
 `markServerI18nTestBarrierReached(request, headers)`, and
 `SERVER_I18N_TEST_BARRIER_REACHED_HEADER`. It is an opt-in two-request
@@ -84,14 +78,19 @@ setClientI18n(i18n);
 
 Call `setClientI18n()` before translated client UI renders.
 
-Generated graph-split catalogs register eager fragments with
-`registerMessages()` or server-side lazy resources with the loader registration
-helpers. `setClientI18n()` and `initializeClientI18n()` flush only eager message
-registrations that evaluated before the client instance existed, and throw if
-the instance cannot `load()` them. Lazy loader
-registrations are consumed explicitly by `loadRegisteredMessages()`; application
-code normally needs these APIs only when building a custom graph-splitting
-integration.
+Generated graph-split catalogs register their messages through
+`@palamedes/runtime/internal`. `setClientI18n()` flushes eager message
+registrations that evaluated before the client instance existed, and throws if
+the instance cannot `load()` them.
+
+## Generated-Code Internals
+
+`@palamedes/runtime/internal` is an **Internal** subpath. The Vite, Next.js and
+Remix adapters emit imports of it; applications do not import it. It exports
+`registerMessages`, `registerMessageLoaders`, `registerMessageLoaderGroup`,
+`loadRegisteredMessages`, `initializeClientI18n`, `RegisteredMessages`, and
+`RegisteredMessageLoader`. These names change together with the generators and
+are not covered by SemVer; see the [stability table](../stability.md#subpath-tiers).
 
 ## `getI18n<T>()`
 
@@ -100,8 +99,8 @@ Transformed macro code calls this automatically.
 
 On the client, `getI18n()` reads the instance registered with
 `setClientI18n()`. Browser Web Workers and Service Workers are client
-environments even though they do not expose `window`, so
-`initializeClientI18n()` and graph-split bootstraps work there too. On the
+environments even though they do not expose `window`, so generated
+graph-split bootstraps work there too. On the
 server, `getI18n()` reads the active server getter.
 
 `getI18n()` throws a descriptive error when no active client instance or server
@@ -114,7 +113,7 @@ generics such as `createServerI18nScope<T>()` accept only types that extend it,
 so `getI18n()._()` is typed as `string` everywhere.
 
 `setClientI18n()` throws when generated message registrations exist and the
-instance has no `load()`, the same way `loadRegisteredMessages()` does.
+instance has no `load()`.
 
 ## Server Runtime
 

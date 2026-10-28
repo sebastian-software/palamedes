@@ -18,10 +18,6 @@ paths that need the same import surface as other React helpers.
 The locale-switch helper and related types are re-exported from
 `@palamedes/core/locale`.
 
-The client subpath `@palamedes/react/client` exports:
-
-- `createClientCatalogBoundary(options)` for the document-fixed locale
-
 The macro subpath `@palamedes/react/macro` exports compile-time macro
 components:
 
@@ -109,43 +105,6 @@ const items = buildLocaleSwitchItems({
 ```
 
 Supported host adapters initialize the client runtime and deliver compiled
-active-locale dependencies automatically. `createClientCatalogBoundary()` is a
-low-level custom React escape hatch for a host that owns an equivalent transport;
-it is not required for the standard Vite or Next integration and should not be
-used to add an application catalog loader map.
-
-## Client Catalog Boundaries
-
-For a custom React host that owns document reloads and compiled asset delivery,
-create a boundary once in a `"use client"` module:
-
-```tsx
-import { createI18n } from "@palamedes/core/compiled";
-import { createClientCatalogBoundary } from "@palamedes/react/client";
-
-type Locale = "en" | "de";
-
-export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
-  createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
-  loadCatalog: (locale) => import(`../locales/${locale}.po`),
-  resolveClientLocale: () => {
-    const locale = document.documentElement.lang;
-    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`);
-    return locale;
-  },
-});
-```
-
-The optional `createI18n` factory is used for both server rendering and client
-hydration. Give the custom host's server factory the same options,
-especially `timeZone`, whenever translated markup includes ICU dates or times.
-
-The active locale starts loading when the browser module evaluates. The
-boundary suspends until it can initialize the shared parser-free i18n instance,
-then renders descendants. Hook-free macro calls therefore have a valid getter
-on their first hydration render. A different `locale` prop fails fast because
-changing language requires document navigation.
-
-Palamedes does not provide a live alternative. See
-[`locale-strategies.md`](../locale-strategies.md#unsupported-root-key-escape-hatch)
-for the unsupported root-key pattern and its cache-safety limitations.
+active-locale dependencies automatically. The v1 client boundary
+`@palamedes/react/client` is removed; see the
+[v2 migration guide](../migration-v2.md).

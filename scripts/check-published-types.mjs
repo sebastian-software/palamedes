@@ -381,6 +381,7 @@ export const authorship: CatalogMachineTranslationStatus = "human"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
 import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
+import { createReactRouterI18n, type ReactRouterHandleRequest } from "@palamedes/react-router"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 import { createI18n } from "@palamedes/core"
 import { getI18n } from "@palamedes/runtime"
@@ -450,6 +451,14 @@ export const wakuInterceptor = createWakuI18nInterceptor((request) =>
 export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) =>
   createI18n({ locale: request.headers.get("accept-language") ?? "en" }),
 )
+export const reactRouterI18n = createReactRouterI18n({
+  resolveLocale: (request) => request.headers.get("accept-language") ?? "en",
+  i18nOptions: { timeZone: "Europe/Berlin" },
+})
+export const reactRouterEntry: ReactRouterHandleRequest = reactRouterI18n.handleRequest
+export const reactRouterMiddleware = [reactRouterI18n.middleware]
+// @ts-expect-error The React Router resolver returns a locale string, not an i18n instance.
+createReactRouterI18n({ resolveLocale: () => createI18n({ locale: "en" }) })
 // @ts-expect-error Adapters require the full v2 instance, not only locale and _().
 createWakuI18nInterceptor(() => ({ locale: "en", _: () => "" }))
 export const translatedText: string = getI18n()._("greeting")
@@ -475,7 +484,7 @@ const remixTransWithoutId: RemixTransProps = { message: "Hello" }
   const commonJsFixture = path.join(fixtureRoot, "consumer.cts");
   writeFileSync(
     commonJsFixture,
-    `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
+    `// @palamedes/tanstack and @palamedes/react-router are ESM-only and belong in consumer.mts.
 import coreNode = require("@palamedes/core-node")
 export const inspection = coreNode.inspectCatalogMachineTranslations({ rootDir: ".", sourceLocale: "en", locales: ["en"], catalogs: [] })
 export const inspectionAsync: Promise<coreNode.CatalogMachineTranslationInspectionResult> = coreNode.inspectCatalogMachineTranslationsAsync({ rootDir: ".", sourceLocale: "en", locales: ["en"], catalogs: [] })

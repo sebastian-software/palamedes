@@ -22,12 +22,6 @@ export {
   type ExecutableMessageRenderer,
   type MessageValues,
 } from "./compiledMessage";
-export {
-  formatMessageArgument,
-  replacePoundPlaceholders,
-  stringifyValue,
-  type MessageFormat,
-} from "./runtimeFormat";
 export type {
   CreateI18nOptions,
   MessageFormatErrorInfo,
@@ -35,4 +29,3 @@ export type {
   MissingMessageInfo,
   PalamedesI18n,
 } from "./i18nRuntime";
-export type { PluralProps, SelectProps, SelectOrdinalProps } from "./choice";

@@ -6,7 +6,6 @@ export default defineBuildConfig({
     "./src/index-server",
     "./src/compiled",
     "./src/compiled-server",
-    "./src/client",
     "./src/macro",
   ],
   declaration: true,

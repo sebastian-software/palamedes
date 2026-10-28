@@ -126,6 +126,13 @@ jobs:
           VITE_RYBBIT_SITE_ID: palamedes-test
         run: pnpm build:site
 
+      # The static half of the deploy-only route verification: which generated
+      # docs carry a progressive outline follows from the prebuild manifest.
+      # The full route crawl takes about ten minutes and stays in Deploy Site.
+      - name: Verify generated docs outlines
+        if: ${{ matrix.full }}
+        run: pnpm verify:site-outlines
+
       - name: Verify site accessibility
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm verify:site-a11y

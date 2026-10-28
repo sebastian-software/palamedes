@@ -402,10 +402,11 @@ describe("workflow contracts", () => {
   });
 
   it("runs path-sensitive and published-consumer package tests on each non-Linux validation leg", async () => {
-    const [ci, packageJson, nextPlugin, tanstack, vitePlugin] = await Promise.all([
+    const [ci, packageJson, nextPlugin, reactRouter, tanstack, vitePlugin] = await Promise.all([
       readRepositoryFile(".github/workflows/ci.yml"),
       readRepositoryFile("package.json").then(JSON.parse),
       readRepositoryFile("packages/next-plugin/package.json").then(JSON.parse),
+      readRepositoryFile("packages/react-router/package.json").then(JSON.parse),
       readRepositoryFile("packages/tanstack/package.json").then(JSON.parse),
       readRepositoryFile("packages/vite-plugin/package.json").then(JSON.parse),
     ]);
@@ -418,9 +419,11 @@ describe("workflow contracts", () => {
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/config");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/core-node");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/next-plugin");
+    expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/react-router");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/tanstack");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/vite-plugin");
     expect(nextPlugin.scripts.test).toBe("vitest run --globals");
+    expect(reactRouter.scripts.test).toContain("scripts/package.test.mjs");
     expect(tanstack.scripts.test).toContain("scripts/package.test.mjs");
     expect(vitePlugin.scripts.test).toBe("vitest run --globals");
   });
@@ -871,6 +874,34 @@ describe("workflow contracts", () => {
       build.indexOf("run: pnpm verify:site-a11y"),
     );
     expect(build).toContain("run: pnpm exec playwright install --with-deps chromium");
+  });
+
+  it("deploys when only a site verification input changes", async () => {
+    const [deploySite, ci, packageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/deploy-site.yml"),
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("package.json").then(JSON.parse),
+    ]);
+    // Pull-request CI does not run the full route crawl, so a change to its
+    // inputs alone must still reach the Deploy Site workflow.
+    for (const path of [
+      '"package.json"',
+      '"site/**"',
+      '"scripts/*site*.mjs"',
+      '"scripts/example-matrix*.mjs"',
+    ]) {
+      expect(deploySite).toContain(`      - ${path}\n`);
+    }
+
+    // The static outline check does run in pull requests, after the build.
+    expect(packageJson.scripts["verify:site-outlines"]).toBe(
+      "node ./site/scripts/verify-progressive-outlines.mjs",
+    );
+    const validate = job(ci, "validate", "validate-rust");
+    expect(validate.indexOf("run: pnpm build:site")).toBeGreaterThan(-1);
+    expect(validate.indexOf("run: pnpm build:site")).toBeLessThan(
+      validate.indexOf("run: pnpm verify:site-outlines"),
+    );
   });
 
   it("pins every third-party action to a commit SHA with a version comment", async () => {

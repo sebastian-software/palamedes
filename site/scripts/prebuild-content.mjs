@@ -17,6 +17,12 @@ import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "../../scripts/componen
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
 import { writeBenchmarkData } from "./generate-benchmark-data.mjs";
+import {
+  PROGRESSIVE_OUTLINE_MANIFEST,
+  PROGRESSIVE_OUTLINE_THRESHOLD,
+  countTopLevelHeadings,
+  usesProgressiveOutline as docUsesProgressiveOutline,
+} from "./progressive-outline.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -34,6 +40,7 @@ const NPM_PACKAGES = [
   "@palamedes/vite-plugin",
   "@palamedes/remix",
   "@palamedes/tanstack",
+  "@palamedes/react-router",
   "@palamedes/solid",
   "@palamedes/waku",
   "@palamedes/react",
@@ -92,8 +99,6 @@ const DOC_INDEX_GROUPS = [
   },
 ];
 
-const PROGRESSIVE_OUTLINE_THRESHOLD = 5;
-
 buildTypedocPackages();
 
 // The live demo is a separate, real adapter build, also served by site dev.
@@ -120,6 +125,7 @@ const docs = await collectDocs();
 const posts = await collectPosts();
 const adrs = await collectAdrs();
 const hostedRoutes = new Map();
+const progressiveOutlineDocs = [];
 
 for (const doc of docs) hostedRoutes.set(doc.source, doc.route);
 for (const post of posts) hostedRoutes.set(post.source, post.route);
@@ -131,6 +137,7 @@ await writeDocsNavigation(docs);
 for (const doc of docs) {
   await writeRouteFromSource(doc);
 }
+await writeProgressiveOutlineManifest();
 
 await writeDecisionsIndex();
 await writeDecisionRedirects(repoRoot, publicRoot);
@@ -449,6 +456,23 @@ async function writeDecisionsIndex() {
   });
 }
 
+/*
+ * Records every generated doc with its top-level heading count and whether it
+ * received a progressive outline. The deploy route verification compares the
+ * generated pages against this manifest instead of a pinned page count.
+ */
+async function writeProgressiveOutlineManifest() {
+  const manifest = {
+    threshold: PROGRESSIVE_OUTLINE_THRESHOLD,
+    docs: progressiveOutlineDocs.toSorted((left, right) => left.file.localeCompare(right.file)),
+  };
+  await mkdir(generatedDataRoot, { recursive: true });
+  await writeFile(
+    join(generatedDataRoot, PROGRESSIVE_OUTLINE_MANIFEST),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+}
+
 async function writeBlogIndexData(posts) {
   const data = posts.map(({ title, excerpt, route, readMinutes, date }) => ({
     title,
@@ -512,9 +536,16 @@ async function writeRouteFromSource(entry) {
     extractAdrMeta(parsed.content, "Date");
   const body = lede ? removeLedeBlock(parsed.content, lede) : parsed.content;
   const content = transformLinks(body, entry.source);
-  const usesProgressiveOutline =
-    entry.source.startsWith("docs/") &&
-    countTopLevelHeadings(content) > PROGRESSIVE_OUTLINE_THRESHOLD;
+  const usesProgressiveOutline = docUsesProgressiveOutline(entry.source, content);
+  if (entry.source.startsWith("docs/")) {
+    progressiveOutlineDocs.push({
+      source: entry.source,
+      route: entry.route,
+      file: relative(join(routesRoot, "docs"), entry.out).replaceAll("\\", "/"),
+      headings: countTopLevelHeadings(content),
+      outline: usesProgressiveOutline,
+    });
+  }
   const frontmatter = {
     title,
     description,
@@ -533,24 +564,6 @@ async function writeRouteFromSource(entry) {
     entry.out,
     `${toFrontmatter(frontmatter)}\n${progressiveOutline}${content.trim()}\n`,
   );
-}
-
-function countTopLevelHeadings(content) {
-  let fence = null;
-  let count = 0;
-
-  for (const line of content.split("\n")) {
-    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0];
-      if (fence == null) fence = marker;
-      else if (fence === marker) fence = null;
-      continue;
-    }
-    if (fence == null && /^##(?!#)\s+\S/u.test(line)) count += 1;
-  }
-
-  return count;
 }
 
 function buildProgressiveOutlineItems(content) {
@@ -777,11 +790,7 @@ function typedocPackages() {
       label: "React",
       packageDir: "react",
       position: 40,
-      entryPoints: [
-        "packages/react/src/index.tsx",
-        "packages/react/src/client.tsx",
-        "packages/react/src/macro.ts",
-      ],
+      entryPoints: ["packages/react/src/index.tsx", "packages/react/src/macro.ts"],
     },
     {
       slug: "solid",
@@ -823,10 +832,17 @@ function typedocPackages() {
       entryPoints: ["packages/tanstack/src/index.ts", "packages/tanstack/src/server.ts"],
     },
     {
+      slug: "react-router",
+      label: "React Router",
+      packageDir: "react-router",
+      position: 77,
+      entryPoints: ["packages/react-router/src/index.ts"],
+    },
+    {
       slug: "remix",
       label: "Remix",
       packageDir: "remix",
-      position: 77,
+      position: 78,
       entryPoints: [
         "packages/remix/src/index.ts",
         "packages/remix/src/client.ts",

@@ -357,6 +357,7 @@ jobs:
           --filter @palamedes/remix
           --filter @palamedes/waku
           --filter @palamedes/tanstack
+          --filter @palamedes/react-router
           --filter @palamedes/solid
           --filter @palamedes/cli
           --filter @palamedes/vite-plugin

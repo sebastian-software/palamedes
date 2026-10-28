@@ -1,7 +1,9 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
 
 import type { Route } from "./+types/root";
-import { DEFAULT_LOCALE, resolveLocaleFromRequest } from "~/lib/i18n";
+import { DEFAULT_LOCALE } from "~/lib/i18n";
+import { i18n } from "~/lib/i18n.server";
+import { serverI18nTestBarrier } from "~/lib/test-barrier.server";
 import "@palamedes/example-ui/styles.css";
 
 declare global {
@@ -10,9 +12,11 @@ declare global {
   }
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+export const middleware: Route.MiddlewareFunction[] = [i18n.middleware, serverI18nTestBarrier];
+
+export async function loader({ context }: Route.LoaderArgs) {
   return {
-    locale: resolveLocaleFromRequest(request),
+    locale: i18n.getLocale(context),
   };
 }
 

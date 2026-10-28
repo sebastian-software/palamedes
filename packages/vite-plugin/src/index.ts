@@ -86,10 +86,16 @@ function bareMessageAsset(rendered: string, locale: string): string {
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config.";
 // Server packages that must stay in Vite's module graph. The runtime and
 // plugin entrypoints import `virtual:` catalog modules, which Node cannot
-// resolve. The Waku adapter must share the bundled `waku/router/server`
-// instance whose request store Waku's router populates. Entries for packages
-// an application does not install have no effect.
-const SERVER_GRAPH_PACKAGES = ["@palamedes/runtime", "@palamedes/vite-plugin", "@palamedes/waku"];
+// resolve; the React Router adapter loads them through the runtime. The Waku
+// adapter must share the bundled `waku/router/server` instance whose request
+// store Waku's router populates. Entries for packages an application does not
+// install have no effect.
+const SERVER_GRAPH_PACKAGES = [
+  "@palamedes/runtime",
+  "@palamedes/vite-plugin",
+  "@palamedes/react-router",
+  "@palamedes/waku",
+];
 
 type EnvironmentAwarePluginContext = {
   environment?: {
@@ -1090,7 +1096,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
           const initialize =
             `import { createI18n } from "@palamedes/core";\n` +
-            `import { initializeClientI18n } from "@palamedes/runtime";\n` +
+            `import { initializeClientI18n } from "@palamedes/runtime/internal";\n` +
             `const locale = document.documentElement.lang;\n` +
             `if (!${JSON.stringify(locales)}.includes(locale)) throw new Error("Unsupported document catalog locale.");\n` +
             `const i18n = initializeClientI18n(locale, () => createI18n({ locale, timeZone: document.documentElement.dataset.palamedesTimeZone }));\n`;

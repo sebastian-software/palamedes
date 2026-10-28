@@ -87,7 +87,7 @@ standard host workflow and does not permit marking raw ICU maps with
 | Next.js                     | Keep the default automatic graph delivery; use the public server factory and remove client catalog plumbing. | Graph splitting is automatic; the removed `messageSplitting` option is rejected. Request server catalogs are shared and immutable. |
 | Remix                       | Replace serialized client bootstrap and `loadClientMessages` with the shared asset registry.                 | Executable catalog assets/fragments load before translated entries; failures reach ordinary host UI.                               |
 | TanStack Start, Waku        | Keep host-specific setup from the checked example and remove raw ICU runtime loading.                        | Use the adapter's request scope and compiled delivery; do not add app-owned catalog transport.                                     |
-| React Router Framework Mode | Drop `experimentalGraphSplitting`, server `.po` maps, the manifest reader, and client `setClientI18n()`.     | No adapter package; the app wires delivery and request scopes per the [guide](./api/react-router.md).                              |
+| React Router Framework Mode | Replace v1 hand-wiring with `@palamedes/react-router`: root middleware plus its server entry.                | The adapter owns request scopes and import-map delivery; the app keeps locale policy. See the [guide](./api/react-router.md).      |
 
 Host-specific guides may expose lower-level hooks for custom servers, but the
 checked standard examples are the evidence for the transparent path. Do not
@@ -97,8 +97,7 @@ pass.
 
 ### React Router Framework Mode
 
-There is no adapter package for this host; the application keeps its own
-server wiring. The v1 examples enabled
+V2 adds the `@palamedes/react-router` adapter. The v1 examples enabled
 `experimentalGraphSplitting: { localeBinding: "import-map" }`, imported every
 locale's `.po` catalog into a server map, and read
 `palamedes-split-manifest.json` to inject the import map with a hand-written
@@ -106,19 +105,18 @@ stream transform. Their `entry.client.tsx` initialized the browser instance
 through `setClientI18n()`, and their loaders called the server scope's
 `activate()`.
 
-In v2:
+| v1 hand-wiring                                                               | v2 with `@palamedes/react-router`                                                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `experimentalGraphSplitting` in `palamedes()`                                | Remove the option; `palamedes()` delivers catalogs without it.                                                      |
+| Server map of every locale's `.po` catalog, a server scope, a request helper | `createReactRouterI18n({ resolveLocale, i18nOptions })` in `app/lib/i18n.server.ts`; it loads the compiled catalog. |
+| `activate()` or a `run()` wrapper in each loader and action                  | `export const middleware = [i18n.middleware]` in `app/root.tsx`; loaders and actions need no wrapper.               |
+| Manifest reader and stream transform in `app/entry.server.tsx`               | `export default i18n.handleRequest` in `app/entry.server.tsx`.                                                      |
+| `setClientI18n()` in `app/entry.client.tsx`                                  | Remove it; the plugin initializes the browser instance from `<html lang>`.                                          |
 
-- call `palamedes()` without `experimentalGraphSplitting`;
-- create request i18n with `createBundledServerI18n({ locale })` from
-  `@palamedes/runtime/server/bundled` instead of importing catalogs;
-- replace the manifest reader and stream transform with
-  `createViteCatalogDelivery()` and its `createDocumentTransform()`;
-- remove the client bootstrap; the plugin initializes the browser instance from
-  `<html lang>`;
-- run loaders and actions inside the request scope with `run()` instead of
-  calling `activate()`.
-
-The [React Router Framework Mode guide](./api/react-router.md) shows the
+Pre-release v2 code that already called `createScopedI18nRunner()`,
+`createServerI18nScope()`, or `createViteCatalogDelivery()` directly can keep
+working, but the adapter replaces all three for this host. The
+[React Router Framework Mode guide](./api/react-router.md) shows the
 complete files.
 
 ### Stable Remix 3
@@ -257,6 +255,11 @@ or use inline code in MDX. See
 | `I18nInstance` with only `_` and `locale` required (`_()` returned `unknown`)                             | Now `PalamedesI18n`: `_()` returns `string`; `load()`, `activate()`, `renderMessage()` and `locale` are required. Use `createI18n()` instances. `setClientI18n()` throws when generated registrations exist and `load()` is missing.                                                    |
 | Runtime `Trans` without `id`, or with `message` as the lookup key                                         | `id` is required on runtime `Trans` props (React, Solid, Remix); `message` is diagnostic metadata only. Author with the `/macro` `Trans`; the transform injects `id`.                                                                                                                   |
 | `PALEMEDES_REMIX_ASSET_PACKAGES`                                                                          | `PALAMEDES_REMIX_ASSET_PACKAGES`.                                                                                                                                                                                                                                                       |
+| `registerMessage*()`, `loadRegisteredMessages()`, `initializeClientI18n()` from `@palamedes/runtime`      | Generated-code plumbing. Moved with `RegisteredMessages` and `RegisteredMessageLoader` to the Internal `@palamedes/runtime/internal` subpath. Supported adapters emit the new import; applications do not call these functions.                                                         |
+| `formatMessageArgument()`, `replacePoundPlaceholders()`, `stringifyValue()`, `MessageFormat` (core)       | Renderer helpers. Moved to the Internal `@palamedes/core/internal` subpath that the React, Solid, and Remix renderers use. Format values through compiled messages.                                                                                                                     |
+| `PluralProps`, `SelectProps`, `SelectOrdinalProps` from `@palamedes/core`                                 | Import them from `@palamedes/core/macro`, next to the choice macro prop types.                                                                                                                                                                                                          |
+| `createClientCatalogBoundary()` from `@palamedes/react/client`                                            | Removed with the subpath. The framework adapter delivers the active-locale catalog and initializes the client runtime; remove the boundary and its `loadCatalog` map.                                                                                                                   |
+| Direct imports of the Next.js loader and server-function subpaths                                         | These subpaths are Internal; `withPalamedes()` wires them into the build. Remove direct imports.                                                                                                                                                                                        |
 
 The existing `CatalogMessages` string-map type can describe build-time data;
 `load()` accepts only `CompiledCatalogMessages`. `CompiledPalamedesI18n` aliases

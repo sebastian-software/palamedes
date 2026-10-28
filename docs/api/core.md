@@ -8,7 +8,9 @@ loading remains available for standalone/custom integrations.
 ## Exports
 
 The package root and `@palamedes/core/compiled` share the same implementation.
-Their complete generated inventories follow. `CompiledPalamedesI18n` is a type
+Their complete generated inventories follow. The choice prop types
+`PluralProps`, `SelectProps`, and `SelectOrdinalProps` are exported from
+`@palamedes/core/macro`. `CompiledPalamedesI18n` is a type
 alias for `PalamedesI18n`. Build packages and run `pnpm check:core-api-reference`
 to verify source, declarations, ESM and CJS exports.
 
@@ -31,20 +33,13 @@ to verify source, declarations, ESM and CJS exports.
 | `DEFAULT_LOCALE`               | Runtime   |
 | `defineCompiledCatalog`        | Runtime   |
 | `ExecutableMessageRenderer`    | Type-only |
-| `formatMessageArgument`        | Runtime   |
 | `isCompiledCatalog`            | Runtime   |
-| `MessageFormat`                | Type-only |
 | `MessageFormatErrorInfo`       | Type-only |
 | `MessageMetadata`              | Type-only |
 | `MessageValues`                | Type-only |
 | `MissingCompiledMessageError`  | Runtime   |
 | `MissingMessageInfo`           | Type-only |
 | `PalamedesI18n`                | Type-only |
-| `PluralProps`                  | Type-only |
-| `replacePoundPlaceholders`     | Runtime   |
-| `SelectOrdinalProps`           | Type-only |
-| `SelectProps`                  | Type-only |
-| `stringifyValue`               | Runtime   |
 
 <!-- core-root-exports:end -->
 
@@ -67,20 +62,13 @@ to verify source, declarations, ESM and CJS exports.
 | `DEFAULT_LOCALE`               | Runtime   |
 | `defineCompiledCatalog`        | Runtime   |
 | `ExecutableMessageRenderer`    | Type-only |
-| `formatMessageArgument`        | Runtime   |
 | `isCompiledCatalog`            | Runtime   |
-| `MessageFormat`                | Type-only |
 | `MessageFormatErrorInfo`       | Type-only |
 | `MessageMetadata`              | Type-only |
 | `MessageValues`                | Type-only |
 | `MissingCompiledMessageError`  | Runtime   |
 | `MissingMessageInfo`           | Type-only |
 | `PalamedesI18n`                | Type-only |
-| `PluralProps`                  | Type-only |
-| `replacePoundPlaceholders`     | Runtime   |
-| `SelectOrdinalProps`           | Type-only |
-| `SelectProps`                  | Type-only |
-| `stringifyValue`               | Runtime   |
 
 <!-- core-compiled-exports:end -->
 
@@ -248,10 +236,13 @@ Palamedes plugin before runtime.
 | `ChoiceMacroMetadata`     | Type-only |
 | `plural`                  | Runtime   |
 | `PluralMacroProps`        | Type-only |
+| `PluralProps`             | Type-only |
 | `select`                  | Runtime   |
 | `SelectMacroProps`        | Type-only |
 | `selectOrdinal`           | Runtime   |
 | `SelectOrdinalMacroProps` | Type-only |
+| `SelectOrdinalProps`      | Type-only |
+| `SelectProps`             | Type-only |
 | `t`                       | Runtime   |
 
 <!-- core-macro-exports:end -->
@@ -286,10 +277,9 @@ formatter subset. Number styles are omitted/default, `percent`, `integer`,
 `short`, `medium`, `long`, or `full`. Invalid or unsupported ICU fails
 compilation. Invalid formatter values throw during execution.
 
-`formatMessageArgument()` exposes the same cached Intl formatting that the
-framework renderers use. `replacePoundPlaceholders()` formats plural pound
-values, and `stringifyValue()` renders scalar values. These helpers do not parse
-ICU.
+The framework renderers share their Intl formatting helpers through the
+**Internal** subpath `@palamedes/core/internal`. Applications do not import it;
+format values through compiled messages instead.
 
 `parseMessagePattern()`, `formatMessagePattern()`, `getMessage()`,
 `getMessageNodes()`, `parsePattern()`, parsed-node types, `resolveChoice()`,

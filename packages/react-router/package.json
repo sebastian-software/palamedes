@@ -1,0 +1,68 @@
+{
+  "name": "@palamedes/react-router",
+  "version": "1.25.1",
+  "description": "React Router Framework Mode request-scoped i18n middleware and server entry for Palamedes",
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "localization",
+    "react-router"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/react-router"
+  },
+  "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "README.md",
+    "dist/"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "unbuild",
+    "test": "vitest run --globals src/index.test.ts && node --test scripts/package.test.mjs",
+    "stub": "unbuild --stub"
+  },
+  "dependencies": {
+    "@palamedes/runtime": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^",
+    "isbot": "^5.2.2"
+  },
+  "devDependencies": {
+    "@react-router/node": "8.5.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router": "8.5.0",
+    "typescript": "^7.0.2",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "@react-router/node": "^8.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^8.5.0"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}

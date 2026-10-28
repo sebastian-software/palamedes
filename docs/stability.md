@@ -70,6 +70,7 @@ release.
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8.                                                                                                                                                                        |
 | `@palamedes/waku`                                     | Stable   | ESM-only Waku handler interceptor, catalog delivery middleware, and request resolver contract for `waku@^1.0.0-rc.4`; the examples verify Waku `1.0.0-rc.4`.                                                                                                                   |
 | `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                                                                                                          |
+| `@palamedes/react-router`                             | Stable   | ESM-only React Router Framework Mode root middleware, server entry, and locale resolver contract for `react-router@^8.5.0`; the examples verify React Router `8.5.0`. RSC mode is not supported.                                                                               |
 | `@palamedes/remix`                                    | Stable   | Full-stack Remix v3 adapter for `remix@^3.0.0`; the examples verify Remix `3.0.0` with Node `>=24.3.0`, and all four strategies have public HTTPS browser proofs.                                                                                                              |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                                                                                           |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                                                                                                                                                                   |
@@ -180,6 +181,44 @@ and Solid integrations does not promise their combined host or every framework
 and renderer combination. Any future host needs its own integration evidence
 before it is advertised as supported.
 
+## Subpath Tiers
+
+Package subpaths have their own tiers. A public subpath follows the tier of its
+package unless the row says otherwise. Internal subpaths exist for generated
+code, framework renderers, or build wiring; applications do not import them,
+and they can change in any release.
+
+| Subpath                                           | Tier     | Notes                                                                                       |
+| ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `@palamedes/core/compiled`                        | Stable   | Alias of the package root; the transform and generated catalogs import it.                  |
+| `@palamedes/core/macro`                           | Stable   | `t`, `plural`, `select`, `selectOrdinal`, and the choice prop types.                        |
+| `@palamedes/core/locale`                          | Stable   | Locale negotiation, locale controls, switch items, and SEO links.                           |
+| `@palamedes/core/internal`                        | Internal | Renderer helpers for the React, Solid, and Remix `Trans` components.                        |
+| `@palamedes/runtime/server`                       | Stable   | Request-local server scopes and the server catalog store.                                   |
+| `@palamedes/runtime/server/bundled`               | Stable   | `createBundledServerI18n` for server code built by `@palamedes/vite-plugin`.                |
+| `@palamedes/runtime/node`                         | Stable   | `defineNodeI18n` for backends that run with or without a bundler.                           |
+| `@palamedes/runtime/node-macros`                  | Stable   | `registerRuntimeMacros` for macros in unbundled Node code.                                  |
+| `@palamedes/runtime/internal`                     | Internal | Message registration and client bootstrap for generated code.                               |
+| `@palamedes/runtime/server/test`                  | Internal | Test-only isolation barrier, inert unless `PALAMEDES_I18N_TEST_BARRIER=1`.                  |
+| `@palamedes/react/compiled`                       | Stable   | Alias of the package root and the transform target for `Trans`.                             |
+| `@palamedes/react/macro`                          | Stable   | Compile-time `Trans`, `Plural`, `Select`, and `SelectOrdinal`.                              |
+| `@palamedes/solid/compiled`                       | Stable   | Alias of the package root and the transform target for `Trans`.                             |
+| `@palamedes/solid/macro`                          | Stable   | Compile-time `Trans`, `Plural`, `Select`, and `SelectOrdinal`.                              |
+| `@palamedes/solid/server`                         | Stable   | Solid Start catalog delivery middleware.                                                    |
+| `@palamedes/vite-plugin/delivery`                 | Stable   | `createViteCatalogDelivery` for SSR hosts that bind documents to catalogs.                  |
+| `@palamedes/next-plugin/server`                   | Stable   | `createNextServerI18n` and `createNextServerI18nScope`.                                     |
+| Other `@palamedes/next-plugin/*` subpaths         | Internal | Loaders, server-function entries, and catalog modules that `withPalamedes()` wires by path. |
+| `@palamedes/tanstack/server`                      | Stable   | `createTanStackServerI18n` and catalog response delivery for React Start.                   |
+| `@palamedes/react-router`                         | Stable   | Root entry only: `createReactRouterI18n`, its middleware, and server entry; no subpaths.    |
+| `@palamedes/waku/server`                          | Stable   | Waku catalog delivery middleware.                                                           |
+| `@palamedes/remix/server`, `/client`, `/register` | Stable   | Server, browser, and Node loader entry points.                                              |
+| `@palamedes/remix/compiled`, `/macro`             | Stable   | Transform target and compile-time components.                                               |
+| `@palamedes/transform/catalog-loader`             | Preview  | Catalog loader helpers for custom bundler integrations.                                     |
+
+`@palamedes/runtime/server/test` is imported by the example servers so the
+browser proofs can hold two requests at a barrier. It does nothing unless the
+test process sets the environment variable, but it is not an application API.
+
 ## Stable Surfaces
 
 Palamedes treats these as stable adoption surfaces:
@@ -190,6 +229,7 @@ Palamedes treats these as stable adoption surfaces:
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
 - TanStack Start server-function middleware documented in `@palamedes/tanstack`
+- React Router Framework Mode middleware and server entry documented in `@palamedes/react-router`
 - Waku interceptor and catalog delivery middleware documented in `@palamedes/waku`
 - Remix v3 adapter APIs documented in `@palamedes/remix`
 - runtime access through `getI18n()`
