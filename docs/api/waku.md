@@ -33,7 +33,7 @@ files from an RSC or browser module.
 
 ```ts
 // src/lib/i18n.server.ts
-import { createViteServerI18n } from "@palamedes/vite-plugin/server";
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { locales } from "./i18n";
 
 export function createRequestI18n(request: Request) {
@@ -42,7 +42,7 @@ export function createRequestI18n(request: Request) {
     acceptLanguageHeader: request.headers.get("accept-language"),
     cookieHeader: request.headers.get("cookie"),
   });
-  return createViteServerI18n({ locale });
+  return createBundledServerI18n({ locale });
 }
 ```
 
@@ -96,7 +96,7 @@ export default createWakuI18nInterceptor(async (request) => {
 
 The resolver receives Waku's original Fetch `Request`, including headers and
 cookies. It resolves the application locale and delegates catalog loading and
-instance creation to `createViteServerI18n`; the interceptor owns activation
+instance creation to `createBundledServerI18n`; the interceptor owns activation
 and cleanup. If it fails, the action
 body does not run and the server throws an error beginning `Palamedes Waku i18n
 initialization failed` with the original cause attached.

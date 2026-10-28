@@ -157,10 +157,10 @@ experimental flag, application PO map, or manual client initialization is
 needed. Vite's resolved `base` must be root-relative (for example `/app/`) or
 an absolute URL.
 
-SSR adapters use `@palamedes/vite-plugin/server` to create request state from
-the shared lazy active-locale catalog, and `@palamedes/vite-plugin/delivery`
-to bind import maps before modulepreloads and modules execute. The React Router
-compatibility export remains at `@palamedes/vite-plugin/react-router`.
+SSR hosts use `createBundledServerI18n` from
+`@palamedes/runtime/server/bundled` to create request state from the shared
+lazy active-locale catalog, and `@palamedes/vite-plugin/delivery` to bind
+import maps before modulepreloads and modules execute.
 Static Vite HTML entries receive the same locale binding automatically.
 
 The package peer range remains broad because macros and catalog loading work on
