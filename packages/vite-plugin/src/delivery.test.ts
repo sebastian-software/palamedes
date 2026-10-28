@@ -123,6 +123,22 @@ describe("Vite catalog delivery", () => {
     expect(html).toContain('<body lang="en">');
   });
 
+  it("sets further <html> attributes and rejects invalid names", async () => {
+    const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
+    const binding = delivery.getLocaleBinding("de");
+    const html = await collect(
+      delivery.createDocumentTransform(binding, {
+        lang: "de",
+        htmlAttributes: { "data-state": 'a"b', "data-palamedes-flag": "" },
+      }),
+      '<html lang="en" data-state="old"><head></head><body>app</body></html>',
+    );
+    expect(html).toContain('<html data-palamedes-flag="" lang="de" data-state="a&quot;b">');
+    expect(() =>
+      delivery.createDocumentTransform(binding, { htmlAttributes: { "on click": "x" } }),
+    ).toThrow("Invalid <html> attribute name");
+  });
+
   it("keeps the document language unless a locale is passed", async () => {
     const delivery = createViteCatalogDelivery({ clientDirectory: await createFixture() });
     const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));

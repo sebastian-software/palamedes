@@ -39,7 +39,15 @@ export type ViteDocumentTransformOptions = {
    * request locale for every document, such as a 404 rendered without route data.
    */
   readonly lang?: string;
+  /**
+   * Further attributes to set on `<html>`, such as a marker the host's browser
+   * code reads to render the same markup the server rendered. Names must be
+   * plain attribute names; values are escaped.
+   */
+  readonly htmlAttributes?: Readonly<Record<string, string>>;
 };
+
+const HTML_ATTRIBUTE_NAME = /^[a-z][a-z0-9-]*$/iu;
 
 /**
  * Owns the server half of Vite's locale-bound catalog delivery for SSR hosts
@@ -136,6 +144,11 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
     binding: ViteCatalogBinding | null,
     transformOptions: ViteDocumentTransformOptions = {},
   ): Transform {
+    for (const name of Object.keys(transformOptions.htmlAttributes ?? {})) {
+      if (!HTML_ATTRIBUTE_NAME.test(name)) {
+        throw new TypeError(`Invalid <html> attribute name ${JSON.stringify(name)}.`);
+      }
+    }
     if (!binding && !options.development) return new PassThrough();
     const nonce = transformOptions.nonce
       ? ` nonce="${escapeAttribute(transformOptions.nonce)}"`
@@ -187,8 +200,12 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
           /<link\b[^>]*\brel=["']modulepreload["'][^>]*\bhref=["'][^"']*#pmds\/[^"]+["'][^>]*>\s*/giu,
           "",
         );
-        if (transformOptions.lang !== undefined) {
-          sanitizedHead = setDocumentLang(sanitizedHead, transformOptions.lang);
+        const htmlAttributes = {
+          ...transformOptions.htmlAttributes,
+          ...(transformOptions.lang === undefined ? {} : { lang: transformOptions.lang }),
+        };
+        if (Object.keys(htmlAttributes).length > 0) {
+          sanitizedHead = setHtmlAttributes(sanitizedHead, htmlAttributes);
         }
         callback(
           null,
@@ -266,15 +283,22 @@ function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
 
-/** Replace or add the `lang` attribute of the document's `<html>` start tag. */
-function setDocumentLang(head: string, lang: string): string {
+/** Replace or add attributes of the document's `<html>` start tag. */
+function setHtmlAttributes(head: string, attributes: Readonly<Record<string, string>>): string {
   return head.replace(/<html(?=[\s/>])[^>]*>/iu, (tag) => {
-    const attribute = ` lang="${escapeAttribute(lang)}"`;
-    // The leading whitespace keeps `xml:lang` and `data-lang` untouched.
-    const existing = /\slang\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+)/iu;
-    return existing.test(tag)
-      ? tag.replace(existing, attribute)
-      : tag.replace(/^<html/iu, `<html${attribute}`);
+    let result = tag;
+    for (const [name, value] of Object.entries(attributes)) {
+      const attribute = ` ${name}="${escapeAttribute(value)}"`;
+      // The leading whitespace keeps `xml:lang` and `data-lang` apart from `lang`.
+      const existing = new RegExp(
+        `\\s${name}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'=<>\`]+))?(?=[\\s/>])`,
+        "iu",
+      );
+      result = existing.test(result)
+        ? result.replace(existing, attribute)
+        : result.replace(/^<html/iu, `<html${attribute}`);
+    }
+    return result;
   });
 }
 

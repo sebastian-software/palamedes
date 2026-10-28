@@ -16,7 +16,7 @@ import {
 } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useDocumentLocale } from "./document";
+import { useCatalogAvailable, useDocumentLocale } from "./document";
 import {
   createReactRouterI18n,
   type CreateReactRouterI18nOptions,
@@ -134,9 +134,11 @@ function createTestApp(
   function Layout({ children }: { children: ReactNode }) {
     const loaderData = useRouteLoaderData("root") as { locale: string } | undefined;
     const documentLocale = useDocumentLocale();
+    const catalogAvailable = useCatalogAvailable();
     const lang = layout === "document" ? (documentLocale ?? "en") : (loaderData?.locale ?? "en");
-    // Translated layout chrome, like a `<Trans>` footer.
-    const footer = layout === "document" ? getI18n()._("footer") : "Footer";
+    // Translated layout chrome, like a `<Trans>` footer, with catalog-free
+    // markup for the server catalog-failure document.
+    const footer = layout === "document" && catalogAvailable ? getI18n()._("footer") : "Footer";
     return documentShell(lang, children, createElement("footer", { key: "footer" }, footer));
   }
 
@@ -364,22 +366,51 @@ describe("createReactRouterI18n", () => {
     expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.de.js"}}');
   });
 
-  it("renders a server catalog failure with the request locale's browser catalogs", async () => {
+  it("renders a server catalog failure through a translated Layout's catalog-free markup", async () => {
     const clientDirectory = await createClientBuild();
-    // The error document has no request scope, so its Layout uses no messages.
     const app = createTestApp(
-      { catalogDelivery: { clientDirectory, development: false } },
+      {
+        catalogDelivery: { clientDirectory, development: false },
+        failureMessage: "The page catalog could not be loaded.",
+      },
       undefined,
-      "fallback",
+      "document",
     );
 
     const response = await app.handler(new Request("https://example.test/?locale=fr"));
     const html = await response.text();
 
+    // The app's ErrorBoundary, not React Router's last-resort response.
     expect(response.status).toBe(500);
-    expect(html).toContain('<html lang="fr">');
-    expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.fr.js"}}');
     expect(html).toContain('<main role="alert">Unavailable</main>');
+    expect(html).not.toContain("Unexpected Server Error");
+    expect(html).toContain("<footer>Footer</footer>");
+    // The browser catalogs are separate files and may still load.
+    expect(html).toContain('<html data-palamedes-catalog-unavailable="" lang="fr">');
+    expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.fr.js"}}');
+    expect(app.errors).toEqual([
+      expect.objectContaining({ message: "The page catalog could not be loaded." }),
+    ]);
+  });
+
+  it("marks only the catalog-failure document as catalog-free", async () => {
+    const clientDirectory = await createClientBuild();
+    const app = createTestApp(
+      { catalogDelivery: { clientDirectory, development: false } },
+      undefined,
+      "document",
+    );
+
+    const [ok, missing] = await Promise.all(
+      ["/?locale=de", "/missing?locale=de"].map(async (target) =>
+        (await app.handler(new Request(`https://example.test${target}`))).text(),
+      ),
+    );
+
+    for (const html of [ok, missing]) {
+      expect(html).not.toContain("data-palamedes-catalog-unavailable");
+      expect(html).toContain("<footer>de[UTC]:footer</footer>");
+    }
   });
 
   it("renders the error boundary without catalogs when the locale has no client build", async () => {
@@ -479,14 +510,20 @@ describe("createReactRouterI18n", () => {
     );
   });
 
-  it("reads the document locale from <html lang> in the browser", () => {
+  it("reads the document locale and catalog marker from <html> in the browser", () => {
     function Probe() {
-      return createElement("p", null, useDocumentLocale() ?? "none");
+      const state = `${useDocumentLocale() ?? "none"}:${useCatalogAvailable()}`;
+      return createElement("p", null, state);
     }
+    const browserDocument = (lang: string, attributes: string[]) => ({
+      documentElement: { lang, hasAttribute: (name: string) => attributes.includes(name) },
+    });
 
-    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>none</p>");
-    vi.stubGlobal("document", { documentElement: { lang: "de" } });
-    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>de</p>");
+    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>none:true</p>");
+    vi.stubGlobal("document", browserDocument("de", []));
+    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>de:true</p>");
+    vi.stubGlobal("document", browserDocument("fr", ["data-palamedes-catalog-unavailable"]));
+    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>fr:false</p>");
   });
 
   it("runs custom entry work inside the request scope", async () => {

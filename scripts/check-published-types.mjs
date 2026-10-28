@@ -382,7 +382,7 @@ import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
 import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
 import { createReactRouterI18n, type ReactRouterHandleRequest } from "@palamedes/react-router"
-import { useDocumentLocale } from "@palamedes/react-router/document"
+import { useCatalogAvailable, useDocumentLocale } from "@palamedes/react-router/document"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 import { createI18n } from "@palamedes/core"
 import { getI18n } from "@palamedes/runtime"
@@ -460,6 +460,7 @@ export const reactRouterI18n = createReactRouterI18n({
 export const reactRouterEntry: ReactRouterHandleRequest = reactRouterI18n.handleRequest
 export const reactRouterMiddleware = [reactRouterI18n.middleware]
 export const useReactRouterDocumentLocale: () => string | undefined = useDocumentLocale
+export const useReactRouterCatalogAvailable: () => boolean = useCatalogAvailable
 // @ts-expect-error The React Router resolver returns a locale string, not an i18n instance.
 createReactRouterI18n({ resolveLocale: () => createI18n({ locale: "en" }) })
 // @ts-expect-error Adapters require the full v2 instance, not only locale and _().

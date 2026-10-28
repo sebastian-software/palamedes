@@ -23,7 +23,11 @@ import {
   type RouterContextProvider,
 } from "react-router";
 
-import { DocumentLocaleContext } from "./document-locale";
+import {
+  CATALOG_UNAVAILABLE_ATTRIBUTE,
+  DocumentStateContext,
+  type DocumentState,
+} from "./document-state";
 
 /** Selects the active locale for one request. Locale policy stays in the application. */
 export type ReactRouterLocaleResolver<TLocale extends string = string> = (
@@ -103,8 +107,9 @@ export type ReactRouterI18n<TLocale extends string = string> = {
   readonly middleware: MiddlewareFunction<Response>;
   /**
    * A complete streaming server entry. Use it as the default export of
-   * `app/entry.server.tsx`. It renders inside the request scope, provides the
-   * locale to `useDocumentLocale()`, and adds the locale's `<html lang>`,
+   * `app/entry.server.tsx`. It renders inside the request scope, provides
+   * `useDocumentLocale()` and `useCatalogAvailable()` with the document's
+   * state, and adds the locale's `<html lang>`,
    * catalog import map, and readiness script to the document.
    */
   readonly handleRequest: ReactRouterHandleRequest;
@@ -280,6 +285,9 @@ export function createReactRouterI18n<TLocale extends string = string>(
       // The browser bootstrap reads `<html lang>` and loads, or checks, the
       // catalogs for it, so the adapter owns that attribute.
       ...(state.locale === undefined ? {} : { lang: state.locale }),
+      // `useCatalogAvailable()` reads this marker in the browser, so a
+      // translated Layout hydrates the catalog-free markup the server rendered.
+      ...(state.i18n ? {} : { htmlAttributes: { [CATALOG_UNAVAILABLE_ATTRIBUTE]: "" } }),
     });
   }
 
@@ -308,9 +316,10 @@ export function createReactRouterI18n<TLocale extends string = string>(
     // resolve their scope here instead.
     return await run(request, loadContext, async () => {
       const documentTransform = await createDocumentTransform(request, loadContext);
+      const state = loadContext.get(stateContext);
       return await renderDocument({
         documentTransform,
-        locale: loadContext.get(stateContext)?.locale,
+        document: { locale: state?.locale, catalogAvailable: state?.i18n !== undefined },
         nonce: resolveNonce(request, loadContext),
         request,
         responseHeaders,
@@ -337,7 +346,7 @@ export function createReactRouterI18n<TLocale extends string = string>(
 
 type RenderDocumentOptions = {
   documentTransform: Transform;
-  locale: string | undefined;
+  document: DocumentState;
   nonce: string | undefined;
   request: Request;
   responseHeaders: Headers;
@@ -352,7 +361,7 @@ type RenderDocumentOptions = {
  */
 function renderDocument({
   documentTransform,
-  locale,
+  document,
   nonce,
   request,
   responseHeaders,
@@ -374,11 +383,11 @@ function renderDocument({
     );
 
     const { pipe, abort } = renderToPipeableStream(
-      // `useDocumentLocale()` reads the locale here, because the root loader
-      // does not run for every document, such as a 404.
+      // `useDocumentLocale()` and `useCatalogAvailable()` read the document
+      // state here, because the root loader does not run for every document.
       createElement(
-        DocumentLocaleContext.Provider,
-        { value: locale },
+        DocumentStateContext.Provider,
+        { value: document },
         createElement(ServerRouter, {
           context: routerContext,
           url: request.url,

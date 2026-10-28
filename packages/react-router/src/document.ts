@@ -1,6 +1,6 @@
 import { useContext } from "react";
 
-import { DocumentLocaleContext } from "./document-locale";
+import { CATALOG_UNAVAILABLE_ATTRIBUTE, DocumentStateContext } from "./document-state";
 
 /**
  * The locale of the document, for `<html lang>` in the root `Layout`.
@@ -13,8 +13,25 @@ import { DocumentLocaleContext } from "./document-locale";
  * the locale resolver threw, or outside `handleRequest`.
  */
 export function useDocumentLocale(): string | undefined {
-  const serverLocale = useContext(DocumentLocaleContext);
-  if (serverLocale !== undefined) return serverLocale;
+  const server = useContext(DocumentStateContext);
+  if (server) return server.locale;
   if (typeof document === "undefined") return undefined;
   return document.documentElement.lang || undefined;
+}
+
+/**
+ * Whether the document's messages are available, so the root `Layout` can
+ * render translated chrome such as navigation and a footer.
+ *
+ * It is `false` only in the error document of a server catalog failure, which
+ * renders without the request's catalog: a `Layout` shows catalog-free markup
+ * there instead of its messages. On the server the value comes from
+ * `handleRequest`; in the browser from the document, so hydration renders the
+ * same markup. Outside `handleRequest` it is `true`.
+ */
+export function useCatalogAvailable(): boolean {
+  const server = useContext(DocumentStateContext);
+  if (server) return server.catalogAvailable;
+  if (typeof document === "undefined") return true;
+  return !document.documentElement.hasAttribute(CATALOG_UNAVAILABLE_ATTRIBUTE);
 }

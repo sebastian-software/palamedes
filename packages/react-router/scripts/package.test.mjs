@@ -99,9 +99,9 @@ const i18n = createReactRouterI18n({ resolveLocale: () => "en", catalogDelivery:
 if (typeof i18n.middleware !== "function" || typeof i18n.handleRequest !== "function") {
   throw new Error("The ESM entry did not create the middleware and server entry")
 }
-const { useDocumentLocale } = await import("@palamedes/react-router/document")
-if (typeof useDocumentLocale !== "function") {
-  throw new Error("The document entry did not export useDocumentLocale")
+const { useCatalogAvailable, useDocumentLocale } = await import("@palamedes/react-router/document")
+if (typeof useDocumentLocale !== "function" || typeof useCatalogAvailable !== "function") {
+  throw new Error("The document entry did not export its hooks")
 }
 `,
   );

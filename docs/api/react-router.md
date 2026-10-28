@@ -209,6 +209,26 @@ fixed for the document, so hydration renders the same value. It returns
 `resolveLocale` threw. The document transform also writes the resolved locale
 to `<html lang>`, so the attribute always matches the import map.
 
+A `Layout` may translate its chrome, such as navigation and a footer, with
+macros. One document renders without the request's catalog: the error document
+of a server catalog failure (see [Error UI](#error-ui)). `useCatalogAvailable()`
+from the same subpath returns `false` only there, so the `Layout` can render
+catalog-free markup instead:
+
+```tsx
+import { Trans } from "@palamedes/react/macro";
+import { useCatalogAvailable } from "@palamedes/react-router/document";
+
+function Footer() {
+  return useCatalogAvailable() ? <Trans>Made in Berlin</Trans> : <>Palamedes</>;
+}
+```
+
+On the server the value comes from `handleRequest`. In the browser the hook
+reads a `data-palamedes-catalog-unavailable` attribute that the document
+transform sets on that document's `<html>`, so hydration renders the same
+markup.
+
 Loaders read the resolved locale with `i18n.getLocale(context)` instead of
 resolving it again. It throws if the middleware did not run for the request.
 
@@ -247,8 +267,9 @@ If the entry module exports its own `streamTimeout`, pass the same value to
 `i18n.run(request, context, work)` for the scope and
 `i18n.createDocumentTransform(request, context)` for the Node `Transform`
 instead of `handleRequest`. Without `handleRequest`, `useDocumentLocale()`
-returns `undefined` on the server; the transform still sets `<html lang>`, and
-the browser reads that value. The checked examples do not need either.
+returns `undefined` and `useCatalogAvailable()` returns `true` on the server;
+the transform still sets `<html lang>` and the catalog-failure marker, and the
+browser reads them. The checked examples do not need either.
 
 ## Client entry
 
@@ -379,8 +400,11 @@ Catalog failures reach the user through these paths:
   `new Error(failureMessage, { cause })` before any loader runs. React Router
   renders the nearest `ErrorBoundary` with status 500 for document requests and
   serializes the error for `.data` requests. The adapter renders that error
-  document without an i18n scope. The root `Layout` wraps it too, so neither
-  the boundary nor the `Layout` may use messages. The document still gets the
+  document without an i18n scope, so the root `ErrorBoundary` must not use
+  messages. The root `Layout` wraps this document too: where it translates
+  chrome, it renders catalog-free markup while `useCatalogAvailable()` is
+  `false`. Messages anywhere else in this document make React Router fall back
+  to its bare "Unexpected Server Error" response. The document still gets the
   request locale's `lang` and import map, because the browser catalogs are
   separate files that may still load.
 - **Client build.** If the client manifest or the locale's import map is

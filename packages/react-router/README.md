@@ -102,9 +102,20 @@ If the entry module exports its own `streamTimeout`, pass the same value to
 If the catalog cannot load, the middleware throws
 `new Error(failureMessage, { cause })`. React Router renders the nearest
 `ErrorBoundary` for document requests and serializes the error for `.data`
-requests. The error document is rendered without an i18n scope, so error UI,
-including the root `Layout`, must not depend on message catalogs. It keeps the
-request locale's `lang` and import map.
+requests. The error document is rendered without an i18n scope, so the
+`ErrorBoundary` must not depend on message catalogs. It keeps the request
+locale's `lang` and import map.
+
+The root `Layout` wraps that document too. A `Layout` with translated chrome
+renders catalog-free markup there, using `useCatalogAvailable()` from
+`@palamedes/react-router/document`:
+
+```tsx
+const catalogAvailable = useCatalogAvailable();
+return <footer>{catalogAvailable ? <Trans>Made in Berlin</Trans> : "Palamedes"}</footer>;
+```
+
+It is `false` only in this document, on the server and during hydration.
 
 In production, a missing client manifest or import map for the locale throws
 the same error from the document transform. React Router then renders the root
