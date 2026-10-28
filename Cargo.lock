@@ -451,9 +451,9 @@ dependencies = [
 
 [[package]]
 name = "ferromark"
-version = "3.6.0"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12915f738971d1d59add8ca4483f3e417d23965e546508d205b1028ab1dd9163"
+checksum = "9580c392584c38a07cd5b6ae1bf042e8e26566a9f846c728b0b2b457ed120f25"
 dependencies = [
  "bumpalo",
  "compact_str",
