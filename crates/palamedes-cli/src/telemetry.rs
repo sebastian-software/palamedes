@@ -42,6 +42,14 @@ pub struct Options {
 
 #[derive(Debug, Subcommand)]
 enum Operation {
+    /// Unified reporting with system context; requires a new explicit grant.
+    Usage(crate::usage_settings::UsageOptions),
+    /// Separate permission for 24-month monthly summaries.
+    History(crate::usage_settings::AdditionalOptions),
+    /// Separate permission to contribute to public monthly totals.
+    Publication(crate::usage_settings::PublicationOptions),
+    /// Separate permission for future cross-tool profile links.
+    Profile(crate::usage_settings::ProfileOptions),
     #[command(about = tr!("Read the usage reporting notice and optionally enable it."))]
     Enable {
         /// Affirm consent to the displayed telemetry-v1 notice.
@@ -90,7 +98,7 @@ pub(crate) fn cache_root() -> Option<PathBuf> {
     Some(root.join("palamedes"))
 }
 
-fn state_root(ci: bool) -> Option<PathBuf> {
+pub(crate) fn state_root(ci: bool) -> Option<PathBuf> {
     if let Some(root) = path_env("APP_TRACKING_STATE_DIR") {
         return root.is_absolute().then_some(root);
     }
@@ -127,7 +135,13 @@ pub(crate) fn ci() -> bool {
 fn configured(offline: bool) -> Option<(Client, Policy)> {
     let ci = ci();
     let root = state_root(ci)?;
-    let policy = Policy {
+    let policy = policy(offline);
+    Some((Client::new(SERVICE_ORIGIN, root, "palamedes").ok()?, policy))
+}
+
+pub(crate) fn policy(offline: bool) -> Policy {
+    let ci = ci();
+    Policy {
         do_not_track: env("DO_NOT_TRACK").as_deref() == Some("1"),
         host_disabled: env("PALAMEDES_TELEMETRY").is_some_and(|s| s != "on"),
         telemetry: env("APP_TRACKING_TELEMETRY"),
@@ -138,8 +152,7 @@ fn configured(offline: bool) -> Option<(Client, Policy)> {
         offline: offline
             || !RELEASE_NETWORK_ENABLED
             || env("PALAMEDES_OFFLINE").as_deref() == Some("1"),
-    };
-    Some((Client::new(SERVICE_ORIGIN, root, "palamedes").ok()?, policy))
+    }
 }
 
 fn error(message: impl ToString) -> CliError {
@@ -155,6 +168,16 @@ fn output(text: &str) -> Result<(), CliError> {
 }
 
 pub fn execute(options: &Options, offline: bool) -> Result<u8, CliError> {
+    match &options.command {
+        Operation::Usage(options) => return crate::usage_settings::usage(options, offline),
+        Operation::History(options) => return crate::usage_settings::history(options, offline),
+        Operation::Publication(options) => {
+            return crate::usage_settings::publication(options, offline);
+        }
+        Operation::Profile(options) => return crate::usage_settings::profile(options, offline),
+        _ => {}
+    }
+
     if let Operation::Enable { accept } = &options.command {
         output(DISCLOSURE)?;
         if accept.is_none() {
@@ -165,6 +188,19 @@ pub fn execute(options: &Options, offline: bool) -> Result<u8, CliError> {
     match &options.command {
         Operation::Preview => output(&(client.preview(&policy).map_err(error)? + "\n"))?,
         operation => {
+            if matches!(
+                operation,
+                Operation::Disable
+                    | Operation::Decline
+                    | Operation::Enable { .. }
+                    | Operation::Delete
+                    | Operation::Reset
+            ) {
+                crate::usage_settings::stop(
+                    offline,
+                    matches!(operation, Operation::Delete | Operation::Reset),
+                )?;
+            }
             let control = match operation {
                 Operation::Enable { .. } => Some(Control::Enable),
                 Operation::Disable => Some(Control::Withdraw),
@@ -172,7 +208,13 @@ pub fn execute(options: &Options, offline: bool) -> Result<u8, CliError> {
                 Operation::Delete => Some(Control::Delete),
                 Operation::Reset => Some(Control::Reset),
                 Operation::Forget { .. } => Some(Control::ForgetUnverified),
-                Operation::Status | Operation::Flush | Operation::Preview => None,
+                Operation::Status
+                | Operation::Flush
+                | Operation::Preview
+                | Operation::Usage(_)
+                | Operation::History(_)
+                | Operation::Profile(_)
+                | Operation::Publication(_) => None,
             };
             if let Some(control) = control {
                 client.control(control, &policy).map_err(error)?;
@@ -190,15 +232,23 @@ pub fn execute(options: &Options, offline: bool) -> Result<u8, CliError> {
                     )
                     .map_err(error)?;
             }
-            output(
-                &(serde_json::to_string_pretty(&client.status(&policy).map_err(error)?)? + "\n"),
-            )?;
+            let mut status = serde_json::to_value(client.status(&policy).map_err(error)?)?;
+            status["unified"] = crate::usage_settings::snapshot(offline)?;
+            output(&(serde_json::to_string_pretty(&status)? + "\n"))?;
         }
     }
     Ok(0)
 }
 
-pub fn record(category: &'static str, offline: bool, context: impl FnOnce() -> RepositoryContext) {
+pub fn record(
+    category: &'static str,
+    offline: bool,
+    context: impl FnOnce() -> RepositoryContext + Send + 'static,
+) {
+    if crate::usage_settings::active(offline) {
+        crate::usage_settings::record(category, offline, context);
+        return;
+    }
     let Some((client, policy)) = configured(offline) else {
         return;
     };

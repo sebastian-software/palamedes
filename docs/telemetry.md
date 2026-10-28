@@ -171,3 +171,83 @@ so preserve the isolated state until acknowledgement when it matters. There
 is no permanent daemon, postinstall hook, or retry loop. The worker reloads
 private state and policy before sending and uses the same consent, offline,
 network-lock, and generation rules as the shared client.
+
+## Additional reporting choices
+
+The unified stream requires a fresh grant because it includes system context.
+Existing `telemetry-v1` grants continue to cover only legacy invocation reports.
+No upgrade, environment grant, or shared profile file grants a new purpose.
+
+```sh
+pmds telemetry usage enable                       # Read the expanded notice
+pmds telemetry usage enable --accept palamedes-events-v1
+pmds telemetry usage status                       # All unified choices, local only
+pmds telemetry usage preview                      # Exact queued payloads, local only
+pmds telemetry usage disable
+pmds telemetry usage delete
+pmds telemetry usage sync                         # Retry pending settings/delivery
+
+pmds telemetry history enable                     # Read the separate notice
+pmds telemetry history enable --accept monthly-history-v1
+pmds telemetry history disable
+pmds telemetry history status
+pmds telemetry history sync
+
+pmds telemetry publication enable                 # Read the public-use notice
+pmds telemetry publication enable --accept public-usage-v1
+pmds telemetry publication disable
+pmds telemetry publication status
+pmds telemetry publication sync
+
+pmds telemetry profile enable                     # Read the separate notice
+pmds telemetry profile enable --accept profile-linking-v1
+pmds telemetry profile disable                    # Unlink only Palamedes
+pmds telemetry profile reset --all-tools           # Remove all shared links
+pmds telemetry profile status
+pmds telemetry profile sync
+```
+
+Each notice-only command leaves state unchanged. `--accept` requires its exact
+revision; there is no preselected choice or prompt during an ordinary command.
+The expanded notice describes coarse OS/version, executable architecture, CPU
+family, and Linux distribution/kernel context. It links the official
+[English](https://sebastian-software.com/privacy#tool-usage-reports) and
+[German](https://sebastian-software.de/privacy#tool-usage-reports) notice.
+
+Enabling the unified stream stops legacy collection and discards unsent legacy
+reports. It preserves old credentials for `telemetry status`, `preview`, `delete`,
+`reset`, and `forget`; no old grant or queued usage is copied to the new stream.
+Each native invocation uses one stream, including npm-to-native execution.
+Explicitly enabling legacy reporting again stops unified collection. Top-level
+`telemetry disable`, `decline`, `delete`, and `reset` also stop the unified stream;
+status includes its permissions and pending changes under `unified`.
+
+History retains screened monthly summaries for 24 months after month end while
+detailed reports still expire after 90 days. Publication requires a third choice
+in addition to history and uses only separately permitted contributions. Anyone
+can access and copy its rounded, screened monthly totals; withdrawal cannot recall
+copies held by others. Refusing publication preserves private history. Withdrawing
+history also queues publication withdrawal and never silently re-enables it.
+
+Profile linking permits future local-use overlap analysis, independently of
+history and publication. It is excluded from CI. The private shared root is
+`%LOCALAPPDATA%/sebastian-software/app-tracking` on Windows,
+`~/Library/Application Support/sebastian-software/app-tracking` on macOS, or
+`$XDG_STATE_HOME/sebastian-software/app-tracking` (falling back to
+`~/.local/state/sebastian-software/app-tracking`) on Linux. It is separate from
+per-tool and project state. Windows uses the private user's application-data ACL.
+No machine ID or hardware fingerprint reconstructs a lost profile. A copied file
+represents the same profile, not a verified person or physical machine.
+
+Unlink removes only Palamedes' link. Shared reset removes all links, and neither
+operation deletes independently retained reports; use each tool's deletion control
+for those. Dalo and Ferriki consumer integration remains deferred.
+
+Settings synchronization is explicit and bounded. Offline changes and failed
+acknowledgements stay visibly pending. Ordinary reporting must first register the
+identity with an accepted real event batch: no fake invocation is generated to
+register it. A newly enabled additional choice may remain pending until you use
+the tool, run `telemetry usage sync`, and retry the relevant scope's `sync`.
+Eligibility starts from the UTC date after acknowledgement, never retroactively.
+These controls do not grant ordinary reporting in CI; use an explicit unified grant
+in isolated CI state with its separate CI revision. Update settings remain independent.

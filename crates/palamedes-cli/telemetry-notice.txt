@@ -75,3 +75,10 @@ driver executions are excluded. Rust/Node APIs and build plugins do not report
 automatically. Prior version-service reporting is not consent to this service.
 The service notice and processor information are maintained at:
 https://github.com/sebastian-software/app-tracking/blob/main/docs/telemetry-consent.md
+
+This legacy grant does not include unified system context, monthly history,
+public publication, or cross-tool linking. Read their separate notices with
+pmds telemetry usage enable, pmds telemetry history enable,
+pmds telemetry publication enable, and pmds telemetry profile enable.
+Top-level status includes unified pending choices; disable and delete cover
+both streams. Updates remain independent.

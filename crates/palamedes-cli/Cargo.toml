@@ -25,7 +25,7 @@ name = "pmds"
 path = "src/main.rs"
 
 [dependencies]
-app-tracking = "0.3.0"
+app-tracking = "=0.5.0"
 palamedes-build = { version = "1.25.1", path = "../palamedes-build" }
 palamedes-i18n = { version = "1.25.1", path = "../palamedes-i18n" }
 clap = { version = "4.6.6", features = ["derive"] }
