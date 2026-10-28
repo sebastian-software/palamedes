@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import * as viteModule from "vite";
-import type { Plugin, FilterPattern, ResolvedConfig } from "vite";
+import type { Plugin, FilterPattern, ResolvedConfig, ViteDevServer } from "vite";
 import { createFilter, version as viteVersion } from "vite";
 import {
   loadPalamedesConfig,
@@ -169,6 +169,12 @@ function assertImportMapBase(base: string): void {
   throw new Error(
     `Palamedes graph splitting with localeBinding: "import-map" requires Vite's resolved base to be root-relative (for example "/app/") or an absolute URL. Relative base ${JSON.stringify(base)} resolves import-map entries against each document URL and breaks on nested routes. Set Vite base to "/" or an absolute deployment path/URL, or use localeBinding: "embed".`,
   );
+}
+
+function sameMessageSet(previous: readonly string[], next: readonly string[]): boolean {
+  const before = new Set(previous);
+  const after = new Set(next);
+  return before.size === after.size && [...after].every((id) => before.has(id));
 }
 
 function stripQuery(id: string): string {
@@ -425,9 +431,48 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       return code;
     }
     return sidecarKey(sourceId).then((key) => {
-      sidecarModules.set(key, { sourceId, compiledIds });
+      registerSidecar(key, sourceId, compiledIds);
       return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`;
     });
+  }
+
+  let devServer: ViteDevServer | undefined;
+
+  /*
+   * The sidecar specifier is derived from the source path only, so it stays
+   * the same when a module starts using a different set of messages. Vite
+   * would keep serving the cached sidecar and locale fragments, and the
+   * browser would keep the modules it already evaluated. When the set
+   * changes, invalidate them as HMR updates: the edited module's import
+   * analysis, which runs after this transform, then adds a fresh `?t=` to
+   * the sidecar import, and the reloaded sidecar does the same for its
+   * fragment imports. Every environment is covered because SSR may
+   * re-transform the module before the browser requests it.
+   */
+  function registerSidecar(key: string, sourceId: string, compiledIds: string[]): void {
+    const previous = sidecarModules.get(key);
+    sidecarModules.set(key, { sourceId, compiledIds });
+    if (!devServer || !previous || sameMessageSet(previous.compiledIds, compiledIds)) {
+      return;
+    }
+    const sidecarId = `${RESOLVED_MESSAGES_PREFIX}${key}`;
+    const isSidecarModule = (id: string) => id === sidecarId || id.startsWith(`${sidecarId}/`);
+    const timestamp = Date.now();
+    // Vite 6 introduced per-environment graphs; earlier majors have one.
+    if (devServer.environments) {
+      for (const devEnvironment of Object.values(devServer.environments)) {
+        const environmentGraph = devEnvironment.moduleGraph;
+        for (const [id, module] of environmentGraph.idToModuleMap) {
+          if (isSidecarModule(id))
+            environmentGraph.invalidateModule(module, new Set(), timestamp, true);
+        }
+      }
+      return;
+    }
+    const graph = devServer.moduleGraph;
+    for (const [id, module] of graph.idToModuleMap) {
+      if (isSidecarModule(id)) graph.invalidateModule(module, new Set(), timestamp, true);
+    }
   }
 
   function transformErrorMessage(sourceId: string, error: unknown): string {
@@ -739,16 +784,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       resetConfig();
     },
 
+    configureServer(server) {
+      devServer = server;
+    },
+
     watchChange(id) {
       resetConfigOnChange(id);
     },
 
     config(viteConfig, env) {
-      // A catalog chunk can be unavailable briefly during a staggered deploy or
-      // while an import-map fragment is still loading. Keep the authored
-      // message in first-party output by default so that case remains readable
-      // instead of exposing the opaque compiled id. Consumers that cannot ship
-      // source text can opt out explicitly.
+      // Authored source text is diagnostic metadata only and is omitted by
+      // default. A missing compiled message throws whether or not it is kept.
       resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false;
       stripNonEssentialProps = env.command === "build";
       isBuildCommand = env.command === "build";
@@ -844,7 +890,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               stripNonEssentialProps,
             });
             if (!result.hasChanged) return null;
-            sidecarModules.set(key, { sourceId: cleanId, compiledIds: result.compiledIds });
+            registerSidecar(key, cleanId, result.compiledIds);
             return { code: result.code, map: result.map as any };
           } catch (error) {
             return this.error(transformErrorMessage(cleanId, error));

@@ -1,7 +1,7 @@
 use super::{
     CatalogArtifactConfig, CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest,
-    CatalogArtifactSelectedRequest, CatalogCompilationCache, CatalogConfig, PalamedesCatalogFormat,
-    compile_catalog_artifact, compile_catalog_artifact_selected,
+    CatalogArtifactSelectedRequest, CatalogCompilationCache, CatalogConfig, FallbackLocales,
+    PalamedesCatalogFormat, compile_catalog_artifact, compile_catalog_artifact_selected,
     compile_catalog_artifact_selected_cached,
     compile_catalog_artifact_selected_cached_without_waiting, resolve_catalog_file_path,
 };
@@ -200,6 +200,135 @@ msgstr "Hallo"
     );
     assert_eq!(result.missing[0].source_key.message, "Only source");
     assert_eq!(result.missing[0].requested_locale, "de");
+    assert_eq!(result.missing[0].resolved_locale.as_deref(), Some("en"));
+}
+
+#[test]
+fn compile_catalog_artifact_resolves_fuzzy_entries_through_the_fallback_chain() {
+    let fixture = create_fixture_dir("catalog-artifact-fuzzy");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(
+        &locale_dir,
+        "en",
+        &[("Fuzzy one", ""), ("Fuzzy only", ""), ("Reviewed", "")],
+    );
+    write_test_catalog(&locale_dir, "fr", &[("Fuzzy one", "Flou")]);
+    let fuzzy_german = "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\n\
+         #, fuzzy\nmsgid \"Fuzzy one\"\nmsgstr \"Unscharf\"\n\n\
+         #, fuzzy\nmsgid \"Fuzzy only\"\nmsgstr \"Nur unscharf\"\n\n\
+         msgid \"Reviewed\"\nmsgstr \"Geprüft\"\n";
+    fs::write(locale_dir.join("de.po"), fuzzy_german).expect("write de");
+
+    let config = || CatalogArtifactConfig {
+        root_dir: fixture.to_string_lossy().into_owned(),
+        locales: vec!["en".to_owned(), "de".to_owned(), "fr".to_owned()],
+        source_locale: "en".to_owned(),
+        fallback_locales: Some(FallbackLocales::Shared(vec!["fr".to_owned()])),
+        pseudo_locale: None,
+        catalogs: vec![CatalogConfig {
+            path: "src/locales/{locale}".to_owned(),
+            format: PalamedesCatalogFormat::Po,
+        }],
+    };
+    let resource_path = locale_dir.join("de.po").to_string_lossy().into_owned();
+    let result = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: config(),
+        resource_path: resource_path.clone(),
+    })
+    .expect("catalog artifact");
+
+    let message = |source: &str| {
+        result
+            .messages
+            .get(&compiled_key(source, None))
+            .map(String::as_str)
+    };
+    assert_eq!(message("Fuzzy one"), Some("Flou"));
+    assert_eq!(message("Fuzzy only"), Some("Fuzzy only"));
+    assert_eq!(message("Reviewed"), Some("Geprüft"));
+    let missing = result
+        .missing
+        .iter()
+        .map(|entry| {
+            (
+                entry.source_key.message.as_str(),
+                entry.resolved_locale.as_deref(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        missing,
+        [("Fuzzy one", Some("fr")), ("Fuzzy only", Some("en"))]
+    );
+
+    // Bundler sidecars compile through the cache; the review flag is part of
+    // the content digest, so confirming the entry must invalidate it.
+    let cache = CatalogCompilationCache::new(2);
+    let selected = CatalogArtifactSelectedRequest {
+        config: config(),
+        resource_path,
+        compiled_ids: vec![compiled_key("Fuzzy only", None)],
+    };
+    let fuzzy = compile_catalog_artifact_selected_cached(&cache, &selected)
+        .expect("selected fuzzy artifact");
+    assert_eq!(fuzzy.messages.values().collect::<Vec<_>>(), ["Fuzzy only"]);
+    assert_eq!(fuzzy.missing.len(), 1);
+
+    fs::write(
+        locale_dir.join("de.po"),
+        fuzzy_german.replace("#, fuzzy\n", ""),
+    )
+    .expect("confirm de");
+    let confirmed = compile_catalog_artifact_selected_cached(&cache, &selected)
+        .expect("selected confirmed artifact");
+    assert_eq!(
+        confirmed.messages.values().collect::<Vec<_>>(),
+        ["Nur unscharf"]
+    );
+    assert!(confirmed.missing.is_empty());
+}
+
+#[test]
+fn compile_catalog_artifact_treats_fcl_fuzzy_entries_as_missing() {
+    let fixture = create_fixture_dir("catalog-artifact-fcl-fuzzy");
+    let locale_dir = fixture.join("locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    fs::write(
+        locale_dir.join("en.fcl"),
+        "%FCL1\tsource=en\nHello\t\tHello\n",
+    )
+    .expect("write en");
+    fs::write(
+        locale_dir.join("de.fcl"),
+        "%FCL1\tsource=en\nHello\t\tHallo\tf=fuzzy\n",
+    )
+    .expect("write de");
+
+    let result = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Fcl,
+            }],
+        },
+        resource_path: locale_dir.join("de.fcl").to_string_lossy().into_owned(),
+    })
+    .expect("catalog artifact");
+
+    assert_eq!(
+        result
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hello")
+    );
+    assert_eq!(result.missing.len(), 1);
     assert_eq!(result.missing[0].resolved_locale.as_deref(), Some("en"));
 }
 

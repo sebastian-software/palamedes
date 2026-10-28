@@ -75,6 +75,8 @@ Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
 
 Compiled delivery follows the evaluated module graph automatically. Development
 awaits the active locale's generated fragment before running its source module.
+When an edit changes the set of messages a module uses, development refreshes
+that module's fragments through HMR, even when no catalog file changed.
 Production emits locale-bound import maps and separate executable fragments.
 Set the document's `lang` before its module entry runs; the adapter initializes
 the client instance. Locale changes require document navigation.
@@ -207,9 +209,13 @@ preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 `resolve.noExternal` configuration.
 
 `@palamedes/vite-plugin/delivery` exports `createViteCatalogDelivery({
-clientDirectory, development?, manifestName? })`. Framework adapters call
-`getLocaleBinding(locale)` and pipe HTML through
-`createDocumentTransform(binding, { nonce?, errorHtml? })`. `errorHtml` is trusted,
+clientDirectory, development?, manifestName? })`. Server code calls
+`getLocaleBinding(locale)` on it and pipes HTML through
+`createDocumentTransform(binding, { nonce?, errorHtml? })`. The Solid, TanStack,
+Waku, and React Router RSC adapters do this internally. React Router Framework
+Mode has no adapter package, so the application makes these calls in
+`app/entry.server.tsx`; see the
+[React Router Framework Mode guide](./react-router.md). `errorHtml` is trusted,
 catalog-independent host markup; the default view provides Reload and Home.
 Import maps precede all modulepreloads. Catalog-only manifest changes refresh
 without restarting the host. Missing production assets fail closed.

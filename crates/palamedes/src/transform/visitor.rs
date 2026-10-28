@@ -220,6 +220,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     .source_locator
                     .indexed_location(self.filename, nested_start)
                     .format(),
+                branch: None,
             });
             return;
         }

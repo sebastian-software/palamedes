@@ -381,7 +381,9 @@ impl ManifestVisitor<'_, '_> {
         } else {
             macro_name
         };
-        let location = self.location(call.span.start);
+        let location = self
+            .locator
+            .indexed_location(self.filename, call.span.start as usize);
         let mut used_value_names = HashMap::new();
         let preferred_name =
             expression_name(value).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_owned());
@@ -395,7 +397,7 @@ impl ManifestVisitor<'_, '_> {
             &mut used_value_names,
             format,
             macro_name,
-            location.as_str(),
+            &location,
             escape_icu_literal,
         )?;
         if lowered.options.is_empty() {
@@ -628,10 +630,6 @@ export const f = (seats: number, role: string, place: number, name: string) => [
                 "plural(n, { one: `# night for ${guest}`, other: `# nights for ${guest}` })",
                 "interpolates a value",
             ),
-            (
-                "plural(n, { one: label, other: \"# items\" })",
-                "string literal",
-            ),
             ("t({ message: `Hello ${name}` })", "string message"),
         ] {
             let source = format!(
@@ -642,6 +640,43 @@ export const f = (seats: number, role: string, place: number, name: string) => [
                 matches!(&error, PalamedesError::RuntimeMacroUnsupported { detail: actual, .. } if actual.contains(detail)),
                 "{error}"
             );
+        }
+    }
+
+    #[test]
+    fn rejects_choice_branches_like_extraction_and_the_transform() {
+        let prefix = "export const f = (n: number, role: string, label: string) => ";
+        for (call, anchor, expected_key, nested) in [
+            (
+                "plural(n, { one: label, other: \"# items\" })",
+                "label",
+                "one",
+                false,
+            ),
+            ("plural(n, { one: ONE, other: OTHER })", "ONE", "one", false),
+            (
+                "select(role, { admin: \"Admin\", other: plural(n, { one: \"#\", other: \"#\" }) })",
+                "plural(n, { one: \"#\"",
+                "other",
+                true,
+            ),
+        ] {
+            let source = format!(
+                "import {{ plural, select }} from \"@palamedes/core/macro\";\n{prefix}{call};"
+            );
+            let column = prefix.len() + call.find(anchor).expect("anchor") + 1;
+            let expected_location = format!("a.ts:2:{column}");
+            let error = manifest(&[("a.ts", &source)]).expect_err("unsupported branch");
+            let matched = if nested {
+                matches!(&error, PalamedesError::NestedMessageMacro { location, branch: Some(key) }
+                    if *location == expected_location && key == expected_key)
+            } else {
+                matches!(&error, PalamedesError::UnsupportedMacroSyntax { macro_name, location, detail }
+                    if macro_name == "plural"
+                        && *location == expected_location
+                        && detail.contains(&format!("`{expected_key}` branch")))
+            };
+            assert!(matched, "{call}: {error}");
         }
     }
 

@@ -1,8 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use ferrocat::{NormalizedParsedCatalog, ParseCatalogOptions, parse_catalog};
+use ferrocat::po::diagnostic_codes::catalog::FUZZY_FLAG;
+use ferrocat::{
+    ApiError, CatalogAuditChecks, CatalogAuditOptions, CatalogMessageKey, NormalizedParsedCatalog,
+    ParseCatalogOptions, TranslationShape, audit_catalogs, parse_catalog_for_review,
+};
 use sha2::{Digest, Sha256};
 
 use super::resolve::{catalog_locale_matcher, normalize_path};
@@ -91,22 +95,86 @@ where
             .with_locale(source.locale.as_str())
             .with_mode(source.format.ferrocat_mode());
         on_parse();
-        let parsed =
-            parse_catalog(options).map_err(|source_error| PalamedesError::ParseCatalog {
-                path: source.path.clone(),
-                source: source_error,
-            })?;
-        loaded.insert(
-            source.locale.clone(),
-            parsed.into_normalized_view().map_err(|source_error| {
+        let catalog = parse_catalog_for_compile(options).map_err(|source_error| {
+            // Only normalization reports duplicate identities as conflicts.
+            if matches!(source_error, ApiError::Conflict(_)) {
                 PalamedesError::NormalizeCatalog {
                     path: source.path.clone(),
                     source: source_error,
                 }
-            })?,
-        );
+            } else {
+                PalamedesError::ParseCatalog {
+                    path: source.path.clone(),
+                    source: source_error,
+                }
+            }
+        })?;
+        loaded.insert(source.locale.clone(), catalog);
     }
     Ok(loaded)
+}
+
+/// Parses one catalog into the normalized view that catalog compilers consume.
+///
+/// Ferrocat's ordinary normalized projection discards review flags. This
+/// projection keeps an active `fuzzy` entry's identity but clears its
+/// translation, so compilation resolves it through the fallback chain and the
+/// source message and reports it as missing, like an untranslated entry. The
+/// JavaScript and Rust catalog targets both compile through this projection.
+///
+/// The catalog locale must come from `options` or from the catalog content.
+///
+/// # Errors
+///
+/// Returns Ferrocat's error when the content cannot be parsed, has no locale,
+/// or contains duplicate message identities.
+pub fn parse_catalog_for_compile(
+    options: ParseCatalogOptions<'_>,
+) -> Result<NormalizedParsedCatalog, ApiError> {
+    let reviewed = parse_catalog_for_review(options)?;
+    let fuzzy = fuzzy_message_keys(&reviewed)?;
+    if fuzzy.is_empty() {
+        return Ok(reviewed);
+    }
+
+    let mut catalog = reviewed.into_parsed_catalog();
+    for message in &mut catalog.messages {
+        if fuzzy.contains(&message.key()) {
+            match &mut message.translation {
+                TranslationShape::Singular { value } => value.clear(),
+                TranslationShape::Plural { translation, .. } => {
+                    translation.values_mut().for_each(String::clear);
+                }
+            }
+        }
+    }
+    catalog.into_normalized_view()
+}
+
+/// Ferrocat exposes review state only through its reports. Auditing the
+/// catalog as its own source reports every active fuzzy entry once.
+fn fuzzy_message_keys(
+    catalog: &NormalizedParsedCatalog,
+) -> Result<BTreeSet<CatalogMessageKey>, ApiError> {
+    let locale = catalog.parsed_catalog().locale.as_deref().unwrap_or("");
+    let checks = CatalogAuditChecks::default()
+        .with_completeness(false)
+        .with_extra_messages(false)
+        .with_icu_syntax(false)
+        .with_icu_compatibility(false)
+        .with_semantic_metadata(false)
+        .with_obsolete_entries(false);
+    let report = audit_catalogs(
+        &[catalog],
+        &CatalogAuditOptions::new(locale).with_checks(checks),
+    )?;
+    Ok(report
+        .diagnostics
+        .into_iter()
+        .filter(|diagnostic| diagnostic.code.as_str() == FUZZY_FLAG)
+        .filter_map(|diagnostic| diagnostic.source_key)
+        .map(|key| CatalogMessageKey::new(key.msgid, key.msgctxt))
+        .collect())
 }
 
 fn infer_locale_from_path(

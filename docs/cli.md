@@ -494,8 +494,8 @@ No module is written while any catalog fails. Each failure names the catalog
 file that holds the message, that file's locale (a fallback locale when the
 message was reached through one), and the source message. Invalid or
 unsupported ICU fails with the compiler's code, such as
-`compile.invalid_icu_message`; `--fail-on-missing` reports each missing
-translation as `compile.missing_translation`. With `--json`, the document also
+`compile.invalid_icu_message`; `--fail-on-missing` reports each missing or
+fuzzy translation as `compile.missing_translation`. With `--json`, the document also
 contains a `diagnostics` array whose entries have `severity`, `code`,
 `message`, `catalogPath`, `locale`, `requestedLocale`, `sourceKey` when the
 source message is known, and `conflictingCatalogPath` for conflicts. The command
