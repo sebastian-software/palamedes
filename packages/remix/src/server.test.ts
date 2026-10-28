@@ -94,6 +94,9 @@ function createTestI18n(locale: string): I18nInstance {
   return {
     locale,
     _: (id: string) => `${locale}:${id}`,
+    load() {},
+    activate() {},
+    renderMessage: unusedRenderMessage,
   };
 }
 
@@ -115,7 +118,7 @@ describe("createRemixI18nRequestScope", () => {
       (i18n) => {
         expect(remixI18n.get()).toBe(i18n);
         expect(getI18n()).toBe(i18n);
-        return new Response(String(getI18n()._("checkout.title")), {
+        return new Response(getI18n()._("checkout.title"), {
           headers: { "x-locale": i18n.locale },
         });
       },
@@ -184,7 +187,7 @@ describe("createRemixI18nRequestScope", () => {
               }
 
               sent = true;
-              controller.enqueue(encoder.encode(String(getI18n()._("streamed.title"))));
+              controller.enqueue(encoder.encode(getI18n()._("streamed.title")));
             },
           }),
         ),
@@ -481,3 +484,7 @@ describe("createRemixI18nServer", () => {
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}

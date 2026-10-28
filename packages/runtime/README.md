@@ -38,9 +38,8 @@ const i18n = createI18n();
 setClientI18n(i18n);
 ```
 
-The public `I18nInstance` contract requires an initialized `locale: string`.
-Custom adapters registered with the client or server runtime must expose that
-property before registration.
+`I18nInstance` is the `PalamedesI18n` type from `@palamedes/core`, so
+`getI18n()._()` returns `string`. Register instances created by `createI18n()`.
 
 Browser client registration also works in windowless Web Worker and Service
 Worker globals. Graph-split bootstrap modules can therefore initialize and

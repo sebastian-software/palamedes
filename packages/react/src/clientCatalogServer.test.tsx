@@ -76,7 +76,7 @@ describe("createClientCatalogBoundary on the server", () => {
     });
 
     function ActiveTimeZone() {
-      return getI18n<ReturnType<typeof createI18n>>().timeZone;
+      return getI18n().timeZone;
     }
 
     const scope = createServerI18nScope<ReturnType<typeof createI18n>>();
@@ -106,7 +106,7 @@ describe("createClientCatalogBoundary on the server", () => {
     const scope = createServerI18nScope<ReturnType<typeof createI18n>>();
 
     function Greeting() {
-      return String(getI18n()._("greeting"));
+      return getI18n()._("greeting");
     }
 
     async function renderLocale(locale: Locale): Promise<string> {
@@ -141,7 +141,7 @@ describe("createClientCatalogBoundary on the server", () => {
     });
 
     function Greeting() {
-      return String(getI18n()._("greeting"));
+      return getI18n()._("greeting");
     }
 
     const renderGreeting = () =>
