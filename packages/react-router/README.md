@@ -36,15 +36,19 @@ Register the middleware on the root route and give the document its language:
 
 ```tsx
 // app/root.tsx
+import { useDocumentLocale } from "@palamedes/react-router/document";
+
 export const middleware: Route.MiddlewareFunction[] = [i18n.middleware];
 
-export async function loader({ context }: Route.LoaderArgs) {
-  return { locale: i18n.getLocale(context) };
+export function Layout({ children }: { children: React.ReactNode }) {
+  const locale = useDocumentLocale() ?? DEFAULT_LOCALE;
+  return <html lang={locale}>{/* head, children, scripts */}</html>;
 }
 ```
 
-Render `<html lang={locale}>` from that loader data. The browser runtime reads
-the active locale from `lang`.
+The browser runtime reads the active locale from `lang`. `useDocumentLocale()`
+returns the request's locale even for documents no loader ran for, such as a
+404, and the document's `lang` in the browser, so hydration matches.
 
 Use the adapter's server entry:
 
@@ -66,13 +70,13 @@ resource routes, `.data` requests, and the document render.
   created once per `createReactRouterI18n()` call and shared by all requests.
 - `handleRequest` is React Router's default Node streaming entry. It renders
   inside the request scope and pipes the HTML through the catalog document
-  transform from `@palamedes/vite-plugin/delivery`. In production that adds the
-  active locale's import map, catalog preloads, and a readiness script before
-  route modules run.
+  transform from `@palamedes/vite-plugin/delivery`. That sets `<html lang>` to
+  the request's locale; in production it also adds the active locale's import
+  map, catalog preloads, and a readiness script before route modules run.
 - Documents that never reach route middleware, such as 404 and 405 responses,
-  resolve their scope and import map in `handleRequest`.
-- `getLocale(context)` returns the locale the middleware resolved, so the root
-  loader does not resolve it a second time.
+  resolve their scope, locale, and import map in `handleRequest`.
+- `getLocale(context)` returns the locale the middleware resolved, so loaders
+  do not resolve it a second time.
 
 ## Options
 
@@ -81,14 +85,14 @@ resource routes, `.data` requests, and the document render.
 | `resolveLocale`   | required                                                                           | `(request) => locale`. The app's cookie, route, subdomain, or TLD policy.           |
 | `i18nOptions`     | `{}`                                                                               | `createI18n` options such as `timeZone`, or `(request, locale) => options`.         |
 | `catalogDelivery` | `{}`                                                                               | `{ clientDirectory, development, manifestName, errorHtml }`, or `false` to disable. |
-| `nonce`           | none                                                                               | `(request) => nonce` for React's scripts, the import map, and the readiness script. |
-| `streamTimeout`   | `5000`                                                                             | Milliseconds before a streaming render is aborted (plus one second).                |
+| `nonce`           | none                                                                               | `(request, context) => nonce`, called once per document for all its scripts.        |
+| `streamTimeout`   | `5000`                                                                             | The entry's stream timeout in milliseconds; the render aborts one second later.     |
 | `failureMessage`  | `Palamedes React Router i18n initialization failed before the route handlers ran.` | Message of the error thrown when the catalog cannot load.                           |
 
 `catalogDelivery.clientDirectory` defaults to `build/client` in the process
-working directory, and `development` defaults to
-`process.env.NODE_ENV !== "production"`. In production, a missing manifest or
-import map for a configured locale throws.
+working directory. `development` defaults to how Vite built the server
+(`import.meta.env.DEV`), not to the runtime `NODE_ENV`, so a production build
+delivers its import map even when the server starts without `NODE_ENV`.
 
 If the entry module exports its own `streamTimeout`, pass the same value to
 `createReactRouterI18n()`.
@@ -98,8 +102,14 @@ If the entry module exports its own `streamTimeout`, pass the same value to
 If the catalog cannot load, the middleware throws
 `new Error(failureMessage, { cause })`. React Router renders the nearest
 `ErrorBoundary` for document requests and serializes the error for `.data`
-requests. The error document is rendered without an i18n scope, so error UI
-must not depend on message catalogs.
+requests. The error document is rendered without an i18n scope, so error UI,
+including the root `Layout`, must not depend on message catalogs. It keeps the
+request locale's `lang` and import map.
+
+In production, a missing client manifest or import map for the locale throws
+the same error from the document transform. React Router then renders the root
+`ErrorBoundary` again, without an import map, instead of its bare
+"Unexpected Server Error" response.
 
 ## Custom server entries
 

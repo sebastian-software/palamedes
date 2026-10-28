@@ -4,16 +4,24 @@ import path from "node:path";
 
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import type * as RuntimeServer from "@palamedes/runtime/server";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
+  createContext,
   createRequestHandler,
   RouterContextProvider,
   useLoaderData,
+  useRouteLoaderData,
   type ServerBuild,
 } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createReactRouterI18n, type CreateReactRouterI18nOptions } from "./index";
+import { useDocumentLocale } from "./document";
+import {
+  createReactRouterI18n,
+  type CreateReactRouterI18nOptions,
+  type ReactRouterContext,
+} from "./index";
 
 const runtimeServer = vi.hoisted(() => ({ scopes: 0 }));
 
@@ -55,6 +63,8 @@ const fixtureDirectories: string[] = [];
 
 afterEach(async () => {
   resetI18nRuntime();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   await Promise.all(
     fixtureDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
   );
@@ -79,13 +89,22 @@ function createRendezvous() {
 }
 
 type TestApp = {
-  handler: (request: Request) => Promise<Response>;
+  handler: (request: Request, context?: RouterContextProvider) => Promise<Response>;
   errors: unknown[];
 };
+
+/**
+ * The root `Layout` variants. `document` follows the guide: `<html lang>` from
+ * `useDocumentLocale()` and a translated footer. `fallback` is the earlier
+ * guide's root-loader-or-default pattern, which is wrong for a 404 in another
+ * locale.
+ */
+type TestLayout = "document" | "fallback";
 
 function createTestApp(
   options: Partial<CreateReactRouterI18nOptions> = {},
   loaderBarrier?: () => Promise<void>,
+  layout?: TestLayout,
 ): TestApp & { i18n: ReturnType<typeof createReactRouterI18n> } {
   const i18n = createReactRouterI18n({
     resolveLocale: localeFromRequest,
@@ -94,28 +113,36 @@ function createTestApp(
   });
   const errors: unknown[] = [];
 
-  function Root() {
-    const data = useLoaderData() as { loader: string; locale: string };
+  function documentShell(lang: string | undefined, ...children: ReactNode[]) {
     return createElement(
       "html",
-      { lang: data.locale },
+      { lang },
       createElement("head"),
-      createElement(
-        "body",
-        null,
-        createElement("p", { id: "loader" }, data.loader),
-        createElement("p", { id: "render" }, getI18n()._("render")),
-      ),
+      createElement("body", null, ...children),
     );
   }
 
+  function Root() {
+    const data = useLoaderData() as { loader: string; locale: string };
+    const content = [
+      createElement("p", { id: "loader", key: "loader" }, data.loader),
+      createElement("p", { id: "render", key: "render" }, getI18n()._("render")),
+    ];
+    return layout ? content : documentShell(data.locale, ...content);
+  }
+
+  function Layout({ children }: { children: ReactNode }) {
+    const loaderData = useRouteLoaderData("root") as { locale: string } | undefined;
+    const documentLocale = useDocumentLocale();
+    const lang = layout === "document" ? (documentLocale ?? "en") : (loaderData?.locale ?? "en");
+    // Translated layout chrome, like a `<Trans>` footer.
+    const footer = layout === "document" ? getI18n()._("footer") : "Footer";
+    return documentShell(lang, children, createElement("footer", { key: "footer" }, footer));
+  }
+
   function ErrorBoundary() {
-    return createElement(
-      "html",
-      null,
-      createElement("head"),
-      createElement("body", null, createElement("main", { role: "alert" }, "Unavailable")),
-    );
+    const alert = createElement("main", { role: "alert", key: "alert" }, "Unavailable");
+    return layout ? alert : documentShell(undefined, alert);
   }
 
   const build: ServerBuild = {
@@ -133,6 +160,7 @@ function createTestApp(
         path: "",
         module: {
           default: Root,
+          ...(layout ? { Layout } : {}),
           ErrorBoundary,
           middleware: [i18n.middleware],
           async loader({ context }) {
@@ -177,7 +205,7 @@ function createTestApp(
   };
 
   const handle = createRequestHandler(build, "production");
-  return { handler: (request) => handle(request), errors, i18n };
+  return { handler: (request, context) => handle(request, context), errors, i18n };
 }
 
 describe("createReactRouterI18n", () => {
@@ -296,6 +324,133 @@ describe("createReactRouterI18n", () => {
     expect(html).toContain('<main role="alert">Unavailable</main>');
   });
 
+  it("gives a 404 document the request locale for both lang and the import map", async () => {
+    const clientDirectory = await createClientBuild();
+    const app = createTestApp(
+      { catalogDelivery: { clientDirectory, development: false } },
+      undefined,
+      "document",
+    );
+
+    // No root loader runs for an unknown path, so `lang` cannot come from
+    // loader data. The browser bootstrap rejects a `lang` that differs from
+    // the compiled catalog locale of the import map.
+    const response = await app.handler(new Request("https://example.test/missing?locale=de"));
+    const html = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(html).toContain('<html lang="de">');
+    expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.de.js"}}');
+    expect(html).toContain('<main role="alert">Unavailable</main>');
+    expect(html).toContain("<footer>de[UTC]:footer</footer>");
+    // React Router reports only the 404 itself.
+    expect(app.errors).toEqual([expect.objectContaining({ status: 404 })]);
+  });
+
+  it("corrects lang for a layout that falls back to a default locale", async () => {
+    const clientDirectory = await createClientBuild();
+    const app = createTestApp(
+      { catalogDelivery: { clientDirectory, development: false } },
+      undefined,
+      "fallback",
+    );
+
+    const html = await (
+      await app.handler(new Request("https://example.test/missing?locale=de"))
+    ).text();
+
+    expect(html).toContain('<html lang="de">');
+    expect(html).not.toContain('lang="en"');
+    expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.de.js"}}');
+  });
+
+  it("renders a server catalog failure with the request locale's browser catalogs", async () => {
+    const clientDirectory = await createClientBuild();
+    // The error document has no request scope, so its Layout uses no messages.
+    const app = createTestApp(
+      { catalogDelivery: { clientDirectory, development: false } },
+      undefined,
+      "fallback",
+    );
+
+    const response = await app.handler(new Request("https://example.test/?locale=fr"));
+    const html = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(html).toContain('<html lang="fr">');
+    expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.fr.js"}}');
+    expect(html).toContain('<main role="alert">Unavailable</main>');
+  });
+
+  it("renders the error boundary without catalogs when the locale has no client build", async () => {
+    const clientDirectory = await createClientBuild();
+    const app = createTestApp(
+      { catalogDelivery: { clientDirectory, development: false } },
+      undefined,
+      "document",
+    );
+
+    const response = await app.handler(new Request("https://example.test/?locale=es"));
+    const html = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(html).toContain('<main role="alert">Unavailable</main>');
+    expect(html).toContain('<html lang="es">');
+    expect(html).not.toContain("importmap");
+    expect(html).not.toContain("Unexpected Server Error");
+    expect(app.errors).toHaveLength(1);
+    const error = app.errors[0] as Error;
+    expect(error.message).toBe(
+      "Palamedes React Router i18n initialization failed before the route handlers ran.",
+    );
+    expect((error.cause as Error).message).toContain('no generated import map for locale "es"');
+  });
+
+  it("delivers production catalogs from a production build without NODE_ENV", async () => {
+    const clientDirectory = await createClientBuild();
+    // Vite replaces `import.meta.env.DEV` in the server build; a custom
+    // server may start that build without NODE_ENV.
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("NODE_ENV", undefined);
+    const app = createTestApp({ catalogDelivery: { clientDirectory } });
+
+    const html = await (await app.handler(new Request("https://example.test/?locale=de"))).text();
+
+    expect(html).toContain('{"imports":{"#pmds/root":"/assets/root.de.js"}}');
+  });
+
+  it("keeps development delivery for a development build under NODE_ENV=production", async () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("NODE_ENV", "production");
+    // A development build reads no manifest, so a missing client build is fine.
+    const app = createTestApp({ catalogDelivery: { clientDirectory: "/missing/client" } });
+
+    const html = await (await app.handler(new Request("https://example.test/?locale=de"))).text();
+
+    expect(html).toContain("palamedes:catalogError");
+    expect(html).not.toContain("importmap");
+  });
+
+  it("resolves the nonce once per document from the request's load context", async () => {
+    const clientDirectory = await createClientBuild();
+    const nonceKey = createContext<string>();
+    const nonce = vi.fn((_request: Request, context: ReactRouterContext) => context.get(nonceKey));
+    const app = createTestApp({ catalogDelivery: { clientDirectory, development: false }, nonce });
+    const loadContext = new RouterContextProvider();
+    loadContext.set(nonceKey, "nonce-from-context");
+
+    const html = await (
+      await app.handler(new Request("https://example.test/?locale=de"), loadContext)
+    ).text();
+
+    expect(nonce).toHaveBeenCalledTimes(1);
+    expect(nonce).toHaveBeenCalledWith(expect.any(Request), loadContext);
+    expect(html).toContain('<script type="importmap" nonce="nonce-from-context">');
+    // React Router's own inline scripts carry the same value.
+    expect(html.match(/<script nonce="nonce-from-context"/gu)?.length).toBeGreaterThan(0);
+    expect(html).not.toMatch(/<script(?![^>]*nonce="nonce-from-context")[^>]*>/u);
+  });
+
   it("leaves HTML untouched when catalog delivery is disabled", async () => {
     const app = createTestApp({ catalogDelivery: false });
 
@@ -324,6 +479,16 @@ describe("createReactRouterI18n", () => {
     );
   });
 
+  it("reads the document locale from <html lang> in the browser", () => {
+    function Probe() {
+      return createElement("p", null, useDocumentLocale() ?? "none");
+    }
+
+    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>none</p>");
+    vi.stubGlobal("document", { documentElement: { lang: "de" } });
+    expect(renderToStaticMarkup(createElement(Probe))).toBe("<p>de</p>");
+  });
+
   it("runs custom entry work inside the request scope", async () => {
     const i18n = createReactRouterI18n({
       resolveLocale: () => "es",
@@ -348,12 +513,17 @@ async function createClientBuild(): Promise<string> {
   await writeFile(
     path.join(clientDirectory, "palamedes-split-manifest.json"),
     JSON.stringify({
-      locales: ["en", "de"],
-      importMaps: { en: "palamedes-importmap.en.json", de: "palamedes-importmap.de.json" },
+      // `es` has a server catalog but no client build, `fr` the reverse.
+      locales: ["en", "de", "fr"],
+      importMaps: {
+        en: "palamedes-importmap.en.json",
+        de: "palamedes-importmap.de.json",
+        fr: "palamedes-importmap.fr.json",
+      },
       chunkImports: {},
     }),
   );
-  for (const locale of ["en", "de"]) {
+  for (const locale of ["en", "de", "fr"]) {
     await writeFile(
       path.join(clientDirectory, `palamedes-importmap.${locale}.json`),
       JSON.stringify({ imports: { "#pmds/root": `/assets/root.${locale}.js` } }),

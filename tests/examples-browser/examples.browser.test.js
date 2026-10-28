@@ -84,6 +84,45 @@ test.runIf(activeExample().framework === "react-router")(
   },
 );
 
+test.runIf(activeExample().id === "react-router-cookie")(
+  "React Router hydrates a German 404 document with the request locale",
+  async () => {
+    const example = activeExample();
+    const page = await launchPage();
+    await page.context().addCookies([{ name: "locale", value: "de", url: example.baseUrl }]);
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      // Chromium reports the 404 document response itself as a console error.
+      if (message.type() === "error" && !message.text().startsWith("Failed to load resource")) {
+        errors.push(message.text());
+      }
+    });
+
+    // No root loader runs for an unknown path, so only the adapter knows the
+    // document locale. `lang` must match the German import map, or the
+    // browser bootstrap rejects the catalogs and hydration fails.
+    const response = await page.goto(new URL("/missing-page", example.baseUrl).href);
+    expect(response?.status()).toBe(404);
+    expect(await page.locator("html").getAttribute("lang")).toBe("de");
+    const importMap = await page.locator('script[type="importmap"]').textContent();
+    expect(importMap).toMatch(/\.de-[^"]*\.js/u);
+    expect(importMap).not.toMatch(/\.en-[^"]*\.js/u);
+    const alert = page.locator('main[role="alert"]');
+    await alert.waitFor();
+
+    // Only a hydrated ErrorBoundary runs the Reload button's click handler.
+    await page.waitForLoadState("networkidle");
+    await Promise.all([
+      page.waitForEvent("load", { timeout: 10_000 }),
+      alert.getByRole("button", { name: "Reload page" }).click(),
+    ]);
+    await alert.waitFor();
+    expect(await page.locator("html").getAttribute("lang")).toBe("de");
+    expect(errors).toEqual([]);
+  },
+);
+
 function remixLocales() {
   return ["en", "de", "es", "fr"];
 }

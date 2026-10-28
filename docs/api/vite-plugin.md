@@ -232,10 +232,12 @@ need a Palamedes-specific `ssr.noExternal` or
 `@palamedes/vite-plugin/delivery` exports `createViteCatalogDelivery({
 clientDirectory, development?, manifestName? })`. Server code calls
 `getLocaleBinding(locale)` on it and pipes HTML through
-`createDocumentTransform(binding, { nonce?, errorHtml? })`. The Solid, TanStack,
-Waku, and React Router adapters do this internally; see the
+`createDocumentTransform(binding, { nonce?, errorHtml?, lang? })`. The Solid,
+TanStack, Waku, and React Router adapters do this internally; see the
 [React Router Framework Mode guide](./react-router.md). `errorHtml` is trusted,
 catalog-independent host markup; the default view provides Reload and Home.
+`lang` writes the document locale to `<html lang>`, for hosts whose layout
+cannot know the request locale for every document.
 Import maps precede all modulepreloads. Catalog-only manifest changes refresh
 without restarting the host. Missing production assets fail closed.
 

@@ -32,6 +32,13 @@ export type ViteDocumentTransformOptions = {
   readonly nonce?: string;
   /** Trusted catalog-independent host error markup; omit for a generic reload/home view. */
   readonly errorHtml?: string;
+  /**
+   * The document locale. When set, the transform writes it to `<html lang>`,
+   * which the generated browser bootstrap reads and checks against the
+   * locale-bound catalogs. Hosts pass it when the layout cannot know the
+   * request locale for every document, such as a 404 rendered without route data.
+   */
+  readonly lang?: string;
 };
 
 /**
@@ -176,10 +183,13 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
         // the locale import map exists. They resolve as `/#pmds/...` and make
         // the browser request HTML as a JavaScript module. Replace them with
         // the locale-bound asset preloads generated above.
-        const sanitizedHead = head.replace(
+        let sanitizedHead = head.replace(
           /<link\b[^>]*\brel=["']modulepreload["'][^>]*\bhref=["'][^"']*#pmds\/[^"]+["'][^>]*>\s*/giu,
           "",
         );
+        if (transformOptions.lang !== undefined) {
+          sanitizedHead = setDocumentLang(sanitizedHead, transformOptions.lang);
+        }
         callback(
           null,
           `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`,
@@ -254,6 +264,18 @@ function isMissingFile(error: unknown): boolean {
 
 function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
+/** Replace or add the `lang` attribute of the document's `<html>` start tag. */
+function setDocumentLang(head: string, lang: string): string {
+  return head.replace(/<html(?=[\s/>])[^>]*>/iu, (tag) => {
+    const attribute = ` lang="${escapeAttribute(lang)}"`;
+    // The leading whitespace keeps `xml:lang` and `data-lang` untouched.
+    const existing = /\slang\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+)/iu;
+    return existing.test(tag)
+      ? tag.replace(existing, attribute)
+      : tag.replace(/^<html/iu, `<html${attribute}`);
+  });
 }
 
 function modulePreloads(head: string, binding: ViteCatalogBinding): string[] {

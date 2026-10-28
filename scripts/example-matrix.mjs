@@ -190,6 +190,14 @@ export const EXAMPLE_MATRIX = [
         htmlLang: "en",
         substrings: ["English", "seats left"],
       },
+      {
+        // React Router renders a 404 without running the root loader; the
+        // document still carries the request locale and its import map.
+        headers: { "accept-language": "de" },
+        path: "/missing-page",
+        htmlLang: "de",
+        substrings: ['<script type="importmap">', "This page is temporarily unavailable."],
+      },
     ],
   },
   {
@@ -211,6 +219,11 @@ export const EXAMPLE_MATRIX = [
         path: "/de",
         htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        path: "/de/missing-page",
+        htmlLang: "de",
+        substrings: ['<script type="importmap">', "This page is temporarily unavailable."],
       },
       {
         headers: { host: "de.lvh.me:4041" },

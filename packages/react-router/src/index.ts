@@ -7,7 +7,10 @@ import type {
   BundledServerI18nOptions,
   createBundledServerI18n,
 } from "@palamedes/runtime/server/bundled";
-import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
+import {
+  createViteCatalogDelivery,
+  type ViteCatalogBinding,
+} from "@palamedes/vite-plugin/delivery";
 import { createReadableStreamFromReadable } from "@react-router/node";
 import { isbot } from "isbot";
 import { createElement } from "react";
@@ -19,6 +22,8 @@ import {
   type MiddlewareFunction,
   type RouterContextProvider,
 } from "react-router";
+
+import { DocumentLocaleContext } from "./document-locale";
 
 /** Selects the active locale for one request. Locale policy stays in the application. */
 export type ReactRouterLocaleResolver<TLocale extends string = string> = (
@@ -32,7 +37,10 @@ export type ReactRouterI18nOptions = Omit<BundledServerI18nOptions, "locale">;
 export type ReactRouterCatalogDeliveryOptions = {
   /** The client build directory; defaults to `build/client` in the process working directory. */
   readonly clientDirectory?: string;
-  /** Skip the client manifest; defaults to `process.env.NODE_ENV !== "production"`. */
+  /**
+   * Skip the client manifest. Defaults to whether Vite built the server as a
+   * development build (`import.meta.env.DEV`), not to the runtime `NODE_ENV`.
+   */
   readonly development?: boolean;
   /** Override the generated manifest filename for a custom Vite output. */
   readonly manifestName?: string;
@@ -52,13 +60,27 @@ export type CreateReactRouterI18nOptions<TLocale extends string = string> = {
       ) => ReactRouterI18nOptions | Promise<ReactRouterI18nOptions>);
   /** Catalog delivery options, or `false` when the host injects the import map itself. */
   readonly catalogDelivery?: ReactRouterCatalogDeliveryOptions | false;
-  /** Resolve a CSP nonce for React's scripts, the import map, and the readiness script. */
-  readonly nonce?: (request: Request) => string | undefined;
-  /** Milliseconds before a streaming render is aborted, minus one second; defaults to 5000. */
+  /**
+   * Resolve a CSP nonce for React's scripts, the import map, and the readiness
+   * script. Called at most once per document request; `context` is the
+   * request's load context, where a server may have stored the nonce.
+   */
+  readonly nonce?: ReactRouterNonceResolver;
+  /**
+   * The server entry's stream timeout in milliseconds; defaults to 5000. The
+   * render is aborted one second after it, so rejected boundaries can still
+   * flush. Match the entry module's `streamTimeout` export if it has one.
+   */
   readonly streamTimeout?: number;
   /** Message of the error thrown when the request's catalog cannot be loaded. */
   readonly failureMessage?: string;
 };
+
+/** Resolves a document request's CSP nonce, for example from its load context. */
+export type ReactRouterNonceResolver = (
+  request: Request,
+  context: ReactRouterContext,
+) => string | undefined;
 
 /** React Router's server entry signature in Framework Mode. */
 export type ReactRouterHandleRequest = (
@@ -81,8 +103,9 @@ export type ReactRouterI18n<TLocale extends string = string> = {
   readonly middleware: MiddlewareFunction<Response>;
   /**
    * A complete streaming server entry. Use it as the default export of
-   * `app/entry.server.tsx`. It renders inside the request scope and adds the
-   * locale's catalog import map and readiness script to the document.
+   * `app/entry.server.tsx`. It renders inside the request scope, provides the
+   * locale to `useDocumentLocale()`, and adds the locale's `<html lang>`,
+   * catalog import map, and readiness script to the document.
    */
   readonly handleRequest: ReactRouterHandleRequest;
   /** The locale the middleware resolved for this request. */
@@ -93,7 +116,10 @@ export type ReactRouterI18n<TLocale extends string = string> = {
     context: ReactRouterContext,
     work: () => Result | Promise<Result>,
   ): Promise<Result>;
-  /** Custom entries: the document transform for the request's locale. */
+  /**
+   * Custom entries: the document transform for the request's locale. It sets
+   * `<html lang>` and, in production, adds the locale's import map.
+   */
   createDocumentTransform(request: Request, context: ReactRouterContext): Promise<Transform>;
   /** The adapter's server i18n scope, created once per `createReactRouterI18n()` call. */
   readonly scope: ServerI18nScope<I18nInstance>;
@@ -103,7 +129,13 @@ type RequestState<TLocale extends string> = {
   locale?: TLocale;
   i18n?: I18nInstance;
   error?: unknown;
+  /** The document's catalog binding, resolved once per request. */
+  binding?: ViteCatalogBinding | null;
+  /** A failed binding. The error document React Router renders next has no catalogs. */
+  bindingError?: unknown;
 };
+
+type NonceState = { readonly value: string | undefined };
 
 const DEFAULT_FAILURE_MESSAGE =
   "Palamedes React Router i18n initialization failed before the route handlers ran.";
@@ -129,6 +161,19 @@ function loadBundledRuntime() {
 }
 
 /**
+ * Whether Vite built this server as a development build. The Palamedes plugin
+ * keeps the adapter in Vite's server module graph, so Vite replaces
+ * `import.meta.env.DEV` in both `vite dev` and `vite build`. A production build
+ * therefore delivers its client catalogs even when the process that serves it
+ * has no `NODE_ENV`. Outside Vite, the runtime `NODE_ENV` decides.
+ */
+function isDevelopmentBuild(): boolean {
+  // Keep the literal `import.meta.env.DEV`: bundlers replace that expression.
+  if (import.meta.env === undefined) return process.env.NODE_ENV !== "production";
+  return import.meta.env.DEV;
+}
+
+/**
  * Create the React Router Framework Mode integration once per server process,
  * in a server-only module such as `app/lib/i18n.server.ts`.
  */
@@ -143,8 +188,9 @@ export function createReactRouterI18n<TLocale extends string = string>(
   // React Router passes the same RouterContextProvider to middleware, loaders,
   // actions, and the server entry, so it carries the request's state.
   const stateContext = createContext<RequestState<TLocale> | null>(null);
+  const nonceContext = createContext<NonceState | null>(null);
   const deliveryOptions = options.catalogDelivery === false ? undefined : options.catalogDelivery;
-  const development = deliveryOptions?.development ?? process.env.NODE_ENV !== "production";
+  const development = deliveryOptions?.development ?? isDevelopmentBuild();
   const delivery =
     options.catalogDelivery === false
       ? undefined
@@ -192,17 +238,48 @@ export function createReactRouterI18n<TLocale extends string = string>(
     return await scope.run(i18n, async () => await work());
   }
 
+  /** The request's nonce; React's scripts and the import map must share one value. */
+  function resolveNonce(request: Request, context: ReactRouterContext): string | undefined {
+    if (!options.nonce) return undefined;
+    const cached = context.get(nonceContext);
+    if (cached) return cached.value;
+    const value = options.nonce(request, context);
+    context.set(nonceContext, { value });
+    return value;
+  }
+
+  /**
+   * The locale's import map binding. A missing manifest or import map throws
+   * once: React Router then renders the root ErrorBoundary through this entry
+   * again, and that error document is rendered without catalogs instead of
+   * failing a second time into React Router's last-resort response.
+   */
+  function resolveBinding(state: RequestState<TLocale>): ViteCatalogBinding | null {
+    if (!delivery || state.locale === undefined || state.bindingError !== undefined) return null;
+    if (state.binding !== undefined) return state.binding;
+    try {
+      state.binding = delivery.getLocaleBinding(state.locale);
+    } catch (error) {
+      state.bindingError = new Error(failureMessage, { cause: error });
+      throw state.bindingError;
+    }
+    return state.binding;
+  }
+
   async function createDocumentTransform(
     request: Request,
     context: ReactRouterContext,
   ): Promise<Transform> {
     if (!delivery) return new PassThrough();
     const state = context.get(stateContext) ?? (await resolveState(request, context));
-    const binding = state.locale === undefined ? null : delivery.getLocaleBinding(state.locale);
-    const nonce = options.nonce?.(request);
+    const binding = resolveBinding(state);
+    const nonce = resolveNonce(request, context);
     return delivery.createDocumentTransform(binding, {
       ...(nonce ? { nonce } : {}),
       ...(deliveryOptions?.errorHtml ? { errorHtml: deliveryOptions.errorHtml } : {}),
+      // The browser bootstrap reads `<html lang>` and loads, or checks, the
+      // catalogs for it, so the adapter owns that attribute.
+      ...(state.locale === undefined ? {} : { lang: state.locale }),
     });
   }
 
@@ -231,10 +308,10 @@ export function createReactRouterI18n<TLocale extends string = string>(
     // resolve their scope here instead.
     return await run(request, loadContext, async () => {
       const documentTransform = await createDocumentTransform(request, loadContext);
-      const nonce = options.nonce?.(request);
       return await renderDocument({
         documentTransform,
-        nonce,
+        locale: loadContext.get(stateContext)?.locale,
+        nonce: resolveNonce(request, loadContext),
         request,
         responseHeaders,
         responseStatusCode,
@@ -260,6 +337,7 @@ export function createReactRouterI18n<TLocale extends string = string>(
 
 type RenderDocumentOptions = {
   documentTransform: Transform;
+  locale: string | undefined;
   nonce: string | undefined;
   request: Request;
   responseHeaders: Headers;
@@ -274,6 +352,7 @@ type RenderDocumentOptions = {
  */
 function renderDocument({
   documentTransform,
+  locale,
   nonce,
   request,
   responseHeaders,
@@ -295,11 +374,17 @@ function renderDocument({
     );
 
     const { pipe, abort } = renderToPipeableStream(
-      createElement(ServerRouter, {
-        context: routerContext,
-        url: request.url,
-        ...(nonce ? { nonce } : {}),
-      }),
+      // `useDocumentLocale()` reads the locale here, because the root loader
+      // does not run for every document, such as a 404.
+      createElement(
+        DocumentLocaleContext.Provider,
+        { value: locale },
+        createElement(ServerRouter, {
+          context: routerContext,
+          url: request.url,
+          ...(nonce ? { nonce } : {}),
+        }),
+      ),
       {
         ...(nonce ? { nonce } : {}),
         [readyOption]() {
