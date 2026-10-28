@@ -173,6 +173,7 @@ pub fn transform_macros(
             }));
             compiled_ids.extend(result.compiled_ids);
         }
+        crate::component::reject_markup_macro_uses(source, filename)?;
         compiled_ids.sort();
         compiled_ids.dedup();
         return render_transform(source, filename, replacements, compiled_ids);
