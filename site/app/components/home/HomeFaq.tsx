@@ -1,7 +1,7 @@
 export const HOME_FAQ = [
   {
     q: "Is Palamedes ready for production use?",
-    a: "The repository contains the current implementation and runnable examples. npm currently ships 1.x while 2.0 publication is on hold. Start with your framework guide and its checked example; the release notes explain the package versions, and the stability guide documents the API contracts.",
+    a: "Palamedes 2.0 is published on npm. Start with your framework guide and its checked example. The release notes explain what changed since 1.x, and the stability guide lists the support tier of each API.",
   },
   {
     q: "What can I translate with Palamedes?",

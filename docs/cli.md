@@ -88,7 +88,7 @@ inputs, offsets, and the separate limits on number formatting.
 The experimental `palamedes-build` and `palamedes-i18n` crates expose the external
 catalog path used by the CLI. Follow the [Rust applications guide](./rust-applications.md)
 for a complete Cargo example, deployment instructions, and the current feature
-limits. The crates ship on crates.io with the coordinated 2.0 release.
+limits. The crates are published on crates.io from 2.0.0.
 
 ## Plugin Commands
 

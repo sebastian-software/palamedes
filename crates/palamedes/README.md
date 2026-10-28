@@ -5,7 +5,8 @@ FCL catalog parsing and serialization, ICU message handling, catalog merging,
 and the macro transform that the CLI and the Node binding both build on.
 
 This crate is the implementation the published `@palamedes/*` npm packages
-call into. It is not published to crates.io yet; see the repository
+call into. It is published to crates.io as a compiler dependency of
+`palamedes-build`; see the repository
 [README](https://github.com/sebastian-software/palamedes#readme) for the
 supported entry points.
 
@@ -18,8 +19,6 @@ a compiler dependency: only its `palamedes::sdk` module, the entry points that
 `palamedes-build` uses, follows Cargo SemVer. Every other item is hidden from
 the rustdoc output and serves the CLI and the Node binding; it can change in
 any release.
-Publication preparation and the held release lane are tracked in
-[#1309](https://github.com/sebastian-software/palamedes/issues/1309).
 
 ## Documentation
 

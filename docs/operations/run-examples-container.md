@@ -23,7 +23,7 @@ brings Node, pnpm and the Rust toolchain itself and builds the native
 
 On image-relevant pushes to `main`, the `Publish Examples Container` workflow
 builds and smoke-tests the image before pushing it to GitHub Container Registry. This lane
-is independent of the package publication hold. A manual `dry_run` dispatch
+is independent of package releases. A manual `dry_run` dispatch
 builds and tests without pushing, including on a feature branch. Pull a verified
 image instead of building:
 

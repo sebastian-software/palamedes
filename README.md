@@ -16,11 +16,10 @@ toolchain from extraction to runtime.
 **[Frameworks and live demos](https://palamedes.dev/frameworks)** ·
 **[Benchmarks](https://palamedes.dev/proof)**
 
-This branch contains the planned v2 implementation. **V2 is not published yet**;
-registry badges below show published releases. Read the
-[v2 release notes](https://palamedes.dev/docs/release-notes-v2) and
-[migration guide](https://palamedes.dev/docs/migration-v2) before adopting code
-from `main`.
+**Palamedes 2.0 is out.** The
+[v2 release notes](https://palamedes.dev/docs/release-notes-v2) explain what
+changed, and the [migration guide](https://palamedes.dev/docs/migration-v2)
+walks you through the upgrade from 1.x.
 
 ## What Palamedes Does
 
@@ -51,7 +50,7 @@ model and [proof](https://palamedes.dev/proof) for reproducible measurements.
 | Vue 3 and Svelte 5 | Preview component-script macros and catalog delivery through Vite. Template-text extraction and rich-text components are outside the current scope. |
 | Nuxt and SvelteKit | Separate Preview proofs for Node SSR, hydration, lazy loading, and request isolation. No dedicated npm packages are published. |
 | Node.js backends | Request-local i18n for Hono, Express, and custom servers. |
-| Rust applications | Preview build integration and an external-catalog runtime; the Rust SDK is not published on crates.io yet. |
+| Rust applications | Preview build integration and an external-catalog runtime, published on crates.io as `palamedes-build` and `palamedes-i18n`. |
 
 Use the [framework overview](https://palamedes.dev/frameworks) to choose a host
 and try its demos. The [stability policy](https://palamedes.dev/docs/stability)
