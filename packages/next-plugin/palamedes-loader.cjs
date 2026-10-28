@@ -7,6 +7,7 @@ const { decode, encode } = require("@jridgewell/sourcemap-codec");
 const {
   catalogMatchesSource,
   catalogResourcePath,
+  createPalamedesSourceFilter,
   loadPalamedesConfigSync,
 } = require("@palamedes/config");
 const { transformPalamedesMacros } = require("@palamedes/transform");
@@ -14,6 +15,34 @@ const { loadConfigCachedSync } = require("./palamedes-config-cache.cjs");
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs");
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected";
+const sourceFilters = new Map();
+
+function deserializeFilterPattern(pattern) {
+  return typeof pattern === "string" ? pattern : new RegExp(pattern.regexp, pattern.flags);
+}
+
+/*
+ * Apply withPalamedes() include/exclude patterns, which reach Turbopack loaders
+ * as JSON. Rule conditions cannot express globs resolved from projectRoot, so
+ * the loader passes unmatched modules through unchanged.
+ */
+function matchesSourceFilter(options, resourcePath) {
+  const serialized = options.sourceFilter;
+  if (!serialized || typeof serialized !== "object") {
+    return true;
+  }
+  const key = JSON.stringify(serialized);
+  let filter = sourceFilters.get(key);
+  if (!filter) {
+    filter = createPalamedesSourceFilter(
+      serialized.include.map(deserializeFilterPattern),
+      serialized.exclude.map(deserializeFilterPattern),
+      { projectRoot: serialized.projectRoot },
+    );
+    sourceFilters.set(key, filter);
+  }
+  return filter(path.resolve(resourcePath));
+}
 
 function resolveLoaderCwd(context, options) {
   if (typeof options.cwd === "string" && options.cwd.length > 0) {
@@ -408,6 +437,14 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
   const callback = this.async ? this.async() : null;
   const options = typeof this.getOptions === "function" ? this.getOptions() : {};
   let result;
+
+  if (!matchesSourceFilter(options, this.resourcePath)) {
+    if (callback) {
+      callback(null, source, inputSourceMap);
+      return;
+    }
+    return source;
+  }
 
   try {
     result = transformPalamedesMacros(String(source), this.resourcePath, {

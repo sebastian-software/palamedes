@@ -25,7 +25,12 @@ export default defineNuxtModule({
       },
     }));
     const compiler = () =>
-      palamedes({ cwd: nuxt.options.rootDir, framework: "none", mdx: false, failOnMissing: true });
+      palamedes({
+        projectRoot: nuxt.options.rootDir,
+        framework: "none",
+        mdx: false,
+        failOnMissing: true,
+      });
     addVitePlugin(compiler);
     // This root-mounted proof uses absolute catalog URLs instead of Nuxt's relative Vite base.
     addVitePlugin(() => ({
@@ -49,7 +54,7 @@ export default defineNuxtModule({
       config.rollupConfig.plugins ||= [];
       config.rollupConfig.plugins.push(
         ...palamedes({
-          cwd: nuxt.options.rootDir,
+          projectRoot: nuxt.options.rootDir,
           framework: "none",
           mdx: false,
           failOnMissing: true,
