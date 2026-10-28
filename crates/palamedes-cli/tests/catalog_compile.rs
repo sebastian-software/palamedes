@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -33,7 +35,7 @@ fn real_po_updates_run_in_a_copied_binary_and_changed_contracts_preserve_old_dat
     let executable = directory
         .path()
         .join(format!("pmds{}", std::env::consts::EXE_SUFFIX));
-    fs::copy(env!("CARGO_BIN_EXE_pmds"), &executable).unwrap();
+    common::install_pmds_copy(&executable);
     let before = fs::read(&executable).unwrap();
     let output = directory.path().join("pmds-locales");
     let compile = || {

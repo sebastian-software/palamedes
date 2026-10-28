@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::process::{Command, Output};
 
@@ -174,7 +176,7 @@ fn installed_binary_loads_only_the_external_requested_language_without_node() {
     let executable = directory
         .path()
         .join(format!("pmds{}", std::env::consts::EXE_SUFFIX));
-    fs::copy(env!("CARGO_BIN_EXE_pmds"), &executable).unwrap();
+    common::install_pmds_copy(&executable);
     let catalogs = directory.path().join("pmds-locales");
     fs::create_dir(&catalogs).unwrap();
     let source = std::path::Path::new(concat!(env!("OUT_DIR"), "/catalogs/de.pmd.json"));

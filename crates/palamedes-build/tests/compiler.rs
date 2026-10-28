@@ -1,6 +1,6 @@
 use std::fs;
 
-use palamedes_build::{CatalogBuilder, extract_messages};
+use palamedes_build::{CatalogBuilder, Error, extract_messages};
 
 fn catalogs(translation: &str) -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
@@ -42,26 +42,72 @@ fn canonical_compilation_emits_data_and_only_ids_as_executable_rust() {
 
 #[test]
 fn invalid_or_unsupported_translations_stop_the_build() {
-    for translation in [
-        "Broken {",
-        "Es ist {wrong}",
-        "{name, number}",
-        "{name, date}",
-        "{name, time}",
-        "<strong>{name}</strong>",
-        "",
-    ] {
-        let directory = catalogs(translation);
-        let output = tempfile::tempdir().unwrap();
-        assert!(
-            CatalogBuilder::new(directory.path(), "en")
+    type Check = fn(&Error) -> bool;
+    let cases: [(&str, Check); 6] = [
+        (
+            "Broken {",
+            |error| matches!(error, Error::CompileCatalog { locale, .. } if locale == "de"),
+        ),
+        ("Es ist {wrong}", |error| {
+            matches!(error, Error::PlaceholderMismatch { locale, message }
+                if locale == "de" && message == "It's {name}")
+        }),
+        ("{name, number}", |error| {
+            matches!(error, Error::UnsupportedMessage { locale, message, .. }
+                if locale == "de" && message == "It's {name}")
+        }),
+        (
+            "{name, date}",
+            |error| matches!(error, Error::UnsupportedMessage { locale, .. } if locale == "de"),
+        ),
+        (
+            "{name, time}",
+            |error| matches!(error, Error::UnsupportedMessage { locale, .. } if locale == "de"),
+        ),
+        (
+            "<strong>{name}</strong>",
+            |error| matches!(error, Error::UnsupportedMessage { locale, .. } if locale == "de"),
+        ),
+    ];
+    // Malformed or unsupported translations fail the build regardless of strictness.
+    for (translation, expected) in cases {
+        for strict in [false, true] {
+            let directory = catalogs(translation);
+            let output = tempfile::tempdir().unwrap();
+            let error = CatalogBuilder::new(directory.path(), "en")
                 .locales(&["en", "de"])
-                .fail_on_missing(true)
+                .fail_on_missing(strict)
                 .compile_to(output.path())
-                .is_err(),
-            "{translation}"
-        );
+                .err()
+                .unwrap_or_else(|| panic!("{translation} should fail"));
+            assert!(
+                expected(&error),
+                "{translation} (strict={strict}): {error:?}"
+            );
+        }
     }
+
+    // An untranslated entry is only an error in strict mode.
+    let directory = catalogs("");
+    let output = tempfile::tempdir().unwrap();
+    let error = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "de"])
+        .fail_on_missing(true)
+        .compile_to(output.path())
+        .err()
+        .expect("strict mode rejects the missing translation");
+    assert!(
+        matches!(&error, Error::MissingTranslation { locale, message }
+            if locale == "de" && message == "It's {name}"),
+        "{error:?}"
+    );
+    assert!(error.to_string().contains("fail_on_missing"), "{error}");
+    let compiled = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "de"])
+        .compile_to(output.path())
+        .expect("non-strict mode keeps the build green");
+    assert!(compiled.catalog_directory.join("de.pmd.json").exists());
+
     let directory = catalogs("Es ist {name}");
     fs::write(
         directory.path().join("de.po"),
@@ -69,17 +115,24 @@ fn invalid_or_unsupported_translations_stop_the_build() {
     )
     .unwrap();
     let output = tempfile::tempdir().unwrap();
+    let error = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "de"])
+        .compile_to(output.path())
+        .err()
+        .expect("catalog is rejected");
     assert!(
-        CatalogBuilder::new(directory.path(), "en")
-            .locales(&["en", "de"])
-            .compile_to(output.path())
-            .is_err()
+        matches!(&error, Error::InvalidCatalog { locale, reason }
+            if locale == "de" && reason.contains("absent from the source catalog")),
+        "{error:?}"
     );
+    let error = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "../de"])
+        .compile_to(output.path())
+        .err()
+        .expect("catalog is rejected");
     assert!(
-        CatalogBuilder::new(directory.path(), "en")
-            .locales(&["en", "../de"])
-            .compile_to(output.path())
-            .is_err()
+        matches!(&error, Error::InvalidLocale { locale } if locale == "../de"),
+        "{error:?}"
     );
 }
 
