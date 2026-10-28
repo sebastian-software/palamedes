@@ -14,7 +14,7 @@ use crate::commands::normalize_locale_list;
 use crate::error::CliError;
 
 /// Version of the `pmds audit --json` document shape (`schemaVersion`).
-pub(crate) const AUDIT_JSON_SCHEMA_VERSION: u32 = 1;
+const AUDIT_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct AuditOptions {

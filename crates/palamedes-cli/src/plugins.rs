@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use palamedes_plugin::{Event as PluginEvent, PluginDiagnostic, PluginManifest, Severity};
 use serde::{Deserialize, Serialize};
 
-use crate::command::Context;
+use crate::command::{Context, VersionedJson};
 use crate::config::{ConfigError, LoadedConfig};
 use crate::error::CliError;
 use crate::plugin_protocol::{parse_event, read_protocol_line};
@@ -1404,6 +1404,29 @@ fn plugin_catalogs(config: &LoadedConfig) -> Value {
     )
 }
 
+/// Version of the `pmds <plugin> <command> --json` envelope (`schemaVersion`).
+const PLUGIN_JSON_SCHEMA_VERSION: u32 = 1;
+
+/// The one document a plugin command prints with `--json`, for a result and
+/// for a host failure alike. Absent names stay `null` rather than disappear.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginJsonEnvelope<'a> {
+    ok: bool,
+    plugin: Option<&'a str>,
+    command: Option<&'a str>,
+    exit_code: u8,
+    result: Value,
+    diagnostics: &'a [PluginDiagnostic],
+}
+
+impl PluginJsonEnvelope<'_> {
+    fn to_json(&self) -> String {
+        serde_json::to_string(&VersionedJson::new(PLUGIN_JSON_SCHEMA_VERSION, self))
+            .expect("plugin result JSON")
+    }
+}
+
 fn emit_result(invocation: &PluginInvocation, output: &PluginOutput) {
     if invocation.json {
         let text = output
@@ -1422,15 +1445,15 @@ fn emit_result(invocation: &PluginInvocation, output: &PluginOutput) {
         });
         println!(
             "{}",
-            serde_json::to_string(&json!({
-                "ok": output.exit_code == 0,
-                "plugin": invocation.namespace,
-                "command": invocation.command,
-                "exitCode": output.exit_code,
-                "result": result,
-                "diagnostics": output.diagnostics,
-            }))
-            .expect("plugin result JSON")
+            PluginJsonEnvelope {
+                ok: output.exit_code == 0,
+                plugin: Some(&invocation.namespace),
+                command: invocation.command.as_deref(),
+                exit_code: output.exit_code,
+                result,
+                diagnostics: &output.diagnostics,
+            }
+            .to_json()
         );
         return;
     }
@@ -1465,15 +1488,15 @@ fn emit_failure(invocation: &InvocationHint, failure: &PluginFailure) -> u8 {
     if invocation.json {
         println!(
             "{}",
-            serde_json::to_string(&json!({
-                "ok": false,
-                "plugin": invocation.namespace,
-                "command": invocation.command,
-                "exitCode": failure.exit_code,
-                "result": Value::Null,
-                "diagnostics": [diagnostic],
-            }))
-            .expect("plugin failure JSON")
+            PluginJsonEnvelope {
+                ok: false,
+                plugin: invocation.namespace.as_deref(),
+                command: invocation.command.as_deref(),
+                exit_code: failure.exit_code,
+                result: Value::Null,
+                diagnostics: std::slice::from_ref(&diagnostic),
+            }
+            .to_json()
         );
     } else {
         eprintln!("{}", diagnostic.display());
@@ -2808,5 +2831,44 @@ catalogs:
         fs::set_permissions(&temporary, fs::Permissions::from_mode(0o755))
             .expect("chmod executable fixture");
         fs::rename(&temporary, path).expect("publish executable fixture");
+    }
+
+    /// The `--json` envelope is a public contract: `schemaVersion` leads, and
+    /// an unknown command stays an explicit `null`.
+    #[test]
+    fn json_envelope_leads_with_its_schema_version() {
+        let diagnostic = super::PluginDiagnostic {
+            severity: super::Severity::Error,
+            message: "failed".to_owned(),
+            code: Some("PLUGIN_TEST".to_owned()),
+            details: None,
+        };
+        let envelope = super::PluginJsonEnvelope {
+            ok: false,
+            plugin: Some("acme"),
+            command: None,
+            exit_code: 1,
+            result: serde_json::Value::Null,
+            diagnostics: std::slice::from_ref(&diagnostic),
+        }
+        .to_json();
+
+        assert!(
+            envelope.starts_with("{\"schemaVersion\":1,\"ok\":false,"),
+            "{envelope}"
+        );
+        let value: serde_json::Value = serde_json::from_str(&envelope).expect("envelope JSON");
+        assert_eq!(
+            value,
+            json!({
+                "schemaVersion": 1,
+                "ok": false,
+                "plugin": "acme",
+                "command": null,
+                "exitCode": 1,
+                "result": null,
+                "diagnostics": [{ "severity": "error", "message": "failed", "code": "PLUGIN_TEST" }],
+            })
+        );
     }
 }

@@ -11,7 +11,7 @@ use crate::config::LoadedConfig;
 use crate::error::CliError;
 
 /// Version of the `pmds report --json` document shape (`schemaVersion`).
-pub(crate) const REPORT_JSON_SCHEMA_VERSION: u32 = 1;
+const REPORT_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct ReportOptions {

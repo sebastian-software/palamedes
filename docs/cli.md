@@ -106,6 +106,28 @@ pmds <plugin> <command> --refresh-plugin-manifests [...args]
 `--` before them to pass them through as plugin arguments. Unknown namespaces
 produce the native plugin host's unknown-namespace diagnostic.
 
+With `--json`, the host prints one envelope on a single line (formatted here),
+for a plugin result and for a host failure alike. It is versioned as described
+in [JSON output](#json-output):
+
+```json
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "plugin": "acme",
+  "command": "inspect",
+  "exitCode": 0,
+  "result": { "count": 2 },
+  "diagnostics": []
+}
+```
+
+`ok` is `true` when `exitCode` is `0`. `result` holds the plugin's result data;
+without data it holds the plugin's text output joined by newlines, or `null`
+when there is none. `diagnostics` lists the plugin's diagnostics, or the host's
+own diagnostic when the plugin could not run. `plugin` and `command` are `null`
+when the invocation did not name them.
+
 Plugin loading is explicit, binary-only, and applies only to non-built-in
 namespaces. Validated manifests are cached under `.palamedes`; changed binaries
 are described again, while cache failures fall back to the normal handshake.
@@ -180,11 +202,13 @@ are present, `--force-clean` wins. Because regular extraction does not delete
 catalog files, the current catalog change kinds are `created` and `modified`;
 cleanup flags remove obsolete entries inside the projected file.
 
-JSON paths are relative to the configuration root when possible, use `/` as
-the separator, and are sorted deterministically:
+The `--check --json` document is versioned as described in
+[JSON output](#json-output). JSON paths are relative to the configuration root
+when possible, use `/` as the separator, and are sorted deterministically:
 
 ```json
 {
+  "schemaVersion": 1,
   "status": "drift",
   "catalogs": [
     { "path": "catalogs/de/messages.fcl", "change": "modified" },
@@ -193,8 +217,8 @@ the separator, and are sorted deterministically:
 }
 ```
 
-A clean result uses `{ "status": "clean", "catalogs": [] }`. An extraction
-or configuration failure uses status `error`, an empty `catalogs` array, and
+A clean result uses `{ "schemaVersion": 1, "status": "clean", "catalogs": [] }`.
+An extraction or configuration failure uses status `error`, an empty `catalogs` array, and
 `error.message`. Exit code `0` means clean, `1` means the check could not run,
 `2` is reserved by Clap for invalid command-line usage, and `3` means catalog
 drift. A minimal CI check is:
@@ -257,10 +281,12 @@ Human diagnostics contain file, line, column, severity, stable code, message,
 and actionable help. JSON contains `diagnostics`, `failedFiles`, and a
 `summary` with file and severity counts plus the number of suppressed findings.
 Diagnostics are ordered by file, byte range, and code; failed files are ordered
-by file. The document shape is stable:
+by file. The document is versioned as described in
+[JSON output](#json-output):
 
 ```json
 {
+  "schemaVersion": 1,
   "diagnostics": [
     {
       "code": "pmds/no-placeholder-only-message",
@@ -356,9 +382,7 @@ catalog entry that still carries a review marker. The default remains
 policy threshold failed.
 
 With `--json`, the command prints one document, also when `--fail-on` fails
-the run. `schemaVersion` comes first and names the document shape. It is `1`
-and changes only when a field is removed, renamed, or changes meaning; new
-fields can appear without a version change.
+the run. It is versioned as described in [JSON output](#json-output).
 
 ```json
 {
@@ -422,8 +446,7 @@ Exit code `6` means the report completed and at least one reported locale was
 below `--fail-if-below`.
 
 With `--json`, the command prints one document, also when `--fail-if-below`
-fails the run. `schemaVersion` follows the same rule as for
-[`pmds audit`](#pmds-audit) and is `1`.
+fails the run. It is versioned as described in [JSON output](#json-output).
 
 ```json
 {
@@ -447,6 +470,15 @@ messages the locale needs, `translated` the complete translations without a
 fuzzy marker, and `missing` the rest. `fuzzy` counts the entries among
 `missing` that carry a fuzzy marker. `percent` is the translated share from `0`
 to `100`, not rounded, and `100` when `total` is `0`.
+
+## JSON output
+
+Every `--json` document is one JSON object whose first field is
+`schemaVersion`. That covers `extract --check`, `lint`, `audit`, `report`,
+`catalog compile`, and the plugin command envelope. Each command versions its
+own document, and all are `1`. A version goes up only when a field is removed,
+renamed, or changes meaning. New fields can appear without a version change,
+so readers should ignore fields they do not know.
 
 ## Exit codes
 
@@ -558,7 +590,9 @@ is an error. Fallbacks follow the
 configuration; `--fallback-locale` replaces the configured `fallback-locales`
 with one shared chain, and each locale it names must be listed in `locales`.
 `--config`, `--fail-on-missing`, and `--json` work as below; `--schema` and
-`--catalog-dir` apply to the Rust target only.
+`--catalog-dir` apply to the Rust target only. For both targets, the `--json`
+document is versioned as described in [JSON output](#json-output) and contains
+`catalogs`, `missing`, and, when compilation fails, `diagnostics`.
 
 A source message that appears in several catalogs compiles to one runtime ID.
 Identical output is kept once, and a translation takes precedence over another

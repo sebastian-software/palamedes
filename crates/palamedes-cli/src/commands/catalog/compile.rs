@@ -19,7 +19,7 @@ use palamedes::{
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
 
-use crate::command::{Command, Context, render_json};
+use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 
@@ -28,6 +28,9 @@ enum CompileTarget {
     Rust,
     Js,
 }
+
+/// Version of the `pmds catalog compile --json` document shape (`schemaVersion`).
+const COMPILE_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct CompileOptions {
@@ -142,7 +145,7 @@ impl Command for CompileOptions {
 
     fn render(&self, output: &Self::Output) -> Result<(), CliError> {
         if self.json {
-            return render_json(output);
+            return render_json(&VersionedJson::new(COMPILE_JSON_SCHEMA_VERSION, output));
         }
         // The verdict reports the diagnostics; nothing was compiled.
         if !output.diagnostics.is_empty() {

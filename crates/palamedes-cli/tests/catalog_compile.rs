@@ -56,7 +56,7 @@ fn real_po_updates_run_in_a_copied_binary_and_changed_contracts_preserve_old_dat
     };
     let result = compile();
     assert!(result.status.success(), "{result:?}");
-    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    let report = versioned_json(&result);
     assert_eq!(report["catalogs"].as_array().unwrap().len(), 1);
     assert!(report["missing"].as_array().unwrap().is_empty());
     let result = Command::new(&executable)
@@ -197,6 +197,15 @@ fn fallback_diagnostics_quote_source_messages_and_leave_json_raw() {
     );
 }
 
+/// Parses a `--json` document after checking that `schemaVersion` leads it.
+fn versioned_json(output: &Output) -> serde_json::Value {
+    assert!(
+        output.stdout.starts_with(b"{\n  \"schemaVersion\": 1,\n"),
+        "schemaVersion is not the first field: {output:?}"
+    );
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {output:?}"))
+}
+
 fn compile_rust(catalog_dir: &Path, output: &Path, extra: &[&str]) -> Output {
     compiler()
         .args([
@@ -220,8 +229,7 @@ fn compile_rust(catalog_dir: &Path, output: &Path, extra: &[&str]) -> Output {
 /// after checking that nothing was compiled and stderr kept the plain text.
 fn rust_failure(output: &Output) -> serde_json::Value {
     assert_eq!(output.status.code(), Some(1), "{output:?}");
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
+    let report = versioned_json(output);
     assert_eq!(report["catalogs"], serde_json::json!([]), "{report}");
     assert_eq!(report["missing"], serde_json::json!([]), "{report}");
     let diagnostics = report["diagnostics"].as_array().unwrap();
@@ -420,8 +428,7 @@ fn js_icu_diagnostics_name_the_catalog_locale_and_source_that_failed() {
     );
     let output = compile_js(project.path(), &["--locale", "de", "--json"]);
     assert_eq!(output.status.code(), Some(1), "{output:?}");
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("{error}: {output:?}"));
+    let report = versioned_json(&output);
     assert_eq!(report["catalogs"], serde_json::json!([]), "{report}");
     let diagnostics = report["diagnostics"].as_array().unwrap();
     assert_eq!(diagnostics.len(), 1, "{report}");
