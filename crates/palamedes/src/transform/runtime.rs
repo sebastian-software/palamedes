@@ -7,7 +7,8 @@ use crate::descriptor::{
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
 use crate::source::DiagnosticLocation;
-use crate::source_message::check_lowered_message;
+use crate::source_macros::MacroImports;
+use crate::source_message::{check_lowered_message, reject_jsx_choice_spread};
 
 use super::NativeTransformOptions;
 use super::imports::ImportCollector;
@@ -24,10 +25,11 @@ use super::messages::{
 pub(super) fn transform_tagged_template(
     template: &TemplateLiteral<'_>,
     source: &str,
+    macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
-    let (message, values) = template_to_message(template, source)?;
+    let (message, values) = template_to_message(template, source, macros)?;
     if message.is_empty() {
         return Ok(None);
     }
@@ -56,6 +58,7 @@ pub(super) fn transform_tagged_template(
 pub(super) fn transform_descriptor_call(
     call: &CallExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
@@ -68,13 +71,14 @@ pub(super) fn transform_descriptor_call(
         ));
     };
 
-    transform_descriptor_object(call, object, source, macro_name, location, options)
+    transform_descriptor_object(call, object, source, macros, macro_name, location, options)
 }
 
 fn transform_descriptor_object(
     call: &CallExpression<'_>,
     object: &ObjectExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
@@ -97,7 +101,7 @@ fn transform_descriptor_object(
     let (message, implicit_values, template) = match message_expression.without_parentheses() {
         Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new(), false),
         Expression::TemplateLiteral(template) => {
-            let (message, values) = template_to_message(template, source)?;
+            let (message, values) = template_to_message(template, source, macros)?;
             let values = values.unwrap_or_default();
             check_bindings(&message, &values, &[], macro_name, location)?;
             (message, values, true)
@@ -143,6 +147,7 @@ fn transform_descriptor_object(
 pub(super) fn transform_choice_call(
     call: &CallExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
@@ -172,6 +177,7 @@ pub(super) fn transform_choice_call(
     let extracted_options = extract_choice_options(
         choice_object,
         source,
+        macros,
         &mut used_value_names,
         format,
         macro_name,
@@ -208,6 +214,7 @@ pub(super) fn transform_choice_call(
 pub(super) fn transform_trans_element(
     element: &JSXElement<'_>,
     source: &str,
+    macros: &MacroImports,
     jsx_runtime_module: &str,
     replacements: &[super::Replacement],
     location: &(impl DiagnosticLocation + ?Sized),
@@ -220,8 +227,13 @@ pub(super) fn transform_trans_element(
     let context = attrs.get("context").cloned();
     let solid_wrappers = jsx_runtime_module == "@palamedes/solid";
 
-    let (children_message, values, components) =
-        extract_jsx_children_parts(&element.children, source, solid_wrappers, replacements)?;
+    let (children_message, values, components) = extract_jsx_children_parts(
+        &element.children,
+        source,
+        macros,
+        solid_wrappers,
+        replacements,
+    )?;
     if !attrs.contains_key("message") {
         check_bindings(&children_message, &values, &components, "Trans", location)?;
     }
@@ -301,6 +313,7 @@ pub(super) fn transform_lowered_trans_call(
 pub(super) fn transform_lowered_choice_call(
     call: &CallExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
@@ -312,7 +325,7 @@ pub(super) fn transform_lowered_choice_call(
         _ => return Ok(None),
     };
     let (value_binding, extracted_options) =
-        choice_from_call(call, source, format, macro_name, location)?;
+        choice_from_call(call, source, macros, format, macro_name, location)?;
     let props = props_object(call, macro_name, location)?;
     let context = descriptor_static_property(props, "context", macro_name, location)?;
     let comment = descriptor_static_property(props, "comment", macro_name, location)?;
@@ -342,6 +355,7 @@ pub(super) fn transform_lowered_choice_call(
 pub(super) fn transform_choice_jsx_element(
     element: &JSXElement<'_>,
     source: &str,
+    macros: &MacroImports,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
@@ -352,6 +366,7 @@ pub(super) fn transform_choice_jsx_element(
     }
     let context = attrs.get("context").cloned();
     let comment = attrs.get("comment").cloned();
+    reject_jsx_choice_spread(&element.opening_element, macro_name, location)?;
     let mut used_value_names = std::collections::HashMap::new();
     let Some(value_binding) =
         extract_jsx_value_binding(&element.opening_element, source, &mut used_value_names)?
@@ -368,6 +383,7 @@ pub(super) fn transform_choice_jsx_element(
     let extracted_options = extract_choice_options_from_jsx(
         &element.opening_element,
         source,
+        macros,
         &mut used_value_names,
         format,
         macro_name,

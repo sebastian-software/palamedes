@@ -44,7 +44,11 @@ plugin's generated entries handle SSR and hydration; use Solid's public
 
 `clientDirectory` defaults to Nitro's `.output/public` in the process working
 directory, and `manifestName` overrides the generated manifest filename, as in
-the other Vite-based adapters. The helper has no `i18nOptions` or
+the other Vite-based adapters. `development` defaults to how Vite built the
+server (`import.meta.env.DEV`): `true` under `vite dev`, `false` in the output of
+`vite build`. The runtime `NODE_ENV` does not change it, so a production build
+served without `NODE_ENV` still delivers the import map. In development the
+helper reads no manifest; pass `development` to override the default. The helper has no `i18nOptions` or
 `failureMessage`: the application's own middleware creates the request
 instance, for example with `createBundledServerI18n({ locale, timeZone })`.
 
@@ -121,6 +125,8 @@ attribute (`one="# item"`) or inside braces (``one={`# item for ${name}`}``).
 Extraction and the transform reject any other branch value, such as a constant,
 a member expression, a JSX element, or a nested `t`, `plural`, `select`, or
 `<Trans>`, with an error that names the branch and its source location.
+Spread attributes such as `{...props}` fail with a located error as well, since
+their branches are only known at runtime.
 
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern, for "and N others" sentences where the number shown is

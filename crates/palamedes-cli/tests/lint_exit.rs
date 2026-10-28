@@ -23,7 +23,25 @@ fn lint_verdicts_have_a_dedicated_exit_code() {
         &["lint", "--json", "--fail-on", "warning", "--threads", "1"],
     );
     assert_eq!(warning.status.code(), Some(4), "{warning:?}");
-    assert!(String::from_utf8_lossy(&warning.stdout).contains("pmds/no-placeholder-only-message"));
+    let stdout = String::from_utf8_lossy(&warning.stdout);
+    assert!(stdout.contains("pmds/no-placeholder-only-message"));
+    // The document is versioned, and the version leads the top level.
+    assert!(
+        stdout.starts_with("{\n  \"schemaVersion\": 1,\n"),
+        "{stdout}"
+    );
+    let document: serde_json::Value = serde_json::from_str(&stdout).expect("lint JSON");
+    let mut keys = document
+        .as_object()
+        .expect("lint JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        ["diagnostics", "failedFiles", "schemaVersion", "summary"]
+    );
 
     let default_threshold = pmds(&fixture, &["lint", "--json"]);
     assert!(default_threshold.status.success(), "{default_threshold:?}");

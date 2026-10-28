@@ -7,12 +7,6 @@ import { i18n } from "~/lib/i18n.server";
 import { serverI18nTestBarrier } from "~/lib/test-barrier.server";
 import "@palamedes/example-ui/styles.css";
 
-declare global {
-  interface Window {
-    __PALAMEDES_LOCALE__?: string;
-  }
-}
-
 export const middleware: Route.MiddlewareFunction[] = [i18n.middleware, serverI18nTestBarrier];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -28,11 +22,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `window.__PALAMEDES_LOCALE__=${JSON.stringify(locale)};`,
-          }}
-        />
         <ScrollRestoration />
         <Scripts />
       </body>

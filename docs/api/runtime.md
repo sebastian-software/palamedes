@@ -134,7 +134,10 @@ serverI18n.activate(i18n);
 ```
 
 `createServerI18nScope()` uses Node `AsyncLocalStorage`, so keep it out of
-client bundles and Edge-only runtime paths. `scope.activate()` lasts for the
+client bundles and Edge-only runtime paths. Create the scope once at module
+level and reuse it for every request: each call allocates a new
+`AsyncLocalStorage`, so calling it inside a request handler adds avoidable
+per-request work. `scope.activate()` lasts for the
 current inherited async context; `scope.run()` restores its caller when its
 callback settles. Async resources created while either scope is active retain
 that store when they execute later. Work started separately without inheriting

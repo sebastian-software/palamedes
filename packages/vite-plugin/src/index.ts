@@ -1010,6 +1010,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   if (graphSplitting) {
     type SidecarEntry = { sourceId: string; compiledIds: string[] };
 
+    // Duplicate compiled IDs warn once per locale and ID, however many
+    // sidecars or rebuilds meet them.
+    const warnedDuplicateIds = new Set<string>();
+
     // `warn` is required rather than optional: an omitted channel would
     // silently disable the `failOnMissing` gate below along with the warning,
     // and every caller has a plugin context that provides one.
@@ -1047,7 +1051,22 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           }
           context.warn(message);
         }
-        Object.assign(selected, result.messages);
+        for (const [id, message] of Object.entries(result.messages)) {
+          // Catalogs apply in configuration order and the last one wins, so the
+          // result is deterministic; the warning only makes the override visible.
+          if (Object.hasOwn(selected, id) && selected[id] !== message) {
+            const key = `${locale}\0${id}`;
+            if (!warnedDuplicateIds.has(key)) {
+              warnedDuplicateIds.add(key);
+              context.warn(
+                `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog ` +
+                  `(seen again in ${catalog.path}); the last catalog in the configuration wins. ` +
+                  "Give the messages distinct IDs or make the catalogs agree.",
+              );
+            }
+          }
+          selected[id] = message;
+        }
       }
       return selected;
     }
@@ -1151,13 +1170,26 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
 
       async generateBundle(_options, bundle) {
-        if (isServer(this, false, legacyBuildSsr) || sidecarModules.size === 0) {
+        // Client builds always emit the manifest, even with no sidecars: an app
+        // that has not written its first message yet still needs one for
+        // delivery to serve HTML. It then carries an empty import map per locale.
+        if (isServer(this, false, legacyBuildSsr)) {
           return;
         }
 
-        assertImportMapBase(resolvedBase);
+        // Import-map URLs only exist for sidecar assets, so an app without any
+        // can use a base the map could not express (such as a relative one).
+        if (sidecarModules.size > 0) assertImportMapBase(resolvedBase);
 
-        const cfg = await getConfigLazy();
+        let cfg: LoadedPalamedesConfig;
+        try {
+          cfg = await getConfigLazy();
+        } catch (error) {
+          // A project that uses the plugin without a config and without any
+          // messages (for example for MDX alone) has no locales to describe.
+          if (sidecarModules.size === 0 && isMissingAutoConfig(error)) return;
+          throw error;
+        }
         const locales = cfg.locales;
         const importMaps = new Map<string, Record<string, string>>(
           locales.map((locale) => [locale, {}]),
@@ -1284,6 +1316,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return [locale, JSON.parse(String(asset.source))];
         }),
       );
+      // With no message sidecars every map is empty. There is nothing to bind,
+      // so leave the HTML as built rather than delaying its entry behind a
+      // locale check that gains nothing.
+      if (Object.values(maps).every((map) => Object.keys(map.imports ?? {}).length === 0)) return;
       for (const output of Object.values(bundle)) {
         if (output.type !== "asset" || !output.fileName.endsWith(".html")) continue;
         const entries: string[] = [];

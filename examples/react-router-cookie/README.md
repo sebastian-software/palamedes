@@ -18,11 +18,12 @@ also binds `PORT=4040`.
 
 ## Palamedes Files
 
-- `palamedes.yaml` declares `en`, `de`, and `es` catalogs.
+- `palamedes.yaml` declares `en`, `de`, `es`, and `fr` catalogs.
 - `app/po.d.ts` declares `.po` imports for TypeScript.
 - `app/lib/i18n.ts` wires the runtime and locale controls.
-- `app/lib/i18n.server.ts` uses the reusable React Router delivery adapter; the
-  application only selects a locale and does not own manifest or HTML plumbing.
+- `app/lib/i18n.server.ts` calls `createReactRouterI18n` from the published
+  `@palamedes/react-router` package; the application only selects a locale and
+  does not own manifest or HTML plumbing.
 
 The canonical overview for all 25 matrix examples is
 [`examples/README.md`](../README.md).

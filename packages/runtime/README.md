@@ -73,6 +73,10 @@ await serverI18n.run(i18n, async () => {
 });
 ```
 
+Create the scope once at module level and reuse it for every request. Each
+`createServerI18nScope()` call allocates a new `AsyncLocalStorage`, so calling it
+inside a request handler adds avoidable per-request work.
+
 All scopes created by this helper share the same runtime getter, so independently
 created scopes do not disconnect transformed `getI18n()` calls from the scope
 that was activated for the current async context. Framework adapters can also

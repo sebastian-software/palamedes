@@ -25,7 +25,7 @@ use palamedes::{
 };
 use serde::Serialize;
 
-use crate::command::{Command, Context, render_json};
+use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 use cache::{load_extract_cache, persist_extract_cache};
@@ -35,6 +35,9 @@ use watch::run_watch_mode;
 /// Prefix the benchmark harness looks for when `PALAMEDES_TIMING_JSON=1`
 /// turns on the machine-readable timing line.
 const TIMING_MARKER: &str = "__PALAMEDES_TIMINGS__";
+
+/// Version of the `pmds extract --check --json` document shape (`schemaVersion`).
+const EXTRACT_CHECK_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct ExtractOptions {
@@ -94,7 +97,10 @@ impl Command for ExtractOptions {
             return Ok(());
         };
         if self.json {
-            return render_json(report);
+            return render_json(&VersionedJson::new(
+                EXTRACT_CHECK_JSON_SCHEMA_VERSION,
+                report,
+            ));
         }
         report.render_human();
         Ok(())

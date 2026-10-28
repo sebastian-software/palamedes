@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use ferrocat_icu::{extract_argument_names, extract_tag_names};
 use oxc_ast::ast::{
-    Expression, JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
-    ObjectExpression, ObjectPropertyKind, TemplateLiteral,
+    Expression, JSXAttributeItem, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
+    JSXOpeningElement, ObjectExpression, ObjectPropertyKind, TemplateLiteral,
 };
 use oxc_span::GetSpan;
 
@@ -22,6 +22,7 @@ use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{JsxMessagePart, clean_jsx_text, join_jsx_message_parts};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::source::{DiagnosticLocation, SourceLocator};
+use crate::source_macros::MacroImports;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceValue {
@@ -128,6 +129,7 @@ pub(crate) fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> BTreeMa
 pub(crate) fn lower_template(
     template: &TemplateLiteral<'_>,
     source: &str,
+    macros: &MacroImports,
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, Vec<SourceValue>)> {
@@ -144,7 +146,7 @@ pub(crate) fn lower_template(
 
         if let Some(expr) = template.expressions.get(index) {
             let Some(preferred_name) = expression_name(expr) else {
-                return Err(nested_macro_placeholder(expr, source)
+                return Err(nested_macro_placeholder(expr, source, macros)
                     .unwrap_or(PalamedesError::UnnamedPlaceholder { syntax }));
             };
             let expression =
@@ -167,11 +169,15 @@ const NESTABLE_MESSAGE_MACROS: [&str; 4] = ["t", "plural", "select", "selectOrdi
 ///
 /// The generic unnamed-placeholder advice ("extract it into a variable")
 /// would turn `${plural(...)}` into a sentence fragment, so nested macros get
-/// their own error pointing at full-sentence branches. Matching the callee
+/// their own error pointing at full-sentence branches. Matching the imported
 /// name is enough here: any call with arguments has no stable placeholder
 /// name, so only the wording of an existing error changes.
-fn nested_macro_placeholder(expr: &Expression<'_>, source: &str) -> Option<PalamedesError> {
-    let (name, start) = nested_message_macro_call(expr)?;
+fn nested_macro_placeholder(
+    expr: &Expression<'_>,
+    source: &str,
+    macros: &MacroImports,
+) -> Option<PalamedesError> {
+    let (name, start) = nested_message_macro_call(expr, macros)?;
     let (line, column) = SourceLocator::new(source).location(start as usize);
     Some(PalamedesError::NestedMacroPlaceholder {
         macro_name: name.to_owned(),
@@ -180,9 +186,13 @@ fn nested_macro_placeholder(expr: &Expression<'_>, source: &str) -> Option<Palam
     })
 }
 
-/// Returns the name and start offset of a `t`, `plural`, `select`, or
-/// `selectOrdinal` call or tagged template.
-fn nested_message_macro_call<'a>(expr: &'a Expression<'_>) -> Option<(&'a str, u32)> {
+/// Returns the local name and start offset of a `t`, `plural`, `select`, or
+/// `selectOrdinal` call or tagged template. The local name resolves through
+/// the module's macro imports, so an alias such as `plural as p` counts.
+fn nested_message_macro_call<'a>(
+    expr: &'a Expression<'_>,
+    macros: &MacroImports,
+) -> Option<(&'a str, u32)> {
     let (name, start) = match expr.without_parentheses() {
         Expression::CallExpression(call) => (call.callee_name()?, call.span.start),
         Expression::TaggedTemplateExpression(tagged) => match tagged.tag.without_parentheses() {
@@ -191,20 +201,24 @@ fn nested_message_macro_call<'a>(expr: &'a Expression<'_>) -> Option<(&'a str, u
         },
         _ => return None,
     };
-    NESTABLE_MESSAGE_MACROS
-        .contains(&name)
+    macros
+        .get(name)
+        .is_some_and(|imported| NESTABLE_MESSAGE_MACROS.contains(&imported.imported_name.as_str()))
         .then_some((name, start))
 }
 
 /// JSX message macros that cannot appear inside another message.
 const NESTABLE_JSX_MESSAGE_MACROS: [&str; 4] = ["Trans", "Plural", "Select", "SelectOrdinal"];
 
-fn is_nested_jsx_message_macro(element: &JSXElement<'_>) -> bool {
+fn is_nested_jsx_message_macro(element: &JSXElement<'_>, macros: &MacroImports) -> bool {
     element
         .opening_element
         .name
         .get_identifier_name()
-        .is_some_and(|name| NESTABLE_JSX_MESSAGE_MACROS.contains(&name.as_str()))
+        .and_then(|name| macros.get(name.as_str()))
+        .is_some_and(|imported| {
+            NESTABLE_JSX_MESSAGE_MACROS.contains(&imported.imported_name.as_str())
+        })
 }
 
 /// Lowers one choice branch. Only string and template literals are messages;
@@ -213,6 +227,7 @@ fn lower_choice_branch(
     key: &str,
     value: &Expression<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
@@ -224,24 +239,28 @@ fn lower_choice_branch(
         Expression::TemplateLiteral(template) => lower_template(
             template,
             source,
+            macros,
             "choice option template expression",
             used_value_names,
         ),
-        value => Err(unsupported_choice_branch(key, value, macro_name, location)),
+        value => Err(unsupported_choice_branch(
+            key, value, macros, macro_name, location,
+        )),
     }
 }
 
 fn unsupported_choice_branch(
     key: &str,
     value: &Expression<'_>,
+    macros: &MacroImports,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesError {
     let nested_start = match value {
-        Expression::JSXElement(element) if is_nested_jsx_message_macro(element) => {
+        Expression::JSXElement(element) if is_nested_jsx_message_macro(element, macros) => {
             Some(element.span.start)
         }
-        _ => nested_message_macro_call(value).map(|(_, start)| start),
+        _ => nested_message_macro_call(value, macros).map(|(_, start)| start),
     };
     if let Some(start) = nested_start {
         return PalamedesError::NestedMessageMacro {
@@ -372,6 +391,7 @@ pub(crate) fn build_icu_message(
 pub(crate) fn lower_choice_options_from_object(
     object: &ObjectExpression<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
@@ -383,10 +403,20 @@ pub(crate) fn lower_choice_options_from_object(
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
-            continue;
+            return Err(unsupported_choice_options(
+                "spread options cannot be read statically; list every choice branch in the options object",
+                macro_name,
+                location,
+                property.span().start,
+            ));
         };
         let Some(key) = property.key.static_name() else {
-            continue;
+            return Err(unsupported_choice_options(
+                "a computed option name cannot be read statically; name every choice branch with a static key such as `one` or `other`",
+                macro_name,
+                location,
+                property.span.start,
+            ));
         };
         let key = key.into_owned();
         if is_plural_format(format) && key == "offset" {
@@ -403,6 +433,7 @@ pub(crate) fn lower_choice_options_from_object(
             &key,
             &property.value,
             source,
+            macros,
             used_value_names,
             macro_name,
             location,
@@ -446,9 +477,49 @@ pub(crate) fn lower_jsx_choice_value_binding(
     None
 }
 
+/// Rejects spread attributes on a JSX choice macro. The spread object is only
+/// known at runtime, so its branches would vanish from the message. Callers run
+/// this before the `value` lookup, so a spread that carries `value` is reported
+/// instead of the generic unsupported-shape error.
+pub(crate) fn reject_jsx_choice_spread(
+    opening_element: &JSXOpeningElement<'_>,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+) -> PalamedesResult<()> {
+    match opening_element
+        .attributes
+        .iter()
+        .find_map(|attr| match attr {
+            JSXAttributeItem::SpreadAttribute(spread) => Some(spread.span.start),
+            JSXAttributeItem::Attribute(_) => None,
+        }) {
+        Some(start) => Err(unsupported_choice_options(
+            "spread attributes cannot be read statically; write the `value` and every choice branch as its own attribute",
+            macro_name,
+            location,
+            start,
+        )),
+        None => Ok(()),
+    }
+}
+
+fn unsupported_choice_options(
+    detail: &str,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+    start: u32,
+) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_owned(),
+        location: location.format_offset(start as usize),
+        detail: detail.to_owned(),
+    }
+}
+
 pub(crate) fn lower_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
+    macros: &MacroImports,
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
@@ -458,6 +529,7 @@ pub(crate) fn lower_choice_options_from_jsx(
     let mut values = Vec::new();
     let mut offset = None;
 
+    reject_jsx_choice_spread(opening_element, macro_name, location)?;
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
             continue;
@@ -499,13 +571,14 @@ pub(crate) fn lower_choice_options_from_jsx(
                     &key,
                     expression,
                     source,
+                    macros,
                     used_value_names,
                     macro_name,
                     location,
                 )?
             }
             Some(JSXAttributeValue::Element(element)) => {
-                if is_nested_jsx_message_macro(element) {
+                if is_nested_jsx_message_macro(element, macros) {
                     return Err(PalamedesError::NestedMessageMacro {
                         location: location.format_offset(element.span.start as usize),
                         branch: Some(key.clone()),
@@ -532,6 +605,7 @@ pub(crate) fn lower_choice_options_from_jsx(
 pub(crate) fn lower_jsx_children(
     children: &[JSXChild<'_>],
     source: &str,
+    macros: &MacroImports,
     component_expression: impl Fn(&JSXOpeningElement<'_>) -> String,
 ) -> PalamedesResult<LoweredJsxMessage> {
     let mut used_value_names = HashMap::new();
@@ -540,6 +614,7 @@ pub(crate) fn lower_jsx_children(
     lower_jsx_children_with_state(
         children,
         source,
+        macros,
         &component_expression,
         &mut used_value_names,
         &mut next_component_index,
@@ -549,6 +624,7 @@ pub(crate) fn lower_jsx_children(
 fn lower_jsx_children_with_state<F>(
     children: &[JSXChild<'_>],
     source: &str,
+    macros: &MacroImports,
     component_expression: &F,
     used_value_names: &mut HashMap<String, String>,
     next_component_index: &mut usize,
@@ -577,7 +653,7 @@ where
                     let Some(preferred_name) = jsx_expression_name(expr) else {
                         return Err(expr
                             .as_expression()
-                            .and_then(|expr| nested_macro_placeholder(expr, source))
+                            .and_then(|expr| nested_macro_placeholder(expr, source, macros))
                             .unwrap_or(PalamedesError::UnnamedPlaceholder {
                                 syntax: "JSX expression",
                             }));
@@ -596,6 +672,7 @@ where
                 let inner = lower_jsx_children_with_state(
                     &element.children,
                     source,
+                    macros,
                     component_expression,
                     used_value_names,
                     next_component_index,
@@ -618,6 +695,7 @@ where
                 let inner = lower_jsx_children_with_state(
                     &fragment.children,
                     source,
+                    macros,
                     component_expression,
                     used_value_names,
                     next_component_index,
@@ -1002,6 +1080,225 @@ mod choice_branch_tests {
                 transformed.code
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod unsupported_shape_tests {
+    //! Macro shapes that lowering cannot read fail with a located diagnostic in
+    //! extraction and the transform alike, instead of dropping branches or
+    //! leaving a macro for the runtime stub (#1387).
+
+    use crate::error::PalamedesError;
+    use crate::extract::extract_messages;
+    use crate::transform_macros;
+
+    const FILENAME: &str = "view.tsx";
+    const BODY_LINE: usize = 5;
+    const BODY_COLUMN: usize = "  return ".len() + 1;
+
+    fn module(body: &str) -> String {
+        format!(
+            "import {{ plural, select, t, plural as p, select as s, t as tr }} from \"@palamedes/core/macro\";\nimport {{ Plural, Select, Trans, Plural as P, Trans as T }} from \"@palamedes/react/macro\";\nimport React, {{ createElement }} from \"react\";\nexport function view(count: number, gender: string, rest: object, props: object, key: string, Other: unknown, localPlural: (value: string) => string) {{\n  return {body};\n}}\n"
+        )
+    }
+
+    fn location(body: &str, anchor: &str) -> String {
+        let column = BODY_COLUMN + body.find(anchor).expect("anchor");
+        format!("{FILENAME}:{BODY_LINE}:{column}")
+    }
+
+    /// Runs both consumers and returns their errors, which must agree.
+    fn errors(body: &str) -> PalamedesError {
+        let source = module(body);
+        let extracted = extract_messages(&source, FILENAME)
+            .map(|messages| format!("{messages:?}"))
+            .expect_err(&format!("extraction should reject `{body}`"));
+        let transformed = transform_macros(&source, FILENAME, None)
+            .map(|result| result.code)
+            .expect_err(&format!("transform should reject `{body}`"));
+        assert_eq!(
+            extracted.to_string(),
+            transformed.to_string(),
+            "extraction and transform disagree on `{body}`"
+        );
+        transformed
+    }
+
+    fn assert_unsupported(body: &str, anchor: &str, macro_name: &str, detail: &str) {
+        let expected = location(body, anchor);
+        let error = errors(body);
+        assert!(
+            matches!(
+                &error,
+                PalamedesError::UnsupportedMacroSyntax {
+                    macro_name: actual_macro,
+                    location: actual_location,
+                    detail: actual_detail,
+                } if actual_macro == macro_name
+                    && *actual_location == expected
+                    && actual_detail.contains(detail)
+            ),
+            "`{body}`: expected `{macro_name}` / `{detail}` at {expected}, got: {error}"
+        );
+    }
+
+    #[test]
+    fn rejects_spread_and_computed_choice_options() {
+        for (body, anchor, macro_name, detail) in [
+            (
+                r##"plural(count, { ...rest, other: "# items" })"##,
+                "...rest",
+                "plural",
+                "spread options",
+            ),
+            (
+                r##"select(gender, { male: "he", ...rest })"##,
+                "...rest",
+                "select",
+                "spread options",
+            ),
+            (
+                r##"plural(count, { [key]: "# item", other: "# items" })"##,
+                "[key]",
+                "plural",
+                "computed option name",
+            ),
+            (
+                r##"<Plural value={count} {...props} other="# items" />"##,
+                "{...props}",
+                "Plural",
+                "spread attributes",
+            ),
+            (
+                r##"<Plural {...props} />"##,
+                "{...props}",
+                "Plural",
+                "spread attributes",
+            ),
+            (
+                r##"<Select value={gender} male="he" other="they" {...props} />"##,
+                "{...props}",
+                "Select",
+                "spread attributes",
+            ),
+        ] {
+            assert_unsupported(body, anchor, macro_name, detail);
+        }
+    }
+
+    #[test]
+    fn computed_static_choice_keys_keep_working() {
+        let source = module(r##"plural(count, { ["one"]: "# item", other: "# items" })"##);
+        let extracted = extract_messages(&source, FILENAME).expect("extraction");
+        assert_eq!(
+            extracted[0].message,
+            "{count, plural, one {# item} other {# items}}"
+        );
+        transform_macros(&source, FILENAME, None).expect("transform");
+    }
+
+    #[test]
+    fn aliased_nested_macros_report_nested_message_macro() {
+        for (body, anchor, branch) in [
+            (
+                r##"s(gender, { male: "he", other: p(count, { one: "#", other: "#" }) })"##,
+                "p(count",
+                "other",
+            ),
+            (r##"p(count, { one: tr`one`, other: "#" })"##, "tr`", "one"),
+            (
+                r##"p(count, { one: tr({ message: "one" }), other: "#" })"##,
+                "tr({",
+                "one",
+            ),
+            (
+                r##"<P value={count} one={<T>one</T>} other="#" />"##,
+                "<T>",
+                "one",
+            ),
+            (
+                r##"<P value={count} _0=<T>none</T> other="#" />"##,
+                "<T>",
+                "_0",
+            ),
+            (
+                r##"<Plural value={count} _0={tr`none`} other="#" />"##,
+                "tr`",
+                "_0",
+            ),
+            (
+                r##"<Select value={gender} male="he" other={p(count, { one: "#", other: "#" })} />"##,
+                "p(count",
+                "other",
+            ),
+        ] {
+            let expected = location(body, anchor);
+            let error = errors(body);
+            assert!(
+                matches!(
+                    &error,
+                    PalamedesError::NestedMessageMacro {
+                        location: actual,
+                        branch: Some(actual_branch),
+                    } if *actual == expected && actual_branch == branch
+                ),
+                "`{body}`: expected NestedMessageMacro in `{branch}` at {expected}, got: {error}"
+            );
+        }
+
+        let error = errors(r##"tr`You have ${p(count, { one: "# file", other: "# files" })}`"##);
+        assert!(
+            matches!(
+                &error,
+                PalamedesError::NestedMacroPlaceholder { macro_name, .. } if macro_name == "p"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn nested_macro_detection_follows_imports_not_spellings() {
+        // `localPlural` is the author's own function, not a macro import.
+        assert_unsupported(
+            r##"p(count, { one: localPlural("x"), other: "#" })"##,
+            "localPlural",
+            "plural",
+            "a function call",
+        );
+    }
+
+    #[test]
+    fn rejects_component_macros_passed_to_create_element() {
+        for (body, macro_name, function_macro) in [
+            (
+                r##"createElement(Plural, { value: count, one: "# item", other: "# items" })"##,
+                "Plural",
+                "`plural` function macro",
+            ),
+            (
+                r##"React.createElement(Trans, null, "Hello")"##,
+                "Trans",
+                "`t` function macro",
+            ),
+            (
+                r##"React.createElement(Select, { value: gender, male: "he", other: "they" })"##,
+                "Select",
+                "`select` function macro",
+            ),
+            (
+                r##"createElement(P, { value: count, other: "# items" })"##,
+                "Plural",
+                "`plural` function macro",
+            ),
+        ] {
+            assert_unsupported(body, body, macro_name, "createElement");
+            assert_unsupported(body, body, macro_name, function_macro);
+        }
+
+        let unrelated = module(r##"[createElement(Other, null), React.createElement("p", null)]"##);
+        assert!(extract_messages(&unrelated, FILENAME).is_ok());
+        assert!(transform_macros(&unrelated, FILENAME, None).is_ok());
     }
 }
 

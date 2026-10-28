@@ -146,7 +146,8 @@ one result event:
   data, and diagnostics follow after the plugin exits.
 - Diagnostics use `info`, `warning`, or `error` severity and may include
   `code` and structured `details`.
-- `--json` folds the result and diagnostics into one host envelope.
+- `--json` folds the result and diagnostics into one host envelope; see
+  [Plugin Commands](../cli.md#plugin-commands) for its versioned shape.
 - A result exit code is authoritative. Without a result, the process exit code
   is the fallback and the host emits `PLUGIN_BINARY_PROTOCOL`.
 - Exit codes range from 0 through 255. Terminal cancellation keeps the usual

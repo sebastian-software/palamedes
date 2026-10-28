@@ -200,6 +200,7 @@ catalogs:
     let cold = pmds(&fixture, &["extract", "--check", "--json", "--no-cache"]);
     assert_eq!(cold.status.code(), Some(3), "{cold:?}");
     let expected = json!({
+        "schemaVersion": 1,
         "status": "drift",
         "catalogs": [
             { "path": "catalogs/de/messages.fcl", "change": "modified" },
@@ -243,7 +244,7 @@ catalogs:
     assert!(clean.status.success(), "{clean:?}");
     assert_eq!(
         json_stdout(&clean),
-        json!({ "status": "clean", "catalogs": [] })
+        json!({ "schemaVersion": 1, "status": "clean", "catalogs": [] })
     );
     assert_catalog_unchanged(&po, &po_clean, clean_mtime);
     assert_catalog_unchanged(&fcl, &fcl_clean, clean_mtime);
@@ -273,6 +274,7 @@ catalogs:
     assert_eq!(
         json_stdout(&output),
         json!({
+            "schemaVersion": 1,
             "status": "drift",
             "catalogs": [
                 { "path": "generated/deep/de/messages.po", "change": "created" }
@@ -609,7 +611,13 @@ fn pmds(root: &Path, arguments: &[&str]) -> Output {
         .expect("run pmds")
 }
 
+/// Parses the `--json` document, which always leads with `schemaVersion`.
 fn json_stdout(output: &Output) -> Value {
+    assert!(
+        output.stdout.starts_with(b"{\n  \"schemaVersion\": 1,\n"),
+        "schemaVersion is not the first field: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
     serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
         panic!(
             "parse JSON stdout: {error}\nstdout: {}\nstderr: {}",

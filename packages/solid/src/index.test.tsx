@@ -14,6 +14,7 @@ import {
   type CompiledMessage as ParserFreeMessage,
 } from "@palamedes/core/compiled";
 import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime";
+import { createServerI18nScope } from "@palamedes/runtime/server";
 
 import { Trans, buildLocaleSwitchItems } from "./index";
 import { Trans as CompiledTrans } from "./compiled";
@@ -199,5 +200,56 @@ describe("@palamedes/solid", () => {
       ).toThrow(/finite numeric/);
     }
     expect(onError).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders concurrent mixed-locale SSR requests each in their own locale", async () => {
+    const greetings: Record<string, string> = { de: "Hallo", en: "Hello", es: "Hola" };
+    const instances = Object.fromEntries(
+      Object.entries(greetings).map(([locale, greeting]) => {
+        const i18n = createI18n({ locale, timeZone: "UTC" });
+        i18n.load(
+          locale,
+          defineCompiledCatalog(
+            compileTestMessages({ greeting: `${greeting} {name}`, footer: `footer-${locale}` }),
+          ),
+        );
+        i18n.activate(locale);
+        return [locale, i18n];
+      }),
+    );
+    // One scope for the whole process, the way the adapter guides create it.
+    const scope = createServerI18nScope<ReturnType<typeof createI18n>>();
+
+    // Every request parks here after entering its scope, so all of them are
+    // in flight, with their own locale, before any of them renders.
+    let arrivals = 0;
+    let release!: () => void;
+    const allInFlight = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const requests = ["de", "en", "es", "de", "en", "es"];
+
+    async function handle(locale: string, name: string): Promise<string> {
+      return await scope.run(instances[locale]!, async () => {
+        arrivals += 1;
+        if (arrivals === requests.length) release();
+        await allInFlight;
+        await new Promise((resolve) => setImmediate(resolve));
+        return withoutHydrationMarkers(
+          renderToString(() => (
+            <p>
+              <Trans id="greeting" values={{ name }} />|<CompiledTrans id="footer" />
+            </p>
+          )),
+        );
+      });
+    }
+
+    const html = await Promise.all(requests.map((locale, index) => handle(locale, `#${index}`)));
+
+    html.forEach((rendered, index) => {
+      const locale = requests[index]!;
+      expect(rendered).toBe(`<p>${greetings[locale]} #${index}|footer-${locale}</p>`);
+    });
   });
 });

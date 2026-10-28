@@ -360,9 +360,6 @@ Every switch is a document navigation. The import map in the document head
 fixes the browser's catalog assets for one locale, so a new locale needs a new
 document. See [ADR-007](../../adr/007-locale-is-fixed-for-a-browser-document.md).
 
-The route, subdomain, and TLD roots still set a `window.__PALAMEDES_LOCALE__`
-global. No Palamedes package reads it; the cookie example does without it.
-
 ## Error UI
 
 Error UI must not depend on message catalogs. The examples' root

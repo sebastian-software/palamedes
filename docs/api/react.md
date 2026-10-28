@@ -71,6 +71,11 @@ attribute (`one="# item"`) or inside braces (``one={`# item for ${name}`}``).
 Extraction and the transform reject any other branch value, such as a constant,
 a member expression, a JSX element, or a nested `t`, `plural`, `select`, or
 `<Trans>`, with an error that names the branch and its source location.
+Spread attributes such as `{...props}` fail with a located error as well, since
+their branches are only known at runtime. The macro components are JSX-only:
+`createElement(Plural, …)` and `React.createElement(Plural, …)` fail with a
+located error, and so does `Trans`; write the element as JSX or use the
+matching function macro.
 
 `Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
 synthesized pattern. Use it for "and N others" sentences where the number shown

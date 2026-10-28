@@ -359,6 +359,36 @@ const descriptor = t({ message })
       ).toThrow(/`invalid` is not a valid plural category/);
     });
 
+    it("rejects choice macro shapes it cannot read with a located error", () => {
+      const cases: Array<[string, RegExp]> = [
+        [
+          `plural(count, { ...rest, other: "# items" })`,
+          /Unsupported `plural` macro usage at test\.tsx:3:24: spread options/,
+        ],
+        [
+          `<Plural value={count} {...props} other="# items" />`,
+          /Unsupported `Plural` macro usage at test\.tsx:3:30: spread attributes/,
+        ],
+        [
+          `select(gender, { male: "he", other: p(count, { one: "#", other: "#" }) })`,
+          /Nested i18n macro is not extractable as a single message at test\.tsx:3:44/,
+        ],
+        [
+          `React.createElement(Plural, { value: count, other: "# items" })`,
+          /Unsupported `Plural` macro usage at test\.tsx:3:8: `createElement\(Plural, …\)` is not a macro form/,
+        ],
+      ];
+
+      for (const [expression, error] of cases) {
+        const code = `import { plural, select, plural as p } from "@palamedes/core/macro";
+import { Plural } from "@palamedes/react/macro"; import React from "react"; function message() {
+return ${expression};
+}
+`;
+        expect(() => extract(code)).toThrow(error);
+      }
+    });
+
     it("extracts interpolated plural branches with placeholder metadata", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"

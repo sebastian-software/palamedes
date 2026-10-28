@@ -38,6 +38,58 @@ fn report_json_stays_machine_readable_when_its_threshold_fails() {
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
 
+/// The `--json` document is a public contract: `schemaVersion` leads, and the
+/// top level and each locale carry exactly the documented fields.
+#[test]
+fn report_json_document_has_a_versioned_top_level_shape() {
+    let fixture = fixture_dir("json-shape");
+    write_project(&fixture);
+
+    let output = pmds(&fixture, &["report", "--json"]);
+
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 stdout");
+    assert!(
+        stdout.starts_with("{\n  \"schemaVersion\": 1,\n"),
+        "{stdout}"
+    );
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("report JSON");
+    assert_eq!(keys(&json), ["locales", "schemaVersion"]);
+    assert_eq!(json["schemaVersion"], 1);
+    let locales = json["locales"].as_array().expect("locales array");
+    assert_eq!(locales.len(), 1, "{json}");
+    assert_eq!(
+        keys(&locales[0]),
+        [
+            "fuzzy",
+            "locale",
+            "missing",
+            "percent",
+            "total",
+            "translated"
+        ]
+    );
+    assert_eq!(locales[0]["locale"], "de");
+    assert_eq!(locales[0]["total"], 2);
+    assert_eq!(locales[0]["translated"], 1);
+    assert_eq!(locales[0]["missing"], 1);
+    assert_eq!(locales[0]["fuzzy"], 0);
+    assert_eq!(locales[0]["percent"], 50.0);
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+fn keys(value: &serde_json::Value) -> Vec<&str> {
+    let mut keys = value
+        .as_object()
+        .unwrap_or_else(|| panic!("not an object: {value}"))
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    keys.sort_unstable();
+    keys
+}
+
 #[test]
 fn report_operational_failures_keep_the_generic_exit_code() {
     let fixture = fixture_dir("configuration-failure");

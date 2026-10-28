@@ -34,7 +34,11 @@ export type WakuCatalogDeliveryOptions = {
   clientDirectory?: string;
   /** Resolve the application-owned locale policy from the original request. */
   resolveLocale: (request: Request) => string;
-  /** Allow running before a client build exists in development. */
+  /**
+   * Allow running before a client build exists in development. Defaults to
+   * whether Vite built the server as a development build
+   * (`import.meta.env.DEV`), not to the runtime `NODE_ENV`.
+   */
   development?: boolean;
   /** Override the generated manifest filename for a custom Vite output. */
   manifestName?: string;
@@ -48,6 +52,19 @@ export type WakuCatalogDeliveryOptions = {
 };
 
 /**
+ * Whether Vite built this server as a development build. Vite replaces
+ * `import.meta.env.DEV` in both `vite dev` and `vite build`, so a production
+ * build delivers its client catalogs even when the process that serves it has
+ * no `NODE_ENV`, and a development server keeps development delivery under
+ * `NODE_ENV=production`. Outside Vite, `NODE_ENV` decides.
+ */
+function isDevelopmentBuild(): boolean {
+  // Keep the literal `import.meta.env.DEV`: bundlers replace that expression.
+  if (import.meta.env === undefined) return process.env.NODE_ENV !== "production";
+  return import.meta.env.DEV;
+}
+
+/**
  * Connects Vite's active-locale import-map delivery to Waku's HTML response.
  * Locale selection remains application-owned; this middleware only transforms
  * document responses after Waku has rendered them and leaves RSC/action
@@ -56,9 +73,10 @@ export type WakuCatalogDeliveryOptions = {
 export function createWakuCatalogDeliveryMiddleware(
   options: WakuCatalogDeliveryOptions,
 ): WakuMiddlewareHandler {
+  const development = options.development ?? isDevelopmentBuild();
   const delivery = createViteCatalogDelivery({
     clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), "dist/public"),
-    ...(options.development === undefined ? {} : { development: options.development }),
+    development,
     ...(options.manifestName ? { manifestName: options.manifestName } : {}),
   });
 
@@ -82,9 +100,7 @@ export function createWakuCatalogDeliveryMiddleware(
         ),
       )
       .pipeThrough(
-        webTransform(
-          createWakuBootstrapGateTransform({ allowMissingPromise: options.development === true }),
-        ),
+        webTransform(createWakuBootstrapGateTransform({ allowMissingPromise: development })),
       );
     const headers = new Headers(response.headers);
     headers.delete("content-length");
@@ -107,6 +123,24 @@ const WAKU_ENTRY_PATTERN =
   /import\(((['"])(?:https?:\/\/[^"']+)?\/(?:[^"']*\/)?index-[^"']+\.js\2)\)/u;
 const TAIL_SIZE = 192;
 
+let driftWarned = false;
+
+const DRIFT_MESSAGE =
+  '@palamedes/waku found Waku\'s inline bootstrap script (<script id="_R_">) but could not find its entry import to gate, ' +
+  "so client catalogs may load late and pages may flash untranslated text. " +
+  "The installed Waku version probably changed its bootstrap output; please report this at https://github.com/sebastian-software/palamedes/issues.";
+
+/**
+ * The bootstrap gate is a textual rewrite of upstream output. When the Waku
+ * bootstrap is present but the entry import was not rewritten, the gate is
+ * silently off. Keep serving the page and log one warning per process.
+ */
+function reportBootstrapDrift(): void {
+  if (driftWarned) return;
+  driftWarned = true;
+  console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
+}
+
 /**
  * Waku emits an inline entry bootstrap after the document head. Gate that
  * import on the exact same catalog-import promise used by the delivery probe.
@@ -117,16 +151,23 @@ function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolea
   const decoder = new StringDecoder("utf8");
   let tail = "";
 
-  function gateWakuEntry(value: string) {
-    const importExpression = options.allowMissingPromise
-      ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import($1)) : import($1))`
-      : `globalThis[${CATALOG_READY_PROMISE}].then(() => import($1))`;
-    return value
+  function gateWakuEntry(value: string): string {
+    const importExpression = (source: string) =>
+      options.allowMissingPromise
+        ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
+        : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
+    let entryRewrites = 0;
+    const gated = value
       .replace(
         /if \(!canRetry\) \{\s*return;\s*\}/u,
         `if (globalThis[${CATALOG_READY}] || !globalThis[${CATALOG_READY_PROMISE}]) {\nreturn;\n}\ne.preventDefault();\nreturn;`,
       )
-      .replace(WAKU_ENTRY_PATTERN, importExpression);
+      .replace(WAKU_ENTRY_PATTERN, (_match: string, source: string) => {
+        entryRewrites += 1;
+        return importExpression(source);
+      });
+    if (entryRewrites === 0) reportBootstrapDrift();
+    return gated;
   }
 
   return new Transform({

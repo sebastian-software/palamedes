@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Transform } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createWakuCatalogDeliveryMiddleware } from "./server";
 
@@ -50,9 +50,91 @@ async function transformHtml(input: string, splitAt: number[], nonce?: string): 
   return context.res.text();
 }
 
+async function driftHarness(html: string, development: boolean) {
+  // The one-warning-per-process flag lives in module state.
+  vi.resetModules();
+  const { createWakuCatalogDeliveryMiddleware: create } = await import("./server");
+  const middleware = create({
+    clientDirectory: "dist/public",
+    development,
+    resolveLocale: () => "en",
+  });
+  const context = {
+    req: { raw: new Request("https://example.test/") },
+    res: new Response(html, { headers: { "content-type": "text/html" } }),
+  } as Parameters<typeof middleware>[0];
+  await middleware(context, async () => {});
+  return context.res;
+}
+
 describe("Waku catalog document delivery", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("stays silent when the bootstrap entry is rewritten", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await driftHarness(
+      '<script id="_R_">import("/assets/index-abc.js")</script>',
+      false,
+    );
+    await expect(response.text()).resolves.toContain("document-catalogs-ready-promise");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("stays silent for documents without the framework bootstrap", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const development of [false, true]) {
+      const response = await driftHarness(
+        '<p>import("/assets/index-x.js")</p><script>window.ok = true;</script>',
+        development,
+      );
+      await expect(response.text()).resolves.toContain("window.ok");
+    }
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns once per process and keeps serving the page when production output drifts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.resetModules();
+    const { createWakuCatalogDeliveryMiddleware: create } = await import("./server");
+    const middleware = create({
+      clientDirectory: "dist/public",
+      development: false,
+      resolveLocale: () => "en",
+    });
+    const drifted = '<html><script id="_R_">startWaku("/assets/main-abc.js")</script></html>';
+    for (let request = 0; request < 3; request += 1) {
+      const context = {
+        req: { raw: new Request("https://example.test/") },
+        res: new Response(drifted, { headers: { "content-type": "text/html" } }),
+      } as Parameters<typeof middleware>[0];
+      await middleware(context, async () => {});
+      await expect(context.res.text()).resolves.toContain("startWaku");
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain("Waku");
+  });
+
+  it("warns instead of failing the page when development output drifts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await driftHarness(
+      '<script id="_R_">startWaku("/assets/main-abc.js")</script>',
+      true,
+    );
+    await expect(response.text()).resolves.toContain("startWaku");
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0]?.[0]);
+    expect(message).toContain("@palamedes/waku");
+    expect(message).toContain("entry import");
+    expect(message).toContain("flash untranslated");
+    expect(message).toContain("please report");
+  });
+
   it("defaults clientDirectory to dist/public and forwards manifestName", () => {
     deliveryOptions.length = 0;
+    vi.stubEnv("DEV", false);
     createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
     createWakuCatalogDeliveryMiddleware({
       clientDirectory: "/srv/client",
@@ -62,9 +144,49 @@ describe("Waku catalog document delivery", () => {
     });
 
     expect(deliveryOptions).toEqual([
-      { clientDirectory: path.resolve(process.cwd(), "dist/public") },
+      { clientDirectory: path.resolve(process.cwd(), "dist/public"), development: false },
       { clientDirectory: "/srv/client", development: true, manifestName: "custom-manifest.json" },
     ]);
+  });
+
+  it("decides the delivery mode from the Vite build, not from the runtime NODE_ENV", async () => {
+    // Vite replaces `import.meta.env.DEV` in the server build; a custom server
+    // may start that build without NODE_ENV, or a dev server may see it set.
+    deliveryOptions.length = 0;
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("NODE_ENV", undefined);
+    createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("NODE_ENV", "production");
+    createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    // An explicit option still overrides the build.
+    createWakuCatalogDeliveryMiddleware({ development: false, resolveLocale: () => "en" });
+    vi.stubEnv("DEV", false);
+    createWakuCatalogDeliveryMiddleware({ development: true, resolveLocale: () => "en" });
+
+    expect(
+      deliveryOptions.map((options) => (options as { development: boolean }).development),
+    ).toEqual([false, true, false, true]);
+  });
+
+  it("gates the Waku entry on the readiness promise in a production build without NODE_ENV", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("NODE_ENV", undefined);
+    const middleware = createWakuCatalogDeliveryMiddleware({ resolveLocale: () => "en" });
+    const context = {
+      req: { raw: new Request("https://example.test/") },
+      res: new Response(
+        '<script id="_R_">import("/assets/index-abc.js").catch((err) => { throw err; });</script>',
+        { headers: { "content-type": "text/html" } },
+      ),
+    };
+    await middleware(context, async () => {});
+
+    const output = await context.res.text();
+    expect(output).toContain(
+      'globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(() => import("/assets/index-abc.js"))',
+    );
+    expect(output).not.toContain("? globalThis[Symbol.for");
   });
 
   it("resolves a nonce function once from the request and the middleware context", async () => {

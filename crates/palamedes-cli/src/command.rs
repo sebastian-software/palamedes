@@ -110,6 +110,29 @@ pub fn render_json<T: Serialize>(value: &T) -> Result<(), CliError> {
     Ok(())
 }
 
+/// A `--json` document whose top level carries `schemaVersion` first.
+///
+/// The fields of `document` follow at the same level, so adding the version
+/// does not move existing fields under a wrapper key. Bump the version when a
+/// field is removed, renamed, or changes meaning; adding a field does not.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionedJson<'a, T> {
+    schema_version: u32,
+    #[serde(flatten)]
+    document: &'a T,
+}
+
+impl<'a, T: Serialize> VersionedJson<'a, T> {
+    /// Pairs a document with the schema version its shape follows.
+    pub fn new(schema_version: u32, document: &'a T) -> Self {
+        Self {
+            schema_version,
+            document,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Context;
