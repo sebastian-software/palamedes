@@ -27,10 +27,12 @@ const hashWith = (edit) =>
 const baseline = await hashWith(() => {});
 
 // The rewrite release-please performs: `$.version` in every package.json and
-// the workspace crate versions in Cargo.lock.
+// the workspace crate versions in Cargo.lock. The target must differ from every
+// real version, including on the release PR branch itself.
+const BUMPED_VERSION = "999.0.0";
 const bumpVersions = (filename, text) => {
   if (path.basename(filename) === "package.json") {
-    const bumped = text.replace(/^( {2}"version": )"[^"]*"/mu, '$1"2.0.0"');
+    const bumped = text.replace(/^( {2}"version": )"[^"]*"/mu, `$1"${BUMPED_VERSION}"`);
     assert.ok(bumped !== text, `${filename} has a version to bump`);
     return bumped;
   }
@@ -39,7 +41,7 @@ const bumpVersions = (filename, text) => {
       .split(/(?=^\[\[package\]\]$)/mu)
       .map((block) =>
         block.startsWith("[[package]]") && !/^source = /mu.test(block)
-          ? block.replace(/^version = "[^"]*"$/mu, 'version = "2.0.0"')
+          ? block.replace(/^version = "[^"]*"$/mu, `version = "${BUMPED_VERSION}"`)
           : block,
       )
       .join("");
