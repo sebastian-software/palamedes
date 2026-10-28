@@ -7,6 +7,10 @@ import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime
 
 import { createNextServerI18nScope } from "./server";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}
+
 describe("@palamedes/next-plugin/server", () => {
   afterEach(() => resetI18nRuntime());
 
@@ -15,6 +19,9 @@ describe("@palamedes/next-plugin/server", () => {
     const i18n: I18nInstance = {
       locale: "de",
       _: (message: string) => message,
+      load() {},
+      activate() {},
+      renderMessage: unusedRenderMessage,
     };
 
     workAsyncStorage.run({} as never, () => {

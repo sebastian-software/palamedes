@@ -48,6 +48,10 @@ import { Trans } from "@palamedes/react";
 <Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />;
 ```
 
+The runtime `Trans` requires `id`, the compiled lookup key that the transform
+injects. `message` is optional diagnostic metadata and is never used as a
+lookup key.
+
 For authoring source strings, prefer macro imports from
 `@palamedes/react/macro` so the build can extract and transform messages.
 

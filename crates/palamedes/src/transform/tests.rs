@@ -2158,6 +2158,62 @@ function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
 }
 
 #[test]
+fn every_runtime_trans_carries_its_compiled_id_without_source_metadata() {
+    // Runtime `Trans` requires `id`; `message` is diagnostic metadata only, so
+    // every emitted element and lowered call must carry the compiled key even
+    // when source metadata is stripped.
+    let production = || {
+        Some(NativeTransformOptions {
+            include_source_metadata: Some(false),
+            ..NativeTransformOptions::default()
+        })
+    };
+    let cases = [
+        (
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
+            "children.tsx",
+            "<Trans id=\"",
+        ),
+        (
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans message=\"Hello\" context=\"greeting\" />;\n",
+            "message.tsx",
+            "<Trans id=\"",
+        ),
+        (
+            "import { Trans } from \"@palamedes/solid/macro\";\nconst el = <Trans>Hello <b>{name}</b></Trans>;\n",
+            "solid.tsx",
+            "<Trans id=\"",
+        ),
+        (
+            "import { Trans as Message } from \"@palamedes/remix/macro\";\nimport { jsxs as render } from \"remix/component/jsx-runtime\";\nconst view = render(Message, { children: [\"Hello \", name] });\n",
+            "remix.js",
+            "render(Trans, { id: \"",
+        ),
+        (
+            "import { Trans as Message } from \"@palamedes/remix/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nconst view = render(Message, { message: \"Hello\" });\n",
+            "remix-message.js",
+            "render(Trans, { id: \"",
+        ),
+    ];
+
+    for (source, filename, expected) in cases {
+        let result = transform_macros(source, filename, production())
+            .unwrap_or_else(|error| panic!("{filename} should transform: {error}"));
+        assert!(
+            result.code.contains(expected),
+            "{filename}: {}",
+            result.code
+        );
+        assert!(
+            !result.code.contains("message"),
+            "{filename}: {}",
+            result.code
+        );
+        assert_eq!(result.compiled_ids.len(), 1, "{filename}");
+    }
+}
+
+#[test]
 fn keeps_source_fallbacks_when_requested() {
     let result = transform_macros_raw(
         r#"import { t } from "@palamedes/core/macro";

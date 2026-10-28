@@ -358,7 +358,8 @@ authored TSX.
 Use `Trans`, `Plural`, `Select`, and `SelectOrdinal` from
 `@palamedes/remix/macro`. The transform targets
 `@palamedes/remix/compiled`, whose `Trans` component produces branded Remix
-nodes without a React dependency. Named tag placeholders preserve the supplied
+nodes without a React dependency. Its props require the compiled `id` that the
+transform injects; `message` is diagnostic metadata only. Named tag placeholders preserve the supplied
 Remix element's props while replacing its authored children with translated
 children. Primitive placeholders, Remix elements, and nested node arrays are
 supported. Missing entries and execution failures propagate to ordinary host error handling; no source text or internal ID substitutes for the failed message.

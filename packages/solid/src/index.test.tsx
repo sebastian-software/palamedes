@@ -2,7 +2,12 @@
 import { renderToString } from "@solidjs/web";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createI18n, defineCompiledCatalog, type CompiledMessage } from "@palamedes/core";
+import {
+  createI18n,
+  defineCompiledCatalog,
+  MissingCompiledMessageError,
+  type CompiledMessage,
+} from "@palamedes/core";
 import {
   createI18n as createCompiledI18n,
   defineCompiledCatalog as defineParserFreeCatalog,
@@ -14,7 +19,7 @@ import { Trans, buildLocaleSwitchItems } from "./index";
 import { Trans as CompiledTrans } from "./compiled";
 import { compileTestMessages } from "../../../scripts/test-support/compiled-messages.mjs";
 
-import { createSolidMessageRuntime } from "./transShared";
+import { createSolidMessageRuntime, type TransProps } from "./transShared";
 
 function withoutHydrationMarkers(html: string): string {
   return html.replaceAll("<!--!$-->", "");
@@ -45,6 +50,32 @@ describe("@palamedes/solid", () => {
     const html = renderToString(() => <Trans id="footer" message="Powered by Palamedes" />);
 
     expect(html).toBe("Bereitgestellt von Palamedes");
+  });
+
+  it("looks messages up by id and never by the diagnostic message", () => {
+    const i18n = createI18n();
+    i18n.load(
+      "en",
+      defineCompiledCatalog({ "compiled-key": "Compiled", "Source text": "Source lookup" }),
+    );
+    setServerI18nGetter(() => i18n);
+
+    expect(renderToString(() => <Trans id="compiled-key" message="Source text" />)).toBe(
+      "Compiled",
+    );
+    // Untyped callers cannot fall back to the source message as a lookup key.
+    const withoutId = { message: "Source text" } as unknown as TransProps;
+    expect(() => renderToString(() => <Trans {...withoutId} />)).toThrow(
+      MissingCompiledMessageError,
+    );
+  });
+
+  it("requires the compiled id in runtime Trans props", () => {
+    // @ts-expect-error The transform injects `id`; `message` is diagnostic metadata only.
+    const props: TransProps = { message: "Hello" };
+    // @ts-expect-error The compiled runtime Trans cannot be authored without `id`.
+    const element = () => <Trans message="Hello" />;
+    expect([props, typeof element]).toEqual([{ message: "Hello" }, "function"]);
   });
 
   it("executes generated message functions directly through the Solid renderer", () => {

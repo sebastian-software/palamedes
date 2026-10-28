@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+
+import type { MessageValues } from "@palamedes/core";
+
 import { getI18n } from "./index";
 
 /**
@@ -80,18 +83,18 @@ export function registerRuntimeMacros(manifest: RuntimeMacroManifest | URL | str
         templatesByText.get(JSON.stringify(strings)) ?? missingEntry("t", JSON.stringify(strings));
       templates.set(strings, entry);
     }
-    if (entry.values.length === 0) return getI18n()._(entry.key) as string;
+    if (entry.values.length === 0) return getI18n()._(entry.key);
     const named: Record<string, unknown> = {};
     entry.values.forEach((name, index) => {
       named[name] = values[index];
     });
-    return getI18n()._(entry.key, named) as string;
+    return getI18n()._(entry.key, named);
   }
 
   function choice(kind: ChoiceKind, value: unknown, options: object): string {
     const signature = choiceSignature(kind, options);
     const entry = choices.get(signature) ?? missingEntry(kind, signature);
-    return getI18n()._(entry.key, { [entry.value]: value }) as string;
+    return getI18n()._(entry.key, { [entry.value]: value });
   }
 
   (globalThis as Record<symbol, unknown>)[RUNTIME_MACROS_KEY] = {
@@ -102,7 +105,7 @@ export function registerRuntimeMacros(manifest: RuntimeMacroManifest | URL | str
       const descriptor = first as { message: string; context?: string };
       const signature = JSON.stringify([descriptor.message, descriptor.context ?? null]);
       const entry = descriptors.get(signature) ?? missingEntry("t", signature);
-      return getI18n()._(entry.key, rest[0]) as string;
+      return getI18n()._(entry.key, rest[0] as MessageValues | undefined);
     },
     plural: (value: unknown, options: object) => choice("plural", value, options),
     select: (value: unknown, options: object) => choice("select", value, options),
