@@ -501,9 +501,11 @@ jobs:
             echo
             echo "Commit: \`${{ github.sha }}\`"
             echo
-            echo "Re-run the workflow with \`force_publish\` once the cause is fixed."
-            echo "Packages that are already published at the release version are skipped,"
-            echo "so a re-run is safe and only ships what is still missing."
+            echo "If recovery needs no repository change, re-run all jobs of this original run."
+            echo "npm skips existing versions; Cargo skips only an identical, unyanked archive."
+            echo "Do not force-publish a newer commit at this version: Cargo records the source commit in its archive, and npm does not replace existing versions."
+            echo "If a source or workflow correction is needed after any upload, prepare a new coordinated release version."
+            echo "See [partial-release recovery](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/CONTRIBUTING.md#recovering-a-partial-release)."
             echo
             echo "Run: $RUN_URL"
           } > issue-body.md
