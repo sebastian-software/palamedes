@@ -75,6 +75,11 @@ registers the runtime getter once. It gives transformed code and ordinary
 runtime helpers inside the request path access to the correct server-local
 instance.
 
+Create the scope once at module level and reuse it for every request. Each
+`createServerI18nScope()` call allocates a new `AsyncLocalStorage`, so calling it
+inside a request handler adds avoidable per-request work and leaves earlier
+scopes behind.
+
 The examples below deliberately use `getI18n()._(...)` rather than a macro.
 That is a plain Node runtime call, so no Vite, SWC, or Babel transform is needed.
 To use macros in a backend, build it with a bundler or, without one, register

@@ -1010,6 +1010,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   if (graphSplitting) {
     type SidecarEntry = { sourceId: string; compiledIds: string[] };
 
+    // Duplicate compiled IDs warn once per locale and ID, however many
+    // sidecars or rebuilds meet them.
+    const warnedDuplicateIds = new Set<string>();
+
     // `warn` is required rather than optional: an omitted channel would
     // silently disable the `failOnMissing` gate below along with the warning,
     // and every caller has a plugin context that provides one.
@@ -1047,7 +1051,22 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           }
           context.warn(message);
         }
-        Object.assign(selected, result.messages);
+        for (const [id, message] of Object.entries(result.messages)) {
+          // Catalogs apply in configuration order and the last one wins, so the
+          // result is deterministic; the warning only makes the override visible.
+          if (Object.hasOwn(selected, id) && selected[id] !== message) {
+            const key = `${locale}\0${id}`;
+            if (!warnedDuplicateIds.has(key)) {
+              warnedDuplicateIds.add(key);
+              context.warn(
+                `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog ` +
+                  `(seen again in ${catalog.path}); the last catalog in the configuration wins. ` +
+                  "Give the messages distinct IDs or make the catalogs agree.",
+              );
+            }
+          }
+          selected[id] = message;
+        }
       }
       return selected;
     }
