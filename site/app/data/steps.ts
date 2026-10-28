@@ -66,7 +66,7 @@ export default function App() {
   return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }
 
-$ pmds extract`,
+$ pnpm exec pmds extract`,
     },
     {
       title: "Translate",
@@ -124,7 +124,7 @@ export default function App() {
   return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }
 
-$ pmds extract`,
+$ pnpm exec pmds extract`,
     },
     {
       title: "Translate",
@@ -185,7 +185,7 @@ export default async function Page() {
   return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }
 
-$ pmds extract`,
+$ pnpm exec pmds extract`,
     },
     {
       title: "Translate",
