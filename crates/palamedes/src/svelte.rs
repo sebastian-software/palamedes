@@ -1000,7 +1000,17 @@ mod tests {
     #[test]
     fn svelte_markup_names_that_only_resemble_macros_keep_working() {
         let script = "<script>\nimport { t, plural } from '@palamedes/core/macro';\nimport { fn } from './handlers';\nconst { obj, tooltip, t2, tä, plurals } = $props();\nconst label = t`Label`;\n</script>\n";
-        let markup = "<p>{obj.t} {obj?.plural} {obj . t} {tooltip} {t2} {tä} {plurals} {fn({ t: 1, plural: 2 })} {fn({ a: 1, t: 2 })} {'t'} {label}</p>";
+        // Member names, object keys, longer identifiers, strings, template
+        // text, comments, plain attribute values, and markup bindings.
+        let markup = concat!(
+            "<p class=\"t\" title=\"plural\" data-x='t plural'>",
+            "{obj.t} {obj?.plural} {obj . t} {tooltip} {t2} {tä} {plurals} ",
+            "{fn({ t: 1, plural: 2 })} {fn({ a: 1, t: 2 })} {'t'} {fn(\"t\")} {'a t b'} ",
+            "{`text t ${obj} plural`} {/* t */ obj} {obj // plural\n} {label}</p>",
+            "{#each obj as t}{t}{/each}",
+            "{#snippet row(t)}{t}{/snippet}{@render row(label)}",
+            "<List items={obj} let:t>{t}</List>",
+        );
         let source = format!("{script}{markup}");
         assert_eq!(
             extract_messages(&source, "View.svelte")

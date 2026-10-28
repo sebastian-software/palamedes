@@ -447,6 +447,8 @@ impl ManifestVisitor<'_, '_> {
     ) -> PalamedesResult<BTreeMap<String, String>> {
         let mut options = BTreeMap::new();
         for property in &object.properties {
+            // Defensive backstop: `lower_choice_options_from_object` already
+            // rejects spread options and computed keys before this runs.
             let ObjectPropertyKind::ObjectProperty(property) = property else {
                 return Err(self.unsupported(
                     macro_name,
