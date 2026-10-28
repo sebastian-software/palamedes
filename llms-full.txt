@@ -154,7 +154,7 @@ Write translated code:
 // src/App.tsx
 import { Trans } from "@palamedes/react/macro"
 
-export function App() {
+export default function App() {
   return (
     <h1>
       <Trans>Welcome to Palamedes</Trans>
@@ -185,9 +185,12 @@ pnpm dev
 Install:
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
-pnpm add -D @palamedes/cli @solidjs/vite-plugin vite typescript
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web@2.0.0-rc.16 solid-js@2.0.0-rc.16
+pnpm add -D @palamedes/cli @solidjs/vite-plugin@3.0.0-next.50 vite typescript
 ```
+
+Solid 2 is still published only as prerelease versions, and an unpinned
+`solid-js` resolves to Solid 1. These pins match the maintained Solid examples.
 
 Configure Vite:
 

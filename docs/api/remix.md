@@ -322,7 +322,7 @@ Reload affected documents to install a new generation. Close the registry with
 | HMR and source maps | Source edits invalidate through Remix; composed authored TS/TSX maps and diagnostics            |
 | Remix Frames        | Document render and direct frame reload retain their own request-local locale                   |
 | Locale strategies   | Cookie, route, subdomain, TLD, and `Accept-Language`; switching reloads the document            |
-| Public hosting      | Source example and CI proof available; public deployment not yet verified                       |
+| Public hosting      | Live cookie, route, subdomain, and TLD demos, verified in Chromium over HTTPS                   |
 
 Reactive same-document locale replacement, browser `.po` loading, and an Edge
 or Worker server runtime are non-goals for the current Node integration. The
@@ -397,11 +397,12 @@ and run `pnpm verify:examples:smoke -- --framework remix` and
 `pnpm verify:examples:browser -- --framework remix`. A `remix@next` canary is
 non-blocking and does not expand support to prereleases.
 
-## Public Demo Readiness
+## Public Demos
 
-The repository example and automated browser contract are ready for hosting,
-but hosting is managed separately. Add a live-demo URL only after all of these
-conditions are true:
+All four strategies run as public demos; the
+[demo deployments](../demo-deployments.md#remix) list their URLs. Hosting is
+managed separately from this package. A hosted deployment counts as verified
+when these conditions hold:
 
 - the published examples image contains the pinned Remix example;
 - the smoke matrix and all four Remix Chromium checks are green;
@@ -409,9 +410,6 @@ conditions are true:
 - locale navigation produces matching SSR, `<html lang>`, and bootstrap data;
 - hydration, interaction, Frames, and browser-console checks pass against that
   deployment.
-
-Until then, public pages link the repository example and label hosting as
-pending instead of presenting an unverified URL.
 
 ## Four-Strategy Browser Verification
 
@@ -426,5 +424,7 @@ for each document, applied to the import map and external bootstrap.
 Route Frame URLs retain the locale prefix (`/de/frames` and
 `/de/frames/locale-summary`); host strategies retain the locale host.
 
-Public deployment remains pending. See the [deployment guide](../demo-deployments.md)
-for external-host commands and the image, routing, DNS, TLS, and caching gates.
+`node scripts/verify-hosted-examples.mjs remix-cookie remix-route remix-subdomain remix-tld`
+runs the same Chromium checks against the public deployments. See the
+[deployment guide](../demo-deployments.md) for the image, routing, DNS, TLS,
+and caching gates.

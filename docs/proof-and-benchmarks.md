@@ -266,7 +266,7 @@ charts quote that report and a build-time guard
 (`scripts/verify-site-bench-data.mjs`) fails the site build if they drift.
 
 Vue, Svelte, and Solid use their own [checked framework report](../benchmarks/e2e-workflow/results/frameworks/latest.md).
-The [proof page](/proof#framework-benchmarks) presents all three corpus sizes,
+The [proof page](https://palamedes.dev/proof#framework-benchmarks) presents all three corpus sizes,
 medians and catalog-conformance receipts. The homepage chart switches
 between framework reports, preserving each run's environment and measured
 scope. Wuchale includes transformation and compilation; Intlayer's failed

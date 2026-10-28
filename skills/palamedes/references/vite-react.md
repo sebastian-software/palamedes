@@ -50,7 +50,7 @@ post-mount React effect is too late to initialize the entry's locale.
 // src/App.tsx
 import { Trans } from "@palamedes/react/macro";
 
-export function App() {
+export default function App() {
   return (
     <h1>
       <Trans>Welcome to Palamedes</Trans>

@@ -38,11 +38,11 @@ export default [
 ] satisfies StartMiddleware[];
 ```
 
-Keep `@palamedes/runtime` and `@palamedes/vite-plugin` in
-`ssr.noExternal` so their virtual catalog imports stay in Vite's module graph
-during development. The plugin's generated entries handle SSR and hydration;
-use Solid's public `Errored` and `Loading` components for error and loading
-boundaries.
+`palamedes()` adds `@palamedes/runtime` and `@palamedes/vite-plugin` to
+`ssr.noExternal` and to every other server environment itself, so their
+virtual catalog imports stay in Vite's module graph without extra config. The
+plugin's generated entries handle SSR and hydration; use Solid's public
+`Errored` and `Loading` components for error and loading boundaries.
 
 For a nonce-based CSP, give the catalog helper the host's trusted request nonce
 and set `event.nonce` to that same value before `next()`. Start Mode forwards
@@ -84,16 +84,18 @@ active i18n instance through the plain `@palamedes/runtime` getter and does not
 install signal dependencies for locale changes; changing locale requires a
 document navigation.
 
+Author messages with the macro from `@palamedes/solid/macro`:
+
 ```tsx
-import { Trans } from "@palamedes/solid";
-<Trans id="title" message="Welcome to Palamedes" />;
+import { Trans } from "@palamedes/solid/macro";
+
+<Trans>Welcome to Palamedes</Trans>;
 ```
 
-The runtime `Trans` requires `id`, the compiled lookup key that the transform
-injects. `message` is optional diagnostic metadata and is never used as a
-lookup key.
-
-For source authoring, prefer macro imports from `@palamedes/solid/macro`.
+The transform replaces the macro with the runtime `Trans` from
+`@palamedes/solid` and injects `id`, the compiled lookup key the runtime
+component requires. Do not write runtime `Trans` elements by hand: `message` is
+optional diagnostic metadata and is never used as a lookup key.
 
 ## Choice macros
 

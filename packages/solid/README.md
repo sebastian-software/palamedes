@@ -178,15 +178,8 @@ export default [
 ] satisfies StartMiddleware[];
 ```
 
-Keep `@palamedes/runtime` in Vite's SSR module graph so its virtual catalog
-import resolves during development:
-
-```ts
-// vite.config.ts
-export default {
-  ssr: { noExternal: ["@palamedes/runtime"] },
-};
-```
+`palamedes()` keeps `@palamedes/runtime` in Vite's SSR module graph itself, so
+its virtual catalog import resolves without an `ssr.noExternal` entry.
 
 `createBundledServerI18n` owns the lazy server catalog store and keeps request
 state isolated while sharing compiled catalog content between requests. The

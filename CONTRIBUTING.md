@@ -202,7 +202,11 @@ not generated API dumps. When a public CLI command, flag, package, or Node API
 changes, refresh the relevant level of detail in both files and run `pnpm
 check:llms`. The check ties the maintained context contract to the CLI docs,
 published package manifests, and exported Node API names; the site build copies
-the checked files to `palamedes.dev`.
+the checked files to `palamedes.dev`. It also runs `scripts/check-docs-drift.mjs`
+over every README, both llms files, `docs/`, and `skills/`: a guide may not set
+an option from `REMOVED_PALAMEDES_OPTION_MESSAGES` outside migration,
+troubleshooting, and changelog contexts, and every Solid install command must
+carry the pins from `examples/solid-cookie/package.json`.
 
 ## README Generation
 

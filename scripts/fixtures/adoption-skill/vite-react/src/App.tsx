@@ -1,4 +1,4 @@
-export function App() {
+export default function App() {
   return (
     <main>
       <h1>Welcome to Palamedes</h1>
