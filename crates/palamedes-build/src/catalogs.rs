@@ -75,6 +75,11 @@ pub struct MissingTranslation {
     pub locale: String,
     /// The source message.
     pub message: String,
+    /// The message context (`msgctxt`) that tells apart equal source
+    /// messages. Rust catalogs are context-free, so the JavaScript target of
+    /// `pmds catalog compile` is the only producer that sets it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
     /// Locale whose text was compiled instead.
     pub resolved_locale: String,
 }
@@ -342,6 +347,7 @@ pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs>
                 missing.push(MissingTranslation {
                     locale: locale.clone(),
                     message: source.clone(),
+                    context: None,
                     resolved_locale,
                 });
             }

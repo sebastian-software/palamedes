@@ -112,10 +112,14 @@ fn localized_errors_preserve_status_streams_and_argument_values() {
     );
     assert_eq!(syntax.status.code(), Some(2));
     assert!(syntax.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&syntax.stderr);
     assert!(
-        String::from_utf8_lossy(&syntax.stderr)
-            .contains("Argumentos de línea de comandos no válidos.")
+        stderr.contains("Argumentos de línea de comandos no válidos."),
+        "{stderr}"
     );
+    // The usage heading matches the localized help template.
+    assert!(stderr.contains("Uso: pmds report"), "{stderr}");
+    assert!(!stderr.contains("Usage:"), "{stderr}");
 }
 
 #[test]

@@ -37,8 +37,10 @@ fn main() -> ExitCode {
             ) && i18n::language() != i18n::Language::English
             {
                 eprintln!("{}", tr!("Invalid command-line arguments."));
+                eprint!("{}", localized_usage_error(&error));
+            } else {
+                let _ = error.print();
             }
-            let _ = error.print();
             return ExitCode::from(u8::try_from(error.exit_code()).unwrap_or(2));
         }
     };
@@ -61,4 +63,30 @@ fn main() -> ExitCode {
     }
 
     ExitCode::from(exit_code)
+}
+
+/// Renders a clap usage error with the same localized `Usage:` heading as the
+/// help template. clap's own error sentences stay English; the localized line
+/// printed before them states the failure in the UI language.
+fn localized_usage_error(error: &clap::Error) -> String {
+    use std::io::IsTerminal;
+
+    let rendered = error.render();
+    let color = io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    let text = if color {
+        rendered.ansi().to_string()
+    } else {
+        rendered.to_string()
+    };
+    // The usage heading follows the error sentence, which may quote an
+    // argument that happens to read `Usage:`.
+    match text.rfind("Usage:") {
+        Some(index) => format!(
+            "{}{}{}",
+            &text[..index],
+            tr!("Usage:"),
+            &text[index + "Usage:".len()..]
+        ),
+        None => text,
+    }
 }
