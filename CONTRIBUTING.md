@@ -300,7 +300,10 @@ not replace this versioned artifact check. Only a commit titled
 publication. Before any upload, the actual publication also runs the Cargo
 preflight: it exchanges the workflow's OIDC identity for a crates.io token and
 checks the policy, allowlists, and ownership, so npm cannot ship a release that
-crates.io then rejects.
+crates.io then rejects. Real releases and dry runs also call the Example
+Verification workflow on the exact release revision, so the example smoke
+checks, the browser matrix, and the framework delivery proofs must pass before
+any upload, whatever the PR path filters selected.
 
 `pnpm release:rust:dry-run` can run the SDK staging check locally without
 uploading. Once enabled, publication still rejects versions below
