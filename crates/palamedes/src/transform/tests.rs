@@ -1214,6 +1214,93 @@ const message = t({ message: `Hello ${name}, you have {count}` }, { count });
 }
 
 #[test]
+fn descriptor_templates_accept_unicode_identifier_values() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+export const greet = (café) => t({ message: `Hello ${café}` });
+export const size = (größe) => t({ message: `Size ${größe}` }, { größe });
+"#;
+    let scoped_source = scope_macro_test_source(source, "test.ts");
+    let extracted = extract_messages(&scoped_source, "test.ts")
+        .expect("non-ASCII descriptor values should extract");
+    let transformed =
+        transform_macros(source, "test.ts", None).expect("non-ASCII descriptor values transform");
+    assert_eq!(
+        extracted
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>(),
+        ["Hello {café}", "Size {größe}"]
+    );
+    assert_eq!(
+        transformed.compiled_ids,
+        extracted
+            .iter()
+            .map(|message| compiled_message_key(&message.message, None))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        transformed.code.contains("{ café }"),
+        "{}",
+        transformed.code
+    );
+}
+
+#[test]
+fn descriptor_value_check_reads_catalog_and_runtime_spellings_alike() {
+    // Extraction checks the catalog spelling and the transform the runtime
+    // spelling; both must find `name` and only `name`.
+    let source = "import { t } from \"@palamedes/core/macro\";\nexport const m = (name) => t({ message: `Use '{x}\n' for ${name}` });\n";
+    let extracted = extract_messages(source, "test.ts").expect("quoted braces extract");
+    let transformed = transform_macros(source, "test.ts", None).expect("quoted braces transform");
+    assert_eq!(extracted[0].message, "Use '''{x}'\n' for {name}");
+    assert_eq!(
+        transformed.compiled_ids,
+        [compiled_message_key(&extracted[0].message, None)]
+    );
+}
+
+#[test]
+fn descriptor_value_mismatches_fail_extraction_and_transform_alike() {
+    for (body, expected) in [
+        // v1-style ICU in a template is literal text, so `n` has no slot.
+        (
+            "t({ message: `{n, plural, one {# item} other {# items}}` }, { n })",
+            "extra value(s): n",
+        ),
+        (
+            "t({ message: `Hello ${name}` }, values)",
+            "only be combined with an object-literal values argument",
+        ),
+        (
+            "t({ message: \"Hello\" }, { name })",
+            "extra value(s): name",
+        ),
+    ] {
+        let source = format!(
+            "import {{ t }} from \"@palamedes/core/macro\";\nexport const m = (n, name, values) =>\n  {body};\n"
+        );
+        let transform_error = transform_macros(&source, "test.ts", None)
+            .expect_err("mismatched descriptor values must fail the transform")
+            .to_string();
+        let extract_error = extract_messages(&source, "test.ts")
+            .expect_err("mismatched descriptor values must fail extraction")
+            .to_string();
+        assert_eq!(extract_error, transform_error, "{body}");
+        assert!(transform_error.contains(expected), "{transform_error}");
+        assert!(
+            transform_error.contains("Unsupported `t` macro usage at test.ts:3:3"),
+            "{transform_error}"
+        );
+        if body.contains('`') {
+            assert!(
+                transform_error.contains("string `message`"),
+                "the error should point to the raw-ICU form: {transform_error}"
+            );
+        }
+    }
+}
+
+#[test]
 fn rejects_removed_deferred_macro_imports_before_removing_shared_imports() {
     for macro_name in ["msg", "defineMessage"] {
         let source = format!(
@@ -1410,6 +1497,59 @@ const doubled = t`client''s l''été`;
             runtime_message
         );
     }
+}
+
+#[test]
+fn apostrophes_between_literal_braces_render_once_on_every_surface() {
+    let source = r##"import { plural, t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+
+const tagged = t`Type {a}'{b} to swap`;
+const closing = t`Close }'} here`;
+const rich = <Trans>Type {"{a}"}'{"{b}"} for {name}</Trans>;
+const choice = plural(count, { one: `{a}'{b} one`, other: `{a}'{b} ${name}` });
+const descriptor = t({ message: `Pick {a}'{b} for ${name}` });
+"##;
+    let scoped_source = scope_macro_test_source(source, "test.tsx");
+    let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
+        .expect("apostrophes between literal braces should extract");
+    let transformed = transform_macros(source, "test.tsx", None)
+        .expect("apostrophes between literal braces should transform");
+
+    assert_eq!(
+        extracted
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "Type '{a}''{b}' to swap",
+            "Close '}''}' here",
+            "Type '{a}''{b}' for {name}",
+            "{count, plural, one {'{a}''{b}' one} other {'{a}''{b}' {name}}}",
+            "Pick '{a}''{b}' for {name}",
+        ]
+    );
+    let extracted_ids = extracted
+        .iter()
+        .map(|message| compiled_message_key(&message.message, message.context.as_deref()))
+        .collect::<Vec<_>>();
+    assert_eq!(transformed.compiled_ids, extracted_ids);
+
+    let rendered = |message: &str| {
+        crate::icu_text::parse_runtime_icu(message)
+            .expect("lowered message parses")
+            .nodes
+            .iter()
+            .map(|node| match node {
+                ferrocat_icu::IcuNode::Literal(text) => text.clone(),
+                ferrocat_icu::IcuNode::Argument { name } => format!("[{name}]"),
+                other => format!("{other:?}"),
+            })
+            .collect::<String>()
+    };
+    assert_eq!(rendered(&extracted[0].message), "Type {a}'{b} to swap");
+    assert_eq!(rendered(&extracted[1].message), "Close }'} here");
+    assert_eq!(rendered(&extracted[2].message), "Type {a}'{b} for [name]");
 }
 
 #[test]

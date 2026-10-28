@@ -5,10 +5,11 @@
 //! A macro called from markup is rejected with a located error instead of
 //! silently surviving as a reference to an import the transform removes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use oxc_allocator::Allocator;
+use oxc_ast::ast::BindingIdentifier;
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
@@ -34,19 +35,41 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
 /// Markup is not an extraction or transform surface, but the script transform
 /// still removes the macro import. Without this check the component would
 /// compile and then fail at runtime with a `ReferenceError`.
+///
+/// A name that markup binds itself shadows the import, so its calls are the
+/// author's own: `{#each items as t}`, `{#snippet row(t)}`, `let:t`,
+/// `{#await … then t}`, `{:catch t}`, and `{@const t = …}`. The check
+/// approximates Svelte's scoping: a block or `let:` binding exempts the name in
+/// all markup of the component, and an arrow or function parameter exempts it
+/// within the same brace expression. A macro call outside the binding's real
+/// scope that reuses a shadowed name therefore goes unreported; the check
+/// prefers that rare miss over rejecting valid markup.
 pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> PalamedesResult<()> {
     if !source.contains("/macro") {
         return Ok(());
     }
     let scan = scan(source, filename)?;
+    let mut markup_bindings = scan.bindings;
     let mut calls = Vec::new();
     for &start in &scan.expressions {
-        expression_scan(source, start, &mut |word_start, word_end| {
+        let mut expression_calls = Vec::new();
+        let end = expression_scan(source, start, &mut |word_start, word_end| {
             if is_call_shape(source.as_bytes(), word_start, word_end) {
-                calls.push(word_start..word_end);
+                expression_calls.push(word_start..word_end);
             }
         });
+        // Parsing for bindings only pays off for a call or a block header.
+        let bindings = end
+            .map(|end| &source[start + 1..end - 1])
+            .filter(|text| !expression_calls.is_empty() || binds_block_names(text))
+            .map(expression_bindings);
+        if let Some(bindings) = &bindings {
+            expression_calls.retain(|call| !bindings.local.contains(&source[call.clone()]));
+        }
+        calls.extend(expression_calls);
+        markup_bindings.extend(bindings.into_iter().flat_map(|bindings| bindings.block));
     }
+    calls.retain(|call| !markup_bindings.contains(&source[call.clone()]));
     if calls.is_empty() {
         return Ok(());
     }
@@ -106,11 +129,14 @@ struct Scan {
     scripts: Vec<ScriptBlock>,
     /// Start offsets of markup and attribute brace expressions.
     expressions: Vec<usize>,
+    /// Names bound by `let:` directives.
+    bindings: HashSet<String>,
 }
 
 fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
     let mut scripts = Vec::new();
     let mut expressions = Vec::new();
+    let mut bindings = HashSet::new();
     let mut cursor = 0;
     let mut elements = 0_usize;
     let mut blocks = 0_usize;
@@ -145,6 +171,17 @@ fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
                 continue;
             }
             expressions.extend_from_slice(&tag.expressions);
+            for (key, value) in &tag.attributes {
+                if let Some(name) = key.strip_prefix("let:") {
+                    bindings.insert(name.to_owned());
+                    if let Some(pattern) = value
+                        .strip_prefix('{')
+                        .and_then(|value| value.strip_suffix('}'))
+                    {
+                        bindings.extend(pattern_bindings(pattern));
+                    }
+                }
+            }
             if matches!(tag.name, "script" | "style" | "textarea" | "title") && !tag.self_closing {
                 let closing = format!("</{}", tag.name);
                 let mut end = cursor;
@@ -249,7 +286,177 @@ fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
     Ok(Scan {
         scripts,
         expressions,
+        bindings,
     })
+}
+
+/// Names one markup brace expression binds.
+#[derive(Default)]
+struct ExpressionBindings {
+    /// Arrow and function parameters, visible within the expression.
+    local: HashSet<String>,
+    /// Block, snippet, and `@const` bindings, visible to enclosed markup.
+    block: HashSet<String>,
+}
+
+/// Whether a markup brace expression is a header that binds names for the
+/// markup it encloses.
+fn binds_block_names(text: &str) -> bool {
+    let text = text.trim_start();
+    ["#each", "#snippet", "#await", ":then", ":catch", "@const"]
+        .iter()
+        .any(|prefix| text.starts_with(prefix))
+}
+
+/// Collects the names a markup brace expression binds; `text` is the content
+/// between its braces.
+fn expression_bindings(text: &str) -> ExpressionBindings {
+    let mut bindings = ExpressionBindings::default();
+    let text = text.trim();
+    if let Some(rest) = text.strip_prefix("#each") {
+        let (iterable, pattern) = split_top_level_word(rest, "as");
+        bindings.local = javascript_bindings(&format!("({iterable});")).unwrap_or_default();
+        if let Some(pattern) = pattern {
+            bindings.block = pattern_bindings(strip_each_key(pattern));
+        }
+    } else if let Some(rest) = text.strip_prefix("#snippet") {
+        bindings.block = javascript_bindings(&format!("function {rest} {{}}"))
+            .unwrap_or_else(|| identifier_words(rest));
+    } else if let Some(rest) = text.strip_prefix("#await") {
+        let (promise, then) = split_top_level_word(rest, "then");
+        let (promise, pattern) = match then {
+            Some(pattern) => (promise, Some(pattern)),
+            None => split_top_level_word(promise, "catch"),
+        };
+        bindings.local = javascript_bindings(&format!("({promise});")).unwrap_or_default();
+        if let Some(pattern) = pattern {
+            bindings.block = pattern_bindings(pattern);
+        }
+    } else if let Some(pattern) = text
+        .strip_prefix(":then")
+        .or_else(|| text.strip_prefix(":catch"))
+    {
+        bindings.block = pattern_bindings(pattern);
+    } else if let Some(rest) = text.strip_prefix("@const") {
+        bindings.block = javascript_bindings(&format!("const {rest};")).unwrap_or_else(|| {
+            identifier_words(rest.split_once('=').map_or(rest, |(pattern, _)| pattern))
+        });
+    } else {
+        let expression = [
+            "#if", "#key", ":else if", ":else", "@html", "@render", "@debug",
+        ]
+        .iter()
+        .find_map(|keyword| text.strip_prefix(keyword))
+        .unwrap_or(text);
+        bindings.local = javascript_bindings(&format!("({expression});")).unwrap_or_default();
+    }
+    bindings
+}
+
+/// Names bound by a destructuring pattern or parameter list; every identifier
+/// in the text when it does not parse, which errs toward fewer reports.
+fn pattern_bindings(pattern: &str) -> HashSet<String> {
+    javascript_bindings(&format!("({pattern}) => 0;")).unwrap_or_else(|| identifier_words(pattern))
+}
+
+/// Binding identifiers declared anywhere in a JavaScript snippet, or `None`
+/// when the snippet does not parse.
+fn javascript_bindings(snippet: &str) -> Option<HashSet<String>> {
+    struct Collector(HashSet<String>);
+    impl<'a> Visit<'a> for Collector {
+        fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+            self.0.insert(it.name.to_string());
+        }
+    }
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, snippet, SourceType::ts()).parse();
+    if !parsed.diagnostics.is_empty() {
+        return None;
+    }
+    let mut collector = Collector(HashSet::new());
+    collector.visit_program(&parsed.program);
+    Some(collector.0)
+}
+
+/// Every identifier-like word in `text`.
+fn identifier_words(text: &str) -> HashSet<String> {
+    text.split(|character: char| !(character.is_alphanumeric() || matches!(character, '_' | '$')))
+        .filter(|word| {
+            word.chars()
+                .next()
+                .is_some_and(|first| !first.is_ascii_digit())
+        })
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+/// Splits `text` at the last occurrence of `word` outside brackets, strings,
+/// and identifiers; the second part is `None` when the word is absent.
+fn split_top_level_word<'a>(text: &'a str, word: &str) -> (&'a str, Option<&'a str>) {
+    let bytes = text.as_bytes();
+    let mut depth = 0_usize;
+    let mut quote = None;
+    let mut found = None;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if let Some(open) = quote {
+            if byte == b'\\' {
+                index += 1;
+            } else if byte == open {
+                quote = None;
+            }
+        } else {
+            match byte {
+                b'\'' | b'"' | b'`' => quote = Some(byte),
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth = depth.saturating_sub(1),
+                _ if depth == 0
+                    && bytes[index..].starts_with(word.as_bytes())
+                    && !is_word_byte(bytes.get(index.wrapping_sub(1)).copied())
+                    && !is_word_byte(bytes.get(index + word.len()).copied()) =>
+                {
+                    found = Some(index);
+                }
+                _ => {}
+            }
+        }
+        index += 1;
+    }
+    match found {
+        Some(index) => (&text[..index], Some(&text[index + word.len()..])),
+        None => (text, None),
+    }
+}
+
+fn is_word_byte(byte: Option<u8>) -> bool {
+    byte.is_some_and(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$') || byte >= 0x80
+    })
+}
+
+/// Drops the `(key)` expression that may end an `{#each}` binding list. A
+/// binding pattern itself never ends with `)`.
+fn strip_each_key(pattern: &str) -> &str {
+    let trimmed = pattern.trim_end();
+    if !trimmed.ends_with(')') {
+        return trimmed;
+    }
+    let mut depth = 0_usize;
+    for (index, byte) in trimmed.bytes().enumerate().rev() {
+        match byte {
+            b')' => depth += 1,
+            b'(' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &trimmed[..index];
+                }
+            }
+            _ => {}
+        }
+    }
+    trimmed
 }
 
 struct Tag<'a> {
@@ -751,6 +958,56 @@ const seats = $derived(plural(count, { one: '# seat', other: '# seats' }));
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn svelte_markup_bindings_shadow_macro_imports() {
+        let script = "<script>import { t } from '@palamedes/core/macro'; const label = t`Label`; let { items, promise } = $props();</script>";
+        for markup in [
+            "{#each items as t}{t(1)}{/each}",
+            "{#each items as { t }, index (t.id)}{t(index)}{/each}",
+            "{#each items as [first, t]}{t(first)}{/each}",
+            "{#snippet row(t)}{t(1)}{/snippet}{@render row(String)}",
+            "{#snippet t(value)}<b>{value}</b>{/snippet}{@render t(label)}",
+            "<List {items} let:t>{t(1)}</List>",
+            "<List {items} let:item={{ t }}>{t(1)}</List>",
+            "{#await promise then t}{t(1)}{/await}",
+            "{#await promise}wait{:then t}{t(1)}{:catch t}{t(2)}{/await}",
+            "{#await promise catch t}{t(1)}{/await}",
+            "{#each items as item}{@const t = (value) => value}{t(item)}{/each}",
+            "{items.map((t) => t(1))}",
+            "<button onclick={(t) => t(1)}>{label}</button>",
+            "{items.map(function (t) { return t(1); })}",
+        ] {
+            let source = format!("{script}{markup}");
+            assert_eq!(
+                extract_messages(&source, "View.svelte")
+                    .unwrap_or_else(|error| panic!("{markup}: {error}"))
+                    .len(),
+                1,
+                "{markup}"
+            );
+            assert_eq!(
+                transform_macros(&source, "View.svelte", None)
+                    .unwrap_or_else(|error| panic!("{markup}: {error}"))
+                    .compiled_ids
+                    .len(),
+                1,
+                "{markup}"
+            );
+        }
+
+        // An arrow parameter is local to its own expression, so a real macro
+        // call in another expression is still reported.
+        let (name, _) = markup_macro_error(&format!(
+            "{script}{{items.map((t) => t(1))}}<p>{{t`Inline`}}</p>"
+        ));
+        assert_eq!(name, "t");
+        // A shadowing name unrelated to the macro leaves the check intact.
+        let (name, _) = markup_macro_error(&format!(
+            "{script}{{#each items as item}}{{t(item)}}{{/each}}"
+        ));
+        assert_eq!(name, "t");
     }
 
     #[test]
