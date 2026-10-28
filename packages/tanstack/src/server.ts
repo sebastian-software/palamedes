@@ -17,7 +17,11 @@ export type TanStackServerI18nOptions = CreateI18nOptions & {
 export type TanStackCatalogDeliveryOptions = {
   /** Built client output; defaults to `dist/client` from the host process. */
   readonly clientDirectory?: string;
-  /** Use development-generated active-locale dependencies before a client build exists. */
+  /**
+   * Use development-generated active-locale dependencies before a client build
+   * exists. Defaults to whether Vite built the server as a development build
+   * (`import.meta.env.DEV`), not to the runtime `NODE_ENV`.
+   */
   readonly development?: boolean;
   /** Override the generated manifest filename for a custom Vite output. */
   readonly manifestName?: string;
@@ -28,6 +32,19 @@ export type TanStackCatalogDeliveryOptions = {
 };
 
 type TanStackResponseResult = Response | Record<string, unknown>;
+
+/**
+ * Whether Vite built this server as a development build. This module imports
+ * a Vite virtual module, and TanStack Start keeps packages that peer-depend on
+ * it in Vite's server module graph, so Vite replaces `import.meta.env.DEV` in
+ * both `vite dev` and `vite build`. A production build therefore delivers its
+ * client catalogs even when the process that serves it has no `NODE_ENV`.
+ */
+function isDevelopmentBuild(): boolean {
+  // Keep the literal `import.meta.env.DEV`: bundlers replace that expression.
+  if (import.meta.env === undefined) return process.env.NODE_ENV !== "production";
+  return import.meta.env.DEV;
+}
 
 /**
  * Load the active generated catalog and create a fresh parser-free instance.
@@ -60,7 +77,7 @@ export function createTanStackCatalogResponseDelivery(
     // default output location in that case instead of passing an undefined
     // clientDirectory into the shared Vite delivery factory.
     clientDirectory: options.clientDirectory ?? path.resolve(process.cwd(), "dist/client"),
-    development: options.development ?? process.env.NODE_ENV !== "production",
+    development: options.development ?? isDevelopmentBuild(),
   };
   const delivery = createViteCatalogDelivery(resolvedOptions);
   return async (result, locale, request) => {
