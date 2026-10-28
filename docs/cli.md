@@ -355,6 +355,45 @@ catalog entry that still carries a review marker. The default remains
 `--fail-on error`. Exit code `5` means the audit completed and the configured
 policy threshold failed.
 
+With `--json`, the command prints one document, also when `--fail-on` fails
+the run. `schemaVersion` comes first and names the document shape. It is `1`
+and changes only when a field is removed, renamed, or changes meaning; new
+fields can appear without a version change.
+
+```json
+{
+  "schemaVersion": 1,
+  "summary": {
+    "sourceMessages": 1,
+    "targetLocales": 1,
+    "diagnostics": 1,
+    "errors": 1,
+    "warnings": 0,
+    "infos": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "catalog.empty_translation",
+      "message": "Locale `de` has an empty translation.",
+      "catalogPath": "/app/locales/de/messages.po",
+      "locale": "de",
+      "sourceKey": { "message": "Save" },
+      "name": "de"
+    }
+  ]
+}
+```
+
+`summary` counts the active source messages the audit expects, the audited
+target locales, and the diagnostics in total and per severity. Each diagnostic
+has `severity` (`error`, `warning`, or `info`), a stable `code`, `message`, and
+the `catalogPath` it was found in. The other fields appear only when they
+apply: `locale`; `sourceKey` with `message` and, for an entry with a
+`msgctxt`, `context`; `name` for the argument, selector, tag, locale, or field
+the finding is about; and `span`, the `{ "start", "end" }` UTF-8 byte range in
+the target value for target-text findings.
+
 ## `pmds report`
 
 Reports per-locale translation completeness from configured catalogs. Source
@@ -381,6 +420,33 @@ Options:
 
 Exit code `6` means the report completed and at least one reported locale was
 below `--fail-if-below`.
+
+With `--json`, the command prints one document, also when `--fail-if-below`
+fails the run. `schemaVersion` follows the same rule as for
+[`pmds audit`](#pmds-audit) and is `1`.
+
+```json
+{
+  "schemaVersion": 1,
+  "locales": [
+    {
+      "locale": "de",
+      "total": 2,
+      "translated": 1,
+      "missing": 1,
+      "fuzzy": 0,
+      "percent": 50.0
+    }
+  ]
+}
+```
+
+`locales` has one entry per reported locale, ordered by locale. The counts are
+summed over all configured catalogs. `total` is the number of active source
+messages the locale needs, `translated` the complete translations without a
+fuzzy marker, and `missing` the rest. `fuzzy` counts the entries among
+`missing` that carry a fuzzy marker. `percent` is the translated share from `0`
+to `100`, not rounded, and `100` when `total` is `0`.
 
 ## Exit codes
 
@@ -535,7 +601,7 @@ pmds catalog compile --target rust --schema dist/schema.pmd.json \
 | `--output <directory>`    | Destination for selected `<locale>.pmd.json` files.                         |
 | `--fallback-locale <tag>` | Build-time fallback locale; repeat in resolution order.                     |
 | `--fail-on-missing`       | Reject missing or fuzzy target translations even if a fallback exists.      |
-| `--json`                  | Emit output paths and missing-translation diagnostics as one JSON document. |
+| `--json`                  | Emit output paths, missing translations, and failures as one JSON document. |
 
 By default, missing and fuzzy target translations compile through the configured
 chain and source locale/message. The source PO defines the complete inventory;
@@ -545,6 +611,27 @@ version and fingerprint are validated too. Successful output replaces each
 selected file atomically and preserves other installed languages. The JSON result
 contains `catalogs` and `missing`; missing records contain `locale`, `message`, and
 `resolvedLocale`. Failures exit 1 with a diagnostic on stderr.
+
+With `--json`, a failure also prints the document, with empty `catalogs` and
+`missing` and one entry in `diagnostics` for the error that stopped the update.
+The entry has the same shape as a JavaScript target diagnostic, but carries only
+what the error names: `catalogPath` (the PO file, schema, or other file the
+error is about), `locale`, and `sourceKey.message` appear only when known, and
+`requestedLocale`, `sourceKey.context`, and `conflictingCatalogPath` are never
+set. The codes are:
+
+| Code                           | Failure                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| `compile.io_error`             | A catalog, the schema, or the output directory could not be read or written.      |
+| `compile.invalid_locale`       | No locale was selected, one was selected twice, or a locale tag is invalid.       |
+| `compile.invalid_catalog`      | A PO catalog does not parse, cannot be used for Rust, or the compiler rejects it. |
+| `compile.unsupported_message`  | A message uses syntax that Rust catalogs do not support.                          |
+| `compile.placeholder_mismatch` | A translation uses different placeholders than its source message.                |
+| `compile.plural_argument`      | A translation pluralizes an argument that the source message only displays.       |
+| `compile.missing_translation`  | `--fail-on-missing` rejected a missing or fuzzy translation.                      |
+| `compile.contract_mismatch`    | The catalogs change the message contract; rebuild the application.                |
+| `compile.invalid_schema`       | The schema is not valid JSON for this format or is unsupported.                   |
+| `compile.failed`               | Any other failure, such as compiled data that could not be serialized.            |
 
 See the [Rust guide](./rust-applications.md#update-translations-without-building-the-application)
 for a complete update against an unchanged executable.
@@ -685,6 +772,8 @@ the CLI reports that specifically instead of a generic not-found error — creat
 a data config next to it for CLI use. Known keys written in camelCase
 (`sourceLocale`, `pseudoLocale`, `fallbackLocales`, `sourceReferenceRoot`,
 `referenceScopes`, `extractThreads`, `extractCache`) are rejected with a kebab-case hint instead of being
-silently ignored; other unknown top-level keys produce a warning.
+silently ignored. Any other unknown key, at the top level or nested, is an
+error too, with a hint when it is close to a known key. `$schema` and top-level
+keys prefixed with `x-` or `.` are reserved for tooling metadata and ignored.
 Fallback-locale entries must reference configured locales, and a
 `pseudo-locale` outside `locales` warns that it will be ignored.

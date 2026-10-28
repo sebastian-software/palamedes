@@ -107,6 +107,72 @@ fn audit_json_output_remains_machine_readable_when_its_threshold_fails() {
     fs::remove_dir_all(fixture).expect("cleanup");
 }
 
+/// The `--json` document is a public contract: `schemaVersion` leads, and the
+/// top level and each diagnostic carry exactly the documented fields.
+#[test]
+fn audit_json_document_has_a_versioned_top_level_shape() {
+    let fixture = fixture_dir("audit-json-shape");
+    write_config(&fixture);
+    write_catalogs(
+        &fixture,
+        "msgid \"Save\"\nmsgstr \"Save\"\n",
+        "msgid \"Save\"\nmsgstr \"\"\n",
+    );
+
+    let output = audit(&fixture, &["--json"]);
+    assert_eq!(output.status.code(), Some(5), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 stdout");
+    assert!(
+        stdout.starts_with("{\n  \"schemaVersion\": 1,\n"),
+        "{stdout}"
+    );
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("audit JSON");
+    assert_eq!(keys(&json), ["diagnostics", "schemaVersion", "summary"]);
+    assert_eq!(json["schemaVersion"], 1);
+    assert_eq!(
+        keys(&json["summary"]),
+        [
+            "diagnostics",
+            "errors",
+            "infos",
+            "sourceMessages",
+            "targetLocales",
+            "warnings"
+        ]
+    );
+    assert_eq!(json["summary"]["errors"], 1);
+    let diagnostic = &json["diagnostics"][0];
+    assert_eq!(
+        keys(diagnostic),
+        [
+            "catalogPath",
+            "code",
+            "locale",
+            "message",
+            "name",
+            "severity",
+            "sourceKey"
+        ]
+    );
+    assert_eq!(diagnostic["severity"], "error");
+    assert_eq!(diagnostic["code"], "catalog.empty_translation");
+    assert_eq!(diagnostic["locale"], "de");
+    assert_eq!(diagnostic["sourceKey"]["message"], "Save");
+
+    fs::remove_dir_all(fixture).expect("cleanup");
+}
+
+fn keys(value: &serde_json::Value) -> Vec<&str> {
+    let mut keys = value
+        .as_object()
+        .unwrap_or_else(|| panic!("not an object: {value}"))
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    keys.sort_unstable();
+    keys
+}
+
 #[test]
 fn audit_operational_failures_keep_the_generic_exit_code() {
     let fixture = fixture_dir("audit-configuration-failure");
