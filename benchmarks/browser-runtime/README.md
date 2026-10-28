@@ -27,7 +27,10 @@ This is an artifact-size measurement, with no timing or throughput claim.
 `node scripts/benchmark-browser-runtime.mjs --verify-report` checks the source
 fingerprint without rebuilding packages or launching a browser. The site build
 runs this lightweight guard. Refresh the report after changing the selected
-runtime sources, dependency lockfile, harness, or catalog fixture. Rerun the full
+runtime sources, dependency lockfile, harness, or catalog fixture. The
+fingerprint ignores release metadata: `version` and other publish-only
+`package.json` fields, and the workspace crates' own versions in `Cargo.lock`,
+so a release bump keeps the report valid. Rerun the full
 measurement when changing the native catalog compiler; its version is pinned by
 the report's source commit, rather than every unrelated Rust edit invalidating
 the runtime-size report.
