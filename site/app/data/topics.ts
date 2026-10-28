@@ -370,15 +370,15 @@ select(gender, {
   {
     slug: "locale-routing",
     icon: "globe-app-network",
-    metaTitle: "Locale routing strategies — cookie, path, subdomain and domain compared",
+    metaTitle: "Locale strategies — cookie, path, subdomain, TLD and explicit domains",
     metaDescription:
-      "Cookie, route prefix, subdomain or country domain: four ways to put a locale in a URL, with different consequences for SEO, caching and infrastructure. Each one is verified in a browser across six meta-frameworks.",
+      "Compare five locale strategies: cookie, route prefix, subdomain, TLD and explicit language domains. See how their URL policies and verification coverage differ.",
     eyebrow: "Topic · Routing",
-    headline: "Four ways to carry a locale. They are not interchangeable.",
-    lede: "Where the locale lives — a cookie, a path prefix, a subdomain, or a separate country domain — decides how search engines index you, how your CDN caches you, and how much infrastructure you have to own. It is one of the earliest decisions in an i18n project and one of the most expensive to reverse.",
+    headline: "Five ways to carry a locale. Choose the URL policy your app needs.",
+    lede: "A cookie, a path prefix, a subdomain, a top-level domain, or an explicit language domain: Palamedes supports all five policies. TLD mode changes product.com to product.de. Explicit language domains also support unrelated names, such as my-product.com and mein-produkt.de.",
     problem: {
       title: "The decision people make by accident",
-      body: "Most teams pick a strategy from whichever tutorial they read first, then discover the consequences at the point where changing it means rewriting URLs that are already indexed. The four options differ on shareability, on how cleanly a CDN can cache each variant, on how much DNS and certificate work you take on, and on whether a search engine can even see the localized versions.",
+      body: "Most teams pick a strategy from whichever tutorial they read first, then discover the consequences at the point where changing it means rewriting URLs that are already indexed. The options differ on shareability, on how cleanly a CDN can cache each variant, on how much DNS and certificate work you take on, and on whether a search engine can even see the localized versions.",
       symptoms: [
         "Your localized pages are not indexed separately, because the locale is only in a cookie.",
         "Sharing a link sends the recipient to the wrong language.",
@@ -392,21 +392,21 @@ select(gender, {
       points: [
         {
           title: "Resolution is separate from routing",
-          body: "Locale resolution, the deliberate-choice cookie and canonical URL helpers are headless. That means the same translation setup works whether the locale arrives in a path segment, a subdomain, a domain or a cookie — and changing strategy later does not touch your messages.",
+          body: "Locale resolution, the deliberate-choice cookie and URL helpers are headless. canonicalUrl() builds language links; seoLinks() returns canonical, language alternate and x-default descriptors using the same policy. Your app renders those links, and changing strategy does not touch your messages.",
         },
         {
           title: "Your router stays framework-native",
           body: "There is no wrapped Link, no proprietary navigation layer and no middleware you inherit from us. You wire slightly more at the start; in exchange you keep your routing knowledge, and moving framework does not mean relearning navigation.",
         },
         {
-          title: "Every strategy is exercised, not just documented",
-          body: `Each of the six server frameworks has an example app for all four strategies. All ${contentStats.smokeExampleCount} examples are smoke-checked on relevant PRs and main pushes; ${contentStats.browserExampleCount} browser-capable examples run the real-browser contract weekly or on manual dispatch. The tradeoffs below are written from apps that run, not from a table someone maintained by hand.`,
+          title: "Verification coverage is explicit",
+          body: `The framework matrix covers cookie, route prefix, subdomain and TLD. All ${contentStats.smokeExampleCount} examples are smoke-checked on relevant PRs and main pushes; ${contentStats.browserExampleCount} browser-capable examples run the real-browser contract weekly or on manual dispatch. Explicit language domains and SEO links have focused core contract tests; they are additional capabilities outside that four-strategy matrix.`,
         },
       ],
     },
     evidence: {
-      title: "The four strategies, and what each one costs",
-      lede: `All four are implemented for every server framework and smoke-checked across ${contentStats.smokeExampleCount} examples. The ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch. The differences are real and worth reading before you commit.`,
+      title: "Five strategies, with two distinct domain policies",
+      lede: "TLD mode derives the next hostname by replacing its final DNS label. Explicit language domains select the entire destination from a configured map. Both keep paths free of locale prefixes; choose TLD when only the suffix changes, and explicit domains when you need full control over the hostnames.",
       items: [
         {
           label: "Cookie",
@@ -424,9 +424,14 @@ select(gender, {
           note: "Clean separation and per-locale caching, at the cost of DNS records and wildcard certificates.",
         },
         {
-          label: "Country domain",
-          value: "example.de",
-          note: "Strongest local signal and the most infrastructure — one domain, one certificate, one deployment target per market.",
+          label: "Top-level domain (TLD)",
+          value: "product.de",
+          note: "product.com to product.de: replace the final DNS label and keep the rest of the hostname. Configure exceptions such as .com mapping to English.",
+        },
+        {
+          label: "Explicit language domains",
+          value: "mein-produkt.de",
+          note: "my-product.com to mein-produkt.de: map every locale to a distinct complete hostname. Names can differ, and configured destination ports are preserved.",
         },
       ],
       href: docsHref("locale-strategies"),
@@ -435,7 +440,15 @@ select(gender, {
     faq: [
       {
         q: "Which locale routing strategy is best for SEO?",
-        a: "A route prefix or a separate domain, because both give every language a distinct, indexable URL. A cookie-only strategy does not — search engines see one URL per route and cannot index the localized variants separately. Country domains give the strongest regional signal but cost the most to operate.",
+        a: "Route prefixes, subdomains, TLDs and explicit language domains give each locale a distinct URL. A cookie-only strategy uses one URL for multiple languages. seoLinks() derives canonical, language alternate and x-default descriptors from the chosen URL policy; your app renders them and decides which pages are available in each language.",
+      },
+      {
+        q: "How are TLD and explicit language domains different?",
+        a: 'Use hosts.mode: "tld" for product.com and product.de: only the last DNS label changes. Use hosts.mode: "domain" for my-product.com and mein-produkt.de: every locale has an explicitly configured complete hostname. Both omit locale path prefixes. Existing TLD sites can keep their current strategy.',
+      },
+      {
+        q: "Is domain mode the same as the existing host map?",
+        a: 'No. hosts.mode: "map" adds advisory host checks to route-based resolution and keeps /en/... or /de/... paths. hosts.mode: "domain" makes the configured hostname authoritative and emits paths without locale prefixes. Moving an existing prefixed site to domain mode changes public URLs and needs redirects owned by your app.',
       },
       {
         q: "Subdomain or path prefix?",
@@ -451,7 +464,7 @@ select(gender, {
       },
       {
         q: "How do I know these actually work?",
-        a: `Every strategy has a running example app per framework — ${contentStats.smokeExampleCount} in total — built and smoke-checked against the workspace packages on relevant PRs and main pushes. ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch; ${contentStats.screenshotExampleCount} UI-adapter examples have versioned screenshots.`,
+        a: `Cookie, route prefix, subdomain and TLD have running example apps per framework — ${contentStats.smokeExampleCount} in total — smoke-checked against workspace packages on relevant PRs and main pushes. ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch; ${contentStats.screenshotExampleCount} UI-adapter examples have versioned screenshots. Explicit language domains and SEO links have focused core contract tests, without a separate framework demo column.`,
       },
     ],
     related: [
