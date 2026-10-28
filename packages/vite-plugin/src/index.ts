@@ -9,14 +9,18 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import * as viteModule from "vite";
-import type { Plugin, FilterPattern, ResolvedConfig, ViteDevServer } from "vite";
-import { createFilter } from "vite";
+import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import {
   loadPalamedesConfig,
   catalogMatchesSource,
+  createPalamedesSourceFilter,
+  resolvePalamedesConfigPath,
+  resolvePalamedesProjectRoot,
   catalogResourcePath,
   getConfigDependencies,
   type PalamedesCatalogConfig,
+  type PalamedesFilterPattern,
+  type PalamedesSourceFilter,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
 } from "@palamedes/config";
@@ -248,16 +252,17 @@ function catalogArtifactConfig(
 
 export type PalamedesPluginOptions = {
   /**
-   * Pattern to include files for transformation.
+   * Files to transform: a glob, a RegExp, or an array of both. Relative globs
+   * resolve from `projectRoot`; RegExps test the absolute file path.
    * @default JavaScript, TypeScript, Vue, and Svelte component files
    */
-  include?: FilterPattern;
+  include?: PalamedesFilterPattern;
 
   /**
-   * Pattern to exclude files from transformation.
+   * Files to skip, with the same pattern rules as `include`.
    * @default /node_modules/
    */
-  exclude?: FilterPattern;
+  exclude?: PalamedesFilterPattern;
 
   /**
    * Enable .po file compilation loader.
@@ -266,15 +271,19 @@ export type PalamedesPluginOptions = {
   enablePoLoader?: boolean;
 
   /**
-   * Path to a Palamedes config file.
-   * If not provided, searches for config automatically.
+   * Path to a Palamedes config file. Relative paths resolve from
+   * `projectRoot`. If not provided, Palamedes searches for a config from
+   * `projectRoot` upward.
    */
   configPath?: string;
 
   /**
-   * Current working directory for config resolution.
+   * Project directory used for config discovery, a relative `configPath`, and
+   * relative `include`/`exclude` globs. Relative values resolve from the
+   * current working directory.
+   * @default Vite's resolved `root`, or the current working directory outside Vite
    */
-  cwd?: string;
+  projectRoot?: string;
 
   /**
    * Skip validation of the config file.
@@ -335,6 +344,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     "failOnCompileError",
     "keepSourceFallbacks",
     "experimentalGraphSplitting",
+    "cwd",
   ]);
   const {
     include = [PALAMEDES_BUNDLER_TRANSFORM_INCLUDE, COMPONENT_FILE_REGEX],
@@ -346,7 +356,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     includeSourceMetadata,
     mdx: mdxOverride,
     environment = "auto",
-    ...configLoaderOptions
+    configPath,
+    projectRoot: explicitProjectRoot,
+    skipValidation,
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
   if (environment !== "auto" && environment !== "server") {
@@ -356,7 +368,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   }
   const isServer = (context: unknown, ssr = false, legacy = false) =>
     environment === "server" || isServerEnvironment(context, ssr, legacy);
-  const transformIncludes = include == null ? [] : Array.isArray(include) ? include : [include];
+  const transformIncludes: ReadonlyArray<string | RegExp> =
+    include == null
+      ? []
+      : typeof include === "string" || include instanceof RegExp
+        ? [include]
+        : include;
+  // Vite replaces this with its resolved root in configResolved. Bundlers
+  // without that hook keep the current working directory.
+  let projectRoot = resolvePalamedesProjectRoot(explicitProjectRoot);
   const graphSplitting = true;
   let resolvedIncludeSourceMetadata = includeSourceMetadata ?? false;
   let stripNonEssentialProps = true;
@@ -367,8 +387,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null;
   let configDependencies = new Set<string>();
-  let filter: ReturnType<typeof createFilter> | null = null;
-  let mdxFilter: ReturnType<typeof createFilter> | null = null;
+  let filter: PalamedesSourceFilter | null = null;
+  let mdxFilter: PalamedesSourceFilter | null = null;
   let macroIds: Set<string> | null = null;
   const mdxModuleIds = new Set<string>();
 
@@ -454,7 +474,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   async function getConfigLazy() {
     if (!config) {
-      config = await loadPalamedesConfig(configLoaderOptions);
+      const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, configPath);
+      config = await loadPalamedesConfig({
+        cwd: projectRoot,
+        ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+        ...(skipValidation === undefined ? {} : { skipValidation }),
+      });
       configDependencies = new Set(getConfigDependencies(config).map(canonicalPath));
       macroIds = new Set(PALAMEDES_MACRO_PACKAGES);
     }
@@ -484,14 +509,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function getFilterLazy() {
     if (!filter) {
-      filter = createFilter(include, exclude);
+      filter = createPalamedesSourceFilter(include, exclude, { projectRoot });
     }
     return filter;
   }
 
   function getMdxFilterLazy() {
     if (!mdxFilter) {
-      mdxFilter = createFilter(undefined, exclude);
+      mdxFilter = createPalamedesSourceFilter(undefined, exclude, { projectRoot });
     }
     return mdxFilter;
   }
@@ -521,7 +546,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function isMissingAutoConfig(error: unknown): boolean {
     return (
-      configLoaderOptions.configPath === undefined &&
+      configPath === undefined &&
       error instanceof Error &&
       error.message.startsWith(MISSING_CONFIG_ERROR_PREFIX)
     );
@@ -811,6 +836,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // retain their separator for non-root and relative deployments.
     configResolved(viteConfig) {
       resolvedBase = viteConfig.base;
+      if (explicitProjectRoot === undefined && viteConfig.root) {
+        const viteRoot = path.resolve(viteConfig.root);
+        if (viteRoot !== projectRoot) {
+          projectRoot = viteRoot;
+          resetConfig();
+          filter = null;
+          mdxFilter = null;
+        }
+      }
       legacyBuildSsr = Boolean(viteConfig.build.ssr);
     },
 
@@ -901,7 +935,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         // configured include/exclude patterns after stripping queries.
         // Let query IDs through and leave exclusions to that handler so
         // query text cannot reject a source file (e.g. ?scope=node_modules).
-        ...(transformIncludes.length > 0
+        // Globs resolve from projectRoot only in the handler, so a
+        // string include skips the ID prefilter rather than risk
+        // different glob semantics in the host's hook filter.
+        ...(transformIncludes.length > 0 &&
+        transformIncludes.every((pattern) => pattern instanceof RegExp)
           ? {
               id: {
                 include: [

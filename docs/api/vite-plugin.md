@@ -20,11 +20,11 @@ formats](../catalog-formats.md) for the storage/import boundary.
 
 ```ts
 interface PalamedesPluginOptions {
-  include?: FilterPattern;
-  exclude?: FilterPattern;
+  include?: string | RegExp | Array<string | RegExp> | null;
+  exclude?: string | RegExp | Array<string | RegExp> | null;
   enablePoLoader?: boolean;
   configPath?: string;
-  cwd?: string;
+  projectRoot?: string;
   skipValidation?: boolean;
   failOnMissing?: boolean;
   framework?: "react" | "solid" | "none";
@@ -39,6 +39,9 @@ Defaults:
 
 - `include`: JavaScript/TypeScript (`/\.([cm]?[jt]s|[jt]sx)$/`) and Vue/Svelte components (`/\.(vue|svelte)$/i`)
 - `exclude`: `/node_modules/`
+- `projectRoot`: Vite's resolved `root`; the current working directory in
+  bundlers without Vite's `configResolved` hook
+- `configPath`: unset — Palamedes searches upward from `projectRoot`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
 - `framework`: `"react"`
@@ -49,9 +52,26 @@ Defaults:
 
 The plugin throws a migration error during setup when it receives a removed v1
 option: `failOnCompileError`, `keepSourceFallbacks` (renamed to
-`includeSourceMetadata`), or `experimentalGraphSplitting` with any value,
-including `{ localeBinding }`. See the
-[v2 migration guide](../migration-v2.md#replace-removed-apis).
+`includeSourceMetadata`), `cwd` (renamed to `projectRoot`), or
+`experimentalGraphSplitting` with any value, including `{ localeBinding }`. See
+the [v2 migration guide](../migration-v2.md#replace-removed-apis).
+
+### Paths and filters
+
+The Vite, Next.js, and Remix adapters share one path contract:
+
+- `projectRoot` is the base for config discovery, a relative `configPath`, and
+  relative `include`/`exclude` globs. A relative `projectRoot` resolves from
+  the current working directory.
+- `configPath` resolves from `projectRoot`. Absolute paths stay absolute.
+- `include` and `exclude` accept a glob string, a RegExp, or an array of both.
+  Relative globs resolve from `projectRoot`; globs that start with `**` and
+  absolute globs match as written. RegExps test the absolute file path with
+  forward slashes. An `exclude` match wins, and an empty `include` accepts
+  every file that is not excluded.
+
+The matching follows Vite's `createFilter()`, with `projectRoot` as the glob
+base. Every value Vite's `FilterPattern` type accepts still works.
 
 `framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set

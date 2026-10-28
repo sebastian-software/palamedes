@@ -13,8 +13,13 @@ import {
   getConfigDependencies,
   catalogMatchesSource,
   catalogResourcePath,
+  createPalamedesSourceFilter,
   loadPalamedesConfigSync,
+  resolvePalamedesConfigPath,
+  resolvePalamedesProjectRoot,
   type LoadedPalamedesConfig,
+  type PalamedesFilterPattern,
+  type PalamedesSourceFilter,
 } from "@palamedes/config";
 import { isCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core/compiled";
 import {
@@ -33,16 +38,27 @@ import {
 
 export type PalamedesRemixRegisterOptions = {
   /**
-   * Files eligible for macro transformation.
+   * Files eligible for macro transformation: a glob, a RegExp, or an array of
+   * both. Relative globs resolve from `projectRoot`; RegExps test the absolute
+   * file path.
    * @default /\.(tsx?|jsx?|mjs|mts)$/
    */
-  include?: RegExp;
+  include?: PalamedesFilterPattern;
 
   /**
-   * Files excluded from macro transformation.
+   * Files excluded from macro transformation, with the same pattern rules as
+   * `include`.
    * @default /[/\\]node_modules[/\\]/
    */
-  exclude?: RegExp;
+  exclude?: PalamedesFilterPattern;
+
+  /**
+   * Project directory used for a relative `configPath` and relative
+   * `include`/`exclude` globs. Relative values resolve from the current
+   * working directory.
+   * @default process.cwd()
+   */
+  projectRoot?: string;
 
   /**
    * Advanced override for the module imported for the runtime i18n getter.
@@ -59,8 +75,9 @@ export type PalamedesRemixRegisterOptions = {
   includeSourceMetadata?: boolean;
 
   /**
-   * Optional Palamedes config path used for `.po` catalog imports.
-   * Relative paths resolve from the imported catalog file's directory.
+   * Optional Palamedes config path used for `.po` catalog imports. Relative
+   * paths resolve from `projectRoot`. Without it, each imported catalog
+   * discovers its config from the catalog file's directory upward.
    */
   configPath?: string;
 
@@ -74,7 +91,7 @@ export type PalamedesRemixRegisterOptions = {
 /** Options shared by Remix browser asset macro transforms. */
 export type PalamedesRemixAssetLoaderOptions = Pick<
   PalamedesRemixRegisterOptions,
-  "include" | "exclude" | "runtimeModule" | "includeSourceMetadata"
+  "include" | "exclude" | "projectRoot" | "runtimeModule" | "includeSourceMetadata"
 > & {
   /** Optional graph-split registry for executable locale fragments. */
   catalogAssets?: PalamedesRemixCatalogAssetRegistry;
@@ -94,8 +111,14 @@ export type PalamedesRemixCatalogAssetRegistry = {
 };
 
 export type CreatePalamedesRemixCatalogAssetRegistryOptions = {
+  /** Palamedes config path. Relative paths resolve from `projectRoot`. */
   configPath?: string;
-  cwd?: string;
+  /**
+   * Project directory used for config discovery and a relative `configPath`.
+   * Relative values resolve from the current working directory.
+   * @default process.cwd()
+   */
+  projectRoot?: string;
   basePath?: string;
   /** Watch catalog/config files; defaults to development and Node --watch processes. */
   watch?: boolean;
@@ -116,7 +139,14 @@ export const PALAMEDES_REMIX_ASSET_PACKAGES = [
 export function createPalamedesRemixCatalogAssetRegistry(
   options: CreatePalamedesRemixCatalogAssetRegistryOptions = {},
 ): PalamedesRemixCatalogAssetRegistry {
-  let config = loadPalamedesConfigSync(options);
+  assertNoRemovedPalamedesOptions(options, ["cwd"]);
+  const projectRoot = resolvePalamedesProjectRoot(options.projectRoot);
+  const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, options.configPath);
+  const configLoaderOptions = {
+    cwd: projectRoot,
+    ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+  };
+  let config = loadPalamedesConfigSync(configLoaderOptions);
   let configDigest = digestConfig(config);
   let catalogGenerationDigest = catalogDigest(config);
   const basePath = options.basePath ?? "/assets";
@@ -160,7 +190,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
   });
 
   const refreshConfig = (): void => {
-    const nextConfig = loadPalamedesConfigSync(options);
+    const nextConfig = loadPalamedesConfigSync(configLoaderOptions);
     const nextDigest = digestConfig(nextConfig);
     if (nextDigest === configDigest) {
       return;
@@ -525,8 +555,10 @@ type CachedPalamedesConfig = {
 };
 
 type ResolvedMacroTransformOptions = {
-  exclude: RegExp;
-  include: RegExp;
+  /** Shared include/exclude filter for macro transforms. */
+  sourceFilter: PalamedesSourceFilter;
+  /** Exclude-only filter for `.po`/`.fcl` catalog imports. */
+  catalogFilter: PalamedesSourceFilter;
   includeSourceMetadata: boolean;
   runtimeModule: string;
   stripNonEssentialProps: boolean;
@@ -538,6 +570,13 @@ export function createPalamedesRemixLoadHook(
   assertNoRemovedPalamedesOptions(options, ["failOnCompileError", "keepSourceFallbacks"]);
   const transformOptions = resolveMacroTransformOptions(options);
   const configCache = new Map<string, CachedPalamedesConfig>();
+  const catalogOptions = {
+    configPath: resolvePalamedesConfigPath(
+      resolvePalamedesProjectRoot(options.projectRoot),
+      options.configPath,
+    ),
+    failOnMissing: options.failOnMissing,
+  };
 
   return (url, context, nextLoad) => {
     if (isConfigWatchUrl(url)) {
@@ -548,8 +587,8 @@ export function createPalamedesRemixLoadHook(
       };
     }
 
-    if (shouldLoadCatalogUrl(url, transformOptions.exclude)) {
-      return loadCatalogModule(url, options, configCache);
+    if (shouldLoadCatalogUrl(url, transformOptions.catalogFilter)) {
+      return loadCatalogModule(url, catalogOptions, configCache);
     }
 
     const loaded = nextLoad(url, context);
@@ -612,9 +651,12 @@ export function createPalamedesRemixAssetLoader(
 function resolveMacroTransformOptions(
   options: PalamedesRemixAssetLoaderOptions,
 ): ResolvedMacroTransformOptions {
+  const projectRoot = resolvePalamedesProjectRoot(options.projectRoot);
+  const include = options.include === undefined ? DEFAULT_INCLUDE : options.include;
+  const exclude = options.exclude === undefined ? DEFAULT_EXCLUDE : options.exclude;
   return {
-    include: options.include ?? DEFAULT_INCLUDE,
-    exclude: options.exclude ?? DEFAULT_EXCLUDE,
+    sourceFilter: createPalamedesSourceFilter(include, exclude, { projectRoot }),
+    catalogFilter: createPalamedesSourceFilter(undefined, exclude, { projectRoot }),
     runtimeModule: resolveMacroRuntimeModule(options.runtimeModule),
     // Authored source text is diagnostic metadata only and is omitted by
     // default. A missing compiled message throws whether or not it is kept.
@@ -665,13 +707,13 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
   };
 }
 
-function shouldLoadCatalogUrl(url: string, exclude: RegExp): boolean {
+function shouldLoadCatalogUrl(url: string, catalogFilter: PalamedesSourceFilter): boolean {
   if (!url.startsWith("file:")) {
     return false;
   }
 
   const filePath = fileURLToPath(url);
-  return PO_FILE.test(filePath) && !exclude.test(filePath);
+  return PO_FILE.test(filePath) && catalogFilter(filePath);
 }
 
 function loadCatalogModule(
@@ -722,8 +764,10 @@ function getPalamedesConfigForCatalog(
   configPath: string | undefined,
   configCache: Map<string, CachedPalamedesConfig>,
 ): LoadedPalamedesConfig {
+  // `configPath` is already absolute (resolved from projectRoot). Without it,
+  // each catalog discovers its config from its own directory upward.
   const cwd = path.dirname(resourcePath);
-  const cacheKey = `${cwd}\0${configPath ?? ""}`;
+  const cacheKey = configPath ?? `${cwd}\0`;
   const cached = configCache.get(cacheKey);
   if (cached && isCurrentConfig(cached)) {
     return cached.config;
@@ -772,15 +816,7 @@ function shouldTransformUrl(url: string, options: ResolvedMacroTransformOptions)
     return false;
   }
 
-  const filePath = fileURLToPath(url);
-  return matches(options.include, filePath) && !matches(options.exclude, filePath);
-}
-
-function matches(pattern: RegExp, value: string): boolean {
-  pattern.lastIndex = 0;
-  const matched = pattern.test(value);
-  pattern.lastIndex = 0;
-  return matched;
+  return options.sourceFilter(fileURLToPath(url));
 }
 
 function stringifySource(source: unknown): string {

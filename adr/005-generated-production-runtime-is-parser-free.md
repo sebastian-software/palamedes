@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-18
+**Last updated:** 2026-10-28
 
 Every public application entrypoint executes compiled messages without an ICU parser.
 
@@ -24,6 +24,12 @@ Generated catalog modules import their ABI from `@palamedes/core/compiled`.
 Macro transforms and generated MDX modules import `Trans` from the matching
 framework `compiled` entrypoint. These entrypoints depend only on the compiled
 message engine and Intl formatters; they do not import the ICU parser.
+
+This ABI, meaning the renderer interface (`CompiledMessageRuntime`,
+`ExecutableMessageRenderer`) and the generated catalog format, is internal.
+Generated catalogs and the first-party renderers change together with the
+Palamedes packages, so the ABI is not an extension point for custom runtimes.
+Applications create instances with `createI18n()`.
 
 Package roots and `compiled` subpaths resolve to the same
 parser-free contract. `parseMessagePattern()`, `parsePattern()`, and runtime

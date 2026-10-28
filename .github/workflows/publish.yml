@@ -92,6 +92,18 @@ jobs:
           PALAMEDES_CRATES_TOKEN_ISSUED: ${{ steps.crates-auth.outputs.token != '' }}
         run: node ./scripts/publish-rust-sdk.mjs --preflight ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
 
+  # Example Verification only runs on pull requests and main pushes that touch
+  # its path filters, so nothing guarantees it covered the release revision.
+  # Run it here on that revision instead: the example smoke checks and the
+  # browser matrix with its TanStack, React Router, Solid, Waku, Remix, and Vite
+  # MDX delivery and failure proofs. Every upload job depends on it.
+  example-verification:
+    needs: determine-release
+    if: needs.determine-release.outputs.should_publish == 'true'
+    uses: ./.github/workflows/example-verification.yml
+    with:
+      run_browser: true
+
   validate-release:
     needs: determine-release
     if: needs.determine-release.outputs.should_publish == 'true'
@@ -161,6 +173,7 @@ jobs:
       - determine-release
       - preflight-cargo
       - validate-release
+      - example-verification
     if: needs.determine-release.outputs.should_publish == 'true'
     strategy:
       fail-fast: false
@@ -268,6 +281,7 @@ jobs:
       - determine-release
       - preflight-cargo
       - validate-release
+      - example-verification
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -422,6 +436,7 @@ jobs:
       - determine-release
       - preflight-cargo
       - validate-release
+      - example-verification
       - publish-native
       - publish-js
       - publish-cargo
@@ -452,6 +467,7 @@ jobs:
             echo "| determine-release | ${{ needs.determine-release.result }} |"
             echo "| preflight-cargo | ${{ needs.preflight-cargo.result }} |"
             echo "| validate-release | ${{ needs.validate-release.result }} |"
+            echo "| example-verification | ${{ needs.example-verification.result }} |"
             echo "| publish-native | ${{ needs.publish-native.result }} |"
             echo "| publish-js | ${{ needs.publish-js.result }} |"
             echo "| publish-cargo | ${{ needs.publish-cargo.result }} |"

@@ -87,7 +87,8 @@ Call `setClientI18n()` before translated client UI renders.
 Generated graph-split catalogs register eager fragments with
 `registerMessages()` or server-side lazy resources with the loader registration
 helpers. `setClientI18n()` and `initializeClientI18n()` flush only eager message
-registrations that evaluated before the client instance existed. Lazy loader
+registrations that evaluated before the client instance existed, and throw if
+the instance cannot `load()` them. Lazy loader
 registrations are consumed explicitly by `loadRegisteredMessages()`; application
 code normally needs these APIs only when building a custom graph-splitting
 integration.
@@ -106,10 +107,14 @@ server, `getI18n()` reads the active server getter.
 `getI18n()` throws a descriptive error when no active client instance or server
 getter result is available. Initialize the runtime before translated code runs.
 
-`I18nInstance.locale` is required. Custom adapters registered with the client or
-server runtime must expose an initialized `locale: string`; adapters that
-previously omitted the property or declared it as optional need to initialize it
-before registration.
+`I18nInstance` is the `PalamedesI18n` type from `@palamedes/core`: `locale`,
+`_()`, `load()`, `activate()` and `renderMessage()` are required, and `_()`
+returns `string`. Register instances created by `createI18n()`. Adapter
+generics such as `createServerI18nScope<T>()` accept only types that extend it,
+so `getI18n()._()` is typed as `string` everywhere.
+
+`setClientI18n()` throws when generated message registrations exist and the
+instance has no `load()`, the same way `loadRegisteredMessages()` does.
 
 ## Server Runtime
 

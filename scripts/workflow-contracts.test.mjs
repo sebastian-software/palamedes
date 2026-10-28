@@ -188,7 +188,7 @@ describe("workflow contracts", () => {
     );
   });
 
-  it("starts no registry upload before the Cargo preflight and the JavaScript pack check pass", async () => {
+  it("starts no registry upload before the Cargo preflight, the JavaScript pack check, and the browser proofs pass", async () => {
     const publish = await readRepositoryFile(".github/workflows/publish.yml");
     const jobs = workflowJobs(publish);
     const uploadJobs = [...jobs.values()]
@@ -200,6 +200,7 @@ describe("workflow contracts", () => {
       const upstream = transitiveNeeds(jobs, name);
       expect(upstream.has("preflight-cargo"), name).toBe(true);
       expect(upstream.has("validate-release"), name).toBe(true);
+      expect(upstream.has("example-verification"), name).toBe(true);
       // A status function would let the job start after a failed preflight.
       for (const jobName of [name, ...upstream]) {
         expect(jobs.get(jobName).if, jobName).not.toMatch(/always\(\)|failure\(\)|cancelled\(\)/u);
@@ -566,6 +567,60 @@ describe("workflow contracts", () => {
     expect(workflow).toContain('"scripts/verify-browser-artifacts.mjs"');
   });
 
+  it("runs the example browser contract proofs on the exact release revision", async () => {
+    const [publish, workflow, browserRunner] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/workflows/example-verification.yml"),
+      readRepositoryFile("scripts/verify-examples-browser.mjs"),
+    ]);
+    const verification = workflowJobs(publish).get("example-verification");
+    expect(verification.needs).toEqual(["determine-release"]);
+    expect(verification.if).toBe("needs.determine-release.outputs.should_publish == 'true'");
+    expect(verification.text).toContain("uses: ./.github/workflows/example-verification.yml");
+    expect(verification.text).toMatch(/with:\n {6}run_browser: true\n/u);
+    expect(verification.text).not.toContain("continue-on-error");
+
+    // Normal pull requests keep their path filter; the release call bypasses it.
+    const triggers = workflow.slice(workflow.indexOf("on:\n"), workflow.indexOf("\npermissions:"));
+    expect(triggers).toMatch(/^ {2}pull_request:\n {4}paths:\n/mu);
+    const call = triggers.slice(
+      triggers.indexOf("  workflow_call:"),
+      triggers.indexOf("  workflow_dispatch:"),
+    );
+    expect(call).toMatch(/run_browser:\n(?: {8}.+\n)*? {8}default: true\n/u);
+    expect(call).not.toContain("paths:");
+
+    const steps = workflowJobs(workflow).get("verify").steps;
+    const byName = Object.fromEntries(steps.map((step) => [step.name, step]));
+    expect(byName["Check out repository"].text).toContain("ref: ${{ github.sha }}");
+    expect(byName["Build workspace packages"].text).toContain("run: pnpm build");
+    expect(byName["Smoke-test all 25 examples"].text).toContain("run: pnpm verify:examples:smoke");
+    expect(byName["Install Playwright Chromium"].text).toContain(
+      "run: pnpm exec playwright install --with-deps chromium",
+    );
+    const browser = byName["Browser-test 25 browser-capable examples"];
+    expect(browser.text).toContain("run: pnpm verify:examples:browser");
+    // A called workflow sees the caller's event, so a Publish dry run reaches
+    // the browser steps through the workflow_call input default.
+    expect(browser.if).toBe("github.event_name != 'workflow_dispatch' || inputs.run_browser");
+    for (const step of steps) expect(step.text, step.name).not.toContain("continue-on-error");
+
+    // The browser runner owns the framework delivery and failure proofs.
+    for (const proof of [
+      "proof-tanstack-catalog-errors.mjs",
+      "proof-tanstack-development.mjs",
+      "proof-vite-fragment-errors.mjs",
+      "proof-vite-development.mjs",
+      "proof-vite-html-delivery.mjs",
+      "verify-solid-catalog-delivery.mjs",
+      "proof-solid-development.mjs",
+      "proof-waku-catalog-delivery.mjs",
+      "proof-waku-development.mjs",
+    ]) {
+      expect(browserRunner).toContain(`runDeliveryProof("${proof}")`);
+    }
+  });
+
   it("caches Rust example builds and retries only scheduled browser verification", async () => {
     const [exampleVerification, browserConfig] = await Promise.all([
       readRepositoryFile(".github/workflows/example-verification.yml"),
@@ -670,6 +725,7 @@ describe("workflow contracts", () => {
       "determine-release",
       "preflight-cargo",
       "validate-release",
+      "example-verification",
       "publish-native",
       "publish-js",
       "verify-release",

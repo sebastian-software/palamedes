@@ -28,8 +28,8 @@ for the storage/import boundary.
 
 ```ts
 interface WithPalamedesOptions {
-  include?: RegExp;
-  exclude?: RegExp;
+  include?: string | RegExp | Array<string | RegExp> | null;
+  exclude?: string | RegExp | Array<string | RegExp> | null;
   enablePoLoader?: boolean;
   configPath?: string;
   projectRoot?: string;
@@ -61,8 +61,15 @@ option: `failOnCompileError`, `keepSourceFallbacks` (renamed to
 discovery, `palamedes.server.*` resolution, loader cache keys, and workspace
 root detection. With `next dev apps/web` or `next build apps/web`, it is derived
 from the Next CLI directory; webpack and Turbopack loaders use their Next root
-context when available. Relative `configPath` values resolve from this root.
-For custom hosts or ambiguous invocation, set `projectRoot` explicitly.
+context when available. Relative `configPath` values and relative
+`include`/`exclude` globs resolve from this root. For custom hosts or ambiguous
+invocation, set `projectRoot` explicitly.
+
+`include` and `exclude` accept a glob string, a RegExp, or an array of both,
+with the same matching as the [Vite plugin](./vite-plugin.md#paths-and-filters).
+RegExps test the absolute file path under both webpack and Turbopack. Turbopack
+rule conditions only see paths relative to its own root, so the transform loader
+applies the filter and passes unmatched modules through unchanged.
 
 Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
 1.17.1 this behavior is shared with the Vite integration, so a matching source

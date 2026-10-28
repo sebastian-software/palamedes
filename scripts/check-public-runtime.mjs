@@ -65,7 +65,10 @@ try {
       return format === "mjs" ? import(url.href) : require(fileURLToPath(url));
     };
     const [remix, core] = await Promise.all([load("remix"), load("core")]);
-    const registry = remix.createPalamedesRemixCatalogAssetRegistry({ cwd: fixture, watch: false });
+    const registry = remix.createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture,
+      watch: false,
+    });
     try {
       const messages = await registry.load("en");
       assert.ok(core.isCompiledCatalog(messages));

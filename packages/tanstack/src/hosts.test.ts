@@ -9,6 +9,10 @@ import {
   createTanStackServerI18nRequestMiddleware,
 } from "./index";
 
+function unusedRenderMessage(): never {
+  throw new Error("renderMessage is not used by request-scope tests.");
+}
+
 const serverModule = vi.hoisted(() => ({
   delivered: [] as Array<{ locale: string; url: string }>,
 }));
@@ -54,6 +58,9 @@ describe("React Start host binding", () => {
     const resolveI18n = vi.fn((incomingRequest: Request) => ({
       locale: incomingRequest.headers.get("x-locale") ?? "en",
       _: (message: string) => message,
+      load() {},
+      activate() {},
+      renderMessage: unusedRenderMessage,
     }));
     const run = handler(createTanStackI18nRequestMiddleware(resolveI18n));
     const request = new Request("https://example.test/_serverFn/probe", {
@@ -80,7 +87,13 @@ describe("React Start host binding", () => {
     const run = handler(
       createTanStackI18nRequestMiddleware((request): I18nInstance => {
         const locale = request.headers.get("x-locale")!;
-        return { locale, _: (message: string) => `${locale}:${message}` };
+        return {
+          locale,
+          _: (message: string) => `${locale}:${message}`,
+          load() {},
+          activate() {},
+          renderMessage: unusedRenderMessage,
+        };
       }),
     );
     await Promise.all(
