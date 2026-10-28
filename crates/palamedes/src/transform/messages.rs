@@ -8,7 +8,7 @@ use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_macros::MacroImports;
 use crate::source_message::{
-    ValueNames, build_icu_message as shared_build_icu_message,
+    ValueNames, bare_identifier, build_icu_message as shared_build_icu_message,
     expression_source as shared_expression_source, jsx_attributes as shared_jsx_attributes,
     lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
     lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
@@ -226,10 +226,12 @@ pub(super) fn extract_jsx_children_parts(
     ))
 }
 
+/// A repeated name always reads the same identifier, so the first spelling
+/// supplies the value.
 fn push_unique_binding(bindings: &mut Vec<ValueBinding>, binding: ValueBinding) {
     if bindings
         .iter()
-        .any(|existing| existing.name == binding.name && existing.expression == binding.expression)
+        .any(|existing| existing.name == binding.name)
     {
         return;
     }
@@ -261,7 +263,7 @@ pub(super) fn choice_expression_binding(
         expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
     let expression =
         shared_expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
-    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
+    let name = make_unique_value_name(preferred_name, bare_identifier(expr), used_value_names);
 
     ValueBinding { expression, name }
 }

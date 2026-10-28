@@ -251,16 +251,18 @@ pub(super) fn transform_trans_element(
         attrs.push(format!("message={{\"{}\"}}", escape_string(&message)));
     }
 
-    if !components.is_empty() {
-        let components_prop = render_value_bindings(&components);
-        attrs.push(format!("components={{{{ {components_prop} }}}}"));
-    }
-
+    // Values come first so they are evaluated in source order before any
+    // component props, which can call functions that change those values.
     if !values.is_empty() {
         attrs.push(format!(
             "values={{{{ {} }}}}",
             render_value_bindings(&values)
         ));
+    }
+
+    if !components.is_empty() {
+        let components_prop = render_value_bindings(&components);
+        attrs.push(format!("components={{{{ {components_prop} }}}}"));
     }
 
     Ok(Some((format!("<Trans {} />", attrs.join(" ")), lookup_key)))
@@ -291,16 +293,17 @@ pub(super) fn transform_lowered_trans_call(
     if options.include_source_metadata() {
         properties.push(format!("message: \"{}\"", escape_string(&lowered.message)));
     }
-    if !lowered.components.is_empty() {
-        properties.push(format!(
-            "components: {{ {} }}",
-            render_value_bindings(&lowered.components)
-        ));
-    }
+    // Values come first, as in authored `<Trans>`.
     if !lowered.values.is_empty() {
         properties.push(format!(
             "values: {{ {} }}",
             render_value_bindings(&lowered.values)
+        ));
+    }
+    if !lowered.components.is_empty() {
+        properties.push(format!(
+            "components: {{ {} }}",
+            render_value_bindings(&lowered.components)
         ));
     }
 

@@ -15,7 +15,7 @@ use crate::jsx_message::{JsxMessagePart, join_jsx_message_parts};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_macros::MacroImports;
-use crate::source_message::{ValueNames, lower_template, make_unique_value_name};
+use crate::source_message::{ValueNames, bare_identifier, lower_template, make_unique_value_name};
 
 use super::imports::{ImportCollector, RemixJsxBinding};
 use super::messages::{ExtractedChoiceOptions, ValueBinding};
@@ -560,8 +560,12 @@ fn expression_binding(
     let preferred_name = expression_name(expression)
         .or_else(|| fallback_name.map(str::to_string))
         .ok_or(PalamedesError::UnnamedPlaceholder { syntax })?;
+    let name = make_unique_value_name(
+        preferred_name,
+        bare_identifier(expression),
+        used_value_names,
+    );
     let expression = expression_source(expression, source);
-    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
     Ok(ValueBinding { expression, name })
 }
 
@@ -577,8 +581,10 @@ fn span_source(span: oxc_span::Span, source: &str) -> String {
         .to_string()
 }
 
+/// A repeated name always reads the same identifier, so the first spelling
+/// supplies the value.
 fn push_unique(values: &mut Vec<ValueBinding>, value: ValueBinding) {
-    if !values.iter().any(|existing| existing == &value) {
+    if !values.iter().any(|existing| existing.name == value.name) {
         values.push(value);
     }
 }

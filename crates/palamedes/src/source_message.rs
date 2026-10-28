@@ -54,14 +54,29 @@ pub(crate) struct ValueNames {
     identifiers: HashMap<String, String>,
 }
 
+/// Returns the identifier a placeholder reads directly, ignoring parentheses.
+pub(crate) fn bare_identifier<'a>(expr: &'a Expression<'_>) -> Option<&'a str> {
+    match expr.without_parentheses() {
+        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
+        _ => None,
+    }
+}
+
+/// Returns the identifier a JSX placeholder reads directly, ignoring parentheses.
+pub(crate) fn jsx_bare_identifier<'a>(expr: &'a JSXExpression<'_>) -> Option<&'a str> {
+    expr.as_expression().and_then(bare_identifier)
+}
+
+/// Names one placeholder occurrence. `identifier` is the variable the
+/// occurrence reads when it is a bare identifier; every other expression gets
+/// its own name and ends sharing for identifiers read before it.
 pub(crate) fn make_unique_value_name(
     preferred_name: String,
-    expression: &str,
+    identifier: Option<&str>,
     used_value_names: &mut ValueNames,
 ) -> String {
-    let is_bare_identifier = expression == preferred_name;
-    if is_bare_identifier {
-        if let Some(name) = used_value_names.identifiers.get(expression) {
+    if let Some(identifier) = identifier {
+        if let Some(name) = used_value_names.identifiers.get(identifier) {
             return name.clone();
         }
     } else {
@@ -75,10 +90,10 @@ pub(crate) fn make_unique_value_name(
         name = format!("{preferred_name}_{suffix}");
         suffix += 1;
     }
-    if is_bare_identifier {
+    if let Some(identifier) = identifier {
         used_value_names
             .identifiers
-            .insert(expression.to_owned(), name.clone());
+            .insert(identifier.to_owned(), name.clone());
     }
     name
 }
@@ -162,7 +177,8 @@ pub(crate) fn lower_template(
             };
             let expression =
                 expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
-            let name = make_unique_value_name(preferred_name, &expression, used_value_names);
+            let name =
+                make_unique_value_name(preferred_name, bare_identifier(expr), used_value_names);
             message.push('{');
             message.push_str(&name);
             message.push('}');
@@ -481,7 +497,11 @@ pub(crate) fn lower_jsx_choice_value_binding(
             .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
         let expression = jsx_expression_source(&container.expression, source)
             .unwrap_or_else(|| preferred_name.clone());
-        let name = make_unique_value_name(preferred_name, &expression, used_value_names);
+        let name = make_unique_value_name(
+            preferred_name,
+            jsx_bare_identifier(&container.expression),
+            used_value_names,
+        );
         return Some(SourceValue { expression, name });
     }
 
@@ -671,8 +691,11 @@ where
                     };
                     let expression = jsx_expression_source(expr, source)
                         .unwrap_or_else(|| preferred_name.clone());
-                    let name =
-                        make_unique_value_name(preferred_name, &expression, used_value_names);
+                    let name = make_unique_value_name(
+                        preferred_name,
+                        jsx_bare_identifier(expr),
+                        used_value_names,
+                    );
                     parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
                     push_unique_value(&mut values, SourceValue { expression, name });
                 }
@@ -737,11 +760,10 @@ where
     })
 }
 
+/// A repeated name always reads the same identifier, so the first spelling
+/// (for example `(count)` before `count`) supplies the value.
 fn push_unique_value(values: &mut Vec<SourceValue>, value: SourceValue) {
-    if values
-        .iter()
-        .any(|existing| existing.name == value.name && existing.expression == value.expression)
-    {
+    if values.iter().any(|existing| existing.name == value.name) {
         return;
     }
 

@@ -29,7 +29,7 @@ use crate::icu_text::compiled_message_key;
 use crate::placeholder_name::expression_name;
 use crate::source::{SourceLocator, display_filename, format_parser_diagnostics};
 use crate::source_message::{
-    ValueNames, build_icu_message, check_lowered_message, expression_source,
+    ValueNames, bare_identifier, build_icu_message, check_lowered_message,
     lower_choice_options_from_object, lower_template, make_unique_value_name,
 };
 
@@ -306,11 +306,9 @@ impl ManifestVisitor<'_, '_> {
                 expression_name(expression).ok_or(PalamedesError::UnnamedPlaceholder {
                     syntax: "template expression",
                 })?;
-            let source = expression_source(expression, self.source)
-                .unwrap_or_else(|| preferred_name.clone());
             values.push(make_unique_value_name(
                 preferred_name,
-                &source,
+                bare_identifier(expression),
                 &mut used_value_names,
             ));
         }
@@ -397,10 +395,11 @@ impl ManifestVisitor<'_, '_> {
         let mut used_value_names = ValueNames::default();
         let preferred_name =
             expression_name(value).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_owned());
-        let value_source =
-            expression_source(value, self.source).unwrap_or_else(|| preferred_name.clone());
-        let value_name =
-            make_unique_value_name(preferred_name, &value_source, &mut used_value_names);
+        let value_name = make_unique_value_name(
+            preferred_name,
+            bare_identifier(value),
+            &mut used_value_names,
+        );
         let lowered = lower_choice_options_from_object(
             object,
             self.source,
@@ -612,6 +611,16 @@ export const f = (id: string, user: { name: string }, other: { name: string }) =
                 "Values: {name}, {other}, {name}",
                 vec!["name", "other", "name"],
             ),
+            (
+                "t`Values: ${(name)} and ${name}`",
+                "Values: {name} and {name}",
+                vec!["name", "name"],
+            ),
+            (
+                "t`Values: ${count}, ${user.name}, ${count}`",
+                "Values: {count}, {name}, {count_1}",
+                vec!["count", "name", "count_1"],
+            ),
         ] {
             let source = format!(
                 "import {{ t }} from \"@palamedes/core/macro\"; function render() {{ return {body}; }}"
@@ -683,6 +692,22 @@ export const f = (seats: number, role: string, place: number, name: string) => [
         assert!(
             matches!(&error, PalamedesError::RuntimeMacroCollision { first, second, .. }
                 if first == "a.ts:2:34" && second == "b.ts:3:36"),
+            "{error}"
+        );
+    }
+
+    /// The same static text with a repeated identifier in one call and a
+    /// repeated property read in another compiles to different placeholder
+    /// names, so the runtime cannot tell the calls apart.
+    #[test]
+    fn rejects_collisions_between_shared_and_per_occurrence_names() {
+        let first = "import { t } from \"@palamedes/core/macro\";\nexport const f = (name: string) => t`${name} invited ${name}.`;";
+        let second = "import { t } from \"@palamedes/core/macro\";\nexport const g = (user: { name: string }) => t`${user.name} invited ${user.name}.`;";
+        let error = manifest(&[("a.ts", first), ("b.ts", second)]).expect_err("collision");
+
+        assert!(
+            matches!(&error, PalamedesError::RuntimeMacroCollision { first, second, .. }
+                if first.starts_with("a.ts:2:") && second.starts_with("b.ts:2:")),
             "{error}"
         );
     }

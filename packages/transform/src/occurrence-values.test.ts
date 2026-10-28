@@ -29,6 +29,7 @@ const setup = `
   function next() { reads.push(value); return value++; }
   const counter = { get value() { return next(); } };
   const name = "Ada";
+  const user = { get name() { return name + next(); } };
 `;
 
 const templates = [
@@ -80,6 +81,22 @@ const templates = [
     text: "Values: Ada and Ada",
     reads: [],
   },
+  {
+    body: "t`Values: ${(name)} and ${name}`",
+    message: "Values: {name} and {name}",
+    strings: ["Values: ", " and ", ""],
+    values: ["name", "name"],
+    text: "Values: Ada and Ada",
+    reads: [],
+  },
+  {
+    body: "t`Values: ${value}, ${user.name}, ${value}`",
+    message: "Values: {value}, {name}, {value_1}",
+    strings: ["Values: ", ", ", ", ", ""],
+    values: ["value", "name", "value_1"],
+    text: "Values: 1, Ada1, 2",
+    reads: [1],
+  },
 ];
 
 afterEach(() => {
@@ -129,8 +146,20 @@ describe("macro expression evaluation", () => {
       "First 2",
       [1, 2, 3],
     ],
+    [
+      "plural(counter.value, { one: `First of ${counter.value}`, other: `${counter.value} items` })",
+      "{value, plural, one {First of {value_1}} other {{value_2} items}}",
+      "First of 2",
+      [1, 2, 3],
+    ],
+    [
+      "select(name, { admin: `${user.name} (admin)`, other: `${user.name}` })",
+      "{name, select, admin {{name_1} (admin)} other {{name_2}}}",
+      "Ada2",
+      [1, 2],
+    ],
   ])("preserves evaluation order in %s", (body, message, text, reads) => {
-    const source = `import { t, plural } from "@palamedes/core/macro";
+    const source = `import { t, plural, select } from "@palamedes/core/macro";
       function run() { ${setup} const text = ${body}; return { text, reads }; }`;
     expect(extractMessagesNative(source, "choices.js")[0]!.message).toBe(message);
     const transformed = transformPalamedesMacros(source, "choices.js");
@@ -157,6 +186,22 @@ describe("macro expression evaluation", () => {
       "First 2",
       [1, 2, 3],
     ],
+    [
+      "<Trans>{counter.value ?? 0} new, <b>{counter.value ?? 0} unread</b> of {value}</Trans>",
+      'render(Trans, { children: [counter.value ?? 0, " new, ", render("b", { children: [counter.value ?? 0, " unread"] }), " of ", value] })',
+      "{value} new, <0>{value_1} unread</0> of {value_2}",
+      "1 new, 2 unread of 3",
+      [1, 2],
+    ],
+    [
+      // Values are passed before components, so `next()` in a component prop
+      // cannot change values the message already captured.
+      "<Trans>{value} <a href={next()}>link</a> {value}</Trans>",
+      'render(Trans, { children: [value, " ", render("a", { href: next(), children: "link" }), " ", value] })',
+      "{value} <0>link</0> {value}",
+      "1 link 1",
+      [1],
+    ],
   ])(
     "keeps authored JSX and lowered JSX consistent for %s",
     (authored, lowered, message, text, reads) => {
@@ -171,10 +216,12 @@ describe("macro expression evaluation", () => {
       expect(transformed.compiledIds).toEqual(authoredResult.compiledIds);
       const i18n = compiledRuntime(transformed.compiledIds[0]!, message);
       const code = transformed.code.replace(/^\s*import .*;$/gm, "");
+      // Embedded elements such as `<b>` become component props; only the
+      // message itself renders text here.
       const render = (
         _component: unknown,
-        props: { id: string; values: Record<string, unknown> },
-      ) => i18n._(props.id, props.values);
+        props: { id?: string; values?: Record<string, unknown> },
+      ) => (props.id === undefined ? null : i18n._(props.id, props.values));
       expect(
         compileFunction(`${code}\nreturn run();`, ["render", "Trans", "getI18n"])(
           render,
