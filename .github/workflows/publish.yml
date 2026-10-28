@@ -283,12 +283,18 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
         run: node ./scripts/publish-package-if-needed.mjs "${{ matrix.package_name }}"
 
+  # Waits for the native packages so a failed native build stops crates.io as
+  # well as npm: otherwise crates.io could ship the release while the
+  # JavaScript packages, which need every native package, do not. After the
+  # native lane, both remaining uploads are already proven by the Cargo
+  # preflight and the JavaScript pack check, so they run side by side.
   publish-cargo:
     needs:
       - determine-release
       - preflight-cargo
       - validate-release
       - example-verification
+      - publish-native
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     concurrency:
       group: ${{ needs.determine-release.outputs.should_publish == 'true' && format('publish-cargo-{0}', github.ref) || format('publish-cargo-{0}', github.run_id) }}

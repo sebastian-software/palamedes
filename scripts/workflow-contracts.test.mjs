@@ -797,6 +797,17 @@ describe("workflow contracts", () => {
     }
   });
 
+  it("holds crates.io until every native package has shipped", async () => {
+    const jobs = workflowJobs(await readRepositoryFile(".github/workflows/publish.yml"));
+
+    // A native build failure must stop both registries: npm JavaScript
+    // already waits for it, so crates.io does too.
+    for (const name of ["publish-cargo", "publish-js"]) {
+      expect(jobs.get(name).needs, name).toContain("publish-native");
+    }
+    expect(transitiveNeeds(jobs, "publish-native").has("publish-cargo")).toBe(false);
+  });
+
   it("filters the umbrella package by directory so the workspace root cannot match", async () => {
     const [publish, rootPackageJson, umbrellaPackageJson] = await Promise.all([
       readRepositoryFile(".github/workflows/publish.yml"),
