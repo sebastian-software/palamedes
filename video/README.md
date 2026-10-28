@@ -4,8 +4,9 @@ This standalone Remotion project contains the v7 product film for Palamedes
 2.0: 3:06 at 1920 × 1080 and 30 fps. It is published on Bunny Stream as
 `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee`; [YouTube](https://youtu.be/XBECHvmx2qQ)
 still carries v6 (2:40).
-`PalamedesFilm` is the only film composition; `PalamedesPoster` renders its
-poster. The project is outside the repository workspace, and its Remotion and
+[ARCHIVE.md](ARCHIVE.md) lists where the takes, masters, and published cuts
+are kept. `PalamedesFilm` is the only film composition; `PalamedesPoster`
+renders its poster. The project is outside the repository workspace, and its Remotion and
 React dependencies are used only to produce the film.
 
 Run these commands from `video/`:
