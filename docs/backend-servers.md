@@ -57,6 +57,13 @@ function createRequestI18n(locale: Locale) {
 }
 ```
 
+The inline `CATALOGS` map keeps this sketch self-contained: its keys are the
+strings the handlers below pass to `_()`. Real applications don't hand-write
+catalogs. They load the modules that `pmds catalog compile --target js` writes,
+keyed by compiled message IDs rather than source text, or let
+[`defineNodeI18n`](#one-setup-for-every-build) or a
+[bundled backend](#macros-in-a-bundled-backend) load them.
+
 For each incoming request:
 
 1. determine the locale from `Accept-Language`, cookies, session, or user profile

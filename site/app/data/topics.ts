@@ -105,7 +105,7 @@ export const TOPICS = [
         },
         {
           title: "Not a Next.js feature",
-          body: `The same model runs across ${contentStats.serverFrameworkCount} server frameworks, including the RSC-capable ones beyond Next.js — Waku and TanStack Start among them. Server-component support here is a property of the architecture, not an integration written for one framework.`,
+          body: `The same model runs across ${contentStats.serverFrameworkCount} server frameworks. Server Components work in Waku as well as Next.js, because server-component support here is a property of the architecture, not an integration written for one framework.`,
         },
       ],
     },

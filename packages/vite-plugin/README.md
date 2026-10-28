@@ -43,9 +43,13 @@ pnpm add -D @vitejs/plugin-react
 or
 
 ```bash
-pnpm add @palamedes/solid @solidjs/web solid-js
-pnpm add -D @solidjs/vite-plugin
+pnpm add @palamedes/solid @solidjs/web@2.0.0-rc.16 solid-js@2.0.0-rc.16
+pnpm add -D @solidjs/vite-plugin@3.0.0-next.50
 ```
+
+Solid 2 is still published only as prerelease versions, and an unpinned
+`solid-js` resolves to Solid 1. The commands pin the versions that the
+maintained `examples/solid-*` apps use.
 
 ## Minimal Setup
 
@@ -61,8 +65,8 @@ export default defineConfig({
 
 Invalid or unsupported ICU always fails catalog compilation. The plugin
 throws a migration error for the removed v1 options `failOnCompileError`,
-`keepSourceFallbacks` (now `includeSourceMetadata`), and
-`experimentalGraphSplitting`.
+`keepSourceFallbacks` (now `includeSourceMetadata`), `cwd` (now
+`projectRoot`), and `experimentalGraphSplitting`.
 
 ```ts
 import { defineConfig } from "vite";
@@ -101,7 +105,7 @@ palamedes({
   exclude: /node_modules/,
   enablePoLoader: true,
   configPath: "./palamedes.yaml",
-  cwd: process.cwd(),
+  projectRoot: undefined,
   skipValidation: false,
   failOnMissing: false,
   framework: "react",
@@ -118,9 +122,11 @@ palamedes({
 compiled messages throw; source metadata never supplies replacement output.
 Valid translation fallbacks are compiled by the native compiler.
 
-`cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
-sets the directory the config search starts from, and `skipValidation` loads
-partially-authored config files without validation (tooling only).
+`projectRoot` is the base for config discovery, a relative `configPath`, and
+relative `include`/`exclude` globs. It defaults to Vite's resolved `root`; a
+relative value resolves from the current working directory. `skipValidation`
+is passed through to `loadPalamedesConfig` and loads partially-authored config
+files without validation (tooling only).
 
 `framework` says which UI framework the app compiles for and selects the
 component contract for compiled `.mdx`. It defaults to `"react"`, so **Solid

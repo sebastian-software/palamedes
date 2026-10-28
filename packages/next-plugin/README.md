@@ -246,13 +246,15 @@ module.exports = withPalamedes(
     failOnMissing: false,
     includeSourceMetadata: undefined,
     workspaceRoot: undefined,
-    serverFunctions: true,
+    serverFunctions: undefined,
   },
 );
 ```
 
 `includeSourceMetadata` defaults to `false`. Set it to `true` only to include
-diagnostic source metadata in generated calls.
+diagnostic source metadata in generated calls. `serverFunctions` is enabled
+automatically when one `palamedes.server` module exists in the project root or
+`src`; `true` makes a missing module an error, and `false` opts out.
 V2 package roots and `compiled` aliases both throw on missing compiled entries;
 retained metadata never supplies replacement message output. Valid translation
 fallbacks are resolved and compiled at build time.
@@ -292,7 +294,8 @@ and Turbopack loaders also prefer their supplied Next root context. This makes
 config discovery, `palamedes.server.*`, catalog paths, and cache entries belong
 to the app rather than the shell's working directory. Relative `configPath`
 values resolve from this directory. Set `projectRoot` explicitly in a custom
-Next host or if the app directory is ambiguous. `cwd` is a deprecated alias.
+Next host or if the app directory is ambiguous. The v1 name `cwd` throws a
+migration error.
 
 `workspaceRoot` pins the monorepo root used for Turbopack and output file
 tracing. When omitted, `withPalamedes` walks upward from the Next project root
