@@ -179,6 +179,32 @@ hand-authored raw ICU in its `message` prop is not a runtime fallback.
 Dynamic values remain supported, but message text and choices must be
 extractable rather than constructed during rendering.
 
+### Literal braces in authored text get new message IDs
+
+Braces in authored text are now literal text. This covers `<Trans>` children,
+MDX text, and template literals in `t`, descriptors, and choice branches.
+Extraction quotes them in the catalog, so `` t`Use {name}` `` becomes the
+`msgid` `Use '{name}'` and renders `Use {name}`. In v1 the same text turned into
+an ICU argument that the macro never supplied, so it rendered the wrong value or
+threw at runtime.
+
+Messages with literal braces therefore get a new `msgid`. The next
+`pmds extract` marks the old entry obsolete and adds the new one, so translate
+those entries again. Two related changes move IDs as well:
+
+- A descriptor template such as ``t({ message: `Hello ${name}, {count} new` }, { count })``
+  no longer reads `{count}` as an argument. Write raw ICU as a string message
+  instead: `t({ message: "Hello {name}, {count} new" }, { name, count })`.
+- A doubled apostrophe in authored text (`` t`It''s` ``) is stored in its
+  shortest spelling, `It's`. Existing PO entries keep their old spelling and
+  their translations.
+
+A literal `<` before a letter, digit, or `/` reads as a rich-text tag, and ICU
+quoting cannot escape it. Extraction and the transform now report it with its
+source location. Add a space after `<`, pass the text as a placeholder value,
+or use inline code in MDX. See
+[Quoting and literal text](../packages/core/README.md#quoting-and-literal-text).
+
 ## Replace removed APIs
 
 | V1 API or option                                                                                 | V2 replacement                                                                                                                                                                                                                                                                          |

@@ -188,14 +188,25 @@ unsupported authored style.
 
 ### Quoting And Literal Text
 
-Apostrophes in source messages need no escaping. The macros and the extractor
-escape them on the way into the catalog, so `t` messages such as `Ada's file`
-and `don't panic` simply work. The one exception is a descriptor with a
-string-literal `message` — `t({ message: "Hello {name}" })` — which is the
-raw-ICU authoring surface: placeholders and ICU quoting are written literally
-and nothing is auto-escaped there. The JSX `message` attribute
-(`<Trans message="Hello {name}" />`) is that same raw-ICU surface, while
-`<Trans>` children are authored text and are escaped.
+Authored text is literal text. `<Trans>` children, MDX text, and template
+literals in `t`, in descriptors, and in choice branches need no ICU escaping:
+the macros and the extractor quote apostrophes and braces on the way into the
+catalog. `` t`Ada's file` `` stays `Ada's file`, and `` t`Type {name} here` ``
+is stored as `Type '{name}' here` and renders `Type {name} here`. Only
+`${…}` interpolations and JSX expressions become placeholders.
+
+Two surfaces take raw ICU instead, where placeholders and ICU quoting are
+written by hand and nothing is auto-escaped: a descriptor with a
+string-literal `message` — `t({ message: "Hello {name}" }, { name })` — and the
+JSX `message` attribute (`<Trans message="Hello {name}" />`). Choice branch
+string literals such as `plural(count, { other: "# items" })` sit in between:
+apostrophes are text, while braces and `#` stay ICU syntax so a branch can hold
+a nested choice.
+
+A literal `<` before a letter, digit, or `/` reads as a rich-text tag, and ICU
+quoting cannot escape it. Extraction and the transform report such text with
+its source location; add a space after `<`, pass the text as a placeholder
+value, or use inline code in MDX.
 
 ICU quoting and plural offsets are resolved during compilation. Use authored
 macros, then run extraction and the normal framework build. Compiled renderers

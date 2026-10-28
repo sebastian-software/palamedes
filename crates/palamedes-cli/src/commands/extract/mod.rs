@@ -828,7 +828,9 @@ catalogs:
                 "msgid \"client's booking\"\n",
                 "msgstr \"Buchung des Kunden\"\n\n",
                 "msgid \"l'été\"\n",
-                "msgstr \"der Sommer\"\n",
+                "msgstr \"der Sommer\"\n\n",
+                "msgid \"It''s ready\"\n",
+                "msgstr \"Es ist fertig\"\n",
             ),
         )
         .expect("write Lingui target catalog");
@@ -843,7 +845,9 @@ catalogs:
             "don't stop",
             "client's booking",
             "l'été",
-            "It''s ready",
+            // A doubled authored apostrophe renders one apostrophe, so a new
+            // catalog stores its shortest spelling.
+            "It's ready",
             "L''{title}",
         ] {
             assert!(
@@ -853,13 +857,20 @@ catalogs:
         }
 
         let target = fs::read_to_string(app.join("locales/de/messages.po")).expect("read target");
-        for translation in ["nicht aufhören", "Buchung des Kunden", "der Sommer"] {
+        for translation in [
+            "nicht aufhören",
+            "Buchung des Kunden",
+            "der Sommer",
+            "Es ist fertig",
+        ] {
             assert!(
                 target.contains(&format!("msgstr \"{translation}\"")),
                 "{target}"
             );
         }
         assert!(!target.contains("msgid \"don''t stop\""), "{target}");
+        // The existing doubled spelling keeps its translation attached.
+        assert!(target.contains("msgid \"It''s ready\""), "{target}");
 
         run_extraction(&config, &options).expect("repeat force-clean extraction");
         assert_eq!(

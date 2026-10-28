@@ -25,12 +25,12 @@ use crate::choice::is_plural_format;
 use crate::descriptor::{descriptor_property_value, descriptor_static_property};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract::{MacroCollector, MacroResolution};
-use crate::icu_text::{compiled_message_key, escape_icu_literal};
+use crate::icu_text::compiled_message_key;
 use crate::placeholder_name::expression_name;
 use crate::source::{SourceLocator, display_filename, format_parser_diagnostics};
 use crate::source_message::{
-    build_icu_message, expression_source, lower_choice_options_from_object, lower_template,
-    make_unique_value_name,
+    build_icu_message, check_lowered_message, expression_source, lower_choice_options_from_object,
+    lower_template, make_unique_value_name,
 };
 
 /// Current manifest format version.
@@ -277,16 +277,24 @@ impl ManifestVisitor<'_, '_> {
 
     fn template(&self, template: &TemplateLiteral<'_>) -> PalamedesResult<Option<Entry>> {
         let mut used_value_names = HashMap::new();
-        let (message, _) = lower_template(
+        let (message, lowered_values) = lower_template(
             template,
             self.source,
             "template expression",
             &mut used_value_names,
-            escape_icu_literal,
         )?;
         if message.is_empty() {
             return Ok(None);
         }
+        check_lowered_message(
+            &message,
+            lowered_values.iter().map(|value| value.name.as_str()),
+            [],
+            "t",
+            &self
+                .locator
+                .indexed_location(self.filename, template.span.start as usize),
+        )?;
 
         // Replays the naming in `lower_template` per slot: values are
         // deduplicated there, but the runtime receives one value per slot.
@@ -340,8 +348,8 @@ impl ManifestVisitor<'_, '_> {
                     self.source,
                     "template expression",
                     &mut used_value_names,
-                    escape_icu_literal,
                 )?;
+                check_lowered_message(&message, [], [], "t", location.as_str())?;
                 let runtime_message = template
                     .single_quasi()
                     .map(|value| value.to_string())
@@ -398,7 +406,6 @@ impl ManifestVisitor<'_, '_> {
             format,
             macro_name,
             &location,
-            escape_icu_literal,
         )?;
         if lowered.options.is_empty() {
             return Ok(None);
@@ -418,6 +425,7 @@ impl ManifestVisitor<'_, '_> {
             &lowered.options,
             options.get("offset").map(String::as_str),
         );
+        check_lowered_message(&message, [value_name.as_str()], [], macro_name, &location)?;
         Ok(Some(Entry::Choice(RuntimeMacroChoice {
             kind: macro_name.to_owned(),
             options,

@@ -1,7 +1,11 @@
+use crate::icu_text::{append_icu, escape_icu_literal};
 use crate::jsx_entities::decode_jsx_entities;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum JsxMessagePart {
+    /// Authored literal text, not yet ICU-escaped. Joining escapes each run of
+    /// adjacent text once, so `{"{"}name{"}"}` and `&#123;name&#125;` lower to
+    /// the same message.
     Text(String),
     ValuePlaceholder(String),
     ComponentPlaceholder {
@@ -91,8 +95,63 @@ pub(crate) fn clean_jsx_whitespace(text: &str) -> String {
     result
 }
 
+/// Assembles ICU text from escaped syntax and raw literal text.
+///
+/// Literal text stays pending until syntax follows, so adjacent text parts are
+/// escaped as one run. Escaping never changes leading or trailing whitespace,
+/// which keeps the whitespace rules below independent of quoting.
+#[derive(Default)]
+struct MessageBuilder {
+    escaped: String,
+    pending: String,
+}
+
+impl MessageBuilder {
+    fn is_empty(&self) -> bool {
+        self.escaped.is_empty() && self.pending.is_empty()
+    }
+
+    fn ends_with_whitespace(&self) -> bool {
+        if self.pending.is_empty() {
+            self.escaped.ends_with(char::is_whitespace)
+        } else {
+            self.pending.ends_with(char::is_whitespace)
+        }
+    }
+
+    fn trim_end(&mut self) {
+        let pending_len = self.pending.trim_end_matches(char::is_whitespace).len();
+        self.pending.truncate(pending_len);
+        if self.pending.is_empty() {
+            let escaped_len = self.escaped.trim_end_matches(char::is_whitespace).len();
+            self.escaped.truncate(escaped_len);
+        }
+    }
+
+    fn push(&mut self, part: &JsxMessagePart, value: &str) {
+        if matches!(part, JsxMessagePart::Text(_)) {
+            self.pending.push_str(value);
+        } else {
+            self.flush();
+            append_icu(&mut self.escaped, value);
+        }
+    }
+
+    fn flush(&mut self) {
+        if !self.pending.is_empty() {
+            append_icu(&mut self.escaped, &escape_icu_literal(&self.pending));
+            self.pending.clear();
+        }
+    }
+
+    fn finish(mut self) -> String {
+        self.flush();
+        self.escaped
+    }
+}
+
 pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessage {
-    let mut message = String::new();
+    let mut message = MessageBuilder::default();
     let mut ends_with_placeholder = false;
 
     for (index, part) in parts.iter().enumerate() {
@@ -105,7 +164,7 @@ pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessa
     }
 
     JoinedJsxMessage {
-        message: trim_message_edges(&message),
+        message: trim_message_edges(&message.finish()),
         ends_with_placeholder,
     }
 }
@@ -113,7 +172,11 @@ pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessa
 /// Markdown spaces are authored content, not JSX formatter whitespace.
 /// In particular, a terminal inline-code placeholder must not eat its preceding space.
 pub(crate) fn join_mdx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessage {
-    let message = parts.iter().map(JsxMessagePart::as_str).collect::<String>();
+    let mut message = MessageBuilder::default();
+    for part in parts {
+        message.push(part, part.as_str());
+    }
+    let message = message.finish();
     let ends_with_placeholder = parts
         .iter()
         .rev()
@@ -126,7 +189,7 @@ pub(crate) fn join_mdx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessa
 }
 
 fn push_jsx_message_part(
-    message: &mut String,
+    message: &mut MessageBuilder,
     ends_with_placeholder: &mut bool,
     part: &JsxMessagePart,
     trim_before_empty_component_placeholder: bool,
@@ -140,12 +203,11 @@ fn push_jsx_message_part(
     let mut next = part_value;
 
     if trim_before_empty_component_placeholder {
-        let trimmed_len = message.trim_end_matches(char::is_whitespace).len();
-        message.truncate(trimmed_len);
+        message.trim_end();
     }
 
     if !message.is_empty() {
-        if message.ends_with(char::is_whitespace) && next.starts_with(char::is_whitespace) {
+        if message.ends_with_whitespace() && next.starts_with(char::is_whitespace) {
             next = next.trim_start_matches(char::is_whitespace);
         }
 
@@ -154,7 +216,7 @@ fn push_jsx_message_part(
         }
     }
 
-    message.push_str(next);
+    message.push(part, next);
 
     if !next.trim_end_matches(char::is_whitespace).is_empty() {
         *ends_with_placeholder = part.ends_with_placeholder();
@@ -235,7 +297,7 @@ mod tests {
             JsxMessagePart::Text(" .".to_string()),
         ];
 
-        assert_eq!(join_jsx_message_parts(&parts).message, "{name} .");
+        assert_eq!(join_jsx_message_parts(&parts).message, "'{name}' .");
     }
 
     #[test]
