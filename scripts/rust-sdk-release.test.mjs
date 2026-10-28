@@ -209,12 +209,14 @@ test("Already-published versions are skipped only when the exact archive matches
   assert.doesNotThrow(() =>
     assertPublishedArchive({ checksum: "same", yanked: false }, "same", packages[0]),
   );
-  for (const version of [{ checksum: "other" }, { checksum: "same", yanked: true }]) {
-    assert.throws(
-      () => assertPublishedArchive(version, "same", packages[0]),
-      /differs or is yanked/,
-    );
-  }
+  assert.throws(
+    () => assertPublishedArchive({ checksum: "other" }, "same", packages[0]),
+    /Already-published archive differs: palamedes-i18n@2\.0\.0.*original release revision/,
+  );
+  assert.throws(
+    () => assertPublishedArchive({ checksum: "same", yanked: true }, "same", packages[0]),
+    /Already-published version is yanked: palamedes-i18n@2\.0\.0/,
+  );
 });
 
 test("Registry errors cannot masquerade as name/version availability", async () => {
@@ -390,6 +392,7 @@ test("The publisher orders verified archives, skips exact versions, and stops be
   const events = [];
   let failing = false;
   let leaking = false;
+  let checksum = "same";
   const services = {
     async metadata() {
       return packages;
@@ -406,7 +409,7 @@ test("The publisher orders verified archives, skips exact versions, and stops be
       return { crate: { repository: RUST_SDK_REPOSITORY } };
     },
     async checksumOf() {
-      return "same";
+      return checksum;
     },
     async execute(command, args) {
       if (command === "tar") {
@@ -437,6 +440,14 @@ test("The publisher orders verified archives, skips exact versions, and stops be
     "visible:palamedes-build",
   ]);
   events.length = 0;
+  checksum = "changed-revision";
+  await assert.rejects(
+    publishRustSdk("/fixture", environment, services),
+    /Already-published archive differs/,
+  );
+  assert.deepEqual(events, ["package:palamedes-i18n"]);
+  events.length = 0;
+  checksum = "same";
   failing = true;
   await assert.rejects(publishRustSdk("/fixture", environment, services), /upload failed/);
   assert.deepEqual(events, [
