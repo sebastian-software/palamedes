@@ -52,6 +52,8 @@ export function createServerCatalogStore<TLocale extends string = string>(option
   load: ServerCatalogLoader<TLocale>;
 }): ServerCatalogStore<TLocale> {
   const entries = new Map<TLocale, CatalogEntry>();
+  // Warn once per locale and ID, however often a development reload merges them.
+  const warnedDuplicates = new Set<string>();
 
   function load(locale: TLocale): Promise<CompiledCatalogMessages> {
     const existing = entries.get(locale);
@@ -63,7 +65,7 @@ export function createServerCatalogStore<TLocale extends string = string>(option
     const attempt: Promise<CompiledCatalogMessages> = Promise.resolve()
       .then(() => options.load({ locale, generation }))
       .then((fragments) => {
-        const prepared = prepareCatalog(fragments);
+        const prepared = prepareCatalog(fragments, locale, warnedDuplicates);
         const current = entries.get(locale);
         if (current?.generation === generation && current.inFlight === attempt) {
           current.ready = prepared.messages;
@@ -142,7 +144,20 @@ function invalidateEntry(entry: CatalogEntry): void {
   entry.inFlight = undefined;
 }
 
-function prepareCatalog(fragments: readonly CompiledCatalogMessages[]): {
+function sameMessage(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  // Generated modules export a fresh closure per sidecar, so equal compiled
+  // messages are told apart by their source rather than by identity.
+  return (
+    typeof left === "function" && typeof right === "function" && String(left) === String(right)
+  );
+}
+
+function prepareCatalog(
+  fragments: readonly CompiledCatalogMessages[],
+  locale: string,
+  warnedDuplicates: Set<string>,
+): {
   messages: CompiledCatalogMessages;
   fragmentCount: number;
 } {
@@ -155,7 +170,21 @@ function prepareCatalog(fragments: readonly CompiledCatalogMessages[]): {
     if (!isCompiledCatalog(fragment)) {
       throw new TypeError("Server catalog loaders must return generated compiled catalogs.");
     }
-    for (const [id, message] of Object.entries(fragment)) merged[id] = message;
+    for (const [id, message] of Object.entries(fragment)) {
+      // The last fragment wins, so the result is deterministic; the warning only
+      // makes a conflicting override visible. Identical duplicates stay silent.
+      if (id in merged && !sameMessage(merged[id], message)) {
+        const key = `${locale}\0${id}`;
+        if (!warnedDuplicates.has(key)) {
+          warnedDuplicates.add(key);
+          console.warn(
+            `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog fragment; the last fragment wins. ` +
+              "Give the messages distinct IDs or make the catalogs agree.",
+          );
+        }
+      }
+      merged[id] = message;
+    }
   }
 
   return {

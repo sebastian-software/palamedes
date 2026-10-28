@@ -147,6 +147,24 @@ export function createTanStackCatalogResponseDelivery(
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 
+let driftWarned = false;
+
+const DRIFT_MESSAGE =
+  "@palamedes/tanstack found a built module script under /assets/ but none matching assets/index-*.js to gate, " +
+  "so client catalogs may load late and pages may flash untranslated text. " +
+  "The installed TanStack Start version probably changed its entry naming; please report this at https://github.com/sebastian-software/palamedes/issues.";
+
+/**
+ * The bootstrap gate matches upstream output by name. When a built module
+ * script is present but none was gated, the gate is silently off. Keep serving
+ * the page and log one warning per process.
+ */
+function reportBootstrapDrift(): void {
+  if (driftWarned) return;
+  driftWarned = true;
+  console.warn(`[palamedes] ${DRIFT_MESSAGE}`);
+}
+
 /**
  * TanStack Start emits its browser entry as a module script rather than an
  * inline bootstrap. Gate that exact entry on the delivery probe's shared
@@ -160,6 +178,8 @@ function createTanStackBootstrapGateTransform(options: {
 }): Transform {
   const decoder = new StringDecoder("utf8");
   let buffered = "";
+  let gatedEntries = 0;
+  let unmatchedAssetScripts = 0;
 
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
@@ -168,7 +188,9 @@ function createTanStackBootstrapGateTransform(options: {
     },
     flush(callback) {
       buffered += decoder.end();
-      callback(null, flushMarkup(true));
+      const output = flushMarkup(true);
+      if (gatedEntries === 0 && unmatchedAssetScripts > 0) reportBootstrapDrift();
+      callback(null, output);
     },
   });
 
@@ -204,6 +226,10 @@ function createTanStackBootstrapGateTransform(options: {
       const candidate = readTagAttribute(openingTag, "src");
       const source =
         candidate && isTanStackEntryScript(openingTag, candidate, options) ? candidate : undefined;
+      if (source) gatedEntries += 1;
+      else if (candidate && isBuiltAssetModuleScript(openingTag, candidate, options)) {
+        unmatchedAssetScripts += 1;
+      }
       output += source
         ? gateTanStackEntry(openingTag, source, options)
         : buffered.slice(open, closingEnd + 1);
@@ -224,6 +250,19 @@ function isTanStackEntryScript(
     type?.toLowerCase() === "module" &&
     isAllowedScriptOrigin(source, options) &&
     /(?:^|\/)assets\/index-[^/?#]+\.js(?:[?#].*)?$/iu.test(source)
+  );
+}
+
+/** A same-origin module script from the build's assets directory that is not the entry. */
+function isBuiltAssetModuleScript(
+  openingTag: string,
+  source: string,
+  options: { allowedOrigins: ReadonlySet<string>; baseOrigin: string },
+): boolean {
+  return (
+    readTagAttribute(openingTag, "type")?.toLowerCase() === "module" &&
+    isAllowedScriptOrigin(source, options) &&
+    /(?:^|\/)assets\/[^/?#]+\.js(?:[?#].*)?$/iu.test(source)
   );
 }
 

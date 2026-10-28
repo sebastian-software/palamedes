@@ -311,19 +311,28 @@ test("Registry propagation waits for the exact indexed archive, with a finite re
   );
 });
 
-test("The Cargo lane retains both independent publication guards and its verified dry run", async () => {
+test("The Cargo lane allows only crates.io for the SDK, keeps other crates unpublished, and retains its verified dry run", async () => {
   for (const file of [
     "Cargo.toml",
     "crates/palamedes-i18n/Cargo.toml",
     "crates/palamedes-build/Cargo.toml",
   ]) {
     const manifest = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
-    assert.match(manifest, /publish = false/);
+    assert.match(manifest, /^publish = \["crates-io"\]$/mu);
     const includes = manifest.match(/include = \[([^\]]+)\]/u)?.[1].match(/"([^"]+)"/gu) ?? [];
     assert(
       includes.length > 0 && includes.every((entry) => entry.startsWith('"/')),
       `${file} must anchor every include path`,
     );
+  }
+  // The CLI, Node binding, and plugin SDK are not part of the Cargo lane.
+  for (const file of [
+    "crates/palamedes-cli/Cargo.toml",
+    "crates/palamedes-node/Cargo.toml",
+    "crates/palamedes-plugin/Cargo.toml",
+  ]) {
+    const manifest = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.match(manifest, /^publish = false$/mu, `${file} must stay unpublished`);
   }
   const workflow = await readFile(
     new URL("../.github/workflows/publish.yml", import.meta.url),

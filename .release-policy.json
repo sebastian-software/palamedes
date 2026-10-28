@@ -1,5 +1,5 @@
 {
   "minimumMajor": 2,
-  "publicationEnabled": false,
-  "reason": "Palamedes v2 publication remains held. Complete Rust SDK release preparation in #1309 and the remaining coordinated v2 gates, then obtain explicit release authorization before enabling publication."
+  "publicationEnabled": true,
+  "reason": "Publication is enabled for the coordinated Palamedes 2.0.0 release (#1204) after explicit maintainer authorization. Release Please proposes 2.0.0; merging that release PR publishes the npm packages and the three Rust SDK crates. Versions below major 2 and prerelease versions remain rejected."
 }

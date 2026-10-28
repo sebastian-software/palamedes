@@ -76,10 +76,10 @@ shows that crates.io trusts this workflow for at least one crate. It does not
 prove the trusted-publisher configuration of each crate; only the upload does.
 
 Publication needs both `publicationEnabled: true` in the release policy and
-explicit `publish = ["crates-io"]` allowlists in the three manifests. The
-`0.0.0` bootstrap publications established the crate names and ownership. A
-passing dry run does not prove trusted-publisher permissions; only an upload
-does.
+explicit `publish = ["crates-io"]` allowlists in the three SDK crate manifests.
+The CLI, Node binding, and plugin crates keep `publish = false`. The `0.0.0`
+bootstrap publications established the crate names and ownership. A passing
+dry run does not prove trusted-publisher permissions; only an upload does.
 
 ## SemVer and MSRV
 

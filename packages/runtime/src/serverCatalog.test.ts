@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createI18n, defineCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core";
 
 import { createServerCatalogStore } from "./serverCatalog";
 
 describe("createServerCatalogStore", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("loads only requested locales and shares concurrent and warmed catalogs", async () => {
     const load = vi.fn(async ({ locale }: { locale: "de" | "en" }) => [
       defineCompiledCatalog({ greeting: locale === "de" ? "Hallo" : "Hello" }),
@@ -31,6 +33,7 @@ describe("createServerCatalogStore", () => {
   });
 
   it("prepares ordered fragments once and applies later overrides", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const base = defineCompiledCatalog({ greeting: "Hello", shared: "base" });
     const override = defineCompiledCatalog({ shared: "override", extra: "Extra" });
     const store = createServerCatalogStore({ load: async () => [base, override] });
@@ -44,6 +47,42 @@ describe("createServerCatalogStore", () => {
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(store.stats()).toMatchObject({ retainedFragments: 2, retainedMessages: 3 });
     expect(await store.load("en")).toBe(catalog);
+  });
+
+  describe("duplicate message IDs across fragments", () => {
+    it("warns once per ID when fragments disagree and keeps the last value", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createServerCatalogStore({
+        load: async () => [
+          defineCompiledCatalog({ shared: "base", same: "same" }),
+          defineCompiledCatalog({ shared: "override", same: "same" }),
+          defineCompiledCatalog({ shared: "again" }),
+        ],
+      });
+
+      const catalog = await store.load("en");
+      store.invalidate("en");
+      await store.load("en");
+
+      expect(catalog).toMatchObject({ shared: "again", same: "same" });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain('"shared"');
+    });
+
+    it("stays silent for identical strings and equivalent compiled functions", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const compiled = () => ((values: Record<string, unknown>) => String(values["name"])) as never;
+      const store = createServerCatalogStore({
+        load: async () => [
+          defineCompiledCatalog({ text: "Hello", fn: compiled() }),
+          defineCompiledCatalog({ text: "Hello", fn: compiled() }),
+        ],
+      });
+
+      await store.load("en");
+
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   it("rejects uncompiled loader fragments before retaining them", async () => {
