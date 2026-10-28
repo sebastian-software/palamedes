@@ -151,8 +151,11 @@ Use `plugins: [palamedes({ framework: "none", mdx: false }), svelte()]`, where
 Core macros work in inline JavaScript or TypeScript instance and module scripts.
 Instance-level calls are valid because Svelte runs that code per component;
 module-level calls must be inside functions. Import macros in the same script
-block as their calls. Native CLI extraction and transforms retain original
-`.svelte` references, markup, styles, and source maps.
+block as their calls. Markup is not a macro surface: a macro call in a markup
+expression, such as ``{t`Hello`}`` or `{plural(count, …)}`, fails extraction and
+the transform with a located error. Create the message in a script and render
+the value. Native CLI extraction and transforms retain original `.svelte`
+references, markup, styles, and source maps.
 
 ```svelte
 <script lang="ts">
