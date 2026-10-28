@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-28
 
 A browser document has one active locale; changing language uses a new document.
 
@@ -15,10 +15,9 @@ A locale is immutable for the lifetime of a browser document.
 - Macro transforms and framework runtime components use the plain, hook-free
   `getI18n()` from `@palamedes/runtime`.
 - `framework` selects only the component contract for generated MDX.
-- `createClientCatalogBoundary()` owns one document-fixed locale. It starts the
-  active catalog import at module evaluation, initializes the parser-free client
-  instance before translated descendants hydrate, and rejects a different
-  locale for the same document.
+- Framework adapters own one document-fixed locale. Their generated client
+  bootstrap initializes the parser-free client instance before translated
+  descendants hydrate and rejects a different locale for the same document.
 - Locale controls persist or encode the new locale and then perform a full
   document navigation.
 - Palamedes does not provide a reactive locale subscription or a live-switching

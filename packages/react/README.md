@@ -111,67 +111,6 @@ function LocaleToolbar({ locale }: { locale: "en" | "de" }) {
 }
 ```
 
-## Render-Safe Client Catalogs
-
-For a custom React host that owns per-locale compiled assets, the client
-boundary can give translated Client Components the right catalog on their first
-hydration render. The standard Next adapter owns this delivery automatically;
-use the boundary only when the host intentionally supplies an equivalent
-transport. Define it once in a `"use client"` module:
-
-```tsx
-"use client";
-
-import { createI18n } from "@palamedes/core/compiled";
-import { createClientCatalogBoundary } from "@palamedes/react/client";
-
-type Locale = "en" | "de";
-
-export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
-  createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
-  loadCatalog: (locale) => import(`../locales/${locale}.po`),
-  resolveClientLocale: () => {
-    const locale = document.documentElement.lang;
-    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`);
-    return locale;
-  },
-});
-```
-
-Use the same `createI18n` options in the server factory. In particular, a
-shared `timeZone` keeps ICU date/time markup identical during hydration.
-
-Then render it from the Server Component after activating the same request
-locale. In Next.js, use the render-lifetime scope from
-`@palamedes/next-plugin/server`:
-
-```tsx
-const { locale } = await createActiveServerI18n();
-
-return (
-  <ClientCatalogBoundary locale={locale}>
-    <TranslatedClientContent />
-  </ClientCatalogBoundary>
-);
-```
-
-The dynamic import keeps executable generated messages in a module chunk; they
-are not serialized through React Server Components. The boundary starts
-that import at client module evaluation, suspends hydration until it is ready,
-and initializes the hook-free runtime before descendants render. It rejects an
-attempt to render a locale other than the document locale; switching language
-must navigate the document.
-
-Palamedes intentionally provides no live boundary. An application can implement
-its own keyed root remount, but owns invalidation of every cache outside that
-subtree. Document navigation is the supported locale-switching path. The
-boundary avoids inline scripts, JSON source, and `eval`, so it works with strict
-Content Security Policies and executable catalogs.
-
-A rejected dynamic import is thrown to the nearest React error boundary. A
-module without a generated, branded `messages` export fails through the
-parser-free Core loader instead of silently falling back to runtime parsing.
-
 <!-- ferramenta-family:start -->
 
 **palamedes** is part of the [Ferramenta](https://ferramenta.dev) family — A family of Rust tools.
