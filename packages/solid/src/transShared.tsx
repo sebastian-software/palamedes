@@ -1,7 +1,7 @@
 import { createComponent, createMemo, type Element, type FlowComponent } from "solid-js";
 
-import { createCompiledMessageRuntime } from "@palamedes/core/compiled";
 import {
+  createCompiledMessageRuntime,
   formatMessageArgument,
   replacePoundPlaceholders,
   stringifyValue,

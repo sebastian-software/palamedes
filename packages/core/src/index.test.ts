@@ -24,6 +24,7 @@ describe("unified public compiled runtime", () => {
         "formatMessageArgument",
         "replacePoundPlaceholders",
         "stringifyValue",
+        "createCompiledMessageRuntime",
       ]) {
         expect(entry).not.toHaveProperty(removed);
       }
@@ -35,6 +36,7 @@ describe("unified public compiled runtime", () => {
 
   it("exposes only the renderer helpers on the internal entry", () => {
     expect(Object.keys(internal).sort()).toEqual([
+      "createCompiledMessageRuntime",
       "formatMessageArgument",
       "replacePoundPlaceholders",
       "stringifyValue",

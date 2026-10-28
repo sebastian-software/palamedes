@@ -9,7 +9,6 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
 
 export { DEFAULT_LOCALE, MissingCompiledMessageError } from "./i18nRuntime";
 export {
-  createCompiledMessageRuntime,
   defineCompiledCatalog,
   isCompiledCatalog,
   type CatalogMessage,
@@ -19,7 +18,6 @@ export {
   type CompiledMessageBranch,
   type CompiledMessageBranches,
   type CompiledMessageRuntime,
-  type ExecutableMessageRenderer,
   type MessageValues,
 } from "./compiledMessage";
 export type {
