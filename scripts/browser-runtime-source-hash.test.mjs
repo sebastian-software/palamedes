@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildBrowserRuntimeCompiler,
   browserRuntimeInputPaths,
   browserRuntimeSourceSha256,
   isBrowserRuntimeTestFile,
@@ -35,6 +36,14 @@ const bumpVersions = (filename, text) => {
     const bumped = text.replace(/^( {2}"version": )"[^"]*"/mu, `$1"${BUMPED_VERSION}"`);
     assert.ok(bumped !== text, `${filename} has a version to bump`);
     return bumped;
+  }
+  if (path.basename(filename) === "Cargo.toml") {
+    return text
+      .replace(/^(version\s*=\s*)"[^"]+"/mu, `$1"${BUMPED_VERSION}"`)
+      .replace(
+        /^(palamedes[\w-]*\s*=\s*\{[^\n]*version\s*=\s*)"[^"]+"(?=[^\n]*path\s*=)/gmu,
+        `$1"=${BUMPED_VERSION}"`,
+      );
   }
   if (filename === "Cargo.lock") {
     const bumped = text
@@ -156,4 +165,41 @@ test("Cargo.lock entries without a source are exactly the workspace crates", (t)
     .sort();
   assert.deepEqual(local, workspace);
   assert.ok(!/^name = "palamedes[^"]*"\nversion = /mu.test(normalizeCargoLock(lock)));
+});
+
+test("native compiler and build settings invalidate the report", async () => {
+  for (const changed of [
+    "crates/palamedes/src/descriptor.rs",
+    "crates/palamedes-node/src/lib.rs",
+    "Cargo.toml",
+    "rust-toolchain.toml",
+    "packages/core-node/src/index.ts",
+    "packages/core-node/scripts/build-native.mjs",
+  ]) {
+    assert.ok(inputPaths.includes(changed), changed);
+    assert.notEqual(
+      await hashWith((filename, text) =>
+        filename === changed ? `${text}\n# changed input\n` : undefined,
+      ),
+      baseline,
+      changed,
+    );
+  }
+});
+
+test("measurement rebuilds the compiler dependency graph and propagates a build failure", () => {
+  let call;
+  buildBrowserRuntimeCompiler(root, (...args) => {
+    call = args;
+  });
+  assert.deepEqual(call[1], ["--recursive", "--filter", "@palamedes/core-node...", "build"]);
+  assert.equal(call[2].cwd, root);
+  const failure = new Error("compiler build failed");
+  assert.throws(
+    () =>
+      buildBrowserRuntimeCompiler(root, () => {
+        throw failure;
+      }),
+    (error) => error === failure,
+  );
 });

@@ -59,9 +59,30 @@ export function normalizeCargoLock(text) {
 // pnpm-lock.yaml needs no projection: workspace packages appear only as
 // `link:` importers with `workspace:` specifiers, and release-please only
 // rewrites package.json `version` fields, so a bump leaves the file unchanged.
+export function normalizeCargoManifest(text) {
+  // Release versions do not change compiled catalog semantics. Keep external
+  // requirements and build/profile/toolchain settings in the fingerprint.
+  return text
+    .replace(/^(version\s*=\s*)"[^"]+"/mu, '$1"<release>"')
+    .replace(
+      /^(palamedes[\w-]*\s*=\s*\{[^\n]*version\s*=\s*)"[^"]+"(?=[^\n]*path\s*=)/gmu,
+      '$1"<release>"',
+    );
+}
+
+export function buildBrowserRuntimeCompiler(root, run = execFileSync) {
+  run(
+    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    ["--recursive", "--filter", "@palamedes/core-node...", "build"],
+    { cwd: root, stdio: "inherit", shell: process.platform === "win32" },
+  );
+}
+
 export function normalizeSourceInput(filename, bytes) {
   if (path.basename(filename) === "package.json")
     return normalizePackageJson(bytes.toString("utf8"));
+  if (path.basename(filename) === "Cargo.toml")
+    return normalizeCargoManifest(bytes.toString("utf8"));
   if (filename === "Cargo.lock") return normalizeCargoLock(bytes.toString("utf8"));
   return bytes;
 }
@@ -89,6 +110,16 @@ export function browserRuntimeInputPaths(root) {
         `packages/${id}/build.config.ts`,
         `packages/${id}/package.json`,
       ),
+    ),
+    ...lsFiles("crates/palamedes/src", "crates/palamedes-node", "crates/palamedes/fixtures"),
+    "Cargo.toml",
+    "rust-toolchain.toml",
+    "packages/core-node/scripts/build-native.mjs",
+    "scripts/build-native-lib.mjs",
+    ...lsFiles(
+      "packages/core-node/src",
+      "packages/core-node/build.config.ts",
+      "packages/core-node/package.json",
     ),
     "Cargo.lock",
     "pnpm-lock.yaml",

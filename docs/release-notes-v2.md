@@ -172,6 +172,12 @@ The [v2 migration guide](./migration-v2.md) lists the exact removed APIs and
 replacements. Update coupled Palamedes packages together and verify the
 framework's supported versions before migrating.
 
+String descriptor values are checked with the same ICU apostrophe policy used
+by catalog compilation. Natural apostrophes in `You're {name}, aren't you?`
+keep `{name}` as an argument. Apostrophe-quoted literal placeholders do not
+accept an unused value binding. This validation does not rewrite source catalog
+identities.
+
 ## What stays familiar
 
 Message identity remains based on source text and context, so existing

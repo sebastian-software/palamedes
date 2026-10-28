@@ -6,16 +6,11 @@
 //! instead of silently surviving as a reference to an import the transform
 //! removes.
 
-use std::collections::HashMap;
 use std::path::Path;
 
-use oxc_allocator::Allocator;
-use oxc_ast_visit::Visit;
-use oxc_parser::Parser;
 use oxc_span::SourceType;
 
 use crate::component::ScriptBlock;
-use crate::extract::MacroCollector;
 use crate::source::display_filename;
 use crate::translation_scope::source_location;
 use crate::{PalamedesError, PalamedesResult};
@@ -53,7 +48,7 @@ pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> Palamede
     if scan.expressions.is_empty() {
         return Ok(());
     }
-    let macros = imported_macros(source, &scan.scripts);
+    let macros = crate::component::imported_macros(source, &scan.scripts);
     if macros.is_empty() {
         return Ok(());
     }
@@ -102,26 +97,6 @@ pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> Palamede
         location: source_location(source, display_filename(filename), reference.start),
         detail: detail.to_owned(),
     })
-}
-
-/// Local macro import names from all component scripts, mapped to the public
-/// macro name. Svelte exposes both instance and module imports to markup.
-fn imported_macros(source: &str, scripts: &[ScriptBlock]) -> HashMap<String, String> {
-    let mut macros = HashMap::new();
-    for script in scripts {
-        let allocator = Allocator::default();
-        let masked = crate::component::masked_source(source, &script.range);
-        let parsed = Parser::new(&allocator, &masked, script.source_type).parse();
-        let mut collector = MacroCollector::new();
-        collector.visit_program(&parsed.program);
-        macros.extend(
-            collector
-                .imported_macros
-                .into_iter()
-                .map(|(local_name, imported)| (local_name, imported.imported_name)),
-        );
-    }
-    macros
 }
 
 /// A plain identifier reference: a call, a tagged template, or a bare value
@@ -612,7 +587,7 @@ fn tag_at(source: &str, start: usize) -> Option<Tag<'_>> {
 /// Skip a Svelte brace expression, including strings, nested templates, comments,
 /// and regex literals. This locates language blocks only; it never extracts or
 /// transforms JavaScript from the markup.
-fn expression_end(source: &str, start: usize) -> Option<usize> {
+pub(crate) fn expression_end(source: &str, start: usize) -> Option<usize> {
     expression_scan(source, start, &mut |_, _| {})
 }
 

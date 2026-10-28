@@ -159,7 +159,9 @@ const label = computed(() => {
 
 Compiled active-locale messages are delivered before the component executes,
 including for async Vue components. Catalog imports and runtime initialization
-remain adapter-owned. Template expressions, automatic template-text extraction,
+remain adapter-owned. Imported macros used in HTML template expressions fail
+with a located diagnostic; move the macro call into `<script setup>` and render
+the resulting value. Template expressions, automatic template-text extraction,
 and Vue rich-text components are not supported. See the runnable
 [Vue proof](../../proof/vue-vite/README.md).
 

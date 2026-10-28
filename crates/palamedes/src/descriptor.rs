@@ -181,15 +181,10 @@ fn check_message_values(
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<()> {
-    // A template message arrives in its catalog spelling during extraction
-    // and in its runtime spelling during the transform. Canonicalizing under
-    // the runtime apostrophe policy makes both read the same placeholders.
-    // String messages are raw ICU and keep the established reading.
-    let placeholders = if template {
-        collect_message_placeholders(&canonicalize_runtime_icu(message))
-    } else {
-        collect_message_placeholders(message)
-    };
+    // Catalog compilation applies the runtime apostrophe policy to both raw
+    // string descriptors and authored templates. Validate the same argument
+    // set without changing the persisted source spelling or lookup identity.
+    let placeholders = collect_message_placeholders(&canonicalize_runtime_icu(message));
     let value_names = values
         .iter()
         .map(|binding| binding.name.clone())

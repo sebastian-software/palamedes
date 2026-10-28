@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 
 use crate::component::ScriptBlock;
 use crate::{PalamedesError, PalamedesResult};
@@ -97,6 +97,244 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
         });
     }
     Ok(scripts)
+}
+
+/// Templates are not macro surfaces. Diagnose imported setup bindings before
+/// their imports are removed, using OXC to distinguish references from property
+/// keys, strings, comments, and locally shadowed function parameters.
+pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> PalamedesResult<()> {
+    if !source.contains("/macro") {
+        return Ok(());
+    }
+    let scripts = script_blocks(source, filename)?
+        .into_iter()
+        .filter(|script| script.instance)
+        .collect::<Vec<_>>();
+    let macros = crate::component::imported_macros(source, &scripts);
+    if macros.is_empty() {
+        return Ok(());
+    }
+    let mut cursor = 0;
+    while let Some(start) = next_tag(source, &mut cursor) {
+        let Some(tag) = parse_tag(source, start) else {
+            continue;
+        };
+        cursor = tag.end;
+        if tag.closing || tag.self_closing {
+            continue;
+        }
+        let raw =
+            tag.name != "template" || tag.attribute("lang").is_some_and(|lang| lang != "html");
+        let end = block_end(source, &tag, raw)
+            .ok_or_else(|| sfc_error(filename, "Missing closing language-block tag."))?;
+        if tag.name == "template" && !raw && tag.attribute("v-pre").is_none() {
+            check_template(source, filename, tag.end, end.start, &macros)?;
+        }
+        cursor = end.end;
+    }
+    Ok(())
+}
+
+fn check_template(
+    source: &str,
+    filename: &str,
+    mut cursor: usize,
+    end: usize,
+    macros: &std::collections::HashMap<String, String>,
+) -> PalamedesResult<()> {
+    let mut scopes: Vec<(&str, Vec<&str>)> = Vec::new();
+    while cursor < end {
+        if source[cursor..].starts_with("<!--") {
+            cursor = source[cursor + 4..]
+                .find("-->")
+                .map_or(end, |offset| cursor + 4 + offset + 3);
+        } else if source[cursor..].starts_with("{{") {
+            let start = cursor + 2;
+            let Some(close) = crate::svelte::expression_end(source, cursor + 1) else {
+                break;
+            };
+            if source.as_bytes().get(close) != Some(&b'}') {
+                break;
+            }
+            check_template_expression(source, filename, start, close - 1, &scopes, macros)?;
+            cursor = close + 1;
+        } else if source.as_bytes()[cursor] == b'<' {
+            let Some(tag) = parse_tag(source, cursor) else {
+                cursor += 1;
+                continue;
+            };
+            cursor = tag.end;
+            if tag.closing {
+                if let Some(index) = scopes.iter().rposition(|(name, _)| *name == tag.name) {
+                    scopes.truncate(index);
+                }
+                continue;
+            }
+            if tag.attribute("v-pre").is_some() {
+                if !tag.self_closing
+                    && let Some(close) = block_end(source, &tag, false)
+                {
+                    cursor = close.end;
+                }
+                continue;
+            }
+            let mut bindings = Vec::new();
+            for (name, value) in &tag.attributes {
+                if *name == "v-for" {
+                    if let Some((pattern, _)) = split_for(value) {
+                        bindings.push(pattern.trim().trim_start_matches('(').trim_end_matches(')'));
+                    }
+                } else if name.starts_with("v-slot") || name.starts_with('#') {
+                    bindings.push(*value);
+                }
+            }
+            scopes.push((tag.name, bindings));
+            for (name, value) in &tag.attributes {
+                if let Some(open) = name.find('[')
+                    && let Some(close) = name.rfind(']')
+                {
+                    let start = name.as_ptr() as usize - source.as_ptr() as usize + open + 1;
+                    check_template_expression(
+                        source,
+                        filename,
+                        start,
+                        start + close - open - 1,
+                        &scopes,
+                        macros,
+                    )?;
+                }
+                if name.starts_with("v-slot") || name.starts_with('#') {
+                    continue;
+                }
+                if name.starts_with("v-") || name.starts_with(':') || name.starts_with('@') {
+                    let expression = if *name == "v-for" {
+                        split_for(value).map_or(*value, |(_, expression)| expression)
+                    } else {
+                        *value
+                    };
+                    let start = expression.as_ptr() as usize - source.as_ptr() as usize;
+                    // A v-for's collection is evaluated outside its own bindings.
+                    let active_scopes = if *name == "v-for" {
+                        &scopes[..scopes.len() - 1]
+                    } else {
+                        &scopes
+                    };
+                    check_template_expression(
+                        source,
+                        filename,
+                        start,
+                        start + expression.len(),
+                        active_scopes,
+                        macros,
+                    )?;
+                }
+            }
+            if tag.self_closing
+                || matches!(
+                    tag.name,
+                    "area"
+                        | "base"
+                        | "br"
+                        | "col"
+                        | "embed"
+                        | "hr"
+                        | "img"
+                        | "input"
+                        | "link"
+                        | "meta"
+                        | "param"
+                        | "source"
+                        | "track"
+                        | "wbr"
+                )
+            {
+                scopes.pop();
+            } else if matches!(tag.name, "script" | "style") {
+                if let Some(close) = block_end(source, &tag, true) {
+                    cursor = close.end;
+                }
+                scopes.pop();
+            }
+        } else {
+            cursor += source[cursor..].chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    Ok(())
+}
+
+fn split_for(value: &str) -> Option<(&str, &str)> {
+    value
+        .split_once(" in ")
+        .or_else(|| value.split_once(" of "))
+}
+
+fn check_template_expression(
+    source: &str,
+    filename: &str,
+    start: usize,
+    end: usize,
+    scopes: &[(&str, Vec<&str>)],
+    macros: &std::collections::HashMap<String, String>,
+) -> PalamedesResult<()> {
+    use oxc_allocator::Allocator;
+    use oxc_parser::Parser;
+    use oxc_semantic::SemanticBuilder;
+    let bindings = scopes.iter().flat_map(|(_, bindings)| bindings);
+    let prefix = bindings
+        .map(|binding| format!("({binding}) => {{"))
+        .collect::<String>();
+    let suffix = "}".repeat(scopes.iter().map(|(_, bindings)| bindings.len()).sum());
+    for expression in [true, false] {
+        let opening = if expression { "(" } else { "() => {" };
+        let closing = if expression { ")" } else { "}" };
+        let text = format!("{prefix}{opening}{}{closing}{suffix}", &source[start..end]);
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &text, SourceType::ts()).parse();
+        if !parsed.diagnostics.is_empty() {
+            continue;
+        }
+        let semantic = SemanticBuilder::new()
+            .with_build_nodes(true)
+            .build(&parsed.program)
+            .semantic;
+        let mut first = None;
+        for (name, imported) in macros {
+            if let Some(references) = semantic
+                .scoping()
+                .root_unresolved_references()
+                .get(name.as_str())
+            {
+                for id in references {
+                    let reference = semantic.scoping().get_reference(*id);
+                    let span = semantic.nodes().get_node(reference.node_id()).span();
+                    let Some(relative) =
+                        (span.start as usize).checked_sub(prefix.len() + opening.len())
+                    else {
+                        continue;
+                    };
+                    if relative >= end - start {
+                        continue;
+                    }
+                    let offset = start + relative;
+                    if first
+                        .as_ref()
+                        .is_none_or(|(previous, _)| offset < *previous)
+                    {
+                        first = Some((offset, imported));
+                    }
+                }
+            }
+        }
+        if let Some((offset, imported)) = first {
+            return Err(PalamedesError::UnsupportedMacroSyntax {
+                macro_name: imported.clone(),
+                location: crate::translation_scope::source_location(source, filename, offset),
+                detail: "Vue templates are not a macro surface, and the transform removes this import; call the macro in <script setup> and render the resulting value instead".into(),
+            });
+        }
+        break;
+    }
+    Ok(())
 }
 
 struct BlockEnd {
@@ -396,5 +634,76 @@ mod tests {
                 .len(),
             1
         );
+    }
+}
+
+#[cfg(test)]
+mod markup_tests {
+    use crate::{extract_messages, transform_macros};
+
+    #[test]
+    fn rejects_template_macro_references_with_the_original_location() {
+        for expression in [
+            "{{ text`Hello` }}",
+            "{{ consume(text) }}",
+            "<button @click=\"return text\">x</button>",
+            "{{ '}}' + text }}",
+            "<p :[text]=\"title\">x</p>",
+            "<input :title=\"text`Hi`\" />",
+            "<button @click=\"consume(text)\">x</button>",
+            "<p v-if=\"text\">x</p>",
+        ] {
+            let source = format!(
+                "<script setup>import {{ t as text }} from '@palamedes/core/macro';</script>\n<template>😀{expression}</template>"
+            );
+            let extracted = extract_messages(&source, "View.vue")
+                .unwrap_err()
+                .to_string();
+            let transformed = transform_macros(&source, "View.vue", None)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(extracted, transformed);
+            assert!(
+                extracted.contains("Vue templates are not a macro surface"),
+                "{extracted}"
+            );
+            assert!(extracted.contains("View.vue:2:"), "{extracted}");
+        }
+    }
+
+    #[test]
+    fn template_local_bindings_and_nonreferences_are_not_macros() {
+        let script = "<script setup>import { t } from '@palamedes/core/macro'; const title=t`Title`;</script>";
+        for markup in [
+            "<p>{{ title }} {{ obj.t }} {{ ({t: 1}) }} {{ 't' }} {{ /t/.test(title) }}</p>",
+            "<p>{{ items.map(t => t.name) }}</p>",
+            "<p v-for=\"t in items\">{{ t.name }}</p>",
+            "<template #default=\"{ t }\">{{ t.name }}</template>",
+            "<p class=\"t\" title=\"t`Not code`\">t`Text`</p><!-- {{ t }} -->",
+            "<div v-pre><p>{{t}}</p><p :title=\"t\">t</p></div>",
+            "<button @click=\"function handler(t) { return t; }\">x</button>",
+        ] {
+            let source =
+                format!("{script}<template>{markup}</template><style>.t{{color:red}}</style>");
+            assert_eq!(
+                extract_messages(&source, "View.vue")
+                    .unwrap_or_else(|e| panic!("{markup}: {e}"))
+                    .len(),
+                1
+            );
+            assert_eq!(
+                transform_macros(&source, "View.vue", None)
+                    .unwrap()
+                    .compiled_ids
+                    .len(),
+                1
+            );
+        }
+        let source = format!(
+            "{script}<template><p v-for=\"t in items\">{{{{t}}}}</p><p>{{{{t}}}}</p></template>"
+        );
+        assert!(extract_messages(&source, "View.vue").is_err());
+        let source = format!("{script}<template><p v-for=\"t in t\">{{{{t}}}}</p></template>");
+        assert!(extract_messages(&source, "View.vue").is_err());
     }
 }

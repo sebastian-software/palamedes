@@ -1,8 +1,13 @@
 //! Script projections shared by component extraction and transformation.
 
 use crate::PalamedesResult;
+use crate::extract::MacroCollector;
+use oxc_allocator::Allocator;
+use oxc_ast_visit::Visit;
+use oxc_parser::Parser;
 use oxc_span::SourceType;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::Range;
 
 pub(crate) struct ScriptBlock {
@@ -43,6 +48,26 @@ pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> Palamede
     if crate::svelte::is_svelte(filename) {
         crate::svelte::reject_markup_macro_uses(source, filename)
     } else {
-        Ok(())
+        crate::vue::reject_markup_macro_uses(source, filename)
     }
+}
+
+/// Local macro import names from all component scripts, mapped to the public
+/// macro name. Callers choose the scripts exposed to their template.
+pub(crate) fn imported_macros(source: &str, scripts: &[ScriptBlock]) -> HashMap<String, String> {
+    let mut macros = HashMap::new();
+    for script in scripts {
+        let allocator = Allocator::default();
+        let masked = crate::component::masked_source(source, &script.range);
+        let parsed = Parser::new(&allocator, &masked, script.source_type).parse();
+        let mut collector = MacroCollector::new();
+        collector.visit_program(&parsed.program);
+        macros.extend(
+            collector
+                .imported_macros
+                .into_iter()
+                .map(|(local_name, imported)| (local_name, imported.imported_name)),
+        );
+    }
+    macros
 }
