@@ -251,6 +251,19 @@ source location. Add a space after `<`, pass the text as a placeholder value,
 or use inline code in MDX. See
 [Quoting and literal text](../packages/core/README.md#quoting-and-literal-text).
 
+## Regenerate messages with repeated expressions
+
+Each call, property read (including getters), or compound interpolation keeps its
+own value. For example, `` t`Values: ${next()} and ${next()}` `` extracts as
+`Values: {next} and {next_1}` and evaluates `next()` twice, from left to right.
+The same rule applies to JSX messages and choice branches. Repeated bare
+identifiers keep shared placeholders until another expression can change them.
+
+Run `pmds extract` and rebuild catalogs after upgrading. Review translations for
+messages whose placeholder names changed; the previous entry becomes obsolete.
+For unbundled Node applications, regenerate the runtime manifest with
+`pmds extract --runtime-manifest ./runtime-macros.json` as well. The manifest format remains version 1.
+
 ## Replace removed APIs
 
 Rows marked _v2 pre-release only_ name APIs that v1 never shipped; they matter

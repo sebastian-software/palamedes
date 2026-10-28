@@ -25,11 +25,11 @@ use crate::source_macros::{
     record_macro_import_declaration,
 };
 use crate::source_message::{
-    SourceValue, build_icu_message as shared_build_icu_message, check_lowered_message,
+    SourceValue, ValueNames, build_icu_message as shared_build_icu_message, check_lowered_message,
     expression_source, jsx_attributes,
     lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
     lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
-    lower_template, reject_jsx_choice_spread,
+    lower_template, make_unique_value_name, reject_jsx_choice_spread,
 };
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
@@ -1070,7 +1070,7 @@ fn extract_choice_options_from_object(
     object: &ObjectExpression<'_>,
     source: &str,
     macros: &MacroImports,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
@@ -1152,7 +1152,8 @@ fn extract_from_jsx_element(
             "SelectOrdinal" => "selectordinal",
             _ => return Ok(None),
         };
-        let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
+        let mut used_value_names = ValueNames::default();
+        make_unique_value_name(value_name.clone(), &value_expression, &mut used_value_names);
         let extracted_options = extract_choice_options_from_jsx(
             &element.opening_element,
             source,
@@ -1338,7 +1339,8 @@ fn extract_from_choice_call(
         .as_expression()
         .and_then(|expression| expression_source(expression, source))
         .unwrap_or_else(|| value_name.clone());
-    let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
+    let mut used_value_names = ValueNames::default();
+    make_unique_value_name(value_name.clone(), &value_expression, &mut used_value_names);
     let format = match macro_name {
         "plural" => "plural",
         "select" => "select",
@@ -1489,7 +1491,7 @@ fn template_to_message(
     source: &str,
     macros: &MacroImports,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
-    let mut used_value_names = HashMap::new();
+    let mut used_value_names = ValueNames::default();
     template_to_message_with_state(
         template,
         source,
@@ -1504,7 +1506,7 @@ fn template_to_message_with_state(
     source: &str,
     macros: &MacroImports,
     syntax: &'static str,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
     let (message, values) = lower_template(template, source, macros, syntax, used_value_names)?;
     let placeholders = values
@@ -1519,7 +1521,7 @@ fn extract_jsx_choice_value(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
 ) -> PalamedesResult<Option<(String, String)>> {
-    let mut used_value_names = HashMap::new();
+    let mut used_value_names = ValueNames::default();
     Ok(
         lower_jsx_choice_value_binding(opening_element, source, &mut used_value_names)
             .map(|value| (value.name, value.expression)),
@@ -1550,7 +1552,7 @@ fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     macros: &MacroImports,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ObjectExpression, ObjectProperty, ObjectPropertyKind,
 };
@@ -17,7 +15,7 @@ use crate::jsx_message::{JsxMessagePart, join_jsx_message_parts};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_macros::MacroImports;
-use crate::source_message::{lower_template, make_unique_value_name};
+use crate::source_message::{ValueNames, lower_template, make_unique_value_name};
 
 use super::imports::{ImportCollector, RemixJsxBinding};
 use super::messages::{ExtractedChoiceOptions, ValueBinding};
@@ -92,7 +90,7 @@ pub(super) fn choice_from_call(
             "the lowered choice macro requires a static `value` property",
         )
     })?;
-    let mut used_value_names = HashMap::new();
+    let mut used_value_names = ValueNames::default();
     let value_binding = expression_binding(
         value,
         source,
@@ -285,7 +283,7 @@ fn static_string_property(
 #[derive(Default)]
 struct LoweringState {
     next_component_index: usize,
-    used_value_names: HashMap<String, String>,
+    used_value_names: ValueNames,
 }
 
 #[derive(Default)]
@@ -555,7 +553,7 @@ fn is_static_element_type(expression: &Expression<'_>) -> bool {
 fn expression_binding(
     expression: &Expression<'_>,
     source: &str,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     syntax: &'static str,
     fallback_name: Option<&str>,
 ) -> PalamedesResult<ValueBinding> {

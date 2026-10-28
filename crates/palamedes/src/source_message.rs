@@ -3,7 +3,7 @@
 //! Extraction owns catalog identity while transformation owns generated runtime
 //! bindings. Both must derive the same names and source expressions.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use ferrocat_icu::{extract_argument_names, extract_tag_names};
 use oxc_ast::ast::{
@@ -45,31 +45,42 @@ pub(crate) struct LoweredChoiceOptions {
 
 const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
 
+/// Names are shared only by bare identifier reads with no intervening expression.
+/// Calls, property reads (including getters), and compound expressions may change
+/// values, even when their source text is identical.
+#[derive(Default)]
+pub(crate) struct ValueNames {
+    used: HashSet<String>,
+    identifiers: HashMap<String, String>,
+}
+
 pub(crate) fn make_unique_value_name(
     preferred_name: String,
     expression: &str,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
 ) -> String {
-    if let Some(existing_expression) = used_value_names.get(&preferred_name) {
-        if existing_expression == expression {
-            return preferred_name;
+    let is_bare_identifier = expression == preferred_name;
+    if is_bare_identifier {
+        if let Some(name) = used_value_names.identifiers.get(expression) {
+            return name.clone();
         }
     } else {
-        used_value_names.insert(preferred_name.clone(), expression.to_string());
-        return preferred_name;
+        // A call or getter can change identifiers read earlier in this message.
+        used_value_names.identifiers.clear();
     }
 
+    let mut name = preferred_name.clone();
     let mut suffix = 1usize;
-    loop {
-        let candidate = format!("{preferred_name}_{suffix}");
-        match used_value_names.get(&candidate) {
-            Some(existing_expression) if existing_expression != expression => suffix += 1,
-            _ => {
-                used_value_names.insert(candidate.clone(), expression.to_string());
-                return candidate;
-            }
-        }
+    while !used_value_names.used.insert(name.clone()) {
+        name = format!("{preferred_name}_{suffix}");
+        suffix += 1;
     }
+    if is_bare_identifier {
+        used_value_names
+            .identifiers
+            .insert(expression.to_owned(), name.clone());
+    }
+    name
 }
 
 pub(crate) fn expression_source(expr: &Expression<'_>, source: &str) -> Option<String> {
@@ -131,7 +142,7 @@ pub(crate) fn lower_template(
     source: &str,
     macros: &MacroImports,
     syntax: &'static str,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
 ) -> PalamedesResult<(String, Vec<SourceValue>)> {
     let mut message = String::new();
     let mut values = Vec::new();
@@ -228,7 +239,7 @@ fn lower_choice_branch(
     value: &Expression<'_>,
     source: &str,
     macros: &MacroImports,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<(String, Vec<SourceValue>)> {
@@ -392,7 +403,7 @@ pub(crate) fn lower_choice_options_from_object(
     object: &ObjectExpression<'_>,
     source: &str,
     macros: &MacroImports,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
@@ -453,7 +464,7 @@ pub(crate) fn lower_choice_options_from_object(
 pub(crate) fn lower_jsx_choice_value_binding(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
 ) -> Option<SourceValue> {
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -520,7 +531,7 @@ pub(crate) fn lower_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     macros: &MacroImports,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     format: &str,
     macro_name: &str,
     location: &(impl DiagnosticLocation + ?Sized),
@@ -608,7 +619,7 @@ pub(crate) fn lower_jsx_children(
     macros: &MacroImports,
     component_expression: impl Fn(&JSXOpeningElement<'_>) -> String,
 ) -> PalamedesResult<LoweredJsxMessage> {
-    let mut used_value_names = HashMap::new();
+    let mut used_value_names = ValueNames::default();
     let mut next_component_index = 0usize;
 
     lower_jsx_children_with_state(
@@ -626,7 +637,7 @@ fn lower_jsx_children_with_state<F>(
     source: &str,
     macros: &MacroImports,
     component_expression: &F,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     next_component_index: &mut usize,
 ) -> PalamedesResult<LoweredJsxMessage>
 where

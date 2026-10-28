@@ -8,7 +8,7 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
 use crate::source::DiagnosticLocation;
 use crate::source_macros::MacroImports;
-use crate::source_message::{check_lowered_message, reject_jsx_choice_spread};
+use crate::source_message::{ValueNames, check_lowered_message, reject_jsx_choice_spread};
 
 use super::NativeTransformOptions;
 use super::imports::ImportCollector;
@@ -166,7 +166,7 @@ pub(super) fn transform_choice_call(
         return Ok(None);
     };
 
-    let mut used_value_names = std::collections::HashMap::new();
+    let mut used_value_names = ValueNames::default();
     let value_binding = choice_expression_binding(value_expr, source, &mut used_value_names);
     let value_name = value_binding.name.clone();
     let format = if macro_name == "selectOrdinal" {
@@ -367,7 +367,7 @@ pub(super) fn transform_choice_jsx_element(
     let context = attrs.get("context").cloned();
     let comment = attrs.get("comment").cloned();
     reject_jsx_choice_spread(&element.opening_element, macro_name, location)?;
-    let mut used_value_names = std::collections::HashMap::new();
+    let mut used_value_names = ValueNames::default();
     let Some(value_binding) =
         extract_jsx_value_binding(&element.opening_element, source, &mut used_value_names)?
     else {
