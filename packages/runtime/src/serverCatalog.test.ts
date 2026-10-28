@@ -22,6 +22,7 @@ describe("createServerCatalogStore", () => {
     expect(store.getReady("de")).toBe(catalog);
     expect(store.getReady("en")).toBeUndefined();
     expect(store.stats()).toStrictEqual({
+      trackedLocales: 1,
       readyLocales: 1,
       inFlightLocales: 0,
       retainedFragments: 1,
@@ -91,6 +92,54 @@ describe("createServerCatalogStore", () => {
     const retry = await store.load("en");
     expect(retry.greeting).toBe("Hello");
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retain locales the loader rejects as unsupported", async () => {
+    // Mirrors the generated server-catalogs modules: the loader, not the
+    // store, knows which locales exist.
+    const loaders: Record<string, () => Promise<CompiledCatalogMessages[]>> = {
+      en: async () => [defineCompiledCatalog({ greeting: "Hello" })],
+    };
+    const load = vi.fn(({ locale }: { locale: string }) => {
+      if (!Object.hasOwn(loaders, locale)) throw new Error("Unsupported catalog locale");
+      return loaders[locale]!();
+    });
+    const store = createServerCatalogStore({ load });
+    const english = await store.load("en");
+    const before = store.stats();
+    expect(before.trackedLocales).toBe(1);
+
+    const unknown = Array.from({ length: 50 }, (_, index) => `xx-${index}`);
+    const results = await Promise.allSettled(unknown.map((locale) => store.load(locale)));
+    for (const result of results) {
+      expect(result).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({ message: "Unsupported catalog locale" }),
+      });
+    }
+
+    expect(store.stats()).toStrictEqual(before);
+    for (const locale of unknown) {
+      expect(store.getReady(locale)).toBeUndefined();
+      expect(store.generation(locale)).toBe(0);
+      store.invalidate(locale);
+    }
+    expect(store.stats()).toStrictEqual(before);
+    expect(await store.load("en")).toBe(english);
+  });
+
+  it("shares one in-flight rejection for concurrent loads of an unknown locale", async () => {
+    const load = vi.fn(async () => {
+      throw new Error("Unsupported catalog locale");
+    });
+    const store = createServerCatalogStore({ load });
+
+    const first = store.load("xx");
+    expect(store.load("xx")).toBe(first);
+    expect(store.stats()).toMatchObject({ trackedLocales: 1, inFlightLocales: 1 });
+    await expect(first).rejects.toThrow("Unsupported catalog locale");
+    expect(load).toHaveBeenCalledOnce();
+    expect(store.stats()).toMatchObject({ trackedLocales: 0, inFlightLocales: 0 });
   });
 
   it("does not let an old generation overwrite a newer invalidation", async () => {
