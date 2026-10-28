@@ -1,14 +1,14 @@
 # React Router Framework Mode
 
-React Router Framework Mode on Vite has no dedicated Palamedes adapter package.
-The integration is `@palamedes/vite-plugin` plus a small amount of server
-wiring that the application writes itself: a request-scoped server i18n
-runner, the catalog document transform in `app/entry.server.tsx`, and a scope
-around each loader and action that runs translated code.
+`@palamedes/react-router` connects Palamedes to React Router Framework Mode on
+Vite. The application adds three pieces next to `@palamedes/vite-plugin`: one
+`createReactRouterI18n()` call with its locale policy, the adapter's middleware
+on the root route, and the adapter's server entry. Loaders and actions need no
+Palamedes code.
 
-This page describes that wiring as the checked examples implement it today.
-Palamedes does not support React Router's experimental RSC mode; use Next.js or
-Waku for React Server Components.
+This page describes that setup as the checked examples implement it. Palamedes
+does not support React Router's experimental RSC mode; use Next.js or Waku for
+React Server Components.
 
 | Example                                                           | Locale source                          |
 | ----------------------------------------------------------------- | -------------------------------------- |
@@ -26,12 +26,14 @@ The examples depend on these Palamedes packages next to React Router 8.5.0,
 React 19, and Vite 8:
 
 ```sh
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/react @palamedes/react-router @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
-`@react-router/dev@8.5.0` declares `vite: ^7.0.0 || ^8.0.0` as its peer range;
-the examples are verified on Vite 8.
+`@palamedes/react-router` needs `react-router@^8.5.0`, `@react-router/node`,
+React 19, and Node.js `>=22.22.0`. It is ESM-only. `@react-router/dev@8.5.0`
+declares `vite: ^7.0.0 || ^8.0.0` as its peer range; the examples are verified
+on Vite 8.
 
 ## Configuration
 
@@ -60,7 +62,9 @@ export default defineConfig({
 ```
 
 The example config also filters a known React Router sourcemap warning; that
-filter is unrelated to Palamedes. Catalog delivery needs no plugin option.
+filter is unrelated to Palamedes. Catalog delivery needs no plugin option. The
+plugin keeps `@palamedes/react-router` in Vite's server module graph, so the
+adapter can load the generated server catalogs when it is installed from npm.
 
 ## Locale policy
 
@@ -96,62 +100,63 @@ an unknown locale, it falls back to the best `Accept-Language` match. See
 [locale controls](./core.md#locale-controls) for the API and
 [Locale strategies](../locale-strategies.md) for the strategies.
 
-## Server i18n and catalog delivery
+## Create the integration
 
-Create the request runner and the catalog delivery once, in a server-only
-module (`examples/react-router-cookie/app/lib/i18n.server.ts`):
+Create the integration once, in a server-only module
+(`examples/react-router-cookie/app/lib/i18n.server.ts`):
 
 ```ts
-import path from "node:path";
-import { createScopedI18nRunner } from "@palamedes/runtime/server";
-import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
-import { createViteCatalogDelivery } from "@palamedes/vite-plugin/delivery";
+import { createReactRouterI18n } from "@palamedes/react-router";
 import { resolveLocaleFromRequest } from "./i18n";
 
-export const serverI18n = createScopedI18nRunner(
-  (request) =>
-    createBundledServerI18n({
-      locale: resolveLocaleFromRequest(request).locale,
-      timeZone: "Europe/Berlin",
-    }),
-  { failureMessage: "The page catalog could not be loaded." },
-);
-
-export const catalogDelivery = createViteCatalogDelivery({
-  clientDirectory: path.resolve(process.cwd(), "build/client"),
-  development: process.env.NODE_ENV !== "production",
+export const i18n = createReactRouterI18n({
+  resolveLocale: (request) => resolveLocaleFromRequest(request).locale,
+  i18nOptions: { timeZone: "Europe/Berlin" },
+  failureMessage: "The page catalog could not be loaded.",
 });
 ```
 
-- `createScopedI18nRunner(resolve, { failureMessage })` returns
-  `{ run(request, next), scope }`. `run()` resolves a fresh i18n instance for
-  the request and runs `next` inside the shared server i18n scope. If the
-  resolver throws, `run()` throws `new Error(failureMessage, { cause })`.
-- `createBundledServerI18n` from `@palamedes/runtime/server/bundled` loads the
-  active locale's compiled catalog from the store that the Vite plugin
-  generates, then returns a new i18n instance for that locale. Pass `timeZone` and other `createI18n`
-  options here.
-- `createViteCatalogDelivery({ clientDirectory, development?, manifestName? })`
-  reads the client build's `palamedes-split-manifest.json` and the locale import
-  maps it names. React Router's client build is normally `build/client`. With
-  `development: true` it reads nothing and returns a `null` binding.
+`createReactRouterI18n(options)` takes:
 
-`clientDirectory` above is resolved against the process working directory, so
-the cookie example expects its server to start in the application directory.
-The other three examples resolve it relative to the server build instead:
-`path.resolve(import.meta.dirname, "../client")`, with
-`development: import.meta.env.DEV`.
+| Option            | Default                                                                            | Purpose                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `resolveLocale`   | required                                                                           | `(request) => locale`, synchronous or asynchronous. The app's locale policy.                  |
+| `i18nOptions`     | `{}`                                                                               | `createI18n` options such as `timeZone`, or `(request, locale) => options`.                   |
+| `catalogDelivery` | `{}`                                                                               | `{ clientDirectory?, development?, manifestName?, errorHtml? }`, or `false` to skip delivery. |
+| `nonce`           | none                                                                               | `(request) => nonce` for React's scripts, the import map, and the readiness script.           |
+| `streamTimeout`   | `5000`                                                                             | Milliseconds before a streaming render is aborted, plus one second.                           |
+| `failureMessage`  | `Palamedes React Router i18n initialization failed before the route handlers ran.` | Message of the error thrown when the catalog cannot load.                                     |
 
-## Document language
+The adapter creates one server i18n scope per `createReactRouterI18n()` call and
+shares it across requests. Each request gets its own i18n instance over the
+shared compiled catalog for its locale, loaded through
+`createBundledServerI18n` from `@palamedes/runtime/server/bundled`.
 
-The browser runtime reads the active locale from `<html lang>` and the time
-zone from `data-palamedes-time-zone`, so the root layout must render both from
-the same locale policy (`examples/react-router-cookie/app/root.tsx`):
+`catalogDelivery.clientDirectory` defaults to `build/client` in the process
+working directory, React Router's default client build. `development` defaults
+to `process.env.NODE_ENV !== "production"`; in development the adapter reads no
+manifest. The examples start `react-router-serve` in the application directory
+and use both defaults.
+
+## Root route
+
+Register the middleware on the root route, and read the resolved locale for
+the document (`examples/react-router-cookie/app/root.tsx`):
 
 ```tsx
-export async function loader({ request }: Route.LoaderArgs) {
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
+
+import type { Route } from "./+types/root";
+import { DEFAULT_LOCALE } from "~/lib/i18n";
+import { i18n } from "~/lib/i18n.server";
+import { serverI18nTestBarrier } from "~/lib/test-barrier.server";
+import "@palamedes/example-ui/styles.css";
+
+export const middleware: Route.MiddlewareFunction[] = [i18n.middleware, serverI18nTestBarrier];
+
+export async function loader({ context }: Route.LoaderArgs) {
   return {
-    locale: resolveLocaleFromRequest(request).locale,
+    locale: i18n.getLocale(context),
   };
 }
 
@@ -177,100 +182,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 ```
 
-The generated browser bootstrap throws if `lang` is not a configured locale.
+`serverI18nTestBarrier` exists for the repository's concurrency checks. It does
+nothing unless `PALAMEDES_I18N_TEST_BARRIER=1` is set and the request carries
+the test header; an application registers only `i18n.middleware`.
+
+React Router 8 always enables route middleware, and the root route matches
+every request. `i18n.middleware` resolves the locale, loads the catalog, and
+runs `next()` inside the request's scope. Everything below it therefore sees
+the request's i18n instance: child middleware, loaders, actions, resource
+routes, `.data` requests from client navigations, and the server entry's
+document render.
+
+`i18n.getLocale(context)` returns the locale the middleware resolved, so the
+root loader does not resolve it again. It throws if the middleware did not run
+for the request.
+
+The browser runtime reads the active locale from `<html lang>` and the time
+zone from `data-palamedes-time-zone`. The generated browser bootstrap throws if
+`lang` is not a configured locale.
 
 ## Server entry
 
-`app/entry.server.tsx` keeps React Router's streaming entry and adds two
-things: it renders inside `serverI18n.run()`, and it pipes the HTML through the
-catalog document transform (`examples/react-router-cookie/app/entry.server.tsx`,
-test-only barrier calls omitted):
+The server entry is the adapter's handler
+(`examples/react-router-cookie/app/entry.server.tsx`):
 
 ```tsx
-import { PassThrough } from "node:stream";
+import { i18n } from "~/lib/i18n.server";
 
-import type { EntryContext, RouterContextProvider } from "react-router";
-import { createReadableStreamFromReadable } from "@react-router/node";
-import { ServerRouter } from "react-router";
-import { isbot } from "isbot";
-import type { RenderToPipeableStreamOptions } from "react-dom/server";
-import { renderToPipeableStream } from "react-dom/server";
-import { resolveLocaleFromRequest } from "~/lib/i18n";
-import { catalogDelivery, serverI18n } from "~/lib/i18n.server";
-
-export const streamTimeout = 5000;
-
-export default function handleRequest(
-  request: Request,
-  responseStatusCode: number,
-  responseHeaders: Headers,
-  routerContext: EntryContext,
-  loadContext: RouterContextProvider,
-) {
-  if (request.method.toUpperCase() === "HEAD") {
-    return new Response(null, { status: responseStatusCode, headers: responseHeaders });
-  }
-
-  const locale = resolveLocaleFromRequest(request).locale;
-  return serverI18n.run(request, async () => {
-    return new Promise((resolve, reject) => {
-      let shellRendered = false;
-      const userAgent = request.headers.get("user-agent");
-      const readyOption: keyof RenderToPipeableStreamOptions =
-        (userAgent && isbot(userAgent)) || routerContext.isSpaMode ? "onAllReady" : "onShellReady";
-      let timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(
-        () => abort(),
-        streamTimeout + 1000,
-      );
-      const { pipe, abort } = renderToPipeableStream(
-        <ServerRouter context={routerContext} url={request.url} />,
-        {
-          [readyOption]() {
-            shellRendered = true;
-            const body = new PassThrough({
-              final(callback) {
-                clearTimeout(timeoutId);
-                timeoutId = undefined;
-                callback();
-              },
-            });
-            const stream = createReadableStreamFromReadable(body);
-            responseHeaders.set("Content-Type", "text/html");
-            const injector = catalogDelivery.createDocumentTransform(
-              catalogDelivery.getLocaleBinding(locale),
-            );
-            injector.pipe(body);
-            pipe(injector);
-            resolve(new Response(stream, { headers: responseHeaders, status: responseStatusCode }));
-          },
-          onShellError(error: unknown) {
-            reject(error);
-          },
-          onError(error: unknown) {
-            responseStatusCode = 500;
-            if (shellRendered) console.error(error);
-          },
-        },
-      );
-    });
-  });
-}
+export default i18n.handleRequest;
 ```
 
-The example also calls `waitForServerI18nTestBarrier` and
-`markServerI18nTestBarrierReached` from `@palamedes/runtime/server/test`. Those
-hooks exist for the repository's concurrency checks. They do nothing unless
-`PALAMEDES_I18N_TEST_BARRIER=1` is set and the request carries the test header,
-and applications do not need them.
-
-`getLocaleBinding(locale)` returns the locale's import map and chunk mapping,
-or `null` in development. In production it throws when the manifest or the
-locale's import map is missing or invalid. The route, subdomain, and TLD
-examples call it before rendering starts rather than inside the shell
-callback.
-
-`createDocumentTransform(binding, { nonce?, errorHtml? })` returns a Node
-`Transform`. It buffers the HTML until `</head>`, then:
+`i18n.handleRequest` is React Router's default Node streaming entry: it answers
+`HEAD` without a body, waits for all content for bots and SPA Mode, and aborts
+the stream after `streamTimeout`. It renders inside the request scope and pipes
+the HTML through the catalog document transform from
+`@palamedes/vite-plugin/delivery`. The transform buffers the HTML until
+`</head>`, then:
 
 - inserts the locale's `<script type="importmap">` directly after `<head>`;
 - removes bare `#pmds/` modulepreload hints that would resolve before the import
@@ -278,9 +225,15 @@ callback.
 - adds a readiness script and `modulepreload` links for the catalog fragments
   of the route chunks that the document already preloads.
 
-`nonce` is applied to the import map and the readiness script. The examples do
-not pass one. `errorHtml` is described under [Error UI](#error-ui). In
-production with a `null` binding, the transform passes HTML through unchanged.
+React Router answers unknown paths (404) and unsupported methods (405) without
+running route middleware. For those documents `handleRequest` resolves the
+locale and scope itself, so they still get the import map.
+
+If the entry module exports its own `streamTimeout`, pass the same value to
+`createReactRouterI18n()`. An application with its own render code can use
+`i18n.run(request, context, work)` for the scope and
+`i18n.createDocumentTransform(request, context)` for the Node `Transform`
+instead of `handleRequest`. The checked examples do not need either.
 
 ## Client entry
 
@@ -307,79 +260,63 @@ for the document's `lang` before translated modules run.
 
 ## Loaders and actions
 
-React Router runs loaders and actions before it calls the server entry for a
-document request. For client navigations it serves `.data` requests without
-calling the entry at all. The entry's scope therefore does not cover them. Wrap
-every loader, action, and resource route that runs translated code
+Loaders, actions, and resource routes use macros directly
 (`examples/react-router-cookie/app/routes/server-status.ts`):
 
 ```ts
 import { t } from "@palamedes/core/macro";
 import type { Route } from "./+types/server-status";
 import { getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n";
-import { serverI18n } from "~/lib/i18n.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return serverI18n.run(request, async () => {
-    const resolved = resolveLocaleFromRequest(request);
-    return {
-      proof: {
-        handledAt: new Date().toISOString(),
-        locale: resolved.locale,
-        localeLabel: getLocaleLabel(resolved.locale),
-        message: t`Server query confirmed locale ${resolved.locale}.`,
-      },
-    };
-  });
+  const resolved = resolveLocaleFromRequest(request);
+  return {
+    proof: {
+      handledAt: new Date().toISOString(),
+      locale: resolved.locale,
+      localeLabel: getLocaleLabel(resolved.locale),
+      message: t`Server query confirmed locale ${resolved.locale}.`,
+    },
+  };
 }
 ```
 
-`routes/home.tsx` and `routes/insights.tsx` wrap their loaders and actions the
-same way. The root loader only reads the locale and is not wrapped. Translated
-server code that runs outside a scope throws `No active server i18n instance`.
+React Router runs loaders and actions inside the root middleware's `next()`, on
+document requests and on the `.data` requests of client navigations alike.
+`routes/home.tsx` and `routes/insights.tsx` follow the same pattern. Translated
+server code that runs outside any request, such as at module scope, throws
+`No active server i18n instance`.
 
 ## Locale strategies
 
-The route, subdomain, and TLD examples resolve the locale before creating the
-i18n instance. They use `createServerI18nScope()` and a small `runServerI18n`
-helper instead of `createScopedI18nRunner`
+The route, subdomain, and TLD examples pass their resolver directly, because
+it already returns a locale
 (`examples/react-router-route/app/lib/i18n.server.ts`):
 
 ```ts
-import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
-import { createServerI18nScope } from "@palamedes/runtime/server";
-import type { Locale } from "./i18n";
+import { createReactRouterI18n } from "@palamedes/react-router";
+import { resolveLocaleFromRequest } from "./i18n";
 
-export const serverI18nScope = createServerI18nScope();
-
-export function createServerI18n(locale: Locale) {
-  return createBundledServerI18n({ locale, timeZone: "Europe/Berlin" });
-}
-
-export async function runServerI18n<Result>(
-  locale: Locale,
-  work: () => Result | Promise<Result>,
-): Promise<Result> {
-  const i18n = await createServerI18n(locale);
-  return serverI18nScope.run(i18n, work);
-}
+export const i18n = createReactRouterI18n({
+  resolveLocale: resolveLocaleFromRequest,
+  i18nOptions: { timeZone: "Europe/Berlin" },
+});
 ```
 
-Their entry awaits `createServerI18n(locale)` and renders inside
-`serverI18nScope.run(i18n, …)`. Loaders and actions call
-`runServerI18n(locale, …)`. Unlike `createScopedI18nRunner`, this helper does
-not wrap catalog errors in a custom message.
+Their root route and server entry match the cookie example. Without a
+`failureMessage`, a catalog failure carries the adapter's default message.
 
-| Strategy  | Locale resolution                                                                                            | Locale switch                                                                                                |
-| --------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Cookie    | `locales.resolve({ strategy: "cookie", … })`                                                                 | `<Form method="post" reloadDocument>`; the action sets the cookie and redirects.                             |
-| Route     | `params.locale` in the route; the entry reads the first path segment. `/` redirects to the preferred locale. | Plain `<a>` to the locale path, such as `/de`; the click stores the choice with `locales.serializeChoice()`. |
-| Subdomain | `locales.resolve({ strategy: "subdomain", … })` with the `Host` header                                       | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`.              |
-| TLD       | `locales.resolve({ strategy: "tld", … })` with the `Host` header                                             | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`.              |
+| Strategy  | Locale resolution                                                                                               | Locale switch                                                                                                |
+| --------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Cookie    | `locales.resolve({ strategy: "cookie", … })`                                                                    | `<Form method="post" reloadDocument>`; the action sets the cookie and redirects.                             |
+| Route     | `params.locale` in the route; the resolver reads the first path segment. `/` redirects to the preferred locale. | Plain `<a>` to the locale path, such as `/de`; the click stores the choice with `locales.serializeChoice()`. |
+| Subdomain | `locales.resolve({ strategy: "subdomain", … })` with the `Host` header                                          | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`.              |
+| TLD       | `locales.resolve({ strategy: "tld", … })` with the `Host` header                                                | Plain `<a>` to `locales.canonicalUrl(…)`; the click stores the choice with `serializeChoice()`.              |
 
-In the route example, client navigations request `/<locale>.data`. Its
-`resolveLocaleFromRequest` strips the `.data` suffix from the first segment;
-without that, the root loader falls back to `Accept-Language`.
+The middleware receives the raw request, so in the route example client
+navigations arrive as `/<locale>.data`. Its `resolveLocaleFromRequest` strips
+the `.data` suffix from the first segment; without that, those requests fall
+back to `Accept-Language`.
 
 Every switch is a document navigation. The import map in the document head
 fixes the browser's catalog assets for one locale, so a new locale needs a new
@@ -415,26 +352,28 @@ Catalog failures reach the user through these paths:
   modules before `entry.client` runs. The readiness script that the document
   transform adds imports the same catalog fragments. If one fails, it replaces
   the page body with `errorHtml`. The default markup is a `role="alert"` view
-  with Reload and Home links. A custom `errorHtml` must be trusted,
-  catalog-independent markup.
+  with Reload and Home links. A custom `catalogDelivery.errorHtml` must be
+  trusted, catalog-independent markup.
 - **Later route loads, production.** The plugin wraps each React Router client
   route chunk. Once the initial catalogs are ready, a failed route import no
   longer triggers React Router's automatic reload. The route component throws
   instead, and the nearest `ErrorBoundary` renders.
 - **Development.** The transform listens for the plugin's `palamedes:catalogError`
   event and renders `errorHtml`.
-- **Server.** A failed server catalog load throws. With
-  `createScopedI18nRunner`, the error carries `failureMessage` and the original
-  cause. React Router treats it like any other server error. If the server
-  entry itself fails, React Router renders once more with the error. When that
-  render fails as well, it returns its last-resort error response.
+- **Server.** If the request's catalog cannot load, the middleware throws
+  `new Error(failureMessage, { cause })` before any loader runs. React Router
+  renders the nearest `ErrorBoundary` with status 500 for document requests and
+  serializes the error for `.data` requests. The adapter renders that error
+  document without an i18n scope, which is why the boundary must not use
+  messages; the document still gets the locale's import map.
 
 The production proof runs the built cookie example in English and German. It
 injects network and evaluation failures into initial and lazy catalog fragments
 under a hash-based script CSP. It then checks that only active-locale catalogs
 load, that the alert view appears, and that Reload recovers. A second proof
-covers the development server. The smoke check builds the examples; the
-browser check then runs both proofs after its `react-router-cookie` checks:
+covers the development server. The smoke check builds the examples and sends
+overlapping mixed-locale requests through the test barrier; the browser check
+then runs both proofs after its `react-router-cookie` checks:
 
 ```sh
 pnpm verify:examples:smoke --framework react-router
@@ -443,16 +382,13 @@ pnpm verify:examples:browser --framework react-router
 
 ## Limits
 
-- There is no `@palamedes/react-router` package. Applications own
-  `app/entry.server.tsx`, the request scope, and the loader and action
-  wrappers shown above.
-- The examples run on Node with `react-router-serve`. The server scope uses
-  `AsyncLocalStorage` from `node:async_hooks`; Edge and Worker runtimes are not
-  verified.
+- The adapter runs on Node. The server scope uses `AsyncLocalStorage` from
+  `node:async_hooks`, and the server entry uses Node streams; Edge and Worker
+  runtimes are not supported.
 - Locale changes require a new document; there is no in-place switch.
 - Production delivery needs the client build: a missing manifest or import map
   for a configured locale throws.
 - The four examples pin React Router 8.5.0 and Vite 8. Other versions are not
   verified.
-- The [stability table](../stability.md#stability-tiers) has no row for this
-  host or for the `@palamedes/vite-plugin/delivery` subpath.
+- React Router's RSC mode is not supported
+  ([ADR-026](../../adr/026-react-router-rsc-entry-request-scope.md)).

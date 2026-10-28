@@ -70,6 +70,7 @@ release.
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8.                                                                                                                                                                        |
 | `@palamedes/waku`                                     | Stable   | ESM-only Waku handler interceptor, catalog delivery middleware, and request resolver contract for `waku@^1.0.0-rc.4`; the examples verify Waku `1.0.0-rc.4`.                                                                                                                   |
 | `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                                                                                                          |
+| `@palamedes/react-router`                             | Stable   | ESM-only React Router Framework Mode root middleware, server entry, and locale resolver contract for `react-router@^8.5.0`; the examples verify React Router `8.5.0`. RSC mode is not supported.                                                                               |
 | `@palamedes/remix`                                    | Stable   | Full-stack Remix v3 adapter for `remix@^3.0.0`; the examples verify Remix `3.0.0` with Node `>=24.3.0`, and all four strategies have public HTTPS browser proofs.                                                                                                              |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                                                                                           |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                                                                                                                                                                   |
@@ -208,6 +209,7 @@ and they can change in any release.
 | `@palamedes/next-plugin/server`                   | Stable   | `createNextServerI18n` and `createNextServerI18nScope`.                                     |
 | Other `@palamedes/next-plugin/*` subpaths         | Internal | Loaders, server-function entries, and catalog modules that `withPalamedes()` wires by path. |
 | `@palamedes/tanstack/server`                      | Stable   | `createTanStackServerI18n` and catalog response delivery for React Start.                   |
+| `@palamedes/react-router`                         | Stable   | Root entry only: `createReactRouterI18n`, its middleware, and server entry; no subpaths.    |
 | `@palamedes/waku/server`                          | Stable   | Waku catalog delivery middleware.                                                           |
 | `@palamedes/remix/server`, `/client`, `/register` | Stable   | Server, browser, and Node loader entry points.                                              |
 | `@palamedes/remix/compiled`, `/macro`             | Stable   | Transform target and compile-time components.                                               |
@@ -227,6 +229,7 @@ Palamedes treats these as stable adoption surfaces:
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
 - TanStack Start server-function middleware documented in `@palamedes/tanstack`
+- React Router Framework Mode middleware and server entry documented in `@palamedes/react-router`
 - Waku interceptor and catalog delivery middleware documented in `@palamedes/waku`
 - Remix v3 adapter APIs documented in `@palamedes/remix`
 - runtime access through `getI18n()`

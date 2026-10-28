@@ -224,16 +224,16 @@ module graph automatically, including when installed from npm rather than
 linked from a workspace. This applies to every server
 environment, such as the `rsc` environment used by Waku, not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
 shares Waku's request store. Existing `noExternal` entries and `true` are
-preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
+preserved. `@palamedes/react-router` stays in the graph as well, because it
+loads the generated server catalogs through the runtime. Applications do not
+need a Palamedes-specific `ssr.noExternal` or
 `resolve.noExternal` configuration.
 
 `@palamedes/vite-plugin/delivery` exports `createViteCatalogDelivery({
 clientDirectory, development?, manifestName? })`. Server code calls
 `getLocaleBinding(locale)` on it and pipes HTML through
 `createDocumentTransform(binding, { nonce?, errorHtml? })`. The Solid, TanStack,
-and Waku adapters do this internally. React Router Framework
-Mode has no adapter package, so the application makes these calls in
-`app/entry.server.tsx`; see the
+Waku, and React Router adapters do this internally; see the
 [React Router Framework Mode guide](./react-router.md). `errorHtml` is trusted,
 catalog-independent host markup; the default view provides Reload and Home.
 Import maps precede all modulepreloads. Catalog-only manifest changes refresh

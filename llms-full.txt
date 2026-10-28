@@ -52,7 +52,7 @@ When helping with Palamedes code:
 5. Avoid numeric placeholder fallback patterns. If an expression cannot be named cleanly, recommend extracting a stable named variable. Never nest `plural()`, `select()`, or `selectOrdinal()` inside a `t` template; write the complete sentence in each branch instead.
 6. Use `getI18n()`/runtime wiring instead of inventing framework-global runtime APIs.
 7. Keep host adapter examples thin. Do not move catalog semantics into framework glue.
-8. Most published packages require Node.js `>=22.0.0`; `@palamedes/waku` and `@palamedes/tanstack` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
+8. Most published packages require Node.js `>=22.0.0`; `@palamedes/react-router`, `@palamedes/tanstack`, and `@palamedes/waku` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`. Repository development and CI require `>=22.22.0`.
 9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/012-native-cli-and-yaml-first-configuration.md`).
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
 11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
@@ -80,6 +80,7 @@ Recommended app-facing packages:
 - `@palamedes/next-plugin`: Next.js integration
 - `@palamedes/remix`: full-stack Remix v3 integration with Node and browser asset loaders, request-local server scope, rich Remix UI messages, and document catalog bootstrap (requires Node.js `>=24.3`)
 - `@palamedes/waku`: ESM-only request-scoped i18n interceptor for Waku server actions
+- `@palamedes/react-router`: ESM-only React Router Framework Mode adapter for `react-router@^8.5.0`: a root route middleware that scopes loaders, actions, and document rendering per request, and a streaming `entry.server` handler that injects the active locale's catalog import map. The four `react-router-*` examples verify it on React Router 8.5.0.
 - `@palamedes/tanstack`: ESM-only request-scoped i18n middleware for React Start 1.169.4. TanStack uses the four React examples; Solid uses four separate Solid 2 Start Mode/Nitro examples. These demos verify SSR, hydration, navigation, locale changes, request isolation, and representative catalog failure/recovery. TanStack Solid Start is outside the v2 scope; no `/solid` entry is exported.
 - `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`, `pmds version`, `pmds telemetry`); also dispatches explicitly configured binary CLI plugins
 - Palamedes v2 uses the shared app-tracking Rust client. Version checks use the owned `https://sebastian-app-tracking.b-cdn.net/v1/versions/palamedes/github/stable` route and send no usage payload or identifiers. Release builds validate that endpoint; ordinary builds without it stay offline. Updates preserve `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0`. Optional CLI command usage requires explicit consent: `pmds telemetry enable` displays the notice only; `pmds telemetry enable --accept telemetry-v1` enables it. `status`/`preview` are local; `disable` discards unsent usage; `delete` can remain pending offline. Fixed command categories, UTC-day counts, tool/version, installation identity, and optional SHA-256 of normalized repository URL are pseudonymous data. No arguments, content, raw URLs, paths, or plugin names are sent. CI needs its own informed grant and isolated state. Build plugins and Rust/Node APIs do not report automatically. See `/docs/telemetry.md`, `/docs/cli.md`, and `/adr/016-privacy-bounded-cli-update-check.md`. Production service activation and public reporting are separate delivery steps.
@@ -723,7 +724,7 @@ Waku support is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and
 
 Use the verified examples as the source of truth for framework-specific wiring. Palamedes' goal is a consistent runtime/catalog model across these hosts.
 
-React Router Framework Mode has no adapter package: it uses `@palamedes/vite-plugin` plus application-owned server wiring (request-scoped server i18n, the catalog document transform in `app/entry.server.tsx`, and scoped loaders and actions). See `/docs/api/react-router.md`.
+React Router Framework Mode uses `@palamedes/react-router` next to `@palamedes/vite-plugin`: create `createReactRouterI18n({ resolveLocale })` once in a server-only module, export `middleware = [i18n.middleware]` from `app/root.tsx`, and use `i18n.handleRequest` as the default export of `app/entry.server.tsx`. Loaders and actions need no wrapping. Locale selection stays application policy. React Router's RSC mode is not supported. See `/docs/api/react-router.md`.
 
 ## Migration from Lingui-shaped code
 

@@ -3,6 +3,7 @@ import { NPM } from "~/data/links";
 
 const PACKAGE_BY_PATH: Record<string, string> = {
   "/frameworks/nextjs": "@palamedes/next-plugin",
+  "/frameworks/react-router": "@palamedes/react-router",
   "/frameworks/remix-v3": "@palamedes/remix",
   "/frameworks/solid": "@palamedes/solid",
   "/frameworks/tanstack-start": "@palamedes/tanstack",

@@ -402,10 +402,11 @@ describe("workflow contracts", () => {
   });
 
   it("runs path-sensitive and published-consumer package tests on each non-Linux validation leg", async () => {
-    const [ci, packageJson, nextPlugin, tanstack, vitePlugin] = await Promise.all([
+    const [ci, packageJson, nextPlugin, reactRouter, tanstack, vitePlugin] = await Promise.all([
       readRepositoryFile(".github/workflows/ci.yml"),
       readRepositoryFile("package.json").then(JSON.parse),
       readRepositoryFile("packages/next-plugin/package.json").then(JSON.parse),
+      readRepositoryFile("packages/react-router/package.json").then(JSON.parse),
       readRepositoryFile("packages/tanstack/package.json").then(JSON.parse),
       readRepositoryFile("packages/vite-plugin/package.json").then(JSON.parse),
     ]);
@@ -418,9 +419,11 @@ describe("workflow contracts", () => {
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/config");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/core-node");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/next-plugin");
+    expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/react-router");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/tanstack");
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/vite-plugin");
     expect(nextPlugin.scripts.test).toBe("vitest run --globals");
+    expect(reactRouter.scripts.test).toContain("scripts/package.test.mjs");
     expect(tanstack.scripts.test).toContain("scripts/package.test.mjs");
     expect(vitePlugin.scripts.test).toBe("vitest run --globals");
   });

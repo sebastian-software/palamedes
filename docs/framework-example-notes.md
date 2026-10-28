@@ -131,10 +131,13 @@ The `react-router-cookie`, `react-router-route`, `react-router-subdomain`, and
 
 - React Router framework mode with SSR and route actions
 - `.po` loading through `@palamedes/vite-plugin`
+- request-scoped loaders, actions, and document rendering through the
+  `@palamedes/react-router` root middleware and server entry, including
+  overlapping mixed-locale requests
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
 The [React Router Framework Mode guide](./api/react-router.md) describes the
-server wiring these examples use.
+setup these examples use.
 
 Current tooling note:
 

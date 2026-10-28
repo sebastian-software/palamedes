@@ -26,6 +26,7 @@ export const publishedPackageInventory = [
   "@palamedes/extractor",
   "@palamedes/next-plugin",
   "@palamedes/react",
+  "@palamedes/react-router",
   "@palamedes/remix",
   "@palamedes/runtime",
   "@palamedes/solid",

@@ -8,7 +8,6 @@ import { LocaleSwitcher } from "~/components/LocaleSwitcher";
 import { ProofPanel } from "~/components/ProofPanel";
 import { TicketPanel } from "~/components/TicketPanel";
 import { LOCALE_COOKIE, getLocaleLabel, locales, resolveLocaleFromRequest } from "~/lib/i18n";
-import { serverI18n } from "~/lib/i18n.server";
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -21,37 +20,33 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return serverI18n.run(request, async () => {
-    const resolved = resolveLocaleFromRequest(request);
+  const resolved = resolveLocaleFromRequest(request);
 
-    return {
-      locale: resolved.locale,
-      localeLabel: getLocaleLabel(resolved.locale),
-      source: resolved.source,
-    };
-  });
+  return {
+    locale: resolved.locale,
+    localeLabel: getLocaleLabel(resolved.locale),
+    source: resolved.source,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  return serverI18n.run(request, async () => {
-    const formData = await request.formData();
-    const intent = formData.get("intent");
-    const resolved = resolveLocaleFromRequest(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const resolved = resolveLocaleFromRequest(request);
 
-    if (intent === "set-locale") {
-      const locale = locales.normalizeLocale(formData.get("locale") ?? resolved.locale);
-      if (resolved.source === "cookie" && resolved.locale === locale) {
-        return redirect("/");
-      }
-      return redirect("/", {
-        headers: {
-          "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
-        },
-      });
+  if (intent === "set-locale") {
+    const locale = locales.normalizeLocale(formData.get("locale") ?? resolved.locale);
+    if (resolved.source === "cookie" && resolved.locale === locale) {
+      return redirect("/");
     }
+    return redirect("/", {
+      headers: {
+        "Set-Cookie": `${LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`,
+      },
+    });
+  }
 
-    return null;
-  });
+  return null;
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {

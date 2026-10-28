@@ -34,6 +34,7 @@ const NPM_PACKAGES = [
   "@palamedes/vite-plugin",
   "@palamedes/remix",
   "@palamedes/tanstack",
+  "@palamedes/react-router",
   "@palamedes/solid",
   "@palamedes/waku",
   "@palamedes/react",
@@ -819,10 +820,17 @@ function typedocPackages() {
       entryPoints: ["packages/tanstack/src/index.ts", "packages/tanstack/src/server.ts"],
     },
     {
+      slug: "react-router",
+      label: "React Router",
+      packageDir: "react-router",
+      position: 77,
+      entryPoints: ["packages/react-router/src/index.ts"],
+    },
+    {
       slug: "remix",
       label: "Remix",
       packageDir: "remix",
-      position: 77,
+      position: 78,
       entryPoints: [
         "packages/remix/src/index.ts",
         "packages/remix/src/client.ts",
