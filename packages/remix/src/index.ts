@@ -623,8 +623,8 @@ function resolveMacroTransformOptions(
     include: options.include ?? DEFAULT_INCLUDE,
     exclude: options.exclude ?? DEFAULT_EXCLUDE,
     runtimeModule: resolveMacroRuntimeModule(options.runtimeModule),
-    // Keep misses readable across production deploy skew by default. Hosts that
-    // must not embed authored text can choose the compact, hash-only behavior.
+    // Authored source text is diagnostic metadata only and is omitted by
+    // default. A missing compiled message throws whether or not it is kept.
     keepSourceFallbacks: options.keepSourceFallbacks ?? false,
     stripNonEssentialProps: process.env.NODE_ENV === "production",
   };

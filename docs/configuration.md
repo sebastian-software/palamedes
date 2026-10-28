@@ -253,9 +253,11 @@ mdx:
 ```
 
 See [MDX messages](./mdx.md) for authoring semantics, framework setup, all
-options, diagnostics, and the native architecture boundary. Set
-`keep-source-fallbacks` when production MDX modules must retain their readable
-source text as runtime fallbacks.
+options, diagnostics, and the native architecture boundary.
+`keep-source-fallbacks` (default `false`) adds the authored source text to
+generated MDX message lookups as diagnostic metadata. It does not provide
+runtime fallbacks: a missing compiled message still throws. The Vite plugin
+replaces this value with its own `keepSourceFallbacks` option.
 
 ## Source References
 
