@@ -59,7 +59,6 @@ middlewareFns: [
   () =>
     createWakuCatalogDeliveryMiddleware({
       resolveLocale: (request) => resolveApplicationLocale(request),
-      development: process.env.NODE_ENV !== "production",
       nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
     }),
 ];
@@ -67,7 +66,12 @@ middlewareFns: [
 
 `clientDirectory` points at the Vite client build containing
 `palamedes-split-manifest.json`; it defaults to Waku's `dist/public` in the
-process working directory. Pass `manifestName` for a custom Vite output. The
+process working directory. `development` defaults to how Vite built the server
+(`import.meta.env.DEV`): `true` under `waku dev`, `false` in the output of
+`waku build`. The runtime `NODE_ENV` does not change it, so a custom server that
+starts a production build without `NODE_ENV` still delivers the import map. In
+development the adapter reads no manifest; pass `development` to override the
+default. Pass `manifestName` for a custom Vite output. The
 `nonce` option is a string or `(request, context) => string | undefined`,
 called once per HTML document with the middleware context. These names and
 shapes match the React Router, TanStack, and Solid adapters. If an active fragment cannot be fetched or

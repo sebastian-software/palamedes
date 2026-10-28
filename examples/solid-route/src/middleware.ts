@@ -8,7 +8,6 @@ import { createServerI18n, serverI18nScope } from "./lib/i18n.server";
 import { DEFAULT_LOCALE, normalizeLocale } from "./lib/i18n";
 
 const catalogDelivery = createSolidCatalogDeliveryMiddleware({
-  development: process.env.NODE_ENV !== "production",
   nonce: process.env.PALAMEDES_CSP_NONCE,
   resolveLocale: (request) =>
     normalizeLocale(new URL(request.url).pathname.split("/").filter(Boolean)[0]),

@@ -98,53 +98,67 @@ describe("installed Palamedes server packages", () => {
       server: { middlewareMode: true, hmr: false, watch: null },
       optimizeDeps: { noDiscovery: true },
     });
-    const nodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-    try {
-      const entry = await server.ssrLoadModule("/react-router-document.ts");
-      const html: string = await entry.render();
-      expect(html).toContain("palamedes:catalogError");
-      expect(html).not.toContain("importmap");
-      expect(html).toContain('<html lang="de">');
-    } finally {
-      process.env.NODE_ENV = nodeEnv;
-    }
+    const entry = await server.ssrLoadModule("/react-router-document.ts");
+    const html = await withNodeEnv("production", () => entry.render() as Promise<string>);
+    expect(html).toContain("palamedes:catalogError");
+    expect(html).not.toContain("importmap");
+    expect(html).toContain('<html lang="de">');
   });
 
   it("delivers React Router production catalogs from a build served without NODE_ENV", async () => {
-    // `react-router build` runs Vite with NODE_ENV=production; a custom
-    // `createRequestHandler` server may then start without it.
     const root = await createFixture();
     await createReactRouterFixture(root);
-    const nodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-    try {
-      await build({
-        ...config(root),
-        build: {
-          ssr: path.join(root, "react-router-document.ts"),
-          outDir: path.join(root, "dist"),
-          rollupOptions: { output: { entryFileNames: "server.mjs" } },
-        },
-      });
-    } finally {
-      process.env.NODE_ENV = nodeEnv;
-    }
-    const moduleUrl = pathToFileURL(path.join(root, "dist/server.mjs")).href;
-    const { NODE_ENV: _omitted, ...environment } = process.env;
-    const html = execFileSync(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `const entry = await import(${JSON.stringify(moduleUrl)}); console.log(await entry.render());`,
-      ],
-      { cwd: root, encoding: "utf8", env: environment },
-    );
-    expect(html).toContain(
-      '<script type="importmap">{"imports":{"#pmds/root":"/assets/root.de.js"}}</script>',
-    );
+    await buildDeliveryServer(root, "react-router-document.ts", config(root));
+    const html = renderBuiltServer(root);
+    expect(html).toContain(PRODUCTION_IMPORT_MAP);
     expect(html).toContain('<html lang="de">');
+  });
+
+  it("keeps Waku development delivery in the dev server under NODE_ENV=production", async () => {
+    const root = await createFixture();
+    await createDeliveryFixture(root, "waku");
+    server = await createServer({
+      ...config(root),
+      environments: { rsc: { consumer: "server" } },
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+    const environment = server.environments.rsc;
+    if (!isRunnableDevEnvironment(environment)) {
+      throw new Error("Expected a runnable rsc environment");
+    }
+    const entry = await environment.runner.import("/waku-document.ts");
+    const html = await withNodeEnv("production", () => entry.render() as Promise<string>);
+    expect(html).toContain("showPalamedesDevCatalogError");
+    expect(html).not.toContain("importmap");
+  });
+
+  it("delivers Waku production catalogs from a build served without NODE_ENV", async () => {
+    const root = await createFixture();
+    await createDeliveryFixture(root, "waku");
+    await buildDeliveryServer(root, "waku-document.ts", config(root));
+    expect(renderBuiltServer(root)).toContain(PRODUCTION_IMPORT_MAP);
+  });
+
+  it("keeps Solid development delivery in the dev server under NODE_ENV=production", async () => {
+    const root = await createFixture();
+    await createDeliveryFixture(root, "solid");
+    server = await createServer({
+      ...solidConfig(root),
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+    const entry = await server.ssrLoadModule("/solid-document.ts");
+    const html = await withNodeEnv("production", () => entry.render() as Promise<string>);
+    expect(html).toContain("showPalamedesDevCatalogError");
+    expect(html).not.toContain("importmap");
+  });
+
+  it("delivers Solid production catalogs from a build served without NODE_ENV", async () => {
+    const root = await createFixture();
+    await createDeliveryFixture(root, "solid");
+    await buildDeliveryServer(root, "solid-document.ts", solidConfig(root));
+    expect(renderBuiltServer(root)).toContain(PRODUCTION_IMPORT_MAP);
   });
 
   it("builds an executable server without external virtual imports", async () => {
@@ -304,23 +318,7 @@ export function locale() {
 }
 `,
   );
-  // A production client build for the document transform.
-  const clientDirectory = path.join(root, "client");
-  await mkdir(clientDirectory);
-  await writeFile(
-    path.join(clientDirectory, "palamedes-split-manifest.json"),
-    JSON.stringify({
-      locales: ["en", "de"],
-      importMaps: { en: "palamedes-importmap.en.json", de: "palamedes-importmap.de.json" },
-      chunkImports: {},
-    }),
-  );
-  for (const locale of ["en", "de"]) {
-    await writeFile(
-      path.join(clientDirectory, `palamedes-importmap.${locale}.json`),
-      JSON.stringify({ imports: { "#pmds/root": `/assets/root.${locale}.js` } }),
-    );
-  }
+  const clientDirectory = await createClientBuild(root);
   // No explicit `development`: the adapter decides from the Vite build.
   await writeFile(
     path.join(root, "react-router-document.ts"),
@@ -384,5 +382,133 @@ export function locale() {
   );
 }
 `,
+  );
+}
+
+// A fixture client build, as `vite build` writes it for a two-locale app.
+async function createClientBuild(root: string): Promise<string> {
+  const clientDirectory = path.join(root, "client");
+  await mkdir(clientDirectory);
+  await writeFile(
+    path.join(clientDirectory, "palamedes-split-manifest.json"),
+    JSON.stringify({
+      locales: ["en", "de"],
+      importMaps: { en: "palamedes-importmap.en.json", de: "palamedes-importmap.de.json" },
+      chunkImports: {},
+    }),
+  );
+  for (const locale of ["en", "de"]) {
+    await writeFile(
+      path.join(clientDirectory, `palamedes-importmap.${locale}.json`),
+      JSON.stringify({ imports: { "#pmds/root": `/assets/root.${locale}.js` } }),
+    );
+  }
+  return clientDirectory;
+}
+
+const PRODUCTION_IMPORT_MAP =
+  '<script type="importmap">{"imports":{"#pmds/root":"/assets/root.de.js"}}</script>';
+
+// Installs the Waku or Solid adapter build, plus a module that renders one
+// document through its catalog delivery. The module sets no `development`
+// option, so the adapter decides from the Vite build, and it creates the
+// middleware per render, so a changed runtime NODE_ENV would be visible.
+async function createDeliveryFixture(root: string, adapter: "waku" | "solid"): Promise<void> {
+  const clientDirectory = await createClientBuild(root);
+  const html = '<html lang="en"><head></head><body></body></html>';
+  if (adapter === "solid") {
+    const target = path.join(root, "node_modules/@palamedes/solid");
+    await mkdir(target);
+    await cp(path.join(packageRoot, "solid/package.json"), path.join(target, "package.json"));
+    await cp(path.join(packageRoot, "solid/dist"), path.join(target, "dist"), { recursive: true });
+    await writeFile(
+      path.join(root, "solid-document.ts"),
+      `
+import { createSolidCatalogDeliveryMiddleware } from "@palamedes/solid/server";
+export async function render(): Promise<string> {
+  const middleware = createSolidCatalogDeliveryMiddleware({
+    resolveLocale: () => "de",
+    clientDirectory: ${JSON.stringify(clientDirectory)},
+  });
+  const response = await middleware(
+    new Request("https://example.test/"),
+    async () => new Response(${JSON.stringify(html)}, { headers: { "content-type": "text/html" } }),
+  );
+  return response.text();
+}
+`,
+    );
+    return;
+  }
+  await writeFile(
+    path.join(root, "waku-document.ts"),
+    `
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+export async function render(): Promise<string> {
+  const middleware = createWakuCatalogDeliveryMiddleware({
+    resolveLocale: () => "de",
+    clientDirectory: ${JSON.stringify(clientDirectory)},
+  });
+  const context = {
+    req: { raw: new Request("https://example.test/") },
+    res: new Response(${JSON.stringify(html)}, { headers: { "content-type": "text/html" } }),
+  };
+  await middleware(context, async () => {});
+  return context.res.text();
+}
+`,
+  );
+}
+
+// Solid's Vite plugin keeps the adapter in the server module graph; the
+// Palamedes plugin does not list it, so the fixture does the same.
+function solidConfig(root: string): InlineConfig {
+  return { ...config(root), ssr: { noExternal: ["@palamedes/solid"] } };
+}
+
+// Runs `action` with a runtime NODE_ENV that differs from how Vite was started.
+async function withNodeEnv<T>(value: string, action: () => Promise<T>): Promise<T> {
+  const nodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = value;
+  try {
+    return await action();
+  } finally {
+    if (nodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = nodeEnv;
+  }
+}
+
+// `react-router build`, `waku build`, and `vite build` run Vite with
+// NODE_ENV=production.
+async function buildDeliveryServer(
+  root: string,
+  entry: string,
+  inlineConfig: InlineConfig,
+): Promise<void> {
+  await withNodeEnv("production", () =>
+    build({
+      ...inlineConfig,
+      build: {
+        ssr: path.join(root, entry),
+        outDir: path.join(root, "dist"),
+        rollupOptions: { output: { entryFileNames: "server.mjs" } },
+      },
+    }),
+  );
+}
+
+// Renders in a child process without NODE_ENV, as a custom server that starts
+// a production build might.
+function renderBuiltServer(root: string): string {
+  const moduleUrl = pathToFileURL(path.join(root, "dist/server.mjs")).href;
+  const { NODE_ENV: _omitted, ...environment } = process.env;
+  return execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const entry = await import(${JSON.stringify(moduleUrl)}); console.log(await entry.render());`,
+    ],
+    { cwd: root, encoding: "utf8", env: environment },
   );
 }
