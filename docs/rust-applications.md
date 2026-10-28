@@ -84,6 +84,36 @@ functional SDK release or an OIDC upload. Verify actual token exchange and
 publication during the authorized coordinated release. A passing dry run does
 not prove trusted-publisher permissions.
 
+## SemVer and MSRV
+
+The crates use the coordinated Palamedes version, and Cargo treats `2.0` to
+`2.1` as a compatible upgrade. These Rust APIs therefore follow Cargo SemVer:
+
+- the public API of `palamedes-i18n`
+- the public API of `palamedes-build`
+- the `palamedes::sdk` module, which `palamedes-build` compiles catalogs with
+
+Everything else in the `palamedes` crate is hidden from its rustdoc. It serves
+the `pmds` CLI and the Node binding and can change in any release, so depend on
+`palamedes-build` and `palamedes-i18n` rather than on `palamedes` directly.
+Items hidden from the `palamedes-i18n` docs support the generated macro or
+describe the catalog file format, which `FORMAT_VERSION` versions separately.
+
+`palamedes_i18n::Error` and `palamedes_build::Error` are `#[non_exhaustive]`.
+New failure kinds can arrive in a minor release, so a `match` on either error
+needs a wildcard arm. Both errors are `Send + Sync + 'static` and chain I/O,
+decoding, and catalog compiler causes through `std::error::Error::source`.
+Data types, such as `CompiledCatalogs`, stay exhaustive.
+
+The minimum supported Rust version (MSRV) is the `rust-version` in the
+workspace [`Cargo.toml`](../Cargo.toml). A minor release can raise it, with a
+changelog entry. The MSRV stays at least two stable Rust releases behind the
+latest stable release.
+
+The crates depend on Ferrocat with caret requirements, so your Cargo graph can
+resolve a newer compatible Ferrocat release. Palamedes's own builds and tests
+use the exact versions in its `Cargo.lock`.
+
 ## Build a Small CLI
 
 Create a project with this layout:

@@ -164,7 +164,7 @@ impl Command for CompileOptions {
 
 impl CompileOptions {
     fn compile_rust(&self, cwd: &Path) -> Result<CatalogUpdate, CliError> {
-        let compile = || -> Result<CatalogUpdate, Box<dyn std::error::Error>> {
+        let compile = || -> Result<CatalogUpdate, palamedes_build::Error> {
             // Clap requires both paths for the Rust target.
             let schema = self.schema.as_deref().unwrap_or(Path::new(""));
             let catalog_dir = self.catalog_dir.as_deref().unwrap_or(Path::new(""));
