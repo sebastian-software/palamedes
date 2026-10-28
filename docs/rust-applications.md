@@ -59,7 +59,9 @@ that all three crates already exist on crates.io with this repository and
 owner, and that the release version is not yanked. It also exchanges the
 workflow's OIDC identity for a crates.io token without uploading anything. All
 upload jobs depend on it, so a Cargo lane that is not ready stops the release
-before npm receives a package. A Publish dry run runs the same registry checks
+before npm receives a package. The Cargo upload also waits for every native npm
+package, so a failed native build stops crates.io as well as the JavaScript
+packages. A Publish dry run runs the same registry checks
 without the token exchange. While the release hold is in place, it reports the
 policy and allowlists instead of enforcing them.
 
@@ -98,6 +100,9 @@ the `pmds` CLI and the Node binding and can change in any release, so depend on
 `palamedes-build` and `palamedes-i18n` rather than on `palamedes` directly.
 Items hidden from the `palamedes-i18n` docs support the generated macro or
 describe the catalog file format, which `FORMAT_VERSION` versions separately.
+Because the code `palamedes-build` generates constructs those hidden items,
+`palamedes-build` requires the exact `palamedes-i18n` release it ships with
+(`=2.0.0` for 2.0.0), so Cargo upgrades the two crates together.
 
 `palamedes_i18n::Error` and `palamedes_build::Error` are `#[non_exhaustive]`.
 New failure kinds can arrive in a minor release, so a `match` on either error

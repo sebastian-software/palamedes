@@ -7,7 +7,8 @@
     "dev": "vite dev --port 4021",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4021",
-    "extract": "pmds extract"
+    "extract": "pmds extract",
+    "test": "vitest run"
   },
   "dependencies": {
     "@palamedes/core": "workspace:^",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   }
 }
