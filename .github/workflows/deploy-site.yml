@@ -24,6 +24,19 @@ on:
       - "benchmarks/e2e-workflow/results/**"
       - "llms.txt"
       - "llms-full.txt"
+      # The root scripts the site build and the route, accessibility, and
+      # analytics checks below run. A change to one of them alone must still
+      # trigger a deploy run, because pull-request CI does not run the full
+      # route verification.
+      - "package.json"
+      - "benchmarks/browser-runtime/results.json"
+      - "scripts/*site*.mjs"
+      - "scripts/benchmark-browser-runtime.mjs"
+      - "scripts/benchmark-tool-versions.mjs"
+      - "scripts/*bench-data.mjs"
+      - "scripts/check-example-matrix.mjs"
+      - "scripts/component-demos.mjs"
+      - "scripts/example-matrix*.mjs"
       - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 

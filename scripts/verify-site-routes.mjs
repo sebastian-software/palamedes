@@ -8,13 +8,14 @@
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 import { startSiteStaticServer } from "./site-static-server.mjs";
 import { verifyFrameworkBenchmarks } from "../site/scripts/verify-framework-benchmarks.mjs";
+import { verifyGeneratedProgressiveOutlines } from "../site/scripts/progressive-outline.mjs";
 import {
   isExpectedSkippedViewTransitionError,
   isKnownArdoBreadcrumbHydrationWarning,
@@ -23,6 +24,7 @@ import {
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const clientDir = join(repoRoot, "site/build/client");
 const generatedDocsDir = join(repoRoot, "site/app/routes/docs");
+const generatedDataDir = join(repoRoot, "site/app/data/generated");
 function portFromEnv(name, fallback) {
   const configured = process.env[name];
   if (configured === undefined) return fallback;
@@ -1206,6 +1208,9 @@ async function checkHomepageSetupViewport(browser, width) {
 }
 
 async function checkProgressiveDocsOutline(browser) {
+  const { manifest } = readProgressiveOutlines();
+  // Every top-level heading of the guide gets one outline link.
+  const expectedLinks = manifest?.docs.find(({ file }) => file === "configuration.mdx")?.headings;
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 });
@@ -1215,8 +1220,10 @@ async function checkProgressiveDocsOutline(browser) {
     fail("progressive docs outline: missing on a long direct-entry page");
   } else {
     const links = outline.locator('a[href^="#"]');
-    if ((await links.count()) !== 12) {
-      fail(`progressive docs outline: expected 12 anchor links, got ${await links.count()}`);
+    if ((await links.count()) !== expectedLinks) {
+      fail(
+        `progressive docs outline: expected ${expectedLinks} anchor links, got ${await links.count()}`,
+      );
     }
     const details = outline.locator("details");
     if (await details.evaluate((element) => element.hasAttribute("open"))) {
@@ -1242,41 +1249,36 @@ async function checkProgressiveDocsOutline(browser) {
   const noJsOutline = noJsPage.locator(".pmds-progressive-outline");
   if (
     (await noJsOutline.count()) !== 1 ||
-    (await noJsOutline.locator('a[href^="#"]').count()) !== 12
+    (await noJsOutline.locator('a[href^="#"]').count()) !== expectedLinks
   ) {
     fail("progressive docs outline: direct no-JS entry lost its anchors");
   }
   await noJsContext.close();
 }
 
+/*
+ * Which docs get a progressive outline follows from their heading count, so the
+ * expectation comes from the prebuild manifest and a re-count of the generated
+ * pages rather than a pinned page total. A doc that lost or gained its outline,
+ * a manifest that drifted from the pages, a required long guide without an
+ * outline, or an empty outline set still fails. CI runs the same static check
+ * after the site build; this pass adds the browser-side anchor verification.
+ */
+let progressiveOutlines;
+function readProgressiveOutlines() {
+  if (progressiveOutlines) return progressiveOutlines;
+  progressiveOutlines = verifyGeneratedProgressiveOutlines({
+    docsDir: generatedDocsDir,
+    dataDir: generatedDataDir,
+  });
+  for (const problem of progressiveOutlines.problems) {
+    fail(`progressive docs outline: ${problem}`);
+  }
+  return progressiveOutlines;
+}
+
 async function checkProgressiveOutlineAnchors(browser) {
-  const docs = readdirSync(generatedDocsDir, { recursive: true })
-    .filter((entry) => /\.mdx?$/u.test(entry))
-    .map((entry) => ({
-      entry,
-      source: readFileSync(join(generatedDocsDir, entry), "utf8"),
-    }))
-    .filter(({ source }) => source.includes('className="pmds-progressive-outline"'));
-
-  if (docs.length !== 30) {
-    fail(`progressive docs outline: expected 30 generated long docs, got ${docs.length}`);
-  }
-  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/vite-plugin/index.md")) {
-    fail(
-      "progressive docs outline: Vite component integration guide is missing its generated outline",
-    );
-  }
-  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/remix/index.md")) {
-    fail("progressive docs outline: Remix API guide is missing its generated outline");
-  }
-
-  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "rust-applications.mdx")) {
-    fail("progressive docs outline: Rust application guide is missing its generated outline");
-  }
-
-  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "migration-v2.mdx")) {
-    fail("progressive docs outline: v2 migration guide is missing its generated outline");
-  }
+  const { docs } = readProgressiveOutlines();
 
   const context = await browser.newContext();
   const page = await context.newPage();
