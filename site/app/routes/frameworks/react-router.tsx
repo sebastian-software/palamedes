@@ -28,7 +28,7 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "React Router 8.3",
+      value: "React Router 8.5",
       note: "React 19 and the React Router Vite plugin.",
     },
     {

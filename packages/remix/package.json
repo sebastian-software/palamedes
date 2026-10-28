@@ -121,11 +121,6 @@
   "peerDependencies": {
     "remix": "^3.0.0"
   },
-  "peerDependenciesMeta": {
-    "remix": {
-      "optional": true
-    }
-  },
   "engines": {
     "node": ">=24.3.0"
   }

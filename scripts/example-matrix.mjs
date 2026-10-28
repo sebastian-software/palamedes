@@ -13,7 +13,7 @@ export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-m
 // Focused production fixtures are intentionally outside the cross-framework
 // locale-strategy matrix. They have dedicated verifiers and must remain
 // discoverable by tooling that inventories the examples directory.
-export const FOCUSED_EXAMPLES = ["react-router-rsc-cookie", "node-backend"];
+export const FOCUSED_EXAMPLES = ["node-backend"];
 
 export const EXAMPLE_MATRIX = [
   {

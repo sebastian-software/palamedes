@@ -20,11 +20,11 @@ formats](../catalog-formats.md) for the storage/import boundary.
 
 ```ts
 interface PalamedesPluginOptions {
-  include?: FilterPattern;
-  exclude?: FilterPattern;
+  include?: string | RegExp | Array<string | RegExp> | null;
+  exclude?: string | RegExp | Array<string | RegExp> | null;
   enablePoLoader?: boolean;
   configPath?: string;
-  cwd?: string;
+  projectRoot?: string;
   skipValidation?: boolean;
   failOnMissing?: boolean;
   framework?: "react" | "solid" | "none";
@@ -39,6 +39,9 @@ Defaults:
 
 - `include`: JavaScript/TypeScript (`/\.([cm]?[jt]s|[jt]sx)$/`) and Vue/Svelte components (`/\.(vue|svelte)$/i`)
 - `exclude`: `/node_modules/`
+- `projectRoot`: Vite's resolved `root`; the current working directory in
+  bundlers without Vite's `configResolved` hook
+- `configPath`: unset — Palamedes searches upward from `projectRoot`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
 - `framework`: `"react"`
@@ -49,9 +52,26 @@ Defaults:
 
 The plugin throws a migration error during setup when it receives a removed v1
 option: `failOnCompileError`, `keepSourceFallbacks` (renamed to
-`includeSourceMetadata`), or `experimentalGraphSplitting` with any value,
-including `{ localeBinding }`. See the
-[v2 migration guide](../migration-v2.md#replace-removed-apis).
+`includeSourceMetadata`), `cwd` (renamed to `projectRoot`), or
+`experimentalGraphSplitting` with any value, including `{ localeBinding }`. See
+the [v2 migration guide](../migration-v2.md#replace-removed-apis).
+
+### Paths and filters
+
+The Vite, Next.js, and Remix adapters share one path contract:
+
+- `projectRoot` is the base for config discovery, a relative `configPath`, and
+  relative `include`/`exclude` globs. A relative `projectRoot` resolves from
+  the current working directory.
+- `configPath` resolves from `projectRoot`. Absolute paths stay absolute.
+- `include` and `exclude` accept a glob string, a RegExp, or an array of both.
+  Relative globs resolve from `projectRoot`; globs that start with `**` and
+  absolute globs match as written. RegExps test the absolute file path with
+  forward slashes. An `exclude` match wins, and an empty `include` accepts
+  every file that is not excluded.
+
+The matching follows Vite's `createFilter()`, with `projectRoot` as the glob
+base. Every value Vite's `FilterPattern` type accepts still works.
 
 `framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set
@@ -104,12 +124,8 @@ export default defineConfig({
 
 Keep `palamedes()` before the React or Solid Vite plugin so the native MDX
 compiler emits JSX before the framework transform runs. React MDX parsing is
-configured automatically. Solid must use
-`solid({ extensions: [".mdx"] })`. React MDX requires Vite 8 or `rolldown-vite`
-because the generated JSX module type needs Rolldown; plain Rollup-based Vite 7
-and older projects can set `mdx: false` while keeping macros and catalog loading.
-See [MDX
-messages](../mdx.md) for authoring and configuration.
+configured automatically. Solid must use `solid({ extensions: [".mdx"] })`.
+See [MDX messages](../mdx.md) for authoring and configuration.
 
 ## Vue single-file components
 
@@ -205,9 +221,8 @@ SSR, loaders and actions. Applications do not construct catalog import maps.
 
 The adapter keeps its server entrypoints and runtime packages in Vite's SSR
 module graph automatically, including when installed from npm rather than
-linked from a workspace. On Vite 6 and newer this applies to every server
-environment, such as the `rsc` environment used by Waku and React Router RSC,
-not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
+linked from a workspace. This applies to every server
+environment, such as the `rsc` environment used by Waku, not only to `ssr`. It also keeps `@palamedes/waku` in that graph so the adapter
 shares Waku's request store. Existing `noExternal` entries and `true` are
 preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 `resolve.noExternal` configuration.
@@ -216,7 +231,7 @@ preserved. Applications do not need a Palamedes-specific `ssr.noExternal` or
 clientDirectory, development?, manifestName? })`. Server code calls
 `getLocaleBinding(locale)` on it and pipes HTML through
 `createDocumentTransform(binding, { nonce?, errorHtml? })`. The Solid, TanStack,
-Waku, and React Router RSC adapters do this internally. React Router Framework
+and Waku adapters do this internally. React Router Framework
 Mode has no adapter package, so the application makes these calls in
 `app/entry.server.tsx`; see the
 [React Router Framework Mode guide](./react-router.md). `errorHtml` is trusted,

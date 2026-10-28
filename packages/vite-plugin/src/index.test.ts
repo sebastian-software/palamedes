@@ -31,6 +31,9 @@ vi.mock("@palamedes/config", async (importOriginal) => {
     catalogMatchesSource: actual.catalogMatchesSource,
     catalogResourcePath: actual.catalogResourcePath,
     getConfigDependencies: actual.getConfigDependencies,
+    createPalamedesSourceFilter: actual.createPalamedesSourceFilter,
+    resolvePalamedesConfigPath: actual.resolvePalamedesConfigPath,
+    resolvePalamedesProjectRoot: actual.resolvePalamedesProjectRoot,
   };
 });
 
@@ -434,6 +437,11 @@ describe("palamedes vite plugin", () => {
       "experimentalGraphSplitting",
       { localeBinding: "embed" },
       "Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.",
+    ],
+    [
+      "cwd",
+      "/repo",
+      "Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.",
     ],
   ] as const)("rejects the removed %s option (%j) during plugin setup", (name, value, message) => {
     expect(() => palamedes({ [name]: value } as Parameters<typeof palamedes>[0])).toThrow(message);
@@ -1429,8 +1437,8 @@ describe("automatic graph splitting", () => {
   it.each([
     ["the legacy SSR environment name", { name: "ssr" }, undefined],
     ["an RSC server consumer", { name: "rsc", config: { consumer: "server" } }, undefined],
-    ["a Vite 3-5 SSR build without an environment", undefined, true],
-    ["a Vite 3-5 SSR entry build without an environment", undefined, "src/entry-server.ts"],
+    ["an SSR build without an environment context", undefined, true],
+    ["an SSR entry build without an environment context", undefined, "src/entry-server.ts"],
   ])("skips asset emission for %s", async (_description, environment, buildSsr) => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],

@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -57,7 +57,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-async function startServer(options: PalamedesPluginOptions = {}) {
+async function startServer(options: PalamedesPluginOptions = {}, viteRoot = root) {
   const plugins = palamedes({ configPath: path.join(root, "palamedes.yaml"), ...options });
   const hook = plugins.find((plugin) => plugin.name === "palamedes:transform")?.transform;
   if (!hook || typeof hook === "function") {
@@ -67,7 +67,7 @@ async function startServer(options: PalamedesPluginOptions = {}) {
   server = await createServer({
     configFile: false,
     envFile: false,
-    root,
+    root: viteRoot,
     cacheDir: path.join(root, "cache"),
     logLevel: "silent",
     plugins,
@@ -156,4 +156,73 @@ describe("transform filters in the Vite dev server", () => {
       expect(mocks.transformPalamedesMacros).toHaveBeenCalledOnce();
     },
   );
+
+  it("resolves a relative configPath from Vite's root when projectRoot is unset", async () => {
+    expect(process.cwd()).not.toBe(root);
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "export const compiledMacro = true;",
+      hasChanged: true,
+      compiledIds: ["greeting"],
+      map: null,
+    });
+    await writeFile(path.join(root, "page.ts"), macroSource);
+    await startServer({ mdx: false, configPath: "palamedes.yaml" });
+
+    const result = await server!.transformRequest("/page.ts");
+
+    expect(result?.code).toContain("compiledMacro");
+    expect(result?.code).toMatch(/palamedes:messages\//u);
+  });
+
+  it("resolves configPath and include globs from an explicit projectRoot instead of Vite's root", async () => {
+    const appRoot = path.join(root, "app");
+    await mkdir(appRoot);
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "export const compiledMacro = true;",
+      hasChanged: true,
+      compiledIds: ["greeting"],
+      map: null,
+    });
+    await writeFile(path.join(appRoot, "page.ts"), macroSource);
+    await writeFile(path.join(appRoot, "other.ts"), macroSource);
+    await startServer(
+      { mdx: false, projectRoot: root, configPath: "palamedes.yaml", include: "app/page.ts" },
+      appRoot,
+    );
+
+    const included = await server!.transformRequest("/page.ts");
+    const skipped = await server!.transformRequest("/other.ts");
+
+    expect(included?.code).toContain("compiledMacro");
+    expect(skipped?.code).not.toContain("compiledMacro");
+    expect(mocks.transformPalamedesMacros).toHaveBeenCalledOnce();
+  });
+
+  it("combines string globs and RegExps in include and exclude arrays", async () => {
+    await mkdir(path.join(root, "src", "legacy"), { recursive: true });
+    await Promise.all(
+      ["src/page.ts", "src/legacy/old.ts", "page.custom", "page.skip.custom", "page.ts"].map(
+        (file) => writeFile(path.join(root, file), macroSource),
+      ),
+    );
+    await startServer({
+      mdx: false,
+      include: ["src/**/*.ts", /\.custom$/u],
+      exclude: ["src/legacy/**", /\.skip\./u],
+    });
+
+    const transformed: string[] = [];
+    for (const file of [
+      "src/page.ts",
+      "src/legacy/old.ts",
+      "page.custom",
+      "page.skip.custom",
+      "page.ts",
+    ]) {
+      const result = await server!.transformRequest(`/${file}`);
+      if (result?.code.includes("compiledMacro")) transformed.push(file);
+    }
+
+    expect(transformed).toEqual(["src/page.ts", "page.custom"]);
+  });
 });

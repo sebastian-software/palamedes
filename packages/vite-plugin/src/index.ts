@@ -9,14 +9,18 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import * as viteModule from "vite";
-import type { Plugin, FilterPattern, ResolvedConfig, ViteDevServer } from "vite";
-import { createFilter, version as viteVersion } from "vite";
+import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import {
   loadPalamedesConfig,
   catalogMatchesSource,
+  createPalamedesSourceFilter,
+  resolvePalamedesConfigPath,
+  resolvePalamedesProjectRoot,
   catalogResourcePath,
   getConfigDependencies,
   type PalamedesCatalogConfig,
+  type PalamedesFilterPattern,
+  type PalamedesSourceFilter,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
 } from "@palamedes/config";
@@ -86,18 +90,6 @@ const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config.";
 // instance whose request store Waku's router populates. Entries for packages
 // an application does not install have no effect.
 const SERVER_GRAPH_PACKAGES = ["@palamedes/runtime", "@palamedes/vite-plugin", "@palamedes/waku"];
-const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10);
-// `moduleType` and Rollup's `moduleTypes` bridge require Vite's Rolldown-based
-// pipeline. The official rolldown-vite alias exposes this on the Vite 7 line,
-// so detect the optional export instead of using only Vite's major version.
-// Reflect.get keeps the published bundle compatible with Vite versions that
-// do not provide a named `rolldownVersion` export.
-function viteSupportsReactMdxModuleType(): boolean {
-  return VITE_MAJOR >= 8 || typeof Reflect.get(viteModule, "rolldownVersion") === "string";
-}
-
-const REACT_MDX_VITE_REQUIREMENT =
-  'Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files. Upgrade Vite, use rolldown-vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.';
 
 type EnvironmentAwarePluginContext = {
   environment?: {
@@ -151,9 +143,9 @@ function createRouteFacade(chunk: RouteFacadeChunk): {
 
 function isServerEnvironment(context: unknown, ssr = false, legacyBuildSsr = false): boolean {
   const environment = (context as EnvironmentAwarePluginContext).environment;
-  // Vite <=5 has no environment context, so use the root build.ssr flag only
-  // for that legacy shape. Modern Vite environments can include both clients
-  // and servers in one build.
+  // Use the root build.ssr flag only for a hook without an environment
+  // context. Vite environments can include both clients and servers in one
+  // build.
   return (
     ssr ||
     environment?.config?.consumer === "server" ||
@@ -260,16 +252,17 @@ function catalogArtifactConfig(
 
 export type PalamedesPluginOptions = {
   /**
-   * Pattern to include files for transformation.
+   * Files to transform: a glob, a RegExp, or an array of both. Relative globs
+   * resolve from `projectRoot`; RegExps test the absolute file path.
    * @default JavaScript, TypeScript, Vue, and Svelte component files
    */
-  include?: FilterPattern;
+  include?: PalamedesFilterPattern;
 
   /**
-   * Pattern to exclude files from transformation.
+   * Files to skip, with the same pattern rules as `include`.
    * @default /node_modules/
    */
-  exclude?: FilterPattern;
+  exclude?: PalamedesFilterPattern;
 
   /**
    * Enable .po file compilation loader.
@@ -278,15 +271,19 @@ export type PalamedesPluginOptions = {
   enablePoLoader?: boolean;
 
   /**
-   * Path to a Palamedes config file.
-   * If not provided, searches for config automatically.
+   * Path to a Palamedes config file. Relative paths resolve from
+   * `projectRoot`. If not provided, Palamedes searches for a config from
+   * `projectRoot` upward.
    */
   configPath?: string;
 
   /**
-   * Current working directory for config resolution.
+   * Project directory used for config discovery, a relative `configPath`, and
+   * relative `include`/`exclude` globs. Relative values resolve from the
+   * current working directory.
+   * @default Vite's resolved `root`, or the current working directory outside Vite
    */
-  cwd?: string;
+  projectRoot?: string;
 
   /**
    * Skip validation of the config file.
@@ -331,7 +328,7 @@ export type PalamedesPluginOptions = {
 
   /**
    * Build target of every module this plugin sees. `"auto"` reads the Vite
-   * environment (or `build.ssr` on Vite 5 and older). Set `"server"` for
+   * environment (or `build.ssr` for a hook without one). Set `"server"` for
    * bundlers without Vite environments, such as tsdown or Rolldown building a
    * Node backend; there every build would otherwise count as a browser build.
    * @default "auto"
@@ -347,6 +344,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     "failOnCompileError",
     "keepSourceFallbacks",
     "experimentalGraphSplitting",
+    "cwd",
   ]);
   const {
     include = [PALAMEDES_BUNDLER_TRANSFORM_INCLUDE, COMPONENT_FILE_REGEX],
@@ -358,7 +356,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     includeSourceMetadata,
     mdx: mdxOverride,
     environment = "auto",
-    ...configLoaderOptions
+    configPath,
+    projectRoot: explicitProjectRoot,
+    skipValidation,
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
   if (environment !== "auto" && environment !== "server") {
@@ -368,7 +368,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   }
   const isServer = (context: unknown, ssr = false, legacy = false) =>
     environment === "server" || isServerEnvironment(context, ssr, legacy);
-  const transformIncludes = include == null ? [] : Array.isArray(include) ? include : [include];
+  const transformIncludes: ReadonlyArray<string | RegExp> =
+    include == null
+      ? []
+      : typeof include === "string" || include instanceof RegExp
+        ? [include]
+        : include;
+  // Vite replaces this with its resolved root in configResolved. Bundlers
+  // without that hook keep the current working directory.
+  let projectRoot = resolvePalamedesProjectRoot(explicitProjectRoot);
   const graphSplitting = true;
   let resolvedIncludeSourceMetadata = includeSourceMetadata ?? false;
   let stripNonEssentialProps = true;
@@ -379,8 +387,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null;
   let configDependencies = new Set<string>();
-  let filter: ReturnType<typeof createFilter> | null = null;
-  let mdxFilter: ReturnType<typeof createFilter> | null = null;
+  let filter: PalamedesSourceFilter | null = null;
+  let mdxFilter: PalamedesSourceFilter | null = null;
   let macroIds: Set<string> | null = null;
   const mdxModuleIds = new Set<string>();
 
@@ -443,7 +451,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     const sidecarId = `${RESOLVED_MESSAGES_PREFIX}${key}`;
     const isSidecarModule = (id: string) => id === sidecarId || id.startsWith(`${sidecarId}/`);
     const timestamp = Date.now();
-    // Vite 6 introduced per-environment graphs; earlier majors have one.
     if (devServer.environments) {
       for (const devEnvironment of Object.values(devServer.environments)) {
         const environmentGraph = devEnvironment.moduleGraph;
@@ -467,7 +474,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   async function getConfigLazy() {
     if (!config) {
-      config = await loadPalamedesConfig(configLoaderOptions);
+      const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, configPath);
+      config = await loadPalamedesConfig({
+        cwd: projectRoot,
+        ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+        ...(skipValidation === undefined ? {} : { skipValidation }),
+      });
       configDependencies = new Set(getConfigDependencies(config).map(canonicalPath));
       macroIds = new Set(PALAMEDES_MACRO_PACKAGES);
     }
@@ -497,14 +509,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function getFilterLazy() {
     if (!filter) {
-      filter = createFilter(include, exclude);
+      filter = createPalamedesSourceFilter(include, exclude, { projectRoot });
     }
     return filter;
   }
 
   function getMdxFilterLazy() {
     if (!mdxFilter) {
-      mdxFilter = createFilter(undefined, exclude);
+      mdxFilter = createPalamedesSourceFilter(undefined, exclude, { projectRoot });
     }
     return mdxFilter;
   }
@@ -534,7 +546,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function isMissingAutoConfig(error: unknown): boolean {
     return (
-      configLoaderOptions.configPath === undefined &&
+      configPath === undefined &&
       error instanceof Error &&
       error.message.startsWith(MISSING_CONFIG_ERROR_PREFIX)
     );
@@ -638,7 +650,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           ...resolveMdxOptions(cfg),
           includeSourceMetadata: resolvedIncludeSourceMetadata,
         };
-        if ((mdx.framework ?? "react") !== "react" || !viteSupportsReactMdxModuleType()) {
+        if ((mdx.framework ?? "react") !== "react") {
           return;
         }
         return {
@@ -668,19 +680,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (!MDX_FILE_REGEX.test(cleanId) || !matchesTransformFilter(cleanId)) {
           return null;
         }
-        if (VITE_MAJOR < 7) {
-          this.error(
-            "Palamedes MDX compilation requires Vite 7 or newer. Disable it with `mdx: false` when using an older Vite release.",
-          );
-        }
         const cfg = await getConfigLazy();
         const mdx = {
           ...resolveMdxOptions(cfg),
           includeSourceMetadata: resolvedIncludeSourceMetadata,
         };
-        if ((mdx.framework ?? "react") === "react" && !viteSupportsReactMdxModuleType()) {
-          this.error(REACT_MDX_VITE_REQUIREMENT);
-        }
         const result = analyzeMdxNative(source, cleanId, mdx);
         mdxModuleIds.add(cleanId);
         addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
@@ -743,15 +747,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
     const mdxTransformHandler = mdxPlugin.transform;
     if (typeof mdxTransformHandler === "function") {
-      mdxPlugin.transform =
-        VITE_MAJOR < 4
-          ? mdxTransformHandler
-          : {
-              filter: {
-                id: MDX_HOOK_ID_REGEX,
-              },
-              handler: mdxTransformHandler,
-            };
+      mdxPlugin.transform = {
+        filter: {
+          id: MDX_HOOK_ID_REGEX,
+        },
+        handler: mdxTransformHandler,
+      };
     }
     plugins.push(mdxPlugin);
   }
@@ -835,6 +836,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // retain their separator for non-root and relative deployments.
     configResolved(viteConfig) {
       resolvedBase = viteConfig.base;
+      if (explicitProjectRoot === undefined && viteConfig.root) {
+        const viteRoot = path.resolve(viteConfig.root);
+        if (viteRoot !== projectRoot) {
+          projectRoot = viteRoot;
+          resetConfig();
+          filter = null;
+          mdxFilter = null;
+        }
+      }
       legacyBuildSsr = Boolean(viteConfig.build.ssr);
     },
 
@@ -916,33 +926,34 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   const transformHandler = transformPlugin.transform;
   if (typeof transformHandler === "function") {
-    // Vite 3 requires function-form hooks. Vite 4 supports object hooks but
-    // ignores the filter metadata until Vite 6.3, so the handler keeps its
-    // existing ID and source checks as the compatibility fallback.
-    transformPlugin.transform =
-      VITE_MAJOR < 4
-        ? transformHandler
-        : {
-            filter: {
-              // Hook filters receive the raw ID, whereas the handler applies
-              // configured include/exclude patterns after stripping queries.
-              // Let query IDs through and leave exclusions to that handler so
-              // query text cannot reject a source file (e.g. ?scope=node_modules).
-              ...(transformIncludes.length > 0
-                ? {
-                    id: {
-                      include: [
-                        ...transformIncludes,
-                        ...(mdxOverride !== false ? [MDX_FILE_REGEX] : []),
-                        /\?/,
-                      ],
-                    },
-                  }
-                : {}),
-              code: [...PALAMEDES_MACRO_PACKAGES],
-            },
-            handler: transformHandler,
-          };
+    // The hook filter lets Vite skip files without a Palamedes macro import
+    // before the JavaScript hook runs. The handler keeps its ID and source
+    // checks for hosts that call it without applying filter metadata.
+    transformPlugin.transform = {
+      filter: {
+        // Hook filters receive the raw ID, whereas the handler applies
+        // configured include/exclude patterns after stripping queries.
+        // Let query IDs through and leave exclusions to that handler so
+        // query text cannot reject a source file (e.g. ?scope=node_modules).
+        // Globs resolve from projectRoot only in the handler, so a
+        // string include skips the ID prefilter rather than risk
+        // different glob semantics in the host's hook filter.
+        ...(transformIncludes.length > 0 &&
+        transformIncludes.every((pattern) => pattern instanceof RegExp)
+          ? {
+              id: {
+                include: [
+                  ...transformIncludes,
+                  ...(mdxOverride !== false ? [MDX_FILE_REGEX] : []),
+                  /\?/,
+                ],
+              },
+            }
+          : {}),
+        code: [...PALAMEDES_MACRO_PACKAGES],
+      },
+      handler: transformHandler,
+    };
   }
   plugins.push(transformPlugin);
 
@@ -965,28 +976,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         // Run after native macro lowering and before Vite's import analysis.
         // Vite's dev JSX transform filters by extension and skips .mdx even
         // when the previous transform returned moduleType: "jsx".
-        const transformWithOxc = Reflect.get(viteModule, "transformWithOxc") as
-          | typeof viteModule.transformWithOxc
-          | undefined;
-        if (typeof transformWithOxc === "function") {
-          if (developmentConfig.oxc === false) return null;
-          const configured = developmentConfig.oxc?.jsx;
-          const jsx = typeof configured === "object" ? configured : {};
-          const oxcResult = await transformWithOxc(code, cleanId, {
-            lang: "jsx",
-            jsx: { runtime: "automatic", ...jsx, development: true, refresh: false },
-            sourcemap: true,
-          });
-          return { code: oxcResult.code, map: oxcResult.map, moduleType: "js" };
-        }
-        // rolldown-vite on Vite 7 still exposes the esbuild host transform.
-        const esbuildResult = await viteModule.transformWithEsbuild(code, cleanId, {
-          loader: "jsx",
-          jsx: "automatic",
-          jsxDev: true,
+        if (developmentConfig.oxc === false) return null;
+        const configured = developmentConfig.oxc?.jsx;
+        const jsx = typeof configured === "object" ? configured : {};
+        const oxcResult = await viteModule.transformWithOxc(code, cleanId, {
+          lang: "jsx",
+          jsx: { runtime: "automatic", ...jsx, development: true, refresh: false },
           sourcemap: true,
         });
-        return { code: esbuildResult.code, map: esbuildResult.map, moduleType: "js" };
+        return { code: oxcResult.code, map: oxcResult.map, moduleType: "js" };
       },
     });
   }

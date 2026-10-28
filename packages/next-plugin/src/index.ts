@@ -11,6 +11,11 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
+import {
+  createPalamedesSourceFilter,
+  resolvePalamedesConfigPath,
+  type PalamedesFilterPattern,
+} from "@palamedes/config";
 import { assertNoRemovedPalamedesOptions } from "@palamedes/core-node";
 
 import {
@@ -113,16 +118,17 @@ function appendTurbopackRule(
 
 export type WithPalamedesOptions = {
   /**
-   * Pattern to include files for transformation.
+   * Files to transform: a glob, a RegExp, or an array of both. Relative globs
+   * resolve from `projectRoot`; RegExps test the absolute file path.
    * @default /\.([cm]?[jt]s|[jt]sx)$/
    */
-  include?: RegExp;
+  include?: PalamedesFilterPattern;
 
   /**
-   * Pattern to exclude files from transformation.
+   * Files to skip, with the same pattern rules as `include`.
    * @default /node_modules/
    */
-  exclude?: RegExp;
+  exclude?: PalamedesFilterPattern;
 
   /**
    * Enable .po file compilation loader.
@@ -237,6 +243,24 @@ function resolveWorkspaceRoot(projectRoot: string, explicitRoot?: string) {
 }
 
 type NextConfigWithResolvedPath = NextConfig & { configFile?: string };
+
+/** JSON-safe include/exclude pattern for loader options. */
+type SerializedFilterPattern = string | { regexp: string; flags: string };
+
+function filterPatternList(pattern: PalamedesFilterPattern): ReadonlyArray<string | RegExp> {
+  if (pattern == null) {
+    return [];
+  }
+  return typeof pattern === "string" || pattern instanceof RegExp ? [pattern] : pattern;
+}
+
+function isRegExp(pattern: string | RegExp): pattern is RegExp {
+  return pattern instanceof RegExp;
+}
+
+function serializeFilterPattern(pattern: string | RegExp): SerializedFilterPattern {
+  return typeof pattern === "string" ? pattern : { regexp: pattern.source, flags: pattern.flags };
+}
 type WebpackContextWithDir = { dir?: unknown };
 
 function resolveProjectRoot(
@@ -430,7 +454,9 @@ export function withPalamedes(
   const includeSourceMetadata = explicitIncludeSourceMetadata ?? false;
   const stripNonEssentialProps = process.env.NODE_ENV === "production";
   const projectRoot = resolveProjectRoot({ projectRoot: explicitProjectRoot }, baseConfig);
-  const resolvedConfigPath = configPath ? path.resolve(projectRoot, configPath) : undefined;
+  const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, configPath);
+  const includePatterns = filterPatternList(include);
+  const excludePatterns = filterPatternList(exclude);
   const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions, projectRoot);
   const serverFunctions = serverFunctionEntry
     ? {
@@ -464,18 +490,33 @@ export function withPalamedes(
     cwd: projectRoot,
     ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
     ...(serverFunctions ? { serverFunctions } : {}),
+    // Turbopack matches rule paths relative to its own root, so the loader
+    // applies the shared include/exclude filter to the absolute file path.
+    sourceFilter: {
+      projectRoot,
+      include: includePatterns.map(serializeFilterPattern),
+      exclude: excludePatterns.map(serializeFilterPattern),
+    },
   };
   const clientFragmentFailureMode = "throw";
 
   const rules: TurbopackRules = { ...baseConfig.turbopack?.rules };
 
-  // Transform local JS/TS files that actually import Palamedes macros. The
-  // include/exclude options translate into the rule condition so they behave
-  // the same under Turbopack as in the webpack branch below.
+  // Transform local JS/TS files that actually import Palamedes macros.
+  // RegExp include/exclude patterns also narrow the rule condition so
+  // Turbopack skips unrelated files early; the loader's shared filter decides.
+  const includeCondition =
+    includePatterns.length > 0 && includePatterns.every(isRegExp)
+      ? [
+          includePatterns.length === 1
+            ? { path: includePatterns[0] }
+            : { any: includePatterns.map((pattern) => ({ path: pattern })) },
+        ]
+      : [];
   const transformConditions = [
     { not: "foreign" },
-    { path: include },
-    { not: { path: exclude } },
+    ...includeCondition,
+    ...excludePatterns.filter(isRegExp).map((pattern) => ({ not: { path: pattern } })),
     {
       content: serverFunctions
         ? new RegExp(`${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`)
@@ -592,19 +633,23 @@ export function withPalamedes(
             initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
           }
         : undefined;
+      const webpackConfigPath = resolvePalamedesConfigPath(webpackProjectRoot, configPath);
       const webpackTransformLoaderOptions = {
         runtimeModule,
         includeSourceMetadata,
         stripNonEssentialProps,
         cwd: webpackProjectRoot,
-        ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
+        ...(webpackConfigPath ? { configPath: webpackConfigPath } : {}),
         ...(webpackServerFunctions ? { serverFunctions: webpackServerFunctions } : {}),
       };
       const webpackPoLoaderOptions = {
         failOnMissing,
         cwd: webpackProjectRoot,
-        ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
+        ...(webpackConfigPath ? { configPath: webpackConfigPath } : {}),
       };
+      const webpackSourceFilter = createPalamedesSourceFilter(include, exclude, {
+        projectRoot: webpackProjectRoot,
+      });
 
       if (messageSplitting && !context.isServer) {
         config.experiments ??= {};
@@ -642,7 +687,7 @@ export function withPalamedes(
             loader: serverCatalogLoaderPath,
             options: {
               cwd: webpackProjectRoot,
-              ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
+              ...(webpackConfigPath ? { configPath: webpackConfigPath } : {}),
             },
           },
         ],
@@ -650,8 +695,7 @@ export function withPalamedes(
 
       // Add the OXC transform loader for JS/TS files
       config.module.rules.push({
-        test: include,
-        exclude,
+        test: (resource: string) => webpackSourceFilter(resource),
         enforce: "pre" as const,
         use: [
           {

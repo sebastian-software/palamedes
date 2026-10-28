@@ -31,7 +31,7 @@ test("rejects an ADR missing from the index", () => {
       checkDecisionsIndex({
         read: withMutation("DECISIONS.md", (text) =>
           text.replace(
-            "26. [ADR-026: React Router RSC Entry Request Scope](./adr/026-react-router-rsc-entry-request-scope.md)\n",
+            "25. [ADR-025: Binary Plugin Protocol For Rust-Hosted Extensions](./adr/025-binary-plugin-protocol.md)\n",
             "",
           ),
         ),

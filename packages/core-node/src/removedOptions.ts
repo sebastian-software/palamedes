@@ -16,7 +16,7 @@ export const REMOVED_PALAMEDES_OPTION_MESSAGES = {
     "Palamedes v2 removed messageSplitting: compiled catalogs are delivered automatically. Remove the option.",
   experimentalGraphSplitting:
     "Palamedes v2 removed experimentalGraphSplitting: compiled catalogs are delivered automatically through an import map. Remove the option, including any localeBinding setting.",
-  cwd: "Palamedes v2 removed the withPalamedes() cwd option. Use projectRoot instead.",
+  cwd: "Palamedes v2 renamed cwd to projectRoot: relative configPath values and include/exclude globs resolve from it. Rename the option; the Vite plugin defaults it to Vite's root.",
 } as const;
 
 export type RemovedPalamedesOption = keyof typeof REMOVED_PALAMEDES_OPTION_MESSAGES;

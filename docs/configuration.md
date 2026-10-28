@@ -13,6 +13,23 @@ so editing only an imported helper reloads the resolved configuration. Package
 implementation files under `node_modules` are excluded from that project watch
 graph.
 
+## Adapter Paths
+
+The Vite, Next.js, and Remix adapters use the same path options:
+
+| Option              | Meaning                                                                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projectRoot`       | Base for config discovery, a relative `configPath`, and relative `include`/`exclude` globs. Vite defaults to its resolved `root`; Next.js derives its project directory; Remix uses the working directory. |
+| `configPath`        | Config file to load instead of searching. Relative paths resolve from `projectRoot`; absolute paths stay absolute.                                                                                         |
+| `include`/`exclude` | Files the macro transform handles: a glob, a RegExp, or an array of both. Relative globs resolve from `projectRoot`; RegExps test the absolute file path.                                                  |
+
+Without `configPath`, Vite and Next.js search upward from `projectRoot`. The
+Remix Node hook searches upward from each imported catalog file. The adapter
+`include`/`exclude` options select files for the macro transform. They are
+separate from catalog `include`/`exclude`, which select source files for a
+catalog and resolve from the config file directory. Palamedes v2 renamed the
+adapter `cwd` option to `projectRoot`; `cwd` throws a migration error.
+
 ## Minimal Config
 
 ```yaml

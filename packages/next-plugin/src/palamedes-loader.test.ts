@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { withPalamedes } from "./index";
+
 declare global {
   var __pmds_test_body_ran: boolean | undefined;
   var __pmds_test_getI18n: (() => { _: (message: string) => string }) | undefined;
@@ -66,6 +68,39 @@ afterEach(() => {
 });
 
 describe("palamedes-loader.cjs", () => {
+  it("applies withPalamedes() include/exclude patterns to the absolute resource path", async () => {
+    const projectRoot = path.resolve("/repo");
+    const config = withPalamedes(
+      {},
+      {
+        projectRoot,
+        include: ["src/**/*.tsx", /\.custom$/u],
+        exclude: ["src/legacy/**", /\.gen\./u],
+      },
+    );
+    const rules = config.turbopack?.rules?.["*"] as {
+      loaders: { options: Record<string, unknown> }[];
+    }[];
+    const options = rules[0]!.loaders[0]!.options;
+    const source =
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }';
+
+    const transformed: string[] = [];
+    for (const file of [
+      "src/page.tsx",
+      "lib/page.custom",
+      "src/legacy/old.tsx",
+      "src/page.gen.tsx",
+      "lib/page.tsx",
+    ]) {
+      const output = await runLoader(options, { resourcePath: path.join(projectRoot, file) });
+      if (output !== source) transformed.push(file);
+    }
+
+    expect(transformed).toEqual(["src/page.tsx", "lib/page.custom"]);
+    expect(transformPalamedesMacros).toHaveBeenCalledTimes(2);
+  });
+
   it("compiles fragments from a small adapter resource instead of repeating full PO inputs", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",

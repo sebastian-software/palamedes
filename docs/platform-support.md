@@ -13,7 +13,7 @@ number for the whole project. This table is the canonical list; the
 | Node.js floor  | Applies to                                                                                                                                                  |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `>=22.0.0`     | Every published package except the rows below, including `@palamedes/core`, `@palamedes/runtime`, `@palamedes/cli`, and the `@palamedes/core-node-*` addons |
-| `>=22.22.0`    | `@palamedes/react-router-rsc`, `@palamedes/tanstack`, `@palamedes/waku`                                                                                     |
+| `>=22.22.0`    | `@palamedes/tanstack`, `@palamedes/waku`                                                                                                                    |
 | `>=24.3.0`     | `@palamedes/remix`, whose floor follows the supported full-stack Remix v3 runtime                                                                           |
 | No declaration | The `@palamedes/cli-*` platform shells, which leave Node compatibility to their `@palamedes/cli` wrapper                                                    |
 | `>=22.22.0`    | This repository itself — development and CI, declared in the root `package.json` and shown by the repository Node badge                                     |

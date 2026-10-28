@@ -16,7 +16,7 @@ await build({
   configFile: false,
   root,
   base: "/fragment-demo/",
-  plugins: [palamedes({ cwd: root, failOnMissing: true })],
+  plugins: [palamedes({ projectRoot: root, failOnMissing: true })],
   oxc: { jsx: { runtime: "automatic" } },
   build: {
     outDir,

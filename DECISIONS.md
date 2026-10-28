@@ -65,7 +65,7 @@ These records explain binding, compilation, performance, protocol, and host-spec
 23. [ADR-023: Bounded Parallel Extraction](./adr/023-bounded-parallel-extraction.md)
 24. [ADR-024: Native Transform Source Maps](./adr/024-native-transform-source-maps.md)
 25. [ADR-025: Binary Plugin Protocol For Rust-Hosted Extensions](./adr/025-binary-plugin-protocol.md)
-26. [ADR-026: React Router RSC Entry Request Scope](./adr/026-react-router-rsc-entry-request-scope.md)
+26. [ADR-026: No React Router RSC Adapter](./adr/026-react-router-rsc-entry-request-scope.md)
 
 ## Website and project operation
 

@@ -363,7 +363,7 @@ describe("createRemixI18nServer", () => {
       );
     }
     try {
-      const registry = createPalamedesRemixCatalogAssetRegistry({ cwd: root });
+      const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: root });
       const remixI18n = createRemixI18nServer({
         locales,
         strategy: "cookie",
