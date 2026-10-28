@@ -26,6 +26,15 @@ import {
 
 const require = createRequire(import.meta.url);
 
+/*
+ * `@palamedes/next-plugin/server` keys request state to this Next.js internal
+ * module (see server.ts). Next has no public request-identity API that also
+ * covers static generation and Client Component SSR, so this dependency is an
+ * explicit, version-verified contract documented in docs/stability.md.
+ */
+const NEXT_WORK_ASYNC_STORAGE_MODULE = "next/dist/server/app-render/work-async-storage.external.js";
+const NEXT_VERIFIED_VERSION = "16.4.1";
+
 type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>;
 type TurbopackRuleConfigItem = Extract<TurbopackRules[string], { loaders?: unknown }>;
 type TurbopackRuleCollectionEntry = Extract<TurbopackRules[string], unknown[]>[number];
@@ -242,6 +251,33 @@ function resolveWorkspaceRoot(projectRoot: string, explicitRoot?: string) {
   }
 }
 
+function installedNextVersion(): string | undefined {
+  try {
+    return (require("next/package.json") as { version?: string }).version;
+  } catch {
+    return undefined;
+  }
+}
+
+/*
+ * Resolve, but do not load, the internal module: loading it here would create
+ * Next's shared AsyncLocalStorage singleton before Next installs its global
+ * AsyncLocalStorage, and `next start` evaluates this config in its own process.
+ */
+function assertNextWorkAsyncStorageResolves(): void {
+  try {
+    require.resolve(NEXT_WORK_ASYNC_STORAGE_MODULE);
+  } catch (error) {
+    const version = installedNextVersion();
+    throw new Error(
+      `Palamedes could not resolve ${NEXT_WORK_ASYNC_STORAGE_MODULE} from the installed Next.js${version ? ` ${version}` : ""}. ` +
+        `@palamedes/next-plugin/server keys request-scoped i18n to this Next.js internal module and is verified against Next.js ${NEXT_VERIFIED_VERSION}. ` +
+        "Install a verified Next.js 16 release or report the new version in the Palamedes issue tracker.",
+      { cause: error },
+    );
+  }
+}
+
 type NextConfigWithResolvedPath = NextConfig & { configFile?: string };
 
 /** JSON-safe include/exclude pattern for loader options. */
@@ -252,10 +288,6 @@ function filterPatternList(pattern: PalamedesFilterPattern): ReadonlyArray<strin
     return [];
   }
   return typeof pattern === "string" || pattern instanceof RegExp ? [pattern] : pattern;
-}
-
-function isRegExp(pattern: string | RegExp): pattern is RegExp {
-  return pattern instanceof RegExp;
 }
 
 function serializeFilterPattern(pattern: string | RegExp): SerializedFilterPattern {
@@ -435,6 +467,7 @@ export function withPalamedes(
     "messageSplitting",
     "cwd",
   ]);
+  assertNextWorkAsyncStorageResolves();
   const {
     include = PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     exclude = /node_modules/,
@@ -503,20 +536,18 @@ export function withPalamedes(
   const rules: TurbopackRules = { ...baseConfig.turbopack?.rules };
 
   // Transform local JS/TS files that actually import Palamedes macros.
-  // RegExp include/exclude patterns also narrow the rule condition so
-  // Turbopack skips unrelated files early; the loader's shared filter decides.
-  const includeCondition =
-    includePatterns.length > 0 && includePatterns.every(isRegExp)
-      ? [
-          includePatterns.length === 1
-            ? { path: includePatterns[0] }
-            : { any: includePatterns.map((pattern) => ({ path: pattern })) },
-        ]
-      : [];
+  // Turbopack tests a rule's `path` condition against the module path relative
+  // to its root, while include/exclude RegExps follow the shared contract and
+  // test the absolute path. A user RegExp in the rule condition could therefore
+  // skip the transform (`/\/src\//` misses `src/page.tsx`) or select files the
+  // contract excludes, so only the loader's shared filter applies them. The
+  // built-in default matches a file extension, which is the same suffix for
+  // both path forms, so it still narrows the rule before the content check.
   const transformConditions = [
     { not: "foreign" },
-    ...includeCondition,
-    ...excludePatterns.filter(isRegExp).map((pattern) => ({ not: { path: pattern } })),
+    ...(include === PALAMEDES_BUNDLER_TRANSFORM_INCLUDE
+      ? [{ path: PALAMEDES_BUNDLER_TRANSFORM_INCLUDE }]
+      : []),
     {
       content: serverFunctions
         ? new RegExp(`${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`)

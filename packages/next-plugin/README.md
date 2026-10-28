@@ -16,10 +16,12 @@ and catalog problems show up while the app is still easy to fix.
 - Recommended for Next.js applications using App Router and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
 - Reports missing translations and ICU compatibility diagnostics during builds
-- Requires Next.js 16 (`peerDependencies: next ^16`); the emitted top-level
-  `turbopack.rules` conditions and `outputFileTracingRoot` need the Next 16
-  config surface
-- Uses Turbopack as the verified default path on Next.js 16.3.4
+- Requires Next.js 16.4.1 or a later 16.x release (`peerDependencies: next ^16.4.1`);
+  the emitted top-level `turbopack.rules` conditions and `outputFileTracingRoot`
+  need the Next 16 config surface, and `@palamedes/next-plugin/server` keys
+  requests to an internal Next module
+  ([Next.js contract](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md#nextjs-contract))
+- Uses Turbopack as the verified default path on Next.js 16.4.1
 - Graph-split client messages are verified under Turbopack and webpack
 - The shipped example proves server rendering, localized `"use server"`
   actions, hydration, and client navigation

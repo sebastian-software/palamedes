@@ -67,7 +67,7 @@ release.
 | `@palamedes/core` runtime API                         | Stable   | `createI18n`, compiled message lookup, locale activation, and missing-message errors are app-facing.                                                                                                                                                                           |
 | `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                                                                                                                                                                   |
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs. `@palamedes/solid` requires `solid-js@^2.0.0-rc.16`; the examples verify Solid `2.0.0-rc.16`.                                                                                                                   |
-| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8.                                                                                                                                                                        |
+| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8. The Next plugin requires `next@^16.4.1`; see the [Next.js contract](#nextjs-contract).                                                                                 |
 | `@palamedes/waku`                                     | Stable   | ESM-only Waku handler interceptor, catalog delivery middleware, and request resolver contract for `waku@^1.0.0-rc.4`; the examples verify Waku `1.0.0-rc.4`.                                                                                                                   |
 | `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                                                                                                          |
 | `@palamedes/react-router`                             | Stable   | ESM-only React Router Framework Mode root middleware, server entry, and locale resolver contract for `react-router@^8.5.0`; the examples verify React Router `8.5.0`. RSC mode is not supported.                                                                               |
@@ -148,6 +148,26 @@ same-origin Node deployment with query-selected locale and a fixed time zone.
 Other Nitro presets, CDN or subpath deployment, prerendering, streaming, islands,
 catalog HMR, and the four-strategy example matrix are not verified. It does not
 establish support for arbitrary Vue SSR hosts.
+
+### Next.js contract
+
+The examples verify Next.js `16.4.1` with React and React DOM `19.2` on
+Node.js, under Turbopack and webpack.
+
+`@palamedes/next-plugin` is **Stable** for `next@^16.4.1`. Its `/server`
+entry keys request-scoped i18n to Next's internal render storage,
+`next/dist/server/app-render/work-async-storage.external.js`. Next has no
+public API that identifies one App Router render across React resuming work in
+an earlier async context, static generation, and Client Component SSR: React
+`cache()` does not cover Client Component SSR, and `headers()` opts a route
+into dynamic rendering.
+
+`withPalamedes()` fails the build with a Palamedes error when the installed
+Next no longer resolves that module. The next-plugin unit tests import it from
+the installed `next`, so a dependency bump that moves it fails CI. Later 16.x
+releases fall inside the peer range; a release counts as verified once it
+passes the request isolation, server action, and Turbopack and webpack build
+proofs.
 
 ### Waku contract
 

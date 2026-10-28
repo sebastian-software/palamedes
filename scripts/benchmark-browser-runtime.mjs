@@ -6,10 +6,14 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
+import {
+  browserRuntimeProfiles,
+  browserRuntimeSourceSha256,
+} from "./browser-runtime-source-hash.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const reportPath = path.join(root, "benchmarks/browser-runtime/results.json");
-const profiles = ["core", "react", "solid", "remix"];
+const profiles = browserRuntimeProfiles;
 const externals = ["react", "react/jsx-runtime", "solid-js", "@solidjs/web", "remix/component"];
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -21,44 +25,13 @@ const sizes = (code) => ({
   }).byteLength,
 });
 
-// Hash source inputs, not generated dist directories. A fresh package build is
-// required before measuring. The report separately retains every bundled input.
-const inputPaths = [
-  ...profiles.flatMap((id) =>
-    git(
-      "ls-files",
-      `packages/${id}/src`,
-      `packages/${id}/build.config.ts`,
-      `packages/${id}/package.json`,
-    ).split("\n"),
-  ),
-  ...git(
-    "ls-files",
-    "packages/runtime/src",
-    "packages/runtime/build.config.ts",
-    "packages/runtime/package.json",
-  ).split("\n"),
-  "Cargo.lock",
-  "pnpm-lock.yaml",
-  "scripts/benchmark-browser-runtime.mjs",
-  ...profiles.map((id) => `benchmarks/browser-runtime/${id}.mjs`),
-  ...profiles.map((id) => `benchmarks/browser-runtime/${id}-client.mjs`),
-  "benchmarks/browser-runtime/catalog-only.mjs",
-  "proof/sveltekit-ssr/locales/en.po",
-].sort();
-const sourceHash = createHash("sha256");
-for (const filename of inputPaths) {
-  sourceHash
-    .update(filename)
-    .update("\0")
-    .update(await readFile(path.join(root, filename)))
-    .update("\0");
-}
-const sourceSha256 = sourceHash.digest("hex");
+// See browser-runtime-source-hash.mjs for which inputs are hashed and how
+// release metadata is projected out of them.
+const sourceSha256 = await browserRuntimeSourceSha256(root);
 
 if (process.argv.includes("--verify-report")) {
   const report = JSON.parse(await readFile(reportPath, "utf8"));
-  assert.equal(report.schemaVersion, 2);
+  assert.equal(report.schemaVersion, 3);
   assert.equal(
     report.sourceSha256,
     sourceSha256,
@@ -316,7 +289,7 @@ if (process.argv.includes("--verify-report")) {
       }
     }
     const report = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       measuredAt: new Date().toISOString(),
       sourceCommit: git("rev-parse", "HEAD"),
       worktreeDirty: git("status", "--porcelain").length > 0,

@@ -70,8 +70,9 @@ invocation, set `projectRoot` explicitly.
 `include` and `exclude` accept a glob string, a RegExp, or an array of both,
 with the same matching as the [Vite plugin](./vite-plugin.md#paths-and-filters).
 RegExps test the absolute file path under both webpack and Turbopack. Turbopack
-rule conditions only see paths relative to its own root, so the transform loader
-applies the filter and passes unmatched modules through unchanged.
+rule conditions only see paths relative to its own root, so user patterns never
+narrow the Turbopack rule; the transform loader applies the filter and passes
+unmatched modules through unchanged.
 
 Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
 1.17.1 this behavior is shared with the Vite integration, so a matching source
@@ -161,8 +162,10 @@ the generated module while existing requests retain their immutable view.
 
 `createNextServerI18nScope<T>()` remains available for explicit request-scoped
 callbacks. Both APIs require Node and must stay out of Client Components and
-Edge code. The adapter supports the declared Next 16 peer range and is verified
-against Next 16.3.4; removal of Next's internal render storage fails the build.
+Edge code. The adapter declares `next@^16.4.1` and is verified against Next
+16.4.1. It keys requests to Next's internal render storage; when the installed
+Next no longer provides that module, `withPalamedes()` fails the build. See the
+[Next.js contract](../stability.md#nextjs-contract).
 
 Browser modules automatically await the native compiled fragments selected by
 their macro usage and `document.documentElement.lang`. Only then can dependent
@@ -194,20 +197,18 @@ Eager translation calls belong inside functions after initialization. Module
 scope and Server Function parameter-initializer macros remain compile errors.
 
 The plugin configures both Turbopack and webpack paths, and requires Next.js
-16 (`peerDependencies: next ^16` — the emitted top-level `turbopack.rules`
-conditions and `outputFileTracingRoot` need the Next 16 config surface).
-`include` and `exclude` apply under both bundlers: in the webpack branch as
-loader `test`/`exclude`, under Turbopack translated into the rule condition
-(`{ path: include }` plus `{ not: { path: exclude } }`).
+16.4.1 or a later 16.x release (`peerDependencies: next ^16.4.1`). The
+emitted top-level `turbopack.rules` conditions and `outputFileTracingRoot`
+need the Next 16 config surface.
 
-The regex is not matched against the same string in both cases. Webpack tests
-the absolute resource path (`/home/me/app/src/page.tsx`); Turbopack tests its
-own internal path representation for the module, which is not guaranteed to be
-that absolute OS path. Extension patterns (`/\.([cm]?[jt]s|[jt]sx)$/`) and path-segment
-patterns (`/[/\\]generated[/\\]/`) behave the same under both. Patterns
-anchored with `^`, or built from an absolute directory, are the ones that can
-match under webpack and silently miss under Turbopack — prefer segment-based
-patterns and verify under both bundlers before relying on one.
+`include` and `exclude` apply under both bundlers against the absolute file
+path: webpack tests them in the loader rule, and the Turbopack transform loader
+applies the same filter. Turbopack tests a rule's `path` condition against the
+module path relative to its root (`src/page.tsx`), so Palamedes does not put
+user patterns into the rule condition. A pattern like `/\/src\//` therefore
+selects the same files under both bundlers, in a standalone app as in a
+monorepo. Only the default extension pattern also narrows the Turbopack rule,
+because a file extension is the same suffix in both path forms.
 
 The `.po` loader is scoped to first-party catalogs under both bundlers —
 `{ not: "foreign" }` for Turbopack, `exclude: /node_modules/` for webpack — so

@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import Module from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -281,16 +282,43 @@ describe("withPalamedes turbopack config", () => {
     ).toThrow(message);
   });
 
-  it("translates include/exclude options into the turbopack rule condition", () => {
-    const include = /\.custom\.tsx?$/;
+  it("leaves user RegExp include/exclude out of Turbopack's project-relative path condition", () => {
+    const include = /\/src\//;
     const exclude = /[/\\]vendored[/\\]/;
     const config = withPalamedes({}, { include, exclude });
 
-    const rule = (getRules(config)["*"] as RuleItem[])[0]!;
-    const conditions = conditionList(rule);
+    for (const rule of getRules(config)["*"] as RuleItem[]) {
+      // Turbopack would test these against `src/page.tsx`, the contract against
+      // the absolute path; the loader's shared filter applies them instead.
+      expect(JSON.stringify(conditionList(rule))).not.toContain('"path"');
+      expect(rule.loaders?.[0]?.options?.sourceFilter).toMatchObject({
+        include: [{ regexp: include.source, flags: "" }],
+        exclude: [{ regexp: exclude.source, flags: "" }],
+      });
+    }
+  });
 
-    expect(conditions).toContainEqual({ path: include });
-    expect(conditions).toContainEqual({ not: { path: exclude } });
+  it("names the Next.js internal render storage when the installed Next no longer provides it", () => {
+    const internalModule = "next/dist/server/app-render/work-async-storage.external.js";
+    const moduleResolver = Module as unknown as {
+      _resolveFilename: (request: string, ...rest: unknown[]) => string;
+    };
+    const originalResolveFilename = moduleResolver._resolveFilename;
+    moduleResolver._resolveFilename = function (request, ...rest) {
+      if (request === internalModule) {
+        throw Object.assign(new Error(`Cannot find module '${request}'`), {
+          code: "MODULE_NOT_FOUND",
+        });
+      }
+      return originalResolveFilename.call(this, request, ...rest);
+    };
+    try {
+      expect(() => withPalamedes()).toThrow(
+        `Palamedes could not resolve ${internalModule} from the installed Next.js 16.`,
+      );
+    } finally {
+      moduleResolver._resolveFilename = originalResolveFilename;
+    }
   });
 
   it("resolves a relative configPath from an explicit projectRoot, not the working directory", () => {
@@ -323,8 +351,7 @@ describe("withPalamedes turbopack config", () => {
       include: ["src/**/*.ts", { regexp: "\\.custom$", flags: "u" }],
       exclude: ["src/legacy/**"],
     });
-    // Globs resolve from projectRoot in the loader, so only RegExp-only
-    // includes narrow Turbopack's project-relative path condition.
+    // Only the loader applies a user filter; Turbopack paths are project-relative.
     expect(
       conditionList(rule).some(
         (condition) => typeof condition === "object" && condition !== null && "path" in condition,
