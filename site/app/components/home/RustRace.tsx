@@ -1,6 +1,6 @@
 import { Reveal } from "@palamedes/site-ui";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "ardo/react";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { CopyCommand } from "~/components/CopyCommand";
 import { PlatformBenchmarks } from "~/components/home/PlatformBenchmarks";
@@ -290,7 +290,7 @@ export function RustRace() {
           label="Re-run it yourself"
           className="w-full max-w-[26rem]"
         />
-        <Link to="/proof" viewTransition className="pmds-arrow-link">
+        <Link to="/proof" className="pmds-arrow-link">
           Every benchmark, and how it is checked →
         </Link>
         <a href={docsHref("benchmark-e2e-workflow")} className="pmds-arrow-link">

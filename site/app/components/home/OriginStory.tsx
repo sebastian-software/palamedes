@@ -1,5 +1,5 @@
 import { Reveal } from "@palamedes/site-ui";
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { Band } from "~/components/marketing/Band";
 
@@ -68,7 +68,6 @@ export function OriginStory() {
                 —{" "}
                 <Link
                   to="/blog/the-third-time-i-built-javascript-i18n-tooling"
-                  viewTransition
                   className="underline decoration-hair underline-offset-4 hover:text-accent hover:decoration-accent"
                 >
                   Sebastian Werner, maintainer

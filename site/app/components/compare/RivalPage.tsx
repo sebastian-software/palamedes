@@ -1,3 +1,5 @@
+import { StructuredData } from "~/components/StructuredData";
+import { faqStructuredData } from "~/lib/meta";
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { CtaBand } from "~/components/home/CtaBand";
 import { PageHero } from "~/components/marketing/PageHero";
@@ -189,6 +191,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
 
   return (
     <Page>
+      <StructuredData data={faqStructuredData(rival.faq)} />
       <PageHero
         kicker={rival.eyebrow}
         title={rival.headline}

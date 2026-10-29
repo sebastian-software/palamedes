@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { chromium } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./ardo-vite.mjs";
 
 const PORT = 4103;
 const origin = `http://127.0.0.1:${PORT}`;
-const cacheDir = mkdtempSync(join(tmpdir(), "palamedes-vite-cache-"));
 const siteRoot = join(import.meta.dirname, "..");
+// Ardo's package boundary also applies to Vite's generated dependency modules.
+const cacheDir = mkdtempSync(join(siteRoot, ".ardo-dev-cache-"));
 const browserExecutable = [
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
   "/opt/pw-browsers/chromium",
@@ -52,6 +52,12 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
   await page.getByRole("banner").getByRole("link", { name: "Docs", exact: true }).click();
   await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor();
+  await page.getByRole("banner").getByRole("button", { name: "Search", exact: true }).click();
+  const search = page.getByRole("dialog", { name: "Search", exact: true });
+  await search.getByRole("combobox", { name: "Search" }).fill("First Working Translation");
+  await search.getByRole("option").first().waitFor();
+  await page.keyboard.press("Escape");
+  await search.waitFor({ state: "hidden" });
   await page.getByRole("link", { name: "First Working Translation" }).first().click();
   await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor();
 
@@ -71,15 +77,8 @@ try {
 
 console.log("verify-docs-development: cold-cache docs navigation passed");
 
-/*
- * The dev server answers its first document request only after it has compiled
- * every route module, including more than 160 generated Markdown routes. That
- * takes 12-14 s on a fast laptop and reached the 30 s Playwright navigation
- * timeout on CI runners. Pay that server-side cost once with a plain request,
- * outside the browser timeout. The client dependency cache stays cold: the
- * browser steps still request every client module, and discover any
- * late dependency, for the first time.
- */
+/* Prime server rendering outside the browser navigation timeout. The browser
+ * still requests every client dependency with a cold cache. */
 async function warmServerRender() {
   const started = performance.now();
   const response = await fetch(`${origin}/`, { signal: AbortSignal.timeout(180_000) });

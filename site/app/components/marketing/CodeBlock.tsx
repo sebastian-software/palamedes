@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from "ardo/react";
 
 /*
  * A small, dependency-free code figure for marketing pages, set like a printed

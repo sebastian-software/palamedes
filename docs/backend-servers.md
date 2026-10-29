@@ -154,8 +154,7 @@ what tells the plugin it is building a server: it then loads
 `virtual:palamedes/server-catalogs` and resolves `@palamedes/runtime/node` to
 the bundled catalog store. Without it, the plugin treats the build as a browser
 build: the bundle silently keeps the runtime-macro path of
-`@palamedes/runtime/node`, and a direct `virtual:palamedes/server-catalogs`
-import fails.
+`@palamedes/runtime/node`, and a direct `virtual:palamedes/server-catalogs` import fails.
 
 Ways to run backend code with macros:
 

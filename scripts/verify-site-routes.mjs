@@ -16,10 +16,6 @@ import { chromium } from "@playwright/test";
 import { startSiteStaticServer } from "./site-static-server.mjs";
 import { verifyFrameworkBenchmarks } from "../site/scripts/verify-framework-benchmarks.mjs";
 import { verifyGeneratedProgressiveOutlines } from "../site/scripts/progressive-outline.mjs";
-import {
-  isExpectedSkippedViewTransitionError,
-  isKnownArdoBreadcrumbHydrationWarning,
-} from "./verify-site-route-errors.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const clientDir = join(repoRoot, "site/build/client");
@@ -279,6 +275,18 @@ function verifyApiReferenceRedirects(sitemapPaths) {
   );
 }
 
+// Ardo links to directory-style static pages, adding a slash before a fragment.
+function normalizeRouteHref(href) {
+  if (!href?.startsWith("/")) return href;
+  const [, path, suffix] = /^([^?#]*)(.*)$/u.exec(href);
+  return (path.replace(/\/+$/u, "") || "/") + suffix;
+}
+
+function routeLinkSelector(href) {
+  const [, path, suffix] = /^([^?#]*)(.*)$/u.exec(href);
+  return `a[href="${href}"], a[href="${path.replace(/\/+$/u, "")}/${suffix}"]`;
+}
+
 function readSitemapPaths() {
   const sitemapPath = join(clientDir, "sitemap.xml");
   if (!existsSync(sitemapPath)) {
@@ -299,19 +307,11 @@ function readSitemapPaths() {
 async function checkRoutes(context, label, { expectHydration }) {
   console.log(`— pass: ${label}`);
   const consoleErrors = [];
-  const knownHydrationWarnings = [];
-  const skippedViewTransitions = [];
 
   if (!expectHydration) {
     for (const path of sitemapPaths) {
       const page = await context.newPage();
-      trackPageErrors(
-        page,
-        () => path,
-        consoleErrors,
-        knownHydrationWarnings,
-        skippedViewTransitions,
-      );
+      trackPageErrors(page, () => path, consoleErrors);
       const response = await gotoAndSettle(page, path, { settleMs: 100 });
       if (response?.status() !== 200) {
         fail(`${label} ${path}: expected HTTP 200, got ${response?.status() ?? "no response"}`);
@@ -329,13 +329,7 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   for (const route of ROUTE_EXPECTATIONS) {
     const routePage = await context.newPage();
-    trackPageErrors(
-      routePage,
-      () => route.path,
-      consoleErrors,
-      knownHydrationWarnings,
-      skippedViewTransitions,
-    );
+    trackPageErrors(routePage, () => route.path, consoleErrors);
     await gotoAndSettle(routePage, route.path, { settleMs: 1500 });
     const h1 = await routePage.locator("h1").first().textContent();
     if (!h1?.trim()) {
@@ -393,20 +387,14 @@ async function checkRoutes(context, label, { expectHydration }) {
   }
 
   const proofPage = await context.newPage();
-  trackPageErrors(
-    proofPage,
-    () => "/proof",
-    consoleErrors,
-    knownHydrationWarnings,
-    skippedViewTransitions,
-  );
+  trackPageErrors(proofPage, () => "/proof", consoleErrors);
   await gotoAndSettle(proofPage, "/proof", { settleMs: expectHydration ? 500 : 100 });
   await checkProofStructure(proofPage, label);
   if (expectHydration) {
     const performanceHref = await proofPage
       .getByRole("link", { name: "i18n performance", exact: true })
       .getAttribute("href");
-    if (performanceHref !== "/i18n-performance") {
+    if (normalizeRouteHref(performanceHref) !== "/i18n-performance") {
       fail(`proof ${label}: performance evidence link drifted (${performanceHref ?? "missing"})`);
     }
     await gotoAndSettle(proofPage, "/i18n-performance", { settleMs: 100 });
@@ -425,13 +413,7 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   const page = await context.newPage();
   let currentPath = "(startup)";
-  trackPageErrors(
-    page,
-    () => currentPath,
-    consoleErrors,
-    knownHydrationWarnings,
-    skippedViewTransitions,
-  );
+  trackPageErrors(page, () => currentPath, consoleErrors);
 
   if (expectHydration) {
     currentPath = "/";
@@ -480,14 +462,18 @@ async function checkRoutes(context, label, { expectHydration }) {
       ["Remix", "/frameworks/remix-v3"],
     ]) {
       const link = frameworks.getByRole("link", { name, exact: true });
-      if (!(await link.isVisible()) || (await link.getAttribute("href")) !== href) {
+      if (
+        !(await link.isVisible()) ||
+        normalizeRouteHref(await link.getAttribute("href")) !== href
+      ) {
         fail(`home framework support: ${name} needs a visible link to its own guide`);
       }
     }
     const libraries = integrationSection.getByRole("list", { name: "UI Libraries", exact: true });
     if (
-      (await libraries.getByRole("link", { name: "Svelte", exact: true }).getAttribute("href")) !==
-      "/frameworks/svelte"
+      normalizeRouteHref(
+        await libraries.getByRole("link", { name: "Svelte", exact: true }).getAttribute("href"),
+      ) !== "/frameworks/svelte"
     ) {
       fail(
         "home integration groups: Svelte must keep its UI-library guide separate from SvelteKit",
@@ -501,7 +487,7 @@ async function checkRoutes(context, label, { expectHydration }) {
       const group = integrationSection.locator(selector);
       if (
         (await group.getByRole("link").count()) !== 2 ||
-        (await group.locator(`a[href="${href}"]`).count()) !== 1
+        (await group.locator(routeLinkSelector(href)).count()) !== 1
       ) {
         fail(`home integration groups: ${selector} needs a guide and working example`);
       }
@@ -564,7 +550,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     ];
     const missingContextualRoutes = [];
     for (const href of contextualRoutes) {
-      if ((await decisionPaths.locator(`a[href="${href}"]`).count()) === 0) {
+      if ((await decisionPaths.locator(routeLinkSelector(href)).count()) === 0) {
         missingContextualRoutes.push(href);
       }
     }
@@ -600,13 +586,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     // The rival template leads with a verdict; the native-toolchain argument
     // belongs on the hub, not repeated on every rival page.
     const comparePage = await context.newPage();
-    trackPageErrors(
-      comparePage,
-      () => "/compare",
-      consoleErrors,
-      knownHydrationWarnings,
-      skippedViewTransitions,
-    );
+    trackPageErrors(comparePage, () => "/compare", consoleErrors);
     await gotoAndSettle(comparePage, "/compare", { settleMs: 1500 });
     const ledgerHeaders = await comparePage
       .locator("table")
@@ -840,7 +820,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     await guidesNavigation.click();
     currentPath = "/guides";
     await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor();
-    await page.locator('a[href="/react-server-components-i18n"]').first().click();
+    await page.locator(routeLinkSelector("/react-server-components-i18n")).first().click();
     currentPath = "/react-server-components-i18n";
     await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor();
     await page.goBack({ waitUntil: "networkidle" });
@@ -852,9 +832,13 @@ async function checkRoutes(context, label, { expectHydration }) {
 
     currentPath = "/";
     await gotoAndSettle(page, "/", { settleMs: 500 });
-    const search = page.getByRole("combobox", { name: "Search" });
+    await page.getByRole("banner").getByRole("button", { name: "Search", exact: true }).click();
+    const search = page
+      .getByRole("dialog", { name: "Search", exact: true })
+      .getByRole("combobox", { name: "Search" });
     await search.fill("First Working Translation");
     const searchResults = page.getByRole("listbox", { name: "Search results" });
+    await searchResults.getByRole("option").first().waitFor();
     if ((await searchResults.getByRole("option").count()) === 0) {
       fail("header search: expected a result for First Working Translation");
     }
@@ -917,7 +901,14 @@ async function checkRoutes(context, label, { expectHydration }) {
     await gotoAndSettle(page, "/guides", { settleMs: 100 });
     const guideTopicLinks = await page
       .locator(
-        'a[href="/react-server-components-i18n"], a[href="/i18n-performance"], a[href="/icu-messageformat"], a[href="/locale-routing"]',
+        [
+          "/react-server-components-i18n",
+          "/i18n-performance",
+          "/icu-messageformat",
+          "/locale-routing",
+        ]
+          .map(routeLinkSelector)
+          .join(", "),
       )
       .count();
     if (guideTopicLinks !== 4) {
@@ -927,20 +918,6 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   if (consoleErrors.length > 0) {
     fail(`${label}: console errors: ${consoleErrors.slice(0, 3).join(" | ")}`);
-  }
-  if (knownHydrationWarnings.length > 0) {
-    console.warn(
-      `  known ARDO breadcrumb hydration warnings filtered: ${knownHydrationWarnings
-        .slice(0, 5)
-        .join(" | ")}`,
-    );
-  }
-  if (skippedViewTransitions.length > 0) {
-    console.warn(
-      `  known skipped View Transition page errors filtered: ${skippedViewTransitions
-        .slice(0, 5)
-        .join(" | ")}`,
-    );
   }
   await page.close();
 }
@@ -1036,7 +1013,8 @@ async function checkGetStartedStructure(page, label) {
 
   const frameworkHrefs = await page
     .getByRole("link", { name: "Choose your framework", exact: true })
-    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href")))
+    .then((hrefs) => hrefs.map(normalizeRouteHref));
   if (
     !frameworkHrefs.includes("#install") ||
     (await page.locator("#loop").count()) !== 1 ||
@@ -1053,8 +1031,8 @@ async function checkGetStartedStructure(page, label) {
     .getAttribute("href");
   if (
     !frameworkHrefs.includes("/frameworks") ||
-    localeHref !== "/locale-routing" ||
-    skillHref !== "/docs/agent-skill"
+    normalizeRouteHref(localeHref) !== "/locale-routing" ||
+    normalizeRouteHref(skillHref) !== "/docs/agent-skill"
   ) {
     fail(`get-started ${label}: framework, locale, or agent setup route is missing`);
   }
@@ -1340,34 +1318,12 @@ async function checkProgressiveOutlineAnchors(browser) {
   await context.close();
 }
 
-function trackPageErrors(
-  page,
-  getPath,
-  consoleErrors,
-  knownHydrationWarnings,
-  skippedViewTransitions,
-) {
+function trackPageErrors(page, getPath, consoleErrors) {
   page.on("pageerror", (error) => {
-    const message = error.message;
-    const path = getPath();
-    if (isExpectedSkippedViewTransitionError("pageerror", error)) {
-      skippedViewTransitions.push(path);
-    } else if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
-      knownHydrationWarnings.push(path);
-    } else {
-      consoleErrors.push(`${path}: ${message}`);
-    }
+    consoleErrors.push(`${getPath()}: ${error.message}`);
   });
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      const text = message.text();
-      const path = getPath();
-      if (isKnownArdoBreadcrumbHydrationWarning(path, text)) {
-        knownHydrationWarnings.push(path);
-      } else {
-        consoleErrors.push(`${path}: ${text}`);
-      }
-    }
+    if (message.type() === "error") consoleErrors.push(`${getPath()}: ${message.text()}`);
   });
   page.on("response", (response) => {
     if (response.status() >= 400) {

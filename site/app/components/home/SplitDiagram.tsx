@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router";
+import { useState } from "ardo/react";
+import { ArdoLink as Link } from "ardo/runtime";
 
 /*
  * An illustration, not a measurement: four screens of an app and the German
@@ -63,11 +63,7 @@ export function SplitDiagram() {
       </ul>
       <figcaption className="border-t border-hair px-5 py-3 text-[13px] leading-relaxed text-ink/75">
         Only the visitor’s language, only for screens they open.{" "}
-        <Link
-          to="/message-splitting"
-          viewTransition
-          className="text-accent underline underline-offset-4"
-        >
+        <Link to="/message-splitting" className="text-accent underline underline-offset-4">
           Watch real fragments load in the live demo →
         </Link>
       </figcaption>

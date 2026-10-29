@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from "ardo/react";
 
 /*
  * A navy statement band for the one sentence a page most wants remembered —

@@ -1,4 +1,6 @@
-import { Link } from "react-router";
+import { StructuredData } from "~/components/StructuredData";
+import { frameworkStructuredData } from "~/lib/meta";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { CtaBand } from "~/components/home/CtaBand";
@@ -62,6 +64,15 @@ function StrategyGrid({ page }: { page: FrameworkLanding }) {
 export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
   return (
     <Page>
+      <StructuredData
+        data={frameworkStructuredData({
+          title: page.metaTitle,
+          description: page.metaDescription,
+          path: page.path,
+          framework: page.name,
+          faq: page.faq,
+        })}
+      />
       <PageHero
         kicker={page.eyebrow}
         title={page.headline}
@@ -137,7 +148,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
         lede={page.strategies.lede}
       >
         <StrategyGrid page={page} />
-        <Link to="/locale-routing" viewTransition className="pmds-arrow-link mt-6">
+        <Link to="/locale-routing" className="pmds-arrow-link mt-6">
           Compare locale strategies →
         </Link>
       </Section>
@@ -184,7 +195,6 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
             <Link
               key={related.href}
               to={related.href}
-              viewTransition
               className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
             >
               <p className="text-[18px] leading-snug font-bold group-hover:text-accent">

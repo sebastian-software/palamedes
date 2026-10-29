@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { build } from "vite";
+import { build } from "./ardo-vite.mjs";
 import { loadPalamedesConfig } from "@palamedes/config";
 import { compileCatalogArtifact, compileCatalogModule } from "@palamedes/core-node";
 import { palamedes } from "@palamedes/vite-plugin";

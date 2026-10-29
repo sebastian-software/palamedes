@@ -165,7 +165,7 @@ callbacks. Both APIs require Node and must stay out of Client Components and
 Edge code. The adapter declares `next@^16.4.1` and is verified against Next
 16.4.1. It keys requests to Next's internal render storage; when the installed
 Next no longer provides that module, `withPalamedes()` fails the build. See the
-[Next.js contract](../stability.md#nextjs-contract).
+[Next.js contract](../stability.md#next-js-contract).
 
 Browser modules automatically await the native compiled fragments selected by
 their macro usage and `document.documentElement.lang`. Only then can dependent

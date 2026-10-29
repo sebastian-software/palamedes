@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-30
 
 Related product sites share open-source UI primitives while retaining independent content, routing, and deployment.
 
@@ -24,8 +24,12 @@ site's content tree, or files outside its package directory. Its component CSS
 works when imported directly by a plain Vite application; Tailwind theme and
 utility declarations are an additive integration for the OSS site.
 
-The OSS site consumes the package with `workspace:*` and keeps its ARDO adapter
-in `site/`. A separate repository consumes a complete commit pin of the package
+The OSS site consumes the package through `file:../packages/site-ui` and keeps
+its ARDO adapter in `site/`. pnpm installs a physical package copy because Ardo 6
+rejects imports from workspace source directories outside the documentation
+package. The prebuild checks `site-ui`, and pnpm synchronizes installed copies
+after build scripts. The local file reference preserves one canonical source;
+it is not a separately maintained copy. A separate repository consumes a complete commit pin of the package
 subdirectory. Local links may be used while developing both repositories, but
 must not be committed as the reproducible dependency.
 
@@ -51,7 +55,7 @@ should look and navigate like related products without copying layout
 components, coupling deployments, or requiring the commercial repository to
 reach into private paths in this workspace.
 
-The OSS site currently uses React Router and ARDO. A shared package tied to
+The OSS site uses Ardo 6 with static document navigation. A shared package tied to
 either library would make it harder for the Plus site to reuse the design
 contract and would turn an integration detail into a cross-repository API.
 

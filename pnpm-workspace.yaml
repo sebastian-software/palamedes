@@ -52,6 +52,13 @@ overrides:
   "waku>vite": "^8.2.0"
   "waku>@vitejs/plugin-react": "^6.0.5"
 
+# Ardo 6 requires a physical installed package, even when its peers match.
+dedupeInjectedDeps: false
+
+# Keep the installed site-ui copy current after its prebuild typecheck.
+syncInjectedDepsAfterScripts:
+  - build
+
 onlyBuiltDependencies:
   - "@swc/core"
   - esbuild
@@ -160,3 +167,4 @@ minimumReleaseAgeExclude:
   - "@remix-run/render-middleware@0.2.0"
   - "@remix-run/spa@0.1.0"
   - "@remix-run/ui@0.8.0"
+  - ardo@6.0.0

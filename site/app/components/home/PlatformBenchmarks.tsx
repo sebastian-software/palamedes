@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState } from "ardo/react";
 import { BenchmarkVersion } from "~/components/proof/BenchmarkVersion";
 import { displayBenchmarkTime } from "~/data/bench";
 import { blacksmithBench, type PlatformBenchmarkData } from "~/data/blacksmith-bench";

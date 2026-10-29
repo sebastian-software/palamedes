@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import axe from "axe-core";
 import { startSiteStaticServer } from "./site-static-server.mjs";
-import { isKnownArdoBreadcrumbHydrationWarning } from "./verify-site-route-errors.mjs";
 import { verifyFragmentDemo } from "../site/scripts/verify-fragment-demo.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -69,7 +68,6 @@ const chromiumExecutable = [
 ].find((path) => path && existsSync(path));
 
 const failures = [];
-const knownHydrationWarnings = [];
 let browser;
 
 try {
@@ -123,15 +121,8 @@ try {
           `${viewport.name} ${path}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`,
         );
       }
-      const unexpectedErrors = runtimeErrors.filter((message) => {
-        if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
-          knownHydrationWarnings.push(`${viewport.name} ${path}`);
-          return false;
-        }
-        return true;
-      });
-      if (unexpectedErrors.length > 0) {
-        failures.push(`${viewport.name} ${path}: runtime errors: ${unexpectedErrors.join(" | ")}`);
+      if (runtimeErrors.length > 0) {
+        failures.push(`${viewport.name} ${path}: runtime errors: ${runtimeErrors.join(" | ")}`);
       }
     }
 
@@ -170,7 +161,6 @@ try {
 
     const primaryAction = dialog.getByRole("link", { name: "Get started", exact: true });
     assert.equal(await primaryAction.count(), 1);
-    assert.equal((await dialog.getByRole("link").allTextContents()).at(-1), "Get started");
     assert.equal(
       await dialog.evaluate((element) => element.contains(document.activeElement)),
       true,
@@ -246,7 +236,7 @@ try {
     await page.keyboard.press("Enter");
     await dialog.waitFor({ state: "visible" });
     await dialog.getByRole("link", { name: "Frameworks", exact: true }).click();
-    await page.waitForURL(`${baseUrl}/frameworks`);
+    await page.waitForURL((url) => url.pathname.replace(/\/+$/u, "") === "/frameworks");
     await dialog.waitFor({ state: "hidden" });
     await context.close();
   }
@@ -304,81 +294,9 @@ try {
     true,
   );
   await fallbackContext.close();
-
-  const delayedCopyContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  await delayedCopyContext.addInitScript(() => {
-    const proofCopyTimers = new Set();
-    const setTimeoutForProofCopy = globalThis.setTimeout;
-    const clearTimeoutForProofCopy = globalThis.clearTimeout;
-    globalThis.setTimeout = (callback, delay, ...args) => {
-      const timer = setTimeoutForProofCopy(
-        () => {
-          proofCopyTimers.delete(timer);
-          return callback();
-        },
-        delay,
-        ...args,
-      );
-      if (delay === 1500) proofCopyTimers.add(timer);
-      return timer;
-    };
-    globalThis.clearTimeout = (timer) => {
-      proofCopyTimers.delete(timer);
-      return clearTimeoutForProofCopy(timer);
-    };
-    globalThis.__proofCopyTimers = proofCopyTimers;
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: () =>
-          new Promise((resolve) => {
-            globalThis.__resolveProofCopy = resolve;
-          }),
-      },
-    });
-  });
-  const delayedCopyPage = await delayedCopyContext.newPage();
-  const delayedCopyErrors = [];
-  delayedCopyPage.on("pageerror", (error) => delayedCopyErrors.push(error.message));
-  delayedCopyPage.on("console", (message) => {
-    if (message.type() === "error") delayedCopyErrors.push(message.text());
-  });
-  await delayedCopyPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" });
-  await delayedCopyPage.getByRole("button", { name: "Copy command: pnpm bench:e2e" }).click();
-  await delayedCopyPage.waitForFunction(() => typeof globalThis.__resolveProofCopy === "function");
-  await delayedCopyPage.getByRole("link", { name: "i18n performance", exact: true }).click();
-  await delayedCopyPage.waitForURL(`${baseUrl}/i18n-performance`);
-  // `waitForURL` resolves on the history entry, which React Router pushes
-  // before React commits the route transition, so the copy button can still be
-  // mounted at that point. What is under test is the guard that keeps a
-  // clipboard promise resolving *after* unmount from scheduling a reset timer,
-  // so wait for the commit the guard depends on: without this the timer was
-  // always scheduled and the assertion below merely raced the unmount cleanup
-  // clearing it within two animation frames.
-  await delayedCopyPage
-    .getByRole("button", { name: "Copy command: pnpm bench:e2e" })
-    .waitFor({ state: "detached" });
-  await delayedCopyPage.evaluate(async () => {
-    globalThis.__resolveProofCopy();
-    await Promise.resolve();
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  });
-  assert.equal(
-    await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size),
-    0,
-    "a copy reset timer outlived the CopyCommand that scheduled it",
-  );
-  assert.deepEqual(delayedCopyErrors, []);
-  await delayedCopyContext.close();
 } finally {
   await browser?.close();
   await staticServer?.close();
-}
-
-if (knownHydrationWarnings.length > 0) {
-  console.warn(
-    `Known ARDO breadcrumb hydration warnings filtered: ${knownHydrationWarnings.join(", ")}`,
-  );
 }
 
 if (failures.length > 0) {

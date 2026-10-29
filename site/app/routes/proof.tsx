@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { PageHero } from "~/components/marketing/PageHero";
@@ -212,11 +212,7 @@ export default function Proof() {
               These are machine-local numbers from the checked-in report, not a marketing average.
               Your hardware will differ; the ratios are the signal. Commands to reproduce:{" "}
               <code>pnpm bench:e2e</code>. For why extraction is slow in the first place, see{" "}
-              <Link
-                to="/i18n-performance"
-                viewTransition
-                className="text-accent underline underline-offset-2"
-              >
+              <Link to="/i18n-performance" className="text-accent underline underline-offset-2">
                 i18n performance
               </Link>
               .
@@ -268,11 +264,7 @@ export default function Proof() {
           </p>
         </EditorialRail>
         <div className="mt-6 space-y-2">
-          <Link
-            to="/icu-messageformat"
-            viewTransition
-            className="mono-nums block text-[13px] text-accent"
-          >
+          <Link to="/icu-messageformat" className="mono-nums block text-[13px] text-accent">
             What ICU MessageFormat is, and what survives the pipeline →
           </Link>
           <a
