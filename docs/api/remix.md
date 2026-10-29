@@ -7,6 +7,9 @@ asset pipelines.
 pnpm add @palamedes/core @palamedes/core-node @palamedes/remix @palamedes/runtime remix
 ```
 
+The peer range is `remix@^3.0.0`. The examples verify Remix 3.0.0; that is
+the tested version, and later 3.x releases are not yet part of the matrix.
+
 Install `@palamedes/core` as a direct runtime dependency: generated catalog
 modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
 
@@ -263,7 +266,7 @@ Further `createRemixI18nServer` options: `i18nOptions` (the request-local
 `failureMessage`, `cookieName` (default `"locale"`), and `cookieMaxAge`
 (default one year, in seconds). `catalogAssets` accepts a
 `RemixCatalogAssetConfig` (the resolved catalog configuration) and a
-locale-to-`.po` resolver. For browser graph splitting, pass
+locale-to-`.po` resolver. For automatic browser catalog delivery, pass
 one `createPalamedesRemixCatalogAssetRegistry()` result to both the browser
 asset loader and `catalogAssets`; the loader registers each module's actual
 compiled IDs, so no hand-maintained catalog map is needed. The adapter exposes

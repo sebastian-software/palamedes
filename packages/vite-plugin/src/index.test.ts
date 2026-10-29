@@ -988,7 +988,7 @@ describe("automatic graph splitting", () => {
     await expect(
       runMacroTransform({}, undefined, ["id-a"], "C:\\shared\\label.ts"),
     ).rejects.toThrow(
-      /Palamedes transform error in C:\\shared\\label\.ts:.*different filesystem volume/,
+      /Palamedes transform error in C:\\shared\\label\.ts: Palamedes catalog delivery .*different filesystem volume.*Keep translated source files on the same volume as the Palamedes config file\./,
     );
   });
 

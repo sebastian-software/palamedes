@@ -278,7 +278,7 @@ export default async function CheckoutHeading({ seats }) {
       points: [
         {
           title: "ICU is the format, not an adapter",
-          body: "The same syntax you write in a macro is the syntax in the .po catalog and the syntax the runtime evaluates. There is no translation between an internal representation and ICU, because there is no internal representation.",
+          body: "ICU is the authoring and catalog format: the syntax you write in a macro is the syntax in the .po catalog. The compiler turns it into executable messages that the parser-free runtime calls, so no house dialect sits between your source and the catalog.",
         },
         {
           title: "Nested selectors are the test case, not the edge case",
@@ -337,7 +337,7 @@ select(gender, {
     other: "They invited # guests",
   }),
 })`,
-      note: "This structure is what lands in the .po catalog and what the runtime evaluates. The proof asserts that all three representations still agree after a full round trip.",
+      note: "This structure is what lands in the .po catalog and what the compiler turns into the executable message the runtime calls. The proof asserts that all three representations still agree after a full round trip.",
     },
     faq: [
       {
@@ -354,7 +354,7 @@ select(gender, {
       },
       {
         q: "Do .po catalogs preserve ICU structure?",
-        a: "Yes. The ICU string is the message, and the source string is the msgid, so a translator or a gettext-based tool sees exactly what the runtime will evaluate.",
+        a: "Yes. The ICU string is the message, and the source string is the msgid, so a translator or a gettext-based tool sees exactly the message the compiler turns into the code your app runs.",
       },
       {
         q: "Is ICU the same as i18next's interpolation format?",

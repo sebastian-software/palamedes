@@ -156,6 +156,9 @@ msgstr "Nombre de threads pour l’extraction parallèle. Remplace `extract-thre
 msgid "Worker threads for the parallel source-analysis pass."
 msgstr "Nombre de threads pour l’analyse parallèle des sources."
 
+msgid "Source files to check instead of configured catalog sources."
+msgstr "Fichiers sources à vérifier à la place des sources de catalogue configurées."
+
 msgid "Palamedes CLI for extraction, source lint, audits, reports, and catalogs"
 msgstr "CLI Palamedes pour l’extraction, la vérification des sources, les audits, les rapports et les catalogues"
 
@@ -393,8 +396,8 @@ msgstr "Impossible de déduire le format de fusion du chemin logique --path `{pa
 msgid "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
 msgstr "Le catalogue {catalog} ne correspond à aucun fichier source (include: {include}) ; les catalogues n’ont pas été modifiés. Corrigez les motifs d’inclusion ou omettez --fail-on-empty-catalog pour conserver un simple avertissement."
 
-msgid "Compile external language catalogs against an existing Rust application schema."
-msgstr "Compiler des catalogues de langue externes à partir d’un schéma d’application Rust existant."
+msgid "Compile catalogs ahead of time into JavaScript modules or Rust language files."
+msgstr "Compiler les catalogues à l’avance en modules JavaScript ou en fichiers de langue Rust."
 
 msgid "Compiled catalog target."
 msgstr "Cible des catalogues compilés."
@@ -473,6 +476,21 @@ msgstr "Supprimer l’identité précédente avant un nouveau consentement disti
 
 msgid "Forget local authority without confirming remote deletion."
 msgstr "Oublier les identifiants locaux sans confirmer la suppression distante."
+
+msgid "Unified reporting with system context; requires a new explicit grant."
+msgstr "Rapports unifiés avec contexte système ; nécessite un nouveau consentement explicite."
+
+msgid "Separate permission for 24-month monthly summaries."
+msgstr "Autorisation distincte pour des synthèses mensuelles sur 24 mois."
+
+msgid "Separate permission to contribute to public monthly totals."
+msgstr "Autorisation distincte pour contribuer aux totaux mensuels publics."
+
+msgid "Separate permission for future cross-tool profile links."
+msgstr "Autorisation distincte pour de futurs liens de profil entre outils."
+
+msgid "Affirm consent to the displayed telemetry-v1 notice."
+msgstr "Confirmer le consentement à la notice telemetry-v1 affichée."
 
 msgid "Usage reporting operation failed: {message}"
 msgstr "Échec de l’opération de rapports d’utilisation : {message}"

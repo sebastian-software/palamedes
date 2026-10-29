@@ -22,7 +22,7 @@ and catalog problems show up while the app is still easy to fix.
   requests to an internal Next module
   ([Next.js contract](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md#nextjs-contract))
 - Uses Turbopack as the verified default path on Next.js 16.4.1
-- Graph-split client messages are verified under Turbopack and webpack
+- Automatic client catalog delivery is verified under Turbopack and webpack
 - The shipped example proves server rendering, localized `"use server"`
   actions, hydration, and client navigation
 - Also supports webpack as an opt-out / fallback path

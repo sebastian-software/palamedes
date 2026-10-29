@@ -93,7 +93,7 @@ export type PalamedesRemixAssetLoaderOptions = Pick<
   PalamedesRemixRegisterOptions,
   "include" | "exclude" | "projectRoot" | "runtimeModule" | "includeSourceMetadata"
 > & {
-  /** Optional graph-split registry for executable locale fragments. */
+  /** Optional catalog-delivery registry for executable locale fragments. */
   catalogAssets?: PalamedesRemixCatalogAssetRegistry;
 };
 

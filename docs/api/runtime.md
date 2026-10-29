@@ -83,7 +83,7 @@ setClientI18n(i18n);
 
 Call `setClientI18n()` before translated client UI renders.
 
-Generated graph-split catalogs register their messages through
+Generated catalog modules register their messages through
 `@palamedes/runtime/internal`. `setClientI18n()` flushes eager message
 registrations that evaluated before the client instance existed, and throws if
 the instance cannot `load()` them.
@@ -105,7 +105,7 @@ Transformed macro code calls this automatically.
 On the client, `getI18n()` reads the instance registered with
 `setClientI18n()`. Browser Web Workers and Service Workers are client
 environments even though they do not expose `window`, so generated
-graph-split bootstraps work there too. On the
+catalog bootstraps work there too. On the
 server, `getI18n()` reads the active server getter.
 
 `getI18n()` throws a descriptive error when no active client instance or server

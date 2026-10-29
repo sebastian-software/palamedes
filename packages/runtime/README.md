@@ -42,7 +42,7 @@ setClientI18n(i18n);
 `getI18n()._()` returns `string`. Register instances created by `createI18n()`.
 
 Browser client registration also works in windowless Web Worker and Service
-Worker globals. Graph-split bootstrap modules can therefore initialize and
+Worker globals. Generated catalog bootstrap modules can therefore initialize and
 resolve their client instance off the main thread.
 
 For server-side rendering or server components, register a getter for the active request-local i18n instance:

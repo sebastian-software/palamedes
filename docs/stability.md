@@ -56,7 +56,9 @@ release.
 - **Preview**: usable, but still allowed to change as real adoption clarifies
   the API shape.
 - **Internal**: implementation detail. Apps should not import or depend on it
-  directly.
+  directly. The `@palamedes/core/internal` and `@palamedes/runtime/internal`
+  subpaths are Internal, so Palamedes packages that import them, or generate
+  code that imports them, pin that sibling package to the exact same version.
 - **Reserved**: package name or surface intentionally held for future work, with
   no supported adoption path yet.
 
@@ -67,7 +69,7 @@ release.
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs. `@palamedes/solid` requires `solid-js@^2.0.0-rc.16`; the examples verify Solid `2.0.0-rc.16`.                                                                                             |
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8. The Next plugin requires `next@^16.4.1`; see the [Next.js contract](#nextjs-contract).                                                           |
 | `@palamedes/waku`                                     | Stable   | ESM-only Waku handler interceptor, catalog delivery middleware, and request resolver contract for `waku@^1.0.0-rc.4`; the examples verify Waku `1.0.0-rc.4`.                                                                                             |
-| `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs.                                                                                                                                                    |
+| `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs for `@tanstack/react-start@^1.169.4`; the examples verify React Start `1.169.4`.                                                                    |
 | `@palamedes/react-router`                             | Stable   | ESM-only React Router Framework Mode root middleware, server entry, and locale resolver contract for `react-router@^8.5.0`; the examples verify React Router `8.5.0`. RSC mode is not supported.                                                         |
 | `@palamedes/remix`                                    | Stable   | Full-stack Remix v3 adapter for `remix@^3.0.0`; the examples verify Remix `3.0.0` with Node `>=24.3.0`, and all four strategies have public HTTPS browser proofs.                                                                                        |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                                                                                                                                                     |

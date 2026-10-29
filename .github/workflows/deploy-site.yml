@@ -39,6 +39,17 @@ on:
       - "scripts/component-demos.mjs"
       - "scripts/example-matrix*.mjs"
       - ".github/workflows/deploy-site.yml"
+  # The framework pages show the npm version fetched at build time. The push
+  # run for a release commit builds before Publish has uploaded the packages,
+  # so rebuild once Publish succeeds for a release commit pushed to main.
+  # Dry runs and forced publishes are workflow_dispatch runs and do not match.
+  workflow_run:
+    workflows:
+      - Publish
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -52,6 +63,13 @@ concurrency:
 
 jobs:
   build:
+    # Publish runs on every push to main; only a successful run for a release
+    # commit (see scripts/determine-release.mjs) can change the npm versions.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'chore: release main'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:

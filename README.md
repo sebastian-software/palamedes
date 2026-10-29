@@ -45,7 +45,7 @@ model and [proof](https://palamedes.dev/proof) for reproducible measurements.
 | Application | Integration |
 | --- | --- |
 | React and Solid | Translation components, macros, and headless locale helpers; Vite integration, including MDX. |
-| Next.js, TanStack Start, Solid Start, and React Router | Framework integration for server rendering and browser delivery. TanStack Start is verified with React; Solid uses Solid 2 Start Mode with Nitro. |
+| Next.js, TanStack Start, Solid 2 Start Mode, and React Router | Framework integration for server rendering and browser delivery. TanStack Start is verified with React; Solid is verified with Solid 2 Start Mode and Nitro. |
 | Remix v3 and Waku | Dedicated adapters, verified with Remix 3.0.0 and Waku 1.0.0-rc.4. |
 | Vue 3 and Svelte 5 | Preview component-script macros and catalog delivery through Vite. Template-text extraction and rich-text components are outside the current scope. |
 | Nuxt and SvelteKit | Separate Preview proofs for Node SSR, hydration, lazy loading, and request isolation. No dedicated npm packages are published. |

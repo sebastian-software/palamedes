@@ -45,12 +45,10 @@ direct invocation use their own syntax, for example `$palamedes` in Codex or
 
 ## Compatibility and scope
 
-These workflows describe the **compiled v2 adapter contract**, which Palamedes
-2.0.0 and later provide. A 1.x install does not have it. The agent checks
-package exports/types and release documentation first. Use a
-compatible release or an explicitly supplied workspace/preview target; an
-unavailable contract is a reported compatibility gap, not permission to add
-custom loaders or upgrade the framework silently.
+These workflows describe the **compiled v2 adapter contract**. Requires
+Palamedes 2.0.0 or later; a 1.x install does not have it. An unavailable
+contract is a reported compatibility gap, not permission to add custom loaders
+or upgrade the framework silently.
 
 The first scope excludes Pages Router, Edge, Vite SSR, and migration from other
 i18n libraries. Other supported Palamedes adapters retain their existing

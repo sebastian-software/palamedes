@@ -317,7 +317,7 @@ describe("registerMessages", () => {
     registerMessages({ "reg-plain": { keyF: "F" } });
 
     expect(() => setClientI18n(createUnloadableI18n("reg-plain"))).toThrow(
-      "cannot load generated graph-split messages",
+      "cannot load generated catalog messages",
     );
     expect(() => getI18n()).toThrow(/No active client i18n instance/);
   });
@@ -343,7 +343,7 @@ describe("registerMessages", () => {
     try {
       setClientI18n(createUnloadableI18n("reg-late"));
       expect(() => registerMessages({ "reg-late": { keyR: "R" } })).toThrow(
-        "cannot load generated graph-split messages",
+        "cannot load generated catalog messages",
       );
     } finally {
       state[REGISTERED_MESSAGES_KEY] = registered;
@@ -483,7 +483,7 @@ describe("registerMessages", () => {
       "reg-server-unloadable": async () => ({ keyL: "L" }),
     });
     await expect(loadRegisteredMessages(i18n, "reg-server-unloadable")).rejects.toThrow(
-      "cannot load generated graph-split messages",
+      "cannot load generated catalog messages",
     );
   });
 
@@ -497,7 +497,7 @@ describe("registerMessages", () => {
 
     await expect(
       loadRegisteredMessages(createUnloadableI18n("reg-server-unstarted"), "reg-server-unstarted"),
-    ).rejects.toThrow("cannot load generated graph-split messages");
+    ).rejects.toThrow("cannot load generated catalog messages");
 
     expect(load).not.toHaveBeenCalled();
   });

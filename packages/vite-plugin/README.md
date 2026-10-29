@@ -158,7 +158,7 @@ native semantic analyzer. Vite 8's Rolldown pipeline recognizes the generated
 React module type, so React parsing is configured automatically. Solid requires
 `solid({ extensions: [".mdx"] })`.
 
-Compiled graph delivery is automatic in development and production. No
+Compiled catalog delivery is automatic in development and production. No
 experimental flag, application PO map, or manual client initialization is
 needed. Vite's resolved `base` must be root-relative (for example `/app/`) or
 an absolute URL.

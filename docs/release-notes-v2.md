@@ -131,6 +131,14 @@ Prebuilt npm native packages do not require a local Rust toolchain.
   prefixes. `seoLinks()` returns canonical, language-alternate, and
   `x-default` link descriptors. Existing TLD and route host-map setups keep
   working unchanged; see [Locale strategies](./locale-strategies.md#domain-strategy).
+- **Node backends:** the new Stable `@palamedes/runtime/node` subpath adds
+  `defineNodeI18n`, one setup for backends that run with or without a bundler,
+  and `@palamedes/runtime/node-macros` adds `registerRuntimeMacros` for macros
+  in unbundled Node code. See [Backend servers](./backend-servers.md).
+- **Rust SDK on crates.io:** `palamedes-i18n`, `palamedes`, and
+  `palamedes-build` are published to crates.io for the first time, in the
+  Preview tier. They prepare PO catalogs during a Cargo build and load the
+  selected language at run time. See [Rust applications](./rust-applications.md).
 - **Agent-assisted adoption:** the repository includes a
   [Palamedes skill](../skills/palamedes/SKILL.md) for Next.js App Router,
   Vite/React, and Lingui migration. It preserves existing locale policy and
@@ -157,24 +165,26 @@ outside the v2 scope.
 ## Why this is a major release
 
 V2 removes a supported execution model, changes how failures are handled, and
-gives messages with literal braces new IDs. Applications that relied on raw
-runtime catalogs, parser APIs, or silent fallbacks need changes before
-upgrading. The Vite, Solid, Waku, and Remix adapters also raise their peer
-ranges.
+gives two kinds of messages new IDs: messages with literal braces, and messages
+that repeat a call, property read, or other non-identifier expression.
+Applications that relied on raw runtime catalogs, parser APIs, or silent
+fallbacks need changes before upgrading. The Vite, Next.js, Solid, Waku, Remix, and TanStack Start adapters
+also raise their peer ranges.
 
-| Existing v1 integration                                                                  | What to change for v2                                                                                       |
-| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Load ICU string maps directly into the runtime                                           | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.                    |
-| Import runtime parser APIs or direct choice components                                   | Move message authoring to macros; use build-time tooling for catalog inspection.                            |
-| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data               | Replace that plumbing with the host adapter's standard setup.                                               |
-| Catch translation failures and return source text or an empty catalog                    | Let failures reach ordinary, catalog-independent error UI.                                                  |
-| Disable Next.js message splitting                                                        | Remove `messageSplitting` and use automatic delivery.                                                       |
-| Set `failOnCompileError`, `keepSourceFallbacks`, or an adapter `cwd`                     | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`.                |
-| Reuse generated v1 catalogs or a custom runtime implementation                           | Regenerate artifacts and create instances with `createI18n()`; the renderer is internal.                    |
-| Use the React Router RSC adapter                                                         | Move to React Router Framework Mode, or to Next.js or Waku for RSC; the adapter is discontinued.            |
-| Write literal braces in `<Trans>` children, MDX text, or `t` templates                   | Run `pmds extract` and translate the new entries; braces are now literal text with a new `msgid`.           |
-| Run Vite 7 or older, an earlier Solid 2 release candidate, or a Remix 3 prerelease       | Upgrade to Vite 8, `solid-js@^2.0.0-rc.16`, and `remix@^3.0.0`; `@palamedes/waku` needs `waku@^1.0.0-rc.4`. |
-| Import generated-code or renderer helpers from `@palamedes/runtime` or `@palamedes/core` | Remove the imports; they moved to the Internal `/internal` subpaths that supported adapters emit.           |
+| Existing v1 integration                                                                                                                  | What to change for v2                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Load ICU string maps directly into the runtime                                                                                           | Use adapter delivery or explicitly generated compiled catalogs for a custom integration.                                                                      |
+| Import runtime parser APIs or direct choice components                                                                                   | Move message authoring to macros; use build-time tooling for catalog inspection.                                                                              |
+| Maintain client catalog maps, boundaries, or serialized ICU bootstrap data                                                               | Replace that plumbing with the host adapter's standard setup.                                                                                                 |
+| Catch translation failures and return source text or an empty catalog                                                                    | Let failures reach ordinary, catalog-independent error UI.                                                                                                    |
+| Disable Next.js message splitting                                                                                                        | Remove `messageSplitting` and use automatic delivery.                                                                                                         |
+| Set `failOnCompileError`, `keepSourceFallbacks`, or an adapter `cwd`                                                                     | Remove `failOnCompileError`; rename the others to `includeSourceMetadata` and `projectRoot`.                                                                  |
+| Reuse generated v1 catalogs or a custom runtime implementation                                                                           | Regenerate artifacts and create instances with `createI18n()`; the renderer is internal.                                                                      |
+| Use the React Router RSC adapter                                                                                                         | Move to React Router Framework Mode, or to Next.js or Waku for RSC; the adapter is discontinued.                                                              |
+| Write literal braces in `<Trans>` children, MDX text, or `t` templates                                                                   | Run `pmds extract` and translate the new entries; braces are now literal text with a new `msgid`.                                                             |
+| Repeat a call or property read such as `${user.name}` in one message                                                                     | Run `pmds extract` and translate the new entries; each occurrence gets its own placeholder (`{name_1}`) and the message a new `msgid`.                        |
+| Run Vite 7 or older, Next.js before 16.4.1, TanStack Start before 1.169.4, an earlier Solid 2 release candidate, or a Remix 3 prerelease | Upgrade to Vite 8, `next@^16.4.1`, `@tanstack/react-start@^1.169.4`, `solid-js@^2.0.0-rc.16`, and `remix@^3.0.0`; `@palamedes/waku` needs `waku@^1.0.0-rc.4`. |
+| Import generated-code or renderer helpers from `@palamedes/runtime` or `@palamedes/core`                                                 | Remove the imports; they moved to the Internal `/internal` subpaths that supported adapters emit.                                                             |
 
 The [v2 migration guide](./migration-v2.md) lists the exact removed APIs and
 replacements. Update coupled Palamedes packages together and verify the
@@ -189,11 +199,14 @@ identities.
 ## What stays familiar
 
 Message identity remains based on source text and context, so existing
-translations keep their IDs. Messages with literal braces are the exception:
-they get a new `msgid` and need translating again (see the
-[literal brace migration](./migration-v2.md#literal-braces-in-authored-text-get-new-message-ids)).
+translations keep their IDs. Two kinds of messages are the exception and need
+translating again: messages with literal braces (see the
+[literal brace migration](./migration-v2.md#literal-braces-in-authored-text-get-new-message-ids)),
+and messages that repeat a non-identifier expression such as `${user.name}`,
+which now get one placeholder per occurrence (see
+[repeated expressions](./migration-v2.md#regenerate-messages-with-repeated-expressions)).
 PO and FCL remain catalog formats, subject to host-specific delivery support:
-automatic Next.js graph delivery currently requires PO.
+automatic Next.js catalog delivery currently requires PO.
 
 Locale selection remains application policy. Cookie, route, subdomain, and TLD
 strategies continue to have checked examples. The browser language is fixed
@@ -216,15 +229,17 @@ replacing catalogs in place.
 
 ## Verification behind the changes
 
-The [catalog delivery evidence](../benchmarks/catalog-delivery/README.md)
-records the coordinated v2 verification: 25 smoke examples, 22 regular browser
-hosts, and Next.js request-scope checks with both Turbopack and webpack. Representative failure tests cover initial and
-lazy delivery and recovery; the report identifies the locale strategies tested
-for each scenario.
+CI and the release-revision Example Verification gate (see
+[CONTRIBUTING](../CONTRIBUTING.md#releases)) smoke-test and browser-test every
+example in the framework matrix, including the framework delivery proofs, on
+the exact revision that is published. Representative failure tests cover
+initial and lazy delivery and recovery.
 
-The report identifies the checked revisions and measurement limits. Use those
-fixture results alongside a production build and browser checks of your own
-application.
+The [catalog delivery evidence](../benchmarks/catalog-delivery/README.md) from
+2026-09-11 is the last full measurement baseline. It records the checked
+revisions, per-host asset measurements, and measurement limits; it predates the
+React Router adapter and stable Remix 3. Use those fixture results alongside a
+production build and browser checks of your own application.
 
 ## Independent updates and optional CLI usage reporting
 

@@ -170,11 +170,8 @@ or the [Next.js first-run guide](./nextjs-first-run.md) for that baseline. An ag
 can use the [repository skill](./agent-skill.md) to inspect the app and follow the
 matching setup and migration workflow.
 
-These recipes describe the compiled v2 adapter contract, which Palamedes 2.0.0
-and later provide. Check the installed package exports and matching release
-documentation before applying them. A version number alone does not establish
-that the contract is available; use a compatible release or an explicitly
-supplied workspace/preview build. Preserve existing framework versions and locale policy.
+These recipes describe the compiled v2 adapter contract. Requires Palamedes
+2.0.0 or later. Preserve existing framework versions and locale policy.
 
 ### 2. Migrate runtime wiring
 
