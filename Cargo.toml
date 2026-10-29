@@ -1,6 +1,6 @@
 [package]
 name = "palamedes"
-version = "1.25.1"
+version = "2.0.0"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
@@ -82,7 +82,7 @@ resolver = "2"
 # (the serde/serde_derive pattern). The pin lives here because release-please's
 # Cargo updater rewrites a member's `=` requirement to a caret one; a generic
 # extra-file bumps this marked line instead. check-release-set keeps it exact.
-palamedes-i18n = { version = "=1.25.1", path = "crates/palamedes-i18n" } # x-release-please-version
+palamedes-i18n = { version = "=2.0.0", path = "crates/palamedes-i18n" } # x-release-please-version
 
 [workspace.package]
 authors = ["Sebastian Software GmbH"]
