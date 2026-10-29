@@ -31,7 +31,7 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `@palamedes/remix/macro`
 - `@palamedes/remix/compiled`
 - `createRemixI18nServer(options)`
-- `startRemixClient(loadEntry, options?)`
+- `startRemixClient(loadEntry, { catalogUrl, errorHtml? })`
 - `initializeRemixClientI18nAsync(options)`
 - `createRemixI18nRequestScope(resolveI18n, options?)`
 - `remixI18nContext`
@@ -311,9 +311,12 @@ const clientEntry = await remixI18n.renderClientEntry("app/public/client.tsx", {
 ```
 
 Every server worker can serve the external bootstrap immediately, including
-before it renders its first document. The entry URL and optional error markup
-travel in the nonce-protected import map, scoped to the bootstrap's own URL, so
-injected page markup cannot redirect the entry or replace the error UI. Serving
+before it renders its first document. The entry URL, catalog mount and optional
+error markup travel in the nonce-protected import map, scoped to the bootstrap's
+own URL. The bootstrap loads the `<html lang>` catalog from that mount, the
+`catalogAssets.basePath` that `serveClientCatalogAsset()` answers, and never
+reads URLs or markup from page elements. Injected script tags or catalog links
+cannot redirect the entry or catalog import or replace the error UI. Serving
 the bootstrap does not require per-worker entry registration. Workers must use
 the same application build and asset mounts.
 
@@ -339,7 +342,9 @@ rejected: relocating a module URL without its import-map scope breaks bare
 dependency resolution. Configure the actual asset server's mounts instead.
 
 The lower-level `initializeRemixClientI18nAsync()` and `startRemixClient()` are
-available for custom host integrations. Generated executable catalogs never
+available for custom host integrations. `startRemixClient()` requires a
+`catalogUrl` from a trusted source, such as server-written import-map data; it
+does not read catalog links from the page. Generated executable catalogs never
 cross JSON. Do not brand raw ICU maps with `defineCompiledCatalog()`; it validates native
 generated constants and functions and does not compile ICU.
 
