@@ -6,7 +6,7 @@ import { HeroFilm } from "./HeroFilm";
 /*
  * The first screen states the whole idea in four words, offers two doors —
  * start now, or have it explained first — and shows the promise in a
- * two-minute film that plays only when asked.
+ * short film that plays only when asked.
  */
 export function HomeHero() {
   return (

@@ -190,16 +190,17 @@ if (args.site) {
   const lines = transcript.map((line) => `  ${JSON.stringify(line)},`).join("\n");
   const next = film
     .replaceAll(currentId, id)
-    .replace(/version: "v\d+"/u, `version: "${args.version}"`)
+    .replace(/version: "[^"]+"/u, `version: ${JSON.stringify(args.version)}`)
+    .replace(/title: "[^"]+"/u, `title: ${JSON.stringify(title)}`)
     .replace(/duration: "\d+:\d\d"/u, `duration: "${duration}"`)
-    .replace(/PalamedesFilm from video\/, \d+:\d\d/u, `PalamedesFilm from video/, ${duration}`)
+    .replace(/\w+ from video\/, \d+:\d\d/u, `${cues.composition} from video/, ${duration}`)
     .replace(/(FILM_TRANSCRIPT: readonly string\[\] = \[\n)[\s\S]*?\n\];/u, `$1${lines}\n];`);
   writeFileSync(FILM_TS, next);
   copyFileSync(args.poster, POSTER_PATH);
   writeFileSync(
     ANALYTICS,
     readFileSync(ANALYTICS, "utf8").replace(
-      /film is `[0-9a-f-]{36}`, version `v\d+`/u,
+      /film is `[0-9a-f-]{36}`, version `[^`]+`/u,
       `film is \`${id}\`, version \`${args.version}\``,
     ),
   );

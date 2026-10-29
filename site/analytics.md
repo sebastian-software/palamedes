@@ -88,7 +88,7 @@ mean these reports describe observed visits rather than all server requests.
 ## Video definitions and reports
 
 Video events include `video_id`, `video_version`, and `placement`. The current
-film is `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee`, version `v7`, placement
+film is `6a66741c-dea6-4742-9319-b203e8ac91aa`, version `launch-v1`, placement
 `homepage-film`; v6 was `df747a2a-efb7-414e-8e67-da6a3be9654f`. Update version
 metadata when replacing the film.
 
