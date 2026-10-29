@@ -32,7 +32,7 @@ depends on the hosting and DNS rows in
 The server-framework matrix uses the same compiled-only application runtime as
 production: macros author source messages, and the host adapters deliver the
 compiled active-locale dependencies. The focused Vite MDX example adds the
-end-to-end parser-free build proof through the `compiled` entrypoints.
+end-to-end parser-free build proof through the package root entrypoints.
 
 This file is the canonical documentation for the full matrix. Individual
 example READMEs are optional and should stay short; add one only when a specific
@@ -225,7 +225,7 @@ derives each module's compiled messages from `palamedes.yaml` and the browser
 loads only the active locale's fragments, so copied app code needs no catalog
 imports either.
 
-For Next.js with PO catalogs, the automatic graph-split path demonstrated by
+For Next.js with PO catalogs, the automatic catalog delivery demonstrated by
 `nextjs-cookie` delivers only the active locale's fragments for the evaluated
 client module graph without any option.
 
