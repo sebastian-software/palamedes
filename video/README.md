@@ -1,9 +1,14 @@
 # Palamedes product film
 
-This standalone Remotion project contains the v7 product film for Palamedes
-2.0: 3:06 at 1920 × 1080 and 30 fps. It is published on Bunny Stream as
-`b37ad483-9fee-4c09-a0ca-1c7fadc4aaee`; [YouTube](https://youtu.be/XBECHvmx2qQ)
-still carries v6 (2:40).
+The homepage plays the 70-second Palamedes 2.0 launch film from Bunny Stream
+(`6a66741c-dea6-4742-9319-b203e8ac91aa`). It is also public on
+[YouTube](https://youtu.be/WGFXql0mOb8). Its `PalamedesSpace` composition and
+release package come from commit `b1a5a40b` in PR #1472.
+
+This standalone Remotion project also contains the v7 product film for Palamedes
+2.0: 3:06 at 1920 × 1080 and 30 fps. It remains on Bunny Stream as
+`b37ad483-9fee-4c09-a0ca-1c7fadc4aaee` for rollback. The older
+[YouTube product film](https://youtu.be/XBECHvmx2qQ) is v6 (2:40).
 [ARCHIVE.md](ARCHIVE.md) lists where the takes, masters, and published cuts
 are kept. `PalamedesFilm` is the only film composition; `PalamedesPoster`
 renders its poster. The project is outside the repository workspace, and its Remotion and

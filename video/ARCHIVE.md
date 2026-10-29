@@ -13,7 +13,7 @@ explains what is kept outside Git and where each published cut is.
 | Masters, captions, posters, audio stems        | NAS archive, `master/` and `stems/`                                                      |
 | YouTube upload package (texts, SRT, thumbnail) | NAS archive, `youtube/`                                                                  |
 | Published video for the homepage               | Bunny Stream, library 783695; the current id is in `site/app/data/film.ts`               |
-| Published video on YouTube                     | https://youtu.be/XBECHvmx2qQ (still v6)                                                  |
+| Published video on YouTube                     | https://youtu.be/WGFXql0mOb8 (launch-v1)                                                 |
 | API keys                                       | `ELEVENLABS_API_KEY` and `BUNNY_API_KEY` in the untracked `.env` of the primary checkout |
 | Build output while working                     | `video/audio/.work/` (ignored by Git, lost with the worktree)                            |
 
@@ -24,16 +24,19 @@ Each cut has a folder named `<date> v<N>` with its own `README.md` and a
 
 ## Cuts
 
-| Cut       | Archive folder                                                 | Length | Source commit      | Bunny id                               | YouTube                                 |
-| --------- | -------------------------------------------------------------- | ------ | ------------------ | -------------------------------------- | --------------------------------------- |
-| v7        | `2026-10-26 v7 (Palamedes 2.0)`                                | 3:06   | `404568f3` (#1361) | `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee` | package ready, not uploaded             |
-| v6        | `2026-10-19 v6`                                                | 2:40   | #1259              | `df747a2a-efb7-414e-8e67-da6a3be9654f` | https://youtu.be/XBECHvmx2qQ            |
-| launch-v1 | `2026-10-29 launch v1 (Palamedes 2.0)` (local release package) | 1:10   | `b1a5a40b` (#1472) | —                                      | https://youtu.be/WGFXql0mOb8 (unlisted) |
+| Cut       | Archive folder                         | Length | Source commit      | Bunny id                               | YouTube                               |
+| --------- | -------------------------------------- | ------ | ------------------ | -------------------------------------- | ------------------------------------- |
+| v7        | `2026-10-26 v7 (Palamedes 2.0)`        | 3:06   | `404568f3` (#1361) | `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee` | package ready, not uploaded           |
+| v6        | `2026-10-19 v6`                        | 2:40   | #1259              | `df747a2a-efb7-414e-8e67-da6a3be9654f` | https://youtu.be/XBECHvmx2qQ          |
+| launch-v1 | `2026-10-29 launch v1 (Palamedes 2.0)` | 1:10   | `b1a5a40b` (#1472) | `6a66741c-dea6-4742-9319-b203e8ac91aa` | https://youtu.be/WGFXql0mOb8 (public) |
 
-The launch film is an additional homepage video, embedded from YouTube through
-`site/app/data/launch-film.ts`. Its English SRT captions and PNG thumbnail were
-uploaded with the master. The source package's `SHA256SUMS` passed verification;
-its NAS copy has not been verified. The product film above keeps its Bunny player.
+The launch film replaces v7 in the existing homepage Bunny player, configured in
+`site/app/data/film.ts`. Bunny carries its WebP poster and English WebVTT captions;
+the public YouTube upload carries the PNG thumbnail and English SRT captions.
+The source package's `SHA256SUMS` passed verification. The complete package was
+copied to the NAS with Finder; checksum verification on the NAS remains pending
+because macOS denied command-line read access. Both v7 and v6 remain in Bunny as
+rollback copies.
 
 The v7 archive holds everything needed to rebuild the cut without
 ElevenLabs: the 15 chosen takes (`takes/`), every delivered take
@@ -45,12 +48,9 @@ aligned to.
 
 ## Open items
 
-- Upload v7 to YouTube by hand from the `youtube/` package. Uploads through
+- Upload the archived v7 product film to YouTube by hand from the `youtube/` package. Uploads through
   the YouTube Data API from an unverified project are locked to private, so
-  the API is not used. Afterwards, replace the YouTube link here and in the
-  README, and set v6 to unlisted.
-- Delete the v6 video in Bunny Stream once v7 has run on the homepage without
-  problems; until then it is the rollback.
+  the API is not used. Afterwards, add its link to the v7 row above.
 
 ## Rebuild a cut from the archive
 

@@ -8,7 +8,6 @@ import { HomeFaq, HOME_FAQ } from "~/components/home/HomeFaq";
 import { HomeHero } from "~/components/home/HomeHero";
 import { IntegrationBand } from "~/components/home/IntegrationBand";
 import { Journey } from "~/components/home/Journey";
-import { LaunchFilm } from "~/components/home/LaunchFilm";
 import { OriginStory } from "~/components/home/OriginStory";
 import { ProofSection } from "~/components/home/ProofSection";
 import { QuestionRoutes } from "~/components/home/QuestionRoutes";
@@ -52,7 +51,6 @@ export default function Home() {
     <Page className="pmds-home">
       <HomeHero />
       <IntegrationBand />
-      <LaunchFilm />
       <BeforeAfter />
       <Journey />
       <RustRace />
