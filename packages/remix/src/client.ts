@@ -72,12 +72,21 @@ export async function initializeRemixClientI18nAsync<
   return initialized;
 }
 
-/** Start an application entry after the document's executable catalog is ready.
- * The optional error markup belongs to the host and must not depend on translations.
- */
+export type StartRemixClientOptions = {
+  /**
+   * Executable catalog URL for the document locale. It must come from a
+   * trusted source such as the nonce-protected import map, never from page
+   * elements that injected markup could imitate.
+   */
+  catalogUrl: string;
+  /** Host error markup; it must not depend on translations. */
+  errorHtml?: string;
+};
+
+/** Start an application entry after the document's executable catalog is ready. */
 export async function startRemixClient(
   loadEntry: () => Promise<unknown>,
-  options: { errorHtml?: string } = {},
+  options: StartRemixClientOptions,
 ): Promise<void> {
   let failed = false;
   const renderFailure = async (): Promise<void> => {
@@ -101,16 +110,17 @@ export async function startRemixClient(
     void renderFailure();
   });
   try {
-    const catalogLink = document.querySelector<HTMLLinkElement>(
-      "link[data-palamedes-catalog-locale]",
-    );
-    if (!catalogLink) throw new Error("Palamedes Remix document catalog is missing.");
+    if (typeof options.catalogUrl !== "string" || options.catalogUrl === "") {
+      throw new Error(
+        "Palamedes Remix document catalog URL is missing. Render <html lang={locale}> and renderClientEntry() in the document.",
+      );
+    }
     await initializeRemixClientI18nAsync({
       createI18n: () =>
         createI18n({
           timeZone: document.documentElement.dataset?.palamedesTimeZone,
         }),
-      catalogUrl: catalogLink.href,
+      catalogUrl: options.catalogUrl,
     });
     await loadEntry();
   } catch {

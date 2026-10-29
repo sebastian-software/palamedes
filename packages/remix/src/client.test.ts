@@ -22,18 +22,55 @@ describe("Remix client catalog installation", () => {
       vi.stubGlobal("document", {
         documentElement: { lang: "en", dataset: { palamedesTimeZone: timeZone } },
         body: {},
-        querySelector: () => ({
-          href: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="timezone",fragmentRegistry=true,messages={};')}`,
-        }),
       });
       const entry = vi.fn(() => {
         expect(getI18n().timeZone).toBe(timeZone);
         return Promise.resolve();
       });
-      await startRemixClient(entry);
+      await startRemixClient(entry, {
+        catalogUrl: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="timezone",fragmentRegistry=true,messages={};')}`,
+      });
       expect(entry).toHaveBeenCalledOnce();
     },
   );
+
+  it("loads only the trusted catalog URL and ignores catalog links in the page", async () => {
+    vi.stubGlobal("window", new EventTarget());
+    // Injected markup can place a look-alike catalog link before the real one.
+    const forgedLink = {
+      href: `data:text/javascript,${encodeURIComponent('globalThis.forgedCatalogLoaded=true;export const locale="en",catalogVersion="forged",fragmentRegistry=true,messages={};')}`,
+      dataset: { palamedesCatalogLocale: "en" },
+    };
+    const lookup = vi.fn(() => forgedLink);
+    vi.stubGlobal("document", {
+      documentElement: { lang: "en", dataset: {} },
+      body: {},
+      querySelector: lookup,
+      querySelectorAll: vi.fn(() => [forgedLink]),
+    });
+    await startRemixClient(async () => {}, {
+      catalogUrl: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="trusted",fragmentRegistry=true,messages={};')}`,
+    });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(Reflect.get(globalThis, "forgedCatalogLoaded")).toBeUndefined();
+    expect(getI18n().locale).toBe("en");
+  });
+
+  it("renders the error UI instead of a blank page when no trusted catalog URL is given", async () => {
+    vi.stubGlobal("window", new EventTarget());
+    const replaceChildren = vi.fn();
+    vi.stubGlobal("document", {
+      documentElement: { lang: "en", dataset: {} },
+      body: { replaceChildren },
+      querySelector: () => null,
+      createElement: () => ({ innerHTML: "", content: { cloneNode: () => ({}) } }),
+    });
+    const entry = vi.fn(async () => {});
+    // JavaScript hosts can omit the option; the bootstrap passes undefined without a locale.
+    await startRemixClient(entry, { catalogUrl: undefined as unknown as string });
+    expect(entry).not.toHaveBeenCalled();
+    expect(replaceChildren).toHaveBeenCalledOnce();
+  });
 
   it("renders a dependency failure once when both its event and startup reject", async () => {
     const browser = new EventTarget();
@@ -42,18 +79,18 @@ describe("Remix client catalog installation", () => {
     vi.stubGlobal("document", {
       documentElement: { lang: "en" },
       body: { replaceChildren },
-      querySelector: (selector: string) =>
-        selector.startsWith("link")
-          ? {
-              href: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="failure-idempotency",fragmentRegistry=true,messages={};')}`,
-            }
-          : null,
+      querySelector: () => null,
       createElement: () => ({ innerHTML: "", content: { cloneNode: () => ({}) } }),
     });
-    await startRemixClient(async () => {
-      browser.dispatchEvent(new Event("palamedes:catalog-error"));
-      throw new Error("entry failed");
-    });
+    await startRemixClient(
+      async () => {
+        browser.dispatchEvent(new Event("palamedes:catalog-error"));
+        throw new Error("entry failed");
+      },
+      {
+        catalogUrl: `data:text/javascript,${encodeURIComponent('export const locale="en",catalogVersion="failure-idempotency",fragmentRegistry=true,messages={};')}`,
+      },
+    );
     expect(replaceChildren).toHaveBeenCalledTimes(1);
   });
 

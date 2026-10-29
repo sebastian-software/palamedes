@@ -65,6 +65,7 @@ describe("stable Remix client entries", () => {
           "@palamedes/remix/client": "/assets/remix/client.hash.js",
           "@palamedes/remix/entry-data": encodeEntryData({
             entry: "/assets/app/client.hash.js",
+            catalog: "/assets/__palamedes/catalog/",
             errorHtml: "<p>Reload</p>",
           }),
         },
@@ -113,6 +114,10 @@ describe("stable Remix client entries", () => {
     }
     // Any worker renders the same scoped entry data for the same build.
     expect(await cold.renderClientEntry("app/public/client.tsx", { assetServer })).toBe(html);
+    // The trusted catalog mount follows the configured asset base path.
+    expect(
+      decodeEntryData(parseEntryScope(html, src)["@palamedes/remix/entry-data"]!),
+    ).toMatchObject({ catalog: "/custom/assets/__palamedes/catalog/" });
     expect(
       cold.serveClientCatalogAsset(
         new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
@@ -140,7 +145,11 @@ describe("stable Remix client entries", () => {
     expect(html).not.toContain("Failure</p>");
     const src = html.match(/src="([^"]+)"/u)![1];
     const entryData = parseEntryScope(html, src)["@palamedes/remix/entry-data"]!;
-    expect(decodeEntryData(entryData)).toEqual({ entry: entryUrl, errorHtml });
+    expect(decodeEntryData(entryData)).toEqual({
+      entry: entryUrl,
+      catalog: "/assets/__palamedes/catalog/",
+      errorHtml,
+    });
     // Browsers normalize import-map addresses with the URL parser; the encoded
     // data must survive that normalization unchanged.
     expect(new URL(entryData).href).toBe(entryData);
@@ -164,6 +173,7 @@ describe("stable Remix client entries", () => {
     const renderAndRun = async (
       errorHtml: string | undefined,
       resolveEntryData: (scopedEntryData: string) => string | null,
+      lang = "de",
     ) => {
       const worker = createRemixI18nServer({
         locales,
@@ -189,14 +199,26 @@ describe("stable Remix client entries", () => {
         .replace('"@palamedes/remix/client"', JSON.stringify(client))
         .replace("import.meta.resolve(", "globalThis.resolveTestSpecifier(");
       const moduleUrl = `data:text/javascript,${encodeURIComponent(`${testSource}\n// ${crypto.randomUUID()}`)}`;
-      const calls: Array<{ entry: unknown; errorHtml: string | undefined }> = [];
+      const calls: Array<{
+        entry: unknown;
+        catalogUrl: string | undefined;
+        errorHtml: string | undefined;
+      }> = [];
       vi.stubGlobal(
         "startTestRemixClient",
-        async (loadEntry: () => Promise<{ default: unknown }>, options: { errorHtml?: string }) => {
+        async (
+          loadEntry: () => Promise<{ default: unknown }>,
+          options: { catalogUrl?: string; errorHtml?: string },
+        ) => {
+          const { catalogUrl, errorHtml: passedErrorHtml } = options;
           try {
-            calls.push({ entry: (await loadEntry()).default, errorHtml: options.errorHtml });
+            calls.push({
+              entry: (await loadEntry()).default,
+              catalogUrl,
+              errorHtml: passedErrorHtml,
+            });
           } catch (error) {
-            calls.push({ entry: error, errorHtml: options.errorHtml });
+            calls.push({ entry: error, catalogUrl, errorHtml: passedErrorHtml });
           }
         },
       );
@@ -207,17 +229,24 @@ describe("stable Remix client entries", () => {
         return resolved;
       });
       // Injected, non-executing markup precedes the real script and claims its
-      // URL. The bootstrap must not consult the document for its data at all.
-      const forgedScripts = [
+      // URL, next to a look-alike catalog link. The bootstrap must not consult
+      // document elements for URLs or markup at all.
+      const forgedElements = [
         { src: moduleUrl, dataset: { palamedesEntry: forgedEntry } },
         {
           src: moduleUrl,
           dataset: { palamedesEntry: forgedEntry, palamedesErrorHtml: forgedErrorHtml },
         },
+        {
+          href: "https://evil.test/catalog.js",
+          dataset: { palamedesCatalogLocale: lang },
+        },
         { src: moduleUrl, dataset: { palamedesEntry: ownEntry } },
       ];
-      const documentLookup = vi.fn(() => forgedScripts);
+      const documentLookup = vi.fn(() => forgedElements);
       vi.stubGlobal("document", {
+        baseURI: "https://example.test/de/booking?step=2",
+        documentElement: { lang },
         querySelector: documentLookup,
         querySelectorAll: documentLookup,
         getElementsByTagName: documentLookup,
@@ -243,6 +272,7 @@ describe("stable Remix client entries", () => {
         renderAndRun('<p title="retry & reload">Failure</p>', (data) => data),
       ).resolves.toEqual({
         entry: "own entry",
+        catalogUrl: "https://example.test/assets/__palamedes/catalog/de.js",
         errorHtml: '<p title="retry & reload">Failure</p>',
       });
     });
@@ -250,20 +280,43 @@ describe("stable Remix client entries", () => {
     it("keeps the default error markup when forged siblings carry error markup", async () => {
       await expect(renderAndRun(undefined, (data) => data)).resolves.toEqual({
         entry: "own entry",
+        catalogUrl: "https://example.test/assets/__palamedes/catalog/de.js",
         errorHtml: undefined,
       });
+    });
+
+    it("encodes the document locale into the trusted catalog mount", async () => {
+      const call = await renderAndRun(undefined, (data) => data, "../evil?x#y");
+      expect(call.catalogUrl).toBe(
+        "https://example.test/assets/__palamedes/catalog/..%2Fevil%3Fx%23y.js",
+      );
+    });
+
+    it("passes no catalog URL without a document locale, so the client shows its error UI", async () => {
+      const call = await renderAndRun(undefined, (data) => data, "");
+      expect(call).toEqual({ entry: "own entry", catalogUrl: undefined, errorHtml: undefined });
     });
 
     it.each([
       ["is not mapped", () => null],
       ["resolves outside its scope", () => "https://evil.test/@palamedes/remix/entry-data"],
       ["is malformed", () => "data:application/json,%7Bnot-json"],
-      ["has no entry", () => `data:application/json,${encodeURIComponent('{"errorHtml":"x"}')}`],
+      [
+        "has no entry",
+        () =>
+          `data:application/json,${encodeURIComponent('{"catalog":"/assets/__palamedes/catalog/","errorHtml":"x"}')}`,
+      ],
+      [
+        "has no catalog mount",
+        () =>
+          `data:application/json,${encodeURIComponent('{"entry":"/assets/app.js","errorHtml":"x"}')}`,
+      ],
     ])(
       "fails visibly through the default error path when entry data %s",
       async (_label, resolveEntryData) => {
         const call = await renderAndRun("<p>Configured</p>", resolveEntryData);
         expect(call.errorHtml).toBeUndefined();
+        expect(call.catalogUrl).toBeUndefined();
         expect(call.entry).toBeInstanceOf(Error);
         expect((call.entry as Error).message).toBe(
           "Palamedes Remix application entry data is missing from the import map.",
@@ -795,7 +848,11 @@ function unusedRenderMessage(): never {
 
 const ENTRY_DATA_PREFIX = "data:application/json,";
 
-function encodeEntryData(data: { entry: string; errorHtml: string | null }): string {
+function encodeEntryData(data: {
+  entry: string;
+  catalog: string;
+  errorHtml: string | null;
+}): string {
   return `${ENTRY_DATA_PREFIX}${encodeURIComponent(JSON.stringify(data))}`;
 }
 
