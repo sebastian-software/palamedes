@@ -1,5 +1,5 @@
 import { Reveal } from "@palamedes/site-ui";
-import type { ReactNode } from "react";
+import type { ReactNode } from "ardo/react";
 
 export type BandTone = "paper" | "parchment" | "navy";
 

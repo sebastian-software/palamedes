@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon";
 
@@ -85,11 +85,7 @@ export function QuestionRoutes() {
           <p className="mt-3 max-w-[32rem] text-[16px] leading-relaxed text-ink/80">
             {entry.answer}
           </p>
-          <Link
-            to={entry.href}
-            viewTransition
-            className="pmds-button pmds-button--outline mt-6 self-start"
-          >
+          <Link to={entry.href} className="pmds-button pmds-button--outline mt-6 self-start">
             {entry.label}
           </Link>
           <ul
@@ -98,7 +94,7 @@ export function QuestionRoutes() {
           >
             {entry.resources.map((resource) => (
               <li key={resource.href}>
-                <Link to={resource.href} viewTransition className="pmds-arrow-link text-[12.5px]">
+                <Link to={resource.href} className="pmds-arrow-link text-[12.5px]">
                   {resource.label}
                 </Link>
               </li>

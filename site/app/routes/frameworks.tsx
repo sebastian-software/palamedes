@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { ButtonLink, Page, Section } from "@palamedes/site-ui";
 import { PageHero } from "~/components/marketing/PageHero";
@@ -82,11 +82,7 @@ export default function Frameworks() {
           covers cookie, route prefix, subdomain, and TLD.
         </p>
         <div className="mt-6 space-y-2">
-          <Link
-            to="/locale-routing"
-            viewTransition
-            className="mono-nums block text-[13px] text-accent"
-          >
+          <Link to="/locale-routing" className="mono-nums block text-[13px] text-accent">
             Which strategy to pick, and what each one costs →
           </Link>
           <a

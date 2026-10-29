@@ -24,7 +24,6 @@ packages/cli-*/LICENSE
 
 # Site build output
 site/build/
-site/.react-router/
 site/public/fragment-demo/
 site/public/decisions/
 site/public/api-reference/

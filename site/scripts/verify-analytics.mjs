@@ -7,7 +7,7 @@ import { startSiteStaticServer } from "../../scripts/site-static-server.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const server = await startSiteStaticServer({
-  clientDir: resolve(siteRoot, "build/client"),
+  clientDir: process.env.PALAMEDES_SITE_CLIENT_DIR ?? resolve(siteRoot, "build/client"),
   port: Number(process.env.SITE_ANALYTICS_PORT ?? 4118),
 });
 const executablePath = [
@@ -24,10 +24,14 @@ const playerSelector = 'iframe[src^="https://player.mediadelivery.net/embed/"]';
 
 // A transport fixture; the installed SDK is also checked during activation.
 const sdkFixture = `
-window.__events = [];
+window.__events = JSON.parse(sessionStorage.getItem('analytics-fixture-events') ?? '[]');
+function record(name, properties) {
+  window.__events.push({name, properties});
+  sessionStorage.setItem('analytics-fixture-events', JSON.stringify(window.__events));
+}
 window.rybbit = {
-  event: (name, properties) => window.__events.push({name, properties}),
-  pageview: () => window.__events.push({name: 'pageview', properties: {page: location.pathname}}),
+  event: record,
+  pageview: () => record('pageview', {page: location.pathname}),
 };
 `;
 const playerFixture = `<!doctype html><html><body><p>Player protocol fixture</p><script>
@@ -150,13 +154,14 @@ try {
     "Continued playback must preserve per-visit deduplication",
   );
 
-  const search = page.getByRole("combobox").first();
+  await page.getByRole("banner").getByRole("button", { name: "Search", exact: true }).click();
+  const search = page.getByRole("dialog", { name: "Search", exact: true }).getByRole("combobox");
   await search.fill("catalog");
   await page.getByRole("option").first().waitFor();
   await search.press("Enter");
   await page.waitForURL((url) => url.pathname !== "/");
   const searchPageUrl = page.url();
-  // The URL changes before React commits the route and runs its analytics effect.
+  // Each static document hydrates before its analytics effect reports the visit.
   // Wait for that visit before navigating back, including on slower CI runners.
   await page.waitForFunction(
     (pathname) =>
@@ -184,10 +189,23 @@ try {
     ).length,
     2,
   );
-  assert.equal(active.requests(), 1, "SPA navigation must not reinstall the SDK");
+  assert.equal(
+    await page.locator("script[data-site-id]").count(),
+    1,
+    "Each document installs one SDK",
+  );
   assert.deepEqual(
     (await events(page, "pageview")).map(({ properties }) => properties.page),
     ["/", new URL(searchPageUrl).pathname, "/"],
+  );
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })),
+  );
+  assert.equal(
+    (await events(page, "pageview")).length,
+    4,
+    "A BFCache restoration begins a new visit",
   );
 
   await page.goto(`${origin}/get-started`, { waitUntil: "networkidle" });
@@ -206,10 +224,15 @@ try {
   assert.equal(new Set(depths.map(({ properties }) => properties.percent)).size, depths.length);
 
   await page.goto(`${origin}/message-splitting`, { waitUntil: "networkidle" });
+  const parentSdkRequests = active.requests();
   const demo = page.frameLocator('iframe[title="Live message splitting demo"]');
   await demo.getByRole("button", { name: "Projects", exact: true }).click();
   assert.equal((await events(page, "demo_interaction")).length, 1);
-  assert.equal(active.requests(), 3, "The embedded demo must not load an additional SDK");
+  assert.equal(
+    active.requests(),
+    parentSdkRequests,
+    "The embedded demo must not load an additional SDK",
+  );
   await demo.getByRole("link", { name: "Français" }).click();
   await demo.getByRole("button", { name: "Billing", exact: true }).click();
   assert.equal((await events(page, "demo_interaction")).at(-1).properties.locale, "fr");
@@ -224,7 +247,7 @@ try {
     await closeContext(fixture.instance);
   }
   console.log(
-    "Site analytics: semantic events, SPA listener cleanup, iframe events, video deduplication, opt-out, local exclusion, and blocked SDK verified with an isolated sink.",
+    "Site analytics: static visits, BFCache restoration, semantic events, iframe events, video deduplication, opt-out, local exclusion, and blocked SDK verified with an isolated sink.",
   );
 } finally {
   for (const instance of browser.contexts()) await closeContext(instance);

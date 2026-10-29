@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId } from "ardo/react";
 import { BENCHMARK_FRAMEWORKS, type BenchmarkFramework } from "~/data/framework-bench";
 
 export function BenchmarkFrameworkPicker({

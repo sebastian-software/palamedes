@@ -111,8 +111,8 @@ Fix:
   `@palamedes/next-plugin`.
 - Keep `.po` files under the catalog path configured in `palamedes.yaml`.
 - Check whether the import is needed. The standard framework adapters load the
-  active locale's compiled catalog themselves; application code does not
-  import `.po` files on that path.
+  active locale's compiled catalog themselves; application code does not load
+  `.po` files on that path.
 - Run `pnpm exec pmds extract` after adding new messages so catalogs exist.
 
 ## `failOnMissing` Breaks The Build

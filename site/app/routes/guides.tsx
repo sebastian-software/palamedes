@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { ButtonLink, Page, Section } from "@palamedes/site-ui";
 import { PageHero } from "~/components/marketing/PageHero";
@@ -51,7 +51,6 @@ export default function Guides() {
             <Link
               key={topic.slug}
               to={`/${topic.slug}`}
-              viewTransition
               className="group bg-paper px-7 py-8 transition-colors hover:bg-hover-fill"
             >
               <div className="flex items-start justify-between gap-4">
@@ -78,7 +77,6 @@ export default function Guides() {
         <div className="hairline-grid grid-cols-3 max-tight:grid-cols-1">
           <Link
             to="/compare"
-            viewTransition
             className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
           >
             <p className="text-[17px] font-bold group-hover:text-accent">
@@ -90,7 +88,6 @@ export default function Guides() {
           </Link>
           <Link
             to="/proof"
-            viewTransition
             className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
           >
             <p className="text-[17px] font-bold group-hover:text-accent">

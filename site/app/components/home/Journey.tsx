@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from "ardo/react";
 
 import { CodeBlock } from "~/components/marketing/CodeBlock";
 import { BandHeader } from "~/components/marketing/Band";

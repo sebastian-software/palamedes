@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { Band, BandHeader } from "~/components/marketing/Band";
 import contentStats from "~/data/generated/content-stats.json";
@@ -58,7 +58,7 @@ export function ProofSection() {
         {LINKS.map((link) => (
           <li key={link.href}>
             {link.internal ? (
-              <Link to={link.href} viewTransition className="pmds-arrow-link">
+              <Link to={link.href} className="pmds-arrow-link">
                 {link.label} →
               </Link>
             ) : (

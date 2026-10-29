@@ -16,20 +16,22 @@ export async function startSiteStaticServer({ clientDir, port }) {
   const server = createServer((request, response) => {
     const url = new URL(request.url, `http://localhost:${port}`);
     const hasExtension = extname(url.pathname) !== "";
+    let status = 200;
     let filePath = join(clientDir, url.pathname);
     if (!extname(filePath)) filePath = join(filePath, "index.html");
     if (existsSync(filePath) && statSync(filePath).isDirectory()) {
       filePath = join(filePath, "index.html");
     }
     if (!existsSync(filePath) && !hasExtension) {
-      filePath = join(clientDir, "__spa-fallback.html");
+      filePath = join(clientDir, "404.html");
+      status = 404;
     }
     if (!existsSync(filePath)) {
       response.writeHead(404);
       response.end("not found");
       return;
     }
-    response.writeHead(200, {
+    response.writeHead(status, {
       "content-type": MIME[extname(filePath)] ?? "application/octet-stream",
     });
     response.end(readFileSync(filePath));

@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { PageHero } from "~/components/marketing/PageHero";
@@ -115,7 +115,6 @@ export default function Compare() {
                     <td className="border border-hair px-4 py-4 align-top">
                       <Link
                         to={`/compare/${rival.slug}`}
-                        viewTransition
                         className="mono-nums text-[13px] text-accent hover:underline"
                       >
                         Read decision →

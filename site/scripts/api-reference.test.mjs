@@ -6,9 +6,17 @@ import { test } from "node:test";
 import {
   generatePackageApiReference,
   normalizeApiPage,
-  repairSourceLinks,
-  repairApiLinks,
+  publicApiImportPath,
 } from "./api-reference.mjs";
+
+async function writeManifest(directory, name, exports) {
+  const root = path.join(directory, "packages", name);
+  await mkdir(root, { recursive: true });
+  await writeFile(
+    path.join(root, "package.json"),
+    JSON.stringify({ name: `@palamedes/${name}`, exports }),
+  );
+}
 
 test("API pages have entry-specific metadata and one rendered main heading", () => {
   const doc = {
@@ -24,10 +32,14 @@ test("API pages have entry-specific metadata and one rendered main heading", () 
   assert.match(core.content, /^## createI18n/mu);
 });
 
-test("each public entry receives a complete reference and repository-relative source base", async () => {
+test("each public entry receives a complete reference and documented import path", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "palamedes-api-reference-"));
   try {
     const calls = [];
+    await writeManifest(directory, "core", {
+      ".": "./dist/index.d.mts",
+      "./locale": "./dist/locale.d.mts",
+    });
     await generatePackageApiReference(
       {
         slug: "core",
@@ -39,22 +51,21 @@ test("each public entry receives a complete reference and repository-relative so
       directory,
       async (config) => {
         calls.push(config);
-        return [
-          {
-            path: "index.md",
-            frontmatter: { title: config.sidebar.title },
-            content: `# ${config.sidebar.title}\n\n## Functions\n\n- defineLocaleControls\n`,
-          },
-        ];
+        return {
+          pages: [
+            {
+              path: "index.md",
+              frontmatter: { title: config.title },
+              content: `# ${config.title}\n\n## Functions\n\n- defineLocaleControls\n`,
+            },
+          ],
+        };
       },
     );
     assert.equal(calls.length, 2);
     assert.equal(calls[0].entryPoints.length, 1);
     assert.equal(calls[1].out, "api-reference/core/modules/locale");
-    assert.equal(
-      calls[1].markdown.sourceBaseUrl,
-      "https://github.com/sebastian-software/palamedes/blob/main/packages/core/src",
-    );
+    assert.equal(calls[1].importPaths[0], "@palamedes/core/locale");
     assert.match(
       await readFile(path.join(directory, "api-reference/core/index.md"), "utf8"),
       /\[locale\]\(\/api-reference\/core\/modules\/locale\)/u,
@@ -76,6 +87,10 @@ test("entry module URLs stay lowercase while labels keep the export name", async
   const directory = await mkdtemp(path.join(tmpdir(), "palamedes-api-reference-"));
   try {
     const calls = [];
+    await writeManifest(directory, "transform", {
+      ".": "./dist/index.d.mts",
+      "./catalog-loader": "./dist/catalogLoader.d.mts",
+    });
     await generatePackageApiReference(
       {
         slug: "transform",
@@ -87,17 +102,19 @@ test("entry module URLs stay lowercase while labels keep the export name", async
       directory,
       async (config) => {
         calls.push(config);
-        return [
-          {
-            path: "index.md",
-            frontmatter: { title: config.sidebar.title },
-            content: `# ${config.sidebar.title}\n`,
-          },
-        ];
+        return {
+          pages: [
+            {
+              path: "index.md",
+              frontmatter: { title: config.title },
+              content: `# ${config.title}\n`,
+            },
+          ],
+        };
       },
     );
     assert.equal(calls[1].out, "api-reference/transform/modules/catalogloader");
-    assert.equal(calls[1].sidebar.title, "Transform / catalogLoader");
+    assert.equal(calls[1].title, "Transform / catalogLoader API");
     assert.match(
       await readFile(path.join(directory, "api-reference/transform/index.md"), "utf8"),
       /\[catalogLoader\]\(\/api-reference\/transform\/modules\/catalogloader\)/u,
@@ -124,45 +141,6 @@ test("breadcrumbs do not leave a second main heading and fenced examples stay in
   assert.match(doc.content, /```md\n# Example/u);
 });
 
-test("source links resolve shared files and never reuse declaration line numbers", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "palamedes-api-sources-"));
-  try {
-    await mkdir(path.join(root, "packages/react/src"), { recursive: true });
-    await mkdir(path.join(root, "packages/core/src"), { recursive: true });
-    await writeFile(path.join(root, "packages/react/src/compiled.tsx"), "// source");
-    await writeFile(path.join(root, "packages/core/src/locale.ts"), "// source");
-    const base = "https://github.com/sebastian-software/palamedes/blob/main/packages/react/src/";
-    const content = `[Source](${base}react/src/compiled.tsx#L9)\n[Source](${base}core/dist/locale.d.mts#L40)`;
-    assert.equal(
-      repairSourceLinks(content, "packages/react/src/index.tsx", root),
-      "[Source](https://github.com/sebastian-software/palamedes/blob/main/packages/react/src/compiled.tsx#L9)\n[Source file](https://github.com/sebastian-software/palamedes/blob/main/packages/core/src/locale.ts)",
-    );
-    assert.throws(
-      () =>
-        repairSourceLinks(`[Source](${base}missing.ts#L1)`, "packages/react/src/index.tsx", root),
-      /Cannot resolve generated API source/u,
-    );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("component navigation follows emitted paths rather than TypeDoc's generic kind", () => {
-  const docs = [
-    { path: "index.md", content: "" },
-    { path: "components/plural.md", content: "" },
-    { path: "components/trans.md", content: "" },
-  ];
-  assert.equal(
-    repairApiLinks(
-      "[Next](/api-reference/react/other/trans) [Plural](/api-reference/react/components/plural#usage)",
-      docs,
-      "api-reference/react",
-    ),
-    "[Next](/api-reference/react/components/trans) [Plural](/api-reference/react/components/plural#usage)",
-  );
-});
-
 test("the page header owns the summary instead of repeating it in the body", () => {
   const doc = normalizeApiPage(
     {
@@ -177,14 +155,63 @@ test("the page header owns the summary instead of repeating it in the body", () 
   assert.match(doc.content, /## Functions/u);
 });
 
-test("props links reach the symbol on its grouped type page", () => {
-  const docs = [{ path: "types/transshared.md", content: "# Types\n\n## TransProps\nDetails" }];
+test("the CLI reference points to commands instead of an empty JavaScript API", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "palamedes-cli-reference-"));
+  try {
+    await generatePackageApiReference(
+      { slug: "cli", label: "CLI", guide: "/docs/cli" },
+      directory,
+      directory,
+      () => {
+        throw new Error("CLI has no declaration API");
+      },
+    );
+    assert.match(
+      await readFile(path.join(directory, "api-reference/cli/index.md"), "utf8"),
+      /\[Read the CLI reference\]\(\/docs\/cli\)/u,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("native API pages describe declarations and their public import paths", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "palamedes-native-api-"));
+  try {
+    await writeManifest(directory, "example", { ".": "./dist/index.d.ts" });
+    await mkdir(path.join(directory, "packages/example/dist"), { recursive: true });
+    await writeFile(
+      path.join(directory, "packages/example/dist/index.d.ts"),
+      `/** Return a translated greeting. */
+export declare function greeting(name: string): string;
+`,
+    );
+    await generatePackageApiReference(
+      { slug: "example", label: "Example", entryPoints: ["packages/example/src/index.ts"] },
+      directory,
+      directory,
+    );
+    const page = await readFile(
+      path.join(directory, "api-reference/example/functions/greeting.md"),
+      "utf8",
+    );
+    assert.match(page, /@palamedes\/example/u);
+    assert.match(page, /name/u);
+    assert.match(page, /Return a translated greeting/u);
+    assert.match(page, /Source entry on GitHub/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("public import paths follow conditional exports rather than source filenames", () => {
+  const manifest = {
+    name: "@palamedes/runtime",
+    exports: { "./server/bundled": { import: { types: "./dist/server-bundled.d.mts" } } },
+  };
   assert.equal(
-    repairApiLinks(
-      "[Props](/api-reference/solid/interfaces/transprops)",
-      docs,
-      "api-reference/solid",
-    ),
-    "[Props](/api-reference/solid/types/transshared#transprops)",
+    publicApiImportPath(manifest, "./dist/server-bundled.d.mts"),
+    "@palamedes/runtime/server/bundled",
   );
+  assert.throws(() => publicApiImportPath(manifest, "./dist/internal.d.mts"), /No public export/u);
 });

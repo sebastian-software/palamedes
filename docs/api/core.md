@@ -119,8 +119,7 @@ is modified.
 The root exports these types only because `renderMessage()` names them. The
 runtime factory `createCompiledMessageRuntime()` and its
 `ExecutableMessageRenderer` input live on the **Internal** subpath
-`@palamedes/core/internal`, where the React, Solid and Remix `Trans` renderers
-import them. None of this is an extension point: generated catalogs and the
+`@palamedes/core/internal`, where the React, Solid and Remix `Trans` renderers import them. None of this is an extension point: generated catalogs and the
 renderer interface change together with the Palamedes packages. Create
 instances with `createI18n()` and render rich text through the framework
 `Trans` macro.

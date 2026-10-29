@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "ardo/react";
+import { renderToStaticMarkup } from "ardo/react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { PlatformBenchmarkData } from "../../data/blacksmith-bench";

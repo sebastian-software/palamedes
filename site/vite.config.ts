@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 import tailwindcss from "@tailwindcss/vite";
-import { ardo } from "ardo/vite";
-import { defineConfig, type Plugin } from "vite";
+import { ardo, defineConfig } from "ardo/vite";
 
 function gitHash(): string {
   const githubSha = process.env.GITHUB_SHA?.trim();
@@ -25,88 +25,35 @@ function gitHash(): string {
   }
 }
 
-/*
- * Ardo 4.x injects per-page meta from markdown frontmatter in an
- * enforce:"pre" transform that inspects the RAW markdown for
- * "export const frontmatter" — which only exists after MDX compilation, so
- * the injection never fires and every generated docs/ADR/blog page prerenders
- * without <title>, description, canonical, or OG tags. This plugin runs in
- * the normal transform phase (after MDX compilation) and appends a meta
- * export built from the compiled frontmatter binding. It skips any module
- * that already has a meta export, so it becomes a no-op if Ardo fixes the
- * ordering upstream.
- */
-function markdownRouteMeta(): Plugin {
-  const routesDir = resolve(import.meta.dirname, "app/routes");
-  const metaModule = resolve(import.meta.dirname, "app/lib/meta.ts");
-  return {
-    name: "palamedes-markdown-route-meta",
-    enforce: "post",
-    transform(code, id) {
-      const [file] = id.split("?", 1);
-      if (!/\.(md|mdx)$/u.test(file) || !file.startsWith(routesDir)) return;
-      if (!code.includes("export const frontmatter")) return;
-      if (code.includes("export const meta") || code.includes("export function meta")) return;
-      const route = file
-        .slice(routesDir.length)
-        .replace(/\.(md|mdx)$/u, "")
-        .replace(/\/index$/u, "");
-      return {
-        code: [
-          code,
-          `import { pageMeta as __pageMeta } from ${JSON.stringify(metaModule)}`,
-          "export const meta = () =>",
-          "  frontmatter.title",
-          '    ? __pageMeta({ title: `${frontmatter.title} | Palamedes`, description: frontmatter.description ?? "", path: ' +
-            `${JSON.stringify(route === "" ? "/" : route)} })`,
-          "    : []",
-        ].join("\n"),
-        map: null,
-      };
-    },
-  };
-}
-
 export default defineConfig({
+  cacheDir: resolve(import.meta.dirname, ".ardo-cache"),
   define: {
     __PALAMEDES_BUILD_HASH__: JSON.stringify(gitHash()),
   },
   optimizeDeps: {
-    // Ardo exposes these entry points lazily. Pre-bundle them together so Vite
-    // does not invalidate the browser graph mid-navigation and temporarily
-    // leave Ardo rendering against a stale React instance. The initial scan
-    // also misses the family registry imported by site-config.tsx, so a cold
-    // dev server re-ran the optimizer for it on the first page load.
-    include: [
-      "@base-ui/react/accordion",
-      "@base-ui/react/tabs",
-      "ardo/mdx-provider",
-      "ardo/runtime",
-      "ardo/ui",
-      "ferramenta-family/registry",
-      "lucide-react",
-    ],
+    // Keep application dependencies warm; Ardo manages its own runtime entries.
+    include: ["@base-ui/react/tabs", "ferramenta-family/registry"],
   },
   plugins: [
     tailwindcss(),
-    markdownRouteMeta(),
     ardo({
       title: "Palamedes",
       description: "Rust-powered i18n tooling for TypeScript with source-string-first catalogs.",
       siteUrl: "https://palamedes.dev",
-      githubPages: false,
       icons: false,
       sidebar: {
         sectionOrder: ["docs", "api-reference", "decisions", "blog"],
       },
       seo: {
+        // The repository maintains curated assistant context files.
+        llms: false,
         sitemap: { changefreq: "weekly", priority: 0.7 },
         robots: { allow: ["/"] },
       },
       linkCheck: {
         enabled: true,
         level: "error",
-        checkAnchors: false,
+        checkAnchors: true,
         exclude: [
           "/llms.txt",
           "/llms-full.txt",
@@ -118,6 +65,7 @@ export default defineConfig({
       metadata: {
         ogType: "website",
         twitterCard: "summary_large_image",
+        image: "/og-image.png",
       },
       markdown: {
         toc: { level: [2, 2] },
@@ -125,7 +73,18 @@ export default defineConfig({
     }),
   ],
   resolve: {
+    alias: { "~": resolve(import.meta.dirname, "app") },
     dedupe: ["react", "react-dom"],
     tsconfigPaths: true,
+  },
+  server: {
+    fs: {
+      // pnpm stores these installed CSS packages outside the documentation root.
+      allow: [
+        import.meta.dirname,
+        realpathSync(resolve(import.meta.dirname, "node_modules/@palamedes/site-ui")),
+        realpathSync(resolve(import.meta.dirname, "node_modules/tailwindcss")),
+      ],
+    },
   },
 });
