@@ -12,7 +12,7 @@ import { arrive, Display, ease, sceneFade } from "../ui";
  * scaled up together, always with the visible name. Support levels stay off
  * screen, so the film outlives them.
  */
-interface IntegrationMark {
+export interface IntegrationMark {
   id: string;
   name: string;
   /** File in public/logos and its display size at 1×, as on the site. */
@@ -25,13 +25,13 @@ interface IntegrationMark {
 
 const SCALE = 1.6;
 
-type IntegrationGroup = { label: string; marks: readonly IntegrationMark[] };
+export type IntegrationGroup = { label: string; marks: readonly IntegrationMark[] };
 
 // The homepage technology stripe's groups (IntegrationBand), three rows deep so
 // every name stays readable at film distance. The film names the UI libraries
 // before the frameworks that host them, so the story builds. Build tools stay
 // off screen: they come with the frameworks.
-const ROWS: readonly (readonly IntegrationGroup[])[] = [
+export const ROWS: readonly (readonly IntegrationGroup[])[] = [
   [
     {
       label: "UI Libraries",

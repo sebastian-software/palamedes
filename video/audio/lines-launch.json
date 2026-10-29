@@ -1,0 +1,9 @@
+{
+  "l1-ask": "Ask your agent to translate one button.",
+  "l2-pains": "It invents a key, edits every language file, ships a plural it never tested, and writes loader glue your framework didn't need.",
+  "l3-reveal": "With Pala-meedeez, your agent just writes the sentence.",
+  "l5-check": "And when the agent gets something wrong, it hears about it right away, not from your users.",
+  "l6b-fast": "Fifteen hundred files take under a tenth of a second. The next-fastest tool needs over two.",
+  "l7b-glue": "And there's no glue code to write. The wiring for React, View, Svelt, Solid and the frameworks around them is already built.",
+  "l8-end": "Add the skill, and ask for translations. Pala-meedeez two point oh, at pala-meedeez dot dev."
+}
