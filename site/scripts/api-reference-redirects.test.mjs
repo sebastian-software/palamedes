@@ -18,7 +18,11 @@ const config = JSON.parse(
 );
 const moved = "/api-reference/core/modules/index/missingcompiledmessageerror";
 const successor = "/api-reference/core/classes/missingcompiledmessageerror";
-const currentRoutes = [...config.legacyRoutes.filter((route) => route !== moved), successor];
+// The current generator emits every published route except the redirect sources.
+const currentRoutes = [
+  ...config.legacyRoutes.filter((route) => !(route in config.redirects)),
+  successor,
+];
 
 test("the published route list is sorted, unique, and covers every redirect", () => {
   const { legacyRoutes, redirects } = config;
@@ -27,6 +31,13 @@ test("the published route list is sorted, unique, and covers every redirect", ()
   for (const route of legacyRoutes) assert.match(route, /^\/api-reference(?:\/[a-z0-9-]+)*$/u);
   for (const source of Object.keys(redirects)) assert.ok(legacyRoutes.includes(source), source);
   assert.equal(redirects[moved], successor);
+  // The discontinued React Router RSC adapter's 1.x pages lead to Framework Mode.
+  for (const [source, target] of Object.entries(redirects)) {
+    if (source.startsWith("/api-reference/react-router-rsc")) {
+      assert.equal(target, "/api-reference/react-router");
+    }
+  }
+  assert.ok(legacyRoutes.includes("/api-reference/react-router-rsc"));
 });
 
 test("every published route needs a current page or a redirect to one", () => {

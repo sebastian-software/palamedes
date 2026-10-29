@@ -1029,6 +1029,27 @@ describe("workflow contracts", () => {
     );
   });
 
+  it("redeploys the site after Publish uploads a release", async () => {
+    const [deploySite, publish] = await Promise.all([
+      readRepositoryFile(".github/workflows/deploy-site.yml"),
+      readRepositoryFile(".github/workflows/publish.yml"),
+    ]);
+    const publishName = /^name: (.+)$/mu.exec(publish)?.[1];
+
+    // The framework pages read npm versions at build time, so the push run for
+    // the release commit alone would snapshot npm before the upload.
+    expect(deploySite).toContain(
+      `  workflow_run:\n    workflows:\n      - ${publishName}\n    types:\n      - completed\n    branches:\n      - main\n`,
+    );
+    // Only successful push runs for a release commit; dry runs are dispatches.
+    const build = job(deploySite, "build", "deploy");
+    expect(build).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(build).toContain("github.event.workflow_run.event == 'push'");
+    expect(build).toContain(
+      "startsWith(github.event.workflow_run.head_commit.message, 'chore: release main')",
+    );
+  });
+
   it("keeps HTML live smoke probes independent of mutable page copy", async () => {
     const deploySite = await readRepositoryFile(".github/workflows/deploy-site.yml");
     const verify = job(deploySite, "verify", "__missing__");

@@ -897,7 +897,7 @@ function buyLabel(seats) {
       {
         criterion: "Compared surface",
         rival: "MIT JavaScript client SDK",
-        palamedes: "MIT local toolchain and runtime adapters",
+        palamedes: "MIT OR Apache-2.0 local toolchain and runtime adapters",
       },
       {
         criterion: "Message identity",

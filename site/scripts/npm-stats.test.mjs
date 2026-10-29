@@ -34,6 +34,7 @@ test("uses only npm-confirmed values for a complete snapshot", async () => {
   assert.deepEqual(stats, {
     name: "@palamedes/vite-plugin",
     version: "1.17.3",
+    released: true,
     monthlyDownloads: 2701,
     period: "2026-07-17/2026-08-15",
     source: "npm",
@@ -80,4 +81,19 @@ test("marks the snapshot unavailable when neither npm endpoint responds", async 
   assert.equal(stats.version, null);
   assert.equal(stats.monthlyDownloads, null);
   assert.equal(stats.source, "unavailable");
+});
+
+test("does not present a name-reservation placeholder as a release", async () => {
+  for (const placeholder of ["0.0.0", "0.0.0-stage"]) {
+    const stats = await fetchNpmPackageStats("@palamedes/vite-plugin", {
+      fetchImpl: npmFetch({
+        registry: response({ version: placeholder }),
+        downloads: response({ downloads: 12, start: "2026-09-29", end: "2026-10-28" }),
+      }),
+    });
+
+    assert.equal(stats.version, null);
+    assert.equal(stats.released, false);
+    assert.equal(stats.source, "npm");
+  }
 });

@@ -10,6 +10,13 @@ title: "Browser-verifying i18n across five frameworks"
 
 Cross-framework i18n is easy to claim and hard to prove.
 
+> **Updated for Palamedes 2.0 (2026-10-29):** This article describes the
+> verification matrix as of July 2026. In 2.0, the Remix adapter is Stable, and
+> all four Remix locale strategies have public HTTPS browser proofs; the
+> statements below about smoke-only Remix strategies and a Preview adapter no
+> longer apply. The [2.0 release notes](../../../docs/release-notes-v2.md) and
+> the [v2 migration guide](../../../docs/migration-v2.md) cover what changed.
+
 A README can list framework names. A demo can work in one happy path. Neither
 tells a maintainer what happens when SSR, locale persistence, client
 interaction, and server actions all have to agree.

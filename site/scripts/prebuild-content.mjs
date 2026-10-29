@@ -52,19 +52,19 @@ const DOC_GROUPS = [
     title: "Start and configure",
     description: "Reach a first translation, then configure the local catalog workflow.",
     match:
-      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx)$/u,
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|agent-skill)$/u,
   },
   {
     title: "Integrate and operate",
     description: "Connect a host, choose locale behavior, and keep day-to-day work predictable.",
     match:
-      /\/(locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
+      /\/(locale-strategies|framework-example-notes|demo-deployments|shared-demo-rollout|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
   },
   {
     title: "Evaluate and migrate",
     description: "Inspect evidence, comparisons, compatibility boundaries, and migration paths.",
     match:
-      /\/(migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
+      /\/(release-notes-v2|migration-v2|ferralk-adoption|migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
   },
   {
     title: "Reference and policy",
@@ -83,20 +83,20 @@ const DOC_INDEX_GROUPS = [
     title: "Guides",
     description: "Start a translation workflow, connect a host, and operate it day to day.",
     match:
-      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|agent-skill|locale-strategies|framework-example-notes|demo-deployments|shared-demo-rollout|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
   },
   {
     title: "References",
     description:
       "Look up package APIs, configuration details, compatibility notes, and project policy.",
-    match: /\/(api\/|example-screenshots|stability|principles)$/u,
+    match: /\/(api(\/.*)?|example-screenshots(\/.*)?|stability|principles|telemetry)$/u,
   },
   {
     title: "Comparisons and migrations",
     description:
       "Evaluate tradeoffs, inspect proof, and plan a migration with the supporting evidence.",
     match:
-      /\/(migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
+      /\/(release-notes-v2|migration-v2|ferralk-adoption|migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
   },
 ];
 
@@ -141,6 +141,7 @@ for (const doc of docs) hostedRoutes.set(doc.source, doc.route);
 for (const post of posts) hostedRoutes.set(post.source, post.route);
 for (const adr of adrs) hostedRoutes.set(adr.source, adr.route);
 hostedRoutes.set("DECISIONS.md", "/decisions");
+await writeEditSources(hostedRoutes);
 
 await writeDocsIndex(docs);
 await writeDocsNavigation(docs);
@@ -278,6 +279,24 @@ async function writeContentStats(adrEntries) {
   );
 }
 
+/*
+ * Maps each page generated from a repository file to that file, so the
+ * "Edit this page" link opens the canonical source. ARDO's own `:path`
+ * substitution only knows the generated route module, which is ignored.
+ */
+async function writeEditSources(routesBySource) {
+  const sources = Object.fromEntries(
+    [...routesBySource]
+      .map(([source, route]) => [route, source])
+      .toSorted(([left], [right]) => left.localeCompare(right)),
+  );
+  await mkdir(generatedDataRoot, { recursive: true });
+  await writeFile(
+    join(generatedDataRoot, "edit-sources.json"),
+    `${JSON.stringify(sources, null, 2)}\n`,
+  );
+}
+
 async function writeNpmStats() {
   const fetchedAt = new Date().toISOString();
   const packages = await Promise.all(NPM_PACKAGES.map((name) => fetchNpmPackageStats(name)));
@@ -299,11 +318,16 @@ async function collectDocs() {
     ["cli.md", 30],
     ["catalog-formats.md", 40],
     ["mdx.md", 45],
+    ["agent-skill.md", 47],
     ["locale-strategies.md", 50],
     ["framework-example-notes.md", 55],
     ["demo-deployments.md", 56],
+    ["shared-demo-rollout.md", 57],
     ["backend-servers.md", 60],
     ["rust-applications.md", 65],
+    ["release-notes-v2.md", 66],
+    ["migration-v2.md", 67],
+    ["ferralk-adoption.md", 68],
     ["migrate-from-lingui.md", 70],
     ["comparison-with-lingui.md", 80],
     ["approach-comparison.md", 90],
@@ -313,6 +337,7 @@ async function collectDocs() {
     ["benchmark-lingui-v6-preview.md", 120],
     ["stability.md", 130],
     ["principles.md", 140],
+    ["telemetry.md", 145],
     ["pseudo-localization.md", 150],
     ["translation-candidate-patches.md", 154],
     ["troubleshooting.md", 160],
@@ -442,7 +467,8 @@ async function writeDocsIndex(docs) {
     }
     lines.push("</CardGroup>", "");
   }
-  await writeGeneratedFile(join(routesRoot, "docs/index.md"), lines.join("\n"));
+  // MDX, like the other generated docs routes: the body uses JSX components.
+  await writeGeneratedFile(join(routesRoot, "docs/index.mdx"), lines.join("\n"));
 }
 
 async function writeDocsNavigation(docs) {
@@ -515,8 +541,11 @@ function docGroupFor(route) {
 }
 
 function indexDocGroupFor(route) {
-  if (route.startsWith("/docs/api/")) return DOC_INDEX_GROUPS[1];
-  return DOC_INDEX_GROUPS.find((group) => group.match.test(route)) ?? DOC_INDEX_GROUPS[1];
+  // Check References first: API routes such as /docs/api/cli would otherwise
+  // match the unanchored guide pattern meant for /docs/cli.
+  const references = DOC_INDEX_GROUPS[1];
+  if (references.match.test(route)) return references;
+  return DOC_INDEX_GROUPS.find((group) => group.match.test(route)) ?? references;
 }
 
 async function writeApiReferenceIndex() {
