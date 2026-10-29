@@ -8,6 +8,14 @@ async function fetchJson(fetchImpl, url, timeoutMs) {
   return response.json();
 }
 
+/*
+ * Package names are reserved on npm with 0.0.0 placeholders before their first
+ * release. A placeholder is not a release, so it is never shown as a version.
+ */
+function isPlaceholderVersion(version) {
+  return /^0\.0\.0(?:[-+].*)?$/u.test(version);
+}
+
 export async function fetchNpmPackageStats(
   name,
   { fetchImpl = fetch, timeoutMs = 5000, warn = console.warn } = {},
@@ -36,9 +44,14 @@ export async function fetchNpmPackageStats(
   const registry = registryResult.status === "fulfilled" ? registryResult.value : null;
   const downloads = downloadsResult.status === "fulfilled" ? downloadsResult.value : null;
 
+  const registryVersion = typeof registry?.version === "string" ? registry.version : null;
+  const placeholder = registryVersion != null && isPlaceholderVersion(registryVersion);
+
   return {
     name,
-    version: typeof registry?.version === "string" ? registry.version : null,
+    version: placeholder ? null : registryVersion,
+    // false: npm only holds a name-reservation placeholder; null: unknown.
+    released: registryVersion == null ? null : !placeholder,
     monthlyDownloads: Number.isFinite(downloads?.downloads) ? downloads.downloads : null,
     period: downloads?.start && downloads?.end ? `${downloads.start}/${downloads.end}` : null,
     source: registry && downloads ? "npm" : registry || downloads ? "npm-partial" : "unavailable",

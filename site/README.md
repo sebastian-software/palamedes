@@ -112,7 +112,9 @@ Deployed to GitHub Pages by
 [`.github/workflows/deploy-site.yml`](../.github/workflows/deploy-site.yml)
 on pushes to `main` that touch `site/**`, the lockfile, or the benchmark
 reports, docs, ADRs, or package sources that feed TypeDoc (plus manual
-`workflow_dispatch`). The canonical domain
+`workflow_dispatch`). It also rebuilds after the Publish workflow succeeds for a
+release commit, so the npm versions on the framework pages, read at build time,
+include the new release. The canonical domain
 `palamedes.dev` is configured in the repository's Pages settings; the
 workflow ships `__spa-fallback.html` as `404.html` so unknown paths render
 client-side while sitemap routes serve prerendered HTML.

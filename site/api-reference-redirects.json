@@ -42,6 +42,11 @@
     "/api-reference/next-plugin/modules/server",
     "/api-reference/react",
     "/api-reference/react-router",
+    "/api-reference/react-router-rsc",
+    "/api-reference/react-router-rsc/functions",
+    "/api-reference/react-router-rsc/functions/react-router-rsc",
+    "/api-reference/react-router-rsc/types",
+    "/api-reference/react-router-rsc/types/react-router-rsc",
     "/api-reference/react-router/functions",
     "/api-reference/react-router/functions/react-router",
     "/api-reference/react-router/types",
@@ -77,6 +82,11 @@
     "/api-reference/waku/modules/server"
   ],
   "redirects": {
-    "/api-reference/core/modules/index/missingcompiledmessageerror": "/api-reference/core/classes/missingcompiledmessageerror"
+    "/api-reference/core/modules/index/missingcompiledmessageerror": "/api-reference/core/classes/missingcompiledmessageerror",
+    "/api-reference/react-router-rsc": "/api-reference/react-router",
+    "/api-reference/react-router-rsc/functions": "/api-reference/react-router",
+    "/api-reference/react-router-rsc/functions/react-router-rsc": "/api-reference/react-router",
+    "/api-reference/react-router-rsc/types": "/api-reference/react-router",
+    "/api-reference/react-router-rsc/types/react-router-rsc": "/api-reference/react-router"
   }
 }

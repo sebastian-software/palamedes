@@ -11,6 +11,13 @@ title: "From Lingui to Palamedes without changing how authoring feels"
 The easiest Palamedes migration story is not "throw away how your team writes
 messages."
 
+> **Updated for Palamedes 2.0 (2026-10-29):** In 2.0, the framework adapter
+> initializes the runtime and delivers compiled catalogs for the active locale.
+> Applications no longer register an i18n instance or load `.po` catalogs
+> themselves, so the migration steps below now follow the 2.0 setup. The
+> [2.0 release notes](../../../docs/release-notes-v2.md) and the
+> [v2 migration guide](../../../docs/migration-v2.md) cover what changed.
+
 It is closer to this: keep the familiar macro-shaped authoring model, then move
 the machinery underneath to a smaller, stricter foundation.
 
@@ -52,11 +59,14 @@ semantics.
 Start with one app path, not the whole codebase:
 
 1. Add `palamedes.yaml`.
-2. Install the scoped Palamedes packages for your framework.
-3. Register the active i18n instance through `@palamedes/runtime`.
+2. Install the scoped Palamedes packages and add your framework's adapter, such
+   as `@palamedes/vite-plugin` or `@palamedes/next-plugin`.
+3. Let the adapter initialize the runtime and deliver catalogs: remove app-owned
+   catalog imports, locale loader maps, and `load()` or `activate()` calls.
 4. Rewrite one route or component to Palamedes macro imports.
 5. Run `pmds extract`.
-6. Load one translated `.po` catalog and verify the rendered result.
+6. Translate one non-source locale in its `.po` catalog and verify the rendered
+   result in the source locale and that locale.
 
 The full checklist lives in
 [`docs/migrate-from-lingui.md`](../../../docs/migrate-from-lingui.md), and the shortest

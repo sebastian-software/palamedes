@@ -41,7 +41,11 @@ export function FrameworkPackageStats({ path }: { path: string }) {
         <code className="mt-1 block text-[12px] text-ink">{packageName}</code>
       </span>
       <span className="mono-nums text-[12px] text-accent">
-        {hasNpmVersion ? `v${stats.version}` : "npm version unavailable"}
+        {hasNpmVersion
+          ? `v${stats.version}`
+          : stats.released === false
+            ? "first release pending"
+            : "npm version unavailable"}
       </span>
       <span className="mono-nums text-[12px] text-ink/75">
         {stats.monthlyDownloads == null

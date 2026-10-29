@@ -17,7 +17,7 @@ export function meta() {
   return pageMeta({
     title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "i18n integrations for React, Vue, Svelte, Solid, and Remix, including Next.js, Nuxt, and SvelteKit. Shared catalogs also connect Hono, Express, and Rust applications.",
+      "Stable i18n adapters for Next.js, TanStack Start, React Router, Remix, Waku, and Solid, plus Preview proofs for Vue, Nuxt, Svelte, and SvelteKit. Shared catalogs also connect Hono, Express, and Rust applications.",
     path: "/frameworks",
   });
 }
@@ -28,7 +28,7 @@ export default function Frameworks() {
       <PageHero
         kicker="Frameworks"
         title="Built for the framework you already use."
-        lede="React, Vue, Svelte, Solid, and Remix share the same message model. Connect Next.js, Nuxt, SvelteKit, TanStack Start, Waku, React Router, or Vite. Ten framework families cover the four matrix strategies: cookie, route prefix, subdomain, and TLD, with the same booking demo in four languages."
+        lede="Stable adapters connect Next.js, TanStack Start, React Router, Remix, Waku, Solid, and Vite with the same message model. Vue, Nuxt, Svelte, and SvelteKit are Preview proofs with no published package yet. All ten framework families run the four matrix strategies: cookie, route prefix, subdomain, and TLD, with the same booking demo in four languages."
         actions={
           <>
             <ButtonLink href="#frontend-frameworks">See the verified matrix</ButtonLink>
