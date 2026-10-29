@@ -148,7 +148,7 @@ export function PlatformBenchmarks({
             outside this benchmark.
           </p>
           <p className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-            <a href={data.runUrl} className="text-accent underline">
+            <a href={platform.runUrl ?? data.runUrl} className="text-accent underline">
               Workflow run →
             </a>
             <a href={repoHref(data.reportPath!)} className="text-accent underline">

@@ -119,6 +119,45 @@ test("rejects partial, mixed, corrupt, local or failed campaigns instead of fill
   }
 });
 
+test("accepts independent platform campaigns while preserving revision and hardware checks", () => {
+  const retained = publication();
+  const pub = {
+    schemaVersion: 2,
+    revision: retained.revision,
+    campaigns: {
+      "linux-x86-64": { runId: "456", attempt: "2" },
+      "macos-arm64": { runId: retained.runId, attempt: retained.attempt },
+    },
+    platforms: retained.platforms,
+  };
+  for (const shard of pub.platforms["linux-x86-64"]) {
+    shard.manifest.runId = "456";
+    shard.manifest.attempt = "2";
+  }
+  const data = blacksmithBenchData(pub);
+  assert.equal(data.runUrl, undefined);
+  assert.ok(data.platforms[0].runUrl.endsWith("/runs/456/attempts/2"));
+  assert.ok(data.platforms[1].runUrl.endsWith(`/runs/${expected.runId}/attempts/1`));
+  for (const mutate of [
+    (p) => {
+      p.platforms["linux-x86-64"][0].manifest.environment.cpu = "another CPU";
+    },
+    (p) => {
+      p.platforms["linux-x86-64"][0].manifest.runId = "789";
+    },
+    (p) => {
+      for (const s of p.platforms["linux-x86-64"]) s.manifest.revision = "c".repeat(40);
+    },
+    (p) => {
+      delete p.campaigns["macos-arm64"];
+    },
+  ]) {
+    const changed = structuredClone(pub);
+    mutate(changed);
+    assert.throws(() => blacksmithBenchData(changed));
+  }
+});
+
 test("only an absent campaign is pending; a malformed existing file fails the build", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "palamedes-pending-bench-test-"));
   try {
@@ -139,6 +178,10 @@ test("imports complete platform artifacts and refuses a summary that disagrees w
   const root = await mkdtemp(path.join(os.tmpdir(), "palamedes-bench-import-test-"));
   try {
     const pub = publication();
+    for (const shard of pub.platforms["linux-x86-64"]) {
+      shard.manifest.runId = "456";
+      shard.manifest.attempt = "2";
+    }
     const roots = {};
     for (const [id, shards] of Object.entries(pub.platforms)) {
       const platformRoot = path.join(root, id);
@@ -160,13 +203,29 @@ test("imports complete platform artifacts and refuses a summary that disagrees w
         }
         await writeFile(path.join(runRoot, "manifest.json"), JSON.stringify(shard.manifest));
       }
-      const report = mergeShards(shards, { ...expected, platform: id });
+      const report = mergeShards(shards, {
+        ...expected,
+        runId: shards[0].manifest.runId,
+        attempt: shards[0].manifest.attempt,
+        platform: id,
+      });
       await writeFile(path.join(platformRoot, "report.json"), JSON.stringify(report));
     }
     const options = { linux: roots["linux-x86-64"], macos: roots["macos-arm64"], repoRoot: root };
     const file = await importBlacksmithBenchmarks(options);
     assert.equal(file, path.join(root, BLACKSMITH_REPORT));
     assert.equal((await loadBlacksmithBenchData(root)).status, "measured");
+    const imported = JSON.parse(await readFile(file, "utf8"));
+    assert.equal(imported.schemaVersion, 2);
+    assert.deepEqual(imported.campaigns["linux-x86-64"], { runId: "456", attempt: "2" });
+    const macosReport = path.join(options.macos, "report.json");
+    const originalMacos = await readFile(macosReport, "utf8");
+    await writeFile(
+      macosReport,
+      JSON.stringify({ ...JSON.parse(originalMacos), revision: "c".repeat(40) }),
+    );
+    await assert.rejects(importBlacksmithBenchmarks(options), /same source revision/u);
+    await writeFile(macosReport, originalMacos);
     const reportFile = path.join(options.linux, "report.json");
     const tampered = JSON.parse(await readFile(reportFile, "utf8"));
     tampered.results[0].medianMs = 0;

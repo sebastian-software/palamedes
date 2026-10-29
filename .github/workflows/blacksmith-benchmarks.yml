@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: blacksmith-benchmarks-${{ github.ref }}
@@ -50,6 +51,25 @@ jobs:
         with:
           node-version: "24.22.0"
           rust: "false"
+      - name: Record runner hardware class
+        run: node benchmarks/e2e-workflow/src/runner-class.mjs record --platform "$PROFILE" --repetition "$REPETITION" --output "$RUNNER_TEMP/runner-class.json"
+      - name: Retain runner hardware receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: runner-class-${{ matrix.profile }}-run${{ matrix.run }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runner-class.json
+          retention-days: 7
+      - name: Wait for this platform's hardware receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node benchmarks/e2e-workflow/src/runner-class.mjs wait --platform "$PROFILE"
+      - name: Download this platform's hardware receipts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: runner-class-${{ matrix.profile }}-run*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runner-classes
+      - name: Require one hardware class before building or measuring
+        run: node benchmarks/e2e-workflow/src/runner-class.mjs validate --platform "$PROFILE" --directory "$RUNNER_TEMP/runner-classes"
       # Cargo uses rust-toolchain.toml, derived from the workspace rust-version.
       # Build and dependency caches are restored before any measured command.
       - name: Read workspace Rust version

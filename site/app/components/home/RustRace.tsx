@@ -119,8 +119,8 @@ export function RustRace() {
         <p className="pmds-lede">
           Your i18n tooling runs every time you save, commit, or open a pull request. Choose a
           framework and platform to compare the CLI workflows on 1,500 files and 6,000 messages.
-          Each table compares tools on the same platform. The local recording replays each tool's
-          measured median.
+          Each table compares tools on the same platform. The historical local recording replays
+          each tool's measured median.
         </p>
       </Reveal>
 
@@ -137,14 +137,14 @@ export function RustRace() {
       <PlatformBenchmarks framework={framework} />
       <details data-local-benchmark className="mt-6" open={blacksmithBench.status === "pending"}>
         <summary className="w-fit cursor-pointer text-[15px] font-semibold underline underline-offset-4">
-          Replay the local Mac recording
+          Replay the historical Mac recording
         </summary>
         <div ref={ref} className="mt-6 border border-hair bg-paper">
           <p
             className="border-b border-hair px-5 py-4 text-[14px] leading-relaxed"
             aria-live="polite"
           >
-            <strong>{view.label}</strong> · {view.corpus} · local macOS recording
+            <strong>{view.label}</strong> · {view.corpus} · historical local macOS recording
           </p>
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hair px-5 py-4">
             <p className="mono-nums text-[15px] text-ink" aria-hidden>
@@ -266,7 +266,7 @@ export function RustRace() {
             <p className="mt-2">
               Median of {view.meta.runs} runs · {view.meta.cpu ? `${view.meta.cpu} · ` : ""}
               {view.meta.platform} · Node {view.meta.node} · {view.meta.generated}. Machine-local
-              measurements. Framework reports were captured separately.
+              measurements from earlier releases. Framework reports were captured separately.
               <a href={repoHref(view.reportPath)} className="ml-1 text-accent underline">
                 Checked report →
               </a>

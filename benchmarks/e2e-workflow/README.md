@@ -71,6 +71,13 @@ After the workflow is merged into the default branch, start a campaign with:
 gh workflow run blacksmith-benchmarks.yml --ref main -f platform=both
 ```
 
+Before Rust setup or measurement, each VM uploads a small hardware receipt.
+All three VMs on a platform must agree in CPU class, CPU count, Node version
+and runner image before any of them proceeds. Missing receipts time out after
+three minutes; mixed classes stop immediately. The final raw-report merger
+still repeats its full hardware, toolchain, source and semantic checks. This
+avoids spending a complete benchmark run on a heterogeneous runner allocation.
+
 The runner labels follow Ferroni's established setup:
 `blacksmith-4vcpu-ubuntu-2404` and `blacksmith-6vcpu-macos-26`. Jobs have a
 90-minute limit. A platform selector permits a Linux-only or macOS-only retry;
@@ -124,8 +131,14 @@ node scripts/blacksmith-bench-data.mjs \
 ```
 
 The importer verifies the retained file hashes and rebuilds both aggregates
-from all six raw VM reports. It rejects mixed runs, revisions, dependencies,
-corpora, scopes, incomplete samples and failed semantic gates. The output is
+from all six raw VM reports. Each platform must contain three complete VMs
+from one run and attempt, with the same hardware class. Platforms can use
+separate runs, so a Linux-only retry can retain a valid macOS campaign.
+Both platforms must still match in source revision, dependency locks,
+measurement options, comparator versions, corpora and scopes. Incomplete
+samples and failed semantic gates prevent publication. Schema 2 records the
+run and attempt per platform; schema 1 historical campaigns remain readable.
+The output is
 `benchmarks/e2e-workflow/results/blacksmith/latest.json`, retaining raw samples
 and catalog receipts in Git after CI artifacts expire. Review that file before
 committing it. The site build validates it again and emits only display data,
@@ -135,32 +148,41 @@ logs remain separate artifacts; retain them durably if they will be linked as
 publication evidence. Never promote a partial run, a local diagnostic, or an
 excluded candidate's timing.
 
-### Published campaign
+### 2.0 reference campaign
 
-The [October 23, 2026 campaign](https://github.com/sebastian-software/palamedes/actions/runs/39977069712/attempts/1)
-measured revision `88bd86d3229778969dd70d21ff84c1911c6b15b1` on three
-Linux x86-64 VMs (four AMD EPYC vCPUs each) and three macOS ARM64 VMs (six
-Apple M4 Pro virtual CPUs each), with Node.js 24.22.0. The
-[checked evidence bundle](results/blacksmith/latest.json) retains all six
-manifests, raw samples, and catalog receipts. Each platform has 72 validated
-case rows and nine untimed Intlayer exclusions, across all three inventories
-and the separately retained React cold/warm lanes.
+The October 29, 2026 reference measurements use the
+[macOS campaign](https://github.com/sebastian-software/palamedes/actions/runs/40846472233/attempts/1)
+and the [Linux retry](https://github.com/sebastian-software/palamedes/actions/runs/40854990521/attempts/1).
+Both measure Palamedes 2.0.0 at revision
+`94fc2467269bf10c3cd02e6a2008cd7de60b5f35`. Its product sources and release
+manifests match release PR #1452 at
+`dfbda46789ef60d29214c4a942e33fc89f646a91`; the only added change corrects
+the benchmark generator and tests. Plain messages omit the values argument,
+while messages containing `{name}` pass `{ name }`. This follows 2.0's
+placeholder validation without changing the logical message inventories,
+timed boundary, comparator versions, or aggregation method.
 
-The campaign predates the removal of vue3-gettext from the active comparison.
-Its raw evidence stays intact and fully validated; the website omits that
-retired comparator. Future campaigns use the reduced framework matrix and no
-longer require GNU gettext tools.
+The [initial attempt](https://github.com/sebastian-software/palamedes/actions/runs/40845875860/attempts/1)
+was canceled after 2.0 correctly rejected the old generator's extra values on
+plain messages. Its partial measurements are not published.
 
-All six measurement jobs succeeded. Both CI reporting jobs failed because
-importing the corpus metadata eagerly resolved `@lingui/format-po`, which the
-Node-only reporting jobs do not install. The complete retained shards were
-downloaded, hash-checked, and combined locally with the same `blacksmith.mjs
-merge` command. Every one of the 81 aggregate rows per platform was checked
-against the original aggregator before import. The fix defers Lingui resolution
-until corpus generation; a regression test now runs the full merge command in
-a checkout without comparator dependencies. No measurement or aggregation
-formula changed during recovery. The workflow link retains the failed
-reporting jobs as part of this campaign's provenance.
+Two complete Linux campaigns were rejected for mixing Intel Xeon and AMD EPYC
+VMs. Those Linux samples are not published. The selected Linux retry passed
+with three AMD EPYC VMs; the validated macOS campaign retains its three Apple
+M4 Pro VMs. Both use Node.js 24.22.0. Each platform retains 69 validated case
+rows and nine untimed Intlayer exclusions. These measurements predate the new
+early hardware preflight; the unchanged final merger verified their hardware.
+
+The [checked evidence bundle](results/blacksmith/latest.json) retains all six
+manifests, raw samples, and catalog receipts. Linux and macOS remain separate;
+the website derives each displayed tool version from the measured binary.
+The older local reports remain historical recordings with their original
+versions and dates, rather than being relabeled as 2.0 measurements.
+
+The previous [October 23 campaign](https://github.com/sebastian-software/palamedes/actions/runs/39977069712/attempts/1)
+and its [retained evidence](https://github.com/sebastian-software/palamedes/blob/4f0064f2d7599f13250fc0e5af192e0499e253af/benchmarks/e2e-workflow/results/blacksmith/latest.json)
+remain available for historical comparison. That campaign included the now
+retired vue3-gettext lane; the 2.0 campaign uses the current framework matrix.
 
 For a local orchestration smoke check after installing both workspaces:
 
