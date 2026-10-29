@@ -4,7 +4,8 @@ import { spawnSync } from "node:child_process";
 import { dirname, extname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { generateApiDocs } from "ardo/typedoc";
+import { generatePackageApiReference } from "./api-reference.mjs";
+import { writeApiReferenceRedirects } from "./api-reference-redirects.mjs";
 import {
   EXAMPLE_MATRIX,
   FOCUSED_EXAMPLES,
@@ -161,9 +162,8 @@ await writeBlogIndexData(posts);
 
 await writeApiReferenceIndex();
 await generateTypedocReference();
-await normalizeTypedocModuleLinks();
-await dedupeTypedocLedes();
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
+await writeApiReferenceRedirects(siteRoot, routesRoot, publicRoot);
 
 await writeContentStats(adrs);
 await writeBrowserRuntimeStats();
@@ -660,27 +660,7 @@ function escapeHtml(value) {
 
 async function generateTypedocReference() {
   for (const pkg of typedocPackages()) {
-    await generateApiDocs(
-      {
-        enabled: true,
-        entryPoints: pkg.entryPoints.map((entry) => join(repoRoot, entry)),
-        tsconfig: join(siteRoot, "tsconfig.typedoc.json"),
-        out: `api-reference/${pkg.slug}`,
-        excludePrivate: true,
-        excludeProtected: true,
-        excludeInternal: true,
-        markdown: {
-          sourceLinks: true,
-          sourceBaseUrl: "https://github.com/sebastian-software/palamedes/blob/main/",
-        },
-        sidebar: {
-          title: pkg.label,
-          collapsed: true,
-          position: pkg.position,
-        },
-      },
-      routesRoot,
-    );
+    await generatePackageApiReference(pkg, repoRoot, routesRoot);
   }
 }
 
@@ -704,7 +684,16 @@ async function ensureDirectoryIndexes(rootDir) {
   const indexPath = join(rootDir, "index.md");
   if (hasMarkdownChild && !existsSync(indexPath)) {
     const relativeDir = relativeRouteDir(rootDir);
-    const title = titleFromPath(relativeDir);
+    const title = relativeDir.split("/").map(titleFromPath).join(" / ");
+    const links = entries.flatMap((entry) => {
+      if (entry.isDirectory())
+        return [`- [${titleFromPath(entry.name)}](/${relativeDir}/${entry.name})`];
+      if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
+        const name = stripMarkdownExtension(entry.name);
+        return [`- [${titleFromPath(name)}](/${relativeDir}/${name})`];
+      }
+      return [];
+    });
     await writeGeneratedFile(
       indexPath,
       [
@@ -714,57 +703,15 @@ async function ensureDirectoryIndexes(rootDir) {
         "sidebar: leaf",
         "---",
         "",
-        `# ${title}`,
+        "Browse the API reference pages in this section:",
         "",
-        "This generated TypeDoc section groups the pages below.",
+        ...links,
         "",
       ].join("\n"),
     );
   }
 
   return hasMarkdownChild || existsSync(indexPath);
-}
-
-async function normalizeTypedocModuleLinks() {
-  for (const pkg of typedocPackages()) {
-    const packageDir = join(routesRoot, "api-reference", pkg.slug);
-    const modulesDir = join(packageDir, "modules");
-    const otherDir = join(packageDir, "other");
-    const indexPath = join(packageDir, "index.md");
-    if (!existsSync(modulesDir) || existsSync(otherDir) || !existsSync(indexPath)) continue;
-
-    const index = await readFile(indexPath, "utf8");
-    await writeFile(
-      indexPath,
-      index.replaceAll(`/api-reference/${pkg.slug}/other`, `/api-reference/${pkg.slug}/modules`),
-      "utf8",
-    );
-  }
-}
-
-/*
- * The TypeDoc generator repeats the frontmatter `description` as the first
- * body paragraph. ARDO's ContentHeader already renders the description as the
- * visible lede, so drop the duplicated paragraph (same rule as extractLede /
- * removeLedeBlock for hand-written pages).
- */
-async function dedupeTypedocLedes() {
-  const apiRoot = join(routesRoot, "api-reference");
-  if (!existsSync(apiRoot)) return;
-  const entries = await readdir(apiRoot, { recursive: true, withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const filePath = join(entry.parentPath, entry.name);
-    const raw = await readFile(filePath, "utf8");
-    const parsed = stripExistingFrontmatter(raw);
-    const description = /^description:\s*["']?(.*?)["']?\s*$/mu.exec(parsed.data)?.[1];
-    if (!description) continue;
-    const normalize = (text) => text.replaceAll(/\s+/gu, " ").replace(/\.$/u, "").trim();
-    const lede = extractLede(parsed.content);
-    if (!lede || normalize(lede.text) !== normalize(description)) continue;
-    const body = removeLedeBlock(parsed.content, lede);
-    await writeFile(filePath, `---\n${parsed.data}\n---\n${body.trimStart()}`, "utf8");
-  }
 }
 
 function typedocPackages() {

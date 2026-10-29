@@ -137,6 +137,15 @@ const fragment = catalogAssets.serve(request);
 if (fragment) return fragment;
 ```
 
+Fragment requests also work on cold or restarted workers. The registry resolves
+a configuration-relative source identity and verifies its compiled message
+selection locally; equivalent deployments can use different checkout paths.
+Deploy the same authored source files, catalogs, and configuration to each
+worker. Catalog include/exclude rules and the asset loader's `include`/`exclude`
+options still apply, and only the requested locale's selected messages are
+delivered. Custom loaders must preserve authored message IDs; adding or removing
+messages after source compilation produces a registration error. No request supplies executable source or a message-ID list.
+
 Pass the same `catalogAssets` to `createRemixI18nServer`, render
 `renderClientCatalog(locale)` into the document head, and send matching
 `/assets/__palamedes/catalog/:locale.js` requests to
@@ -145,6 +154,15 @@ Pass the same `catalogAssets` to `createRemixI18nServer`, render
 ```ts
 const entry = await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer });
 ```
+
+Every server worker can serve the external bootstrap immediately, including
+before it renders its first document. The entry URL, catalog mount and optional
+error markup travel in the nonce-protected import map, scoped to the bootstrap's
+own URL. The bootstrap loads the `<html lang>` catalog from that mount and never
+reads URLs or markup from page elements, so injected script tags or catalog
+links cannot redirect an import or replace the error UI. Serving the bootstrap
+does not require per-worker entry registration. Workers must use the same
+application build and asset mounts.
 
 The adapter renders the stable Remix import map for both the entry and its own
 bootstrap, followed by an external script. It also delivers ordinary

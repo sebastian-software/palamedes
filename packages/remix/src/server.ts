@@ -153,6 +153,11 @@ export type RemixI18nServer<TLocale extends string> = {
   }>;
   get(context?: RemixI18nContextReader): RemixI18nContextValue<TLocale, PalamedesI18n> | undefined;
   createClientCatalogAsset(locale: TLocale): RemixClientCatalogAsset<TLocale>;
+  /**
+   * Render the catalog preload link. The bootstrap loads the catalog from
+   * `catalogAssets.basePath` through its import-map data, never from this link,
+   * so a `basePath` override changes only the preload URL.
+   */
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
   /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
   renderClientEntry(entryPath: string, options: RemixClientEntryOptions): Promise<string>;
@@ -180,6 +185,42 @@ type CachedRemixClientCatalogAsset<TLocale extends string> = RemixClientCatalogA
 
 export const remixI18nContext: RemixI18nContextKey =
   createContextKey<RemixI18nContextValue<string, I18nInstance>>();
+
+// Each entry URL serves the same module on every worker. The URL digest keeps
+// distinct application entries separate in the browser module cache. The
+// request-specific entry URL, catalog mount and error markup reach the module
+// only through the nonce-protected import map, scoped to this exact module URL.
+// Document elements are never trusted for URLs or markup, so injected scripts
+// or catalog links cannot redirect an import or replace the error UI. The
+// catalog URL combines the server-written mount with the document locale, the
+// same way lazy catalog fragments resolve theirs.
+const CLIENT_ENTRY_DATA_SPECIFIER = "@palamedes/remix/entry-data";
+const CLIENT_ENTRY_DATA_PREFIX = "data:application/json,";
+const CLIENT_ENTRY_SOURCE = `import { startRemixClient } from "@palamedes/remix/client";
+let data;
+try {
+  const resolved = import.meta.resolve(${JSON.stringify(CLIENT_ENTRY_DATA_SPECIFIER)});
+  if (resolved.startsWith(${JSON.stringify(CLIENT_ENTRY_DATA_PREFIX)})) {
+    const parsed = JSON.parse(decodeURIComponent(resolved.slice(${CLIENT_ENTRY_DATA_PREFIX.length})));
+    if (typeof parsed?.entry === "string" && typeof parsed.catalog === "string") data = parsed;
+  }
+} catch {}
+const locale = document.documentElement.lang;
+// Missing entry data still reaches the default error UI instead of a blank page.
+await startRemixClient(
+  () =>
+    data === undefined
+      ? Promise.reject(new Error("Palamedes Remix application entry data is missing from the import map."))
+      : import(data.entry),
+  {
+    catalogUrl:
+      data === undefined || !locale
+        ? undefined
+        : new URL(data.catalog + encodeURIComponent(locale) + ".js", document.baseURI).href,
+    errorHtml: typeof data?.errorHtml === "string" ? data.errorHtml : undefined,
+  },
+);
+`;
 
 const DEFAULT_FAILURE_MESSAGE =
   "Palamedes Remix i18n initialization failed before the handler ran.";
@@ -221,7 +262,6 @@ export function createRemixI18nServer<TLocale extends string>(
   const failureMessage = options.failureMessage ?? DEFAULT_FAILURE_MESSAGE;
   const scope = createServerI18nScope<PalamedesI18n>();
   const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
-  const clientEntries = new Map<string, string>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<
     PalamedesI18n,
@@ -355,7 +395,7 @@ export function createRemixI18nServer<TLocale extends string>(
 
   const renderClientCatalog = (locale: TLocale, renderOptions: { basePath?: string } = {}) => {
     const basePath = renderOptions.basePath ?? options.catalogAssets?.basePath ?? "/assets";
-    const href = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog/${encodeURIComponent(locale)}.js`;
+    const href = `${catalogAssetPrefix(basePath)}${encodeURIComponent(locale)}.js`;
     return `<link rel="modulepreload" href="${escapeHtmlAttribute(href)}" data-palamedes-catalog-locale="${escapeHtmlAttribute(locale)}" data-palamedes-catalog-version="${escapeHtmlAttribute(createClientCatalogAsset(locale).catalogVersion)}" />`;
   };
 
@@ -374,12 +414,27 @@ export function createRemixI18nServer<TLocale extends string>(
       entryOptions.assetServer.getHref(clientPath),
       entryOptions.assetServer.getImportMap([entryPath, clientPath]),
     ]);
-    const source = `import{startRemixClient}from${JSON.stringify(clientUrl)};await startRemixClient(()=>import(${JSON.stringify(entryUrl)}),${JSON.stringify({ errorHtml: entryOptions.errorHtml })});`;
-    const key = createHash("sha256").update(source).digest("hex");
-    clientEntries.set(key, source);
+    const key = createHash("sha256")
+      .update(JSON.stringify([CLIENT_ENTRY_SOURCE, clientUrl, entryUrl, entryOptions.errorHtml]))
+      .digest("hex");
     const src = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/${key}.js`;
     const nonce = entryOptions.nonce ? ` nonce="${escapeHtmlAttribute(entryOptions.nonce)}"` : "";
-    const serializedImportMap = JSON.stringify(importMap).replace(/</gu, "\\u003c");
+    const serializedImportMap = JSON.stringify({
+      ...importMap,
+      scopes: {
+        ...importMap.scopes,
+        [src]: {
+          "@palamedes/remix/client": clientUrl,
+          [CLIENT_ENTRY_DATA_SPECIFIER]: `${CLIENT_ENTRY_DATA_PREFIX}${encodeURIComponent(
+            JSON.stringify({
+              entry: entryUrl,
+              catalog: catalogAssetPrefix(basePath),
+              errorHtml: entryOptions.errorHtml ?? null,
+            }),
+          )}`,
+        },
+      },
+    }).replace(/</gu, "\\u003c");
     return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}"${nonce}></script>`;
   };
 
@@ -388,17 +443,17 @@ export function createRemixI18nServer<TLocale extends string>(
     const pathname = new URL(request.url).pathname;
     const entryPrefix = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/`;
     if (pathname.startsWith(entryPrefix) && pathname.endsWith(".js")) {
-      const source = clientEntries.get(pathname.slice(entryPrefix.length, -3));
-      return source === undefined
+      const key = pathname.slice(entryPrefix.length, -3);
+      return !/^[a-f0-9]{64}$/u.test(key)
         ? new Response("Unknown application entry.", { status: 404 })
-        : new Response(source, {
+        : new Response(CLIENT_ENTRY_SOURCE, {
             headers: {
               "content-type": "application/javascript; charset=utf-8",
               "cache-control": "no-cache",
             },
           });
     }
-    const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog/`;
+    const prefix = catalogAssetPrefix(basePath);
     if (!pathname.startsWith(prefix) || !pathname.endsWith(".js")) {
       return undefined;
     }
@@ -527,6 +582,10 @@ function resolveCatalogAssetVersion<TLocale extends string>(
   return createHash("sha256")
     .update(JSON.stringify([locale, source]))
     .digest("hex");
+}
+
+function catalogAssetPrefix(basePath: string): string {
+  return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog/`;
 }
 
 function escapeHtmlAttribute(value: string): string {

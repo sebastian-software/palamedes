@@ -1560,7 +1560,7 @@ fn descriptor_string_literals_stay_raw_icu_on_both_sides() {
     // text and go through the shared escaping instead.
     let source = r##"import { t } from "@palamedes/core/macro";
 
-const quoted = t({ message: "L'{title} est prêt" }, { title });
+const quoted = t({ message: "L'{title} est prêt" }, {});
 const doubled = t({ message: "It''s {name}" }, { name });
 const authored = t({ message: `l'${item}` });
 "##;
@@ -2873,4 +2873,95 @@ fn rejects_nested_choice_macros_in_trans_children() {
         ),
         "{error:?}"
     );
+}
+
+#[test]
+fn descriptor_apostrophe_policy_matches_catalog_placeholders() {
+    for message in [
+        "You're {name}, aren't you?",
+        "Don't quote '{name}', but greet {name}",
+        "It''s {name}",
+    ] {
+        let source = format!(
+            "import {{t}} from '@palamedes/core/macro'; export function greet(name){{return t({{message:{}}},{{name}})}}",
+            serde_json::to_string(message).unwrap()
+        );
+        let extracted = extract_messages(&source, "test.ts").expect("descriptor extracts");
+        assert_eq!(extracted[0].message, message);
+        transform_macros(&source, "test.ts", None).expect("descriptor uses runtime quoting");
+    }
+    let source = "import {t} from '@palamedes/core/macro'; export function greet(name){return t({message:\"You're {name}, aren't you?\"},{})}";
+    assert!(
+        extract_messages(source, "test.ts")
+            .unwrap_err()
+            .to_string()
+            .contains("Missing value(s): name")
+    );
+    assert!(
+        transform_macros(source, "test.ts", None)
+            .unwrap_err()
+            .to_string()
+            .contains("Missing value(s): name")
+    );
+}
+
+/// Extraction and the transform must agree on per-occurrence placeholder
+/// names: only repeated bare identifiers share one (#1462).
+#[test]
+fn names_repeated_expressions_per_occurrence() {
+    for (filename, source, message, values) in [
+        (
+            "choice.ts",
+            "import { plural } from \"@palamedes/core/macro\";\nconst label = plural(items.length, { one: \"# item\", other: `${items.length} items` });\n",
+            "{length, plural, one {# item} other {{length_1} items}}",
+            "{ length: items.length, length_1: items.length }",
+        ),
+        (
+            "choice.tsx",
+            "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={items.length} one=\"# item\" other={`${items.length} items`} />;\n",
+            "{length, plural, one {# item} other {{length_1} items}}",
+            "{ length: items.length, length_1: items.length }",
+        ),
+        (
+            "select.ts",
+            "import { select } from \"@palamedes/core/macro\";\nconst label = select(role, { admin: `${user.name} (admin)`, other: `${user.name}` });\n",
+            "{role, select, admin {{name} (admin)} other {{name_1}}}",
+            "{ role, name: user.name, name_1: user.name }",
+        ),
+        (
+            "parenthesized.ts",
+            "import { t } from \"@palamedes/core/macro\";\nconst label = t`${(count)} of ${count}`;\n",
+            "{count} of {count}",
+            "{ count: (count) }",
+        ),
+        (
+            "intervening.ts",
+            "import { t } from \"@palamedes/core/macro\";\nconst label = t`${count} ${user.name} ${count}`;\n",
+            "{count} {name} {count_1}",
+            "{ count, name: user.name, count_1: count }",
+        ),
+        (
+            "nested.tsx",
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>{count} new, <b>{count} unread</b></Trans>;\n",
+            "{count} new, <0>{count} unread</0>",
+            "values={{ count }} components={{ 0: <b /> }}",
+        ),
+        (
+            "nested-member.tsx",
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>{inbox.count} new, <b>{inbox.count} unread</b></Trans>;\n",
+            "{count} new, <0>{count_1} unread</0>",
+            "values={{ count: inbox.count, count_1: inbox.count }} components={{ 0: <b /> }}",
+        ),
+    ] {
+        let extracted = extract_messages(&scope_macro_test_source(source, filename), filename)
+            .expect("extraction");
+        assert_eq!(extracted[0].message, message, "{source}");
+        let result = transform_macros(source, filename, None).expect("transform");
+        assert!(
+            result.code.contains(&compiled_message_key(message, None)),
+            "{}",
+            result.code
+        );
+        assert!(result.code.contains(values), "{}", result.code);
+    }
 }

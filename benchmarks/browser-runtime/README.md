@@ -26,14 +26,37 @@ This is an artifact-size measurement, with no timing or throughput claim.
 
 `node scripts/benchmark-browser-runtime.mjs --verify-report` checks the source
 fingerprint without rebuilding packages or launching a browser. The site build
-runs this lightweight guard. Refresh the report after changing the selected
-runtime sources, dependency lockfile, harness, or catalog fixture. The
-fingerprint ignores release metadata: `version` and other publish-only
-`package.json` fields, and the workspace crates' own versions in `Cargo.lock`,
-so a release bump keeps the report valid. Rerun the full
-measurement when changing the native catalog compiler; its version is pinned by
-the report's source commit, rather than every unrelated Rust edit invalidating
-the runtime-size report.
+runs this lightweight guard. Refresh the report whenever one of the hashed
+inputs changes:
+
+- the measured packages (`core`, `react`, `solid`, `remix`, and `runtime`):
+  their `src/` files, `build.config.ts`, and `package.json`;
+- the native compiler: the `palamedes` crate sources in `crates/palamedes/src/`,
+  the whole `crates/palamedes-node/` addon crate (sources, `build.rs`, and
+  `Cargo.toml`), the root `Cargo.toml`, `rust-toolchain.toml`, and the native
+  build scripts (`packages/core-node/scripts/build-native.mjs` and
+  `scripts/build-native-lib.mjs`);
+- the `@palamedes/core-node` wrapper: its `src/` files, `build.config.ts`, and
+  `package.json`;
+- `Cargo.lock` and `pnpm-lock.yaml`;
+- the harness (`scripts/benchmark-browser-runtime.mjs`,
+  `scripts/browser-runtime-source-hash.mjs`, and the profile and client entries
+  plus `catalog-only.mjs` in this directory) and the catalog fixture
+  `proof/sveltekit-ssr/locales/en.po`.
+
+Files that never reach a build stay out of the fingerprint: JavaScript unit and
+type tests (`*.test.*`, `*.type-test.*`), Rust test modules (`tests.rs`,
+`test_support.rs`, `tests/`, `*_test.rs`, `*_tests.rs`), the Rust test
+fixtures in `crates/palamedes/fixtures/`, and Markdown files such as crate
+READMEs. The fingerprint also ignores release metadata: `version` and other
+publish-only `package.json` fields, the workspace crates' own manifest and
+lockfile versions, and local path dependency release pins. External dependency
+requirements and toolchain settings remain inputs, so a release bump alone
+keeps the report valid.
+
+Every full measurement rebuilds the native compiler and its Node wrapper before
+loading them. An old addon from a previous checkout cannot silently supply
+catalog bytes for a report fingerprinted from newer compiler sources.
 
 ## Measured boundary
 

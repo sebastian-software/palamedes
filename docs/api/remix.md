@@ -31,7 +31,7 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `@palamedes/remix/macro`
 - `@palamedes/remix/compiled`
 - `createRemixI18nServer(options)`
-- `startRemixClient(loadEntry, options?)`
+- `startRemixClient(loadEntry, { catalogUrl, errorHtml? })`
 - `initializeRemixClientI18nAsync(options)`
 - `createRemixI18nRequestScope(resolveI18n, options?)`
 - `remixI18nContext`
@@ -186,6 +186,24 @@ in place and other changes reload the document, without restarting the server.
 `projectRoot`, and a relative `configPath` resolves from `projectRoot`. The
 removed `cwd` option throws a migration error; rename it to `projectRoot`.
 
+Fragment URLs identify an authored module relative to the configuration root and
+its compiled message IDs. A cold or restarted worker reconstructs that selection
+from its own source files, so equivalent deployments can use different absolute
+checkout paths. Workers need the same source tree, catalogs, and configuration;
+no earlier document or asset request is required on that worker. Configured
+catalog includes and excludes also apply to reconstruction, including explicit
+sibling workspace includes, together with the `include` and `exclude` options of
+asset loaders that use the registry. A source identity must use the exact
+on-disk spelling, so case-variant and symlink aliases are rejected. Modules
+without messages never receive fragment URLs and answer 404. Requests never
+supply message IDs or executable source.
+
+Keep authored source files available with the Remix asset server. Custom loaders
+must preserve the authored message IDs: adding or removing messages during
+post-compilation fails registration with a diagnostic. The registry compiles
+only the verified module selection for the requested supported locale. A stale
+selection returns 404 after source invalidation; catalog-only edits retain URLs.
+
 The catalog registry watches PO/FCL and config inputs in development and clears
 compiled caches without changing registered module URLs. Warm requests do not
 scan these files. Other runners can enable `watch: true` or explicitly call
@@ -292,6 +310,16 @@ const clientCatalog = remixI18n.renderClientCatalog(locale);
 const clientEntry = await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer });
 ```
 
+Every server worker can serve the external bootstrap immediately, including
+before it renders its first document. The entry URL, catalog mount and optional
+error markup travel in the nonce-protected import map, scoped to the bootstrap's
+own URL. The bootstrap loads the `<html lang>` catalog from that mount, the
+`catalogAssets.basePath` that `serveClientCatalogAsset()` answers, and never
+reads URLs or markup from page elements. Injected script tags or catalog links
+cannot redirect the entry or catalog import or replace the error UI. Serving
+the bootstrap does not require per-worker entry registration. Workers must use
+the same application build and asset mounts.
+
 `renderClientEntry()` is asynchronous and accepts an entry file path plus the
 same `assetServer` used for browser delivery. It renders the import map for the
 application and adapter bootstrap, then an external module script. The adapter
@@ -314,7 +342,9 @@ rejected: relocating a module URL without its import-map scope breaks bare
 dependency resolution. Configure the actual asset server's mounts instead.
 
 The lower-level `initializeRemixClientI18nAsync()` and `startRemixClient()` are
-available for custom host integrations. Generated executable catalogs never
+available for custom host integrations. `startRemixClient()` requires a
+`catalogUrl` from a trusted source, such as server-written import-map data; it
+does not read catalog links from the page. Generated executable catalogs never
 cross JSON. Do not brand raw ICU maps with `defineCompiledCatalog()`; it validates native
 generated constants and functions and does not compile ICU.
 

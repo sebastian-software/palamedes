@@ -27,6 +27,7 @@ site/build/
 site/.react-router/
 site/public/fragment-demo/
 site/public/decisions/
+site/public/api-reference/
 
 # Next.js
 .next/
