@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { readFileSync, realpathSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { createRequire, type registerHooks } from "node:module";
@@ -98,6 +98,7 @@ export type PalamedesRemixAssetLoaderOptions = Pick<
 };
 
 export type PalamedesRemixCatalogAssetRegistry = {
+  /** Register the IDs present in an authored source module, unchanged by custom loaders. */
   register(sourcePath: string, compiledIds: readonly string[]): string;
   /** Load the complete executable catalog for one active server locale. */
   load?(locale: string): Promise<CompiledCatalogMessages>;
@@ -159,8 +160,14 @@ export function createPalamedesRemixCatalogAssetRegistry(
   let refreshQueued = false;
   const warnedConflicts = new Set<string>();
   const fragmentAssets = new Map<string, { source: string; etag: string }>();
-  const entries = new Map<string, { sourcePath: string; compiledIds: string[] }>();
+  const entries = new Map<string, CatalogFragmentEntry>();
   const keysBySource = new Map<string, string>();
+  // Cold lookups by canonical source path; null records a failed transform.
+  const coldSelections = new Map<string, CatalogFragmentEntry | null>();
+  const boundSourceFilters: PalamedesSourceFilter[] = [];
+  const defaultSourceFilter = createPalamedesSourceFilter(DEFAULT_INCLUDE, DEFAULT_EXCLUDE, {
+    projectRoot,
+  });
   const serverCatalogStore = createServerCatalogStore({
     async load({ locale }) {
       const catalogs = config.catalogs;
@@ -202,6 +209,9 @@ export function createPalamedesRemixCatalogAssetRegistry(
     serverCatalogStore.invalidate();
     fragmentAssets.clear();
     warnedConflicts.clear();
+    entries.clear();
+    keysBySource.clear();
+    coldSelections.clear();
   };
 
   const refreshCatalogGeneration = (): void => {
@@ -215,19 +225,126 @@ export function createPalamedesRemixCatalogAssetRegistry(
     warnedConflicts.clear();
   };
 
-  const register = (sourcePath: string, compiledIds: readonly string[]): string => {
+  const isRegistrySource = (requestedPath: string, sourcePath: string): boolean => {
+    // Bound asset loaders define which modules they transform. Before a loader
+    // binds, apply the loader defaults.
+    const filters = boundSourceFilters.length > 0 ? boundSourceFilters : [defaultSourceFilter];
+    return filters.some((filter) => filter(requestedPath) || filter(sourcePath));
+  };
+
+  /** Canonical, configured source identity, or undefined for anything else. */
+  const sourceIdentity = (sourcePath: string) => {
     const source = canonicalSourcePath(sourcePath);
-    const normalizedIds = [...new Set(compiledIds)].sort();
-    const key = createCatalogKey(source, normalizedIds);
-    const previousKey = keysBySource.get(source);
+    const relativeSource = path
+      .relative(canonicalSourcePath(config.rootDir), source)
+      .split(path.sep)
+      .join("/");
+    if (
+      !relativeSource ||
+      path.isAbsolute(relativeSource) ||
+      !isRegistrySource(path.resolve(sourcePath), source) ||
+      !config.catalogs.some((catalog) => catalogMatchesSource(config, catalog, source))
+    ) {
+      return;
+    }
+    return { sourcePath: source, relativeSource };
+  };
+
+  const readSourceEntry = (identity: {
+    sourcePath: string;
+    relativeSource: string;
+  }): CatalogFragmentEntry => {
+    const stamp = sourceStamp(identity.sourcePath);
+    const compiledIds = normalizeCompiledIds(
+      transformPalamedesMacros(readFileSync(identity.sourcePath, "utf8"), identity.sourcePath)
+        .compiledIds,
+    );
+    return { ...identity, compiledIds, stamp };
+  };
+
+  const rememberEntry = (entry: CatalogFragmentEntry): string => {
+    const key = createCatalogKey(entry.relativeSource, entry.compiledIds);
+    const previousKey = keysBySource.get(entry.sourcePath);
     if (previousKey && previousKey !== key) {
       entries.delete(previousKey);
       for (const assetKey of fragmentAssets.keys())
         if (assetKey.startsWith(`${previousKey}:`)) fragmentAssets.delete(assetKey);
     }
-    keysBySource.set(source, key);
-    entries.set(key, { sourcePath: source, compiledIds: normalizedIds });
+    coldSelections.delete(entry.sourcePath);
+    keysBySource.set(entry.sourcePath, key);
+    entries.set(key, entry);
     return key;
+  };
+
+  const register = (sourcePath: string, compiledIds: readonly string[]): string => {
+    const normalizedIds = normalizeCompiledIds(compiledIds);
+    const source = canonicalSourcePath(sourcePath);
+    const currentKey = keysBySource.get(source);
+    const current = currentKey ? entries.get(currentKey) : undefined;
+    // Asset loaders call register for every module compilation. Reuse the
+    // authored-source verification while the file on disk is unchanged.
+    if (
+      current &&
+      current.stamp !== undefined &&
+      current.stamp === sourceStamp(source) &&
+      sameCompiledIds(current.compiledIds, normalizedIds)
+    ) {
+      return currentKey!;
+    }
+    const identity = sourceIdentity(sourcePath);
+    if (!identity) {
+      throw new Error(
+        `Palamedes source module "${source}" is not included in a configured catalog.`,
+      );
+    }
+    const entry = readSourceEntry(identity);
+    if (!sameCompiledIds(entry.compiledIds, normalizedIds)) {
+      throw new Error(
+        `Palamedes Remix catalog fragments require custom loaders to preserve the authored message IDs in "${entry.sourcePath}". The post-compile selection differs from the source module on disk.`,
+      );
+    }
+    return rememberEntry(entry);
+  };
+
+  const resolveEntry = (key: string): CatalogFragmentEntry | undefined => {
+    const cached = entries.get(key);
+    if (cached) return cached.compiledIds.length > 0 ? cached : undefined;
+    const relativeSource = decodeCatalogSource(key);
+    if (!relativeSource) return;
+    try {
+      // The canonical on-disk spelling must equal the requested identity. This
+      // rejects traversal, symlink, and case-variant aliases before any cache
+      // or transform work. Explicit ../workspace includes remain governed by
+      // the catalog filters.
+      const identity = sourceIdentity(path.resolve(config.rootDir, relativeSource));
+      if (!identity || identity.relativeSource !== relativeSource) return;
+      // A registered selection is authoritative for its source; other digests are stale.
+      if (keysBySource.has(identity.sourcePath)) return;
+      let entry = coldSelections.get(identity.sourcePath);
+      if (entry === undefined) {
+        if (!existsSync(identity.sourcePath)) return;
+        try {
+          entry = readSourceEntry(identity);
+        } catch {
+          entry = null;
+        }
+        // Bounded per-file results keep repeated cold lookups for one source
+        // file at a single transform, whatever digest the requests carry.
+        if (coldSelections.size >= MAX_COLD_SELECTIONS) {
+          coldSelections.delete(coldSelections.keys().next().value!);
+        }
+        coldSelections.set(identity.sourcePath, entry);
+      }
+      // Modules without messages never receive fragment URLs, so an empty
+      // selection answers like a missing file instead of confirming it exists.
+      if (!entry || entry.compiledIds.length === 0) return;
+      if (createCatalogKey(entry.relativeSource, entry.compiledIds) !== key) return;
+      rememberEntry(entry);
+      return entry;
+    } catch {
+      // Untrusted locators never expose filesystem or transform diagnostics.
+      return;
+    }
   };
 
   const refreshCatalogState = (): void => {
@@ -291,7 +408,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
   };
   watchInputs();
 
-  return {
+  const registry: PalamedesRemixCatalogAssetRegistry = {
     register,
 
     load(locale) {
@@ -320,7 +437,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
       }
 
       const key = url.pathname.slice(prefix.length, -3);
-      const entry = entries.get(key);
+      const entry = resolveEntry(key);
       if (!entry) {
         return new Response(`Unknown Palamedes catalog fragment "${key}".`, { status: 404 });
       }
@@ -418,28 +535,66 @@ export function createPalamedesRemixCatalogAssetRegistry(
         serverCatalogStore.invalidate();
         fragmentAssets.clear();
         warnedConflicts.clear();
+        entries.clear();
+        keysBySource.clear();
+        coldSelections.clear();
       } else {
         const source = canonicalSourcePath(sourcePath);
+        coldSelections.delete(source);
         const key = keysBySource.get(source);
         if (key) {
           entries.delete(key);
           keysBySource.delete(source);
+          for (const assetKey of fragmentAssets.keys())
+            if (assetKey.startsWith(`${key}:`)) fragmentAssets.delete(assetKey);
         }
       }
     },
   };
+  registrySourceFilters.set(registry, boundSourceFilters);
+  return registry;
 }
 
+type CatalogFragmentEntry = {
+  sourcePath: string;
+  relativeSource: string;
+  compiledIds: string[];
+  /** File identity when the authored source was verified. */
+  stamp: string | undefined;
+};
+
+// Cold workers reconstruct only modules that a bound asset loader would transform.
+const registrySourceFilters = new WeakMap<
+  PalamedesRemixCatalogAssetRegistry,
+  PalamedesSourceFilter[]
+>();
+const MAX_COLD_SELECTIONS = 1024;
+
+// Native realpath returns the on-disk spelling on case-insensitive filesystems,
+// matching catalog filters, so case variants cannot alias a source identity.
 function canonicalSourcePath(source: string): string {
   try {
-    return realpathSync(source);
+    return realpathSync.native(source);
   } catch {
     try {
-      return path.join(realpathSync(path.dirname(source)), path.basename(source));
+      return path.join(realpathSync.native(path.dirname(source)), path.basename(source));
     } catch {
       return path.resolve(source);
     }
   }
+}
+
+function sourceStamp(source: string): string | undefined {
+  try {
+    const stats = statSync(source, { bigint: true });
+    return `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}`;
+  } catch {
+    return;
+  }
+}
+
+function sameCompiledIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
 function serveFragment(asset: { source: string; etag: string }, request: Request): Response {
@@ -457,13 +612,30 @@ function thisSidecarUrl(basePath: string, key: string): string {
   return `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/${key}.js?`;
 }
 
-function createCatalogKey(sourcePath: string, compiledIds: readonly string[]): string {
-  return createHash("sha256")
-    .update(path.resolve(sourcePath))
-    .update("\0")
-    .update(JSON.stringify(compiledIds))
-    .digest("hex")
-    .slice(0, 16);
+function normalizeCompiledIds(compiledIds: readonly string[]): string[] {
+  return [...new Set(compiledIds)].sort();
+}
+
+function createCatalogKey(relativeSource: string, compiledIds: readonly string[]): string {
+  const digest = createHash("sha256").update(JSON.stringify(compiledIds)).digest("hex");
+  return `v1.${Buffer.from(relativeSource).toString("base64url")}.${digest}`;
+}
+
+function decodeCatalogSource(key: string): string | undefined {
+  // Keep request metadata bounded, independent of the number of messages.
+  if (key.length > 8192) return;
+  const match = /^v1\.([A-Za-z0-9_-]+)\.[a-f0-9]{64}$/u.exec(key);
+  if (!match) return;
+  const source = Buffer.from(match[1]!, "base64url").toString("utf8");
+  if (
+    Buffer.from(source).toString("base64url") !== match[1] ||
+    source.includes("\0") ||
+    source.includes("\\") ||
+    path.posix.isAbsolute(source) ||
+    path.win32.isAbsolute(source)
+  )
+    return;
+  return source;
 }
 
 function catalogDigest(config: LoadedPalamedesConfig): string {
@@ -628,10 +800,17 @@ export function createPalamedesRemixAssetLoader(
 ): ModuleLoader {
   assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
   const transformOptions = resolveMacroTransformOptions(options);
+  if (options.catalogAssets) {
+    registrySourceFilters.get(options.catalogAssets)?.push(transformOptions.sourceFilter);
+  }
 
   return (url, context, nextLoad) => {
+    const transformable = shouldTransformUrl(url, transformOptions);
+    // Distinguish an edit during compilation from a loader that changes IDs.
+    const stampBeforeLoad =
+      transformable && options.catalogAssets ? sourceStamp(fileURLToPath(url)) : undefined;
     const loaded = nextLoad(url, context);
-    if (!shouldTransformUrl(url, transformOptions) || loaded.source == null) {
+    if (!transformable || loaded.source == null) {
       return loaded;
     }
 
@@ -646,7 +825,19 @@ export function createPalamedesRemixAssetLoader(
     if (!macroResult.hasChanged || macroResult.compiledIds.length === 0) {
       return transformed;
     }
-    const key = options.catalogAssets.register(fileURLToPath(url), macroResult.compiledIds);
+    const sourcePath = fileURLToPath(url);
+    let key: string;
+    try {
+      key = options.catalogAssets.register(sourcePath, macroResult.compiledIds);
+    } catch (error) {
+      if (sourceStamp(sourcePath) !== stampBeforeLoad) {
+        throw new Error(
+          `Palamedes source module "${sourcePath}" changed while the Remix asset server compiled it. Request the module again.`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     const sidecar = options.catalogAssets.sidecarUrl(key);
     const sidecarImport = `${sidecar}?fragment=1&locale=`;
     const catalogPrelude =
