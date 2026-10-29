@@ -140,6 +140,13 @@ describe("workflow contracts", () => {
     expect(compare).toContain("run: [1, 2, 3]");
     expect(compare).toContain("if: always()");
     expect(compare).toContain("persist-credentials: false");
+    expect(workflow).toContain("actions: read");
+    expect(compare).toContain("runner-class.mjs validate");
+    expect(compare.indexOf("runner-class.mjs validate")).toBeLessThan(
+      compare.indexOf("Read workspace Rust version"),
+    );
+    expect(compare).toContain("runner-class.mjs wait");
+    expect(compare).toContain("GH_TOKEN: ${{ github.token }}");
     const merge = job(workflow, "merge", "missing");
     expect(merge).toContain("!cancelled()");
     expect(merge).toContain(
