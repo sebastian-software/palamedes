@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ObjectExpression, ObjectProperty, ObjectPropertyKind,
 };
@@ -17,7 +15,7 @@ use crate::jsx_message::{JsxMessagePart, join_jsx_message_parts};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_macros::MacroImports;
-use crate::source_message::{lower_template, make_unique_value_name};
+use crate::source_message::{ValueNames, bare_identifier, lower_template, make_unique_value_name};
 
 use super::imports::{ImportCollector, RemixJsxBinding};
 use super::messages::{ExtractedChoiceOptions, ValueBinding};
@@ -92,7 +90,7 @@ pub(super) fn choice_from_call(
             "the lowered choice macro requires a static `value` property",
         )
     })?;
-    let mut used_value_names = HashMap::new();
+    let mut used_value_names = ValueNames::default();
     let value_binding = expression_binding(
         value,
         source,
@@ -285,7 +283,7 @@ fn static_string_property(
 #[derive(Default)]
 struct LoweringState {
     next_component_index: usize,
-    used_value_names: HashMap<String, String>,
+    used_value_names: ValueNames,
 }
 
 #[derive(Default)]
@@ -555,15 +553,19 @@ fn is_static_element_type(expression: &Expression<'_>) -> bool {
 fn expression_binding(
     expression: &Expression<'_>,
     source: &str,
-    used_value_names: &mut HashMap<String, String>,
+    used_value_names: &mut ValueNames,
     syntax: &'static str,
     fallback_name: Option<&str>,
 ) -> PalamedesResult<ValueBinding> {
     let preferred_name = expression_name(expression)
         .or_else(|| fallback_name.map(str::to_string))
         .ok_or(PalamedesError::UnnamedPlaceholder { syntax })?;
+    let name = make_unique_value_name(
+        preferred_name,
+        bare_identifier(expression),
+        used_value_names,
+    );
     let expression = expression_source(expression, source);
-    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
     Ok(ValueBinding { expression, name })
 }
 
@@ -579,8 +581,10 @@ fn span_source(span: oxc_span::Span, source: &str) -> String {
         .to_string()
 }
 
+/// A repeated name always reads the same identifier, so the first spelling
+/// supplies the value.
 fn push_unique(values: &mut Vec<ValueBinding>, value: ValueBinding) {
-    if !values.iter().any(|existing| existing == &value) {
+    if !values.iter().any(|existing| existing.name == value.name) {
         values.push(value);
     }
 }
