@@ -192,7 +192,11 @@ from its own source files, so equivalent deployments can use different absolute
 checkout paths. Workers need the same source tree, catalogs, and configuration;
 no earlier document or asset request is required on that worker. Configured
 catalog includes and excludes also apply to reconstruction, including explicit
-sibling workspace includes. Requests never supply message IDs or executable source.
+sibling workspace includes, together with the `include` and `exclude` options of
+asset loaders that use the registry. A source identity must use the exact
+on-disk spelling, so case-variant and symlink aliases are rejected. Modules
+without messages never receive fragment URLs and answer 404. Requests never
+supply message IDs or executable source.
 
 Keep authored source files available with the Remix asset server. Custom loaders
 must preserve the authored message IDs: adding or removing messages during

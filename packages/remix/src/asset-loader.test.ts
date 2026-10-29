@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,13 +17,30 @@ import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isCompiledCatalog } from "@palamedes/core/compiled";
+import { compileCatalogArtifactSelected } from "@palamedes/core-node";
 import { transformPalamedesMacros } from "@palamedes/transform";
+import type * as CoreNodeModule from "@palamedes/core-node";
+import type * as TransformModule from "@palamedes/transform";
 
 import {
   createPalamedesRemixAssetLoader,
   createPalamedesRemixCatalogAssetRegistry,
   PALAMEDES_REMIX_ASSET_PACKAGES,
 } from "./index";
+
+// Count native work so cold-lookup tests can assert that rejected identities
+// never transform sources or compile fragments.
+vi.mock("@palamedes/transform", async (importOriginal) => {
+  const actual = await importOriginal<typeof TransformModule>();
+  return { ...actual, transformPalamedesMacros: vi.fn(actual.transformPalamedesMacros) };
+});
+vi.mock("@palamedes/core-node", async (importOriginal) => {
+  const actual = await importOriginal<typeof CoreNodeModule>();
+  return {
+    ...actual,
+    compileCatalogArtifactSelected: vi.fn(actual.compileCatalogArtifactSelected),
+  };
+});
 
 const assetLoadContext = {
   conditions: ["browser", "import", "module", "default"],
@@ -600,6 +618,182 @@ describe("createPalamedesRemixAssetLoader", () => {
       "preserve the authored message IDs",
     );
     expect(registry.serve(request(key))?.status).toBe(200);
+    registry.close?.();
+  });
+
+  it("rejects case-variant identities without transforming or caching them", () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
+    const warm = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const key = warm.register(fixture.modulePath, ids);
+    const digest = key.split(".").at(-1)!;
+    const cold = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const transform = vi.mocked(transformPalamedesMacros);
+    const compile = vi.mocked(compileCatalogArtifactSelected);
+    transform.mockClear();
+    compile.mockClear();
+    const canonical = "app/public/message.ts";
+    for (let variant = 1; variant < 64; variant += 1) {
+      const spelling = [...canonical]
+        .map((character, index) =>
+          (variant >> (index % 6)) & 1 ? character.toUpperCase() : character,
+        )
+        .join("");
+      for (const candidateDigest of [digest, "0".repeat(64)]) {
+        const candidate = `v1.${Buffer.from(spelling).toString("base64url")}.${candidateDigest}`;
+        for (const registry of [warm, cold])
+          expect(
+            registry.serve(
+              new Request(
+                `https://example.test${registry.sidecarUrl(candidate)}?fragment=1&locale=de`,
+              ),
+            )?.status,
+          ).toBe(404);
+      }
+    }
+    expect(transform).not.toHaveBeenCalled();
+    expect(compile).not.toHaveBeenCalled();
+
+    // Forged digests for the canonical identity cost one transform per file.
+    const forged = `v1.${Buffer.from(canonical).toString("base64url")}.${"0".repeat(64)}`;
+    for (let index = 0; index < 50; index += 1)
+      expect(
+        cold.serve(
+          new Request(`https://example.test${cold.sidecarUrl(forged)}?fragment=1&locale=de`),
+        )?.status,
+      ).toBe(404);
+    expect(transform).toHaveBeenCalledTimes(1);
+    expect(compile).not.toHaveBeenCalled();
+    const fragment = new Request(
+      `https://example.test${cold.sidecarUrl(key)}?fragment=1&locale=de`,
+    );
+    expect(cold.serve(fragment)?.status).toBe(200);
+    expect(cold.serve(fragment)?.status).toBe(200);
+    expect(transform).toHaveBeenCalledTimes(1);
+    expect(compile).toHaveBeenCalledTimes(1);
+    warm.close?.();
+    cold.close?.();
+  });
+
+  it("answers macro-free and untransformable sources like missing files", () => {
+    const fixture = createAssetFixture("plain.ts", "export const plain = 1;");
+    writeFragmentCatalogFixture(fixture.rootDir);
+    writeFileSync(path.join(fixture.rootDir, "app", "public", "broken.ts"), "export const = ;");
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const emptyDigest = createHash("sha256").update("[]").digest("hex");
+    const transform = vi.mocked(transformPalamedesMacros);
+    transform.mockClear();
+    for (const sourcePath of [
+      "app/public/plain.ts",
+      "app/public/broken.ts",
+      "app/public/missing.ts",
+    ]) {
+      const candidate = `v1.${Buffer.from(sourcePath).toString("base64url")}.${emptyDigest}`;
+      for (const suffix of ["", "?fragment=1&locale=de"])
+        for (let index = 0; index < 3; index += 1)
+          expect(
+            registry.serve(
+              new Request(`https://example.test${registry.sidecarUrl(candidate)}${suffix}`),
+            )?.status,
+          ).toBe(404);
+    }
+    expect(transform).toHaveBeenCalledTimes(2);
+    const directKey = registry.register(fixture.modulePath, []);
+    expect(
+      registry.serve(new Request(`https://example.test${registry.sidecarUrl(directKey)}`))?.status,
+    ).toBe(404);
+    registry.close?.();
+  });
+
+  it("reconstructs only modules that the bound asset loader transforms", () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    const privatePath = path.join(fixture.rootDir, "app", "routes", "admin.server.ts");
+    mkdirSync(path.dirname(privatePath), { recursive: true });
+    writeFileSync(privatePath, source);
+    const ids = transformPalamedesMacros(source, privatePath).compiledIds;
+    const unbound = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const privateKey = unbound.register(privatePath, ids);
+    const publicKey = unbound.register(fixture.modulePath, ids);
+    const cold = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    createPalamedesRemixAssetLoader({
+      catalogAssets: cold,
+      projectRoot: fixture.rootDir,
+      include: ["app/public/**"],
+    });
+    const request = (key: string) =>
+      new Request(`https://example.test${cold.sidecarUrl(key)}?fragment=1&locale=de`);
+    expect(cold.serve(request(privateKey))?.status).toBe(404);
+    expect(cold.serve(request(publicKey))?.status).toBe(200);
+    expect(() => cold.register(privatePath, ids)).toThrow("not included in a configured catalog");
+    unbound.close?.();
+    cold.close?.();
+  });
+
+  it("reuses authored-source verification until the source changes", () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
+    const transform = vi.mocked(transformPalamedesMacros);
+    transform.mockClear();
+    const key = registry.register(fixture.modulePath, ids);
+    for (let index = 0; index < 5; index += 1)
+      expect(registry.register(fixture.modulePath, ids)).toBe(key);
+    expect(transform).toHaveBeenCalledTimes(1);
+    const changed = source.replace("Greeting", "Hello");
+    writeFileSync(fixture.modulePath, changed);
+    const changedIds = transformPalamedesMacros(changed, fixture.modulePath).compiledIds;
+    transform.mockClear();
+    expect(registry.register(fixture.modulePath, changedIds)).not.toBe(key);
+    expect(transform).toHaveBeenCalledTimes(1);
+    registry.close?.();
+  });
+
+  it("reports a source edit during compilation instead of an ID-changing loader", () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const loader = createPalamedesRemixAssetLoader({
+      catalogAssets: registry,
+      projectRoot: fixture.rootDir,
+    });
+    expect(() =>
+      loader(pathToFileURL(fixture.modulePath).href, assetLoadContext, () => {
+        writeFileSync(fixture.modulePath, source.replace("Greeting", "Edited later"));
+        return { format: "module", source };
+      }),
+    ).toThrow("changed while the Remix asset server compiled it");
     registry.close?.();
   });
 

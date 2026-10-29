@@ -141,10 +141,10 @@ Fragment requests also work on cold or restarted workers. The registry resolves
 a configuration-relative source identity and verifies its compiled message
 selection locally; equivalent deployments can use different checkout paths.
 Deploy the same authored source files, catalogs, and configuration to each
-worker. Catalog include/exclude rules still apply, and only the requested
-locale's selected messages are delivered. Custom loaders must preserve authored
-message IDs; adding or removing messages after source compilation produces a
-registration error. No request supplies executable source or a message-ID list.
+worker. Catalog include/exclude rules and the asset loader's `include`/`exclude`
+options still apply, and only the requested locale's selected messages are
+delivered. Custom loaders must preserve authored message IDs; adding or removing
+messages after source compilation produces a registration error. No request supplies executable source or a message-ID list.
 
 Pass the same `catalogAssets` to `createRemixI18nServer`, render
 `renderClientCatalog(locale)` into the document head, and send matching
