@@ -149,7 +149,8 @@ the same `string | (request, context) => string | undefined` shape.
 ## Root route
 
 Register the middleware on the root route, and give the document its locale
-with `useDocumentLocale()` (`examples/react-router-cookie/app/root.tsx`):
+with `useDocumentLocale()` (adapted from
+`examples/react-router-cookie/app/root.tsx`):
 
 ```tsx
 import { useDocumentLocale } from "@palamedes/react-router/document";
@@ -158,10 +159,8 @@ import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import type { Route } from "./+types/root";
 import { DEFAULT_LOCALE } from "~/lib/i18n";
 import { i18n } from "~/lib/i18n.server";
-import { serverI18nTestBarrier } from "~/lib/test-barrier.server";
-import "@palamedes/example-ui/styles.css";
 
-export const middleware: Route.MiddlewareFunction[] = [i18n.middleware, serverI18nTestBarrier];
+export const middleware: Route.MiddlewareFunction[] = [i18n.middleware];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const locale = useDocumentLocale() ?? DEFAULT_LOCALE;
@@ -184,9 +183,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 ```
 
-`serverI18nTestBarrier` exists for the repository's concurrency checks. It does
-nothing unless `PALAMEDES_I18N_TEST_BARRIER=1` is set and the request carries
-the test header; an application registers only `i18n.middleware`.
+The checked example also registers `serverI18nTestBarrier` from the Internal
+`@palamedes/runtime/server/test` subpath. It is test-only: it exists for the
+repository's concurrency checks and does nothing unless
+`PALAMEDES_I18N_TEST_BARRIER=1` is set and the request carries the test header.
+An application registers only `i18n.middleware`.
 
 React Router 8 always enables route middleware, and the root route matches
 every request. `i18n.middleware` resolves the locale, loads the catalog, and

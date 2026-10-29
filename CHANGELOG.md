@@ -8,11 +8,22 @@
   When a note here is no longer worth carrying, delete it.
 -->
 
-## Behavior Notes (1.x)
+## Palamedes 2.0
+
+Palamedes 2.0 is a major release. The [v2 release notes](./docs/release-notes-v2.md)
+explain what changed, and the [v2 migration guide](./docs/migration-v2.md) is the
+complete list of breaking changes and replacements for upgrading from 1.x. The
+2.0.0 version section below lists the individual commits.
+
+## Historical Behavior Notes (1.x, superseded by 2.0)
 
 Changes across the 1.x line that need more context than a release entry gives.
-All of them have shipped; the version sections below record the release each one
-landed in.
+All of them shipped in 1.x; the version sections below record the release each
+one landed in. Palamedes 2.0 supersedes several of them: it removes
+`keepSourceFallbacks`, `stripMessageField`, the runtime `Plural`/`Select`/
+`SelectOrdinal` components, the `messageSplitting` opt-in, and lazy parsing of
+string catalogs, and it requires `solid-js@^2.0.0-rc.16`. Read them as 1.x
+history and use the migration guide for 2.0 behavior.
 
 ### Compatibility Notes
 

@@ -5,11 +5,6 @@ CLI usage reporting. It is off until you opt in. Previous update-check analytics
 are not consent. The npm launcher, framework/build plugins, Rust/Node APIs, and
 application runtimes do not report automatically.
 
-The service's production activation is tracked in
-[app-tracking #11](https://github.com/sebastian-software/app-tracking/issues/11).
-The consumer integration must pass its deployed-service checks before release;
-merging code alone does not establish production readiness.
-
 ## Choose and inspect
 
 ```sh

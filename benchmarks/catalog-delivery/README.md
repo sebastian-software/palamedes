@@ -5,6 +5,8 @@ compiled runtime and adapter-owned catalog delivery contract. The measurements
 describe the checked source revision and verification commands; they are not a
 production performance claim.
 
+This record predates the `@palamedes/react-router` adapter and stable Remix 3.
+
 ## Verification scope
 
 The regular browser matrix covers 22 host entries. It checks the healthy
@@ -130,6 +132,4 @@ guide](../../docs/migration-v2.md), [ADR-008](../../adr/008-framework-adapter-ar
 [ADR-004](../../adr/004-generated-catalogs-use-executable-message-functions.md),
 and [ADR-005](../../adr/005-generated-production-runtime-is-parser-free.md).
 
-These checks do not publish packages or enable release publication. The
-repository release hold remains active until the final evidence and release
-gates have been reviewed.
+These checks do not publish packages or enable release publication.
