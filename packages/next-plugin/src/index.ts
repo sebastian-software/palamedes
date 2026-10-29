@@ -481,7 +481,6 @@ export function withPalamedes(
     serverFunctions: serverFunctionOptions,
   } = options;
 
-  const messageSplitting = true;
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Source metadata is optional diagnostics; compiled catalogs supply all message output.
   const includeSourceMetadata = explicitIncludeSourceMetadata ?? false;
@@ -554,42 +553,34 @@ export function withPalamedes(
         : MACRO_CONTENT_PATTERN,
     },
   ];
-  if (serverFunctions || messageSplitting) {
-    // Turbopack's built-in browser condition lets one unified graph produce a
-    // plain client transform and a server transform with lazy message
-    // sidecars. Keeping the rules disjoint prevents server-only catalog
-    // loaders from entering browser chunks.
-    appendTurbopackRule(rules, "*", {
-      condition: { all: [...transformConditions, "browser"] },
-      loaders: [
-        {
-          loader: oxcLoaderPath,
-          options: {
-            ...transformLoaderOptions,
-            ...(messageSplitting
-              ? { clientMessageSplitting: true, clientFragmentFailureMode }
-              : {}),
-          },
+  // Turbopack's built-in browser condition lets one unified graph produce a
+  // plain client transform and a server transform with lazy message
+  // sidecars. Keeping the rules disjoint prevents server-only catalog
+  // loaders from entering browser chunks.
+  appendTurbopackRule(rules, "*", {
+    condition: { all: [...transformConditions, "browser"] },
+    loaders: [
+      {
+        loader: oxcLoaderPath,
+        options: {
+          ...transformLoaderOptions,
+          clientMessageSplitting: true,
+          clientFragmentFailureMode,
         },
-      ],
-    });
-    appendTurbopackRule(rules, "*", {
-      condition: { all: [...transformConditions, { not: "browser" }] },
-      loaders: [
-        {
-          loader: oxcLoaderPath,
-          options: {
-            ...transformLoaderOptions,
-          },
+      },
+    ],
+  });
+  appendTurbopackRule(rules, "*", {
+    condition: { all: [...transformConditions, { not: "browser" }] },
+    loaders: [
+      {
+        loader: oxcLoaderPath,
+        options: {
+          ...transformLoaderOptions,
         },
-      ],
-    });
-  } else {
-    appendTurbopackRule(rules, "*", {
-      condition: { all: transformConditions },
-      loaders: [{ loader: oxcLoaderPath, options: transformLoaderOptions }],
-    });
-  }
+      },
+    ],
+  });
 
   appendTurbopackRule(rules, "catalog-fragment.cjs", {
     condition: { path: /[/\\]next-plugin[/\\]catalog-fragment\.cjs$/u },
@@ -682,7 +673,7 @@ export function withPalamedes(
         projectRoot: webpackProjectRoot,
       });
 
-      if (messageSplitting && !context.isServer) {
+      if (!context.isServer) {
         config.experiments ??= {};
         config.experiments.topLevelAwait = true;
         config.output ??= {};
@@ -733,7 +724,7 @@ export function withPalamedes(
             loader: oxcLoaderPath,
             options: {
               ...webpackTransformLoaderOptions,
-              ...(messageSplitting && !context.isServer
+              ...(!context.isServer
                 ? { clientMessageSplitting: true, clientFragmentFailureMode }
                 : {}),
             },
