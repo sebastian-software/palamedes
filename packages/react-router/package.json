@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/react-router",
-  "version": "1.25.1",
+  "version": "2.0.0",
   "description": "React Router Framework Mode request-scoped i18n middleware and server entry for Palamedes",
   "keywords": [
     "i18n",
