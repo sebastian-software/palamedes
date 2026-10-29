@@ -18,6 +18,13 @@ it.each([true, false])(
     const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-conflicts-"));
     roots.push(root);
     mkdirSync(path.join(root, "app"));
+    // Registration verifies the selection against the authored source on disk.
+    for (const page of ["page", "other"]) {
+      writeFileSync(
+        path.join(root, "app", `${page}.ts`),
+        'import { t } from "@palamedes/core/macro";\nexport const greeting = () => t`Hello`;\n',
+      );
+    }
     const po = (locale: string, value: string) =>
       `msgid ""\nmsgstr ""\n"Language: ${locale}\\n"\n"Content-Type: text/plain; charset=UTF-8\\n"\n\nmsgid "Hello"\nmsgstr "${value}"\n`;
     for (const catalog of ["first", "last"]) {
