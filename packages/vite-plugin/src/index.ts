@@ -80,7 +80,7 @@ function bareMessageAsset(rendered: string, locale: string): string {
     !rendered.trimEnd().endsWith(RENDERED_CATALOG_DEFAULT_EXPORT)
   ) {
     throw new Error(
-      "Palamedes graph splitting: the native catalog module shape changed; cannot derive a bare message asset.",
+      "Palamedes catalog delivery: the native catalog module shape changed; cannot derive a bare message asset.",
     );
   }
   const body = rendered
@@ -226,17 +226,17 @@ function canonicalRelativePath(rootDir: string, sourceId: string): string {
       path.win32.parse(canonicalSourceId).root.toLowerCase()
   ) {
     throw new Error(
-      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`,
+      `Palamedes catalog delivery cannot derive a reproducible message module key for ${sourceId}: it is on a different filesystem volume than the Palamedes config directory ${rootDir}. Keep translated source files on the same volume as the Palamedes config file.`,
     );
   }
   const relativePath = pathImplementation.relative(canonicalRootDir, canonicalSourceId);
 
   // There is no checkout-independent relative identity across filesystem
-  // volumes, so refusing graph splitting is safer than baking a machine path
+  // volumes, so refusing catalog delivery is safer than baking a machine path
   // into sidecar keys and emitted chunk content.
   if (pathImplementation.isAbsolute(relativePath)) {
     throw new Error(
-      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`,
+      `Palamedes catalog delivery cannot derive a reproducible message module key for ${sourceId}: it is on a different filesystem volume than the Palamedes config directory ${rootDir}. Keep translated source files on the same volume as the Palamedes config file.`,
     );
   }
 
@@ -405,7 +405,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const mdxModuleIds = new Set<string>();
 
   /*
-   * Message sidecar registry for experimental graph splitting, keyed by a
+   * Message sidecar registry for automatic catalog delivery, keyed by a
    * short hash of the canonical source path relative to the Palamedes root.
    * Entries are written when a module is transformed and read when the bundler
    * loads the sidecar it imports, so population always precedes the read
@@ -776,8 +776,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
     // Config invalidation belongs on the transform plugin because it is the
     // only Palamedes plugin present for every supported configuration. In
-    // particular, graph splitting can intentionally disable both MDX and the
-    // eager PO loader while its sidecars still read this shared config.
+    // particular, MDX and the eager PO loader can both be disabled while the
+    // catalog-delivery message sidecars still read this shared config.
     buildStart() {
       resetConfig();
     },
@@ -1001,7 +1001,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     });
   }
 
-  // Plugin 4b: message sidecar modules for experimental graph splitting.
+  // Plugin 4b: message sidecar modules for automatic catalog delivery.
   // Per message-bearing source file, one per-locale module rendered by the
   // native catalog-module renderer (ADR-004: the single generator, so split
   // artifacts stay on the branded parser-free compiled ABI) plus one

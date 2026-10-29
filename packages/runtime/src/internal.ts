@@ -30,8 +30,8 @@ import {
 export type { RegisteredMessageLoader, RegisteredMessages };
 
 /**
- * Register compiled messages at module-evaluation time. Generated message
- * sidecar modules (experimental graph splitting) call this so messages travel
+ * Register compiled messages at module-evaluation time. The message sidecar
+ * modules generated for automatic catalog delivery call this so messages travel
  * with the code chunks that use them: registration loads into the active
  * client instance immediately when one is installed, and buffers otherwise so
  * `setClientI18n` can flush before the first render.
@@ -205,7 +205,8 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
 }
 
 /**
- * Create the shared parser-free client instance used by graph-split modules.
+ * Create the shared parser-free client instance used by generated catalog
+ * delivery modules.
  * Multiple modules can bootstrap concurrently; the first one installs the
  * instance and every later module reuses it before loading its own fragment.
  */
