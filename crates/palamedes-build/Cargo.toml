@@ -1,6 +1,6 @@
 [package]
 name = "palamedes-build"
-version = "1.25.1"
+version = "2.0.0"
 authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
@@ -24,7 +24,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-palamedes = { version = "1.25.1", path = "../.." }
+palamedes = { version = "2.0.0", path = "../.." }
 # Exact `=` pin inherited from the workspace: generated code constructs hidden
 # palamedes-i18n items, so both crates must come from the same release.
 palamedes-i18n = { workspace = true }
