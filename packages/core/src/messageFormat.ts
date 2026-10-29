@@ -47,8 +47,9 @@ export type MessageNode =
 
 const parseCache = new Map<string, MessageNode[]>();
 
-// Keep this marker stable: the browser bundle check uses it to prove both that
-// the compatibility entry still contains the parser and compiled apps do not.
+// Keep this marker stable: scripts/check-runtime-browser-bundle.mjs reads this
+// test-only parser source as its positive control and then proves that no
+// public browser runtime bundle contains the marker.
 const PARSER_BUNDLE_SENTINEL = "[palamedes:icu-parser]";
 
 // Parsed patterns are keyed by the full message text, so the working set is the

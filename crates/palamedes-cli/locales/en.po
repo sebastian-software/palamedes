@@ -156,6 +156,9 @@ msgstr "Worker threads for the parallel extraction pass. Overrides `extract-thre
 msgid "Worker threads for the parallel source-analysis pass."
 msgstr "Worker threads for the parallel source-analysis pass."
 
+msgid "Source files to check instead of configured catalog sources."
+msgstr "Source files to check instead of configured catalog sources."
+
 msgid "Palamedes CLI for extraction, source lint, audits, reports, and catalogs"
 msgstr "Palamedes CLI for extraction, source lint, audits, reports, and catalogs"
 
@@ -393,8 +396,8 @@ msgstr "Could not infer catalog merge format from logical --path `{path}` or mer
 msgid "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
 msgstr "Catalog {catalog} matched no source files (include: {include}); catalogs were not updated. Fix the include patterns or omit --fail-on-empty-catalog to keep warning-only behavior."
 
-msgid "Compile external language catalogs against an existing Rust application schema."
-msgstr "Compile external language catalogs against an existing Rust application schema."
+msgid "Compile catalogs ahead of time into JavaScript modules or Rust language files."
+msgstr "Compile catalogs ahead of time into JavaScript modules or Rust language files."
 
 msgid "Compiled catalog target."
 msgstr "Compiled catalog target."
@@ -473,6 +476,21 @@ msgstr "Delete the previous identity before a separate new consent decision."
 
 msgid "Forget local authority without confirming remote deletion."
 msgstr "Forget local authority without confirming remote deletion."
+
+msgid "Unified reporting with system context; requires a new explicit grant."
+msgstr "Unified reporting with system context; requires a new explicit grant."
+
+msgid "Separate permission for 24-month monthly summaries."
+msgstr "Separate permission for 24-month monthly summaries."
+
+msgid "Separate permission to contribute to public monthly totals."
+msgstr "Separate permission to contribute to public monthly totals."
+
+msgid "Separate permission for future cross-tool profile links."
+msgstr "Separate permission for future cross-tool profile links."
+
+msgid "Affirm consent to the displayed telemetry-v1 notice."
+msgstr "Affirm consent to the displayed telemetry-v1 notice."
 
 msgid "Usage reporting operation failed: {message}"
 msgstr "Usage reporting operation failed: {message}"

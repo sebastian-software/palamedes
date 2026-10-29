@@ -42,18 +42,21 @@ pub struct Options {
 
 #[derive(Debug, Subcommand)]
 enum Operation {
-    /// Unified reporting with system context; requires a new explicit grant.
+    #[command(about = tr!("Unified reporting with system context; requires a new explicit grant."))]
     Usage(crate::usage_settings::UsageOptions),
-    /// Separate permission for 24-month monthly summaries.
+    #[command(about = tr!("Separate permission for 24-month monthly summaries."))]
     History(crate::usage_settings::AdditionalOptions),
-    /// Separate permission to contribute to public monthly totals.
+    #[command(about = tr!("Separate permission to contribute to public monthly totals."))]
     Publication(crate::usage_settings::PublicationOptions),
-    /// Separate permission for future cross-tool profile links.
+    #[command(about = tr!("Separate permission for future cross-tool profile links."))]
     Profile(crate::usage_settings::ProfileOptions),
     #[command(about = tr!("Read the usage reporting notice and optionally enable it."))]
     Enable {
-        /// Affirm consent to the displayed telemetry-v1 notice.
-        #[arg(long, value_parser = [CONSENT_REVISION])]
+        #[arg(
+            long,
+            value_parser = [CONSENT_REVISION],
+            help = tr!("Affirm consent to the displayed telemetry-v1 notice.")
+        )]
         accept: Option<String>,
     },
     #[command(about = tr!("Inspect the effective usage reporting policy without sending data."))]

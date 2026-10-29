@@ -151,13 +151,13 @@ export function createRegisteredMessageLoaderState(
 
 /**
  * Plain JavaScript callers can still pass an instance without `load()`.
- * Generated graph-split messages cannot reach such an instance, so fail before
+ * Generated catalog messages cannot reach such an instance, so fail before
  * a later render reports a confusing missing message.
  */
 export function assertCanLoadMessages(i18n: I18nInstance, role: string): void {
   if (typeof i18n.load !== "function") {
     throw new TypeError(
-      `The ${role} i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages).`,
+      `The ${role} i18n instance cannot load generated catalog messages. Provide an instance with load(locale, messages).`,
     );
   }
 }

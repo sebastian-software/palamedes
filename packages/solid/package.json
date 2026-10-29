@@ -77,7 +77,7 @@
     "stub": "unbuild --stub"
   },
   "dependencies": {
-    "@palamedes/core": "workspace:^",
+    "@palamedes/core": "workspace:*",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^"
   },

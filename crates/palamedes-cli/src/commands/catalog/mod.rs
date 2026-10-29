@@ -23,6 +23,6 @@ pub enum CatalogSubcommand {
     MergeDriver(MergeDriverOptions),
     #[command(about = tr!("Convert configured PO catalogs to another Palamedes storage format."))]
     Convert(ConvertOptions),
-    #[command(about = tr!("Compile external language catalogs against an existing Rust application schema."))]
+    #[command(about = tr!("Compile catalogs ahead of time into JavaScript modules or Rust language files."))]
     Compile(compile::CompileOptions),
 }

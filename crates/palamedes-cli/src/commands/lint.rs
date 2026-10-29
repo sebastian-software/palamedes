@@ -20,8 +20,8 @@ const LINT_JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 pub struct LintOptions {
-    /// Explicit files bypass catalog discovery; paths are relative to the invocation directory.
-    #[arg(help = "Source files to check instead of configured catalog sources.")]
+    // Explicit files bypass catalog discovery; paths are relative to the invocation directory.
+    #[arg(help = tr!("Source files to check instead of configured catalog sources."))]
     #[arg(value_name = "FILE")]
     files: Vec<PathBuf>,
     #[arg(help = tr!("Path to a Palamedes config file."))]

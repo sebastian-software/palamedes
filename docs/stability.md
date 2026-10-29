@@ -58,7 +58,9 @@ release.
 - **Preview**: usable, but still allowed to change as real adoption clarifies
   the API shape.
 - **Internal**: implementation detail. Apps should not import or depend on it
-  directly.
+  directly. The `@palamedes/core/internal` and `@palamedes/runtime/internal`
+  subpaths are Internal, so Palamedes packages that import them, or generate
+  code that imports them, pin that sibling package to the exact same version.
 - **Reserved**: package name or surface intentionally held for future work, with
   no supported adoption path yet.
 

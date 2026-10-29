@@ -1650,7 +1650,7 @@ importers:
         specifier: workspace:^
         version: link:../core-node
       '@palamedes/runtime':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../runtime
       '@palamedes/transform':
         specifier: workspace:^
@@ -1674,7 +1674,7 @@ importers:
   packages/react:
     dependencies:
       '@palamedes/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@palamedes/runtime':
         specifier: workspace:^
@@ -1757,13 +1757,13 @@ importers:
         specifier: workspace:^
         version: link:../config
       '@palamedes/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../core-node
       '@palamedes/runtime':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../runtime
       '@palamedes/transform':
         specifier: workspace:^
@@ -1831,7 +1831,7 @@ importers:
   packages/solid:
     dependencies:
       '@palamedes/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
       '@palamedes/runtime':
         specifier: workspace:^
@@ -1930,7 +1930,7 @@ importers:
         specifier: workspace:^
         version: link:../core-node
       '@palamedes/runtime':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../runtime
       '@palamedes/transform':
         specifier: workspace:^

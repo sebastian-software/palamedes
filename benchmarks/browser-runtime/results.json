@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-10-29T00:57:59.695Z",
-  "sourceCommit": "37ae8678c130bd0756fd6e5a255f529c74f6a735",
+  "measuredAt": "2026-10-29T07:52:38.979Z",
+  "sourceCommit": "8ee6c8ee3f3fbdd1cc941d952343f7bf004bc774",
   "worktreeDirty": false,
-  "sourceSha256": "badc8a49ad22b78600697046c3d70073589f6a7294ab35cba32119913045cde8",
+  "sourceSha256": "c1fe1fdf2ea593dab35b85c77d9849ce3b1e014d5db44e529412d83206b6bbd5",
   "environment": {
     "node": "v24.22.1",
     "vite": "8.2.4",
@@ -25,11 +25,11 @@
     {
       "id": "core",
       "bytes": {
-        "raw": 12927,
-        "gzip": 4415,
-        "brotli": 3910
+        "raw": 12923,
+        "gzip": 4411,
+        "brotli": 3905
       },
-      "sha256": "67937396d2477e0ba0b4af94bd753a31aeceb8527d61cfe4b47dbcb410712f13",
+      "sha256": "b6f1d2fb86e6a319c4c211550aadfcd7633ba1ee7f323219e89b8495a32f4fdd",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -69,26 +69,26 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         }
       ]
     },
     {
       "id": "react",
       "bytes": {
-        "raw": 15215,
-        "gzip": 5178,
-        "brotli": 4604
+        "raw": 15211,
+        "gzip": 5171,
+        "brotli": 4614
       },
-      "sha256": "62b5ebdbbf60dc10371e3d289e46f9cd107c83a8f599d309296738b984577dc8",
+      "sha256": "7bb5e2f20e7681096af9d75816c60628e45b3a09118816d7578c75021480d369",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -143,26 +143,26 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         }
       ]
     },
     {
       "id": "solid",
       "bytes": {
-        "raw": 14527,
-        "gzip": 4892,
-        "brotli": 4334
+        "raw": 14523,
+        "gzip": 4885,
+        "brotli": 4338
       },
-      "sha256": "aacb3c6b05e987cb82516e7adc6b56d52b0a5a211ca1882c4373ecc057b84154",
+      "sha256": "3742ca0107e54e6d73d853995737902a6eb4c34e9bc296ca5304cf6472b011b5",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -208,15 +208,15 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         },
         {
           "path": "packages/solid/dist/compiled.mjs",
@@ -227,11 +227,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 14907,
-        "gzip": 5017,
-        "brotli": 4467
+        "raw": 14903,
+        "gzip": 5012,
+        "brotli": 4462
       },
-      "sha256": "41908a7dc1e04c509e91237fe2a8ec3a90d208acf2d66c174b76007cd589f8f7",
+      "sha256": "556814d01eaf9058f983c7353749966dcc3be13a0de595d8d2aef75352647ddb",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -277,15 +277,15 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         }
       ]
     }
@@ -294,11 +294,11 @@
     {
       "id": "core",
       "bytes": {
-        "raw": 9841,
-        "gzip": 3536,
-        "brotli": 3145
+        "raw": 9837,
+        "gzip": 3531,
+        "brotli": 3132
       },
-      "sha256": "304e692f04305e5401b22df1d6fe8dde1914bd38d3f5c78d1fb603aabb14e678",
+      "sha256": "022dfcb3a9c45b3634fc6d6a4676b5ef5275fbd3885928e90e626fa1e60fd1b6",
       "exports": ["createI18n", "defineCompiledCatalog", "getI18n", "initializeClientI18n"],
       "imports": [],
       "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
@@ -317,26 +317,26 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         }
       ]
     },
     {
       "id": "react",
       "bytes": {
-        "raw": 11804,
-        "gzip": 4182,
-        "brotli": 3721
+        "raw": 11800,
+        "gzip": 4176,
+        "brotli": 3720
       },
-      "sha256": "2d9f523df29433223f1528c928a06c81e0d801d8f9cc7259949a4a3c02b52ed2",
+      "sha256": "c7c376f285cea2dceabb01024b5cdbaff0d896ab2d8696dfc7d473ac54d529c0",
       "exports": [
         "Trans",
         "createI18n",
@@ -369,26 +369,26 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         }
       ]
     },
     {
       "id": "solid",
       "bytes": {
-        "raw": 11148,
-        "gzip": 3906,
-        "brotli": 3466
+        "raw": 11144,
+        "gzip": 3902,
+        "brotli": 3462
       },
-      "sha256": "34808ac88e8017f954ac1293f00fed8f6739dd97384bcd2eaacd6836f5653c3a",
+      "sha256": "18e6adc6af7ee1b995ecd0a8aed593e5625615b0037b246014794a1ee125361b",
       "exports": [
         "Trans",
         "createI18n",
@@ -413,15 +413,15 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         },
         {
           "path": "packages/solid/dist/compiled.mjs",
@@ -432,11 +432,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 11781,
-        "gzip": 4128,
-        "brotli": 3677
+        "raw": 11777,
+        "gzip": 4124,
+        "brotli": 3670
       },
-      "sha256": "4d4060ef25dac3ba480df511a0180057cd6dc56f4eab398bd96c9b600a64a945",
+      "sha256": "0de2f5a70b4a3e8e55f7ec6adcaf2af20ce231a4d5d9a55d82ac6208d5499d4a",
       "exports": [
         "Trans",
         "createI18n",
@@ -465,15 +465,15 @@
         },
         {
           "path": "packages/runtime/dist/index.mjs",
-          "sha256": "b727dc8e80f573e098d24830edd1305922bebe358b19309be6324216189fcf72"
+          "sha256": "8ed6fe82576e110b043de4daec36a4c7ce85e51fbe71f0d07f683c6eef50d67f"
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "500d4553bf6cab221c3346ec0da229dae35ef4b35eb57ce35ad18e5722aeb870"
+          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
         },
         {
-          "path": "packages/runtime/dist/shared/runtime._OeDeZ26.mjs",
-          "sha256": "2fce33b948205157395f7317f902f8943d5b17dbba3b92084c3f0a33c2fc2d09"
+          "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
+          "sha256": "adc30af25ebb9ad4cdda8b9ba4fed60170796d5a3319f9948de5f57960456083"
         }
       ]
     }
@@ -507,11 +507,11 @@
     "locale": "en",
     "messages": 38,
     "bytes": {
-      "raw": 2406,
-      "gzip": 1297,
-      "brotli": 1131
+      "raw": 2362,
+      "gzip": 1265,
+      "brotli": 1095
     },
-    "sha256": "0f807d193d81f8bd9718f899fbd54a985cb0cf12026b98133087022cebbb96cb",
+    "sha256": "fbcfc4a0f8a41cd75af4e2bcd6dd5d3a6ee431a6aef9215b397aeaad4a2cfa93",
     "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
   }
 }
