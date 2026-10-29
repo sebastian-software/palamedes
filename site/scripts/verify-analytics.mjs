@@ -20,6 +20,7 @@ const browser = await chromium.launch({
   ...(executablePath ? { executablePath } : {}),
 });
 const origin = "https://palamedes.dev";
+const playerSelector = 'iframe[src^="https://player.mediadelivery.net/embed/"]';
 
 // A transport fixture; the installed SDK is also checked during activation.
 const sdkFixture = `
@@ -130,7 +131,7 @@ try {
   );
 
   await page.getByRole("link", { name: /Watch the film/ }).click();
-  const frame = page.frameLocator('iframe[title="Palamedes product film"]');
+  const frame = page.frameLocator(playerSelector);
   await frame.getByText("Player protocol fixture").waitFor();
   const player = page.frames().find((candidate) => candidate.url().includes("mediadelivery.net"));
   await player.waitForFunction(() => typeof window.emit === "function");
@@ -218,10 +219,7 @@ try {
     const fixture = await context(options);
     await fixture.page.getByRole("button", { name: "One seat more" }).click();
     await fixture.page.getByRole("link", { name: /Watch the film/ }).click();
-    await fixture.page
-      .frameLocator('iframe[title="Palamedes product film"]')
-      .getByText("Player protocol fixture")
-      .waitFor();
+    await fixture.page.frameLocator(playerSelector).getByText("Player protocol fixture").waitFor();
     assert.equal(fixture.requests(), options.blocked ? 1 : 0);
     await closeContext(fixture.instance);
   }
