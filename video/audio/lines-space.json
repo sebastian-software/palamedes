@@ -1,0 +1,9 @@
+{
+  "l1b-ask": "Ask your agent to translate the booking page.",
+  "l2c-pains": "It makes up a key for every string, copies them into every language file, and writes its own loaders and glue code to wire it all up. That's a lot of code for one page.",
+  "l3b-reveal": "Let it stand on broader shoulders. With Pala-meedeez, there are no keys. Your agent just writes the sentence.",
+  "l4c-wiring": "The wiring is already built, for React, View, Svelt, Solid, and the frameworks around them.",
+  "l5-check": "And when the agent gets something wrong, it hears about it right away, not from your users.",
+  "l6c-fast": "Fifteen hundred files take under a tenth of a second. Tools doing the same job need seconds.",
+  "l8-end": "Add the skill, and ask for translations. Pala-meedeez two point oh, at pala-meedeez dot dev."
+}

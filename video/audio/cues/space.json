@@ -1,0 +1,88 @@
+{
+  "composition": "PalamedesSpace",
+  "output": "palamedes-space",
+  "bpm": 120,
+  "total": 70,
+  "plan": [
+    "intro",
+    "intro",
+    "intro",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "break",
+    "break",
+    "break",
+    "break",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "drop",
+    "drop",
+    "drop",
+    "groove",
+    "groove",
+    "groove",
+    "end",
+    "tail",
+    "tail",
+    "tail"
+  ],
+  "cues": [
+    {
+      "take": "eleven-chris/l1b-ask",
+      "at": 1.0,
+      "text": "Ask your agent to translate the booking page."
+    },
+    {
+      "take": "eleven-chris/l2c-pains",
+      "at": 6.3,
+      "text": "It makes up a key for every string, copies them into every language file, and writes its own loaders and glue code to wire it all up. That's a lot of code for one page."
+    },
+    {
+      "take": "eleven-chris/l3b-reveal",
+      "at": 18.4,
+      "text": "Let it stand on broader shoulders. With Palamedes, there are no keys. Your agent just writes the sentence."
+    },
+    {
+      "take": "eleven-chris/l4c-wiring",
+      "at": 27.0,
+      "text": "The wiring is already built, for React, Vue, Svelte, Solid, and the frameworks around them."
+    },
+    {
+      "take": "eleven-chris/l5-check",
+      "at": 34.6,
+      "text": "And when the agent gets something wrong, it hears about it right away, not from your users."
+    },
+    {
+      "take": "eleven-chris/l6c-fast",
+      "at": 42.4,
+      "text": "1,500 files take under a tenth of a second. Tools doing the same job need seconds."
+    },
+    {
+      "take": "eleven-chris/l8-end",
+      "at": 50.6,
+      "trim": [0, 2.8],
+      "gain": 1.5,
+      "text": "Add the skill, and ask for translations."
+    },
+    {
+      "take": "eleven-chris/l8-end",
+      "at": 56.3,
+      "trim": [2.8, null],
+      "text": "Palamedes 2.0, at palamedes.dev."
+    }
+  ]
+}

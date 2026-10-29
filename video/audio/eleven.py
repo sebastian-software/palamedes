@@ -13,7 +13,15 @@ usage: eleven.py <work> <lines.json> [line ...] [--voice brian] [--seeds 7,11] [
 """
 import json, os, sys, urllib.error, urllib.request
 
-VOICES = {"brian": "nPczCjzI2devNBz1zQrb"}
+# Premade voices: Brian narrated v1–v7; the others are conversational
+# candidates for a calmer, peer-to-peer register.
+VOICES = {
+    "brian": "nPczCjzI2devNBz1zQrb",
+    "chris": "iP95p4xoKVk53GoZ742B",
+    "eric": "cjVigY5qzO86Huf0OWal",
+    "jessica": "cgSgspJ2msm6clMCkdW9",
+    "river": "SAz9YHcvj6GT2YYXdXww",
+}
 MODEL = "eleven_v4"
 
 work, lines_path, *rest = sys.argv[1:]

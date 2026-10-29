@@ -1,0 +1,88 @@
+{
+  "composition": "PalamedesLaunch",
+  "output": "palamedes-launch",
+  "bpm": 120,
+  "total": 70,
+  "plan": [
+    "intro",
+    "intro",
+    "intro",
+    "intro",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "break",
+    "break",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "groove",
+    "drop",
+    "drop",
+    "drop",
+    "drop",
+    "end",
+    "tail",
+    "tail",
+    "tail"
+  ],
+  "cues": [
+    {
+      "take": "eleven-chris/l1-ask",
+      "at": 1.0,
+      "text": "Ask your agent to translate one button."
+    },
+    {
+      "take": "eleven-chris/l2-pains",
+      "at": 8.3,
+      "text": "It invents a key, edits every language file, ships a plural it never tested, and writes loader glue your framework didn't need."
+    },
+    {
+      "take": "eleven-chris/l3-reveal",
+      "at": 20.4,
+      "text": "With Palamedes, your agent just writes the sentence."
+    },
+    {
+      "take": "eleven-chris/l5-check",
+      "at": 26.4,
+      "text": "And when the agent gets something wrong, it hears about it right away, not from your users."
+    },
+    {
+      "take": "eleven-chris/l6b-fast",
+      "at": 34.1,
+      "text": "1,500 files take under a tenth of a second. The next-fastest tool needs over two."
+    },
+    {
+      "take": "eleven-chris/l7b-glue",
+      "at": 42.4,
+      "text": "And there's no glue code to write. The wiring for React, Vue, Svelte, Solid and the frameworks around them is already built."
+    },
+    {
+      "take": "eleven-chris/l8-end",
+      "at": 54.6,
+      "trim": [0, 2.8],
+      "gain": 1.5,
+      "text": "Add the skill, and ask for translations."
+    },
+    {
+      "take": "eleven-chris/l8-end",
+      "at": 62.3,
+      "trim": [2.8, null],
+      "text": "Palamedes 2.0, at palamedes.dev."
+    }
+  ]
+}

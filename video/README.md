@@ -5,8 +5,10 @@ This standalone Remotion project contains the v7 product film for Palamedes
 `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee`; [YouTube](https://youtu.be/XBECHvmx2qQ)
 still carries v6 (2:40).
 [ARCHIVE.md](ARCHIVE.md) lists where the takes, masters, and published cuts
-are kept. `PalamedesFilm` is the only film composition; `PalamedesPoster`
-renders its poster. The project is outside the repository workspace, and its Remotion and
+are kept. `PalamedesFilm` is the long product film; `PalamedesPoster`
+renders its poster. Two short launch films sit beside it: `PalamedesSpace`
+and its slide-based predecessor `PalamedesLaunch` (see
+[Launch films](#launch-films)). The project is outside the repository workspace, and its Remotion and
 React dependencies are used only to produce the film.
 
 Run these commands from `video/`:
@@ -17,6 +19,7 @@ pnpm run studio          # preview the film and its poster
 pnpm run render:picture  # muted film → audio/.work/out/picture.mp4
 pnpm run render:poster   # poster → audio/.work/out/poster.png
 pnpm run render:film     # score, chosen voice takes, mix, picture, MP4 + SRT
+pnpm run render:space    # the 70 s launch film, supersampled → audio/.work/out/palamedes-space.mp4
 ```
 
 ## Story and timing
@@ -54,6 +57,27 @@ paper, parchment, and mist backgrounds, navy text, a bronze accent, Cinzel
 Hellenic, and light code listings. The sans and mono stacks use macOS system
 fonts, so render on macOS or supply equivalent font files before rendering
 elsewhere.
+
+## Launch films
+
+`PalamedesSpace` is the 70 s launch film: one camera flight through a 3D
+space instead of a sequence of slides. The agent translates a booking page,
+and the film names the strengths in turn: no keys, the framework wiring
+already built, lint feedback, and speed against tools that do the same job.
+`src/space/camera.tsx` holds the camera, which interpolates the eye's position
+so fly-throughs never brake at a portal; `src/space/Space.tsx` places every
+scene in the world; and `src/space/timeline.ts` holds the 35-bar plan and the
+word cues. `PalamedesLaunch` in `src/launch/` is the earlier slide-based cut
+that the space film replaced; it is kept for comparison.
+
+Both films use Chris, an ElevenLabs premade voice, and an original piano
+deep-house score at 120 BPM, one bar to 2 s. `audio/deep.py` writes and renders
+the score from the bar plan in the cue sheet; `audio/build-launch.sh` builds
+voice, score, mix, picture, and MP4 from `audio/cues/space.json` or
+`audio/cues/launch.json`. The lines live in `audio/lines-space.json` and
+`audio/lines-launch.json`, and `audio/eleven.py` generates their takes. Set
+`SUPERSAMPLE=2` for a master: it renders at 3840 × 2160 and scales down with
+Lanczos, so type that drifts by fractions of a pixel does not shimmer.
 
 ## Publishing to Bunny Stream
 
