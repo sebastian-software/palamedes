@@ -59,9 +59,30 @@ export function normalizeCargoLock(text) {
 // pnpm-lock.yaml needs no projection: workspace packages appear only as
 // `link:` importers with `workspace:` specifiers, and release-please only
 // rewrites package.json `version` fields, so a bump leaves the file unchanged.
+export function normalizeCargoManifest(text) {
+  // Release versions do not change compiled catalog semantics. Keep external
+  // requirements and build/profile/toolchain settings in the fingerprint.
+  return text
+    .replace(/^(version\s*=\s*)"[^"]+"/mu, '$1"<release>"')
+    .replace(
+      /^(palamedes[\w-]*\s*=\s*\{[^\n]*version\s*=\s*)"[^"]+"(?=[^\n]*path\s*=)/gmu,
+      '$1"<release>"',
+    );
+}
+
+export function buildBrowserRuntimeCompiler(root, run = execFileSync) {
+  run(
+    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    ["--recursive", "--filter", "@palamedes/core-node...", "build"],
+    { cwd: root, stdio: "inherit", shell: process.platform === "win32" },
+  );
+}
+
 export function normalizeSourceInput(filename, bytes) {
   if (path.basename(filename) === "package.json")
     return normalizePackageJson(bytes.toString("utf8"));
+  if (path.basename(filename) === "Cargo.toml")
+    return normalizeCargoManifest(bytes.toString("utf8"));
   if (filename === "Cargo.lock") return normalizeCargoLock(bytes.toString("utf8"));
   return bytes;
 }
@@ -71,14 +92,23 @@ export function normalizeSourceInput(filename, bytes) {
 // that only adds or edits a test from invalidating the report. Real sources
 // whose names merely contain "test" (for example `server-test.ts`) do not match.
 const testFilePattern = /\.(?:test|type-test)\.[cm]?[jt]sx?$/u;
-export const isBrowserRuntimeTestFile = (filename) => testFilePattern.test(filename);
+// Rust test modules live in separate files that their parent declares behind
+// `#[cfg(test)]` (`tests.rs`, `test_support.rs`, `tests/` directories, and
+// `*_test.rs`/`*_tests.rs`), so a release build of the addon never compiles them.
+const rustTestFilePattern = /(?:^|\/)(?:tests\/.*|tests\.rs|test_support\.rs|[^/]+_tests?\.rs)$/u;
+export const isBrowserRuntimeTestFile = (filename) =>
+  testFilePattern.test(filename) || rustTestFilePattern.test(filename);
+// Documentation next to the sources (for example a crate README) is never
+// compiled or bundled.
+export const isBrowserRuntimeIgnoredFile = (filename) =>
+  isBrowserRuntimeTestFile(filename) || filename.endsWith(".md");
 
 export function browserRuntimeInputPaths(root) {
   const lsFiles = (...paths) =>
     execFileSync("git", ["ls-files", ...paths], { cwd: root, encoding: "utf8" })
       .trim()
       .split("\n")
-      .filter((filename) => !isBrowserRuntimeTestFile(filename));
+      .filter((filename) => !isBrowserRuntimeIgnoredFile(filename));
   // Hash source inputs, not generated dist directories. A fresh package build
   // is required before measuring. The report separately retains every bundled
   // input.
@@ -89,6 +119,19 @@ export function browserRuntimeInputPaths(root) {
         `packages/${id}/build.config.ts`,
         `packages/${id}/package.json`,
       ),
+    ),
+    // The native compiler: the `palamedes` crate (root Cargo.toml) and the
+    // Node addon crate. `crates/palamedes/fixtures` only feeds `#[cfg(test)]`
+    // modules through `include_str!`, so it is not an input.
+    ...lsFiles("crates/palamedes/src", "crates/palamedes-node"),
+    "Cargo.toml",
+    "rust-toolchain.toml",
+    "packages/core-node/scripts/build-native.mjs",
+    "scripts/build-native-lib.mjs",
+    ...lsFiles(
+      "packages/core-node/src",
+      "packages/core-node/build.config.ts",
+      "packages/core-node/package.json",
     ),
     "Cargo.lock",
     "pnpm-lock.yaml",

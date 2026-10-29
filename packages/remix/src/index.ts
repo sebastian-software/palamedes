@@ -158,6 +158,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
   let refreshFailure: unknown;
   let closed = false;
   let refreshQueued = false;
+  const warnedConflicts = new Set<string>();
   const fragmentAssets = new Map<string, { source: string; etag: string }>();
   const entries = new Map<string, CatalogFragmentEntry>();
   const keysBySource = new Map<string, string>();
@@ -207,6 +208,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = catalogDigest(config);
     serverCatalogStore.invalidate();
     fragmentAssets.clear();
+    warnedConflicts.clear();
     entries.clear();
     keysBySource.clear();
     coldSelections.clear();
@@ -220,6 +222,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     catalogGenerationDigest = nextDigest;
     serverCatalogStore.invalidate();
     fragmentAssets.clear();
+    warnedConflicts.clear();
   };
 
   const isRegistrySource = (requestedPath: string, sourcePath: string): boolean => {
@@ -492,7 +495,19 @@ export function createPalamedesRemixCatalogAssetRegistry(
             catalogResourcePath(config, catalog, locale),
             entry.compiledIds,
           );
-          Object.assign(messages, result.messages);
+          for (const [id, message] of Object.entries(result.messages)) {
+            if (Object.hasOwn(messages, id) && messages[id] !== message) {
+              const conflict = `${locale}\0${id}`;
+              if (!warnedConflicts.has(conflict)) {
+                warnedConflicts.add(conflict);
+                console.warn(
+                  `Palamedes compiled message ID "${id}" has different ${locale} values in more than one Remix catalog; the last catalog wins. ` +
+                    "Give the messages distinct contexts or make the catalogs agree.",
+                );
+              }
+            }
+            messages[id] = message;
+          }
         }
         const source = `${stripCatalogBranding(renderCatalogModule(messages))}export const locale=${JSON.stringify(locale)};`;
         const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
@@ -519,6 +534,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
       if (sourcePath === undefined) {
         serverCatalogStore.invalidate();
         fragmentAssets.clear();
+        warnedConflicts.clear();
         entries.clear();
         keysBySource.clear();
         coldSelections.clear();

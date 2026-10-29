@@ -1618,6 +1618,7 @@ const descriptor = t({ message: "Don't greet {name}" }, { name });
 const rich = <Trans message="Don't wave at {name}" />;
 const authored = t`L'${title} est prêt`;
 const colliding = <Trans>{user.name} vs {team.name}</Trans>;
+const paired = t({ message: "You're {name}, aren't you?" }, { name });
 "##;
     let scoped_source = scope_macro_test_source(source, "test.tsx");
     let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
@@ -1643,6 +1644,7 @@ const colliding = <Trans>{user.name} vs {team.name}</Trans>;
             "Don't wave at {name}",
             "L''{title} est prêt",
             "{name} vs {name_1}",
+            "You're {name}, aren't you?",
         ]
     );
 
@@ -1704,6 +1706,7 @@ const colliding = <Trans>{user.name} vs {team.name}</Trans>;
         "DE Don''t wave at {name}",
         "DE L''{title} est prêt",
         "DE {name} vs {name_1}",
+        "DE You''re {name}, aren''t you?",
     ];
     for (id, expected) in transformed.compiled_ids.iter().zip(expected_translations) {
         assert_eq!(result.messages.get(id).map(String::as_str), Some(expected));

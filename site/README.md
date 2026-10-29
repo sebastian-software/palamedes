@@ -81,6 +81,14 @@ update repository references and `decision-redirects.json`; the prebuild emits
 small canonical redirects under the ignored `public/decisions/` directory so
 existing public links keep reaching the same topics, including without JavaScript.
 
+Generated API reference URLs follow the same rule. `api-reference-redirects.json`
+lists every `/api-reference` route the published site has listed
+(`legacyRoutes`) and maps each one the generator no longer emits to its current
+page (`redirects`). The prebuild fails when a published route has neither a page
+nor a redirect, and writes the redirects under the ignored
+`public/api-reference/` directory. Append new routes to `legacyRoutes` when a
+release publishes them; do not remove entries.
+
 Every Markdown article under `site/content/blog/` except `README.md` is published
 by the site prebuild. Keep that directory for finished articles; a body label
 such as "Status: draft" does not prevent publication. Remove completed plans

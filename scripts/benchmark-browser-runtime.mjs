@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import {
+  buildBrowserRuntimeCompiler,
   browserRuntimeProfiles,
   browserRuntimeSourceSha256,
 } from "./browser-runtime-source-hash.mjs";
@@ -62,6 +63,10 @@ if (process.argv.includes("--verify-report")) {
   }
   console.log("Browser runtime report matches its source inputs.");
 } else {
+  // Build before importing: a native addon already loaded in this process
+  // cannot be replaced safely, and an old addon can produce different bytes
+  // even when the recorded source hash describes the current compiler.
+  buildBrowserRuntimeCompiler(root);
   const { chromium } = await import("@playwright/test");
   const { compileCatalogArtifact, renderCatalogModule } =
     await import("../packages/core-node/dist/index.mjs");

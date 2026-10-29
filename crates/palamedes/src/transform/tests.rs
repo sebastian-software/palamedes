@@ -1560,7 +1560,7 @@ fn descriptor_string_literals_stay_raw_icu_on_both_sides() {
     // text and go through the shared escaping instead.
     let source = r##"import { t } from "@palamedes/core/macro";
 
-const quoted = t({ message: "L'{title} est prêt" }, { title });
+const quoted = t({ message: "L'{title} est prêt" }, {});
 const doubled = t({ message: "It''s {name}" }, { name });
 const authored = t({ message: `l'${item}` });
 "##;
@@ -2872,6 +2872,36 @@ fn rejects_nested_choice_macros_in_trans_children() {
             }
         ),
         "{error:?}"
+    );
+}
+
+#[test]
+fn descriptor_apostrophe_policy_matches_catalog_placeholders() {
+    for message in [
+        "You're {name}, aren't you?",
+        "Don't quote '{name}', but greet {name}",
+        "It''s {name}",
+    ] {
+        let source = format!(
+            "import {{t}} from '@palamedes/core/macro'; export function greet(name){{return t({{message:{}}},{{name}})}}",
+            serde_json::to_string(message).unwrap()
+        );
+        let extracted = extract_messages(&source, "test.ts").expect("descriptor extracts");
+        assert_eq!(extracted[0].message, message);
+        transform_macros(&source, "test.ts", None).expect("descriptor uses runtime quoting");
+    }
+    let source = "import {t} from '@palamedes/core/macro'; export function greet(name){return t({message:\"You're {name}, aren't you?\"},{})}";
+    assert!(
+        extract_messages(source, "test.ts")
+            .unwrap_err()
+            .to_string()
+            .contains("Missing value(s): name")
+    );
+    assert!(
+        transform_macros(source, "test.ts", None)
+            .unwrap_err()
+            .to_string()
+            .contains("Missing value(s): name")
     );
 }
 

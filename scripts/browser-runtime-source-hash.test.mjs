@@ -6,8 +6,10 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildBrowserRuntimeCompiler,
   browserRuntimeInputPaths,
   browserRuntimeSourceSha256,
+  isBrowserRuntimeIgnoredFile,
   isBrowserRuntimeTestFile,
   normalizeCargoLock,
 } from "./browser-runtime-source-hash.mjs";
@@ -35,6 +37,14 @@ const bumpVersions = (filename, text) => {
     const bumped = text.replace(/^( {2}"version": )"[^"]*"/mu, `$1"${BUMPED_VERSION}"`);
     assert.ok(bumped !== text, `${filename} has a version to bump`);
     return bumped;
+  }
+  if (path.basename(filename) === "Cargo.toml") {
+    return text
+      .replace(/^(version\s*=\s*)"[^"]+"/mu, `$1"${BUMPED_VERSION}"`)
+      .replace(
+        /^(palamedes[\w-]*\s*=\s*\{[^\n]*version\s*=\s*)"[^"]+"(?=[^\n]*path\s*=)/gmu,
+        `$1"=${BUMPED_VERSION}"`,
+      );
   }
   if (filename === "Cargo.lock") {
     const bumped = text
@@ -156,4 +166,100 @@ test("Cargo.lock entries without a source are exactly the workspace crates", (t)
     .sort();
   assert.deepEqual(local, workspace);
   assert.ok(!/^name = "palamedes[^"]*"\nversion = /mu.test(normalizeCargoLock(lock)));
+});
+
+test("native compiler and build settings invalidate the report", async () => {
+  for (const changed of [
+    "crates/palamedes/src/descriptor.rs",
+    "crates/palamedes-node/src/lib.rs",
+    "Cargo.toml",
+    "rust-toolchain.toml",
+    "packages/core-node/src/index.ts",
+    "packages/core-node/scripts/build-native.mjs",
+  ]) {
+    assert.ok(inputPaths.includes(changed), changed);
+    assert.notEqual(
+      await hashWith((filename, text) =>
+        filename === changed ? `${text}\n# changed input\n` : undefined,
+      ),
+      baseline,
+      changed,
+    );
+  }
+});
+
+test("Rust tests, test fixtures, and docs do not change the source hash", async () => {
+  for (const filename of [
+    "crates/palamedes/src/transform/tests.rs",
+    "crates/palamedes/src/catalog_artifact/tests.rs",
+    "crates/palamedes/src/test_support.rs",
+    "crates/palamedes-node/tests/addon.rs",
+    "crates/palamedes/src/vue_test.rs",
+    "crates/palamedes/src/vue_tests.rs",
+  ])
+    assert.ok(isBrowserRuntimeTestFile(filename), filename);
+  for (const filename of [
+    "crates/palamedes/src/descriptor.rs",
+    "crates/palamedes/src/transform/mod.rs",
+    "crates/palamedes/src/testing.rs",
+    "crates/palamedes/src/latest.rs",
+  ])
+    assert.ok(!isBrowserRuntimeIgnoredFile(filename), filename);
+
+  const unchanged = [
+    "crates/palamedes/src/transform/tests.rs",
+    "crates/palamedes/src/test_support.rs",
+    "crates/palamedes/fixtures/lingui-apostrophes.de.po",
+    "crates/palamedes-node/README.md",
+  ];
+  for (const filename of unchanged) {
+    // The file exists in the repository, so excluding it is a choice, not a typo.
+    await readInput(filename);
+    assert.ok(!inputPaths.includes(filename), filename);
+    assert.equal(
+      await browserRuntimeSourceSha256(root, {
+        inputPaths,
+        async read(name) {
+          const bytes = await readInput(name);
+          return name === filename ? Buffer.concat([bytes, Buffer.from("\n// edit\n")]) : bytes;
+        },
+      }),
+      baseline,
+      filename,
+    );
+  }
+  assert.deepEqual(
+    inputPaths.filter(
+      (filename) => filename.startsWith("crates/palamedes/fixtures/") || filename.endsWith(".md"),
+    ),
+    [],
+  );
+});
+
+test("a native compiler source edit changes the source hash", async () => {
+  for (const changed of ["crates/palamedes/src/vue.rs", "crates/palamedes/src/transform/mod.rs"]) {
+    assert.ok(inputPaths.includes(changed), changed);
+    assert.notEqual(
+      await hashWith((filename, text) => (filename === changed ? `${text}\n// edit\n` : undefined)),
+      baseline,
+      changed,
+    );
+  }
+});
+
+test("measurement rebuilds the compiler dependency graph and propagates a build failure", () => {
+  let call;
+  buildBrowserRuntimeCompiler(root, (...args) => {
+    call = args;
+  });
+  assert.deepEqual(call[1], ["--recursive", "--filter", "@palamedes/core-node...", "build"]);
+  assert.equal(call[2].cwd, root);
+  const failure = new Error("compiler build failed");
+  assert.throws(
+    () =>
+      buildBrowserRuntimeCompiler(root, () => {
+        throw failure;
+      }),
+    (error) => error === failure,
+  );
 });
