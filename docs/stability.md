@@ -8,15 +8,13 @@ depend on and where changes may still happen between minor releases.
 
 All publishable Palamedes packages ship in lockstep.
 
-Published packages declare Node.js `>=22.0.0` unless a package has a specific
-runtime reason to require a higher Node floor. The canonical per-package list is
-the [platform support table](./platform-support.md#nodejs-requirements), which
-is checked against the published `engines.node` fields. The `@palamedes/cli-*`
-platform shells intentionally leave Node compatibility to their `@palamedes/cli`
-wrapper and therefore omit an engine declaration; the `@palamedes/core-node-*`
-native addons are loaded directly by Node and declare `>=22.0.0`. The repository
-development and CI floor is stricter: contributors should use Node.js `>=22.22`,
-matching the root `package.json`, repository Node badge, and contribution guide.
+V2 drops Node.js 22 support. Published Node.js packages, native Node addons,
+and repository development require Node.js `>=24.3.0`. CI validates Node.js 24
+and 26. The canonical [platform support table](./platform-support.md#nodejs-requirements)
+is checked against the published `engines.node` fields and the root manifest.
+The `@palamedes/cli-*` platform shells run native executables without Node.js
+and therefore omit an engine declaration; the `@palamedes/cli` npm launcher
+requires the shared Node.js floor.
 
 From 1.0 onward:
 
@@ -174,7 +172,7 @@ proofs.
 ### Waku contract
 
 The examples verify Waku `1.0.0-rc.4` with React, React DOM, and
-`react-server-dom-webpack` `19.3.1` on Node.js 22.22 or newer. Upstream
+`react-server-dom-webpack` `19.3.1` on Node.js 24.3.0 or newer. Upstream
 Waku is a release candidate, not a stable 1.0 release.
 
 `@palamedes/waku` is **Stable** for `waku@^1.0.0-rc.4`. Its interceptor reads

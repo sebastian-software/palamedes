@@ -110,7 +110,7 @@ caller's request ownership.
 
 `@palamedes/waku` uses `@palamedes/runtime/server`, which requires Node's
 `AsyncLocalStorage`. It supports the pinned Waku line `^1.0.0-rc.4` on
-Node.js 22.22 or later. Do not use this adapter in Edge or Worker runtimes
+Node.js 24.3.0 or later. Do not use this adapter in Edge or Worker runtimes
 unless their Node-compatible `AsyncLocalStorage` behavior has been independently
 verified. Waku's request and nonce APIs are unstable-prefixed,
 so treat the adapter as coupled to that Waku line and revalidate it when

@@ -435,6 +435,10 @@ describe("workflow contracts", () => {
     ]);
     const validate = job(ci, "validate", "validate-rust");
 
+    const nodeVersions = [...validate.matchAll(/^\s+node: (\d+)$/gmu)].map((match) =>
+      Number(match[1]),
+    );
+    expect([...new Set(nodeVersions)].sort((a, b) => a - b)).toEqual([24, 26]);
     expect(ci).toContain("permissions:\n  contents: read");
     expect(ci).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
     expect(validate).toContain("uses: ./.github/actions/setup-workspace");
@@ -443,6 +447,14 @@ describe("workflow contracts", () => {
     expect(setupWorkspace).toContain("rust:");
     expect(setupWorkspace).toContain("rust-cache:");
     expect(setupWorkspace).toContain("registry-url:");
+    expect(setupWorkspace).toContain("if ! command -v corepack >/dev/null 2>&1; then");
+    expect(setupWorkspace).toContain("npm install --global corepack@0.36.0");
+    expect(setupWorkspace.indexOf("command -v corepack")).toBeLessThan(
+      setupWorkspace.indexOf("npm install --global corepack@0.36.0"),
+    );
+    expect(setupWorkspace.indexOf("npm install --global corepack@0.36.0")).toBeLessThan(
+      setupWorkspace.indexOf("corepack enable"),
+    );
     expect(setupWorkspace).toContain("cache: pnpm");
     expect(setupWorkspace).toContain("uses: Swatinem/rust-cache@");
     expect(setupWorkspace.indexOf("cache: pnpm")).toBeLessThan(

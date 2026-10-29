@@ -73,10 +73,31 @@ test("rejects a renamed published package outside the compact inventory", () => 
   );
 });
 
-test("rejects drift between published Node engines and the documented exceptions", () => {
+test("rejects Node.js 22 support in published packages", () => {
   expectRejected(
     "packages/waku/package.json",
-    (text) => text.replace('"node": ">=22.22.0"', '"node": ">=22.0.0"'),
+    (text) => text.replace('"node": ">=24.3.0"', '"node": ">=22.0.0"'),
+    /Published package Node\.js engine exceptions changed/u,
+  );
+});
+
+test("requires the repository and support table to use the shared Node.js floor", () => {
+  expectRejected(
+    "package.json",
+    (text) => text.replace('"node": ">=24.3.0"', '"node": ">=22.22.0"'),
+    /Repository Node\.js engine must be >=24\.3\.0/u,
+  );
+  expectRejected(
+    "docs/platform-support.md",
+    (text) => text.replaceAll("`>=24.3.0`", "`>=22.0.0`"),
+    /must state the published Node floor >=24\.3\.0/u,
+  );
+});
+
+test("keeps native CLI platform shells independent of Node.js", () => {
+  expectRejected(
+    "packages/cli-darwin-arm64/package.json",
+    (text) => text.replace('"name":', '"engines": { "node": ">=24.3.0" }, "name":'),
     /Published package Node\.js engine exceptions changed/u,
   );
 });
@@ -86,7 +107,10 @@ test("requires the shared Node support contract in both assistant surfaces", () 
     expectRejected(
       file,
       (text) =>
-        text.replace("Most published packages require Node.js", "Published packages use Node.js"),
+        text.replace(
+          "Published Node.js packages and repository development require",
+          "Packages use",
+        ),
       new RegExp(`${file.replace(".", "\\.")} Node support contract`, "u"),
     );
 });
@@ -94,7 +118,7 @@ test("requires the shared Node support contract in both assistant surfaces", () 
 test("keeps the Next.js first-run floor aligned with the plugin manifest", () => {
   expectRejected(
     "docs/nextjs-first-run.md",
-    (text) => text.replace("Use Node.js `>=22.0.0`", "Use Node.js `>=22.22.0`"),
+    (text) => text.replace("Use Node.js `>=24.3.0`", "Use Node.js `>=22.0.0`"),
     /Next\.js first-run Node requirement/u,
   );
 });

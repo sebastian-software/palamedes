@@ -14,6 +14,13 @@ example in the framework matrix. The
 
 ## Check installation and tooling prerequisites
 
+V2 drops Node.js 22 support and requires Node.js `>=24.3.0` for all published
+Node.js packages, including every framework adapter and the npm CLI launcher.
+Upgrade local development, CI, build images, and Node.js deployment runtimes
+before updating Palamedes. CI validates Node.js 24 and 26. Check `node --version`
+in each environment before installing the v2 packages. Direct native CLI
+binaries remain independent of Node.js.
+
 Update coupled Palamedes packages together and regenerate compiled artifacts
 with the v2 toolchain. Keep the previous dependency lockfile and generated
 artifacts together if you need to roll back to the previous application build;
@@ -27,8 +34,8 @@ requires Vite 8, `@palamedes/next-plugin` requires `next@^16.4.1` (was `^16`),
 `remix@^3.0.0` as a required peer.
 
 Prebuilt npm packages do not require Rust. Check the
-[platform support table](./platform-support.md) for the Node.js floor and native
-targets; Remix requires Node.js 24.3 or newer. Building from Rust source requires
+[platform support table](./platform-support.md) for the shared Node.js floor and
+native targets. Building from Rust source requires
 Rust 1.96 or newer. The CLI now uses Ferralk's native pattern syntax, including
 extglobs and POSIX classes; Windows patterns use `/` separators and `\` escapes.
 Review [source-pattern migration](./ferralk-adoption.md#pattern-migration) before

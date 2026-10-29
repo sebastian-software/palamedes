@@ -6,7 +6,7 @@ export default defineConfig({
   entry: { cli: "src/cli.ts", express: "src/express-server.ts", hono: "src/hono-server.ts" },
   outDir: "dist-tsdown",
   platform: "node",
-  target: "node22",
+  target: "node24.3",
   sourcemap: true,
   plugins: [palamedes({ framework: "none", environment: "server" })],
   // Bundle Express, Hono, and the Palamedes runtime so the output runs on its own.

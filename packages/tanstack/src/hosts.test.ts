@@ -159,8 +159,8 @@ describe("catalog-backed request middleware", () => {
       });
     }
 
-    // Each scope owns an AsyncLocalStorage. On Node 22 every one of them stays
-    // registered for the process lifetime and slows all async resource setup.
+    // Each scope owns an AsyncLocalStorage, so scopes are created once per
+    // middleware instead of once per request.
     expect(createScopedI18nRunner).toHaveBeenCalledTimes(1);
   });
 

@@ -6,23 +6,21 @@ page before installing `@palamedes/cli` or a package that uses
 
 ## Node.js Requirements
 
-Published packages declare their own Node.js floor, so there is no single
-number for the whole project. This table is the canonical list; the
-[stability policy](./stability.md) explains what those floors mean for support.
+Palamedes v2 requires Node.js `>=24.3.0` for published Node.js packages and
+repository development. Node.js 22 is no longer supported. CI validates Node.js
+24 and 26. This table is the canonical list; the
+[stability policy](./stability.md) explains the support contract.
 
-| Node.js floor  | Applies to                                                                                                                                                  |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `>=22.0.0`     | Every published package except the rows below, including `@palamedes/core`, `@palamedes/runtime`, `@palamedes/cli`, and the `@palamedes/core-node-*` addons |
-| `>=22.22.0`    | `@palamedes/react-router`, `@palamedes/tanstack`, `@palamedes/waku`                                                                                         |
-| `>=24.3.0`     | `@palamedes/remix`, whose floor follows the supported full-stack Remix v3 runtime                                                                           |
-| No declaration | The `@palamedes/cli-*` platform shells, which leave Node compatibility to their `@palamedes/cli` wrapper                                                    |
-| `>=22.22.0`    | This repository itself — development and CI, declared in the root `package.json` and shown by the repository Node badge                                     |
+| Node.js floor  | Applies to                                                                                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `>=24.3.0`     | Every published Node.js package, including all framework adapters, `@palamedes/core`, `@palamedes/runtime`, `@palamedes/cli`, and the `@palamedes/core-node-*` addons |
+| No declaration | The `@palamedes/cli-*` platform shells, which run native executables without Node.js                                                                                  |
+| `>=24.3.0`     | This repository itself — development and CI, declared in the root `package.json` and shown by the repository Node badge                                               |
 
-The repository floor is stricter than the default published-package floor.
-Host-specific requirements still apply: use Node.js 24.3 or newer for Remix
-examples. `pnpm check:llms` compares this table with the `engines.node` field of
-every published package, so a package that changes its floor fails the check
-until the table is updated.
+The shared floor includes the Remix v3 runtime requirement. `pnpm check:llms`
+checks the published `engines.node` fields and this table against the shared
+floor. The native CLI binaries can run directly without Node.js; the npm
+`@palamedes/cli` launcher requires the shared Node.js floor.
 
 ## Supported Targets
 

@@ -235,7 +235,7 @@ function verifyPackages(read, listDirectories) {
    * time, which is how the floors drifted apart (#1155).
    */
   const nodeSupportContract =
-    "Most published packages require Node.js `>=22.0.0`; `@palamedes/react-router`, `@palamedes/tanstack`, and `@palamedes/waku` require `>=22.22.0`, while `@palamedes/remix` requires `>=24.3.0`.";
+    "Published Node.js packages and repository development require Node.js `>=24.3.0`. Node.js 22 is unsupported in v2; CI validates Node.js 24 and 26. The native `@palamedes/cli-*` platform shells do not require Node.js.";
   for (const file of ["llms.txt", "llms-full.txt"])
     assertContains(read(file), nodeSupportContract, `${file} Node support contract`);
   assertContains(
@@ -244,21 +244,15 @@ function verifyPackages(read, listDirectories) {
     "README Node support pointer",
   );
 
+  const sharedNodeEngine = ">=24.3.0";
   const nodeEngineExceptions = packages
-    .filter(({ nodeEngine }) => nodeEngine && nodeEngine !== ">=22.0.0")
+    .filter(({ name, nodeEngine }) =>
+      platformParent(name) === "@palamedes/cli" ? nodeEngine : nodeEngine !== sharedNodeEngine,
+    )
     .map(({ name, nodeEngine }) => `${name}: ${nodeEngine}`);
-  assertSameInventory(
-    nodeEngineExceptions,
-    [
-      "@palamedes/react-router: >=22.22.0",
-      "@palamedes/remix: >=24.3.0",
-      "@palamedes/tanstack: >=22.22.0",
-      "@palamedes/waku: >=22.22.0",
-    ],
-    "Published package Node.js engine exceptions",
-  );
+  assertSameInventory(nodeEngineExceptions, [], "Published package Node.js engine exceptions");
 
-  verifyPlatformSupportNodeTable(read, packages);
+  verifyPlatformSupportNodeTable(read, sharedNodeEngine);
 
   const missingNodeEngines = packages
     .filter(({ name, nodeEngine }) => !nodeEngine && platformParent(name) !== "@palamedes/cli")
@@ -279,49 +273,28 @@ function verifyPackages(read, listDirectories) {
   );
 }
 
-/*
- * Keeps the canonical Node.js floor table in docs/platform-support.md tied to
- * the published `engines.node` fields: every non-default floor must name
- * exactly the packages that declare it, and the repository row must repeat the
- * root floor.
- */
-function verifyPlatformSupportNodeTable(read, packages) {
+/* Keep the canonical support table and repository floor tied to the shared floor. */
+function verifyPlatformSupportNodeTable(read, sharedNodeEngine) {
   const platformSupport = read("docs/platform-support.md");
-  const byEngine = new Map();
-  for (const { name, nodeEngine } of packages) {
-    if (!nodeEngine || nodeEngine === ">=22.0.0") continue;
-    byEngine.set(nodeEngine, [...(byEngine.get(nodeEngine) ?? []), name]);
-  }
-
-  for (const [engine, names] of byEngine) {
-    const row = platformSupport
-      .split(/\r?\n/u)
-      .find((line) => line.startsWith(`| \`${engine}\``) && !line.includes("This repository"));
-    if (!row) {
-      throw new Error(`docs/platform-support.md is missing a Node.js floor row for ${engine}`);
-    }
-    for (const name of names) {
-      assertContains(row, `\`${name}\``, `docs/platform-support.md ${engine} row`);
-    }
-    for (const [otherEngine, otherNames] of byEngine) {
-      if (otherEngine === engine) continue;
-      for (const name of otherNames) {
-        if (row.includes(`\`${name}\``)) {
-          throw new Error(
-            `docs/platform-support.md lists ${name} under the ${engine} floor; it declares ${otherEngine}`,
-          );
-        }
-      }
-    }
+  const publishedRow = platformSupport
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith("| `") && line.includes("Every published Node.js package"));
+  if (!publishedRow?.startsWith(`| \`${sharedNodeEngine}\``)) {
+    throw new Error(
+      `docs/platform-support.md must state the published Node floor ${sharedNodeEngine}`,
+    );
   }
 
   const rootNodeEngine = JSON.parse(read("package.json")).engines.node;
+  if (rootNodeEngine !== sharedNodeEngine) {
+    throw new Error(`Repository Node.js engine must be ${sharedNodeEngine}`);
+  }
   const repositoryRow = platformSupport
     .split(/\r?\n/u)
     .find((line) => line.startsWith("| `") && line.includes("This repository"));
-  if (!repositoryRow?.startsWith(`| \`${rootNodeEngine}\``)) {
+  if (!repositoryRow?.startsWith(`| \`${sharedNodeEngine}\``)) {
     throw new Error(
-      `docs/platform-support.md must state the repository Node floor ${rootNodeEngine}`,
+      `docs/platform-support.md must state the repository Node floor ${sharedNodeEngine}`,
     );
   }
 }

@@ -6,11 +6,14 @@ well-scoped changes are easiest to review.
 
 ## Prerequisites
 
-- Node.js `>=22.22`; use `>=24.3.0` when working on Remix examples
+- Node.js `>=24.3.0`; CI validates Node.js 24 and 26
 - pnpm via Corepack
 - Rust — `rust-toolchain.toml` pins the workspace MSRV, so `rustup` installs it
   on the first `cargo` invocation; make sure `rustup` itself is up to date
 - GitHub CLI if you work on issue or PR automation locally
+
+Node.js 26 does not bundle Corepack. On Node.js 26, install it first with
+`npm install --global corepack@0.36.0`.
 
 ```bash
 corepack enable

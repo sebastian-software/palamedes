@@ -40,9 +40,16 @@ runs:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
 
-    - name: Enable Corepack
+    # Node.js 26 does not bundle Corepack, while Node.js 24 does and a global install
+    # over the bundled shims fails on Windows (EEXIST). Install it only when missing,
+    # before pnpm cache lookup.
+    - name: Install and enable Corepack
       shell: bash
-      run: corepack enable
+      run: |
+        if ! command -v corepack >/dev/null 2>&1; then
+          npm install --global corepack@0.36.0
+        fi
+        corepack enable
 
     # Corepack has to run before setup-node asks pnpm for the cache directory.
     - name: Restore pnpm cache

@@ -7,7 +7,7 @@ export default defineConfig({
   ssr: { noExternal: true },
   build: {
     ssr: true,
-    target: "node22",
+    target: "node24.3",
     sourcemap: true,
     rolldownOptions: {
       input: { cli: "src/cli.ts", express: "src/express-server.ts", hono: "src/hono-server.ts" },

@@ -110,7 +110,7 @@ export function createTanStackServerI18nRequestMiddleware(
   // the request is the key for handing its resolved locale to delivery.
   const activeLocales = new WeakMap<Request, string>();
   // Create the scope once per middleware. Each scope owns an AsyncLocalStorage,
-  // and Node 22 keeps every enabled one for the process lifetime.
+  // so creating one per request would pile up long-lived storages.
   const runner = createScopedTanStackI18nRunner(async (request) => {
     const locale = await resolveLocale(request);
     activeLocales.set(request, locale);
