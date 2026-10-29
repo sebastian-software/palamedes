@@ -52,6 +52,17 @@ const measured: PlatformBenchmarkData = {
 };
 
 describe("platform benchmark table", () => {
+  it("links the selected platform's campaign instead of another platform's run", () => {
+    const data = structuredClone(measured);
+    data.platforms[0].runUrl = "https://example.test/linux-retry";
+    data.platforms[1].runUrl = "https://example.test/macos-run";
+    const html = renderToStaticMarkup(
+      createElement(PlatformBenchmarks, { framework: "vue", data }),
+    );
+    expect(html).toContain('href="https://example.test/linux-retry"');
+    expect(html).not.toContain('href="https://example.test/macos-run"');
+    expect(html).not.toContain(`href="${measured.runUrl}"`);
+  });
   it("prerenders platform controls and explicit missing results without timing placeholders", () => {
     const html = renderToStaticMarkup(
       createElement(PlatformBenchmarks, { framework: "react", data: pending }),

@@ -31,15 +31,23 @@ const SCOPES = {
 
 export function blacksmithBenchData(publication) {
   if (publication === null) return { status: "pending", platforms: PLATFORMS, profiles: [] };
-  assert.equal(publication.schemaVersion, 1);
+  assert.ok([1, 2].includes(publication.schemaVersion), "unknown campaign schema");
   assert.deepEqual(Object.keys(publication.platforms).sort(), PLATFORMS.map((p) => p.id).sort());
-  const expected = {
-    runId: publication.runId,
-    attempt: publication.attempt,
-    revision: publication.revision,
-  };
-  const reports = PLATFORMS.map(({ id }) =>
-    mergeShards(publication.platforms[id], { ...expected, platform: id }),
+  if (publication.schemaVersion === 2)
+    assert.deepEqual(Object.keys(publication.campaigns).sort(), PLATFORMS.map((p) => p.id).sort());
+  // Platforms are independent experiments and may be retried separately. Each
+  // still needs one complete, homogeneous three-VM campaign; source, locks,
+  // measurement options and comparator versions must agree across platforms.
+  const campaigns = PLATFORMS.map(({ id }) =>
+    publication.schemaVersion === 1 ? publication : publication.campaigns[id],
+  );
+  const reports = PLATFORMS.map(({ id }, index) =>
+    mergeShards(publication.platforms[id], {
+      runId: campaigns[index].runId,
+      attempt: campaigns[index].attempt,
+      revision: publication.revision,
+      platform: id,
+    }),
   );
   const first = reports[0].repetitions[0];
   for (const report of reports) {
@@ -59,16 +67,20 @@ export function blacksmithBenchData(publication) {
     const { gettext: _baselineGettext, ...baselineVersions } = baseline.frameworks.versions;
     assert.deepEqual(versions, baselineVersions, "platform comparator versions differ");
   }
-  const runUrl = `https://github.com/sebastian-software/palamedes/actions/runs/${expected.runId}/attempts/${expected.attempt}`;
+  const runUrls = campaigns.map(
+    ({ runId, attempt }) =>
+      `https://github.com/sebastian-software/palamedes/actions/runs/${runId}/attempts/${attempt}`,
+  );
   return {
     status: "measured",
-    runUrl,
-    revision: expected.revision,
+    runUrl: runUrls[0] === runUrls[1] ? runUrls[0] : undefined,
+    revision: publication.revision,
     reportPath: BLACKSMITH_REPORT,
     platforms: PLATFORMS.map((platform, index) => {
       const manifest = reports[index].repetitions[0];
       return {
         ...platform,
+        runUrl: runUrls[index],
         cpu: manifest.environment.cpu,
         node: manifest.environment.node,
         measured: manifest.finishedAt.slice(0, 10),
@@ -146,10 +158,12 @@ export async function importBlacksmithBenchmarks({ linux, macos, repoRoot }) {
   const platformReports = await Promise.all(
     roots.map(async (root) => JSON.parse(await readFile(join(root, "report.json"), "utf8"))),
   );
-  const { runId, attempt, revision } = platformReports[0];
-  const publication = { schemaVersion: 1, runId, attempt, revision, platforms: {} };
+  const { revision } = platformReports[0];
+  const publication = { schemaVersion: 2, revision, campaigns: {}, platforms: {} };
   for (const [index, { id }] of PLATFORMS.entries()) {
     const declared = platformReports[index];
+    assert.equal(declared.revision, revision, "platforms must measure the same source revision");
+    const { runId, attempt } = declared;
     const shards = await Promise.all(
       [1, 2, 3].map((run) => readShard(join(roots[index], `run${run}`))),
     );
@@ -162,6 +176,7 @@ export async function importBlacksmithBenchmarks({ linux, macos, repoRoot }) {
     );
     for (const key of ["platform", "runId", "attempt", "revision"])
       assert.equal(declared[key], checked[key]);
+    publication.campaigns[id] = { runId, attempt };
     publication.platforms[id] = shards;
   }
   blacksmithBenchData(publication);

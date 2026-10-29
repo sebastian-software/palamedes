@@ -271,6 +271,11 @@ async function checkPlatform(page, region, data, framework, platformId) {
     1,
   );
   if (data.status === "pending") return;
+  assert.equal(
+    await region.getByRole("link", { name: "Workflow run →", exact: true }).getAttribute("href"),
+    platform.runUrl ?? data.runUrl,
+    "The workflow link must identify the selected platform's campaign",
+  );
   const rows = data.profiles
     .find((item) => item.id === "realistic")
     .frameworks.find((item) => item.id === framework).rows;

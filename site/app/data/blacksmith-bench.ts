@@ -10,6 +10,7 @@ export interface PlatformBenchmarkData {
     id: BenchmarkPlatform;
     label: string;
     arch: string;
+    runUrl?: string;
     cpu?: string;
     node?: string;
     measured?: string;
