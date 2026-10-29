@@ -7,7 +7,7 @@
 //! to the compiled lookup key and placeholder names the transform would have
 //! produced, so the runtime never hashes or parses (ADR-005, ADR-006, ADR-020).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use oxc_allocator::Allocator;
@@ -29,8 +29,8 @@ use crate::icu_text::compiled_message_key;
 use crate::placeholder_name::expression_name;
 use crate::source::{SourceLocator, display_filename, format_parser_diagnostics};
 use crate::source_message::{
-    build_icu_message, check_lowered_message, expression_source, lower_choice_options_from_object,
-    lower_template, make_unique_value_name,
+    ValueNames, bare_identifier, build_icu_message, check_lowered_message,
+    lower_choice_options_from_object, lower_template, make_unique_value_name,
 };
 
 /// Current manifest format version.
@@ -276,7 +276,7 @@ impl ManifestVisitor<'_, '_> {
     }
 
     fn template(&self, template: &TemplateLiteral<'_>) -> PalamedesResult<Option<Entry>> {
-        let mut used_value_names = HashMap::new();
+        let mut used_value_names = ValueNames::default();
         let (message, lowered_values) = lower_template(
             template,
             self.source,
@@ -299,18 +299,16 @@ impl ManifestVisitor<'_, '_> {
 
         // Replays the naming in `lower_template` per slot: values are
         // deduplicated there, but the runtime receives one value per slot.
-        let mut used_value_names = HashMap::new();
+        let mut used_value_names = ValueNames::default();
         let mut values = Vec::with_capacity(template.expressions.len());
         for expression in &template.expressions {
             let preferred_name =
                 expression_name(expression).ok_or(PalamedesError::UnnamedPlaceholder {
                     syntax: "template expression",
                 })?;
-            let source = expression_source(expression, self.source)
-                .unwrap_or_else(|| preferred_name.clone());
             values.push(make_unique_value_name(
                 preferred_name,
-                &source,
+                bare_identifier(expression),
                 &mut used_value_names,
             ));
         }
@@ -343,7 +341,7 @@ impl ManifestVisitor<'_, '_> {
                 (literal.value.to_string(), literal.value.to_string())
             }
             Expression::TemplateLiteral(template) if template.expressions.is_empty() => {
-                let mut used_value_names = HashMap::new();
+                let mut used_value_names = ValueNames::default();
                 let (message, _) = lower_template(
                     template,
                     self.source,
@@ -394,13 +392,14 @@ impl ManifestVisitor<'_, '_> {
         let location = self
             .locator
             .indexed_location(self.filename, call.span.start as usize);
-        let mut used_value_names = HashMap::new();
+        let mut used_value_names = ValueNames::default();
         let preferred_name =
             expression_name(value).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_owned());
-        let value_source =
-            expression_source(value, self.source).unwrap_or_else(|| preferred_name.clone());
-        let value_name =
-            make_unique_value_name(preferred_name, &value_source, &mut used_value_names);
+        let value_name = make_unique_value_name(
+            preferred_name,
+            bare_identifier(value),
+            &mut used_value_names,
+        );
         let lowered = lower_choice_options_from_object(
             object,
             self.source,
@@ -520,6 +519,7 @@ mod tests {
     use std::fs;
 
     use super::{RuntimeMacroManifest, collect_runtime_macro_manifest};
+    use crate::icu_text::compiled_message_key;
     use crate::{PalamedesError, SourceFileAnalysisRequest, transform_macros};
 
     fn manifest(sources: &[(&str, &str)]) -> Result<RuntimeMacroManifest, PalamedesError> {
@@ -568,13 +568,73 @@ export const f = (id: string, user: { name: string }, other: { name: string }) =
             .iter()
             .find(|entry| entry.values.len() == 3)
             .expect("member template");
-        assert_eq!(names.values, ["name", "name_1", "name"]);
+        assert_eq!(names.values, ["name", "name_1", "name_2"]);
         for entry in &manifest.templates {
             assert!(
                 code.contains(&format!("\"{}\"", entry.key)),
                 "transform and manifest disagree on {:?}: {code}",
                 entry.strings
             );
+        }
+    }
+
+    #[test]
+    fn preserves_occurrence_names_and_stable_identifier_compatibility() {
+        for (body, expected_message, expected_names) in [
+            (
+                "t`Values: ${next()} and ${next()}`",
+                "Values: {next} and {next_1}",
+                vec!["next", "next_1"],
+            ),
+            (
+                "t`Values: ${counter.value} and ${counter.value}`",
+                "Values: {value} and {value_1}",
+                vec!["value", "value_1"],
+            ),
+            (
+                "t`Values: ${value}, ${next()}, ${value}`",
+                "Values: {value}, {next}, {value_1}",
+                vec!["value", "next", "value_1"],
+            ),
+            (
+                "t`Values: ${value}, ${counter.value}, ${value}`",
+                "Values: {value}, {value_1}, {value_2}",
+                vec!["value", "value_1", "value_2"],
+            ),
+            (
+                "t`Values: ${counter.value ?? 0} and ${counter.value ?? 0}`",
+                "Values: {value} and {value_1}",
+                vec!["value", "value_1"],
+            ),
+            (
+                "t`Values: ${name}, ${other}, ${name}`",
+                "Values: {name}, {other}, {name}",
+                vec!["name", "other", "name"],
+            ),
+            (
+                "t`Values: ${(name)} and ${name}`",
+                "Values: {name} and {name}",
+                vec!["name", "name"],
+            ),
+            (
+                "t`Values: ${count}, ${user.name}, ${count}`",
+                "Values: {count}, {name}, {count_1}",
+                vec!["count", "name", "count_1"],
+            ),
+        ] {
+            let source = format!(
+                "import {{ t }} from \"@palamedes/core/macro\"; function render() {{ return {body}; }}"
+            );
+            let manifest = manifest(&[("occurrences.ts", &source)]).expect("manifest");
+            let messages =
+                crate::extract::extract_messages(&source, "occurrences.ts").expect("extraction");
+            assert_eq!(messages[0].message, expected_message);
+            assert_eq!(manifest.templates[0].values, expected_names);
+            assert_eq!(
+                manifest.templates[0].key,
+                compiled_message_key(expected_message, None)
+            );
+            assert!(transformed(&source).contains(&manifest.templates[0].key));
         }
     }
 
@@ -632,6 +692,22 @@ export const f = (seats: number, role: string, place: number, name: string) => [
         assert!(
             matches!(&error, PalamedesError::RuntimeMacroCollision { first, second, .. }
                 if first == "a.ts:2:34" && second == "b.ts:3:36"),
+            "{error}"
+        );
+    }
+
+    /// The same static text with a repeated identifier in one call and a
+    /// repeated property read in another compiles to different placeholder
+    /// names, so the runtime cannot tell the calls apart.
+    #[test]
+    fn rejects_collisions_between_shared_and_per_occurrence_names() {
+        let first = "import { t } from \"@palamedes/core/macro\";\nexport const f = (name: string) => t`${name} invited ${name}.`;";
+        let second = "import { t } from \"@palamedes/core/macro\";\nexport const g = (user: { name: string }) => t`${user.name} invited ${user.name}.`;";
+        let error = manifest(&[("a.ts", first), ("b.ts", second)]).expect_err("collision");
+
+        assert!(
+            matches!(&error, PalamedesError::RuntimeMacroCollision { first, second, .. }
+                if first.starts_with("a.ts:2:") && second.starts_with("b.ts:2:")),
             "{error}"
         );
     }
