@@ -186,6 +186,24 @@ in place and other changes reload the document, without restarting the server.
 `projectRoot`, and a relative `configPath` resolves from `projectRoot`. The
 removed `cwd` option throws a migration error; rename it to `projectRoot`.
 
+Fragment URLs identify an authored module relative to the configuration root and
+its compiled message IDs. A cold or restarted worker reconstructs that selection
+from its own source files, so equivalent deployments can use different absolute
+checkout paths. Workers need the same source tree, catalogs, and configuration;
+no earlier document or asset request is required on that worker. Configured
+catalog includes and excludes also apply to reconstruction, including explicit
+sibling workspace includes, together with the `include` and `exclude` options of
+asset loaders that use the registry. A source identity must use the exact
+on-disk spelling, so case-variant and symlink aliases are rejected. Modules
+without messages never receive fragment URLs and answer 404. Requests never
+supply message IDs or executable source.
+
+Keep authored source files available with the Remix asset server. Custom loaders
+must preserve the authored message IDs: adding or removing messages during
+post-compilation fails registration with a diagnostic. The registry compiles
+only the verified module selection for the requested supported locale. A stale
+selection returns 404 after source invalidation; catalog-only edits retain URLs.
+
 The catalog registry watches PO/FCL and config inputs in development and clears
 compiled caches without changing registered module URLs. Warm requests do not
 scan these files. Other runners can enable `watch: true` or explicitly call
