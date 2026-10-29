@@ -212,6 +212,8 @@ if (missingDiscoveryPaths.length > 0) {
   );
 }
 
+verifyApiReferenceRedirects(sitemapPaths);
+
 const staticServer = process.env.PALAMEDES_SITE_URL
   ? null
   : await startSiteStaticServer({ clientDir, port: PORT });
@@ -241,6 +243,40 @@ let failures = 0;
 function fail(message) {
   failures += 1;
   console.error(`  !! ${message}`);
+}
+
+// Every API reference URL the published site listed must still answer: either
+// as a current page or as a static redirect to one. Redirect pages are not
+// content, so the sitemap must not list them.
+function verifyApiReferenceRedirects(sitemapPaths) {
+  const { legacyRoutes, redirects } = JSON.parse(
+    readFileSync(join(repoRoot, "site/api-reference-redirects.json"), "utf8"),
+  );
+  const problems = [];
+  for (const route of legacyRoutes) {
+    const page = join(clientDir, route.slice(1), "index.html");
+    if (!existsSync(page)) {
+      problems.push(`${route}: no page or redirect in the build`);
+      continue;
+    }
+    const target = redirects[route];
+    if (target === undefined) {
+      if (!sitemapPaths.includes(route)) problems.push(`${route}: page missing from sitemap`);
+      continue;
+    }
+    if (sitemapPaths.includes(route)) problems.push(`${route}: sitemap lists a redirect page`);
+    if (!readFileSync(page, "utf8").includes(`content="0;url=${target}"`)) {
+      problems.push(`${route}: redirect does not point to ${target}`);
+    }
+    if (!sitemapPaths.includes(target))
+      problems.push(`${route}: redirect target ${target} is not a page`);
+  }
+  if (problems.length > 0) {
+    throw new Error(`verify-site-routes: API reference redirects:\n${problems.join("\n")}`);
+  }
+  console.log(
+    `  ok ${legacyRoutes.length} published API reference routes (${Object.keys(redirects).length} redirected)`,
+  );
 }
 
 function readSitemapPaths() {

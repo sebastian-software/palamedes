@@ -5,6 +5,7 @@ import { dirname, extname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { generatePackageApiReference } from "./api-reference.mjs";
+import { writeApiReferenceRedirects } from "./api-reference-redirects.mjs";
 import {
   EXAMPLE_MATRIX,
   FOCUSED_EXAMPLES,
@@ -162,6 +163,7 @@ await writeBlogIndexData(posts);
 await writeApiReferenceIndex();
 await generateTypedocReference();
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
+await writeApiReferenceRedirects(siteRoot, routesRoot, publicRoot);
 
 await writeContentStats(adrs);
 await writeBrowserRuntimeStats();
