@@ -86,12 +86,14 @@ export function renderFrameworkComponent(
   // template uses normal framework bindings, as in the shipped demos.
   const scriptMacros =
     (tool === "palamedes" && framework !== "solid") || (tool === "i18next" && framework === "vue");
+  const palamedesCall = (message) =>
+    `t({ message: ${quote(message)} }${message.includes("{name}") ? ", { name }" : ""})`;
   const scriptMessages = scriptMacros
     ? [
         "const copy = [",
         ...messages.map(({ current }) =>
           tool === "palamedes"
-            ? `t({ message: ${quote(current)} }, { name }),`
+            ? `${palamedesCall(current)},`
             : `i18next.t(${quote(current.replaceAll("{name}", "{{name}}"))}, { name }),`,
         ),
         "];",
@@ -99,8 +101,7 @@ export function renderFrameworkComponent(
     : [];
   const messageNodes = messages.map(({ current }, index) => {
     let expression;
-    if (tool === "palamedes")
-      expression = scriptMacros ? `copy[${index}]` : `t({ message: ${quote(current)} }, { name })`;
+    if (tool === "palamedes") expression = scriptMacros ? `copy[${index}]` : palamedesCall(current);
     if (tool === "i18next")
       expression = scriptMacros
         ? `copy[${index}]`
