@@ -294,6 +294,24 @@ relative to the config directory, matching Lingui's default behavior.
 `reference-scopes` defaults to `true`; set it to `false` to skip scope
 extraction and emit file-only PO `#:` and FCL `r=` references.
 
+## Network and Privacy
+
+Release builds run an advisory update check before ordinary commands, only
+when stderr is an interactive terminal outside CI. It is a plain GET with no
+installation ID, project hash, installed version, or platform; failures are
+silent, and stdout, JSON output, and exit codes never change. Any of
+`DO_NOT_TRACK=1`, `PALAMEDES_UPDATE_CHECK=0`, `--offline`, or
+`PALAMEDES_OFFLINE=1` turns it off.
+
+Usage reporting is off until you opt in. `pmds telemetry enable` shows the full
+notice, `pmds telemetry enable --accept telemetry-v1` gives consent, and
+`pmds telemetry disable` stops reporting and discards unsent data. The npm
+launcher itself never reports anything.
+
+See [advisory update checks](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md#advisory-update-checks)
+and [optional CLI usage reporting](https://github.com/sebastian-software/palamedes/blob/main/docs/telemetry.md)
+for the details.
+
 ## Related Packages
 
 - [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) for low-level extraction

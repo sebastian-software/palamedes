@@ -16,6 +16,9 @@ locale and may supply ordinary error markup. See [the Remix API guide](../../doc
 pnpm add @palamedes/core @palamedes/core-node @palamedes/remix @palamedes/runtime remix
 ```
 
+The peer range is `remix@^3.0.0`. The examples verify Remix 3.0.0; that is
+the tested version, and later 3.x releases are not yet part of the matrix.
+
 `@palamedes/core` must be a direct runtime dependency because generated catalog
 modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
 `@palamedes/core-node` performs native catalog compilation on the server.

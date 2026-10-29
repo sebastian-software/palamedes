@@ -13,16 +13,20 @@ commands.
 - `pmds catalog merge`
 - `pmds catalog merge-driver`
 - `pmds catalog convert`
+- `pmds catalog compile`
 - `pmds version`
+- `pmds telemetry` (optional usage reporting, off until you opt in)
 
 See the [CLI reference](../cli.md) for flags and examples.
 
-The CLI reference also documents the deployment-gated advisory update check,
-its 24-hour cache, exact six-field request with the year-month install
-cohort, two opt-outs, stderr-only notice,
-non-fatal two-second network bound, build-time endpoint allowlist, and the
-distinction between protocol-only path/media/length validation and aggregate
-storage.
+Release builds run an advisory update check before ordinary commands, only
+with an interactive stderr terminal outside CI. The request is a plain GET with
+no installation ID, project hash, installed version, platform, or install
+cohort; failures are silent and stdout, JSON output, and exit status never
+change. `DO_NOT_TRACK=1`, `PALAMEDES_UPDATE_CHECK=0`, `--offline`, or
+`PALAMEDES_OFFLINE=1` turn it off. See
+[advisory update checks](../cli.md#advisory-update-checks) and
+[optional CLI usage reporting](../telemetry.md).
 
 ## Plugins
 

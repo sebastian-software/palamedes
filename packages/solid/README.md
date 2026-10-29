@@ -144,7 +144,7 @@ plain runtime getter and do not subscribe to in-document locale replacement.
 
 ## SSR and split catalogs
 
-For SSR applications, configure the Vite plugin with compiled graph delivery
+For SSR applications, configure the Vite plugin with automatic compiled catalog delivery
 and install `createSolidCatalogDeliveryMiddleware` before the framework's
 HTML middleware. It injects the active-locale import map, waits for the
 initial catalog fragments before importing the Solid client entry, and leaves
