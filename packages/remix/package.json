@@ -105,9 +105,9 @@
   },
   "dependencies": {
     "@palamedes/config": "workspace:^",
-    "@palamedes/core": "workspace:^",
+    "@palamedes/core": "workspace:*",
     "@palamedes/core-node": "workspace:^",
-    "@palamedes/runtime": "workspace:^",
+    "@palamedes/runtime": "workspace:*",
     "@palamedes/transform": "workspace:^",
     "source-map-js": "1.2.2"
   },
