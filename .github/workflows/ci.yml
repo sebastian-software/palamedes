@@ -396,3 +396,36 @@ jobs:
           # The action's own default arguments are not accepted by current
           # cargo-deny releases.
           arguments: ""
+
+  # Branch protection requires this stable name instead of individual matrix
+  # legs. Keep every other CI job in needs; the workflow contract checks this.
+  ci-gate:
+    name: CI gate
+    if: ${{ always() }}
+    needs:
+      - validate
+      - validate-musl-native
+      - validate-rust
+      - validate-dependency-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        # Use the runner's Node installation; no checkout, dependencies, or
+        # credentials are needed to inspect the completed job results.
+        run: |
+          node <<'NODE'
+          const jobs = Object.entries(JSON.parse(process.env.CI_NEEDS));
+          const unsuccessful = jobs.filter(([, job]) => job.result !== "success");
+          if (jobs.length === 0 || unsuccessful.length > 0) {
+            console.error("CI gate requires every dependency to succeed.");
+            for (const [name, job] of unsuccessful) {
+              console.error(`${name}: ${job.result}`);
+            }
+            process.exit(1);
+          }
+          console.log(`CI gate: all ${jobs.length} job groups succeeded.`);
+          NODE

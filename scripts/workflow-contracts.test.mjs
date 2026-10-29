@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -100,6 +101,45 @@ function uploadsToRegistry(stepText) {
 }
 
 describe("workflow contracts", () => {
+  it("keeps one stable CI gate over every CI job, including all matrix legs", async () => {
+    const jobs = workflowJobs(await readRepositoryFile(".github/workflows/ci.yml"));
+    const gate = jobs.get("ci-gate");
+    expect(gate).toBeDefined();
+    expect(gate.text).toContain("name: CI gate\n");
+    expect(gate.if).toBe("${{ always() }}");
+    expect(gate.needs.toSorted()).toEqual(
+      [...jobs.keys()].filter((name) => name !== "ci-gate").sort(),
+    );
+    expect(gate.text).toContain("CI_NEEDS: ${{ toJSON(needs) }}");
+    expect(gate.text).not.toContain("continue-on-error:");
+    expect(gate.steps).toHaveLength(1);
+    expect(gate.steps[0].if).toBe("");
+  });
+
+  it("executes the CI gate and blocks failed, cancelled, skipped, or missing results", async () => {
+    const jobs = workflowJobs(await readRepositoryFile(".github/workflows/ci.yml"));
+    const gate = jobs.get("ci-gate");
+    const script = gate.text.match(/^ {10}node <<'NODE'\n(?<script>[\s\S]*?)^ {10}NODE$/mu)?.groups
+      ?.script;
+    expect(script).toBeDefined();
+    const successful = Object.fromEntries(gate.needs.map((name) => [name, { result: "success" }]));
+    const run = (needs) =>
+      spawnSync(process.execPath, ["-e", script], {
+        encoding: "utf8",
+        env: { ...process.env, CI_NEEDS: JSON.stringify(needs) },
+      });
+
+    expect(run(successful).status).toBe(0);
+    for (const name of gate.needs) {
+      for (const result of ["failure", "cancelled", "skipped", undefined]) {
+        const output = run({ ...successful, [name]: { result } });
+        expect(output.status, `${name}: ${result}`).toBe(1);
+        expect(output.stderr).toContain(`${name}: ${result}`);
+      }
+    }
+    expect(run({}).status).toBe(1);
+  });
+
   it("keeps native fuzzing bounded, isolated, and separate from normal Rust gates", async () => {
     const workflow = await readRepositoryFile(".github/workflows/native-fuzz.yml");
     const runner = await readRepositoryFile("scripts/fuzz-native.mjs");
