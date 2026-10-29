@@ -72,6 +72,45 @@ test("each public entry receives a complete reference and repository-relative so
   }
 });
 
+test("entry module URLs stay lowercase while labels keep the export name", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "palamedes-api-reference-"));
+  try {
+    const calls = [];
+    await generatePackageApiReference(
+      {
+        slug: "transform",
+        label: "Transform",
+        position: 10,
+        entryPoints: ["packages/transform/src/index.ts", "packages/transform/src/catalogLoader.ts"],
+      },
+      directory,
+      directory,
+      async (config) => {
+        calls.push(config);
+        return [
+          {
+            path: "index.md",
+            frontmatter: { title: config.sidebar.title },
+            content: `# ${config.sidebar.title}\n`,
+          },
+        ];
+      },
+    );
+    assert.equal(calls[1].out, "api-reference/transform/modules/catalogloader");
+    assert.equal(calls[1].sidebar.title, "Transform / catalogLoader");
+    assert.match(
+      await readFile(path.join(directory, "api-reference/transform/index.md"), "utf8"),
+      /\[catalogLoader\]\(\/api-reference\/transform\/modules\/catalogloader\)/u,
+    );
+    await readFile(
+      path.join(directory, "api-reference/transform/modules/catalogloader/index.md"),
+      "utf8",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("breadcrumbs do not leave a second main heading and fenced examples stay intact", () => {
   const doc = normalizeApiPage(
     {

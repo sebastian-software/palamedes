@@ -113,12 +113,14 @@ export async function generatePackageApiReference(
   generate = generateApiDocs,
 ) {
   const root = `api-reference/${pkg.slug}`;
-  const entries = pkg.entryPoints.map((entry, index) => ({
-    source: entry,
-    subpath: index === 0 ? null : basename(entry).replace(/\.[cm]?[jt]sx?$/u, ""),
-  }));
-  for (const { source, subpath } of entries) {
-    const label = subpath ? `${pkg.label} / ${subpath}` : pkg.label;
+  const entries = pkg.entryPoints.map((entry, index) => {
+    const name = index === 0 ? null : basename(entry).replace(/\.[cm]?[jt]sx?$/u, "");
+    // The former multi-entry generator published lowercase module URLs, for
+    // example `/api-reference/transform/modules/catalogloader`. Keep them.
+    return { source: entry, name, subpath: name?.toLowerCase() ?? null };
+  });
+  for (const { source, name, subpath } of entries) {
+    const label = name ? `${pkg.label} / ${name}` : pkg.label;
     const out = subpath ? `${root}/modules/${subpath}` : root;
     // One entry at a time prevents Ardo from replacing module exports with
     // empty module shells. Each entry keeps its existing public module URL.
@@ -150,7 +152,7 @@ export async function generatePackageApiReference(
       if (doc.path === "index.md" && subpath === null && entries.length > 1) {
         const links = entries
           .slice(1)
-          .map(({ subpath: name }) => `- [${name}](/${root}/modules/${name})`)
+          .map(({ name, subpath }) => `- [${name}](/${root}/modules/${subpath})`)
           .join("\n");
         normalized.content += `\n\n## Entry points\n\n${links}`;
       }

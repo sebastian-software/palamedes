@@ -9,6 +9,7 @@ import {
   buildBrowserRuntimeCompiler,
   browserRuntimeInputPaths,
   browserRuntimeSourceSha256,
+  isBrowserRuntimeIgnoredFile,
   isBrowserRuntimeTestFile,
   normalizeCargoLock,
 } from "./browser-runtime-source-hash.mjs";
@@ -181,6 +182,65 @@ test("native compiler and build settings invalidate the report", async () => {
       await hashWith((filename, text) =>
         filename === changed ? `${text}\n# changed input\n` : undefined,
       ),
+      baseline,
+      changed,
+    );
+  }
+});
+
+test("Rust tests, test fixtures, and docs do not change the source hash", async () => {
+  for (const filename of [
+    "crates/palamedes/src/transform/tests.rs",
+    "crates/palamedes/src/catalog_artifact/tests.rs",
+    "crates/palamedes/src/test_support.rs",
+    "crates/palamedes-node/tests/addon.rs",
+    "crates/palamedes/src/vue_test.rs",
+    "crates/palamedes/src/vue_tests.rs",
+  ])
+    assert.ok(isBrowserRuntimeTestFile(filename), filename);
+  for (const filename of [
+    "crates/palamedes/src/descriptor.rs",
+    "crates/palamedes/src/transform/mod.rs",
+    "crates/palamedes/src/testing.rs",
+    "crates/palamedes/src/latest.rs",
+  ])
+    assert.ok(!isBrowserRuntimeIgnoredFile(filename), filename);
+
+  const unchanged = [
+    "crates/palamedes/src/transform/tests.rs",
+    "crates/palamedes/src/test_support.rs",
+    "crates/palamedes/fixtures/lingui-apostrophes.de.po",
+    "crates/palamedes-node/README.md",
+  ];
+  for (const filename of unchanged) {
+    // The file exists in the repository, so excluding it is a choice, not a typo.
+    await readInput(filename);
+    assert.ok(!inputPaths.includes(filename), filename);
+    assert.equal(
+      await browserRuntimeSourceSha256(root, {
+        inputPaths,
+        async read(name) {
+          const bytes = await readInput(name);
+          return name === filename ? Buffer.concat([bytes, Buffer.from("\n// edit\n")]) : bytes;
+        },
+      }),
+      baseline,
+      filename,
+    );
+  }
+  assert.deepEqual(
+    inputPaths.filter(
+      (filename) => filename.startsWith("crates/palamedes/fixtures/") || filename.endsWith(".md"),
+    ),
+    [],
+  );
+});
+
+test("a native compiler source edit changes the source hash", async () => {
+  for (const changed of ["crates/palamedes/src/vue.rs", "crates/palamedes/src/transform/mod.rs"]) {
+    assert.ok(inputPaths.includes(changed), changed);
+    assert.notEqual(
+      await hashWith((filename, text) => (filename === changed ? `${text}\n// edit\n` : undefined)),
       baseline,
       changed,
     );

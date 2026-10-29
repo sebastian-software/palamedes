@@ -267,10 +267,30 @@ fn check_template(
     Ok(())
 }
 
+/// Split a `v-for` value into its alias and collection like Vue's
+/// `forAliasRE` (`/([\s\S]*?)\s+(?:in|of)\s+(\S[\s\S]*)/`): the first `in` or
+/// `of` surrounded by any whitespace separates them, and the collection starts
+/// at its first non-whitespace character.
 fn split_for(value: &str) -> Option<(&str, &str)> {
-    value
-        .split_once(" in ")
-        .or_else(|| value.split_once(" of "))
+    let is_space = |c: char| c.is_whitespace();
+    let mut search = 0;
+    while let Some(offset) = value[search..].find(is_space) {
+        let start = search + offset;
+        let keyword = value[start..].trim_start_matches(is_space);
+        if let Some(rest) = keyword
+            .strip_prefix("in")
+            .or_else(|| keyword.strip_prefix("of"))
+            && rest.starts_with(is_space)
+        {
+            let collection = rest.trim_start_matches(is_space);
+            if !collection.is_empty() {
+                return Some((&value[..start], collection));
+            }
+        }
+        // Later starts inside the same whitespace run cannot match either.
+        search = value.len() - keyword.len();
+    }
+    None
 }
 
 fn check_template_expression(
@@ -712,5 +732,55 @@ mod markup_tests {
         assert!(extract_messages(&source, "View.vue").is_err());
         let source = format!("{script}<template><p v-for=\"t in t\">{{{{t}}}}</p></template>");
         assert!(extract_messages(&source, "View.vue").is_err());
+    }
+
+    #[test]
+    fn v_for_aliases_accept_any_whitespace_around_in_and_of() {
+        let script = "<script setup>import { t } from '@palamedes/core/macro'; const title=t`Title`;</script>";
+        for value in [
+            "t\tin items",
+            "t\nin\nitems",
+            "t   of   items",
+            "(t, index) in items",
+            "(t,\tindex)\r\nof items",
+            "{ t } in items",
+            "({ t, id }, index)  in  items",
+            "[t, id] of items",
+        ] {
+            let source =
+                format!("{script}<template><p v-for=\"{value}\">{{{{ t }}}}</p></template>");
+            assert_eq!(
+                extract_messages(&source, "View.vue")
+                    .unwrap_or_else(|e| panic!("{value:?}: {e}"))
+                    .len(),
+                1,
+                "{value:?}"
+            );
+            transform_macros(&source, "View.vue", None)
+                .unwrap_or_else(|e| panic!("{value:?}: {e}"));
+        }
+        // The collection is still evaluated outside the alias, whatever the spacing.
+        let source = format!("{script}<template><p v-for=\"t\tin\n t\">{{{{t}}}}</p></template>");
+        assert!(extract_messages(&source, "View.vue").is_err());
+    }
+
+    #[test]
+    fn v_for_split_matches_vue_for_alias_semantics() {
+        use super::split_for;
+        assert_eq!(split_for("t in items"), Some(("t", "items")));
+        assert_eq!(split_for("t\tin\titems"), Some(("t", "items")));
+        assert_eq!(split_for("t\n  of\n  items"), Some(("t", "items")));
+        assert_eq!(split_for("(t, i)   in  items"), Some(("(t, i)", "items")));
+        assert_eq!(
+            split_for("({ t, id }, i) of list.filter(x => x in y)"),
+            Some(("({ t, id }, i)", "list.filter(x => x in y)"))
+        );
+        // The first separator wins, whichever keyword it is.
+        assert_eq!(split_for("t of a in b"), Some(("t", "a in b")));
+        // Keywords inside identifiers, or without a collection, do not split.
+        assert_eq!(split_for("item inside"), None);
+        assert_eq!(split_for("t intems"), None);
+        assert_eq!(split_for("t in "), None);
+        assert_eq!(split_for("t"), None);
     }
 }
