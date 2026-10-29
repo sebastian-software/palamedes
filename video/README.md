@@ -77,7 +77,13 @@ voice, score, mix, picture, and MP4 from `audio/cues/space.json` or
 `audio/cues/launch.json`. The lines live in `audio/lines-space.json` and
 `audio/lines-launch.json`, and `audio/eleven.py` generates their takes. Set
 `SUPERSAMPLE=2` for a master: it renders at 3840 × 2160 and scales down with
-Lanczos, so type that drifts by fractions of a pixel does not shimmer.
+Lanczos, so type that drifts by fractions of a pixel does not shimmer. The build
+also writes SRT and word-timed WebVTT captions next to the MP4.
+
+The launch film is a second video, not a new cut of the homepage film. Publish
+it with `scripts/publish-bunny.mjs` without `--site`, and pass its own
+`--title` and `--cues audio/cues/space.json`; `--site` would point the homepage
+at it.
 
 ## Publishing to Bunny Stream
 

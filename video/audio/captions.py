@@ -69,9 +69,11 @@ def chunks(text):
     """Cues end at sentence ends where they can, and never exceed MAX characters."""
     # A dot between letters (Next.js, palamedes.dev) is part of a name, not a sentence end.
     text = re.sub(r"(?<=\w)\.(?=\w)", "\u2024", text)
+    # Neither is a comma between digits (1,500).
+    text = re.sub(r"(?<=\d),(?=\d)", "\u201a", text)
     clauses = []
     for clause in re.findall(r"[^,.:;?!]+[,.:;?!]*", text):
-        clauses += split_long(clause.strip().replace("\u2024", "."))
+        clauses += split_long(clause.strip().replace("\u2024", ".").replace("\u201a", ","))
     out, current = [], ""
     for clause in clauses:
         joined = f"{current} {clause}".strip()
@@ -94,6 +96,12 @@ def stamp(t):
 timed = []
 for cue in cues:
     spoken = words_for(cue["take"])
+    # A trimmed cue plays only part of its take: keep the words inside the trim
+    # and place them relative to its start.
+    trim = cue.get("trim") or [0, None]
+    lo, hi = trim[0] or 0, trim[1]
+    spoken = [w for w in spoken if w[1] >= lo - 0.05 and (hi is None or w[1] < hi)]
+    at = cue["at"] - lo
     script = cue["text"].split()
     matcher = difflib.SequenceMatcher(None, [norm(w) for w in script], [norm(w[0]) for w in spoken])
     start_of, end_of = {}, {}
@@ -113,10 +121,14 @@ for cue in cues:
         return fallback
 
     position = 0
-    for text in chunks(cue["text"]):
+    parts = chunks(cue["text"])
+    for index, text in enumerate(parts):
         count = len(text.split())
-        begin = cue["at"] + when(position, start_of, first)
-        end = cue["at"] + when(position + count - 1, end_of, last) + 0.25
+        # A cue's first and last words bound its speech even when a name does
+        # not transcribe the way it is spelled.
+        begin = at + (first if index == 0 else when(position, start_of, first))
+        tail = last if index == len(parts) - 1 else when(position + count - 1, end_of, last)
+        end = at + tail + 0.25
         timed.append([begin, end, text])
         position += count
 

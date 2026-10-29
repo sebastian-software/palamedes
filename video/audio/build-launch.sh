@@ -39,6 +39,8 @@ ffmpeg -v error -y -i "$OUT/premix.wav" \
   -af "loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=$(get input_i):measured_TP=$(get input_tp):measured_LRA=$(get input_lra):measured_thresh=$(get input_thresh):offset=$(get target_offset):linear=true" \
   -ar 48000 -c:a pcm_s16le "$OUT/audio.wav"
 cp "$OUT/captions.srt" "$WORK/out/$FILE.srt"
+# Short, word-timed WebVTT captions for streaming players.
+"$PY" -I "$HERE/captions.py" "$WORK" "$CUES" "$WORK/out/$FILE.en.vtt"
 
 # --- picture and mux (SKIP_PICTURE=1 builds the audio only) -------------------
 [ "${SKIP_PICTURE:-}" = 1 ] && exit 0
