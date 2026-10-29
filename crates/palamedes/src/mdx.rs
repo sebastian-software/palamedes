@@ -4,7 +4,7 @@
 //! Palamedes consumes that tree to define translation units, rich
 //! placeholders, message identity, extraction records, and the runtime module.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 
 use ferromark::ast::{
@@ -22,7 +22,9 @@ use crate::icu_text::{catalog_icu_spelling, compiled_message_key, escape_icu_lit
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{JsxMessagePart, clean_jsx_whitespace, join_mdx_message_parts};
 use crate::source::{SourceComment, SourceCommentKind, SourceLocator, SourceRange};
-use crate::source_message::lowered_message_problem;
+use crate::source_message::{
+    ValueNames, bare_identifier, lowered_message_problem, make_unique_value_name,
+};
 use crate::transform::NativeTransformSourceMap;
 
 // Markdown soft line breaks separate words, including next to rich placeholders.
@@ -1086,14 +1088,15 @@ impl<'a> MdxCompiler<'a> {
                 .append_at(&fallback_jsx(&unit.roots), source_offset);
             return true;
         }
-        if !self.check_lowered_message(&joined.message, &unit.values, &components, source_offset) {
+        let placeholders = unit.values.iter().cloned().collect::<BTreeMap<_, _>>();
+        if !self.check_lowered_message(&joined.message, &placeholders, &components, source_offset) {
             return true;
         }
 
         let reference = self.push_message_with_runtime(
             catalog_icu_spelling(&joined.message),
             joined.message,
-            unit.values.clone(),
+            placeholders,
             source_offset,
         );
         self.needs_trans = true;
@@ -1101,6 +1104,8 @@ impl<'a> MdxCompiler<'a> {
         if self.options.include_source_metadata {
             props.push(format!("message={{{}}}", js_string(&reference.message)));
         }
+        // Values stay in source order and come before components, matching
+        // authored `<Trans>` evaluation.
         if !unit.values.is_empty() {
             let values = unit
                 .values
@@ -1267,8 +1272,9 @@ impl<'a> MdxCompiler<'a> {
 struct RichUnit {
     roots: Vec<RichNode>,
     frames: Vec<RichFrame>,
-    values: BTreeMap<String, String>,
-    used_names: BTreeSet<String>,
+    /// Unique names and expressions in source order.
+    values: Vec<(String, String)>,
+    names: ValueNames,
     source_offset: Option<usize>,
     ignored: Option<bool>,
     body_checkpoint: WriterCheckpoint,
@@ -1293,23 +1299,18 @@ impl RichUnit {
         }
     }
 
+    /// Names a value with the rule shared by JavaScript and JSX messages: only
+    /// repeated bare identifiers share a placeholder.
     fn value(&mut self, expression: &str, source_offset: usize) {
-        if let Some(name) = self
-            .values
-            .iter()
-            .find(|(_, existing)| existing.as_str() == expression)
-            .map(|(name, _)| name.clone())
-        {
-            self.push(RichNode::Value {
-                name,
-                expression: expression.to_owned(),
-                source_offset,
-            });
-            return;
+        let identifier = mdx_bare_identifier(expression);
+        let name = make_unique_value_name(
+            infer_expression_name(expression),
+            identifier.as_deref(),
+            &mut self.names,
+        );
+        if !self.values.iter().any(|(existing, _)| *existing == name) {
+            self.values.push((name.clone(), expression.to_owned()));
         }
-        let base = infer_expression_name(expression);
-        let name = unique_name(&base, &mut self.used_names);
-        self.values.insert(name.clone(), expression.to_owned());
         self.push(RichNode::Value {
             name,
             expression: expression.to_owned(),
@@ -1538,18 +1539,13 @@ fn candidate_or_value(expression: &str) -> &str {
     }
 }
 
-fn unique_name(base: &str, used: &mut BTreeSet<String>) -> String {
-    if used.insert(base.to_owned()) {
-        return base.to_owned();
-    }
-    let mut suffix = 1usize;
-    loop {
-        let candidate = format!("{base}_{suffix}");
-        if used.insert(candidate.clone()) {
-            return candidate;
-        }
-        suffix += 1;
-    }
+/// Returns the identifier an MDX expression reads directly, if that is all it does.
+fn mdx_bare_identifier(expression: &str) -> Option<String> {
+    let allocator = Allocator::default();
+    Parser::new(&allocator, expression, SourceType::tsx())
+        .parse_expression()
+        .ok()
+        .and_then(|expression| bare_identifier(&expression).map(ToOwned::to_owned))
 }
 
 fn is_js_identifier(value: &str) -> bool {
@@ -2727,8 +2723,8 @@ See ![Diagram label](./d.png) here.
     }
 
     #[test]
-    fn deduplicates_expressions_and_preserves_rendering_metadata() {
-        let source = "Hello {user.name} and again {user.name}.\n\n```ts\nconst value = 1\n```\n\n<div class=\"note\">Styled</div>";
+    fn shares_repeated_identifiers_and_preserves_rendering_metadata() {
+        let source = "Hello {name} and again {(name)}.\n\n```ts\nconst value = 1\n```\n\n<div class=\"note\">Styled</div>";
         let result = analyze_valid(source, MdxOptions::default());
         assert_eq!(result.messages[0].message, "Hello {name} and again {name}.");
         assert_eq!(
@@ -2740,11 +2736,41 @@ See ![Diagram label](./d.png) here.
             1
         );
         let code = result.code.expect("valid MDX should compile");
+        assert!(code.contains("values={{ name: (name) }}"), "{code}");
         assert!(code.contains(r#"className={"language-ts"}"#));
         assert!(
             code.contains(r#"<div className="note" />"#),
             "generated module should normalize React class attributes:\n{code}"
         );
+    }
+
+    /// MDX follows the JavaScript and JSX rule (#1462): calls, property reads,
+    /// and compound expressions keep their own values, which are passed in
+    /// source order before component props.
+    #[test]
+    fn keeps_repeated_expression_values_in_source_order() {
+        for (source, message, values) in [
+            (
+                "Values: {next()} and {next()}, {user.name} and {user.name}.",
+                "Values: {next} and {next_1}, {name} and {name_1}.",
+                "values={{ next: (next()), next_1: (next()), name: (user.name), name_1: (user.name) }}",
+            ),
+            (
+                "Counts: {count}, {user.name}, {count}.",
+                "Counts: {count}, {name}, {count_1}.",
+                "values={{ count: (count), name: (user.name), count_1: (count) }}",
+            ),
+            (
+                "{count} new, **{count} unread** of {inbox.total}.",
+                "{count} new, <0>{count} unread</0> of {total}.",
+                "values={{ count: (count), total: (inbox.total) }} components={{ 0: <strong /> }}",
+            ),
+        ] {
+            let result = analyze_valid(source, MdxOptions::default());
+            assert_eq!(result.messages[0].message, message);
+            let code = result.code.expect("valid MDX should compile");
+            assert!(code.contains(values), "{code}");
+        }
     }
 
     fn assert_valid_tsx(source: &str) {

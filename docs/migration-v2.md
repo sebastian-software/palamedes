@@ -251,6 +251,49 @@ source location. Add a space after `<`, pass the text as a placeholder value,
 or use inline code in MDX. See
 [Quoting and literal text](../packages/core/README.md#quoting-and-literal-text).
 
+## Regenerate messages with repeated expressions
+
+Each call, property read (including getters), or other non-identifier
+interpolation now keeps its own placeholder and value. For example,
+`` t`Values: ${next()} and ${next()}` `` extracts as `Values: {next} and {next_1}`
+and evaluates `next()` twice, from left to right. In v1 both occurrences shared
+`{next}`, so `next()` ran once.
+
+A repeated bare identifier such as `${count}` (or `${(count)}`) still shares one
+placeholder, as long as no other kind of expression appears between the two
+occurrences. Any call, property read, or compound expression in between could
+change the variable, so the later occurrence gets its own name. The rule is the
+same for `t`, descriptors, choice macros, `<Trans>`, the JSX choice components,
+and MDX. These messages get new IDs:
+
+| Source                                                              | v1 message                                       | v2 message                                         |
+| ------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| `` t`${user.name} invited ${user.name}` ``                          | `{name} invited {name}`                          | `{name} invited {name_1}`                          |
+| `` t`${count} ${user.name} ${count}` ``                             | `{count} {name} {count}`                         | `{count} {name} {count_1}`                         |
+| ``plural(items.length, { other: `${items.length} items` })``        | `{length, plural, other {{length} items}}`       | `{length, plural, other {{length_1} items}}`       |
+| ``<Plural value={items.length} other={`${items.length} items`} />`` | `{length, plural, other {{length} items}}`       | `{length, plural, other {{length_1} items}}`       |
+| ``select(role, { admin: `${user.name}!`, other: `${user.name}` })`` | `{role, select, admin {{name}!} other {{name}}}` | `{role, select, admin {{name}!} other {{name_1}}}` |
+| MDX: `Hi {user.name}, bye {user.name}`                              | `Hi {name}, bye {name}`                          | `Hi {name}, bye {name_1}`                          |
+
+Unchanged examples: `` t`${count} of ${count}` `` stays `{count} of {count}`,
+and `<Trans>{count} new, <b>{count} unread</b></Trans>` stays
+`{count} new, <0>{count} unread</0>`.
+
+Values are evaluated in source order. A choice macro evaluates its value and
+then the values of every branch, not only the branch it renders. `<Trans>` and
+MDX pass `values` before `components`, so attributes on embedded elements, such
+as `href={url()}`, run after every message value.
+
+Run `pmds extract` and rebuild catalogs after upgrading. Review translations for
+messages whose placeholder names changed; the previous entry becomes obsolete.
+For unbundled Node applications, regenerate the runtime manifest with
+`pmds extract --runtime-manifest ./runtime-macros.json` as well. The manifest
+format remains version 1. Two `t` calls with the same static text but different
+expression shapes, such as `` t`${name} invited ${name}` `` and
+`` t`${user.name} invited ${user.name}` ``, now compile to different messages,
+so manifest generation reports a `RuntimeMacroCollision` for them. Rename one
+placeholder or reword one message.
+
 ## Replace removed APIs
 
 Rows marked _v2 pre-release only_ name APIs that v1 never shipped; they matter

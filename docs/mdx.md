@@ -86,9 +86,11 @@ Read the <0>guide</0> or visit <1>configuration</1>.
 ```
 
 The generated module preserves `account.name` as the runtime expression behind
-the `name` placeholder. Repeated expressions reuse the same placeholder. URLs,
-image sources, fenced code blocks, and inline code are rendered but are not sent
-to translators. Fenced code keeps a `language-*` class derived from its info
+the `name` placeholder. A repeated bare identifier such as `{count}` reuses one
+placeholder; calls, property reads, and other expressions get one placeholder per
+occurrence (`{name}`, `{name_1}`) and are evaluated in source order, as in
+JavaScript macros. URLs, image sources, fenced code blocks, and inline code are
+rendered but are not sent to translators. Fenced code keeps a `language-*` class derived from its info
 string.
 
 ## Configuration
