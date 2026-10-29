@@ -24,10 +24,16 @@ Each cut has a folder named `<date> v<N>` with its own `README.md` and a
 
 ## Cuts
 
-| Cut | Archive folder                  | Length | Source commit on main | Bunny id                               | YouTube                      |
-| --- | ------------------------------- | ------ | --------------------- | -------------------------------------- | ---------------------------- |
-| v7  | `2026-10-26 v7 (Palamedes 2.0)` | 3:06   | `404568f3` (#1361)    | `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee` | package ready, not uploaded  |
-| v6  | `2026-10-19 v6`                 | 2:40   | #1259                 | `df747a2a-efb7-414e-8e67-da6a3be9654f` | https://youtu.be/XBECHvmx2qQ |
+| Cut       | Archive folder                                                 | Length | Source commit      | Bunny id                               | YouTube                                 |
+| --------- | -------------------------------------------------------------- | ------ | ------------------ | -------------------------------------- | --------------------------------------- |
+| v7        | `2026-10-26 v7 (Palamedes 2.0)`                                | 3:06   | `404568f3` (#1361) | `b37ad483-9fee-4c09-a0ca-1c7fadc4aaee` | package ready, not uploaded             |
+| v6        | `2026-10-19 v6`                                                | 2:40   | #1259              | `df747a2a-efb7-414e-8e67-da6a3be9654f` | https://youtu.be/XBECHvmx2qQ            |
+| launch-v1 | `2026-10-29 launch v1 (Palamedes 2.0)` (local release package) | 1:10   | `b1a5a40b` (#1472) | —                                      | https://youtu.be/WGFXql0mOb8 (unlisted) |
+
+The launch film is an additional homepage video, embedded from YouTube through
+`site/app/data/launch-film.ts`. Its English SRT captions and PNG thumbnail were
+uploaded with the master. The source package's `SHA256SUMS` passed verification;
+its NAS copy has not been verified. The product film above keeps its Bunny player.
 
 The v7 archive holds everything needed to rebuild the cut without
 ElevenLabs: the 15 chosen takes (`takes/`), every delivered take
