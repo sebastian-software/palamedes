@@ -67,6 +67,20 @@ test("placeholder normalization only unifies the corpus's one variable", () => {
   assert.equal(normalizeMessage("{other}"), "{other}");
 });
 
+test("Palamedes fixtures pass values only for message placeholders", () => {
+  for (const lane of frameworkLanes().filter((lane) => lane.tool === "palamedes")) {
+    const code = renderFrameworkComponent(
+      lane,
+      [{ current: "Pay for {name}" }, { current: "Save & continue <today>" }],
+      0,
+      40,
+    );
+    assert.ok(code.includes('t({ message: "Pay for {name}" }, { name })'), lane.id);
+    assert.ok(code.includes('t({ message: "Save & continue <today>" })'), lane.id);
+    assert.ok(!code.includes('t({ message: "Save & continue <today>" },'), lane.id);
+  }
+});
+
 function validCatalogs(inventory) {
   return Object.fromEntries(
     ["en", "de"].map((locale) => [
