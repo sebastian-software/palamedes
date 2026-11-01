@@ -58,6 +58,8 @@ async function context({ disabled = false, blocked = false, local = false } = {}
       sdkRequests++;
       if (blocked) return route.abort();
       assert.ok(url.searchParams.get("siteId"), "SDK request must carry the configured site ID");
+      // Exercise document navigation before the asynchronous SDK is ready.
+      await new Promise((resolve) => setTimeout(resolve, 250));
       return route.fulfill({ contentType: "application/javascript", body: sdkFixture });
     }
     if (url.hostname === "palamedes.dev") {
@@ -142,7 +144,9 @@ try {
   await player.evaluate(() => window.emit("timeupdate", { seconds: 0, duration: 100 }));
   await page.waitForTimeout(20);
   await player.evaluate(() => window.emit("timeupdate", { seconds: 0.05, duration: 100 }));
-  await page.waitForFunction(() => window.__events.some(({ name }) => name === "video_start"));
+  await page.waitForFunction(() =>
+    (window.__events ?? []).some(({ name }) => name === "video_start"),
+  );
   assert.equal((await events(page, "video_start")).length, 1);
   // The hero player stays in place; more playback in the same visit is not a second start.
   await player.evaluate(() => window.emit("timeupdate", { seconds: 0.1, duration: 100 }));
@@ -165,7 +169,7 @@ try {
   // Wait for that visit before navigating back, including on slower CI runners.
   await page.waitForFunction(
     (pathname) =>
-      window.__events.some(
+      (window.__events ?? []).some(
         ({ name, properties }) => name === "pageview" && properties.page === pathname,
       ),
     new URL(searchPageUrl).pathname,
@@ -179,7 +183,7 @@ try {
   await page.goBack();
   await page.waitForURL(`${origin}/`);
   await page.waitForFunction(() => {
-    const views = window.__events.filter(({ name }) => name === "pageview");
+    const views = (window.__events ?? []).filter(({ name }) => name === "pageview");
     return views.length >= 3 && views.at(-1).properties.page === "/";
   });
   await page.getByRole("button", { name: "One seat more" }).click();
@@ -210,16 +214,20 @@ try {
 
   await page.goto(`${origin}/get-started`, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "Vite + Solid", exact: true }).click();
-  await page.waitForFunction(() => window.__events.some(({ name }) => name === "tab_select"));
+  await page.waitForFunction(() =>
+    (window.__events ?? []).some(({ name }) => name === "tab_select"),
+  );
   assert.equal((await events(page, "tab_select")).length, 1);
   await page.getByRole("tab", { name: "Vite + Solid", exact: true }).press("ArrowRight");
   await page.keyboard.press("Enter");
   await page.waitForFunction(
-    () => window.__events.filter(({ name }) => name === "tab_select").length === 2,
+    () => (window.__events ?? []).filter(({ name }) => name === "tab_select").length === 2,
   );
   await page.mouse.move(1300, 600);
   await page.mouse.wheel(0, 20_000);
-  await page.waitForFunction(() => window.__events.some(({ name }) => name === "scroll_depth"));
+  await page.waitForFunction(() =>
+    (window.__events ?? []).some(({ name }) => name === "scroll_depth"),
+  );
   const depths = await events(page, "scroll_depth");
   assert.equal(new Set(depths.map(({ properties }) => properties.percent)).size, depths.length);
 
