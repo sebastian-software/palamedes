@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from "ardo/react";
 
 /*
  * The opening of every marketing subpage: a kicker that names the page's job,

@@ -1,5 +1,5 @@
 import { Reveal } from "@palamedes/site-ui";
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { Band, BandHeader } from "~/components/marketing/Band";
 import contentStats from "~/data/generated/content-stats.json";
@@ -96,7 +96,7 @@ export function FrameworkWiring() {
         Without an adapter, every one of these moments is glue code you write and maintain. With
         Palamedes the same model connects {FRAMEWORKS.map((framework) => framework.name).join(", ")}
         , and Vite. Hono and Express use the shared runtime for backend messages.{" "}
-        <Link to="/frameworks" viewTransition className="pmds-arrow-link">
+        <Link to="/frameworks" className="pmds-arrow-link">
           Find your framework →
         </Link>
       </p>
@@ -111,7 +111,7 @@ export function FrameworkWiring() {
             {FRAMEWORKS.length} app integrations × {contentStats.localeStrategyCount} strategies in
             CI. Explicit language domains and SEO link generation have focused core tests.
           </p>
-          <Link to="/locale-routing" viewTransition className="pmds-arrow-link mt-3">
+          <Link to="/locale-routing" className="pmds-arrow-link mt-3">
             Which one fits your product? →
           </Link>
         </Reveal>

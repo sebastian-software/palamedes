@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { FrameworkIdentity } from "~/components/FrameworkIdentity";
 import { frameworkLandingHref } from "~/data/framework-landing";
@@ -78,11 +78,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                   scope="row"
                   className="border border-hair px-4 py-4 text-left align-top text-[14px] font-bold"
                 >
-                  <Link
-                    to={frameworkLandingHref(framework.slug)}
-                    viewTransition
-                    className="hover:text-accent"
-                  >
+                  <Link to={frameworkLandingHref(framework.slug)} className="hover:text-accent">
                     <FrameworkIdentity slug={framework.slug} name={framework.name} />
                   </Link>
                   <div className="mt-2">

@@ -22,8 +22,9 @@ SPA pageviews must be disabled before deploying this integration.
    and `VITE_RYBBIT_SITE_ID`. Both absent means tracking stays disabled.
 3. In this site's tracking settings, disable **Automatic Initial Pageview** and
    **SPA Navigation**. The shared shell calls `rybbit.pageview()` once after
-   script loading and on each subsequent pathname change, including history
-   navigation. Rybbit v2.6.0's SPA listener counts query/anchor-only changes as
+   script loading in each static document, including history navigation. A
+   `pageshow` restoration from the browser's back/forward cache starts a new
+   visit without reinstalling the SDK. Rybbit v2.6.0's SPA listener counts query/anchor-only changes as
    visits even when URL parameters are disabled. Disable **URL Parameters** too;
    the site has no hash routing. Keep these settings when upgrading Rybbit so
    automatic and site-owned pageviews don't run together.

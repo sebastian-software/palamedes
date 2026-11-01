@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { Band, BandHeader } from "~/components/marketing/Band";
 import { NOT_FOR_YOU } from "~/data/fit";
@@ -23,7 +23,6 @@ export function Chooser() {
           <li key={rival.slug} className="bg-paper">
             <Link
               to={`/compare/${rival.slug}`}
-              viewTransition
               className="group flex h-full flex-col px-6 py-6 transition-colors hover:bg-hover-fill focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
             >
               <span className="micro text-[11px] tracking-label text-gray-spec">Palamedes vs</span>

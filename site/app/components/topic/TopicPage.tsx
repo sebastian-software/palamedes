@@ -1,4 +1,6 @@
-import { Link } from "react-router";
+import { StructuredData } from "~/components/StructuredData";
+import { topicStructuredData } from "~/lib/meta";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
 import { CtaBand } from "~/components/home/CtaBand";
@@ -19,6 +21,14 @@ import type { Topic } from "~/data/topics";
 export function TopicPage({ topic }: { topic: Topic }) {
   return (
     <Page>
+      <StructuredData
+        data={topicStructuredData({
+          title: topic.metaTitle,
+          description: topic.metaDescription,
+          path: `/${topic.slug}`,
+          faq: topic.faq,
+        })}
+      />
       <PageHero
         kicker={topic.eyebrow}
         title={topic.headline}
@@ -147,7 +157,6 @@ export function TopicPage({ topic }: { topic: Topic }) {
             <Link
               key={link.href}
               to={link.href}
-              viewTransition
               className="group bg-paper px-7 py-7 transition-colors hover:bg-hover-fill"
             >
               <p className="text-[18px] leading-snug font-bold group-hover:text-accent">

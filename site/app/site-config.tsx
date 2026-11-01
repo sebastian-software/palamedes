@@ -1,7 +1,7 @@
 import { FAMILY_SITE, family, familyGroups, type FamilyTool } from "ferramenta-family/registry";
 import type { SiteConfig, SiteFamilyTool, SiteLinkComponentProps } from "@palamedes/site-ui";
 import { defineSiteConfig } from "@palamedes/site-ui";
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import { apiHref, decisionHref, docsHref, repoHref } from "~/data/links";
 import { PRIMARY_NAVIGATION_LINKS } from "~/data/navigation";
@@ -14,18 +14,12 @@ export function RouterSiteLink({
   ariaCurrent,
 }: SiteLinkComponentProps) {
   /*
-   * Route paths get React Router view transitions. Hash links, generated
-   * static files, and external origins remain ordinary anchors.
+   * Ardo resolves internal paths against the deployment base. Other links
+   * retain their original destinations.
    */
   if (href.startsWith("/") && !href.includes(".")) {
     return (
-      <Link
-        to={href}
-        viewTransition
-        className={className}
-        aria-label={ariaLabel}
-        aria-current={ariaCurrent}
-      >
+      <Link to={href} className={className} aria-label={ariaLabel} aria-current={ariaCurrent}>
         {children}
       </Link>
     );

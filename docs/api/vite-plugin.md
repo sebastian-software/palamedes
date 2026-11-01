@@ -192,8 +192,7 @@ const label = $derived(plural(quantity, { one: "# ticket", other: "# tickets" })
 ```
 
 The existing Vite adapter delivers only the active locale's component fragments
-before initial and dynamically imported components execute. Applications do not
-import catalogs or initialize the runtime manually. Locale controls navigate to
+before initial and dynamically imported components execute. Applications do not import catalogs or initialize the runtime manually. Locale controls navigate to
 a new document, following [ADR-007](../../adr/007-locale-is-fixed-for-a-browser-document.md).
 
 The private [Svelte + Vite proof](../../proof/svelte-vite/README.md) uses the shared

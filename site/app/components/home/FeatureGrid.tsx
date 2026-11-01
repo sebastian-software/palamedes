@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 
 import type { FeatureCard } from "~/data/features";
 import { FeatureIcon } from "~/components/icons/FeatureIcon";
@@ -29,7 +29,6 @@ export function FeatureGrid({ cards, columns = 3 }: FeatureGridProps) {
             card.href.startsWith("/") && !card.href.includes(".") ? (
               <Link
                 to={card.href}
-                viewTransition
                 className="pmds-arrow-link mt-auto self-start pt-3"
                 aria-label={`${card.title}: read more`}
               >

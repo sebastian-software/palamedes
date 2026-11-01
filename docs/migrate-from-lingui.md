@@ -100,8 +100,7 @@ function currentLocale() {
 }
 ```
 
-Call `getI18n()` inside a function or component, not at module top level — at
-import time there is no active i18n instance yet.
+Call `getI18n()` inside a function or component, not at module top level — at import time there is no active i18n instance yet.
 
 ### 2. Explicit IDs
 

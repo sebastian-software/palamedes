@@ -100,9 +100,6 @@ jobs:
           VITE_RYBBIT_SITE_ID: ${{ vars.PALAMEDES_RYBBIT_SITE_ID }}
         run: pnpm build:site
 
-      - name: Add SPA fallback as 404 page
-        run: cp site/build/client/__spa-fallback.html site/build/client/404.html
-
       # Runs against the exact artifact that is about to deploy, and before the
       # deploy job, so a dead route or a console error blocks the release
       # instead of being found by the post-deploy curl checks, which only grep

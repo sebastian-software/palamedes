@@ -1,6 +1,5 @@
 import {
   ArdoErrorBoundary,
-  ArdoFooter,
   ArdoGeneratedSidebar,
   ArdoHeader,
   ArdoHeaderActions,
@@ -14,7 +13,7 @@ import {
   ArdoSocialLink,
 } from "ardo/ui";
 import { ButtonLink, SiteFooter, SiteUiProvider, ToolSwitcher } from "@palamedes/site-ui";
-import { Link, useLoaderData, useLocation } from "react-router";
+import { ArdoLink as Link, useArdoPath } from "ardo/runtime";
 import config from "virtual:ardo/config";
 
 import { OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config";
@@ -25,11 +24,14 @@ import editSources from "~/data/generated/edit-sources.json";
 import { PRIMARY_NAVIGATION_GROUPS, isPrimaryNavigationLinkActive } from "~/data/navigation";
 import { SiteAnalytics } from "~/components/SiteAnalytics";
 
+import { PALAMEDES_THEME } from "./ardo-theme";
+
 import "./app.css";
 
-export function links() {
+export function meta() {
   return [
     {
+      tagName: "link" as const,
       rel: "preload",
       href: "/fonts/CinzelHellenic-Regular.woff2",
       as: "font",
@@ -40,7 +42,11 @@ export function links() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  return <ArdoRootLayout>{children}</ArdoRootLayout>;
+  return (
+    <ArdoRootLayout colorScheme="light" icon="/favicon.svg">
+      {children}
+    </ArdoRootLayout>
+  );
 }
 
 function renderSidebarSections() {
@@ -83,7 +89,7 @@ function renderSidebarSections() {
 }
 
 function PrimaryNavigation() {
-  const { pathname } = useLocation();
+  const pathname = useArdoPath();
 
   return (
     <ArdoNav className="pmds-primary-nav">
@@ -101,7 +107,6 @@ function PrimaryNavigation() {
                 aria-current={active ? "page" : undefined}
                 to={link.href}
                 data-analytics-id={`primary-nav-${link.href}`}
-                viewTransition
               >
                 {link.label}
               </Link>
@@ -113,27 +118,16 @@ function PrimaryNavigation() {
   );
 }
 
-export function loader() {
-  return {
-    build: config.buildTime
-      ? {
-          builtAt: config.buildTime,
-          commitHash: __PALAMEDES_BUILD_HASH__,
-        }
-      : null,
-  };
-}
-
 /*
- * ARDO owns the chrome: its header and footer render on every route (marketing
- * pages included), so nothing below <ArdoRoot> may add a second nav or footer.
- * Palamedes look and feel comes from the --ardo-* token bridge in app.css plus
- * the public props used here — never from overriding ARDO internals.
+ * Ardo owns the header and documentation layout. The shared footer follows
+ * its frame so it remains a page-level landmark outside the main content.
+ * The typed theme and public layout slots preserve the editorial design
+ * without targeting Ardo implementation classes.
  */
 const EDIT_SOURCES: Readonly<Record<string, string>> = editSources;
 
 /* Pages generated from docs/, adr/, or blog sources link to that file; other
- * pages (marketing, the docs landing page, TypeDoc output) get no edit link. */
+ * pages (marketing, the docs landing page, generated API output) get no edit link. */
 function editLinkFor(pathname: string) {
   const route = pathname.length > 1 ? pathname.replace(/\/+$/u, "") : pathname;
   const source = EDIT_SOURCES[route];
@@ -146,29 +140,36 @@ function editLinkFor(pathname: string) {
 }
 
 export default function App() {
-  const { build } = useLoaderData<typeof loader>();
-  const { pathname } = useLocation();
+  const build =
+    import.meta.env.PROD && config.buildTime
+      ? { builtAt: config.buildTime, commitHash: __PALAMEDES_BUILD_HASH__ }
+      : undefined;
+  const pathname = useArdoPath();
 
   return (
     <SiteUiProvider linkComponent={RouterSiteLink}>
       <SiteAnalytics />
       <ArdoRoot
-        config={config}
+        footer={false}
+        theme={PALAMEDES_THEME}
+        scrollMode="document"
+        icon="/favicon.svg"
+        logo={
+          <img
+            src={OSS_SITE_CONFIG.logoSrc}
+            alt=""
+            aria-hidden
+            width={36}
+            height={36}
+            className="size-9"
+          />
+        }
         tocLabel="Page outline"
         editLink={editLinkFor(pathname)}
         lastUpdated={{ enabled: true, text: "Last updated" }}
       >
         <ArdoHeader
-          logo={
-            <img
-              src={OSS_SITE_CONFIG.logoSrc}
-              alt=""
-              aria-hidden
-              width={36}
-              height={36}
-              className="size-9"
-            />
-          }
+          search="icon"
           searchPlaceholder="Search Palamedes docs..."
           mobileMenuContent={
             <div className="border-t border-hair px-4 py-4">
@@ -211,10 +212,8 @@ export default function App() {
           </ArdoHeaderActions>
         </ArdoHeader>
         <ArdoSidebar>{renderSidebarSections()}</ArdoSidebar>
-        <ArdoFooter>
-          <SiteFooter config={OSS_SITE_CONFIG} build={build ?? undefined} />
-        </ArdoFooter>
       </ArdoRoot>
+      <SiteFooter config={OSS_SITE_CONFIG} build={build} />
     </SiteUiProvider>
   );
 }

@@ -4,6 +4,8 @@ Palamedes ships native packages for the CLI and the Node binding. Check this
 page before installing `@palamedes/cli` or a package that uses
 `@palamedes/core-node`.
 
+<span id="nodejs-requirements"></span>
+
 ## Node.js Requirements
 
 Palamedes v2 requires Node.js `>=24.3.0` for published Node.js packages and

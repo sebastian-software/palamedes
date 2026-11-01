@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from "ardo/react";
 
 import { SPECIMEN_LOCALES, specimenSeats } from "~/data/specimen";
 

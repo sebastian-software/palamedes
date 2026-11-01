@@ -1,3 +1,4 @@
+import { prepareDocument } from "ferromark";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,22 +18,15 @@ export const PROGRESSIVE_OUTLINE_MANIFEST = "progressive-outlines.json";
 
 const OUTLINE_MARKER = 'className="pmds-progressive-outline"';
 
+export function buildProgressiveOutlineItems(content) {
+  return prepareDocument(content, { format: "mdx", frontMatter: true })
+    .extractText({ headingIds: true })
+    .sections.filter(({ level }) => level === 2)
+    .map(({ heading, id, level }) => ({ id, text: heading, depth: level }));
+}
+
 export function countTopLevelHeadings(content) {
-  let fence = null;
-  let count = 0;
-
-  for (const line of content.split("\n")) {
-    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0];
-      if (fence == null) fence = marker;
-      else if (fence === marker) fence = null;
-      continue;
-    }
-    if (fence == null && /^##(?!#)\s+\S/u.test(line)) count += 1;
-  }
-
-  return count;
+  return buildProgressiveOutlineItems(content).length;
 }
 
 export function usesProgressiveOutline(source, content) {
@@ -111,8 +105,8 @@ export function checkProgressiveOutlines({ docsDir, manifest }) {
  * silently changing in a way that still agrees with its own manifest.
  */
 export const REQUIRED_OUTLINE_DOCS = [
-  ["api/vite-plugin/index.md", "Vite component integration guide"],
-  ["api/remix/index.md", "Remix API guide"],
+  ["api/vite-plugin/index.mdx", "Vite component integration guide"],
+  ["api/remix/index.mdx", "Remix API guide"],
   ["configuration.mdx", "configuration guide"],
   ["rust-applications.mdx", "Rust application guide"],
   ["migration-v2.mdx", "v2 migration guide"],

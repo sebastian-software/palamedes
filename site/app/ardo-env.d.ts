@@ -1,22 +1,15 @@
 declare module "*.md" {
-  import type { FunctionComponent } from "react";
+  import type { FunctionComponent } from "ardo/react";
 
   const Component: FunctionComponent;
   export default Component;
 }
 
 declare module "*.mdx" {
-  import type { FunctionComponent } from "react";
+  import type { FunctionComponent } from "ardo/react";
 
   const Component: FunctionComponent;
   export default Component;
-}
-
-declare module "virtual:ardo/config" {
-  import type { ArdoConfig } from "ardo";
-
-  const config: ArdoConfig;
-  export default config;
 }
 
 declare const __PALAMEDES_BUILD_HASH__: string;

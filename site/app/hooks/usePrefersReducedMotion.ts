@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "ardo/react";
 
 const QUERY = "(prefers-reduced-motion: reduce)";
 

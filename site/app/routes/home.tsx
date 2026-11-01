@@ -1,3 +1,4 @@
+import { StructuredData } from "~/components/StructuredData";
 import { Page } from "@palamedes/site-ui";
 import { BeforeAfter } from "~/components/home/BeforeAfter";
 import { BrowserRuntime } from "~/components/home/BrowserRuntime";
@@ -14,7 +15,7 @@ import { QuestionRoutes } from "~/components/home/QuestionRoutes";
 import { RustRace } from "~/components/home/RustRace";
 import { Band, BandHeader } from "~/components/marketing/Band";
 import { REPO } from "~/data/links";
-import { pageMeta } from "~/lib/meta";
+import { faqStructuredData, pageMeta } from "~/lib/meta";
 
 export const handle = { layout: "bare" };
 
@@ -23,20 +24,7 @@ export function meta() {
   const description =
     "Open-source i18n for frontends, backends, command-line tools, MDX documentation, and Rust applications. Keep translations in Git and compile catalogs with one local toolchain.";
 
-  return [
-    ...pageMeta({ title, description, path: "/" }),
-    {
-      "script:ld+json": {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: HOME_FAQ.map((entry) => ({
-          "@type": "Question",
-          name: entry.q,
-          acceptedAnswer: { "@type": "Answer", text: entry.a },
-        })),
-      },
-    },
-  ];
+  return pageMeta({ title, description, path: "/" });
 }
 
 /*
@@ -49,6 +37,7 @@ export function meta() {
 export default function Home() {
   return (
     <Page className="pmds-home">
+      <StructuredData data={faqStructuredData(HOME_FAQ)} />
       <HomeHero />
       <IntegrationBand />
       <BeforeAfter />

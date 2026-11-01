@@ -18,10 +18,10 @@ const config = JSON.parse(
 );
 const moved = "/api-reference/core/modules/index/missingcompiledmessageerror";
 const successor = "/api-reference/core/classes/missingcompiledmessageerror";
-// The current generator emits every published route except the redirect sources.
+// Current pages include the new destinations introduced by a generator migration.
 const currentRoutes = [
   ...config.legacyRoutes.filter((route) => !(route in config.redirects)),
-  successor,
+  ...Object.values(config.redirects),
 ];
 
 test("the published route list is sorted, unique, and covers every redirect", () => {
@@ -46,7 +46,7 @@ test("every published route needs a current page or a redirect to one", () => {
 
   assert.throws(
     () => validateApiReferenceRedirects({ ...config, redirects: {} }, current),
-    new RegExp(`neither a page nor a redirect:\\n${moved}`, "u"),
+    /neither a page nor a redirect/u,
   );
   assert.throws(
     () => validateApiReferenceRedirects(config, [...current, moved]),
@@ -55,8 +55,8 @@ test("every published route needs a current page or a redirect to one", () => {
   assert.throws(
     () =>
       validateApiReferenceRedirects(
-        config,
-        current.filter((route) => route !== successor),
+        { ...config, redirects: { ...config.redirects, [moved]: "/api-reference/not-emitted" } },
+        current,
       ),
     /must target a current page/u,
   );

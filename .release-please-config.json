@@ -3,7 +3,6 @@
   "include-component-in-tag": true,
   "tag-separator": "-",
   "separate-pull-requests": false,
-  "last-release-sha": "294295b4d97518805f7fb47e2780653a3a845116",
   "changelog-sections": [
     {
       "type": "feat",
@@ -61,7 +60,6 @@
   "packages": {
     ".": {
       "release-type": "rust",
-      "release-as": "2.0.0",
       "component": "palamedes",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [

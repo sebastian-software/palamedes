@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "ardo/react";
 
 /*
  * Once-only in-view flag. Defaults to visible (true) whenever observation is

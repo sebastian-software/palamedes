@@ -1,14 +1,7 @@
-/*
- * Layer order is the contract that lets ARDO and Tailwind coexist:
- * ARDO's stylesheet ends in an unlayered `* { margin: 0; padding: 0 }` reset
- * that would beat every layered Tailwind utility. Importing it into the
- * `ardo` layer between `base` and `components` keeps ARDO's component styles
- * winning over the preflight while our utilities win over ARDO's reset.
- */
+/* Ardo 6 emits its stylesheet in the ardo layer. Tailwind utilities come last. */
 @layer theme, base, ardo, components, utilities;
 @import "@palamedes/site-ui/styles.css";
 @import "@palamedes/site-ui/tailwind.css";
-@import "ardo/ui/styles.css" layer(ardo);
 @import "tailwindcss";
 
 /*
@@ -42,59 +35,6 @@
  * contract. This file contains only the font asset and ARDO integration.
  */
 
-/* ----------------------------------------------------- ARDO theme bridge -- */
-
-/*
- * ARDO themes itself exclusively through the `--ardo-*` custom-property
- * contract (see `ardo/theme`). Mapping those variables onto the Palamedes
- * tokens is the entire theming story: no hashed ARDO class is ever targeted,
- * so ARDO upgrades stay safe. This block must stay unlayered — ARDO's own
- * `:root` defaults are unlayered too, and source order decides the winner.
- */
-:root {
-  /* Brand + accent collapse onto the single Palamedes bronze. */
-  --ardo-color-brand: var(--color-accent);
-  --ardo-color-brandLight: var(--color-gold);
-  --ardo-color-brandDark: #6f4f1e;
-  --ardo-color-brandSubtle: #f4ecda;
-  /* Flat fill — the design system bans gradients. */
-  --ardo-color-brandGradient: var(--color-accent);
-  --ardo-color-accent: var(--color-accent);
-  --ardo-color-accentLight: var(--color-accent-soft);
-  --ardo-color-accentDark: #6f4f1e;
-  --ardo-color-accentSubtle: #f4ecda;
-
-  --ardo-color-bg: var(--color-paper);
-  --ardo-color-bgSoft: #f5f2e8;
-  --ardo-color-bgMute: var(--color-track);
-  --ardo-color-bgAlt: #eae5d4;
-  --ardo-color-text: var(--color-ink);
-  --ardo-color-textLight: #3f5471;
-  --ardo-color-textLighter: #5d6c81;
-  --ardo-color-border: var(--color-hair);
-  --ardo-color-borderLight: #e8e2d3;
-  --ardo-color-divider: #e8e2d3;
-  --ardo-color-sidebarBg: var(--color-paper);
-  --ardo-color-sidebarBorder: var(--color-hair);
-  --ardo-color-codeBg: var(--color-track);
-  --ardo-color-codeBorder: var(--color-hair);
-
-  /* Shadow slots hold full box-shadow values; render them as nothing. */
-  --ardo-color-codeShadow: 0 0 0 0 transparent;
-  --ardo-color-shadowSm: 0 0 0 0 transparent;
-  --ardo-color-shadowMd: 0 0 0 0 transparent;
-  --ardo-color-shadowLg: 0 0 0 0 transparent;
-
-  --ardo-radius-sm: 0px;
-  --ardo-radius-base: 0px;
-  --ardo-radius-lg: 0px;
-
-  --ardo-font-family: var(--font-sans);
-  --ardo-font-familyHeading: var(--font-sans);
-  --ardo-font-mono: var(--font-mono);
-  --ardo-font-lineHeight: 1.65;
-}
-
 /*
  * Generated docs keep ARDO's own component structure. These are local,
  * semantic hooks for the prebuild-owned index micro-labels and the public
@@ -122,7 +62,8 @@
   display: grid;
   gap: 0.35rem;
   margin: 0;
-  padding-left: 1.25rem;
+  padding-left: 0;
+  list-style: none;
 }
 
 .pmds-progressive-outline-list li[data-depth="1"] {

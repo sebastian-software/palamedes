@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "ardo/react";
 
 import { FILM, FILM_CREDITS, FILM_TRANSCRIPT } from "~/data/film";
 import { trackEvent } from "~/lib/analytics";

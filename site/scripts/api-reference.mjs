@@ -1,8 +1,11 @@
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, basename } from "node:path";
 
-import { generateApiDocs } from "ardo/typedoc";
+import { generateDeclarationDocs } from "ardo/api";
+
+const require = createRequire(import.meta.url);
+const libFiles = [require.resolve("typescript/lib/lib.es2022.full.d.ts")];
 
 const repository = "https://github.com/sebastian-software/palamedes/blob/main";
 
@@ -40,60 +43,16 @@ export function normalizeApiPage(doc, label) {
   return { ...doc, content, frontmatter: { ...doc.frontmatter, title, description } };
 }
 
-export function repairSourceLinks(content, entry, repoRoot) {
-  const entryDirectory = dirname(entry).replaceAll("\\", "/");
-  return content.replace(
-    /\[([^\]]+)\]\(https:\/\/github\.com\/sebastian-software\/palamedes\/blob\/main\/([^\s)#]+)(#L\d+)?\)/gu,
-    (_match, label, file, line = "") => {
-      const raw = file.startsWith(`${entryDirectory}/`)
-        ? file.slice(entryDirectory.length + 1)
-        : file;
-      const candidates = [file, `packages/${raw}`, `${entryDirectory}/${raw}`];
-      const fromDeclaration = /\/dist\//u.test(file);
-      const paths = fromDeclaration
-        ? candidates.flatMap((candidate) => {
-            const source = candidate.replace("/dist/", "/src/").replace(/\.d\.[cm]?ts$/u, ".ts");
-            return [source, source.replace(/\.ts$/u, ".tsx")];
-          })
-        : candidates;
-      const resolved = paths.find(
-        (candidate) => !candidate.includes("/dist/") && existsSync(join(repoRoot, candidate)),
-      );
-      if (!resolved) throw new Error(`Cannot resolve generated API source ${file} for ${entry}`);
-      const target = relative(repoRoot, join(repoRoot, resolved)).replaceAll("\\", "/");
-      // Declaration line numbers do not describe the original source file.
-      return `[${fromDeclaration ? "Source file" : label}](${repository}/${target}${fromDeclaration ? "" : line})`;
-    },
-  );
+function exportTargets(value) {
+  return typeof value === "string" ? [value] : Object.values(value ?? {}).flatMap(exportTargets);
 }
 
-export function repairApiLinks(content, docs, out) {
-  const routes = docs.map(({ path }) =>
-    `/${out}/${path
-      .replace(/\.md$/u, "")
-      .replace(/(^|\/)index$/u, "")
-      .replace(/\/$/u, "")}`.replace(/\/$/u, ""),
+export function publicApiImportPath(manifest, declaration) {
+  const entry = Object.entries(manifest.exports ?? {}).find(([, value]) =>
+    exportTargets(value).includes(declaration),
   );
-  const known = new Set(routes);
-  const symbols = docs.flatMap((doc, index) =>
-    [...doc.content.replace(/```[\s\S]*?```/gu, "").matchAll(/^#{2,6} (.+)$/gmu)].map(
-      ([, heading]) => {
-        const slug = heading
-          .toLowerCase()
-          .replaceAll(/[^\p{L}\p{N}_ -]/gu, "")
-          .replaceAll(" ", "-");
-        return { slug, route: `${routes[index]}#${slug}` };
-      },
-    ),
-  );
-  return content.replace(/\]\((\/[^\s)#]+)(#[^\s)]+)?\)/gu, (match, route, anchor = "") => {
-    if (!route.startsWith(`/${out}/`) || known.has(route)) return match;
-    const name = route.split("/").at(-1);
-    const matches = routes.filter((candidate) => candidate.split("/").at(-1) === name);
-    if (matches.length === 1) return `](${matches[0]}${anchor})`;
-    const definitions = symbols.filter(({ slug }) => slug === name);
-    return definitions.length === 1 ? `](${definitions[0].route})` : match;
-  });
+  if (!entry) throw new Error(`No public export in ${manifest.name} points to ${declaration}`);
+  return manifest.name + (entry[0] === "." ? "" : entry[0].slice(1));
 }
 
 async function writeDoc(directory, doc) {
@@ -110,8 +69,21 @@ export async function generatePackageApiReference(
   pkg,
   repoRoot,
   routesRoot,
-  generate = generateApiDocs,
+  generate = generateDeclarationDocs,
 ) {
+  if (pkg.guide) {
+    await writeDoc(join(routesRoot, "api-reference", pkg.slug), {
+      path: "index.md",
+      frontmatter: {
+        title: `${pkg.label} reference`,
+        description: "Commands, options, and workflows for the native Palamedes CLI.",
+      },
+      content: `The CLI provides the native \`pmds\` command rather than a JavaScript API.\n\n[Read the CLI reference](${pkg.guide}).`,
+    });
+    return;
+  }
+  const packageRoot = join(repoRoot, "packages", pkg.packageDir ?? pkg.slug);
+  const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
   const root = `api-reference/${pkg.slug}`;
   const entries = pkg.entryPoints.map((entry, index) => {
     const name = index === 0 ? null : basename(entry).replace(/\.[cm]?[jt]sx?$/u, "");
@@ -122,33 +94,35 @@ export async function generatePackageApiReference(
   for (const { source, name, subpath } of entries) {
     const label = name ? `${pkg.label} / ${name}` : pkg.label;
     const out = subpath ? `${root}/modules/${subpath}` : root;
-    // One entry at a time prevents Ardo from replacing module exports with
-    // empty module shells. Each entry keeps its existing public module URL.
-    const docs = await generate(
+    // Reuse the checked declarations produced by the package build. This uses
+    // Ardo's native OXC renderer without adding a nightly compiler to the repo.
+    const stem = `./${relative(packageRoot, join(repoRoot, source.replace("/src/", "/dist/").replace(/\.tsx?$/u, ""))).replaceAll("\\", "/")}`;
+    const declaration = Object.values(manifest.exports)
+      .flatMap(exportTargets)
+      .find(
+        (file) => /\.d\.(?:mts|ts)$/u.test(file) && file.replace(/\.d\.(?:mts|ts)$/u, "") === stem,
+      );
+    if (!declaration) throw new Error(`No public declaration export for ${source}`);
+    const importPath = publicApiImportPath(manifest, declaration);
+    const result = await generate(
       {
-        enabled: true,
-        entryPoints: [join(repoRoot, source)],
-        tsconfig: join(repoRoot, "site/tsconfig.typedoc.json"),
+        entryPoints: [join(packageRoot, declaration)],
+        importPaths: [importPath],
+        libFiles,
+        packageRoot,
         out,
-        excludePrivate: true,
-        excludeProtected: true,
-        excludeInternal: true,
-        markdown: {
-          sourceLinks: true,
-          sourceBaseUrl: `${repository}/${relative(repoRoot, dirname(join(repoRoot, source))).replaceAll("\\", "/")}`,
-        },
-        sidebar: { title: label, collapsed: true, position: pkg.position },
+        title: `${label} API`,
       },
       routesRoot,
     );
-    for (const doc of docs) {
-      const normalized = normalizeApiPage(
-        {
-          ...doc,
-          content: repairApiLinks(repairSourceLinks(doc.content, source, repoRoot), docs, out),
-        },
-        label,
+    if (result.diagnostics?.length) {
+      console.warn(
+        `API reference keeps unexpanded type expressions for ${importPath}:\n${result.diagnostics.map(({ file, message }) => `${file}: ${message}`).join("\n")}`,
       );
+    }
+    const docs = result.pages;
+    for (const doc of docs) {
+      const normalized = normalizeApiPage(doc, label);
       if (doc.path === "index.md" && subpath === null && entries.length > 1) {
         const links = entries
           .slice(1)
@@ -156,6 +130,7 @@ export async function generatePackageApiReference(
           .join("\n");
         normalized.content += `\n\n## Entry points\n\n${links}`;
       }
+      normalized.content += `\n\n[Source entry on GitHub](${repository}/${source})`;
       await writeDoc(join(routesRoot, out), normalized);
     }
   }

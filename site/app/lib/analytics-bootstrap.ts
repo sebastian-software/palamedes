@@ -5,7 +5,8 @@ let loaded = false;
 let reportedPath: string | undefined;
 
 /** Own pageviews by pathname; older SDKs count query/anchor changes as SPA visits. */
-export function reportPageview() {
+export function reportPageview({ newVisit = false }: { newVisit?: boolean } = {}) {
+  if (newVisit) reportedPath = undefined;
   if (!loaded || trackingDisabled() || reportedPath === location.pathname) return;
   try {
     if (!window.rybbit) return;

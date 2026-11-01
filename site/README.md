@@ -1,7 +1,6 @@
 # @palamedes/site
 
-The public Palamedes website, live at <https://palamedes.dev> — React Router 8
-(framework mode) with ARDO route generation, full prerendering, Tailwind v4,
+The public Palamedes website, live at <https://palamedes.dev> — Ardo 6 with static document navigation, full prerendering, Tailwind v4,
 and the Palamedes editorial design system (ADR-011). Private workspace, never
 published to npm.
 
@@ -18,14 +17,16 @@ Inside `site/`:
 
 ```bash
 pnpm preview      # serve the built output on http://localhost:4101
-pnpm typecheck    # react-router typegen + tsc
+pnpm typecheck    # content prebuild + tsc
 ```
 
 `site/scripts/prebuild-content.mjs` runs before dev, build, and typecheck. It
 keeps `docs/`, `adr/`, and `site/content/blog/` as the canonical sources while
 generating ARDO routes under `app/routes/docs`, `app/routes/decisions`, and
-`app/routes/blog`. It also generates the `/api-reference` section with TypeDoc
-from the package sources. Those generated route files and copied doc assets are
+`app/routes/blog`. It also generates the `/api-reference` section with Ardo's native OXC renderer
+from the checked declarations produced by the package builds. Each public entry
+keeps its own reference and import path. This reuses the repository toolchain
+without requiring Ardo's optional TypeScript 7.1 nightly compiler. Those generated route files and copied doc assets are
 ignored; rerun the prebuild script instead of editing them.
 
 Headless verification of the built output (three passes: default,
@@ -37,25 +38,39 @@ node scripts/verify-site-routes.mjs
 
 ## Theming & chrome (ARDO)
 
-ARDO owns the site chrome: `ArdoRoot` in `app/root.tsx` renders the header and
-footer on **every** route (marketing pages included — `layout: "bare"` only
-drops the sidebar). Marketing pages therefore must not render their own nav or
-footer; the shared `SiteFooter` is passed into ARDO's `footer` slot instead.
+Ardo owns the header, documentation sidebar, search, and document layout. The
+shared `SiteFooter` sits after `ArdoRoot`, with Ardo's own footer disabled, so
+it forms one page-level footer landmark outside the main content. Marketing routes use `layout: "bare"` and keep the
+explicit header and footer. Documentation uses `scrollMode="document"`.
+The header uses Ardo's search dialog at every width so the primary navigation
+and full wordmark fit alongside it. The keyboard search shortcut remains available.
 
-The Palamedes look is applied through two sanctioned mechanisms only:
+`app/ardo-theme.ts` maps Ardo's typed theme tokens to the Palamedes editorial
+palette, fonts, square corners, and flat surfaces. Ardo loads its stylesheet
+once in the `ardo` cascade layer; `app/app.css` orders that layer before
+Tailwind utilities. Do not target Ardo's generated classes.
 
-1. **Token bridge** — `app/app.css` maps ARDO's public `--ardo-*` custom
-   properties (its complete theming contract) onto the Swiss-spec-grid tokens
-   (paper/ink/hairline/accent, radius 0, no shadows). Never target ARDO's
-   hashed class names; they change between releases.
-2. **Cascade layers** — ARDO's stylesheet ships an unlayered
-   `* { margin: 0; padding: 0 }` reset that would override Tailwind's layered
-   utilities. `app.css` therefore imports `ardo/ui/styles.css` into the `ardo`
-   layer between `base` and `components` (do not re-import it in `root.tsx`).
+The site is light-only: `ArdoRootLayout` forces `colorScheme="light"` before
+first paint, and the header hides the theme toggle. Add a full dark token set
+before enabling a user-selectable color scheme.
 
-The site is deliberately light-only (`themeToggle: false`): the design system
-has no dark token set yet. To add dark mode later, define a `.dark` mapping for
-both the Palamedes tokens and the `--ardo-*` bridge, then re-enable the toggle.
+Ardo requires imports to stay inside installed packages. pnpm injects
+`@palamedes/site-ui` through `file:../packages/site-ui` into the site's
+dependency tree instead of linking its
+workspace source directory. The prebuild checks the shared UI, and pnpm
+synchronizes its installed copy after `build` scripts.
+
+Ardo manages React, React DOM, and Vite. App code uses `ardo/react`,
+`ardo/react-dom/*`, and `ArdoLink` from `ardo/runtime`. Links load prerendered
+HTML documents; there is no client router or route loader. The build timestamp
+comes from Ardo's configuration. JSON-LD is rendered by `StructuredData` in the
+page because Ardo's metadata descriptors cover titles, links, and meta tags.
+
+The native Ferromark pipeline supplies Markdown, syntax highlighting, search
+excerpts, and heading identities. Progressive outlines use the same native
+parser, including duplicate heading IDs. The build checks rendered internal
+links and heading anchors with Ferrolink. Curated `llms.txt` files remain owned by the repository;
+Ardo's automatic LLM exports are disabled.
 
 ## Data honesty guards
 
@@ -111,10 +126,10 @@ visitor exclusions, and the isolated browser check.
 Deployed to GitHub Pages by
 [`.github/workflows/deploy-site.yml`](../.github/workflows/deploy-site.yml)
 on pushes to `main` that touch `site/**`, the lockfile, or the benchmark
-reports, docs, ADRs, or package sources that feed TypeDoc (plus manual
+reports, docs, ADRs, or package declarations that feed the API reference (plus manual
 `workflow_dispatch`). It also rebuilds after the Publish workflow succeeds for a
 release commit, so the npm versions on the framework pages, read at build time,
 include the new release. The canonical domain
-`palamedes.dev` is configured in the repository's Pages settings; the
-workflow ships `__spa-fallback.html` as `404.html` so unknown paths render
-client-side while sitemap routes serve prerendered HTML.
+`palamedes.dev` is configured in the repository's Pages settings. Ardo generates
+`404.html` alongside the prerendered routes; unknown paths receive that static
+error document.

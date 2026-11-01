@@ -19,6 +19,7 @@ import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
 import { writeBenchmarkData } from "./generate-benchmark-data.mjs";
 import {
+  buildProgressiveOutlineItems,
   PROGRESSIVE_OUTLINE_MANIFEST,
   PROGRESSIVE_OUTLINE_THRESHOLD,
   countTopLevelHeadings,
@@ -109,7 +110,7 @@ const DOC_INDEX_GROUPS = [
  */
 const MAINTAINER_ONLY_DOCS = ["docs/readme-theme.md", "docs/operations/"];
 
-buildTypedocPackages();
+buildApiPackages();
 
 // The live demo is a separate, real adapter build, also served by site dev.
 const demoBuild = spawnSync(process.execPath, [join(siteRoot, "scripts/build-fragment-demo.mjs")], {
@@ -162,7 +163,7 @@ for (const post of posts) {
 await writeBlogIndexData(posts);
 
 await writeApiReferenceIndex();
-await generateTypedocReference();
+await generateApiReference();
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"));
 await writeApiReferenceRedirects(siteRoot, routesRoot, publicRoot);
 
@@ -172,7 +173,7 @@ await writeBenchmarkData(repoRoot);
 await writeNpmStats();
 
 console.log(
-  `prebuild-content: generated ${docs.length} docs, ${adrs.length} ADRs, ${posts.length} posts, and TypeDoc API routes`,
+  `prebuild-content: generated ${docs.length} docs, ${adrs.length} ADRs, ${posts.length} posts, and native API routes`,
 );
 
 async function writeBrowserRuntimeStats() {
@@ -193,17 +194,19 @@ async function writeBrowserRuntimeStats() {
   );
 }
 
-function buildTypedocPackages() {
-  const packages = typedocPackages();
-  assertTypedocEntryPoints(packages);
+function buildApiPackages() {
+  const packages = apiPackages();
+  assertApiEntryPoints(packages);
   const filters = [
+    "--filter",
+    "@palamedes/site-ui",
     "--filter",
     "./packages/core-node-*",
     ...packages.flatMap(({ packageDir }) => ["--filter", `./packages/${packageDir}`]),
   ];
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
-  console.log("prebuild-content: building TypeDoc workspace packages");
+  console.log("prebuild-content: building native workspace packages");
   const result = spawnSync(pnpm, ["--recursive", ...filters, "build"], {
     cwd: repoRoot,
     stdio: "inherit",
@@ -211,21 +214,21 @@ function buildTypedocPackages() {
   });
 
   if (result.error) {
-    throw new Error("Could not start the TypeDoc workspace package build", {
+    throw new Error("Could not start the native workspace package build", {
       cause: result.error,
     });
   }
   if (result.status !== 0) {
-    throw new Error(`TypeDoc workspace package build failed with status ${result.status}`);
+    throw new Error(`native workspace package build failed with status ${result.status}`);
   }
 }
 
-function assertTypedocEntryPoints(packages) {
+function assertApiEntryPoints(packages) {
   const missing = packages.flatMap(({ entryPoints }) =>
     entryPoints.filter((entryPoint) => !existsSync(join(repoRoot, entryPoint))),
   );
   if (missing.length > 0) {
-    throw new Error(`TypeDoc entry points are missing: ${missing.join(", ")}`);
+    throw new Error(`native entry points are missing: ${missing.join(", ")}`);
   }
 }
 
@@ -449,7 +452,7 @@ async function writeDocsIndex(docs) {
     "",
     "# Documentation",
     "",
-    '<p className="pmds-docs-micro-label">Field guide / maintained from source</p>',
+    '<p className="pmds-docs-micro-label">{"Field guide / maintained from source"}</p>',
     "",
     "Canonical source files still live under `docs/`; this page groups the generated routes by the question in front of you.",
     "",
@@ -549,11 +552,11 @@ function indexDocGroupFor(route) {
 }
 
 async function writeApiReferenceIndex() {
-  const packages = typedocPackages();
+  const packages = apiPackages();
   const lines = [
     "---",
     'title: "Generated API Reference"',
-    'description: "TypeDoc-generated reference pages for the public Palamedes TypeScript packages."',
+    'description: "Generated reference pages for the public Palamedes TypeScript packages."',
     "order: 0",
     "---",
     "",
@@ -581,6 +584,8 @@ async function writeRouteFromSource(entry) {
   const body = lede ? removeLedeBlock(parsed.content, lede) : parsed.content;
   const content = transformLinks(body, entry.source);
   const usesProgressiveOutline = docUsesProgressiveOutline(entry.source, content);
+  // Outline labels are literal JSX expressions, including titles with type parameters.
+  if (usesProgressiveOutline) entry.out = entry.out.replace(/\.md$/u, ".mdx");
   if (entry.source.startsWith("docs/")) {
     progressiveOutlineDocs.push({
       source: entry.source,
@@ -610,61 +615,16 @@ async function writeRouteFromSource(entry) {
   );
 }
 
-function buildProgressiveOutlineItems(content) {
-  const items = [];
-  const slugs = new Map();
-  let fence = null;
-
-  for (const line of content.split("\n")) {
-    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0];
-      if (fence == null) fence = marker;
-      else if (fence === marker) fence = null;
-      continue;
-    }
-    if (fence != null) continue;
-
-    const heading = /^##(?!#)\s+(.+?)\s*#*\s*$/u.exec(line);
-    if (!heading) continue;
-
-    const text = heading[1];
-    const base = slugifyHeading(text) || `heading-${items.length}`;
-    const duplicate = slugs.get(base) ?? 0;
-    slugs.set(base, duplicate + 1);
-    items.push({
-      id: duplicate === 0 ? base : `${base}-${duplicate}`,
-      text,
-      depth: 2,
-    });
-  }
-
-  return items;
-}
-
-function slugifyHeading(text) {
-  let slug = text
-    .replace(/<[^>]*>/gu, "")
-    .toLowerCase()
-    .trim()
-    .replaceAll(/[`*_~[\]()]/gu, "")
-    .replaceAll(/[^\p{Letter}\p{Number}\s-]/gu, "")
-    .replaceAll(/[\s_]+/gu, "-");
-
-  while (slug.includes("--")) slug = slug.replaceAll("--", "-");
-  return slug.replaceAll(/^-|-$/gu, "");
-}
-
 function renderProgressiveOutline(items) {
   const visibleItems = items.slice(0, 4);
   const remainingItems = items.slice(4);
   return [
     '<section className="pmds-progressive-outline" aria-labelledby="page-outline-title">',
-    '<p id="page-outline-title" className="pmds-progressive-outline-label">Page outline</p>',
+    '<p id="page-outline-title" className="pmds-progressive-outline-label">{"Page outline"}</p>',
     '<nav aria-label="Page outline">',
     renderProgressiveOutlineList(visibleItems),
     '<details className="pmds-progressive-outline-more">',
-    `<summary>More sections (${remainingItems.length})</summary>`,
+    `<summary>{${JSON.stringify(`More sections (${remainingItems.length})`)}}</summary>`,
     renderProgressiveOutlineList(remainingItems),
     "</details>",
     "</nav>",
@@ -677,18 +637,14 @@ function renderProgressiveOutlineList(items) {
     '<ol className="pmds-progressive-outline-list">',
     ...items.map(
       (item) =>
-        `<li data-depth="${item.depth}"><a href="#${item.id}">${escapeHtml(item.text)}</a></li>`,
+        `<li data-depth="${item.depth}"><a href="#${item.id}">{${JSON.stringify(item.text)}}</a></li>`,
     ),
     "</ol>",
   ].join("\n");
 }
 
-function escapeHtml(value) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
-async function generateTypedocReference() {
-  for (const pkg of typedocPackages()) {
+async function generateApiReference() {
+  for (const pkg of apiPackages()) {
     await generatePackageApiReference(pkg, repoRoot, routesRoot);
   }
 }
@@ -743,7 +699,7 @@ async function ensureDirectoryIndexes(rootDir) {
   return hasMarkdownChild || existsSync(indexPath);
 }
 
-function typedocPackages() {
+function apiPackages() {
   return [
     {
       slug: "core",
@@ -867,7 +823,8 @@ function typedocPackages() {
       label: "CLI",
       packageDir: "cli",
       position: 110,
-      entryPoints: ["packages/cli/src/index.ts"],
+      entryPoints: [],
+      guide: "/docs/cli",
     },
   ];
 }

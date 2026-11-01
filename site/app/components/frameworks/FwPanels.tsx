@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { ArdoLink as Link } from "ardo/runtime";
 import { FrameworkIdentity } from "~/components/FrameworkIdentity";
 
 import { frameworkLandingHref } from "~/data/framework-landing";
@@ -112,11 +112,7 @@ export function FwPanels() {
           >
             <div>
               <h3 className="text-[18px] font-bold">
-                <Link
-                  to={frameworkLandingHref(panel.slug)}
-                  viewTransition
-                  className="hover:text-accent"
-                >
+                <Link to={frameworkLandingHref(panel.slug)} className="hover:text-accent">
                   <FrameworkIdentity slug={panel.slug} name={panel.name} />
                 </Link>
               </h3>
@@ -167,11 +163,7 @@ export function FwPanels() {
                 ) : hasLiveDemos ? (
                   <span className="text-gray-spec">◌ tld</span>
                 ) : null}
-                <Link
-                  to={frameworkLandingHref(panel.slug)}
-                  viewTransition
-                  className="text-accent hover:text-ink"
-                >
+                <Link to={frameworkLandingHref(panel.slug)} className="text-accent hover:text-ink">
                   i18n guide →
                 </Link>
                 <a

@@ -10,7 +10,7 @@ All publishable Palamedes packages ship in lockstep.
 
 V2 drops Node.js 22 support. Published Node.js packages, native Node addons,
 and repository development require Node.js `>=24.3.0`. CI validates Node.js 24
-and 26. The canonical [platform support table](./platform-support.md#nodejs-requirements)
+and 26. The canonical [platform support table](./platform-support.md#node-js-requirements)
 is checked against the published `engines.node` fields and the root manifest.
 The `@palamedes/cli-*` platform shells run native executables without Node.js
 and therefore omit an engine declaration; the `@palamedes/cli` npm launcher
@@ -67,7 +67,7 @@ release.
 | `@palamedes/core` runtime API                         | Stable   | `createI18n`, compiled message lookup, locale activation, and missing-message errors are app-facing.                                                                                                                                                     |
 | `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                                                                                                                                             |
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs. `@palamedes/solid` requires `solid-js@^2.0.0-rc.16`; the examples verify Solid `2.0.0-rc.16`.                                                                                             |
-| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8. The Next plugin requires `next@^16.4.1`; see the [Next.js contract](#nextjs-contract).                                                           |
+| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs. The Vite plugin requires Vite 8. The Next plugin requires `next@^16.4.1`; see the [Next.js contract](#next-js-contract).                                                          |
 | `@palamedes/waku`                                     | Stable   | ESM-only Waku handler interceptor, catalog delivery middleware, and request resolver contract for `waku@^1.0.0-rc.4`; the examples verify Waku `1.0.0-rc.4`.                                                                                             |
 | `@palamedes/tanstack`                                 | Stable   | React Start server-function middleware and its request resolver contract are public integration APIs for `@tanstack/react-start@^1.169.4`; the examples verify React Start `1.169.4`.                                                                    |
 | `@palamedes/react-router`                             | Stable   | ESM-only React Router Framework Mode root middleware, server entry, and locale resolver contract for `react-router@^8.5.0`; the examples verify React Router `8.5.0`. RSC mode is not supported.                                                         |
@@ -148,6 +148,8 @@ same-origin Node deployment with query-selected locale and a fixed time zone.
 Other Nitro presets, CDN or subpath deployment, prerendering, streaming, islands,
 catalog HMR, and the four-strategy example matrix are not verified. It does not
 establish support for arbitrary Vue SSR hosts.
+
+<span id="nextjs-contract"></span>
 
 ### Next.js contract
 

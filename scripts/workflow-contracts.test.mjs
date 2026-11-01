@@ -1158,7 +1158,7 @@ describe("workflow contracts", () => {
       "node ./site/scripts/verify-docs-development.mjs",
     );
     expect(sitePackageJson.scripts.dev).toBe(
-      "node ./scripts/prebuild-content.mjs && react-router dev --port 4100",
+      "node ./scripts/prebuild-content.mjs && ardo dev --port 4100",
     );
 
     const buildSteps = [
@@ -1168,7 +1168,7 @@ describe("workflow contracts", () => {
       "node ../scripts/verify-site-streamline-assets.mjs",
       "node ./scripts/generate-og-images.mjs --check",
       "node ./scripts/prebuild-content.mjs",
-      "react-router build",
+      "ardo build",
       "node ../scripts/copy-llms-to-site.mjs",
     ];
     let previousBuildStep = -1;
@@ -1196,7 +1196,6 @@ describe("workflow contracts", () => {
       "docs/",
       "adr/",
       "site/content/blog/",
-      "site/app/routes.ts",
       "site/app/routes/docs/",
       "site/app/routes/decisions/",
       "site/app/routes/blog/",

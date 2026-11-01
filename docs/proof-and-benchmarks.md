@@ -30,7 +30,7 @@ evidence easy to inspect.
 | Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                         |
 | Native core           | Rust + `napi-rs`                                                                                  |
 | Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                      |
-| Node requirement      | Package-specific; see the [platform support table](./platform-support.md#nodejs-requirements)     |
+| Node requirement      | Package-specific; see the [platform support table](./platform-support.md#node-js-requirements)    |
 | Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                        |
 
 ## What Counts As Proof In This Repo
