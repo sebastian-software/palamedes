@@ -73,8 +73,13 @@
 
 /* Product specimens use local composition; they do not restyle documentation. */
 :root {
-  --pmds-measure: 69rem;
-  --pmds-gutter: clamp(1.25rem, 5vw, 3rem);
+  --pmds-measure: var(--ardo-layout-pageMaxWidth);
+  --pmds-gutter: var(--ardo-space-lg);
+}
+@media (max-width: 48rem) {
+  :root {
+    --pmds-gutter: var(--ardo-space-md);
+  }
 }
 .pmds-page {
   min-width: 0;
@@ -83,7 +88,7 @@
 .pmds-band,
 .pmds-section,
 .pmds-page-hero {
-  padding: clamp(3rem, 6vw, 5rem) max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
+  padding: var(--ardo-space-section) max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
   border-top: 1px solid var(--color-hair);
 }
 .pmds-measured {
@@ -143,7 +148,7 @@
   color: var(--ardo-color-textLight);
 }
 .pmds-hero {
-  padding: clamp(3rem, 6vw, 5rem) var(--pmds-gutter);
+  padding: var(--ardo-space-section) var(--pmds-gutter);
 }
 .pmds-hero-lede {
   margin-inline: auto;

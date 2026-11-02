@@ -2010,8 +2010,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/runtime
       ardo:
-        specifier: 6.1.2
-        version: 6.1.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(oxc-parser@0.156.0)(terser@5.49.0)(tsx@4.21.0)(typescript@6.0.3)
+        specifier: 6.2.0
+        version: 6.2.0(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(oxc-parser@0.156.0)(terser@5.49.0)(tsx@4.21.0)(typescript@6.0.3)
       ferramenta-family:
         specifier: github:sebastian-software/ferramenta#05fadd21d86b69bb15179ef4461bef6b3b531f88&path:/packages/family
         version: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88#path:/packages/family(react@19.2.8)
@@ -6474,8 +6474,8 @@ packages:
     resolution: {integrity: sha512-BJ8/l4R5LRE7hW9WdSuGYrLSHi2ynxeFpDFbH0K/CgNeY/tyhk+vO6TYxXC5r5CpUhNVX310xzPsN/H9lCdfOA==}
     engines: {node: '>=14'}
 
-  ardo@6.1.2:
-    resolution: {integrity: sha512-hFF6x4vwaKZibDlQrPPpjoNJg/n2q+ueWbj/RI2id38PT8gprYpCX0jbCALLkTs2liF0eORdjYJ34qiGUEXS0g==}
+  ardo@6.2.0:
+    resolution: {integrity: sha512-fDih83Tv33Yhiyl2nTTfK/L3T1r682R1ERKxv/j+mWPBAORbm2IM5wysouJ7pldt2yMbx2G924lSu2dA/DEfHA==}
     engines: {node: '>=22.22.0'}
     hasBin: true
     peerDependencies:
@@ -13955,7 +13955,7 @@ snapshots:
 
   ansis@4.3.1: {}
 
-  ardo@6.1.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(oxc-parser@0.156.0)(terser@5.49.0)(tsx@4.21.0)(typescript@6.0.3):
+  ardo@6.2.0(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(oxc-parser@0.156.0)(terser@5.49.0)(tsx@4.21.0)(typescript@6.0.3):
     dependencies:
       '@base-ui/react': 1.9.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@ferriki/core': 1.3.0
@@ -15059,7 +15059,7 @@ snapshots:
       tsconfig-paths: 4.2.0
       unified: 11.0.5
       unist-util-visit: 5.1.0
-      yaml: 2.9.0
+      yaml: 2.9.1
     transitivePeerDependencies:
       - '@babel/core'
       - '@types/react'
