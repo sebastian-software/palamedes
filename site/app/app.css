@@ -84,6 +84,12 @@
   color: var(--ardo-color-brand);
 }
 
+/* Ardo 6.0 keeps its desktop row inside the mobile panel. */
+.ardo-mobile-panel .ardo-nav {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 /* Ardo 6.0 controls need this until the upstream touch-target fix is released. */
 header button[aria-label="Toggle menu"],
 [role="dialog"][aria-modal="true"] button[aria-label="Close menu"] {

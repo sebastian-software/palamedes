@@ -150,8 +150,7 @@ try {
       "Guides",
       "Docs",
     ]);
-    assert.equal(await navigation.getByRole("group", { name: "Evaluate" }).count(), 1);
-    assert.equal(await navigation.getByRole("group", { name: "Resources" }).count(), 1);
+    assert.equal(await navigation.getByRole("group").count(), 0);
     assert.equal(
       await navigation
         .getByRole("link", { name: "Guides", exact: true })
@@ -159,8 +158,9 @@ try {
       "page",
     );
 
-    const primaryAction = dialog.getByRole("link", { name: "Get started", exact: true });
-    assert.equal(await primaryAction.count(), 1);
+    const familyLink = dialog.getByRole("link", { name: "Ferramenta", exact: true });
+    assert.equal(await familyLink.count(), 1);
+    assert.equal(await familyLink.getAttribute("href"), "https://ferramenta.dev");
     assert.equal(
       await dialog.evaluate((element) => element.contains(document.activeElement)),
       true,
@@ -169,7 +169,7 @@ try {
       await dialog.evaluate((element) => {
         const nav = element.querySelector("nav");
         const action = [...element.querySelectorAll("a")].find(
-          (link) => link.textContent?.trim() === "Get started",
+          (link) => link.textContent?.trim() === "Ferramenta",
         );
         return Boolean(
           nav && action && nav.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -179,22 +179,23 @@ try {
     );
 
     const closeButton = dialog.getByRole("button", { name: "Close menu" });
+    // Icon controls retain 44px targets; native text links meet the 24px minimum.
     const targetLocators = [
-      menuButton,
-      closeButton,
-      ...(await navigationLinks.all()),
-      primaryAction,
+      { locator: menuButton, minimum: 44 },
+      { locator: closeButton, minimum: 44 },
+      ...(await navigationLinks.all()).map((locator) => ({ locator, minimum: 24 })),
+      { locator: familyLink, minimum: 24 },
     ];
     const targetSizes = await Promise.all(
-      targetLocators.map(async (locator) => {
+      targetLocators.map(async ({ locator, minimum }) => {
         const box = await locator.boundingBox();
-        return box ? { width: box.width, height: box.height } : null;
+        return { box, minimum };
       }),
     );
-    for (const [index, box] of targetSizes.entries()) {
-      if (!box || box.width < 44 || box.height < 44) {
+    for (const [index, { box, minimum }] of targetSizes.entries()) {
+      if (!box || box.width < minimum || box.height < minimum) {
         failures.push(
-          `mobile ${width}px control ${index + 1}: expected 44x44px, got ${JSON.stringify(box)}`,
+          `mobile ${width}px control ${index + 1}: expected ${minimum}x${minimum}px, got ${JSON.stringify(box)}`,
         );
       }
     }

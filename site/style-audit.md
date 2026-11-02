@@ -10,7 +10,7 @@ and its imported global CSS rather than adding more overrides to reconcile them.
 | Footer                             | Ardo            | Links, license, copyright, and required artwork attribution |
 | Sidebar                            | Ardo            | Curated content groups and generated API navigation         |
 | Article, code, focus, page outline | Ardo            | Source content and heading levels                           |
-| Theme                              | Ardo            | Three hue options in `app/ardo-theme.ts`                    |
+| Theme                              | Ardo            | Three hue options and one temporary code-background token   |
 | Marketing sections and specimens   | Site            | `app/components/marketing/primitives.tsx` and `app/app.css` |
 | Standalone fragment demo           | Demo            | Its small independent base stylesheet                       |
 | Optional shared site UI            | Other consumers | Preserved package API; no OSS-site dependency               |
@@ -21,7 +21,8 @@ and its imported global CSS rather than adding more overrides to reconcile them.
 - The injected `@palamedes/site-ui` dependency, provider, router adapter, full
   palette, body/code resets, shared header/footer, animation rules, and CSS
   required only by unused shared components.
-- The 34 individual theme-token overrides for palette, fonts, corners, and shadows.
+- The palette, font, corner, and shadow overrides. One code-background token
+  remains temporarily because GitHub Light comments lose contrast on a tint.
 - Grouped primary navigation and its mobile-dialog CSS.
 - Custom wordmark composition and duplicate header actions.
 - The progressive-outline generator, manifest, heading planner, and specialized
@@ -39,13 +40,19 @@ Ardo 6.0's `ArdoNavLink.activeMatch` highlights related routes without setting
 the Guides hub. Two menu-size rules keep existing 44px controls until an Ardo
 release contains the upstream fix. The decorative logo element also avoids
 Ardo 6.0 announcing the title twice.
-None of these exceptions targets generated classes.
+The mobile `.ardo-nav` also needs a vertical layout inside the public
+`.ardo-mobile-panel` container, and code surfaces use white so GitHub Light
+comments reach 4.5:1 instead of 4.09:1. None of these exceptions targets
+generated classes.
 
 The [upstream Ardo PR](https://github.com/sebastian-software/ardo/pull/447) covers
 current-link semantics, menu target size, breadcrumb reflow, and the accessible
-home-link name. It does not change the common palette or typography.
+home-link name, mobile navigation flow, and the highlighter background.
+Its code-surface correction follows the shipped syntax theme; it does not add
+Palamedes-specific colors or typography.
 After adopting a release with those fixes, replace the local navigation adapter
-with `ArdoNavLink` and remove the two menu-size selectors.
+with `ArdoNavLink` and remove the menu-size, mobile-flow, and code-background
+compatibility rules.
 
 ## Verification
 

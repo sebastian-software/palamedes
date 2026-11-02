@@ -43,7 +43,8 @@ code styling, focus rings, and responsive page outline. Marketing routes use
 `layout: "bare"`; documentation uses `scrollMode="document"`. The curated
 sidebar groups remain content configuration in `app/root.tsx`.
 
-`app/ardo-theme.ts` sets three public hue options. Ardo derives the surfaces,
+`app/ardo-theme.ts` sets three public hue options and a temporary white code
+background for syntax contrast. Ardo derives the remaining surfaces,
 text, borders, and component styling. `app/app.css` maps marketing utilities to
 those tokens and contains the local marketing composition. Cinzel Hellenic is
 loaded for marketing headings. Do not target generated Ardo classes or import
