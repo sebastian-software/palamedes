@@ -1,6 +1,6 @@
 # Website style ownership
 
-The OSS site uses Ardo 6.1.2 directly. The cleanup removes the second site shell
+The OSS site uses Ardo 6.2.0 directly. The cleanup removes the second site shell
 and its imported global CSS rather than adding more overrides to reconcile them.
 
 | Surface                            | Owner           | Local responsibility                                        |
@@ -34,6 +34,21 @@ provenance stay in their existing sources. The standalone fragment demo retains
 its own small base because it renders outside Ardo's document context.
 
 ## Upstream fixes adopted
+
+Ardo 6.2.0 includes the shared page frame, adaptive desktop layout, and code
+gutter correction from [Ardo #459](https://github.com/sebastian-software/ardo/pull/459),
+[Ardo #460](https://github.com/sebastian-software/ardo/pull/460), and
+[Ardo #462](https://github.com/sebastian-software/ardo/pull/462):
+
+- Marketing and documentation share the outer frame, with a default maximum
+  of 90rem including gutters. Route-level `fullWidth` remains available for exceptions.
+- Documentation shows its right-hand outline from an 80rem frame width.
+  Reading typography adapts to the frame without changing the root font size.
+- Highlighted code lines compensate for the preformatted block's padding once.
+
+Marketing sections now reference Ardo's page-width, gutter, and section-spacing
+tokens instead of maintaining an independent 69rem measure and viewport spacing.
+These changes require no local document or chrome overrides.
 
 Ardo 6.1.2 includes the general corrections from
 [Ardo #447](https://github.com/sebastian-software/ardo/pull/447) and
