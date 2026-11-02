@@ -56,6 +56,9 @@ export function safeDestination(href: string, base = location.href): string | nu
 export function controlId(element: Element): string {
   const explicit = (element as HTMLElement).dataset.analyticsId;
   if (explicit) return explicit;
+  // Native navigation keeps stable IDs without an application link adapter.
+  const navHref = element.closest(".ardo-nav") ? element.getAttribute("href") : null;
+  if (navHref?.startsWith("/")) return `primary-nav-${navHref.replace(/\/+$/u, "") || "/"}`;
   const parts: string[] = [];
   let current: Element | null = element;
   while (current && current !== element.ownerDocument.body && parts.length < 8) {

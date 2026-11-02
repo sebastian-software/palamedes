@@ -793,7 +793,14 @@ async function checkRoutes(context, label, { expectHydration }) {
     await page.getByRole("banner").getByRole("link", { name: "Docs", exact: true }).click();
     currentPath = "/docs";
     await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor();
-    await page.getByRole("link", { name: "First Working Translation" }).first().click();
+    await page
+      .getByRole("article")
+      .getByRole("link", { name: "First Working Translation" })
+      .first()
+      .click();
+    await page.waitForURL(
+      (url) => url.pathname.replace(/\/+$/u, "") === "/docs/first-working-translation",
+    );
     currentPath = "/docs/first-working-translation";
     await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor();
     await page.goBack({ waitUntil: "networkidle" });

@@ -95,6 +95,17 @@ async function events(page, name) {
   );
 }
 
+async function waitForVisit(page) {
+  // Static navigation changes the URL before the fixture SDK restores its events.
+  await page.waitForFunction(
+    (pathname) =>
+      (window.__events ?? []).some(
+        ({ name, properties }) => name === "pageview" && properties.page === pathname,
+      ),
+    new URL(page.url()).pathname,
+  );
+}
+
 try {
   const active = await context();
   const { page } = active;
@@ -167,13 +178,7 @@ try {
   const searchPageUrl = page.url();
   // Each static document hydrates before its analytics effect reports the visit.
   // Wait for that visit before navigating back, including on slower CI runners.
-  await page.waitForFunction(
-    (pathname) =>
-      (window.__events ?? []).some(
-        ({ name, properties }) => name === "pageview" && properties.page === pathname,
-      ),
-    new URL(searchPageUrl).pathname,
-  );
+  await waitForVisit(page);
   assert.equal((await events(page, "search_use")).length, 1);
   assert.equal((await events(page, "search_result")).length, 1);
   assert.ok(
@@ -245,6 +250,26 @@ try {
   await demo.getByRole("button", { name: "Billing", exact: true }).click();
   assert.equal((await events(page, "demo_interaction")).at(-1).properties.locale, "fr");
   await closeContext(active.instance);
+
+  for (const width of [1440, 390]) {
+    const navigation = await context();
+    await waitForVisit(navigation.page);
+    await navigation.page.setViewportSize({ width, height: 844 });
+    if (width === 390) {
+      await navigation.page.getByRole("button", { name: "Toggle menu", exact: true }).click();
+    }
+    await navigation.page
+      .locator(".ardo-nav")
+      .getByRole("link", { name: "Frameworks", exact: true })
+      .click();
+    await navigation.page.waitForURL((url) => url.pathname.replace(/\/+$/u, "") === "/frameworks");
+    await waitForVisit(navigation.page);
+    assert.equal(
+      (await events(navigation.page, "link_click")).at(-1).properties.control,
+      "primary-nav-/frameworks",
+    );
+    await closeContext(navigation.instance);
+  }
 
   for (const options of [{ disabled: true }, { local: true }, { blocked: true }]) {
     const fixture = await context(options);

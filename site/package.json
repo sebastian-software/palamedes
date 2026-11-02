@@ -15,7 +15,7 @@
     "@palamedes/core": "workspace:*",
     "@palamedes/react": "workspace:*",
     "@palamedes/runtime": "workspace:*",
-    "ardo": "6.0.0",
+    "ardo": "6.1.2",
     "ferramenta-family": "github:sebastian-software/ferramenta#05fadd21d86b69bb15179ef4461bef6b3b531f88&path:/packages/family"
   },
   "devDependencies": {
