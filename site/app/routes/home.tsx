@@ -1,5 +1,5 @@
 import { StructuredData } from "~/components/StructuredData";
-import { Page } from "@palamedes/site-ui";
+import { Page } from "~/components/marketing/primitives";
 import { BeforeAfter } from "~/components/home/BeforeAfter";
 import { BrowserRuntime } from "~/components/home/BrowserRuntime";
 import { Chooser } from "~/components/home/Chooser";

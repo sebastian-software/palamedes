@@ -18,13 +18,6 @@ import { COMPONENT_FRAMEWORKS, CONTAINER_EXAMPLES } from "../../scripts/componen
 import { fetchNpmPackageStats } from "./npm-stats.mjs";
 import { writeDecisionRedirects } from "./decision-redirects.mjs";
 import { writeBenchmarkData } from "./generate-benchmark-data.mjs";
-import {
-  buildProgressiveOutlineItems,
-  PROGRESSIVE_OUTLINE_MANIFEST,
-  PROGRESSIVE_OUTLINE_THRESHOLD,
-  countTopLevelHeadings,
-  usesProgressiveOutline as docUsesProgressiveOutline,
-} from "./progressive-outline.mjs";
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
@@ -136,7 +129,6 @@ const docs = await collectDocs();
 const posts = await collectPosts();
 const adrs = await collectAdrs();
 const hostedRoutes = new Map();
-const progressiveOutlineDocs = [];
 
 for (const doc of docs) hostedRoutes.set(doc.source, doc.route);
 for (const post of posts) hostedRoutes.set(post.source, post.route);
@@ -149,7 +141,6 @@ await writeDocsNavigation(docs);
 for (const doc of docs) {
   await writeRouteFromSource(doc);
 }
-await writeProgressiveOutlineManifest();
 
 await writeDecisionsIndex();
 await writeDecisionRedirects(repoRoot, publicRoot);
@@ -198,8 +189,6 @@ function buildApiPackages() {
   const packages = apiPackages();
   assertApiEntryPoints(packages);
   const filters = [
-    "--filter",
-    "@palamedes/site-ui",
     "--filter",
     "./packages/core-node-*",
     ...packages.flatMap(({ packageDir }) => ["--filter", `./packages/${packageDir}`]),
@@ -463,7 +452,7 @@ async function writeDocsIndex(docs) {
     lines.push(`## ${group.title}`, "", group.description, "", "<CardGroup cols={2}>");
     for (const entry of entries) {
       lines.push(
-        `<Card title=${JSON.stringify(entry.title)} href=${JSON.stringify(entry.route)}>`,
+        `<Card className="pmds-doc-card" title=${JSON.stringify(entry.title)} href=${JSON.stringify(entry.route)}>`,
         entry.description ?? "Open the generated documentation page.",
         "</Card>",
       );
@@ -498,23 +487,6 @@ async function writeDecisionsIndex() {
     out: join(routesRoot, "decisions/index.md"),
     order: 0,
   });
-}
-
-/*
- * Records every generated doc with its top-level heading count and whether it
- * received a progressive outline. The deploy route verification compares the
- * generated pages against this manifest instead of a pinned page count.
- */
-async function writeProgressiveOutlineManifest() {
-  const manifest = {
-    threshold: PROGRESSIVE_OUTLINE_THRESHOLD,
-    docs: progressiveOutlineDocs.toSorted((left, right) => left.file.localeCompare(right.file)),
-  };
-  await mkdir(generatedDataRoot, { recursive: true });
-  await writeFile(
-    join(generatedDataRoot, PROGRESSIVE_OUTLINE_MANIFEST),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  );
 }
 
 async function writeBlogIndexData(posts) {
@@ -583,64 +555,17 @@ async function writeRouteFromSource(entry) {
     extractAdrMeta(parsed.content, "Date");
   const body = lede ? removeLedeBlock(parsed.content, lede) : parsed.content;
   const content = transformLinks(body, entry.source);
-  const usesProgressiveOutline = docUsesProgressiveOutline(entry.source, content);
-  // Outline labels are literal JSX expressions, including titles with type parameters.
-  if (usesProgressiveOutline) entry.out = entry.out.replace(/\.md$/u, ".mdx");
-  if (entry.source.startsWith("docs/")) {
-    progressiveOutlineDocs.push({
-      source: entry.source,
-      route: entry.route,
-      file: relative(join(routesRoot, "docs"), entry.out).replaceAll("\\", "/"),
-      headings: countTopLevelHeadings(content),
-      outline: usesProgressiveOutline,
-    });
-  }
   const frontmatter = {
     title,
     description,
     order: entry.order,
     ...(date ? { date } : {}),
     ...(status ? { status } : {}),
-    ...(usesProgressiveOutline ? { outline: false } : {}),
   };
   entry.title ??= title;
   entry.status = status;
   entry.date = date;
-  const progressiveOutline = usesProgressiveOutline
-    ? `${renderProgressiveOutline(buildProgressiveOutlineItems(content))}\n\n`
-    : "";
-  await writeGeneratedFile(
-    entry.out,
-    `${toFrontmatter(frontmatter)}\n${progressiveOutline}${content.trim()}\n`,
-  );
-}
-
-function renderProgressiveOutline(items) {
-  const visibleItems = items.slice(0, 4);
-  const remainingItems = items.slice(4);
-  return [
-    '<section className="pmds-progressive-outline" aria-labelledby="page-outline-title">',
-    '<p id="page-outline-title" className="pmds-progressive-outline-label">{"Page outline"}</p>',
-    '<nav aria-label="Page outline">',
-    renderProgressiveOutlineList(visibleItems),
-    '<details className="pmds-progressive-outline-more">',
-    `<summary>{${JSON.stringify(`More sections (${remainingItems.length})`)}}</summary>`,
-    renderProgressiveOutlineList(remainingItems),
-    "</details>",
-    "</nav>",
-    "</section>",
-  ].join("\n");
-}
-
-function renderProgressiveOutlineList(items) {
-  return [
-    '<ol className="pmds-progressive-outline-list">',
-    ...items.map(
-      (item) =>
-        `<li data-depth="${item.depth}"><a href="#${item.id}">{${JSON.stringify(item.text)}}</a></li>`,
-    ),
-    "</ol>",
-  ].join("\n");
+  await writeGeneratedFile(entry.out, `${toFrontmatter(frontmatter)}\n${content.trim()}\n`);
 }
 
 async function generateApiReference() {

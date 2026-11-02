@@ -1,4 +1,4 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, Page, Section } from "~/components/marketing/primitives";
 import { FragmentDemo } from "~/components/FragmentDemo";
 import { PageHero } from "~/components/marketing/PageHero";
 import { PlainWords } from "~/components/marketing/PlainWords";

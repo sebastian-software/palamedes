@@ -1,4 +1,3 @@
-import { Reveal } from "@palamedes/site-ui";
 import { useCallback, useEffect, useRef, useState } from "ardo/react";
 import { ArdoLink as Link } from "ardo/runtime";
 
@@ -110,8 +109,7 @@ export function RustRace() {
       aria-labelledby="rust-title"
       className="pmds-band pmds-band--mist relative"
     >
-      <div className="meander absolute inset-x-0 top-0" aria-hidden />
-      <Reveal>
+      <div>
         <p className="pmds-kicker">Why Rust?</p>
         <h2 id="rust-title" className="pmds-title max-w-[17em]">
           Because nobody likes waiting for their tools.
@@ -122,7 +120,7 @@ export function RustRace() {
           Each table compares tools on the same platform. The historical local recording replays
           each tool's measured median.
         </p>
-      </Reveal>
+      </div>
 
       <BenchmarkFrameworkPicker value={framework} onChange={selectFramework} />
       <noscript>

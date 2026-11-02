@@ -80,7 +80,7 @@ export function CopyCommand({
     <div className={className}>
       <p className="micro text-[10px] tracking-label text-gray-spec">{label}</p>
       <div className="mt-2 flex items-stretch border border-hair">
-        <code ref={commandRef} className="mono-nums grow bg-paper px-3 py-3 text-[12.5px]">
+        <code ref={commandRef} className="mono-nums min-w-0 grow bg-paper px-3 py-3 text-[12.5px]">
           {command}
         </code>
         <button

@@ -1,6 +1,6 @@
 import { ArdoLink as Link } from "ardo/runtime";
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, Page, Section } from "~/components/marketing/primitives";
 import { PageHero } from "~/components/marketing/PageHero";
 import { pageMeta } from "~/lib/meta";
 import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix";
@@ -45,7 +45,7 @@ export default function Frameworks() {
         lede={`${contentStats.demoFrameworkCount} frameworks × ${contentStats.localeStrategyCount} locale strategies. Open a live demo, or read the source of the exact app behind each cell.`}
         id="frontend-frameworks"
       >
-        <FrameworkMatrix scan />
+        <FrameworkMatrix />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
           All {contentStats.demoCount} demos are smoke-checked in the production image and have
           Playwright browser contracts. Vue and Svelte render in the browser; Nuxt, SvelteKit, and

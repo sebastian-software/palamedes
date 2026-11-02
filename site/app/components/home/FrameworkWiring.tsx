@@ -1,4 +1,3 @@
-import { Reveal } from "@palamedes/site-ui";
 import { ArdoLink as Link } from "ardo/runtime";
 
 import { Band, BandHeader } from "~/components/marketing/Band";
@@ -72,8 +71,6 @@ export function FrameworkWiring() {
       />
 
       <div className="pmds-flow relative mt-16">
-        <span aria-hidden className="pmds-flow-line" />
-        <span aria-hidden className="pmds-flow-token" />
         <ol className="relative grid grid-cols-1 gap-y-10 md:grid-cols-2 md:gap-x-10 xl:grid-cols-4">
           {MOMENTS.map((moment, index) => (
             <li key={moment.title} className="min-w-0">
@@ -102,7 +99,7 @@ export function FrameworkWiring() {
       </p>
 
       <div className="mt-20 grid grid-cols-1 gap-x-14 gap-y-8 border-t border-hair pt-14 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)]">
-        <Reveal>
+        <div>
           <h3 className="display-serif text-[clamp(1.6rem,1.1rem+1.4vw,2.3rem)] leading-[1.1]">
             Where does the language live in your URL?
           </h3>
@@ -114,7 +111,7 @@ export function FrameworkWiring() {
           <Link to="/locale-routing" className="pmds-arrow-link mt-3">
             Which one fits your product? →
           </Link>
-        </Reveal>
+        </div>
         <ul className="grid grid-cols-1 gap-px border border-hair bg-hair sm:grid-cols-2">
           {URL_SHAPES.map((shape) => (
             <li key={shape.name} className="min-w-0 bg-paper px-5 py-6 sm:last:col-span-2">

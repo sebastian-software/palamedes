@@ -1,4 +1,4 @@
-import { EditorialRail } from "@palamedes/site-ui";
+import { EditorialRail } from "~/components/marketing/primitives";
 
 /*
  * The "In plain words" aside: one question a newcomer would ask, answered

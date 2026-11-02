@@ -2009,18 +2009,12 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:*
         version: link:../packages/runtime
-      '@palamedes/site-ui':
-        specifier: file:../packages/site-ui
-        version: file:packages/site-ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       ardo:
         specifier: 6.0.0
         version: 6.0.0(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(oxc-parser@0.156.0)(terser@5.49.0)(tsx@4.21.0)(typescript@6.0.3)
       ferramenta-family:
         specifier: github:sebastian-software/ferramenta#05fadd21d86b69bb15179ef4461bef6b3b531f88&path:/packages/family
         version: https://codeload.github.com/sebastian-software/ferramenta/tar.gz/05fadd21d86b69bb15179ef4461bef6b3b531f88#path:/packages/family(react@19.2.8)
-    dependenciesMeta:
-      '@palamedes/site-ui':
-        injected: true
     devDependencies:
       '@palamedes/config':
         specifier: workspace:*
@@ -4627,13 +4621,6 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
-
-  '@palamedes/site-ui@file:packages/site-ui':
-    resolution: {directory: packages/site-ui, type: directory}
-    engines: {node: '>=24.3.0'}
-    peerDependencies:
-      react: ^19.0.0
-      react-dom: ^19.0.0
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -11979,11 +11966,6 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.81.0':
     optional: true
-
-  '@palamedes/site-ui@file:packages/site-ui(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
-    dependencies:
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
 
   '@pinojs/redact@0.4.0': {}
 

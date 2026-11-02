@@ -1,4 +1,4 @@
-import { EditorialRail } from "@palamedes/site-ui";
+import { EditorialRail } from "~/components/marketing/primitives";
 import type { Step } from "~/data/steps";
 
 /*

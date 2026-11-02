@@ -2,7 +2,7 @@ import { StructuredData } from "~/components/StructuredData";
 import { frameworkStructuredData } from "~/lib/meta";
 import { ArdoLink as Link } from "ardo/runtime";
 
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, EditorialRail, Page, Section } from "~/components/marketing/primitives";
 import { CtaBand } from "~/components/home/CtaBand";
 import { PageHero } from "~/components/marketing/PageHero";
 import { V2ReleaseNotice } from "~/components/V2ReleaseNotice";

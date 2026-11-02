@@ -1,6 +1,8 @@
 import {
   ArdoErrorBoundary,
   ArdoGeneratedSidebar,
+  ArdoFooter,
+  ArdoNavLink,
   ArdoHeader,
   ArdoHeaderActions,
   ArdoNav,
@@ -12,16 +14,16 @@ import {
   ArdoSidebarSection,
   ArdoSocialLink,
 } from "ardo/ui";
-import { ButtonLink, SiteFooter, SiteUiProvider, ToolSwitcher } from "@palamedes/site-ui";
-import { ArdoLink as Link, useArdoPath } from "ardo/runtime";
-import config from "virtual:ardo/config";
 
-import { OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config";
+import { ArdoLink as Link, useArdoPath } from "ardo/runtime";
+
+import { FAMILY_SITE } from "ferramenta-family/registry";
+import { repoHref } from "~/data/links";
 import docsNavigation from "~/data/generated/docs-navigation.json";
 import decisionLedger from "~/data/generated/decision-ledger.json";
 import blogPosts from "~/data/generated/blog-posts.json";
 import editSources from "~/data/generated/edit-sources.json";
-import { PRIMARY_NAVIGATION_GROUPS, isPrimaryNavigationLinkActive } from "~/data/navigation";
+import { PRIMARY_NAVIGATION_LINKS, isPrimaryNavigationLinkActive } from "~/data/navigation";
 import { SiteAnalytics } from "~/components/SiteAnalytics";
 
 import { PALAMEDES_THEME } from "./ardo-theme";
@@ -92,38 +94,25 @@ function PrimaryNavigation() {
   const pathname = useArdoPath();
 
   return (
-    <ArdoNav className="pmds-primary-nav">
-      {PRIMARY_NAVIGATION_GROUPS.map((group) => (
-        <div key={group.label} className="pmds-nav-group" role="group" aria-label={group.label}>
-          <span className="pmds-nav-group-label" aria-hidden>
-            {group.label}
-          </span>
-          {group.links.map((link) => {
-            const active = isPrimaryNavigationLinkActive(link, pathname);
-            return (
-              <Link
-                key={link.href}
-                className={`pmds-nav-link${active ? " active" : ""}`}
-                aria-current={active ? "page" : undefined}
-                to={link.href}
-                data-analytics-id={`primary-nav-${link.href}`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+    <ArdoNav>
+      {PRIMARY_NAVIGATION_LINKS.map((link) => {
+        const active = isPrimaryNavigationLinkActive(link, pathname);
+        return (
+          <Link
+            key={link.href}
+            to={link.href}
+            className="pmds-nav-link"
+            aria-current={active ? "page" : undefined}
+            data-analytics-id={`primary-nav-${link.href}`}
+          >
+            {link.label}
+          </Link>
+        );
+      })}
     </ArdoNav>
   );
 }
 
-/*
- * Ardo owns the header and documentation layout. The shared footer follows
- * its frame so it remains a page-level landmark outside the main content.
- * The typed theme and public layout slots preserve the editorial design
- * without targeting Ardo implementation classes.
- */
 const EDIT_SOURCES: Readonly<Record<string, string>> = editSources;
 
 /* Pages generated from docs/, adr/, or blog sources link to that file; other
@@ -140,81 +129,61 @@ function editLinkFor(pathname: string) {
 }
 
 export default function App() {
-  const build =
-    import.meta.env.PROD && config.buildTime
-      ? { builtAt: config.buildTime, commitHash: __PALAMEDES_BUILD_HASH__ }
-      : undefined;
   const pathname = useArdoPath();
 
   return (
-    <SiteUiProvider linkComponent={RouterSiteLink}>
+    <>
       <SiteAnalytics />
       <ArdoRoot
-        footer={false}
         theme={PALAMEDES_THEME}
         scrollMode="document"
         icon="/favicon.svg"
-        logo={
-          <img
-            src={OSS_SITE_CONFIG.logoSrc}
-            alt=""
-            aria-hidden
-            width={36}
-            height={36}
-            className="size-9"
-          />
-        }
+        logo={<img src="/logo.svg" alt="" width={32} height={32} />}
         tocLabel="Page outline"
         editLink={editLinkFor(pathname)}
         lastUpdated={{ enabled: true, text: "Last updated" }}
       >
-        <ArdoHeader
-          search="icon"
-          searchPlaceholder="Search Palamedes docs..."
-          mobileMenuContent={
-            <div className="border-t border-hair px-4 py-4">
-              <ButtonLink
-                href={OSS_SITE_CONFIG.primaryAction!.href}
-                className="min-h-11 w-full text-center"
-              >
-                {OSS_SITE_CONFIG.primaryAction!.label}
-              </ButtonLink>
-            </div>
-          }
-          /* Light-only site by design ("Swiss Spec Grid" is a paper spec sheet);
-           * re-enable once both token systems ship a dark set. */
-          themeToggle={false}
-        >
+        <ArdoHeader search="icon" themeToggle={false}>
           <PrimaryNavigation />
           <ArdoHeaderActions>
-            {/*
-             * The family switcher sits with the header actions, in the site's
-             * own editorial style (decision D6). It needs the room a flyout
-             * takes, so below the tight breakpoint the footer family line is
-             * the family surface — the same width at which ARDO already folds
-             * the primary action away.
-             */}
-            {OSS_SITE_CONFIG.toolSwitcher ? (
-              <ToolSwitcher switcher={OSS_SITE_CONFIG.toolSwitcher} className="max-tight:hidden" />
-            ) : null}
+            <ArdoNavLink href={FAMILY_SITE}>Ferramenta</ArdoNavLink>
             <ArdoSocialLink
               href="https://github.com/sebastian-software/palamedes"
               icon="github"
               ariaLabel="Palamedes on GitHub"
             />
-            <ButtonLink
-              variant="small"
-              href={OSS_SITE_CONFIG.primaryAction!.href}
-              className="max-tight:hidden"
-            >
-              {OSS_SITE_CONFIG.primaryAction!.label}
-            </ButtonLink>
           </ArdoHeaderActions>
         </ArdoHeader>
         <ArdoSidebar>{renderSidebarSections()}</ArdoSidebar>
+        <ArdoFooter
+          buildHash={import.meta.env.PROD ? __PALAMEDES_BUILD_HASH__ : undefined}
+          message={
+            <>
+              <Link to="/get-started">Get started</Link>
+              {" · "}
+              <Link to="/proof">Benchmarks</Link>
+              {" · "}
+              <Link to="/compare">Comparison</Link>
+              {" · "}
+              <Link to="/decisions">Decisions</Link>
+              {" · "}
+              <Link to="/blog">Blog</Link>
+              {" · "}
+              <a href={FAMILY_SITE}>Ferramenta</a>
+              {" · "}
+              <a href="https://www.streamlinehq.com/">Icons by Streamline</a>
+            </>
+          }
+          copyright={
+            <>
+              <a href={repoHref("README.md#license")}>MIT OR Apache-2.0</a>
+              {" © 2025–2026 "}
+              <a href="https://oss.sebastian-software.com/">Sebastian Software GmbH</a>
+            </>
+          }
+        />
       </ArdoRoot>
-      <SiteFooter config={OSS_SITE_CONFIG} build={build} />
-    </SiteUiProvider>
+    </>
   );
 }
 

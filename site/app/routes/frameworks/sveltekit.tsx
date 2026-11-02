@@ -1,4 +1,4 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, Page, Section } from "~/components/marketing/primitives";
 import { PageHero } from "~/components/marketing/PageHero";
 import { docsHref, repoHref } from "~/data/links";
 import { pageMeta } from "~/lib/meta";

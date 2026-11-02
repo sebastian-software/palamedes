@@ -170,8 +170,8 @@ the accessibility check covers Axe and responsive overflow; and the docs
 development check verifies cold-cache navigation, reload, and browser history.
 Pull-request CI does not run the route check, which takes about ten minutes;
 the Deploy Site workflow runs it before publishing. CI does run
-`pnpm verify:site-outlines`, the route check's static comparison of the
-generated docs with the prebuild's progressive outline manifest.
+`pnpm verify:site-outlines`, which checks Ardo's native outlines and their
+heading targets in the built HTML.
 
 ## Development Notes
 
@@ -235,8 +235,8 @@ pins and outputs together. Never edit generated family text by hand.
 The React documentation site uses `ferramenta-family` from `site/package.json`.
 To update that dependency, align its Git revision with `GENERATOR_COMMIT` in
 `scripts/readme-family.mjs`, update the lockfile, and run the site's build.
-The shared header and footer exclude this project from sibling links and
-include sibling descriptions.
+The website links to the Ferramenta family project from the header and the
+Project footer column; it does not render the full tool registry.
 
 ## Pull Requests
 

@@ -1,4 +1,3 @@
-import { Reveal } from "@palamedes/site-ui";
 import { ArdoLink as Link } from "ardo/runtime";
 
 import { Band } from "~/components/marketing/Band";
@@ -22,7 +21,7 @@ export function OriginStory() {
   return (
     <Band tone="parchment" labelledBy="origin-title">
       <div className="grid grid-cols-1 items-start gap-x-16 gap-y-12 lg:grid-cols-[minmax(14rem,0.75fr)_minmax(0,2fr)]">
-        <Reveal>
+        <div>
           <figure className="mx-auto max-w-[18rem] text-center lg:sticky lg:top-24">
             <img
               src="/logo.svg"
@@ -39,10 +38,10 @@ export function OriginStory() {
               software that teaches applications new languages.
             </figcaption>
           </figure>
-        </Reveal>
+        </div>
 
         <div>
-          <Reveal>
+          <div>
             <p className="pmds-kicker">Why it exists</p>
             <h2 id="origin-title" className="pmds-title max-w-[16em]">
               Built by someone who has done this three times.
@@ -74,7 +73,7 @@ export function OriginStory() {
                 </Link>
               </footer>
             </blockquote>
-          </Reveal>
+          </div>
 
           <ul className="mt-14 grid grid-cols-1 gap-x-10 gap-y-8 border-t border-hair pt-10 sm:grid-cols-2">
             {OWNERSHIP.map((item) => (

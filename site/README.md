@@ -1,7 +1,7 @@
 # @palamedes/site
 
 The public Palamedes website, live at <https://palamedes.dev> — Ardo 6 with static document navigation, full prerendering, Tailwind v4,
-and the Palamedes editorial design system (ADR-011). Private workspace, never
+and a small local marketing layer (ADR-011). Private workspace, never
 published to npm.
 
 ## Commands
@@ -36,41 +36,39 @@ reduced-motion, JS disabled), from the repo root:
 node scripts/verify-site-routes.mjs
 ```
 
-## Theming & chrome (ARDO)
+## Theming and chrome
 
-Ardo owns the header, documentation sidebar, search, and document layout. The
-shared `SiteFooter` sits after `ArdoRoot`, with Ardo's own footer disabled, so
-it forms one page-level footer landmark outside the main content. Marketing routes use `layout: "bare"` and keep the
-explicit header and footer. Documentation uses `scrollMode="document"`.
-The header uses Ardo's search dialog at every width so the primary navigation
-and full wordmark fit alongside it. The keyboard search shortcut remains available.
+Ardo owns the header, footer, search, sidebar components, document layout,
+code styling, focus rings, and responsive page outline. Marketing routes use
+`layout: "bare"`; documentation uses `scrollMode="document"`. The curated
+sidebar groups remain content configuration in `app/root.tsx`.
 
-`app/ardo-theme.ts` maps Ardo's typed theme tokens to the Palamedes editorial
-palette, fonts, square corners, and flat surfaces. Ardo loads its stylesheet
-once in the `ardo` cascade layer; `app/app.css` orders that layer before
-Tailwind utilities. Do not target Ardo's generated classes.
+`app/ardo-theme.ts` sets three public hue options and a temporary white code
+background for syntax contrast. Ardo derives the remaining surfaces,
+text, borders, and component styling. `app/app.css` maps marketing utilities to
+those tokens and contains the local marketing composition. Cinzel Hellenic is
+loaded for marketing headings. Do not target generated Ardo classes or import
+`@palamedes/site-ui` into this site. That package remains available to other
+consumers; the OSS site no longer needs its second chrome and token system.
 
-The site is light-only: `ArdoRootLayout` forces `colorScheme="light"` before
-first paint, and the header hides the theme toggle. Add a full dark token set
-before enabling a user-selectable color scheme.
+Ferramenta has a plain link in the header and footer. There is no Tools menu or
+family directory. See the [style audit](style-audit.md) for the ownership boundary
+and the remaining compatibility exceptions awaiting an Ardo release.
 
-Ardo requires imports to stay inside installed packages. pnpm injects
-`@palamedes/site-ui` through `file:../packages/site-ui` into the site's
-dependency tree instead of linking its
-workspace source directory. The prebuild checks the shared UI, and pnpm
-synchronizes its installed copy after `build` scripts.
+The site currently forces light mode. Ardo supplies its complete theme palette;
+local specimens and licensed illustrations need a separate dark-mode review
+before exposing the theme toggle.
 
-Ardo manages React, React DOM, and Vite. App code uses `ardo/react`,
-`ardo/react-dom/*`, and `ArdoLink` from `ardo/runtime`. Links load prerendered
-HTML documents; there is no client router or route loader. The build timestamp
-comes from Ardo's configuration. JSON-LD is rendered by `StructuredData` in the
-page because Ardo's metadata descriptors cover titles, links, and meta tags.
-
-The native Ferromark pipeline supplies Markdown, syntax highlighting, search
-excerpts, and heading identities. Progressive outlines use the same native
-parser, including duplicate heading IDs. The build checks rendered internal
-links and heading anchors with Ferrolink. Curated `llms.txt` files remain owned by the repository;
-Ardo's automatic LLM exports are disabled.
+App code uses `ardo/react`, `ardo/react-dom/*`, and `ArdoLink` from `ardo/runtime`.
+Links load prerendered HTML documents. The build timestamp comes from Ardo,
+and JSON-LD is rendered by `StructuredData` in the page. The native Ferromark
+pipeline owns Markdown, syntax highlighting, search excerpts, and heading IDs.
+Ardo's native outline replaces the custom generated outline and manifest.
+`pnpm verify:site-outlines` checks native outlines against the shipped HTML;
+the route check exercises their disclosure and anchors with and without JavaScript.
+The build checks internal links and heading anchors with Ferrolink.
+Curated `llms.txt` files remain repository-owned, so Ardo's automatic LLM exports
+are disabled.
 
 ## Data honesty guards
 

@@ -1,6 +1,6 @@
 import { ArdoLink as Link } from "ardo/runtime";
 
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, EditorialRail, Page, Section } from "~/components/marketing/primitives";
 import { PageHero } from "~/components/marketing/PageHero";
 import { CopyCommand } from "~/components/CopyCommand";
 import { pageMeta } from "~/lib/meta";

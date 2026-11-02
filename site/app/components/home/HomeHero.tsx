@@ -1,4 +1,4 @@
-import { ButtonLink } from "@palamedes/site-ui";
+import { ButtonLink } from "~/components/marketing/primitives";
 
 import { AgentStart } from "./AgentStart";
 import { HeroFilm } from "./HeroFilm";

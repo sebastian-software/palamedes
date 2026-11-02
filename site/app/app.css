@@ -1,27 +1,37 @@
-/* Ardo 6 emits its stylesheet in the ardo layer. Tailwind utilities come last. */
+/* Ardo owns document and chrome styles. Marketing rules stay local. */
 @layer theme, base, ardo, components, utilities;
-@import "@palamedes/site-ui/styles.css";
-@import "@palamedes/site-ui/tailwind.css";
 @import "tailwindcss";
 
-/*
- * Grounds beyond paper. Parchment is the warm alternate ground; mist is a pale
- * tint of the navy ink for the bands that used to invert to navy; slate is a
- * softer ink for secondary code tokens. The site has no dark surfaces: navy is
- * ink, never a background.
- */
-@theme {
-  --color-parchment: #f3efe3;
-  --color-mist: #e8edf2;
-  --color-mist-deep: #d6dee7;
-  --color-slate: #4f6074;
-  --color-listing: #f4f6f8;
+@theme inline {
+  --color-paper: var(--ardo-color-bg);
+  --color-ink: var(--ardo-color-text);
+  --color-hair: var(--ardo-color-border);
+  --color-accent: var(--ardo-color-brand);
+  --color-gold: var(--ardo-color-brand);
+  --color-gray-spec: var(--ardo-color-textLight);
+  --color-accent-soft: var(--ardo-color-brandSubtle);
+  --color-hover-fill: var(--ardo-color-bgSoft);
+  --color-track: var(--ardo-color-bgMute);
+  --color-parchment: var(--ardo-color-bgSoft);
+  --color-mist: var(--ardo-color-bgSoft);
+  --color-mist-deep: var(--ardo-color-bgMute);
+  --color-slate: var(--ardo-color-textLight);
+  --color-listing: var(--ardo-color-codeBg);
+  --font-sans: var(--ardo-font-family);
+  --font-mono: var(--ardo-font-mono);
+  --font-display: "Cinzel Hellenic", "Times New Roman", serif;
+  --text-display: clamp(1.75rem, 3.8vw, 3rem);
+  --text-h2: clamp(1.375rem, 3.2vw, 2rem);
+  --text-band: clamp(1.2rem, 2.8vw, 1.75rem);
+  --text-stat: 2.125rem;
+  --breakpoint-grid: 60rem;
+  --breakpoint-tight: 35rem;
+  --tracking-micro: 0.14em;
+  --tracking-eyebrow: 0.22em;
+  --tracking-label: 0.16em;
+  --tracking-th: 0.18em;
 }
 
-/*
- * Cinzel Hellenic — the brand's inscription face (Trajan-style capitals with
- * small-cap lowercase). Single weight by design; never used for body copy.
- */
 @font-face {
   font-family: "Cinzel Hellenic";
   src: url("/fonts/CinzelHellenic-Regular.woff2") format("woff2");
@@ -30,568 +40,199 @@
   font-display: swap;
 }
 
-/*
- * The shared package owns the complete Hellenic Spec Grid token and utility
- * contract. This file contains only the font asset and ARDO integration.
- */
-
-/*
- * Generated docs keep ARDO's own component structure. These are local,
- * semantic hooks for the prebuild-owned index micro-labels and the public
- * runtime outline component; no ARDO implementation class is targeted.
- */
-.pmds-docs-micro-label,
-.pmds-progressive-outline-label {
-  margin: 0 0 0.65rem;
+@utility micro {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
+  letter-spacing: var(--tracking-micro);
+}
+@utility mono-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+@utility hairline-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--color-hair);
+  border: 1px solid var(--color-hair);
+  > * {
+    min-width: 0;
+  }
+}
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
   color: var(--color-gray-spec);
 }
-
-.pmds-progressive-outline {
-  margin: 1.5rem 0 2rem;
-  padding: 1rem 1.125rem;
-  border-block: 1px solid var(--color-hair);
-  background: var(--ardo-color-bgSoft);
-}
-
-.pmds-progressive-outline-list {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0;
-  padding-left: 0;
-  list-style: none;
-}
-
-.pmds-progressive-outline-list li[data-depth="1"] {
-  margin-left: 0.75rem;
-}
-
-.pmds-progressive-outline-list a,
-.pmds-progressive-outline-more summary {
-  color: var(--ardo-color-text);
-}
-
-.pmds-progressive-outline-list a:focus-visible,
-.pmds-progressive-outline-more summary:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.pmds-progressive-outline-more {
-  margin-top: 0.75rem;
-}
-
-.pmds-progressive-outline-more summary {
-  width: fit-content;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.pmds-progressive-outline-more .pmds-progressive-outline-list {
-  margin-top: 0.75rem;
-}
-
-/*
- * The header wordmark. ARDO renders the site title as a plain <span> inside
- * the logo home link and exposes no className hook for it; like the
- * mobile-panel nav below, it is scoped through semantics (a descendant
- * combinator, so an extra ARDO wrapper element cannot silently break the
- * match), never through hashed classes. The family switcher also links this
- * site's root — for its own entry — and its labels are body type, not the
- * inscription, so it is excluded by its own public class.
- * Cinzel Hellenic set wide, as on an inscription.
- */
-header a[href="/"]:not(.pmds-switcher-link) span {
+@utility display-serif {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: 18px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--color-ink);
-  translate: 0 2px; /* optical baseline against the ring icon */
 }
 
-/*
- * Evaluation and resource links remain one ARDO navigation landmark. The
- * relationship is a restrained rule on desktop and explicit group labels in
- * ARDO's mobile dialog. All selectors use our public classes or semantics,
- * never ARDO's generated implementation classes.
- */
-.pmds-primary-nav,
-.pmds-nav-group {
-  display: flex;
-  align-items: center;
+/* Preserve related-topic aria-current until ArdoNavLink exposes activeMatch to AT. */
+.pmds-nav-link {
+  padding: 0.5rem 0.875rem;
+  color: var(--ardo-color-textLight);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.pmds-nav-link:hover,
+.pmds-nav-link[aria-current] {
+  color: var(--ardo-color-brand);
 }
 
-.pmds-primary-nav {
-  gap: 0.5rem;
-}
-
-.pmds-nav-group + .pmds-nav-group {
-  margin-left: 0.25rem;
-  padding-left: 0.75rem;
-  border-left: 1px solid var(--color-hair);
-}
-
-.pmds-nav-group-label {
-  display: none;
-}
-
-[role="dialog"][aria-modal="true"] .pmds-primary-nav {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.75rem;
-}
-
-[role="dialog"][aria-modal="true"] .pmds-nav-group {
+/* Ardo 6.0 keeps its desktop row inside the mobile panel. */
+.ardo-mobile-panel .ardo-nav {
   flex-direction: column;
   align-items: stretch;
 }
 
-[role="dialog"][aria-modal="true"] .pmds-nav-group + .pmds-nav-group {
-  margin-left: 0;
-  padding-top: 0.75rem;
-  padding-left: 0;
-  border-top: 1px solid var(--color-hair);
-  border-left: 0;
-}
-
-[role="dialog"][aria-modal="true"] .pmds-nav-group-label {
-  display: block;
-  padding: 0.25rem 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-gray-spec);
-}
-
-[role="dialog"][aria-modal="true"] .pmds-nav-link {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  padding: 0.65rem 0;
-  border-bottom: none;
-  font-size: 12px;
-}
-
-.pmds-nav-link:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-header button[aria-label="Toggle menu"]:focus-visible,
-[role="dialog"][aria-modal="true"] button[aria-label="Close menu"]:focus-visible,
-[role="dialog"][aria-modal="true"] a[href="/"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
+/* Ardo 6.0 controls need this until the upstream touch-target fix is released. */
 header button[aria-label="Toggle menu"],
 [role="dialog"][aria-modal="true"] button[aria-label="Close menu"] {
   min-width: 44px;
   min-height: 44px;
 }
 
-/* -------------------------------------------------- marketing composition -- */
+/* Ardo 6.0 cards retain intrinsic minimum widths for long text. */
+.pmds-doc-card {
+  min-width: 0;
+}
+.pmds-doc-card h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
-/*
- * Marketing pages run edge to edge so the paper, parchment, and mist bands can
- * carry the page rhythm. Content is centered on one shared measure through
- * padding, which lets the shared site-ui Section and the local Band component
- * use the same rule without an extra wrapper element.
- */
+/* Product specimens use local composition; they do not restyle documentation. */
 :root {
-  --pmds-measure: 76rem;
-  --pmds-gutter: clamp(1.25rem, 5vw, 4.5rem);
-  --text-hero: clamp(2.45rem, 6.2vw, 5.6rem);
-  --text-title: clamp(2rem, 4.1vw, 3.5rem);
-  --text-lede: clamp(1.0625rem, 0.95rem + 0.4vw, 1.3125rem);
+  --pmds-measure: 69rem;
+  --pmds-gutter: clamp(1.25rem, 5vw, 3rem);
 }
-
-#main-content:has(.pmds-page) > .pmds-page {
-  width: 100% !important;
-  max-width: none !important;
-  margin-inline: 0 !important;
-  border-inline: 0;
+.pmds-page {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-
-footer.ardo-footer:has(.pmds-footer) > div {
-  width: min(calc(100% - 4rem), 1440px) !important;
-  max-width: 1440px !important;
-  margin-inline: auto !important;
-  border-inline: 0;
-}
-
-footer.ardo-footer:has(.pmds-footer) {
-  padding-inline: 0;
-}
-
-header.ardo-header {
-  border-bottom: 1px solid var(--color-hair);
-}
-
-header.ardo-header > div {
-  width: min(100%, 1440px);
-  margin-inline: auto;
-  padding-inline: 2rem;
-}
-
 .pmds-band,
-.pmds-page .pmds-section {
-  padding-block: clamp(4rem, 7.5vw, 6.75rem);
-  padding-inline: max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
+.pmds-section,
+.pmds-page-hero {
+  padding: clamp(3rem, 6vw, 5rem) max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
   border-top: 1px solid var(--color-hair);
 }
-
 .pmds-measured {
   padding-inline: max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
 }
-
-/*
- * Bronze reaches 4.48:1 on parchment; a marginally deeper bronze inside
- * parchment bands keeps small accent text at WCAG AA without a second hue.
- */
 .pmds-band--parchment {
-  --color-accent: #866026;
   background: var(--color-parchment);
 }
-
-/* Bronze is deepened on mist exactly as on parchment, for AA small text. */
-.pmds-band--mist {
-  --color-accent: #866026;
-  background: var(--color-mist);
-}
-
-/*
- * Code is set like a printed listing: ink on a cool, light ground with a
- * hairline frame. Messages and marks use bronze; secondary tokens use slate.
- */
 .pmds-code {
-  --color-accent: #866026;
   border: 1px solid var(--color-hair);
   background: var(--color-listing);
   color: var(--color-ink);
 }
-
 .pmds-code-label {
   border-bottom: 1px solid var(--color-hair);
-  background: var(--color-paper);
 }
-
 .pmds-band-header {
   max-width: 54rem;
 }
-
 .pmds-band-header--center {
   margin-inline: auto;
   text-align: center;
 }
-
 .pmds-band-header--center .pmds-lede {
   margin-inline: auto;
 }
-
-/*
- * One kicker treatment replaces the former stack of number, section sign, and
- * eyebrow: a short bronze rule, then a single readable label.
- */
 .pmds-kicker,
-.pmds-page .pmds-section-number {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  margin: 0;
+.pmds-docs-micro-label {
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
   color: var(--color-accent);
 }
-
-.pmds-kicker::before,
-.pmds-page .pmds-section-number::before,
-.pmds-band-header--center .pmds-kicker::after {
-  flex: none;
-  width: 2.25rem;
-  height: 1px;
-  background: currentcolor;
-  content: "";
-}
-
-.pmds-band-header--center .pmds-kicker {
-  justify-content: center;
-}
-
-.pmds-page .pmds-section-eyebrow {
-  margin-top: 0.6rem;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  color: var(--color-gray-spec);
-}
-
-.pmds-page .pmds-section-eyebrow::before {
-  content: none;
-}
-
-.pmds-hero-title,
+.pmds-title,
 .pmds-page-title,
-.pmds-title,
-.pmds-page .pmds-section-title,
-.pmds-page .display-serif {
-  overflow-wrap: break-word;
-  hyphens: auto;
-}
-
-/* Long build metadata wraps instead of widening the page under text zoom. */
-.pmds-footer-meta {
-  flex-wrap: wrap;
-}
-
-.pmds-title,
-.pmds-page .pmds-section-title {
-  margin-top: 1.4rem;
-  font-family: var(--font-display);
-  font-size: var(--text-title);
-  font-weight: 400;
-  line-height: 1.06;
-  letter-spacing: 0.005em;
-  text-wrap: balance;
-}
-
-.pmds-page .pmds-section-title {
-  max-width: 20em;
-  font-size: clamp(1.9rem, 3.7vw, 3.1rem);
-}
-
-.pmds-lede,
-.pmds-page .pmds-section-lede {
-  max-width: 42rem;
-  margin-top: 1.5rem;
-  font-size: var(--text-lede);
-  line-height: 1.65;
-  color: rgb(14 42 77 / 0.86);
-  text-wrap: pretty;
-}
-
-.pmds-page .pmds-section-content {
-  margin-top: clamp(2.5rem, 5vw, 4rem);
-}
-
-/* ------------------------------------------------------------------ hero -- */
-
-.pmds-hero {
-  padding: clamp(3.5rem, 7vw, 6.5rem) var(--pmds-gutter) clamp(4rem, 8vw, 7rem);
-}
-
 .pmds-hero-title {
-  margin-top: 1.75rem;
+  margin-top: 1rem;
   font-family: var(--font-display);
-  font-size: var(--text-hero);
+  font-size: clamp(1.9rem, 3.7vw, 3.1rem);
   font-weight: 400;
-  line-height: 1.02;
-  letter-spacing: -0.005em;
+  line-height: 1.15;
   text-wrap: balance;
+  overflow-wrap: anywhere;
 }
-
+.pmds-hero-title {
+  font-size: clamp(2.45rem, 6.2vw, 4.75rem);
+}
+.pmds-page-title {
+  font-size: clamp(2.35rem, 5.2vw, 4rem);
+}
+.pmds-lede,
+.pmds-page-lede,
 .pmds-hero-lede {
   max-width: 42rem;
-  margin: 1.75rem auto 0;
-  font-size: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
-  line-height: 1.6;
-  color: rgb(14 42 77 / 0.88);
-  text-wrap: balance;
-}
-
-.pmds-page-hero {
-  padding: clamp(3.5rem, 7vw, 6rem) max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2))
-    clamp(3.5rem, 6vw, 5.5rem);
-}
-
-.pmds-page-title {
   margin-top: 1.5rem;
-  font-family: var(--font-display);
-  font-size: clamp(2.35rem, 5.2vw, 4.6rem);
-  font-weight: 400;
-  line-height: 1.03;
-  letter-spacing: -0.005em;
-  text-wrap: balance;
+  font-size: clamp(1.0625rem, 0.95rem + 0.4vw, 1.3125rem);
+  line-height: 1.65;
+  color: var(--ardo-color-textLight);
 }
-
-.pmds-page-lede {
-  max-width: 40rem;
-  margin-top: 1.75rem;
-  font-size: clamp(1.125rem, 1rem + 0.45vw, 1.3125rem);
-  line-height: 1.6;
-  color: rgb(14 42 77 / 0.88);
-  text-wrap: pretty;
+.pmds-hero {
+  padding: clamp(3rem, 6vw, 5rem) var(--pmds-gutter);
 }
-
-/* -------------------------------------------------------------- journey -- */
-
+.pmds-hero-lede {
+  margin-inline: auto;
+}
 .pmds-journey {
-  --pmds-journey-gap: clamp(4.5rem, 8vw, 7rem);
   display: grid;
-  gap: var(--pmds-journey-gap);
+  gap: 3rem;
 }
-
-.pmds-journey-stop {
-  position: relative;
-  padding-left: 4.75rem;
-}
-
-.pmds-journey-stop::before {
-  position: absolute;
-  top: 3.25rem;
-  bottom: calc(-1 * var(--pmds-journey-gap) + 0.75rem);
-  left: 1.375rem;
-  width: 1px;
-  background: rgb(134 96 38 / 0.45);
-  content: "";
-}
-
-.pmds-journey-stop:last-child::before {
-  content: none;
-}
-
 .pmds-journey-marker {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: grid;
-  width: 2.75rem;
-  height: 2.75rem;
-  place-items: center;
-  border: 1px solid var(--color-accent);
-  background: var(--color-paper);
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
   color: var(--color-accent);
-  font-family: var(--font-display);
-  font-size: 1.2rem;
 }
-
-@media (max-width: 40rem) {
-  .pmds-journey-stop {
-    padding-top: 4rem;
-    padding-left: 0;
-  }
-
-  .pmds-journey-stop::before {
-    content: none;
-  }
+.pmds-editorial-rail {
+  max-width: 56em;
+  border-inline-start: 1px solid var(--color-hair);
+  padding-inline-start: 1.25rem;
 }
-
-/* ----------------------------------------------------------------- flow -- */
-
-/*
- * A four-station flow: one hairline joins the stations on wide screens and a
- * bronze marker travels it, the way a message moves from server render to
- * server action. Under reduced motion the marker is not shown. It passes behind
- * the station squares, which sit above it in the stacking order.
- */
-.pmds-flow-line,
-.pmds-flow-token {
-  display: none;
+.pmds-editorial-rail--emphasis {
+  border-inline-start-color: var(--color-accent);
 }
-
-@media (min-width: 80rem) {
-  .pmds-flow-line {
-    position: absolute;
-    top: 1.25rem;
-    /* The fourth station starts at 75% plus three quarters of the 2.5rem gap. */
-    right: calc(25% - 3.125rem);
-    left: 1.25rem;
-    display: block;
-    height: 1px;
-    background: rgb(134 96 38 / 0.45);
-  }
-
-  .pmds-flow-token {
-    position: absolute;
-    top: calc(1.25rem - 4px);
-    left: 1.25rem;
-    width: 9px;
-    height: 9px;
-    background: var(--color-accent);
-    rotate: 45deg;
-  }
-
-  /* Only a moving marker means something; at rest it would hide a station. */
-  @media (prefers-reduced-motion: no-preference) {
-    .pmds-flow-token {
-      display: block;
-      animation: pmds-flow-travel 7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-    }
-  }
-}
-
-@keyframes pmds-flow-travel {
-  0%,
-  6% {
-    left: 1.25rem;
-    opacity: 0;
-  }
-
-  10% {
-    opacity: 1;
-  }
-
-  90% {
-    opacity: 1;
-  }
-
-  96%,
-  100% {
-    left: calc(75% + 3.125rem);
-    opacity: 0;
-  }
-}
-
-/* --------------------------------------------------------------- actions -- */
-
-.pmds-page .pmds-button:not(.pmds-button--small) {
-  padding: 0.95rem 1.6rem;
-  font-size: 12px;
-}
-
-.pmds-button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-}
-
-.pmds-arrow-link {
+.pmds-button {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: 0.02em;
+  justify-content: center;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid var(--color-ink);
+  border-radius: var(--ardo-radius-base);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.pmds-button--primary {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+.pmds-button--outline,
+.pmds-button--small {
+  color: var(--color-ink);
+}
+.pmds-button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pmds-arrow-link {
+  display: inline-block;
+  min-height: 44px;
+  padding-block: 0.5rem;
   color: var(--color-accent);
   text-decoration: underline;
-  text-decoration-color: rgb(142 102 40 / 0.35);
-  text-underline-offset: 6px;
-  transition: text-decoration-color 120ms ease-out;
+  text-underline-offset: 4px;
 }
-
-.pmds-arrow-link:hover {
-  text-decoration-color: currentcolor;
-}
-
-.pmds-arrow-link:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-@media (max-width: 42rem) {
-  footer.ardo-footer:has(.pmds-footer) > div {
-    width: calc(100% - 2.5rem);
-  }
-
-  header.ardo-header > div {
-    padding-inline: 1.25rem;
-  }
+.pmds-page code {
+  overflow-wrap: anywhere;
 }

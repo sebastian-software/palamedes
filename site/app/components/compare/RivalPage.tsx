@@ -1,6 +1,6 @@
 import { StructuredData } from "~/components/StructuredData";
 import { faqStructuredData } from "~/lib/meta";
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, EditorialRail, Page, Section } from "~/components/marketing/primitives";
 import { CtaBand } from "~/components/home/CtaBand";
 import { PageHero } from "~/components/marketing/PageHero";
 import { StatementBand } from "~/components/home/StatementBand";

@@ -1,5 +1,5 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { ButtonLink } from "@palamedes/site-ui";
+import { ButtonLink } from "~/components/marketing/primitives";
 import { StepFlow } from "~/components/get-started/StepFlow";
 import { QUICKSTART_STEPS, STACKS, type StackId } from "~/data/steps";
 import { docsHref } from "~/data/links";

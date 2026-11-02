@@ -1,14 +1,8 @@
-import { Reveal } from "@palamedes/site-ui";
 import type { ReactNode } from "ardo/react";
 
-export type BandTone = "paper" | "parchment" | "navy";
+export type BandTone = "paper" | "parchment";
 
-/*
- * A full-width marketing band. Tone carries the page rhythm — paper for
- * explanation, parchment for context, navy for the few statements that should
- * stop the scroll. Content is centered on one shared measure by padding, so
- * bands need no inner wrapper and subpage sections can share the same rule.
- */
+/** Product-content section; spacing and optional tone stay local to this site. */
 export function Band({
   id,
   tone = "paper",
@@ -52,7 +46,7 @@ export function BandHeader({
   children?: ReactNode;
 }) {
   return (
-    <Reveal>
+    <div>
       <header className={`pmds-band-header${center ? " pmds-band-header--center" : ""}`}>
         {kicker ? <p className="pmds-kicker">{kicker}</p> : null}
         <h2 id={id} className="pmds-title">
@@ -61,6 +55,6 @@ export function BandHeader({
         {lede ? <p className="pmds-lede">{lede}</p> : null}
         {children}
       </header>
-    </Reveal>
+    </div>
   );
 }

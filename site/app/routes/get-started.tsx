@@ -1,4 +1,4 @@
-import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, EditorialRail, Page, Section } from "~/components/marketing/primitives";
 import { PageHero } from "~/components/marketing/PageHero";
 import { PlainWords } from "~/components/marketing/PlainWords";
 import { V2ReleaseNotice } from "~/components/V2ReleaseNotice";

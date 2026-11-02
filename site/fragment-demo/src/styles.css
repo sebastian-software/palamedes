@@ -1,4 +1,17 @@
-@import "@palamedes/site-ui/styles.css";
+:root {
+  --color-paper: #faf9f4;
+  --color-ink: #0e2a4d;
+  --color-hair: #ddd6c6;
+  --color-accent: #866026;
+  --font-mono: ui-monospace, monospace;
+}
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font:
+    1rem/1.55 system-ui,
+    sans-serif;
+}
 
 * {
   box-sizing: border-box;

@@ -82,7 +82,6 @@ export default defineConfig({
       // pnpm stores these installed CSS packages outside the documentation root.
       allow: [
         import.meta.dirname,
-        realpathSync(resolve(import.meta.dirname, "node_modules/@palamedes/site-ui")),
         realpathSync(resolve(import.meta.dirname, "node_modules/tailwindcss")),
       ],
     },
