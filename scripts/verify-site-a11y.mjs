@@ -129,6 +129,20 @@ try {
     await context.close();
   }
 
+  // Card sizing must also work below the main mobile sweep's 390px viewport.
+  const docsContext = await browser.newContext({ viewport: { width: 320, height: 844 } });
+  const docsPage = await docsContext.newPage();
+  await docsPage.goto(`${baseUrl}/docs`, { waitUntil: "networkidle" });
+  const docsWidth = await docsPage.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    content: document.documentElement.scrollWidth,
+  }));
+  assert.ok(
+    docsWidth.content <= docsWidth.viewport + 1,
+    `Documentation cards overflow at 320px: ${JSON.stringify(docsWidth)}`,
+  );
+  await docsContext.close();
+
   await verifyFragmentDemo(browser, baseUrl);
 
   for (const width of [320, 390, 430]) {

@@ -97,6 +97,15 @@ header button[aria-label="Toggle menu"],
   min-height: 44px;
 }
 
+/* Ardo 6.0 cards retain intrinsic minimum widths for long text. */
+.pmds-doc-card {
+  min-width: 0;
+}
+.pmds-doc-card h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Product specimens use local composition; they do not restyle documentation. */
 :root {
   --pmds-measure: 69rem;

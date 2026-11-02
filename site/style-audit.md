@@ -43,16 +43,19 @@ Ardo 6.0 announcing the title twice.
 The mobile `.ardo-nav` also needs a vertical layout inside the public
 `.ardo-mobile-panel` container, and code surfaces use white so GitHub Light
 comments reach 4.5:1 instead of 4.09:1. None of these exceptions targets
-generated classes.
+generated classes. Documentation cards also need a local minimum-width and
+heading-wrap correction until Ardo ships the upstream card reflow fix.
 
 The [upstream Ardo PR](https://github.com/sebastian-software/ardo/pull/447) covers
 current-link semantics, menu target size, breadcrumb reflow, and the accessible
 home-link name, mobile navigation flow, and the highlighter background.
-Its code-surface correction follows the shipped syntax theme; it does not add
+The code-surface correction follows the shipped syntax theme; it does not add
 Palamedes-specific colors or typography.
+The [card reflow fix](https://github.com/sebastian-software/ardo/pull/448)
+has its own follow-up PR.
 After adopting a release with those fixes, replace the local navigation adapter
-with `ArdoNavLink` and remove the menu-size, mobile-flow, and code-background
-compatibility rules.
+with `ArdoNavLink` and remove the menu-size, mobile-flow, code-background,
+and documentation-card compatibility rules.
 
 ## Verification
 

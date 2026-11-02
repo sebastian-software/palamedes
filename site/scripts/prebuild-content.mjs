@@ -452,7 +452,7 @@ async function writeDocsIndex(docs) {
     lines.push(`## ${group.title}`, "", group.description, "", "<CardGroup cols={2}>");
     for (const entry of entries) {
       lines.push(
-        `<Card title=${JSON.stringify(entry.title)} href=${JSON.stringify(entry.route)}>`,
+        `<Card className="pmds-doc-card" title=${JSON.stringify(entry.title)} href=${JSON.stringify(entry.route)}>`,
         entry.description ?? "Open the generated documentation page.",
         "</Card>",
       );
