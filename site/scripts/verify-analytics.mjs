@@ -246,6 +246,24 @@ try {
   assert.equal((await events(page, "demo_interaction")).at(-1).properties.locale, "fr");
   await closeContext(active.instance);
 
+  for (const width of [1440, 390]) {
+    const navigation = await context();
+    await navigation.page.setViewportSize({ width, height: 844 });
+    if (width === 390) {
+      await navigation.page.getByRole("button", { name: "Toggle menu", exact: true }).click();
+    }
+    await navigation.page
+      .locator(".ardo-nav")
+      .getByRole("link", { name: "Frameworks", exact: true })
+      .click();
+    await navigation.page.waitForURL((url) => url.pathname.replace(/\/+$/u, "") === "/frameworks");
+    assert.equal(
+      (await events(navigation.page, "link_click")).at(-1).properties.control,
+      "primary-nav-/frameworks",
+    );
+    await closeContext(navigation.instance);
+  }
+
   for (const options of [{ disabled: true }, { local: true }, { blocked: true }]) {
     const fixture = await context(options);
     await fixture.page.getByRole("button", { name: "One seat more" }).click();

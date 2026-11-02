@@ -23,7 +23,7 @@ import docsNavigation from "~/data/generated/docs-navigation.json";
 import decisionLedger from "~/data/generated/decision-ledger.json";
 import blogPosts from "~/data/generated/blog-posts.json";
 import editSources from "~/data/generated/edit-sources.json";
-import { PRIMARY_NAVIGATION_LINKS, isPrimaryNavigationLinkActive } from "~/data/navigation";
+import { PRIMARY_NAVIGATION_LINKS } from "~/data/navigation";
 import { SiteAnalytics } from "~/components/SiteAnalytics";
 
 import { PALAMEDES_THEME } from "./ardo-theme";
@@ -90,29 +90,6 @@ function renderSidebarSections() {
   );
 }
 
-function PrimaryNavigation() {
-  const pathname = useArdoPath();
-
-  return (
-    <ArdoNav>
-      {PRIMARY_NAVIGATION_LINKS.map((link) => {
-        const active = isPrimaryNavigationLinkActive(link, pathname);
-        return (
-          <Link
-            key={link.href}
-            to={link.href}
-            className="pmds-nav-link"
-            aria-current={active ? "page" : undefined}
-            data-analytics-id={`primary-nav-${link.href}`}
-          >
-            {link.label}
-          </Link>
-        );
-      })}
-    </ArdoNav>
-  );
-}
-
 const EDIT_SOURCES: Readonly<Record<string, string>> = editSources;
 
 /* Pages generated from docs/, adr/, or blog sources link to that file; other
@@ -138,13 +115,19 @@ export default function App() {
         theme={PALAMEDES_THEME}
         scrollMode="document"
         icon="/favicon.svg"
-        logo={<img src="/logo.svg" alt="" width={32} height={32} />}
+        logo="/logo.svg"
         tocLabel="Page outline"
         editLink={editLinkFor(pathname)}
         lastUpdated={{ enabled: true, text: "Last updated" }}
       >
         <ArdoHeader search="icon" themeToggle={false}>
-          <PrimaryNavigation />
+          <ArdoNav>
+            {PRIMARY_NAVIGATION_LINKS.map((link) => (
+              <ArdoNavLink key={link.href} to={link.href} activeMatch={link.activeMatch}>
+                {link.label}
+              </ArdoNavLink>
+            ))}
+          </ArdoNav>
           <ArdoHeaderActions>
             <ArdoNavLink href={FAMILY_SITE}>Ferramenta</ArdoNavLink>
             <ArdoSocialLink

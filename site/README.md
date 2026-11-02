@@ -1,6 +1,6 @@
 # @palamedes/site
 
-The public Palamedes website, live at <https://palamedes.dev> — Ardo 6 with static document navigation, full prerendering, Tailwind v4,
+The public Palamedes website, live at <https://palamedes.dev> — Ardo 6.1.1 with static document navigation, full prerendering, Tailwind v4,
 and a small local marketing layer (ADR-011). Private workspace, never
 published to npm.
 
@@ -43,8 +43,7 @@ code styling, focus rings, and responsive page outline. Marketing routes use
 `layout: "bare"`; documentation uses `scrollMode="document"`. The curated
 sidebar groups remain content configuration in `app/root.tsx`.
 
-`app/ardo-theme.ts` sets three public hue options and a temporary white code
-background for syntax contrast. Ardo derives the remaining surfaces,
+`app/ardo-theme.ts` sets three public hue options. Ardo derives the remaining surfaces,
 text, borders, and component styling. `app/app.css` maps marketing utilities to
 those tokens and contains the local marketing composition. Cinzel Hellenic is
 loaded for marketing headings. Do not target generated Ardo classes or import
@@ -53,7 +52,7 @@ consumers; the OSS site no longer needs its second chrome and token system.
 
 Ferramenta has a plain link in the header and footer. There is no Tools menu or
 family directory. See the [style audit](style-audit.md) for the ownership boundary
-and the remaining compatibility exceptions awaiting an Ardo release.
+and the upstream fixes adopted with Ardo 6.1.1.
 
 The site currently forces light mode. Ardo supplies its complete theme palette;
 local specimens and licensed illustrations need a separate dark-mode review

@@ -71,41 +71,6 @@
   font-weight: 400;
 }
 
-/* Preserve related-topic aria-current until ArdoNavLink exposes activeMatch to AT. */
-.pmds-nav-link {
-  padding: 0.5rem 0.875rem;
-  color: var(--ardo-color-textLight);
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-decoration: none;
-}
-.pmds-nav-link:hover,
-.pmds-nav-link[aria-current] {
-  color: var(--ardo-color-brand);
-}
-
-/* Ardo 6.0 keeps its desktop row inside the mobile panel. */
-.ardo-mobile-panel .ardo-nav {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-/* Ardo 6.0 controls need this until the upstream touch-target fix is released. */
-header button[aria-label="Toggle menu"],
-[role="dialog"][aria-modal="true"] button[aria-label="Close menu"] {
-  min-width: 44px;
-  min-height: 44px;
-}
-
-/* Ardo 6.0 cards retain intrinsic minimum widths for long text. */
-.pmds-doc-card {
-  min-width: 0;
-}
-.pmds-doc-card h3 {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 /* Product specimens use local composition; they do not restyle documentation. */
 :root {
   --pmds-measure: 69rem;
