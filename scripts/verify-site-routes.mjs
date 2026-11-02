@@ -15,12 +15,10 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { startSiteStaticServer } from "./site-static-server.mjs";
 import { verifyFrameworkBenchmarks } from "../site/scripts/verify-framework-benchmarks.mjs";
-import { verifyGeneratedProgressiveOutlines } from "../site/scripts/progressive-outline.mjs";
+import { verifyDocOutlines } from "../site/scripts/verify-doc-outlines.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const clientDir = join(repoRoot, "site/build/client");
-const generatedDocsDir = join(repoRoot, "site/app/routes/docs");
-const generatedDataDir = join(repoRoot, "site/app/data/generated");
 function portFromEnv(name, fallback) {
   const configured = process.env[name];
   if (configured === undefined) return fallback;
@@ -1221,101 +1219,28 @@ async function checkHomepageSetupViewport(browser, width) {
   await context.close();
 }
 
-async function checkProgressiveDocsOutline(browser) {
-  const { manifest } = readProgressiveOutlines();
-  // Every top-level heading of the guide gets one outline link.
-  const expectedLinks = manifest?.docs.find(({ file }) => file === "configuration.mdx")?.headings;
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  const page = await context.newPage();
-  await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 });
-
-  const outline = page.locator(".pmds-progressive-outline");
-  if ((await outline.count()) !== 1) {
-    fail("progressive docs outline: missing on a long direct-entry page");
-  } else {
-    const links = outline.locator('a[href^="#"]');
-    if ((await links.count()) !== expectedLinks) {
-      fail(
-        `progressive docs outline: expected ${expectedLinks} anchor links, got ${await links.count()}`,
-      );
-    }
-    const details = outline.locator("details");
-    if (await details.evaluate((element) => element.hasAttribute("open"))) {
-      fail("progressive docs outline: additional sections must start collapsed");
-    }
+async function checkNativeDocsOutline(browser) {
+  verifyDocOutlines(clientDir);
+  for (const javaScriptEnabled of [true, false]) {
+    const context = await browser.newContext({
+      javaScriptEnabled,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    await gotoAndSettle(page, "/docs/configuration", { settleMs: 100 });
+    const details = page
+      .locator("details")
+      .filter({ has: page.locator("summary", { hasText: "Page outline" }) });
     const summary = details.locator("summary");
     await summary.focus();
     await page.keyboard.press("Enter");
-    if (!(await details.evaluate((element) => element.hasAttribute("open")))) {
-      fail("progressive docs outline: keyboard did not open additional sections");
-    }
-    const target = details.getByRole("link", { name: "Other Data Formats", exact: true });
-    await target.click();
-    if (new URL(page.url()).hash !== "#other-data-formats") {
-      fail("progressive docs outline: a disclosed anchor did not update the URL");
-    }
+    if (!(await details.evaluate((element) => element.open)))
+      fail("native outline: keyboard disclosure did not open");
+    await details.getByRole("link", { name: "Other Data Formats", exact: true }).click();
+    if (new URL(page.url()).hash !== "#other-data-formats")
+      fail("native outline: heading navigation failed");
+    await context.close();
   }
-  await context.close();
-
-  const noJsContext = await browser.newContext({ javaScriptEnabled: false });
-  const noJsPage = await noJsContext.newPage();
-  await gotoAndSettle(noJsPage, "/docs/configuration", { settleMs: 100 });
-  const noJsOutline = noJsPage.locator(".pmds-progressive-outline");
-  if (
-    (await noJsOutline.count()) !== 1 ||
-    (await noJsOutline.locator('a[href^="#"]').count()) !== expectedLinks
-  ) {
-    fail("progressive docs outline: direct no-JS entry lost its anchors");
-  }
-  await noJsContext.close();
-}
-
-/*
- * Which docs get a progressive outline follows from their heading count, so the
- * expectation comes from the prebuild manifest and a re-count of the generated
- * pages rather than a pinned page total. A doc that lost or gained its outline,
- * a manifest that drifted from the pages, a required long guide without an
- * outline, or an empty outline set still fails. CI runs the same static check
- * after the site build; this pass adds the browser-side anchor verification.
- */
-let progressiveOutlines;
-function readProgressiveOutlines() {
-  if (progressiveOutlines) return progressiveOutlines;
-  progressiveOutlines = verifyGeneratedProgressiveOutlines({
-    docsDir: generatedDocsDir,
-    dataDir: generatedDataDir,
-  });
-  for (const problem of progressiveOutlines.problems) {
-    fail(`progressive docs outline: ${problem}`);
-  }
-  return progressiveOutlines;
-}
-
-async function checkProgressiveOutlineAnchors(browser) {
-  const { docs } = readProgressiveOutlines();
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  for (const { entry, source } of docs) {
-    const routeEntry = entry
-      .replaceAll("\\", "/")
-      .replace(/\.mdx?$/u, "")
-      .replace(/\/index$/u, "");
-    const path = `/docs/${routeEntry}`;
-    const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1]);
-    await gotoAndSettle(page, path, { settleMs: 200 });
-    const missingIds = await page.evaluate(
-      (ids) => ids.filter((id) => document.getElementById(id) == null),
-      expectedIds,
-    );
-    if (missingIds.length > 0) {
-      fail(
-        `progressive docs outline: ${path} links to missing heading IDs: ${missingIds.join(", ")}`,
-      );
-    }
-  }
-  console.log(`  progressive outline heading IDs verified across ${docs.length} generated docs`);
-  await context.close();
 }
 
 function trackPageErrors(page, getPath, consoleErrors) {
@@ -1398,8 +1323,7 @@ await checkProofViewport(browser, 430);
 await checkProofViewport(browser, 390, { textScale: 2 });
 await checkHomepageSetupViewport(browser, 320);
 await checkHomepageSetupViewport(browser, 390);
-await checkProgressiveDocsOutline(browser);
-await checkProgressiveOutlineAnchors(browser);
+await checkNativeDocsOutline(browser);
 
 await browser.close();
 await staticServer?.close();

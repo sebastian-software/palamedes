@@ -1,5 +1,3 @@
-import { Reveal } from "@palamedes/site-ui";
-
 import { Band, BandHeader } from "~/components/marketing/Band";
 import { BENCH_REALISTIC, displayBenchmarkTime } from "~/data/bench";
 import { blacksmithBench } from "~/data/blacksmith-bench";
@@ -111,11 +109,11 @@ export function BeforeAfter() {
           ))}
         </ol>
       </div>
-      <Reveal>
+      <div>
         <p className="display-serif mt-14 text-center text-[clamp(1.6rem,1rem+2.6vw,3rem)] leading-tight">
           Clear. Complete. Fast. <span className="text-accent">Pick three.</span>
         </p>
-      </Reveal>
+      </div>
     </Band>
   );
 }

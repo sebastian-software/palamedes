@@ -34,11 +34,8 @@ function CellContent({ cell }: { cell: MatrixCell }) {
   );
 }
 
-/*
- * The 10×4 proof matrix uses the public hosting state in the matrix data.
- * `scan` adds the /frameworks accent scanline on first view.
- */
-export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
+/** Verified integrations and their public hosting state. */
+export function FrameworkMatrix() {
   return (
     <div>
       <div
@@ -46,13 +43,6 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         tabIndex={0}
         aria-label="Verified framework and locale strategy matrix"
       >
-        {scan ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 z-10 h-px bg-accent"
-            style={{ animation: "scanline 1.2s ease-out 0.4s both" }}
-          />
-        ) : null}
         <table className="w-full min-w-[720px] border-collapse border border-hair">
           <thead>
             <tr>

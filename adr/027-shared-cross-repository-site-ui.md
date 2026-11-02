@@ -2,9 +2,9 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-30
+**Last updated:** 2026-11-02
 
-Related product sites share open-source UI primitives while retaining independent content, routing, and deployment.
+Related sites may share optional UI primitives; the OSS site uses Ardo for its complete shell.
 
 ## Decision
 
@@ -22,20 +22,20 @@ It owns:
 The package depends only on React. It does not depend on React Router, ARDO, a
 site's content tree, or files outside its package directory. Its component CSS
 works when imported directly by a plain Vite application; Tailwind theme and
-utility declarations are an additive integration for the OSS site.
+utility declarations are an additive integration for Tailwind consumers.
 
-The OSS site consumes the package through `file:../packages/site-ui` and keeps
-its ARDO adapter in `site/`. pnpm installs a physical package copy because Ardo 6
-rejects imports from workspace source directories outside the documentation
-package. The prebuild checks `site-ui`, and pnpm synchronizes installed copies
-after build scripts. The local file reference preserves one canonical source;
-it is not a separately maintained copy. A separate repository consumes a complete commit pin of the package
-subdirectory. Local links may be used while developing both repositories, but
-must not be committed as the reproducible dependency.
+The OSS site uses Ardo directly and does not consume this package. Its local
+marketing primitives own product content composition, not another site shell.
+The package remains available to the separate commercial repository through a
+complete commit pin of its package subdirectory. Changes to that public
+contract still require consumer validation; simplifying the OSS site is not a
+reason to break or remove it.
 
-Cross-product navigation is configuration, never hostname detection. The
-Palamedes+ destination is present but disabled in the OSS configuration until
-that site is live.
+Shared structure and accessibility fixes belong in Ardo when they benefit
+unrelated sites. Palamedes-specific typography, artwork, colors, and marketing
+composition stay in the consuming project. Ardo must not acquire Palamedes
+visual defaults. Prefer its existing public slots and theme options; add a
+general extension point only when an actual structural gap remains.
 
 Family navigation is optional configuration through `toolSwitcher` and
 `familyLine`. `SiteHeader` and `SiteFooter` render those surfaces; `ToolSwitcher`
@@ -55,8 +55,8 @@ should look and navigate like related products without copying layout
 components, coupling deployments, or requiring the commercial repository to
 reach into private paths in this workspace.
 
-The OSS site uses Ardo 6 with static document navigation. A shared package tied to
-either library would make it harder for the Plus site to reuse the design
+The OSS site uses Ardo 6 with static document navigation. Keeping the optional package tied to
+a routing or documentation library would make it harder for the Plus site to reuse the design
 contract and would turn an integration detail into a cross-repository API.
 
 ## Alternatives Considered

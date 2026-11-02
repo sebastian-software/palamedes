@@ -1,4 +1,4 @@
-import { ButtonLink } from "@palamedes/site-ui";
+import { ButtonLink } from "~/components/marketing/primitives";
 
 interface Cta {
   label: string;
@@ -6,8 +6,8 @@ interface Cta {
 }
 
 /*
- * The closing invitation on every marketing page: one navy band, one
- * sentence, one primary step. The meander marks it as the page's last word.
+ * The closing invitation on every marketing page: one section, one
+ * sentence, one primary step.
  */
 export function CtaBand({
   headline,
@@ -22,7 +22,6 @@ export function CtaBand({
 }) {
   return (
     <section className="pmds-band pmds-band--mist relative" aria-label="Next step">
-      <div className="meander absolute inset-x-0 top-0" aria-hidden />
       <h2 className="display-serif max-w-[18em] text-[clamp(2rem,4.2vw,3.5rem)] leading-[1.08] text-balance">
         {headline}
       </h2>

@@ -2,65 +2,38 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-26
+**Last updated:** 2026-11-02
 
-One editorial visual language connects product pages, documentation, and inspectable evidence.
+Palamedes keeps its identity in local content and brand choices while delegating
+site structure and component styling to Ardo.
 
 ## Decision
 
-Use the **Inscription and ledger, opened up** system for all Palamedes web
-surfaces — the classical masthead and evidence ledger, composed as an
-editorial page that explains before it proves:
+Use Ardo's public components and theme options for the OSS site's header,
+footer, search, document layout, navigation, outline, code, and focus styles.
+Keep a small local marketing layer for product specimens and editorial sections.
 
-- warm paper `#faf9f4` is the ground, navy `#0e2a4d` is the primary ink, and
-  bronze `#8e6628` is the single semantic accent;
-- Cinzel Hellenic is the display face, paired with restrained body type, mono
-  uppercase micro-labels, and tabular numbers;
-- section kickers use one 12 px mono treatment led by a short bronze rule;
-  remaining micro-labels use 10–11 px, and `gray-spec` is no lighter than
-  `#6f695b` on paper so small text retains WCAG AA contrast. Marketing body
-  copy stays at 15–21 px;
-- marketing pages run full width. Content sits on one shared 76 rem measure,
-  and paper, parchment (`#f3efe3`), and mist (`#e8edf2`, a pale tint of the
-  navy ink) bands carry the page rhythm with soft, close-valued transitions.
-  The site has no dark surfaces: navy is ink — text, rules, small marks, and
-  the primary button — never a band or panel background. Code is set like a
-  printed listing on a light ground (`#f4f6f8`) with bronze marks and slate
-  (`#4f6074`) secondary tokens. Statement and closing bands use mist and are
-  marked by the meander ornament. On parchment, mist, and listing grounds,
-  bronze text uses `#866026`, the same accent deepened just enough for WCAG AA;
-- concepts a newcomer may not know are explained in an "In plain words" aside
-  beside the artifact they describe, never only in a tooltip;
-- product specimens — real code, catalog entries, rendered components in
-  several languages, address bars — are the primary marketing imagery;
-- mastheads and running heads use rules, alignment, and whitespace rather than
-  cards; border radius, box shadows, and gradients are outside the system,
-  with one scoped exception: homepage integration links use small white badges
-  with a fine border, an 8 px radius, and a subtle shadow. Compact mark slots,
-  a close logo-to-name gap, and balanced padding preserve the vendor artwork
-  without oversized controls;
-- structural rules are one-pixel hairlines. Editorial qualifications, asides,
-  and boundaries use the shared `EditorialRail` primitive. Its structural tone
-  uses ink/hairline tokens; its emphasis tone may use bronze. Thick colored
-  side tabs are not part of the system;
-- bronze communicates interaction or semantic emphasis. Ordinary grouping
-  must not spend the accent merely for decoration;
-- non-brand marketing pictograms use only licensed Streamline Sharp Duo
-  exports recorded in `site/streamline-asset-manifest.md`. Framework and vendor
-  marks are the intentional brand exception;
-- larger editorial illustrations, when used, come only from Streamline UX
-  Duotone. Keep them distinct from the small Sharp Duo pictograms, preserve
-  their geometry, and use the same navy/bronze palette. Use either layer only
-  where it helps the reader; avoid repeated decorative icons or illustrations;
-- framework marks identify integrations, not customers or adoption. Preserve
-  their geometry and record their provenance and usage constraints in
-  `site/framework-brand-usage.md`;
-- public benchmark values follow the rounding, scope, and evidence policy
-  below. Exact values remain available in the checked source artifacts.
+- Local hue choices give the site warm accents and cool neutrals. Ardo derives
+  the rest of the palette; do not maintain parallel surface and text tokens.
+- Keep the logo, Cinzel Hellenic marketing headings, product specimens, and
+  licensed artwork local. Exact values live in the theme and stylesheet.
+- Prefer ordinary spacing and type hierarchy. Scroll reveals, decorative
+  ornaments, animated connectors, forced square corners, and flat-surface
+  overrides are not required brand features.
+- Use one simple Ferramenta link instead of a family tool menu or sibling list.
+- Explain unfamiliar concepts beside their artifacts, including the existing
+  "In plain words" asides. Editorial rails remain local one-pixel rules.
+- Share structural and accessibility improvements through Ardo. Never introduce
+  Palamedes-specific visual defaults into the common theme, and do not require
+  unrelated Ardo sites to adopt this site's appearance.
+- Framework marks identify integrations, not customers or adoption. Preserve
+  their geometry and provenance in `site/framework-brand-usage.md`.
+- Existing Streamline artwork remains subject to the asset handling rules below.
+  New artwork must explain content rather than fill empty space.
 
-ARDO continues to own documentation chrome. Palamedes applies this language
-through ARDO's public token and component APIs rather than overriding internal
-classes.
+The earlier inscription-and-ledger treatment is deliberately reduced. Future
+visual additions must justify their local maintenance cost instead of restoring
+the former theme wholesale.
 
 ### Benchmark Presentation
 
@@ -99,15 +72,12 @@ a project usage allowance.
 
 ## Context
 
-Palamedes needs one visual language across marketing pages, documentation,
-proof artifacts, and shared site UI. The October 2026 revision kept the palette,
-display type, logo, and hard rules but opened the composition: the earlier
-dense spec-sheet layout proved technically convincing yet hard to understand
-on first contact. A warm editorial masthead and
-technical ledger need consistent typography, icon rules, numeric presentation,
-and callout treatment. Without a shared contract, individual routes can drift back to
-generic documentation chrome, mixed icon families, or several competing
-callout systems.
+The OSS site previously combined Ardo with shared site chrome and a second
+complete palette. Local CSS then restyled those shared primitives again.
+Ardo 6 already supplies the document and shell behavior we need, so this made
+visual changes harder to reason about without adding product functionality.
+The simpler boundary keeps branded content local and general framework
+behavior upstream.
 
 ## Alternatives Considered
 
@@ -130,7 +100,7 @@ inspectable in the asset manifest.
 
 ## Consequences
 
-- Shared components and tokens carry visual changes across all site surfaces.
+- Ardo carries shell and document changes; local marketing code carries product-specific presentation.
 - New callouts use `EditorialRail`; the site build guard rejects a return of
   `border-l-4` callouts under `site/app`.
 - Designers and implementers must preserve adjacent scope and provenance for
@@ -142,10 +112,9 @@ inspectable in the asset manifest.
 
 ## Validation And Review Triggers
 
-The shared site UI tests distinguish structural and emphasis rails, and
 `scripts/verify-site-editorial-rails.mjs` enforces the one-pixel rail contract.
 The site benchmark guard verifies checked numeric presentation. Revisit this
-decision when the brand palette or display type changes, ARDO exposes a new
-theme contract, the icon license or selected family changes, or accessibility
+decision when a local visual addition needs more theme overrides, Ardo exposes
+a useful structural capability, the icon license or selected family changes, or accessibility
 testing shows that a token or type treatment cannot meet the documented
 contrast and reflow requirements.

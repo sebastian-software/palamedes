@@ -20,7 +20,7 @@ export function SplitDiagram() {
   const [opened, setOpened] = useState<ReadonlySet<ScreenId>>(() => new Set(["home"]));
 
   return (
-    <figure className="border border-ink bg-paper">
+    <figure className="@container border border-ink bg-paper">
       <p className="micro border-b border-hair px-5 py-3 text-[11px] tracking-label text-gray-spec">
         Illustration · open a screen
       </p>
@@ -30,7 +30,7 @@ export function SplitDiagram() {
           return (
             <li
               key={screen.id}
-              className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-4 px-5 py-4 max-tight:grid-cols-1 max-tight:gap-2"
+              className="grid grid-cols-1 @min-[34rem]:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-4 px-5 py-4 max-tight:grid-cols-1 max-tight:gap-2"
             >
               <button
                 type="button"
@@ -44,7 +44,7 @@ export function SplitDiagram() {
               >
                 {screen.name}
               </button>
-              <p className="flex items-center gap-3 text-[14.5px]">
+              <p className="flex min-w-0 items-center gap-3 text-[14.5px]">
                 <span
                   aria-hidden
                   className={`h-3 shrink-0 transition-[width,background-color] duration-500 ${loaded ? "w-16 bg-accent" : "w-16 border border-dashed border-gray-spec bg-transparent"}`}

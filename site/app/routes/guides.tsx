@@ -1,6 +1,6 @@
 import { ArdoLink as Link } from "ardo/runtime";
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui";
+import { ButtonLink, Page, Section } from "~/components/marketing/primitives";
 import { PageHero } from "~/components/marketing/PageHero";
 import { CtaBand } from "~/components/home/CtaBand";
 import { StreamlineIcon } from "~/components/icons/StreamlineIcon";

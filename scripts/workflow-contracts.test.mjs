@@ -1045,7 +1045,7 @@ describe("workflow contracts", () => {
 
     // The static outline check does run in pull requests, after the build.
     expect(packageJson.scripts["verify:site-outlines"]).toBe(
-      "node ./site/scripts/verify-progressive-outlines.mjs",
+      "node ./site/scripts/verify-doc-outlines.mjs",
     );
     const validate = job(ci, "validate", "validate-rust");
     expect(validate.indexOf("run: pnpm build:site")).toBeGreaterThan(-1);

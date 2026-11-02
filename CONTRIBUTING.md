@@ -170,8 +170,8 @@ the accessibility check covers Axe and responsive overflow; and the docs
 development check verifies cold-cache navigation, reload, and browser history.
 Pull-request CI does not run the route check, which takes about ten minutes;
 the Deploy Site workflow runs it before publishing. CI does run
-`pnpm verify:site-outlines`, the route check's static comparison of the
-generated docs with the prebuild's progressive outline manifest.
+`pnpm verify:site-outlines`, which checks Ardo's native outlines and their
+heading targets in the built HTML.
 
 ## Development Notes
 
