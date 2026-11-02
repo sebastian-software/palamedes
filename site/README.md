@@ -1,6 +1,6 @@
 # @palamedes/site
 
-The public Palamedes website, live at <https://palamedes.dev> — Ardo 6.1.1 with static document navigation, full prerendering, Tailwind v4,
+The public Palamedes website, live at <https://palamedes.dev> — Ardo 6.1.2 with static document navigation, full prerendering, Tailwind v4,
 and a small local marketing layer (ADR-011). Private workspace, never
 published to npm.
 
@@ -52,7 +52,7 @@ consumers; the OSS site no longer needs its second chrome and token system.
 
 Ferramenta has a plain link in the header and footer. There is no Tools menu or
 family directory. See the [style audit](style-audit.md) for the ownership boundary
-and the upstream fixes adopted with Ardo 6.1.1.
+and the upstream fixes adopted with Ardo 6.1.2.
 
 The site currently forces light mode. Ardo supplies its complete theme palette;
 local specimens and licensed illustrations need a separate dark-mode review

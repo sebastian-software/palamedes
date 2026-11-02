@@ -1,6 +1,6 @@
 # Website style ownership
 
-The OSS site uses Ardo 6.1.1 directly. The cleanup removes the second site shell
+The OSS site uses Ardo 6.1.2 directly. The cleanup removes the second site shell
 and its imported global CSS rather than adding more overrides to reconcile them.
 
 | Surface                            | Owner           | Local responsibility                                        |
@@ -35,7 +35,7 @@ its own small base because it renders outside Ardo's document context.
 
 ## Upstream fixes adopted
 
-Ardo 6.1.1 includes the general corrections from
+Ardo 6.1.2 includes the general corrections from
 [Ardo #447](https://github.com/sebastian-software/ardo/pull/447) and
 [Ardo #448](https://github.com/sebastian-software/ardo/pull/448):
 
@@ -44,6 +44,9 @@ Ardo 6.1.1 includes the general corrections from
 - Breadcrumbs and documentation cards wrap in narrow layouts.
 - Logo and title produce one accessible home-link name.
 - The light code surface preserves GitHub Light comment contrast.
+
+Ardo 6.1.2 also restores keyboard focus after reloading a failed search. This
+uses the upstream search behavior without a local patch.
 
 The site now uses `ArdoNavLink` with the native `activeMatch` option and a logo
 asset path. The local link adapter, chrome CSS, card compatibility class, and
