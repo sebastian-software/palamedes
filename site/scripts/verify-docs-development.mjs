@@ -52,13 +52,21 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
   await page.getByRole("banner").getByRole("link", { name: "Docs", exact: true }).click();
   await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor();
+  await page.waitForLoadState("networkidle");
   await page.getByRole("banner").getByRole("button", { name: "Search", exact: true }).click();
   const search = page.getByRole("dialog", { name: "Search", exact: true });
   await search.getByRole("combobox", { name: "Search" }).fill("First Working Translation");
   await search.getByRole("option").first().waitFor();
   await page.keyboard.press("Escape");
   await search.waitFor({ state: "hidden" });
-  await page.getByRole("link", { name: "First Working Translation" }).first().click();
+  await page
+    .getByRole("article")
+    .getByRole("link", { name: "First Working Translation" })
+    .first()
+    .click();
+  await page.waitForURL(
+    (url) => url.pathname.replace(/\/+$/u, "") === "/docs/first-working-translation",
+  );
   await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor();
 
   await page.goBack({ waitUntil: "networkidle" });
