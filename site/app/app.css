@@ -75,12 +75,6 @@
   color: var(--ardo-color-text);
 }
 
-.pmds-progressive-outline-list a:focus-visible,
-.pmds-progressive-outline-more summary:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
 .pmds-progressive-outline-more {
   margin-top: 0.75rem;
 }
@@ -93,26 +87,6 @@
 
 .pmds-progressive-outline-more .pmds-progressive-outline-list {
   margin-top: 0.75rem;
-}
-
-/*
- * The header wordmark. ARDO renders the site title as a plain <span> inside
- * the logo home link and exposes no className hook for it; like the
- * mobile-panel nav below, it is scoped through semantics (a descendant
- * combinator, so an extra ARDO wrapper element cannot silently break the
- * match), never through hashed classes. The family switcher also links this
- * site's root — for its own entry — and its labels are body type, not the
- * inscription, so it is excluded by its own public class.
- * Cinzel Hellenic set wide, as on an inscription.
- */
-header a[href="/"]:not(.pmds-switcher-link) span {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 18px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--color-ink);
-  translate: 0 2px; /* optical baseline against the ring icon */
 }
 
 /*
@@ -179,18 +153,7 @@ header a[href="/"]:not(.pmds-switcher-link) span {
   font-size: 12px;
 }
 
-.pmds-nav-link:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-header button[aria-label="Toggle menu"]:focus-visible,
-[role="dialog"][aria-modal="true"] button[aria-label="Close menu"]:focus-visible,
-[role="dialog"][aria-modal="true"] a[href="/"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
+/* Ardo supplies focus rings; these two icon buttons still need 44px targets. */
 header button[aria-label="Toggle menu"],
 [role="dialog"][aria-modal="true"] button[aria-label="Close menu"] {
   min-width: 44px;
@@ -213,32 +176,10 @@ header button[aria-label="Toggle menu"],
   --text-lede: clamp(1.0625rem, 0.95rem + 0.4vw, 1.3125rem);
 }
 
-#main-content:has(.pmds-page) > .pmds-page {
-  width: 100% !important;
-  max-width: none !important;
-  margin-inline: 0 !important;
+.pmds-page {
+  max-width: none;
+  margin-inline: 0;
   border-inline: 0;
-}
-
-footer.ardo-footer:has(.pmds-footer) > div {
-  width: min(calc(100% - 4rem), 1440px) !important;
-  max-width: 1440px !important;
-  margin-inline: auto !important;
-  border-inline: 0;
-}
-
-footer.ardo-footer:has(.pmds-footer) {
-  padding-inline: 0;
-}
-
-header.ardo-header {
-  border-bottom: 1px solid var(--color-hair);
-}
-
-header.ardo-header > div {
-  width: min(100%, 1440px);
-  margin-inline: auto;
-  padding-inline: 2rem;
 }
 
 .pmds-band,
@@ -558,11 +499,6 @@ header.ardo-header > div {
   font-size: 12px;
 }
 
-.pmds-button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-}
-
 .pmds-arrow-link {
   display: inline-flex;
   min-height: 44px;
@@ -579,19 +515,4 @@ header.ardo-header > div {
 
 .pmds-arrow-link:hover {
   text-decoration-color: currentcolor;
-}
-
-.pmds-arrow-link:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-@media (max-width: 42rem) {
-  footer.ardo-footer:has(.pmds-footer) > div {
-    width: calc(100% - 2.5rem);
-  }
-
-  header.ardo-header > div {
-    padding-inline: 1.25rem;
-  }
 }

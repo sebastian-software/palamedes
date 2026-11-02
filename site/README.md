@@ -50,6 +50,13 @@ palette, fonts, square corners, and flat surfaces. Ardo loads its stylesheet
 once in the `ardo` cascade layer; `app/app.css` orders that layer before
 Tailwind utilities. Do not target Ardo's generated classes.
 
+The wordmark uses Ardo's public logo slot. Ardo supplies header sizing and
+focus rings; the site only enlarges the mobile menu buttons to 44 px. The
+Ferramenta family project has one link in the header and one in the Project
+footer column, without a tool switcher or sibling list. See the
+[Ardo 6 style audit](style-audit.md) for the remaining customization and its
+ownership.
+
 The site is light-only: `ArdoRootLayout` forces `colorScheme="light"` before
 first paint, and the header hides the theme toggle. Add a full dark token set
 before enabling a user-selectable color scheme.

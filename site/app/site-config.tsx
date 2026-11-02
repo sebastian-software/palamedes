@@ -1,5 +1,5 @@
-import { FAMILY_SITE, family, familyGroups, type FamilyTool } from "ferramenta-family/registry";
-import type { SiteConfig, SiteFamilyTool, SiteLinkComponentProps } from "@palamedes/site-ui";
+import { FAMILY_SITE } from "ferramenta-family/registry";
+import type { SiteConfig, SiteLinkComponentProps } from "@palamedes/site-ui";
 import { defineSiteConfig } from "@palamedes/site-ui";
 import { ArdoLink as Link } from "ardo/runtime";
 
@@ -32,29 +32,8 @@ export function RouterSiteLink({
   );
 }
 
-/*
- * D6 of the 2026-09 family audit: palamedes.dev keeps its own editorial brand
- * and adds the family switcher plus the footer family line. The facts come from
- * the `ferramenta-family` registry — names, jobs, and destinations are never
- * copied into this repository (ferramenta ADR-0001). Only the registry entry
- * point is imported: it is data with no React and no CSS, so `site-ui` keeps
- * its React-only dependency contract (ADR-027) and the shared chrome receives
- * plain configuration.
- */
-const FAMILY_CURRENT = "palamedes";
-
-function toFamilyTool(tool: FamilyTool): SiteFamilyTool {
-  const current = tool.name === FAMILY_CURRENT;
-  return {
-    label: tool.name,
-    /* This site is its own registry destination; link it as a route instead. */
-    href: current ? "/" : (tool.docs ?? tool.repo),
-    job: tool.shortJob,
-    current,
-  };
-}
-
-const { pipeline, language, workbench } = familyGroups();
+/** One family destination, shared by the header and footer. */
+export const FERRAMENTA_LINK = { label: "Ferramenta", href: FAMILY_SITE };
 
 export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
   name: "Palamedes",
@@ -74,20 +53,6 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
     label: "Palamedes+",
     href: "https://plus.palamedes.dev",
     enabled: false,
-  },
-  toolSwitcher: {
-    label: "Tools",
-    ariaLabel: "Ferramenta family tools",
-    groups: [
-      { label: "Pipeline", tools: pipeline.map(toFamilyTool) },
-      { label: "Language", tools: language.map(toFamilyTool) },
-      { label: "Workbench", tools: workbench.map(toFamilyTool) },
-    ],
-  },
-  familyLine: {
-    label: "Ferramenta family",
-    href: FAMILY_SITE,
-    tools: family.map(toFamilyTool),
   },
   footerColumns: [
     {
@@ -114,6 +79,7 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
     {
       title: "Project",
       links: [
+        FERRAMENTA_LINK,
         { label: "Decision records", href: decisionHref() },
         { label: "Stability & versioning", href: docsHref("stability") },
         { label: "Changelog", href: repoHref("CHANGELOG.md") },

@@ -235,8 +235,8 @@ pins and outputs together. Never edit generated family text by hand.
 The React documentation site uses `ferramenta-family` from `site/package.json`.
 To update that dependency, align its Git revision with `GENERATOR_COMMIT` in
 `scripts/readme-family.mjs`, update the lockfile, and run the site's build.
-The shared header and footer exclude this project from sibling links and
-include sibling descriptions.
+The website links to the Ferramenta family project from the header and the
+Project footer column; it does not render the full tool registry.
 
 ## Pull Requests
 

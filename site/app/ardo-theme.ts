@@ -11,9 +11,7 @@ export const PALAMEDES_THEME = {
     },
     font: {
       family: "var(--font-sans)",
-      familyHeading: "var(--font-sans)",
       mono: "var(--font-mono)",
-      lineHeight: "1.65",
     },
   },
   light: {

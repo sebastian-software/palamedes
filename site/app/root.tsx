@@ -12,11 +12,11 @@ import {
   ArdoSidebarSection,
   ArdoSocialLink,
 } from "ardo/ui";
-import { ButtonLink, SiteFooter, SiteUiProvider, ToolSwitcher } from "@palamedes/site-ui";
+import { ButtonLink, SiteFooter, SiteUiProvider, Wordmark } from "@palamedes/site-ui";
 import { ArdoLink as Link, useArdoPath } from "ardo/runtime";
 import config from "virtual:ardo/config";
 
-import { OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config";
+import { FERRAMENTA_LINK, OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config";
 import docsNavigation from "~/data/generated/docs-navigation.json";
 import decisionLedger from "~/data/generated/decision-ledger.json";
 import blogPosts from "~/data/generated/blog-posts.json";
@@ -153,22 +153,29 @@ export default function App() {
         footer={false}
         theme={PALAMEDES_THEME}
         scrollMode="document"
+        labels={{ mobilePanel: { home: OSS_SITE_CONFIG.name } }}
         icon="/favicon.svg"
         logo={
-          <img
-            src={OSS_SITE_CONFIG.logoSrc}
-            alt=""
-            aria-hidden
-            width={36}
-            height={36}
-            className="size-9"
-          />
+          <>
+            <img
+              src={OSS_SITE_CONFIG.logoSrc}
+              alt=""
+              aria-hidden
+              width={36}
+              height={36}
+              className="size-9"
+            />
+            <Wordmark className="translate-y-0.5 truncate text-lg text-ink">
+              {OSS_SITE_CONFIG.name}
+            </Wordmark>
+          </>
         }
         tocLabel="Page outline"
         editLink={editLinkFor(pathname)}
         lastUpdated={{ enabled: true, text: "Last updated" }}
       >
         <ArdoHeader
+          title=""
           search="icon"
           searchPlaceholder="Search Palamedes docs..."
           mobileMenuContent={
@@ -187,16 +194,9 @@ export default function App() {
         >
           <PrimaryNavigation />
           <ArdoHeaderActions>
-            {/*
-             * The family switcher sits with the header actions, in the site's
-             * own editorial style (decision D6). It needs the room a flyout
-             * takes, so below the tight breakpoint the footer family line is
-             * the family surface — the same width at which ARDO already folds
-             * the primary action away.
-             */}
-            {OSS_SITE_CONFIG.toolSwitcher ? (
-              <ToolSwitcher switcher={OSS_SITE_CONFIG.toolSwitcher} className="max-tight:hidden" />
-            ) : null}
+            <a href={FERRAMENTA_LINK.href} className="pmds-nav-link">
+              {FERRAMENTA_LINK.label}
+            </a>
             <ArdoSocialLink
               href="https://github.com/sebastian-software/palamedes"
               icon="github"

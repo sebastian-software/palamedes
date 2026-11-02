@@ -104,8 +104,8 @@ const config = defineSiteConfig({
 ```
 
 `ToolSwitcher` and `FamilyLine` are exported on their own for a site whose
-header is not `SiteHeader` — palamedes.dev drops `ToolSwitcher` into ARDO's
-header actions.
+header is not `SiteHeader`. The OSS site leaves both options unset and links
+directly to Ferramenta from its Ardo header and Project footer column.
 
 `current: true` marks the entry with `aria-current="page"`. Consumer link
 adapters receive that as the optional `ariaCurrent` prop; an adapter that
