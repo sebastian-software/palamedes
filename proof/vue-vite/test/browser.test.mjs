@@ -55,6 +55,10 @@ const translations = {
 };
 
 for (const mode of ["development", "production"]) {
+  // Production groups the fragments of one output chunk into one message
+  // asset, so the entry components arrive as one request. Development still
+  // loads one fragment per module.
+  const entryFragments = mode === "production" ? 1 : 3;
   test(`${mode}: direct SFC macros, shared booking demo, locale isolation, and lazy catalogs`, async () => {
     const server =
       mode === "development"
@@ -99,12 +103,16 @@ for (const mode of ["development", "production"]) {
           await page.getByTestId("client-proof-trigger").click();
           assert.equal(
             catalogs.length,
-            3,
-            "Only the three entry SFC fragments should load initially",
+            entryFragments,
+            "Only the entry SFC fragments should load initially",
           );
           await page.getByTestId("lazy-catalog-trigger").click();
           await expect(page.getByTestId("lazy-catalog-details")).toHaveText(copy.tip);
-          assert.equal(catalogs.length, 4, "The async SFC should load its own fragment");
+          assert.equal(
+            catalogs.length,
+            entryFragments + 1,
+            "The async SFC should load its own fragment",
+          );
           for (const url of catalogs)
             assert.ok(
               mode === "production" ? url.includes(`.${locale}-`) : url.endsWith(`/${locale}`),
@@ -113,7 +121,11 @@ for (const mode of ["development", "production"]) {
           await page.getByTestId("lazy-catalog-trigger").click();
           await page.getByTestId("lazy-catalog-trigger").click();
           await expect(page.getByTestId("lazy-catalog-details")).toHaveText(copy.tip);
-          assert.equal(catalogs.length, 4, "Remounting should reuse the loaded SFC catalog");
+          assert.equal(
+            catalogs.length,
+            entryFragments + 1,
+            "Remounting should reuse the loaded SFC catalog",
+          );
           const localeCodes = Object.keys(translations);
           const nextLocale = localeCodes[(localeCodes.indexOf(locale) + 1) % localeCodes.length];
           await page.getByTestId(`locale-switch-${nextLocale}`).click();
@@ -162,7 +174,7 @@ for (const mode of ["development", "production"]) {
         try {
           let requests = 0;
           await lazyFailure.route("**/palamedes-m-*.fr-*.js", (route) =>
-            ++requests > 3 ? route.abort() : route.continue(),
+            ++requests > entryFragments ? route.abort() : route.continue(),
           );
           await lazyFailure.goto(`${origin}?locale=fr`);
           await expect(lazyFailure.getByTestId("ticket-count")).toHaveText(
