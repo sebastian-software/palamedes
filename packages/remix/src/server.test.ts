@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { defineCompiledCatalog } from "@palamedes/core/compiled";
+import { createI18n as createCoreI18n, defineCompiledCatalog } from "@palamedes/core/compiled";
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import { transformPalamedesMacros } from "@palamedes/transform";
@@ -347,6 +347,7 @@ describe("stable Remix client entries", () => {
 
 function createTestI18n(locale: string): I18nInstance {
   return {
+    ...createCoreI18n({ locale }),
     locale,
     _: (id: string) => `${locale}:${id}`,
     load() {},

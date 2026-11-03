@@ -252,6 +252,7 @@ describe("Remix client catalog installation", () => {
     await expect(
       initializeRemixClientI18nAsync({
         createI18n: () => ({
+          ...createI18n(),
           locale: "",
           _: () => "",
           load() {

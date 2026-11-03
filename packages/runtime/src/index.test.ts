@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createI18n as createCoreI18n } from "@palamedes/core";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +26,7 @@ function unusedRenderMessage(): never {
 
 function createTestI18n(locale = "en"): I18nInstance {
   return {
+    ...createCoreI18n({ locale }),
     locale,
     _: (message: string) => message,
     load() {},
@@ -97,6 +99,7 @@ describe("@palamedes/runtime", () => {
     const activate = vi.fn<(locale: string) => void>();
     const load = vi.fn();
     const createI18n = vi.fn(() => ({
+      ...createCoreI18n(),
       locale: "",
       _: (message: string) => message,
       activate(locale: string) {
@@ -123,6 +126,7 @@ describe("@palamedes/runtime", () => {
     expect(isServerEnvironment()).toBe(false);
     const activate = vi.fn<(locale: string) => void>();
     const createI18n = vi.fn(() => ({
+      ...createCoreI18n(),
       locale: "",
       _: (message: string) => message,
       activate(locale: string) {
@@ -253,6 +257,7 @@ describe("registerMessages", () => {
   function createLoadableI18n(locale = "en") {
     const loaded: Record<string, Record<string, unknown>[]> = {};
     return {
+      ...createCoreI18n({ locale }),
       locale,
       _: (message: string) => message,
       load(loadLocale: string, messages: Record<string, unknown>) {

@@ -16,6 +16,8 @@ vi.mock("waku/router/server", () => ({ unstable_getRequest: getRequest }));
 
 function createTestI18n(locale: string): I18nInstance {
   return {
+    number: unusedRenderMessage,
+    date: unusedRenderMessage,
     locale,
     _: (message: string) => `${locale}:${message}`,
     load() {},
