@@ -97,7 +97,43 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
   );
 }
 
-function clientMessageBootstrap(config, sourcePath, compiledIds) {
+/*
+ * Production asset delivery keeps catalog fragments out of the bundler graph.
+ * The module's key, source path, and selected IDs stay in the emitted chunk as
+ * one string literal, which the post-compile step reads back to group the
+ * messages of each chunk into one asset per locale.
+ */
+function clientAssetBootstrap(config, sourcePath, compiledIds) {
+  if (!config.catalogs.some((catalog) => catalogMatchesSource(config, catalog, sourcePath))) {
+    return null;
+  }
+  const modulePath = normalizePath(
+    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
+  );
+  const key = createHash("sha256").update(modulePath).digest("hex").slice(0, 12);
+  const payload = Buffer.from(JSON.stringify({ source: modulePath, ids: compiledIds })).toString(
+    "base64url",
+  );
+  const identifier = `__pmds_${key}`;
+  return `const ${identifier}_modules = await Promise.all([
+  import("@palamedes/core/compiled"),
+  import("@palamedes/runtime/internal"),
+  import("@palamedes/next-plugin/client-catalog"),
+]);
+const ${identifier}_locale = document.documentElement.lang;
+const ${identifier}_messages = await ${identifier}_modules[2].loadClientCatalog(${JSON.stringify(`pmds-next:${key}:${payload}`)});
+const ${identifier}_i18n = ${identifier}_modules[1].initializeClientI18n(
+  ${identifier}_locale,
+  () => ${identifier}_modules[0].createI18n({ timeZone: document.documentElement.dataset.palamedesTimeZone }),
+);
+${identifier}_i18n.load(${identifier}_locale, ${identifier}_modules[0].defineCompiledCatalog(${identifier}_messages));
+`;
+}
+
+function clientMessageBootstrap(config, sourcePath, compiledIds, delivery) {
+  if (delivery === "assets") {
+    return clientAssetBootstrap(config, sourcePath, compiledIds);
+  }
   const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds);
   if (!importsByCatalog) {
     return null;
@@ -498,7 +534,12 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
           result.compiledIds,
           clearsServerRegistration,
         )
-      : clientMessageBootstrap(config, this.resourcePath, result.compiledIds);
+      : clientMessageBootstrap(
+          config,
+          this.resourcePath,
+          result.compiledIds,
+          options.clientCatalogDelivery,
+        );
     let code = result.code;
     let sourceMap = result.map ?? inputSourceMap ?? null;
     if (registration) {

@@ -29,7 +29,8 @@
     "palamedes-dev-warning.cjs",
     "palamedes-po-loader.cjs",
     "palamedes-server-catalogs-loader.cjs",
-    "catalog-fragment.cjs"
+    "catalog-fragment.cjs",
+    "client-catalog.mjs"
   ],
   "type": "module",
   "sideEffects": false,
@@ -90,7 +91,8 @@
       }
     },
     "./palamedes-server-catalogs-loader": "./palamedes-server-catalogs-loader.cjs",
-    "./catalog-fragment": "./catalog-fragment.cjs"
+    "./catalog-fragment": "./catalog-fragment.cjs",
+    "./client-catalog": "./client-catalog.mjs"
   },
   "publishConfig": {
     "access": "public"

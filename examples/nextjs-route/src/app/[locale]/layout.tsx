@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import "@palamedes/example-ui/styles.css";
+import { clientCatalogMap } from "@palamedes/next-plugin/server";
 import { LOCALES, locales } from "@/lib/i18n";
 
 export const metadata: Metadata = {
@@ -27,8 +28,18 @@ export default async function RootLayout({
     notFound();
   }
 
+  const catalogMap = clientCatalogMap(locale);
   return (
     <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
+      <head>
+        {catalogMap ? (
+          <script
+            id="palamedes-client-catalogs"
+            type="application/json"
+            dangerouslySetInnerHTML={{ __html: catalogMap }}
+          />
+        ) : null}
+      </head>
       <body>{children}</body>
     </html>
   );

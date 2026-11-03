@@ -10,6 +10,36 @@ import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/
 import type { I18nInstance } from "@palamedes/runtime";
 import { createI18n, type CreateI18nOptions, type PalamedesI18n } from "@palamedes/core";
 import { loadServerCatalog } from "@palamedes/next-plugin/server-catalogs";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+let clientCatalogManifest: Record<string, Record<string, string>> | null | undefined;
+
+/**
+ * Experimental: the JSON for a `<script id="palamedes-client-catalogs"
+ * type="application/json">` element in the root layout's `<head>`, or
+ * `undefined` when the build delivers client catalogs in its module graph.
+ */
+export function clientCatalogMap(locale: string): string | undefined {
+  if (clientCatalogManifest === undefined) {
+    const distDir = process.env.PALAMEDES_NEXT_DIST_DIR;
+    try {
+      clientCatalogManifest = distDir
+        ? JSON.parse(
+            readFileSync(
+              path.join(process.cwd(), distDir, "palamedes-client-catalogs.json"),
+              "utf8",
+            ),
+          ).locales
+        : null;
+    } catch {
+      clientCatalogManifest = null;
+    }
+  }
+  const assets = clientCatalogManifest?.[locale];
+  if (!assets) return undefined;
+  return JSON.stringify({ locale, assets }).replaceAll("<", "\\u003c");
+}
 
 const NEXT_RENDER_REQUEST_KEY_PROVIDER = Symbol.for(
   "palamedes.nextPlugin.renderRequestKeyProvider",

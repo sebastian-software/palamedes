@@ -350,6 +350,29 @@ describe("palamedes-loader.cjs", () => {
     expect(output).not.toContain("registerMessageLoaderGroup");
   });
 
+  it("keeps production asset delivery out of the bundler graph", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a", "id-b"],
+    });
+
+    const output = await runLoader({
+      clientMessageSplitting: true,
+      clientCatalogDelivery: "assets",
+    });
+
+    expect(output).toContain('import("@palamedes/next-plugin/client-catalog")');
+    expect(output).not.toContain("catalog-fragment");
+    const marker = /"pmds-next:([0-9a-f]{12}):([\w-]+)"/u.exec(output);
+    expect(marker).not.toBeNull();
+    expect(JSON.parse(Buffer.from(marker![2]!, "base64url").toString("utf8"))).toEqual({
+      source: expect.stringMatching(/\.tsx?$/u),
+      ids: ["id-a", "id-b"],
+    });
+    expect(output).toContain(".defineCompiledCatalog(");
+  });
+
   it("boots a client module before its compiled module-scope call and its importers", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: [

@@ -193,6 +193,15 @@ export type WithPalamedesOptions = {
    * Automatically enabled when the conventional entry exists.
    */
   serverFunctions?: boolean;
+
+  /**
+   * Experimental: deliver production client catalogs as message assets
+   * outside the bundler graph, one per client chunk and locale. Render
+   * `clientCatalogMap(locale)` from `@palamedes/next-plugin/server` in the
+   * root layout's `<head>`. Development keeps the in-graph fragments.
+   * @default false
+   */
+  experimentalClientCatalogAssets?: boolean;
 };
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
@@ -479,7 +488,11 @@ export function withPalamedes(
     projectRoot: explicitProjectRoot,
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
+    experimentalClientCatalogAssets = false,
   } = options;
+  const clientCatalogDelivery =
+    experimentalClientCatalogAssets && process.env.NODE_ENV === "production" ? "assets" : "graph";
+  const distDir = baseConfig.distDir ?? ".next";
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Source metadata is optional diagnostics; compiled catalogs supply all message output.
@@ -566,6 +579,7 @@ export function withPalamedes(
           ...transformLoaderOptions,
           clientMessageSplitting: true,
           clientFragmentFailureMode,
+          clientCatalogDelivery,
         },
       },
     ],
@@ -619,8 +633,32 @@ export function withPalamedes(
     }
   }
 
+  const userAfterCompile = baseConfig.compiler?.runAfterProductionCompile;
+  const publicPrefix = (baseConfig.assetPrefix || baseConfig.basePath || "").replace(/\/+$/u, "");
+  const clientCatalogConfig: Partial<NextConfig> =
+    clientCatalogDelivery === "assets"
+      ? {
+          env: { ...baseConfig.env, PALAMEDES_NEXT_DIST_DIR: distDir },
+          compiler: {
+            ...baseConfig.compiler,
+            async runAfterProductionCompile(metadata) {
+              await userAfterCompile?.(metadata);
+              const { emitClientCatalogAssets } = await import("./client-catalog-assets");
+              await emitClientCatalogAssets({
+                distDir: metadata.distDir,
+                projectRoot,
+                ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+                failOnMissing,
+                publicPrefix,
+              });
+            },
+          },
+        }
+      : {};
+
   return {
     ...baseConfig,
+    ...clientCatalogConfig,
     ...(outputFileTracingRoot ? { outputFileTracingRoot } : {}),
 
     // Turbopack configuration
@@ -725,7 +763,7 @@ export function withPalamedes(
             options: {
               ...webpackTransformLoaderOptions,
               ...(!context.isServer
-                ? { clientMessageSplitting: true, clientFragmentFailureMode }
+                ? { clientMessageSplitting: true, clientFragmentFailureMode, clientCatalogDelivery }
                 : {}),
             },
           },
