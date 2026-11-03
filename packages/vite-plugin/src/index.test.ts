@@ -1376,6 +1376,103 @@ describe("automatic graph splitting", () => {
     expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] });
   });
 
+  it("shares one message asset per output chunk and locale", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    mocks.compileCatalogArtifactSelected.mockImplementation(
+      (_config: unknown, resourcePath: string, ids: string[]) => ({
+        messages: Object.fromEntries(
+          ids.map((id) => [id, `${id}:${resourcePath === deCatalogPath ? "de" : "other"}`]),
+        ),
+        missing: [],
+        diagnostics: [],
+        watchFiles: [],
+        resolvedLocaleChain: [],
+      }),
+    );
+
+    const {
+      key: label,
+      sidecarPlugin,
+      addSidecar,
+    } = await runSidecarLoad(
+      ["id-label", "id-shared"],
+      {},
+      { pluginOptions: {}, command: "build" },
+    );
+    const button = await addSidecar("/repo/src/button.ts", ["id-button", "id-shared"]);
+    const lazy = await addSidecar("/repo/src/lazy.ts", ["id-lazy"]);
+    const unused = await addSidecar("/repo/src/unused.ts", ["id-unused"]);
+    const bundle = () => ({
+      "assets/home-abc.js": {
+        type: "chunk",
+        imports: [`#pmds/${button}`, `#pmds/${label}`, "assets/vendor.js"],
+      },
+      "assets/lazy-def.js": { type: "chunk", imports: [`#pmds/${lazy}`] },
+      "assets/vendor.js": { type: "chunk", imports: [] },
+    });
+    const emitted = await emitImportMap(sidecarPlugin, label, bundle());
+
+    // The home chunk's two sidecars share an asset; the lazy chunk and the
+    // sidecar no chunk imports keep their own. Three locales each.
+    const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"));
+    expect(assets).toHaveLength(9);
+    const deMap = emitted.find((file) => file.fileName.includes("palamedes-importmap.de-"));
+    const imports = JSON.parse(deMap!.source).imports as Record<string, string>;
+    expect(Object.keys(imports)).toEqual(
+      [button, label, lazy, unused].map((key) => `#pmds/${key}`).sort(),
+    );
+    expect(imports[`#pmds/${label}`]).toBe(imports[`#pmds/${button}`]);
+    expect(imports[`#pmds/${lazy}`]).toContain(`palamedes-m-${lazy}.de-`);
+    expect(imports[`#pmds/${unused}`]).toContain(`palamedes-m-${unused}.de-`);
+
+    const shared = assets.find((file) => `/${file.fileName}` === imports[`#pmds/${label}`]);
+    expect(shared?.fileName).not.toContain(label);
+    expect(shared?.source).toBe(
+      `export const locale="de";export const messages=({"id-button":"id-button:de","id-shared":"id-shared:de","id-label":"id-label:de"});`,
+    );
+
+    // Names and hashes only depend on the sidecars, not on emission runs.
+    expect(await emitImportMap(sidecarPlugin, label, bundle())).toEqual(emitted);
+  });
+
+  it("keeps separate assets when a chunk's sidecars disagree or a sidecar has two importers", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    mocks.compileCatalogArtifactSelected.mockImplementation(
+      (_config: unknown, _resourcePath: string, ids: string[]) => ({
+        messages: Object.fromEntries(ids.map((id) => [id.replace(/:.*/u, ""), id])),
+        missing: [],
+        diagnostics: [],
+        watchFiles: [],
+        resolvedLocaleChain: [],
+      }),
+    );
+
+    const {
+      key: first,
+      sidecarPlugin,
+      addSidecar,
+    } = await runSidecarLoad(["id-shared:first"], {}, { pluginOptions: {}, command: "build" });
+    const second = await addSidecar("/repo/src/second.ts", ["id-shared:second"]);
+    const common = await addSidecar("/repo/src/common.ts", ["id-common"]);
+    const emitted = await emitImportMap(sidecarPlugin, first, {
+      "assets/home-abc.js": {
+        type: "chunk",
+        imports: [`#pmds/${common}`, `#pmds/${first}`, `#pmds/${second}`],
+      },
+      "assets/other-def.js": { type: "chunk", imports: [`#pmds/${common}`] },
+    });
+
+    const enMap = emitted.find((file) => file.fileName.includes("palamedes-importmap.en-"));
+    const imports = JSON.parse(enMap!.source).imports as Record<string, string>;
+    expect(imports[`#pmds/${first}`]).toContain(`palamedes-m-${first}.en-`);
+    expect(imports[`#pmds/${second}`]).toContain(`palamedes-m-${second}.en-`);
+    expect(imports[`#pmds/${common}`]).toContain(`palamedes-m-${common}.en-`);
+  });
+
   it("emits an empty manifest for a client build without any messages", async () => {
     const { plugins, sidecarPlugin } = buildPlugins();
     const bundle = {
@@ -1637,6 +1734,7 @@ async function runSidecarLoad(
   transformedCode: string;
   addWatchFile: ReturnType<typeof vi.fn>;
   sidecarPlugin: any;
+  addSidecar: (sourceId: string, compiledIds: string[]) => Promise<string>;
 }> {
   mocks.transformPalamedesMacros.mockClear();
   mocks.compileCatalogArtifactSelected.mockClear();
@@ -1705,12 +1803,30 @@ async function runSidecarLoad(
       ),
     );
 
+  const addSidecar = async (sourceId: string, ids: string[]) => {
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "transformed",
+      hasChanged: true,
+      compiledIds: ids,
+      map: null,
+    });
+    const result = (await transform.call(
+      { error: vi.fn() } as never,
+      'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
+      sourceId,
+    )) as { code?: string } | null;
+    const added = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(result?.code ?? "")?.[1];
+    if (!added) throw new Error("Expected a sidecar import in the transformed output");
+    return added;
+  };
+
   return {
     load: boundLoad,
     key,
     transformedCode: transformed?.code ?? "",
     addWatchFile,
     sidecarPlugin,
+    addSidecar,
   };
 }
 

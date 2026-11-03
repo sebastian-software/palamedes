@@ -113,6 +113,10 @@ async function start(mode, directory = root) {
 }
 
 for (const mode of ["production", "development"]) {
+  // Production groups the fragments of one output chunk into one message
+  // asset, so the entry components arrive as one request. Development still
+  // loads one fragment per module.
+  const entryFragments = mode === "production" ? 1 : 3;
   test(
     `${mode}: SSR, hydration, active-locale fragments, Nitro isolation, and lazy navigation`,
     { timeout: 180_000 },
@@ -173,14 +177,14 @@ for (const mode of ["production", "development"]) {
             await page.getByTestId("server-proof-trigger").click();
             assert.equal((await (await refreshed).json()).locale, locale);
             await expect(page.getByTestId("server-proof-message")).toContainText(locale);
-            assert.equal(catalogs.length, 3, JSON.stringify(catalogs));
+            assert.equal(catalogs.length, entryFragments, JSON.stringify(catalogs));
             await page.getByTestId("lazy-catalog-trigger").click();
             await expect(page.getByTestId("lazy-catalog-details")).toHaveText(copy.tip);
-            assert.equal(catalogs.length, 4);
+            assert.equal(catalogs.length, entryFragments + 1);
             await page.getByTestId("lazy-catalog-trigger").click();
             await page.getByTestId("lazy-catalog-trigger").click();
             await expect(page.getByTestId("lazy-catalog-details")).toHaveText(copy.tip);
-            assert.equal(catalogs.length, 4);
+            assert.equal(catalogs.length, entryFragments + 1);
             const navigated = [];
             page.on("request", (request) => {
               if (request.isNavigationRequest() && request.resourceType() === "document")
@@ -188,7 +192,11 @@ for (const mode of ["production", "development"]) {
             });
             await page.getByTestId("insights-link").click();
             await expect(page.getByTestId("insights-title")).toHaveText(copy.tip);
-            assert.equal(catalogs.length, 5, "A Nuxt lazy page must bring its own fragment");
+            assert.equal(
+              catalogs.length,
+              entryFragments + 2,
+              "A Nuxt lazy page must bring its own fragment",
+            );
             assert.deepEqual(navigated, [], "Same-locale page changes stay in the document");
             await page.getByTestId("booking-link").click();
             await expect(page.getByTestId("ticket-count")).toHaveText(copy.tickets[0]);
@@ -203,7 +211,7 @@ for (const mode of ["production", "development"]) {
             );
             assert.equal(
               oldCatalogs.length,
-              5,
+              entryFragments + 2,
               "Every previous fragment belongs to the active locale",
             );
             assert.deepEqual(errors, []);
@@ -268,7 +276,7 @@ for (const mode of ["production", "development"]) {
           try {
             let count = 0;
             await lazy.route("**/palamedes-m-*.fr-*.js", (route) =>
-              ++count > 3 ? route.abort() : route.continue(),
+              ++count > entryFragments ? route.abort() : route.continue(),
             );
             await lazy.goto(`${server.origin}/?locale=fr`);
             await expect(lazy.getByTestId("client-ready")).toHaveCount(1);

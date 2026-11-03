@@ -142,6 +142,8 @@ export function createI18nRuntime(options: CreateI18nOptions = {}): PalamedesI18
         );
       }
       const current = catalogs.get(locale);
+      // Modules that share a delivered catalog each load it; one layer is enough.
+      if (current?.includes(messages)) return;
       catalogs.set(locale, current ? [...current, messages] : [messages]);
     },
     activate(locale) {
