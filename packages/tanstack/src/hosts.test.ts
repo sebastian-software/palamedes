@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createI18n as createCoreI18n } from "@palamedes/core";
 import { getI18n, resetI18nRuntime } from "@palamedes/runtime";
 import type { I18nInstance } from "@palamedes/runtime";
 import { createScopedI18nRunner } from "@palamedes/runtime/server";
@@ -57,6 +58,7 @@ describe("React Start host binding", () => {
 
   it("activates the original server-function request and leaves router requests alone", async () => {
     const resolveI18n = vi.fn((incomingRequest: Request) => ({
+      ...createCoreI18n({ locale: incomingRequest.headers.get("x-locale") ?? "en" }),
       locale: incomingRequest.headers.get("x-locale") ?? "en",
       _: (message: string) => message,
       load() {},
@@ -89,6 +91,7 @@ describe("React Start host binding", () => {
       createTanStackI18nRequestMiddleware((request): I18nInstance => {
         const locale = request.headers.get("x-locale")!;
         return {
+          ...createCoreI18n({ locale }),
           locale,
           _: (message: string) => `${locale}:${message}`,
           load() {},

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createI18n as createCoreI18n } from "@palamedes/core";
 
 import { describe, expect, it, afterEach, vi } from "vitest";
 
@@ -7,6 +8,7 @@ import { createScopedI18nRunner, createServerI18nScope } from "./server";
 
 function createTestI18n(locale = "en"): I18nInstance {
   return {
+    ...createCoreI18n({ locale }),
     locale,
     _: (message: string) => message,
     load() {},
@@ -34,6 +36,42 @@ function rendezvousAfterActivation() {
 describe("@palamedes/runtime/server", () => {
   afterEach(() => {
     resetI18nRuntime();
+  });
+
+  it("formats through getI18n in concurrent request scopes with client/server parity", async () => {
+    const scope = createServerI18nScope();
+    const rendezvous = rendezvousAfterActivation();
+    const when = "2026-11-03T01:00:00Z";
+    const dateOptions = { dateStyle: "medium", timeStyle: "short" } as const;
+    const numberOptions = { style: "currency", currency: "EUR" } as const;
+    const configurations = [
+      { locale: "en-US", timeZone: "America/Los_Angeles" },
+      { locale: "de-DE", timeZone: "Asia/Tokyo" },
+    ];
+    await Promise.all(
+      configurations.map(async (options) => {
+        const server = createCoreI18n(options);
+        const client = createCoreI18n(options);
+        await scope.run(server, async () => {
+          await rendezvous();
+          expect(getI18n()).toBe(server);
+          expect(getI18n().number(1234.56, numberOptions)).toBe(
+            client.number(1234.56, numberOptions),
+          );
+          expect(getI18n().date(when, dateOptions)).toBe(client.date(when, dateOptions));
+          expect(getI18n().date(when, dateOptions)).toBe(
+            new Intl.DateTimeFormat(options.locale, {
+              ...dateOptions,
+              timeZone: options.timeZone,
+            }).format(new Date(when)),
+          );
+          expect(getI18n().date("2026-11-03", { dateStyle: "medium" })).toBe(
+            client.date("2026-11-03", { dateStyle: "medium" }),
+          );
+        });
+      }),
+    );
+    expect(scope.get()).toBeUndefined();
   });
 
   it("registers the scope as the active server i18n getter", () => {

@@ -51,6 +51,8 @@ function unusedRenderMessage(): never {
 
 function createTestI18n(locale: string, timeZone = "UTC"): I18nInstance {
   return {
+    number: unusedRenderMessage,
+    date: unusedRenderMessage,
     locale,
     _: (message: string) => `${locale}[${timeZone}]:${message}`,
     load() {},

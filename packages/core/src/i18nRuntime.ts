@@ -6,6 +6,7 @@ import {
   type CompiledMessageRuntime,
   type MessageValues,
 } from "./compiledMessage";
+import { formatDateValue, formatNumberValue } from "./runtimeFormat";
 
 /** Authored identity retained for diagnostics, never a replacement message. */
 export type MessageMetadata = {
@@ -37,6 +38,16 @@ export type CreateI18nOptions = {
 export type PalamedesI18n = {
   readonly locale: string;
   readonly timeZone?: string;
+  /** Formats a finite number or numeric string without loading a catalog. */
+  number: (
+    value: number | string,
+    options?: Intl.NumberFormatOptions & { locale?: string },
+  ) => string;
+  /** ISO date-only strings retain their calendar date, regardless of time zone. */
+  date: (
+    value: Date | number | string,
+    options?: Intl.DateTimeFormatOptions & { locale?: string },
+  ) => string;
   _: (id: string, values?: MessageValues, metadata?: MessageMetadata) => string;
   load: (locale: string, messages: CompiledCatalogMessages) => void;
   activate: (locale: string) => void;
@@ -117,6 +128,12 @@ export function createI18nRuntime(options: CreateI18nOptions = {}): PalamedesI18
     },
     get timeZone() {
       return timeZone;
+    },
+    number(value, formatOptions) {
+      return formatNumberValue(value, formatOptions, formatOptions?.locale ?? activeLocale);
+    },
+    date(value, formatOptions) {
+      return formatDateValue(value, formatOptions, formatOptions?.locale ?? activeLocale, timeZone);
     },
     load(locale, messages) {
       if (!isCompiledCatalog(messages)) {

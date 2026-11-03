@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { createI18n as createCoreI18n } from "@palamedes/core";
 
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import { createServerI18nScope } from "@palamedes/runtime/server";
@@ -11,6 +12,7 @@ function unusedRenderMessage(): never {
 
 function createTestI18n(locale: string): I18nInstance {
   return {
+    ...createCoreI18n({ locale }),
     locale,
     _: (message: string) => `${locale}:${message}`,
     load() {},
