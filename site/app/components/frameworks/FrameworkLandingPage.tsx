@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import { StructuredData } from "~/components/StructuredData";
 import { frameworkStructuredData } from "~/lib/meta";
 import { ArdoLink as Link } from "ardo/runtime";
@@ -88,10 +89,10 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
       >
         <V2ReleaseNotice className="mt-7 max-w-[40rem]" />
       </PageHero>
-      <div className="pmds-measured pb-[clamp(3.5rem,6vw,5.5rem)]">
+      <ArdoContentContainer className="pb-[var(--ardo-space-section)]">
         <Facts facts={page.facts} />
         <FrameworkPackageStats path={page.path} />
-      </div>
+      </ArdoContentContainer>
 
       <Section num="01 — The framework problem" title={page.problem.title} lede={page.problem.lede}>
         <EditorialRail>

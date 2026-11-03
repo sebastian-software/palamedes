@@ -167,5 +167,5 @@ minimumReleaseAgeExclude:
   - "@remix-run/render-middleware@0.2.0"
   - "@remix-run/spa@0.1.0"
   - "@remix-run/ui@0.8.0"
-  - ardo@6.2.0
+  - ardo@6.3.0
   - "@vitejs/plugin-react@6.2.1"

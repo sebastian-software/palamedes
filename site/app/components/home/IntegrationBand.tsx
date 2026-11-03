@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import { FrameworkIdentity } from "~/components/FrameworkIdentity";
 import { frameworkLandingHref } from "~/data/framework-landing";
 import { repoHref } from "~/data/links";
@@ -92,9 +93,9 @@ export function IntegrationBand() {
     <section
       id="applications"
       aria-label="First-party integrations"
-      className="border-t border-hair px-[var(--pmds-gutter)] pt-12 pb-14"
+      className="border-t border-hair pt-12 pb-14"
     >
-      <div className="mx-auto max-w-[var(--pmds-measure)]">
+      <ArdoContentContainer>
         <h2
           id="framework-support-title"
           className="display-serif scroll-mt-20 text-[clamp(1.6rem,1.1rem+1.4vw,2.3rem)] leading-tight"
@@ -158,7 +159,7 @@ export function IntegrationBand() {
             </li>
           ))}
         </ul>
-      </div>
+      </ArdoContentContainer>
     </section>
   );
 }

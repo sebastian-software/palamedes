@@ -148,16 +148,15 @@ The durable visual and editorial contract is recorded in
 Precise, verifiable, calm — and warm enough to be felt. The visual voice is
 **Inscription and ledger, opened up**: a classical Palamedes masthead over an
 editorial page that explains before it proves. Warm paper ground (`#faf9f4`),
-parchment (`#f3efe3`) and mist (`#e8edf2`) bands with soft transitions, navy
-ink (`#0e2a4d`) that is never used as a background, one bronze accent
-(`#8e6628`), inscription-scale Cinzel Hellenic headlines, readable 16–21 px
-body copy, hairline rules, and tabular numbers. Code reads like a printed
+parchment (`#f3efe3`) and mist (`#e8edf2`) bands, navy ink (`#0e2a4d`), one
+bronze accent (`#866026`), inscription-scale Cinzel Hellenic marketing headlines,
+readable body copy, hairline rules, and tabular numbers. Code reads like a printed
 listing on a light ground, not a dark editor.
 Product specimens — real code, a real `.po` entry, a rendered component in
 several languages, URL bars — are the imagery. Terminal green/amber remain
-reserved for CLI output. The general rules are zero border-radius, zero
-box-shadow, and zero gradients. Homepage integration links are the scoped
-exception: small white badges use a fine border, an 8 px radius, a subtle shadow,
+reserved for CLI output. Marketing actions are square and bronze; Ardo owns document typography,
+component corners, elevation, and focus treatment. Homepage integration links
+use small white badges with a fine border, an 8 px radius, a subtle shadow,
 compact logo slots, a close logo-to-name gap, and balanced horizontal padding.
 Confidence comes from clear explanation and evidence, not visual loudness.
 
@@ -189,7 +188,7 @@ an implementation dependency for its own documentation chrome.
 2. **Hairlines, not boxes.** Structure comes from rules and the framed column
    grid. The small integration badges identify individual links; they do not
    replace the page's editorial structure.
-3. **One accent, spent deliberately.** Bronze `#8e6628` marks interaction and
+3. **One accent, spent deliberately.** Bronze `#866026` marks interaction and
    emphasis; everything else is ink on paper.
 4. **The docs are part of the brand.** Reference pages share the same tokens
    and typographic voice as the landing pages; theme the framework via its

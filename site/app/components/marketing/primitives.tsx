@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import type { ReactNode } from "ardo/react";
 import { ArdoLink } from "ardo/runtime";
 
@@ -62,11 +63,13 @@ export function Section({
 }) {
   return (
     <section id={id} className="pmds-section">
-      {num ? <p className="pmds-kicker pmds-section-number">{num}</p> : null}
-      {eyebrow ? <p className="pmds-kicker">{eyebrow}</p> : null}
-      {title ? <h2 className="pmds-title">{title}</h2> : null}
-      {lede ? <p className="pmds-lede">{lede}</p> : null}
-      {children ? <div className="mt-10">{children}</div> : null}
+      <ArdoContentContainer>
+        {num ? <p className="pmds-kicker pmds-section-number">{num}</p> : null}
+        {eyebrow ? <p className="pmds-kicker">{eyebrow}</p> : null}
+        {title ? <h2 className="pmds-title">{title}</h2> : null}
+        {lede ? <p className="pmds-lede">{lede}</p> : null}
+        {children ? <div className="mt-10">{children}</div> : null}
+      </ArdoContentContainer>
     </section>
   );
 }
