@@ -971,6 +971,29 @@ describe("workflow contracts", () => {
     expect(dependencyAudit).toContain("scripts/open-or-refresh-issue.mjs");
   });
 
+  it("runs the Next canary guard on a schedule against the asset contract", async () => {
+    const [canary, example] = await Promise.all([
+      readRepositoryFile(".github/workflows/next-canary.yml"),
+      readRepositoryFile("examples/nextjs-route/package.json"),
+    ]);
+
+    // Canary changes independently of pull requests, so it must not gate them.
+    expect(canary).toMatch(/^ {2}schedule:$/mu);
+    expect(canary).toContain("workflow_dispatch:");
+    expect(canary).not.toMatch(/^ {2}(push|pull_request):/mu);
+    expect(canary).toContain(
+      'pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"',
+    );
+    expect(canary).toContain("run: pnpm --dir examples/nextjs-route build:catalog-assets");
+    expect(JSON.parse(example).scripts["build:catalog-assets"]).toContain(
+      "check-next-client-catalog-assets.mjs",
+    );
+    expect(canary).toContain(
+      "if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'",
+    );
+    expect(canary).toContain("scripts/open-or-refresh-issue.mjs");
+  });
+
   it("offers every screenshot-capturable example in the capture dropdown", async () => {
     const capture = await readRepositoryFile(".github/workflows/capture-example-screenshots.yml");
     const options = Array.from(
@@ -991,6 +1014,7 @@ describe("workflow contracts", () => {
       ".github/workflows/deploy-site.yml",
       ".github/workflows/capture-example-screenshots.yml",
       ".github/workflows/publish.yml",
+      ".github/workflows/next-canary.yml",
     ];
     const workflows = await Promise.all(workflowPaths.map(readRepositoryFile));
 
@@ -1002,6 +1026,7 @@ describe("workflow contracts", () => {
     expect(capture).toContain("timeout-minutes: 90");
     expect(job(publish, "publish-native", "publish-js")).toContain("timeout-minutes: 45");
     expect(job(publish, "publish-js", "verify-release")).toContain("timeout-minutes: 45");
+    expect(workflows[6]).toContain("timeout-minutes: 45");
   });
 
   it("verifies the built site before the deploy job publishes it", async () => {

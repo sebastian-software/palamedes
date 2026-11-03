@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const emitClientCatalogAssets = vi.hoisted(() => vi.fn(async () => ({ locales: {} })));
 vi.mock("./client-catalog-assets", () => ({ emitClientCatalogAssets }));
+vi.mock("./client-catalog-trace", () => ({ traceClientCatalogManifest: vi.fn() }));
 
 import { clientCatalogPublicPrefix, crossOriginClientCatalogHost } from "./client-catalog-url";
 import { withPalamedes } from "./index";

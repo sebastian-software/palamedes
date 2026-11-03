@@ -195,6 +195,37 @@ served catalog assets. Selected PO and fallback/config files remain normal
 build dependencies. Next can use Fast Refresh or reload at async-module
 boundaries; a document reload is the supported recovery when HMR cannot apply.
 
+Eager translation calls belong inside functions after initialization. Module
+scope and Server Function parameter-initializer macros remain compile errors.
+
+The plugin configures both Turbopack and webpack paths, and requires Next.js
+16.4.1 or a later 16.x release (`peerDependencies: next ^16.4.1`). The
+emitted top-level `turbopack.rules` conditions and `outputFileTracingRoot`
+need the Next 16 config surface.
+
+`include` and `exclude` apply under both bundlers against the absolute file
+path: webpack tests them in the loader rule, and the Turbopack transform loader
+applies the same filter. Turbopack tests a rule's `path` condition against the
+module path relative to its root (`src/page.tsx`), so Palamedes does not put
+user patterns into the rule condition. A pattern like `/\/src\//` therefore
+selects the same files under both bundlers, in a standalone app as in a
+monorepo. Only the default extension pattern also narrows the Turbopack rule,
+because a file extension is the same suffix in both path forms.
+
+The `.po` loader is scoped to first-party catalogs under both bundlers —
+`{ not: "foreign" }` for Turbopack, `exclude: /node_modules/` for webpack — so
+a dependency shipping importable `.po` files does not fail the build with an
+unmatched-catalog error.
+
+User-supplied `turbopack.rules` for the same glob are preserved: the Palamedes
+rules are appended to the glob's rule list instead of overwriting it. A user
+value written in the loader shorthand (`"*": ["my-loader"]`) is first wrapped
+into the equivalent rule config (`{ loaders: ["my-loader"] }`), because a list
+mixing bare loaders with rule configs has no defined meaning.
+
+`workspaceRoot` can be set explicitly in monorepos when automatic root
+detection from the Next project root is not correct.
+
 ### Client catalog assets (experimental)
 
 `withPalamedes(config, { experimentalClientCatalogAssets: true })` delivers
@@ -288,34 +319,3 @@ Next's chunks are classic scripts and do not need CORS. When `assetPrefix`
 points to another origin, that host must send `Access-Control-Allow-Origin`
 for `/_next/static/palamedes/`, or the page shows its error view. The build
 logs a warning for absolute prefixes.
-
-Eager translation calls belong inside functions after initialization. Module
-scope and Server Function parameter-initializer macros remain compile errors.
-
-The plugin configures both Turbopack and webpack paths, and requires Next.js
-16.4.1 or a later 16.x release (`peerDependencies: next ^16.4.1`). The
-emitted top-level `turbopack.rules` conditions and `outputFileTracingRoot`
-need the Next 16 config surface.
-
-`include` and `exclude` apply under both bundlers against the absolute file
-path: webpack tests them in the loader rule, and the Turbopack transform loader
-applies the same filter. Turbopack tests a rule's `path` condition against the
-module path relative to its root (`src/page.tsx`), so Palamedes does not put
-user patterns into the rule condition. A pattern like `/\/src\//` therefore
-selects the same files under both bundlers, in a standalone app as in a
-monorepo. Only the default extension pattern also narrows the Turbopack rule,
-because a file extension is the same suffix in both path forms.
-
-The `.po` loader is scoped to first-party catalogs under both bundlers —
-`{ not: "foreign" }` for Turbopack, `exclude: /node_modules/` for webpack — so
-a dependency shipping importable `.po` files does not fail the build with an
-unmatched-catalog error.
-
-User-supplied `turbopack.rules` for the same glob are preserved: the Palamedes
-rules are appended to the glob's rule list instead of overwriting it. A user
-value written in the loader shorthand (`"*": ["my-loader"]`) is first wrapped
-into the equivalent rule config (`{ loaders: ["my-loader"] }`), because a list
-mixing bare loaders with rule configs has no defined meaning.
-
-`workspaceRoot` can be set explicitly in monorepos when automatic root
-detection from the Next project root is not correct.

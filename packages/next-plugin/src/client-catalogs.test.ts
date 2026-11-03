@@ -87,14 +87,14 @@ describe("loadClientCatalog", () => {
     await expect(loadClientCatalog(`pmds-next:${second}:e30`)).resolves.toEqual({ a: "Gruppe" });
     await expect(loadClientCatalog(`pmds-next:${lone}:e30`)).resolves.toEqual({ b: "Allein" });
     await expect(loadClientCatalog("pmds-next:ffffffffffff:e30")).rejects.toThrow(
-      "no asset for module ffffffffffff",
+      "(module key ffffffffffff)",
     );
   });
 
   it("rejects a map for another locale", async () => {
     const { loadClientCatalog } = await setUpDocument("fr");
     await expect(loadClientCatalog(`pmds-next:${first}:e30`)).rejects.toThrow(
-      "does not match the document locale",
+      'is for locale "de", but the document locale is "fr"',
     );
   });
 });
