@@ -18,7 +18,8 @@ export const PALAMEDES_THEME = {
       bgMute: "#e8edf2",
       text: "#0e2a4d",
       textLight: "#3f5471",
-      textLighter: "#5d6c81",
+      // Also meets AA on the footer's brand-tinted parchment surface.
+      textLighter: "#526176",
       border: "#ddd6c6",
       borderLight: "#e8e2d3",
       divider: "#ddd6c6",
