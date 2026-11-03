@@ -1,17 +1,25 @@
 import { createLocaleFormatterCache } from "./localeFormatterCache";
+import {
+  createIntlFormatterCache,
+  DATE_TIME_FORMAT_KEYS,
+  NUMBER_FORMAT_KEYS,
+} from "./intlFormatterCache";
 
 export type MessageFormat = "number" | "date" | "time";
 
-const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>();
 const DATE_ONLY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-// Intl instances are keyed by (locale, style): a handful per app, so a small
-// bound is plenty and keeps the retained memory of these heavy objects low.
+// Bound retained Intl objects across all locales and effective options.
 const FORMATTER_CACHE_LIMIT = 64;
-const getNumberFormatter = createLocaleFormatterCache(
-  (locale: string | undefined, style: string | undefined) =>
-    new Intl.NumberFormat(locale, parseNumberFormatOptions(style)),
-  FORMATTER_CACHE_LIMIT,
+const getNumberFormatter = /* @__PURE__ */ createIntlFormatterCache(
+  (locale: string | undefined, options: Intl.NumberFormatOptions) =>
+    new Intl.NumberFormat(locale, options),
+  NUMBER_FORMAT_KEYS,
+);
+const getDateTimeFormatter = /* @__PURE__ */ createIntlFormatterCache(
+  (locale: string | undefined, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(locale, options),
+  DATE_TIME_FORMAT_KEYS,
 );
 const getCachedPluralRules = createLocaleFormatterCache(
   (locale: string | undefined, type: "cardinal" | "ordinal") =>
@@ -27,21 +35,44 @@ export function formatMessageArgument(
   timeZone?: string,
 ): string {
   if (format === "number") {
-    const numericValue = normalizeFormattedNumberValue(value);
-    if (numericValue === undefined) {
-      throw new TypeError("Expected a finite numeric value for a compiled number formatter.");
-    }
-
-    return getNumberFormatter(locale, style).format(numericValue);
+    return formatNumberValue(value, parseNumberFormatOptions(style), locale);
   }
 
+  const normalizedStyle = normalizeDateTimeStyle(style, format);
+  return formatDateValue(
+    value,
+    format === "date" ? { dateStyle: normalizedStyle } : { timeStyle: normalizedStyle },
+    locale,
+    timeZone,
+  );
+}
+
+export function formatNumberValue(
+  value: unknown,
+  options: Intl.NumberFormatOptions = {},
+  locale?: string,
+): string {
+  const numericValue = normalizeFormattedNumberValue(value);
+  if (numericValue === undefined) {
+    throw new TypeError("Expected a finite numeric value for a number formatter.");
+  }
+  return getNumberFormatter(locale, options).format(numericValue);
+}
+
+export function formatDateValue(
+  value: unknown,
+  options: Intl.DateTimeFormatOptions = {},
+  locale?: string,
+  timeZone?: string,
+): string {
   const dateValue = normalizeDateValue(value);
   if (!dateValue) {
-    throw new TypeError("Expected a valid date value for a compiled date/time formatter.");
+    throw new TypeError("Expected a valid date value for a date/time formatter.");
   }
 
-  const formatterTimeZone = isDateOnlyIsoString(value) ? "UTC" : timeZone;
-  return getDateTimeFormatter(locale, format, style, formatterTimeZone).format(dateValue);
+  return getDateTimeFormatter(locale, options, {
+    timeZone: isDateOnlyIsoString(value) ? "UTC" : (options.timeZone ?? timeZone),
+  }).format(dateValue);
 }
 
 function isDateOnlyIsoString(value: unknown): value is string {
@@ -90,27 +121,6 @@ function normalizeDateValue(value: unknown): Date | undefined {
   }
 
   return undefined;
-}
-
-function getDateTimeFormatter(
-  locale: string | undefined,
-  format: "date" | "time",
-  style: string | undefined,
-  timeZone: string | undefined,
-): Intl.DateTimeFormat {
-  const normalizedStyle = normalizeDateTimeStyle(style, format);
-  const cacheKey = `${locale ?? ""}\0${format}\0${normalizedStyle ?? ""}\0${timeZone ?? ""}`;
-  const cached = dateTimeFormatCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const options: Intl.DateTimeFormatOptions =
-    format === "date"
-      ? { dateStyle: normalizedStyle, timeZone }
-      : { timeStyle: normalizedStyle, timeZone };
-  const formatter = new Intl.DateTimeFormat(locale, options);
-  return rememberFormatter(dateTimeFormatCache, cacheKey, formatter);
 }
 
 function normalizeDateTimeStyle(
@@ -176,28 +186,12 @@ export function selectPluralCategory(
   );
 }
 
-function rememberFormatter<TFormatter>(
-  cache: Map<string, TFormatter>,
-  key: string,
-  formatter: TFormatter,
-): TFormatter {
-  if (!cache.has(key) && cache.size >= FORMATTER_CACHE_LIMIT) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey !== undefined) {
-      cache.delete(oldestKey);
-    }
-  }
-
-  cache.set(key, formatter);
-  return formatter;
-}
-
 export function replacePoundPlaceholders(
   value: string,
   numericValue: number,
   locale?: string,
 ): string {
-  return value.replaceAll("#", getNumberFormatter(locale, undefined).format(numericValue));
+  return value.replaceAll("#", getNumberFormatter(locale, {}).format(numericValue));
 }
 
 export function stringifyValue(value: unknown): string {

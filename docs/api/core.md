@@ -99,6 +99,11 @@ brands constants, it does not compile ICU.
 interface PalamedesI18n {
   readonly locale: string;
   readonly timeZone?: string;
+  number(value: number | string, options?: Intl.NumberFormatOptions & { locale?: string }): string;
+  date(
+    value: Date | number | string,
+    options?: Intl.DateTimeFormatOptions & { locale?: string },
+  ): string;
   _(id: string, values?, metadata?): string;
   load(locale: string, messages: CompiledCatalogMessages): void;
   activate(locale: string): void;
@@ -111,6 +116,55 @@ message with a framework renderer; the React, Solid and Remix `Trans`
 components use it for rich text. Later catalog loads add or override entries
 for that locale. Invalid entry types are rejected before the existing catalog
 is modified.
+
+### Formatting values outside messages
+
+Use `getI18n().number()` and `getI18n().date()` for table cells, charts, and
+other values outside translated messages. Both methods work before any catalog
+is loaded. They read the instance's active locale on each call, including after
+`activate()`, and accept the platform's Intl options. `options.locale` overrides
+the locale for one call; `date()` also accepts `options.timeZone`, which takes
+precedence over the instance's configured time zone for instants.
+
+```ts
+import { createI18n } from "@palamedes/core";
+
+const i18n = createI18n({ locale: "en-US", timeZone: "America/Los_Angeles" });
+
+i18n.number(1234.56, { style: "currency", currency: "EUR" }); // €1,234.56
+i18n.number(1234.56, { style: "currency", currency: "JPY" }); // ¥1,235
+i18n.number(1234.56, { style: "currency", currency: "KWD" }); // KWD 1,234.560
+i18n.number(0.125, { style: "percent", maximumFractionDigits: 1 }); // 12.5%
+i18n.number(12000, { notation: "compact" }); // 12K
+i18n.number(1234.56, { locale: "de-DE" }); // 1.234,56
+
+i18n.date("2026-11-03", { dateStyle: "medium" }); // Nov 3, 2026
+i18n.date("2026-11-03T00:00:00Z", { dateStyle: "medium" }); // Nov 2, 2026
+i18n.date("2026-11-03T00:00:00Z", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Tokyo",
+});
+```
+
+`number()` accepts finite numbers and non-empty strings that convert to a
+finite JavaScript number, matching compiled number arguments. `date()` accepts
+valid `Date` objects, timestamps in **milliseconds**, and strings parsed by
+JavaScript's `Date` constructor. Use ISO strings with an explicit offset or `Z`
+for portable instants. A date-only ISO string (`YYYY-MM-DD`) is a civil date:
+it is formatted in UTC to preserve its calendar day, even with a per-call time
+zone. A `Date` or timestamp created from that string is an instant instead.
+
+Invalid values throw `TypeError`; invalid Intl options propagate Intl's
+`RangeError` or `TypeError`. These standalone calls do not invoke the
+message-specific `onMissing` or `onError` observers. Missing-value placeholders,
+currencies, units, and business rounding remain application choices.
+
+Standalone helpers and compiled message arguments share bounded Intl formatter
+caches keyed by locale and effective options. Per-call overrides do not change
+the instance or another request's instance. Server/client output agrees when
+locale, time zone, input values, options, and Intl data match. Without an explicit
+time zone, instants use the host's time zone.
 
 ### Internal compiled format
 
@@ -280,7 +334,7 @@ compilation. Invalid formatter values throw during execution.
 
 The framework renderers share their compiled message runtime factory and Intl
 formatting helpers through the **Internal** subpath `@palamedes/core/internal`. Applications do not import it;
-format values through compiled messages instead.
+format values through compiled messages or the instance's `number()` and `date()` methods.
 
 `parseMessagePattern()`, `formatMessagePattern()`, `getMessage()`,
 `getMessageNodes()`, `parsePattern()`, parsed-node types, `resolveChoice()`,

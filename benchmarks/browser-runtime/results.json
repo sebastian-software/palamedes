@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-03T20:12:26.841Z",
-  "sourceCommit": "ce070f374cf26b50411234989c4294407e39a473",
-  "worktreeDirty": false,
-  "sourceSha256": "547bb248e35ec20308f7bc871781974f982b18b41068ac6dbd763485b9b91c81",
+  "measuredAt": "2026-11-03T21:52:41.197Z",
+  "sourceCommit": "b6606331e4ae35f200fa82a2ba8d1998f40eb420",
+  "worktreeDirty": true,
+  "sourceSha256": "a5cdc056c9505633beacd715410cc9c31441c7b04f0610b19fc95ad95a8597ea",
   "environment": {
     "node": "v24.22.2",
     "vite": "8.2.4",
@@ -25,11 +25,11 @@
     {
       "id": "core",
       "bytes": {
-        "raw": 13054,
-        "gzip": 4436,
-        "brotli": 3927
+        "raw": 14099,
+        "gzip": 4766,
+        "brotli": 4198
       },
-      "sha256": "0484bb1419b9c226673b76ad8a9148233a73258b47548c40dd057490b6797008",
+      "sha256": "2b0b06365542fde1fc4bf73ac68ab0c20e6754e760e827ee6a2ee1c9ceee30b9",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -61,11 +61,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -84,11 +84,11 @@
     {
       "id": "react",
       "bytes": {
-        "raw": 15342,
-        "gzip": 5194,
-        "brotli": 4609
+        "raw": 16387,
+        "gzip": 5524,
+        "brotli": 4890
       },
-      "sha256": "8b291e756cb05fef685ae6015ca495f718d65676336f0cd9fc0a4702c9218a5e",
+      "sha256": "9ea69be19d15f84efffc33c750f735577aa1ab99e944a7fd8ff9b54fa4b4bfa1",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -123,15 +123,15 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
           "path": "packages/core/dist/locale.mjs",
           "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/react/dist/compiled.mjs",
@@ -158,11 +158,11 @@
     {
       "id": "solid",
       "bytes": {
-        "raw": 14654,
-        "gzip": 4915,
-        "brotli": 4361
+        "raw": 15699,
+        "gzip": 5247,
+        "brotli": 4636
       },
-      "sha256": "5d38acb7d99813bd1fb95f1dfa66749d04b1bce0a02b0fc75317f951bd454512",
+      "sha256": "46770aef81398f979a2b75d4b30688f4d2665902841764fc74a33828ed2afe8a",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -196,15 +196,15 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
           "path": "packages/core/dist/locale.mjs",
           "sha256": "ff470ef53633dbe0a2b6424fcabc77ba21d63489e1510a07f445072f565c99a1"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -227,11 +227,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 15034,
-        "gzip": 5038,
-        "brotli": 4487
+        "raw": 16079,
+        "gzip": 5376,
+        "brotli": 4757
       },
-      "sha256": "2c7c4432f789aa907a2992b1fcf27954db18607e6632cdef1b0fb2028dfe59b1",
+      "sha256": "ae64e22bb074d7f0769a8a02a9baee4bf80be8e13d5b9c034d1a39110185beac",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -265,11 +265,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/remix/dist/compiled.mjs",
@@ -294,11 +294,11 @@
     {
       "id": "core",
       "bytes": {
-        "raw": 9966,
-        "gzip": 3564,
-        "brotli": 3167
+        "raw": 11005,
+        "gzip": 3884,
+        "brotli": 3444
       },
-      "sha256": "c38e00e9ccf43d1342d973cef2af839e673eb0caeaf8639e9f6eff62bb655b9c",
+      "sha256": "ba3894c0d639ef46431f05896abae5ff8d7b43dc4e9c277cf01c53041f355fa9",
       "exports": ["createI18n", "defineCompiledCatalog", "getI18n", "initializeClientI18n"],
       "imports": [],
       "retainedIntl": ["NumberFormat", "DateTimeFormat", "PluralRules"],
@@ -309,11 +309,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -332,11 +332,11 @@
     {
       "id": "react",
       "bytes": {
-        "raw": 11931,
-        "gzip": 4209,
-        "brotli": 3745
+        "raw": 12976,
+        "gzip": 4544,
+        "brotli": 4008
       },
-      "sha256": "c91f3aa7022bf85eb3d226c9c4c04e8bf965ffda89c881b21d29119a0fb0ba23",
+      "sha256": "5859e3825d8b6387557e8d7b4653ab5407bbbd05a72decba3a5658691448a60a",
       "exports": [
         "Trans",
         "createI18n",
@@ -353,11 +353,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/react/dist/compiled.mjs",
@@ -384,11 +384,11 @@
     {
       "id": "solid",
       "bytes": {
-        "raw": 11275,
-        "gzip": 3934,
-        "brotli": 3494
+        "raw": 12320,
+        "gzip": 4255,
+        "brotli": 3763
       },
-      "sha256": "0fba036eeb5e95f191622c0e1e6abb102ee03b3f66ac47f5562f0e1ce4dbb418",
+      "sha256": "6de33ec18f0ecb2a8745859efc15704e7a95e99fda8234be8aa100518be765f3",
       "exports": [
         "Trans",
         "createI18n",
@@ -405,11 +405,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -432,11 +432,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 11908,
-        "gzip": 4156,
-        "brotli": 3697
+        "raw": 12953,
+        "gzip": 4482,
+        "brotli": 3976
       },
-      "sha256": "1ffb1053fc3119221b7584b3eda71bcc77b0dd5f4f04f7a1f7a1fcd25dd8d2a6",
+      "sha256": "a9afbfb0bdd58b3f01bc5bbeee9a8c60f154972b0e9a4bca4c6b848c07284b6b",
       "exports": [
         "Trans",
         "createI18n",
@@ -453,11 +453,11 @@
         },
         {
           "path": "packages/core/dist/compiled.mjs",
-          "sha256": "a955a5cc2fe44a73966e0f32d5614e1a7137fe169c13f692d6b9f5f6f54e1e07"
+          "sha256": "bd151223ed93f2b5df328c022ba01c6e1bb8e8e1035650e59c92294eb31b106e"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         },
         {
           "path": "packages/remix/dist/compiled.mjs",
@@ -496,8 +496,8 @@
           "sha256": "f223935884db73454d3bec0a52f0d4843f04b4d987fe65cd4ea29e8dd82d0e5c"
         },
         {
-          "path": "packages/core/dist/shared/core.jSxb7o7m.mjs",
-          "sha256": "9bae89ac70a43e689a36a4f1ca05ee69965a4a3d9612096a23941f96e84a56a5"
+          "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
+          "sha256": "c9574ff7dc60e431dd534fc495940d3fb56e80e7072dc08efc4f8ac3a343fdcc"
         }
       ]
     }
@@ -507,11 +507,11 @@
     "locale": "en",
     "messages": 38,
     "bytes": {
-      "raw": 2355,
-      "gzip": 1262,
-      "brotli": 1095
+      "raw": 2377,
+      "gzip": 1276,
+      "brotli": 1113
     },
-    "sha256": "3fa4fdddd1431e27159a78e993822be7d6718f0c8b0a8f108b8a0973ddbe3a34",
+    "sha256": "9af95a1b519d607f8d8423464efda62102e7e5825d619d817c26001e691ff1e7",
     "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
   }
 }

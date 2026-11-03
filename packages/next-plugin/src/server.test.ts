@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createI18n as createCoreI18n } from "@palamedes/core";
 
 import { afterEach, describe, expect, it } from "vitest";
 import "next/dist/server/node-environment.js";
@@ -43,6 +44,7 @@ describe("@palamedes/next-plugin/server", () => {
   it("uses the Next render store when React resumes an earlier async context", () => {
     const scope = createNextServerI18nScope<I18nInstance>();
     const i18n: I18nInstance = {
+      ...createCoreI18n({ locale: "de" }),
       locale: "de",
       _: (message: string) => message,
       load() {},
