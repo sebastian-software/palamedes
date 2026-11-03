@@ -61,26 +61,40 @@ assert.equal(
 const manifestPath = path.join(distDir, "palamedes-client-catalogs.json");
 assert.ok(existsSync(manifestPath), `Missing ${manifestPath}`);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-assert.deepEqual(Object.keys(manifest.locales).sort(), [...config.locales].sort());
+assert.deepEqual(Object.keys(manifest.maps).sort(), [...config.locales].sort());
+
+// Assets are browser ES modules; the example package is not "type": "module".
+const staticFile = (url) =>
+  path.join(distDir, url.slice(url.indexOf("/_next/") + "/_next/".length));
+const importFile = (file) =>
+  import(`data:text/javascript;base64,${readFileSync(file).toString("base64")}`);
 
 let assets = 0;
 for (const locale of config.locales) {
-  const urls = new Set();
+  // Read the map the browser reads: asset names relative to the map, each
+  // listing its modules as concatenated 12-character keys.
+  const mapFile = staticFile(manifest.maps[locale]);
+  const { default: map } = await importFile(mapFile);
+  assert.equal(map.locale, locale, `${manifest.maps[locale]} is not the ${locale} map`);
+  const moduleAssets = new Map();
+  for (const [fileName, keys] of Object.entries(map.assets)) {
+    assert.equal(keys.length % 12, 0, `${fileName} lists a malformed module key`);
+    for (let index = 0; index < keys.length; index += 12) {
+      moduleAssets.set(keys.slice(index, index + 12), fileName);
+    }
+  }
+  const files = new Set();
   for (const [key, modulePath] of expected) {
-    const url = manifest.locales[locale][key];
-    assert.ok(url, `The ${locale} manifest has no asset for ${modulePath}`);
-    urls.add(url);
+    const fileName = moduleAssets.get(key);
+    assert.ok(fileName, `The ${locale} catalog map has no asset for ${modulePath}`);
+    files.add(fileName);
   }
-  for (const url of urls) {
-    const file = path.join(distDir, url.slice(url.indexOf("/_next/") + "/_next/".length));
-    // Assets are browser ES modules; the example package is not "type": "module".
-    const asset = await import(
-      `data:text/javascript;base64,${readFileSync(file).toString("base64")}`
-    );
-    assert.equal(typeof asset.messages, "object", `${url} does not export messages`);
-    assert.notEqual(Object.keys(asset.messages).length, 0, `${url} has no messages`);
+  for (const fileName of files) {
+    const asset = await importFile(path.join(path.dirname(mapFile), fileName));
+    assert.equal(typeof asset.messages, "object", `${fileName} does not export messages`);
+    assert.notEqual(Object.keys(asset.messages).length, 0, `${fileName} has no messages`);
   }
-  assets += urls.size;
+  assets += files.size;
 }
 
 console.log(

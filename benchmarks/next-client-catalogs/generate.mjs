@@ -109,17 +109,16 @@ ${uses.join("\n")}
 
 await writeFile(
   path.join(app, "src/app/[locale]/layout.tsx"),
-  `import { clientCatalogMap } from "@palamedes/next-plugin/server";
+  `import { PalamedesClientCatalogs } from "@palamedes/next-plugin/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function Layout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const catalogMap = clientCatalogMap(locale);
   return (
     <html lang={locale}>
       <head>
-        {catalogMap ? <script id="palamedes-client-catalogs" type="application/json" dangerouslySetInnerHTML={{ __html: catalogMap }} /> : null}
+        <PalamedesClientCatalogs locale={locale} />
       </head>
       <body>{children}</body>
     </html>
