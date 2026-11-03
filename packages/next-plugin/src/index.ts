@@ -24,6 +24,8 @@ import {
   resolveMacroRuntimeModule,
 } from "@palamedes/transform";
 
+import { clientCatalogPublicPrefix, crossOriginClientCatalogHost } from "./client-catalog-url";
+
 const require = createRequire(import.meta.url);
 
 /*
@@ -634,7 +636,9 @@ export function withPalamedes(
   }
 
   const userAfterCompile = baseConfig.compiler?.runAfterProductionCompile;
-  const publicPrefix = (baseConfig.assetPrefix || baseConfig.basePath || "").replace(/\/+$/u, "");
+  // Read from the config passed to withPalamedes(); a plugin wrapped around it
+  // that sets assetPrefix or basePath later is not visible here.
+  const publicPrefix = clientCatalogPublicPrefix(baseConfig);
   const clientCatalogConfig: Partial<NextConfig> =
     clientCatalogDelivery === "assets"
       ? {
@@ -643,6 +647,12 @@ export function withPalamedes(
             ...baseConfig.compiler,
             async runAfterProductionCompile(metadata) {
               await userAfterCompile?.(metadata);
+              const crossOriginHost = crossOriginClientCatalogHost(publicPrefix);
+              if (crossOriginHost) {
+                console.warn(
+                  `Palamedes loads client catalog assets from ${crossOriginHost} with import(), which always uses CORS. When pages are served from another origin, ${publicPrefix}/_next/static/palamedes/ must send Access-Control-Allow-Origin for it.`,
+                );
+              }
               const { emitClientCatalogAssets } = await import("./client-catalog-assets");
               await emitClientCatalogAssets({
                 distDir: metadata.distDir,
