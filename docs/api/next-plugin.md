@@ -223,3 +223,35 @@ mixing bare loaders with rule configs has no defined meaning.
 
 `workspaceRoot` can be set explicitly in monorepos when automatic root
 detection from the Next project root is not correct.
+
+### Client catalog assets: bundlers, cache, and URL prefixes
+
+`experimentalClientCatalogAssets` only changes production builds. `next dev`
+keeps in-graph fragments under both bundlers.
+
+| Mode                                          | Status                   |
+| --------------------------------------------- | ------------------------ |
+| `next build` (Turbopack)                      | Supported, checked in CI |
+| `next build --webpack`                        | Supported, checked in CI |
+| Turbopack and webpack persistent build caches | Supported                |
+| `basePath`, path or absolute `assetPrefix`    | Supported                |
+
+Both bundlers run `compiler.runAfterProductionCompile`, keep the `pmds-next:`
+marker literals through minification, and leave the asset `import()` native.
+The post-compile step reads the chunks of the current build and recompiles
+the catalogs every time, so a warm build cache still picks up source and
+catalog-only edits. Next clears old chunks before each build, and the step
+replaces `.next/static/palamedes/`, so earlier assets are not served.
+
+Asset URLs use the prefix Next puts in front of its own `/_next/` chunks:
+`assetPrefix` when set, with one trailing slash removed, and `basePath`
+otherwise. Next does not join the two, so with both set, the assets use
+`assetPrefix` alone, like the chunks. Palamedes reads both values from the
+config passed to `withPalamedes()`, so set them there and not in a wrapper
+applied after it.
+
+The browser loads assets with a native `import()`, which always uses CORS.
+Next's chunks are classic scripts and do not need CORS. When `assetPrefix`
+points to another origin, that host must send `Access-Control-Allow-Origin`
+for `/_next/static/palamedes/`, or the page shows its error view. The build
+logs a warning for absolute prefixes.
