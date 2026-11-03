@@ -98,11 +98,21 @@ const COMPILED_CATALOG_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog");
 const COMPILED_CATALOG_REGISTRY_SYMBOL = Symbol.for("@palamedes/core/compiled-catalog-registry/v2");
 
 let localCatalogRegistry: WeakSet<object> | undefined;
+// Several generated modules can share one delivered message object (Vite
+// groups them per output chunk), so each object is snapshotted only once.
+const snapshotsByInput = new WeakMap<object, CompiledCatalogMessages>();
 
-/** Marks generated strings as constants; function entries are executable messages. */
+/**
+ * Marks generated strings as constants; function entries are executable messages.
+ *
+ * The input is copied once: passing the same object again returns the same
+ * frozen snapshot, so later changes to that object are not picked up.
+ */
 export function defineCompiledCatalog<TMessages extends Record<string, CatalogMessage>>(
   messages: TMessages,
 ): Readonly<TMessages> & CompiledCatalogBrand {
+  const existing = snapshotsByInput.get(messages);
+  if (existing) return existing as Readonly<TMessages> & CompiledCatalogBrand;
   const snapshot: Record<string, CatalogMessage> = Object.create(null);
   for (const id of Object.keys(messages)) {
     const value = messages[id];
@@ -119,7 +129,10 @@ export function defineCompiledCatalog<TMessages extends Record<string, CatalogMe
   });
   Object.freeze(snapshot);
   getCatalogRegistryForWrite().add(snapshot);
-  return snapshot as Readonly<TMessages> & CompiledCatalogBrand;
+  const compiled = snapshot as Readonly<TMessages> & CompiledCatalogBrand;
+  snapshotsByInput.set(messages, compiled);
+  snapshotsByInput.set(compiled, compiled);
+  return compiled;
 }
 
 export function isCompiledCatalog(messages: unknown): messages is CompiledCatalogMessages {
