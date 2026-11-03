@@ -29,6 +29,30 @@ describe("parser-free compiled runtime", () => {
     expect(Object.isFrozen(catalog)).toBe(true);
   });
 
+  it("snapshots a shared message object once and loads it as one layer", () => {
+    let getterCalls = 0;
+    const shared = {
+      get greeting() {
+        getterCalls += 1;
+        return "Hallo";
+      },
+    };
+
+    const first = defineCompiledCatalog(shared);
+    const second = defineCompiledCatalog(shared);
+    expect(second).toBe(first);
+    expect(defineCompiledCatalog(first)).toBe(first);
+    expect(getterCalls).toBe(1);
+
+    const i18n = createI18n({ locale: "de" });
+    const override = defineCompiledCatalog({ greeting: "Servus" });
+    i18n.load("de", first);
+    i18n.load("de", override);
+    // Loading the shared catalog again keeps the existing layer order.
+    i18n.load("de", second);
+    expect(i18n._("greeting")).toBe("Servus");
+  });
+
   it("refreshes the string renderer across locale round trips without changing its time zone", () => {
     const message: CompiledMessage = (args, runtime) =>
       runtime.join(runtime.number(args, "amount"), " / ", runtime.date(args, "date", "short"));

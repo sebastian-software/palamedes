@@ -89,6 +89,31 @@ function bareMessageAsset(rendered: string, locale: string): string {
   const withoutDefault = body.slice(0, body.lastIndexOf(RENDERED_CATALOG_DEFAULT_EXPORT));
   return `export const locale=${JSON.stringify(locale)};${withoutDefault}`;
 }
+
+/*
+ * The union of several sidecars' selected messages, or null when two of them
+ * disagree on a message ID. Those sidecars then keep separate assets, so
+ * grouping never decides which value wins.
+ */
+function mergeSelections(selections: Record<string, string>[]): Record<string, string> | null {
+  const union: Record<string, string> = {};
+  for (const selected of selections) {
+    for (const [id, message] of Object.entries(selected)) {
+      if (Object.hasOwn(union, id) && union[id] !== message) return null;
+      union[id] = message;
+    }
+  }
+  return union;
+}
+
+/*
+ * A single sidecar keeps its own key as the asset name. A group is named
+ * after its member keys, which stay stable when Rollup re-hashes the chunk.
+ */
+function messageGroupName(keys: string[]): string {
+  if (keys.length === 1) return keys[0]!;
+  return createHash("sha256").update(keys.join("\n")).digest("hex").slice(0, 12);
+}
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config.";
 // Server packages that must stay in Vite's module graph. The runtime and
 // plugin entrypoints import `virtual:` catalog modules, which Node cannot
@@ -1195,28 +1220,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           locales.map((locale) => [locale, {}]),
         );
 
-        // Sorted for determinism: sidecarModules fills in transform order,
-        // which varies between builds; unsorted emission would re-hash the
-        // import maps of untouched locales on every build.
-        const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b));
-        for (const [key, entry] of sortedSidecars) {
-          for (const locale of locales) {
-            const selected = await compileSidecarLocale(cfg, entry, locale, {
-              warn: (message) => this.warn(message),
-            });
-            const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale);
-            const contentHash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
-            const fileName = `assets/palamedes-m-${key}.${locale}-${contentHash}.js`;
-            this.emitFile({ type: "asset", fileName, source: asset });
-            importMaps.get(locale)![`${BARE_MESSAGES_PREFIX}${key}`] = `${resolvedBase}${fileName}`;
-          }
-        }
-
         // Which chunk imports which bare message specifier, so servers can
         // emit modulepreload hints for the mapped assets of the chunks they
         // are about to serve and message assets load in parallel with the
         // code instead of one waterfall step behind it.
         const chunkImports: Record<string, string[]> = {};
+        const importingChunks = new Map<string, number>();
         for (const fileName of Object.keys(bundle).sort()) {
           const output = bundle[fileName];
           if (!output || output.type !== "chunk") {
@@ -1227,12 +1236,62 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             .sort();
           if (bareImports.length > 0) {
             chunkImports[fileName] = bareImports;
+            for (const bare of bareImports) {
+              importingChunks.set(bare, (importingChunks.get(bare) ?? 0) + 1);
+            }
             // These specifiers are resolved by the document import map, not
             // asset URLs. Keep them in our locale manifest and emitted source,
             // but exclude them from framework route preload manifests.
             output.imports = output.imports.filter(
               (imported) => !imported.startsWith(BARE_MESSAGES_PREFIX),
             );
+          }
+        }
+
+        // Rollup places each module in exactly one output chunk, and a
+        // chunk's modules always load together, so the sidecars a chunk
+        // imports share one asset per locale. A sidecar that no chunk or more
+        // than one chunk imports keeps an asset of its own. Both orders are
+        // sorted for determinism: sidecarModules fills in transform order,
+        // which varies between builds.
+        const groups: string[][] = [];
+        const grouped = new Set<string>();
+        for (const bareImports of Object.values(chunkImports)) {
+          const keys = bareImports
+            .filter((bare) => importingChunks.get(bare) === 1)
+            .map((bare) => bare.slice(BARE_MESSAGES_PREFIX.length))
+            .filter((key) => sidecarModules.has(key));
+          if (keys.length === 0) continue;
+          groups.push(keys);
+          keys.forEach((key) => grouped.add(key));
+        }
+        for (const key of [...sidecarModules.keys()].sort()) {
+          if (!grouped.has(key)) groups.push([key]);
+        }
+
+        for (const keys of groups) {
+          for (const locale of locales) {
+            const selections: [string, Record<string, string>][] = [];
+            for (const key of keys) {
+              const selected = await compileSidecarLocale(cfg, sidecarModules.get(key)!, locale, {
+                warn: (message) => this.warn(message),
+              });
+              selections.push([key, selected ?? {}]);
+            }
+            const union = mergeSelections(selections.map(([, selected]) => selected));
+            const assets: [string, Record<string, string>, string[]][] = union
+              ? [[messageGroupName(keys), union, keys]]
+              : selections.map(([key, selected]) => [key, selected, [key]]);
+            for (const [name, messages, members] of assets) {
+              const asset = bareMessageAsset(renderCatalogModule(messages), locale);
+              const contentHash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
+              const fileName = `assets/palamedes-m-${name}.${locale}-${contentHash}.js`;
+              this.emitFile({ type: "asset", fileName, source: asset });
+              for (const key of members) {
+                importMaps.get(locale)![`${BARE_MESSAGES_PREFIX}${key}`] =
+                  `${resolvedBase}${fileName}`;
+              }
+            }
           }
         }
 
@@ -1246,7 +1305,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           chunkImports,
         };
         for (const [locale, imports] of importMaps) {
-          const source = JSON.stringify({ imports });
+          const sorted = Object.fromEntries(
+            Object.entries(imports).sort(([a], [b]) => a.localeCompare(b)),
+          );
+          const source = JSON.stringify({ imports: sorted });
           const contentHash = createHash("sha256").update(source).digest("hex").slice(0, 8);
           const fileName = `assets/palamedes-importmap.${locale}-${contentHash}.json`;
           this.emitFile({ type: "asset", fileName, source });

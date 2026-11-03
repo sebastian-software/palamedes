@@ -101,6 +101,8 @@ awaits the active locale's generated fragment before running its source module.
 When an edit changes the set of messages a module uses, development refreshes
 that module's fragments through HMR, even when no catalog file changed.
 Production emits locale-bound import maps and separate executable fragments.
+Modules that Rollup places in one output chunk share one message asset per
+locale, so message requests follow chunks rather than source modules.
 Set the document's `lang` before its module entry runs; the adapter initializes
 the client instance. Locale changes require document navigation.
 
