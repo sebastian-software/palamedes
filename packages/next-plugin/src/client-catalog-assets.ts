@@ -6,16 +6,14 @@ import { catalogMatchesSource, catalogResourcePath, loadPalamedesConfig } from "
 import { compileCatalogArtifactSelectedAsync, renderCatalogModule } from "@palamedes/core-node";
 import { createMissingErrorMessage } from "@palamedes/transform";
 
-export const CLIENT_CATALOG_MANIFEST = "palamedes-client-catalogs.json";
+import { CLIENT_CATALOG_MANIFEST, type ClientCatalogManifest } from "./client-catalog-manifest";
 
 const MARKER_PATTERN = /["'`]pmds-next:([0-9a-f]{12}):([\w-]+)["'`]/gu;
+// Group and module names are 12 hex characters, so this prefix cannot collide.
+const CATALOG_MAP_PREFIX = "catalogs.";
 const RENDERED_CATALOG_IMPORT =
   'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";';
 const RENDERED_CATALOG_DEFAULT_EXPORT = "export default { messages };";
-
-export type ClientCatalogManifest = {
-  locales: Record<string, Record<string, string>>;
-};
 
 type Sidecar = { source: string; ids: string[] };
 
@@ -62,6 +60,20 @@ function mergeSelections(selections: Record<string, string>[]): Record<string, s
     }
   }
   return union;
+}
+
+/*
+ * One map per locale lists every translated module, so a soft navigation to
+ * any route finds its asset without another lookup. It is a content-hashed
+ * static module: the document carries only its URL, and the browser caches it
+ * across pages. Module keys have a fixed length, so each asset lists its
+ * modules as one concatenated string, and asset names are relative to the map.
+ */
+function renderCatalogMap(locale: string, assets: Record<string, string[]>): string {
+  const entries = Object.entries(assets)
+    .map(([fileName, keys]) => [fileName, [...keys].sort().join("")] as const)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `export default ${JSON.stringify({ locale, assets: Object.fromEntries(entries) })};\n`;
 }
 
 function groupName(keys: string[]): string {
@@ -165,9 +177,9 @@ export async function emitClientCatalogAssets(
   const outputDir = path.join(staticDir, "palamedes");
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
-  const manifest: ClientCatalogManifest = { locales: {} };
+  const manifest: ClientCatalogManifest = { maps: {} };
   for (const locale of cfg.locales) {
-    const assets: Record<string, string> = {};
+    const assets: Record<string, string[]> = {};
     const compiled = await compileLocale(locale);
     for (const keys of groups) {
       const selections = keys.map((key) => compiled.get(key)!);
@@ -180,13 +192,14 @@ export async function emitClientCatalogAssets(
         const hash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
         const fileName = `${name}.${locale}-${hash}.js`;
         await writeFile(path.join(outputDir, fileName), asset);
-        const url = `${options.publicPrefix}/_next/static/palamedes/${fileName}`;
-        for (const key of members) assets[key] = url;
+        assets[fileName] = members;
       }
     }
-    manifest.locales[locale] = Object.fromEntries(
-      Object.entries(assets).sort(([a], [b]) => a.localeCompare(b)),
-    );
+    const map = renderCatalogMap(locale, assets);
+    const mapHash = createHash("sha256").update(map).digest("hex").slice(0, 8);
+    const mapName = `${CATALOG_MAP_PREFIX}${locale}-${mapHash}.js`;
+    await writeFile(path.join(outputDir, mapName), map);
+    manifest.maps[locale] = `${options.publicPrefix}/_next/static/palamedes/${mapName}`;
   }
   await writeFile(
     path.join(options.distDir, CLIENT_CATALOG_MANIFEST),

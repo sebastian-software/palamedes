@@ -10,35 +10,32 @@ import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/
 import type { I18nInstance } from "@palamedes/runtime";
 import { createI18n, type CreateI18nOptions, type PalamedesI18n } from "@palamedes/core";
 import { loadServerCatalog } from "@palamedes/next-plugin/server-catalogs";
-import { readFileSync } from "node:fs";
-import path from "node:path";
+import { createElement, type ReactElement } from "react";
+import { readClientCatalogManifest } from "./client-catalog-manifest";
 
-let clientCatalogManifest: Record<string, Record<string, string>> | null | undefined;
+/** The element ID that `@palamedes/next-plugin/client-catalog` looks up. */
+const CLIENT_CATALOG_MAP_ID = "palamedes-client-catalogs";
+
+export type PalamedesClientCatalogsProps = {
+  /** The document locale, the same value as `<html lang>`. */
+  locale: string;
+};
 
 /**
- * Experimental: the JSON for a `<script id="palamedes-client-catalogs"
- * type="application/json">` element in the root layout's `<head>`, or
- * `undefined` when the build delivers client catalogs in its module graph.
+ * Experimental: points the browser at this locale's client catalog map when
+ * the build uses `experimentalClientCatalogAssets`. Render it in the root
+ * layout's `<head>`. It renders nothing when client catalogs are delivered in
+ * the module graph, which includes development.
  */
-export function clientCatalogMap(locale: string): string | undefined {
-  if (clientCatalogManifest === undefined) {
-    const distDir = process.env.PALAMEDES_NEXT_DIST_DIR;
-    try {
-      clientCatalogManifest = distDir
-        ? JSON.parse(
-            readFileSync(
-              path.join(process.cwd(), distDir, "palamedes-client-catalogs.json"),
-              "utf8",
-            ),
-          ).locales
-        : null;
-    } catch {
-      clientCatalogManifest = null;
-    }
-  }
-  const assets = clientCatalogManifest?.[locale];
-  if (!assets) return undefined;
-  return JSON.stringify({ locale, assets }).replaceAll("<", "\\u003c");
+export function PalamedesClientCatalogs({
+  locale,
+}: PalamedesClientCatalogsProps): ReactElement | null {
+  const maps = readClientCatalogManifest()?.maps;
+  const href = maps && Object.hasOwn(maps, locale) ? maps[locale] : undefined;
+  if (!href) return null;
+  // A module preload starts fetching the map while the parser is still in
+  // <head>, and the browser helper reads the map URL back from its href.
+  return createElement("link", { id: CLIENT_CATALOG_MAP_ID, rel: "modulepreload", href });
 }
 
 const NEXT_RENDER_REQUEST_KEY_PROVIDER = Symbol.for(

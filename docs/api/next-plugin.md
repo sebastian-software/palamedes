@@ -18,6 +18,8 @@ for the storage/import boundary.
 - `WithPalamedesOptions`
 - `createNextServerI18n({ locale, timeZone?, ...options })` from `@palamedes/next-plugin/server`
 - `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
+- `PalamedesClientCatalogs` from `@palamedes/next-plugin/server` (experimental,
+  see [Client catalog assets](#client-catalog-assets-experimental))
 
 `withPalamedes()` also wires these **Internal** subpaths into the Next.js
 build by path: `server-function-initializer`, `server-function-entry`,
@@ -192,6 +194,43 @@ serialized executable functions. Configure CSP for Next's own scripts and the
 served catalog assets. Selected PO and fallback/config files remain normal
 build dependencies. Next can use Fast Refresh or reload at async-module
 boundaries; a document reload is the supported recovery when HMR cannot apply.
+
+### Client catalog assets (experimental)
+
+`withPalamedes(config, { experimentalClientCatalogAssets: true })` delivers
+production client catalogs as static message assets outside the bundler graph,
+one per client chunk and locale. Development keeps the in-graph fragments.
+
+The browser finds those assets through a per-locale catalog map. Render
+`PalamedesClientCatalogs` in the root layout's `<head>` with the document
+locale:
+
+```tsx
+import { PalamedesClientCatalogs } from "@palamedes/next-plugin/server";
+
+export default async function RootLayout({ children, params }) {
+  const { locale } = await params;
+  return (
+    <html lang={locale}>
+      <head>
+        <PalamedesClientCatalogs locale={locale} />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+It renders a `<link rel="modulepreload">` to the map, so the browser fetches
+the map alongside Next's own chunks. It renders nothing when the build keeps
+catalogs in the module graph, so the layout needs no condition for
+development or for builds without the option.
+
+The map is a content-hashed static module that lists every translated client
+module of the locale, so soft navigations to other routes resolve without
+another lookup. Its size grows with the number of translated client modules,
+about 8 bytes gzip per module, but the document only carries its URL, and
+browsers cache the map across pages and visits until the next deployment.
 
 Eager translation calls belong inside functions after initialization. Module
 scope and Server Function parameter-initializer macros remain compile errors.

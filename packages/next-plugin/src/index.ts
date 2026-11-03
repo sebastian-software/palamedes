@@ -197,8 +197,9 @@ export type WithPalamedesOptions = {
   /**
    * Experimental: deliver production client catalogs as message assets
    * outside the bundler graph, one per client chunk and locale. Render
-   * `clientCatalogMap(locale)` from `@palamedes/next-plugin/server` in the
-   * root layout's `<head>`. Development keeps the in-graph fragments.
+   * `<PalamedesClientCatalogs locale={locale} />` from
+   * `@palamedes/next-plugin/server` in the root layout's `<head>`.
+   * Development keeps the in-graph fragments.
    * @default false
    */
   experimentalClientCatalogAssets?: boolean;
