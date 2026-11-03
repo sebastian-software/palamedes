@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import type { ReactNode } from "ardo/react";
 
 /*
@@ -23,7 +24,7 @@ export function PageHero({
 }) {
   return (
     <section className="pmds-page-hero">
-      <div
+      <ArdoContentContainer
         className={
           aside
             ? "grid grid-cols-1 items-start gap-x-16 gap-y-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,1fr)]"
@@ -38,7 +39,7 @@ export function PageHero({
           {children}
         </div>
         {aside ? <div className="min-w-0">{aside}</div> : null}
-      </div>
+      </ArdoContentContainer>
     </section>
   );
 }

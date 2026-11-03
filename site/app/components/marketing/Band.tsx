@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import type { ReactNode } from "ardo/react";
 
 export type BandTone = "paper" | "parchment";
@@ -25,7 +26,7 @@ export function Band({
       aria-labelledby={labelledBy}
       className={`pmds-band pmds-band--${tone} ${className}`}
     >
-      {children}
+      <ArdoContentContainer>{children}</ArdoContentContainer>
     </section>
   );
 }

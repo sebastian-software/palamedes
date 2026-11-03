@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import { ButtonLink } from "~/components/marketing/primitives";
 
 import { AgentStart } from "./AgentStart";
@@ -22,10 +23,10 @@ export function HomeHero() {
         height={240}
         className="pointer-events-none absolute -top-16 -right-40 w-[min(52rem,72vw)] opacity-[0.07] max-lg:hidden"
       />
-      <div className="relative mx-auto grid max-w-[var(--pmds-measure)] grid-cols-1 items-center gap-x-16 gap-y-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <div>
+      <ArdoContentContainer className="relative grid grid-cols-1 items-center gap-x-16 gap-y-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
           <p className="pmds-kicker">Open-source i18n for TypeScript &amp; Rust</p>
-          <h1 id="home-title" className="pmds-hero-title [--text-hero:clamp(2.45rem,5.6vw,4.4rem)]">
+          <h1 id="home-title" className="pmds-hero-title">
             Just write
             <span className="block text-accent">the sentence.</span>
           </h1>
@@ -51,11 +52,11 @@ export function HomeHero() {
             .
           </p>
         </div>
-        <div>
+        <div className="min-w-0">
           <HeroFilm />
           <AgentStart />
         </div>
-      </div>
+      </ArdoContentContainer>
     </section>
   );
 }

@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import { StructuredData } from "~/components/StructuredData";
 import { faqStructuredData } from "~/lib/meta";
 import { ButtonLink, EditorialRail, Page, Section } from "~/components/marketing/primitives";
@@ -214,7 +215,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
           </div>
         }
       />
-      <div className="pmds-measured pb-[clamp(3.5rem,6vw,5.5rem)]">
+      <ArdoContentContainer className="pb-[var(--ardo-space-section)]">
         <dl className="grid grid-cols-4 gap-px border border-hair bg-hair max-grid:grid-cols-2 max-tight:grid-cols-1">
           {rival.facts.map((fact) => (
             <div key={fact.label} className="bg-paper px-5 py-5">
@@ -227,7 +228,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
           {rival.name} figures: {rival.subject}, researched {rival.researched}. Projects move;
           re-check before you decide.
         </p>
-      </div>
+      </ArdoContentContainer>
 
       <Section
         num="01 — Decide"

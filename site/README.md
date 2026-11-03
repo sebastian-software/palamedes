@@ -1,6 +1,6 @@
 # @palamedes/site
 
-The public Palamedes website, live at <https://palamedes.dev> — Ardo 6.2.0 with static document navigation, full prerendering, Tailwind v4,
+The public Palamedes website, live at <https://palamedes.dev> — Ardo 6.3.0 with static document navigation, full prerendering, Tailwind v4,
 and a small local marketing layer (ADR-011). Private workspace, never
 published to npm.
 
@@ -43,25 +43,26 @@ code styling, focus rings, and responsive page outline. Marketing routes use
 `layout: "bare"`; documentation uses `scrollMode="document"`. The curated
 sidebar groups remain content configuration in `app/root.tsx`.
 
-Both layouts use Ardo's shared page frame. Marketing sections reuse its page
-width, gutter, and section-spacing tokens. The default frame reaches 90rem
-including gutters, and documentation shows its right-hand outline from 80rem.
-Ardo also supplies adaptive reading typography without changing the root font size.
+Both layouts use Ardo's full-width shell. Marketing sections use its public
+`ArdoContentContainer` for bounded content and responsive gutters, with
+Ardo's section-spacing token for vertical rhythm. Guides keep a reading measure;
+generated API references use the wider page measure. Documentation shows its
+right-hand outline from 80rem. Ardo supplies adaptive reading typography without
+changing the root font size.
 
-`app/ardo-theme.ts` sets three public hue options. Ardo derives the remaining surfaces,
-text, borders, and component styling. `app/app.css` maps marketing utilities to
-those tokens and contains the local marketing composition. Cinzel Hellenic is
-loaded for marketing headings. Do not target generated Ardo classes or import
+`app/ardo-theme.ts` sets the local paper, navy, and bronze palette through
+Ardo's typed theme options. Marketing utilities reference those same semantic
+tokens; there is no second palette or document stylesheet. `app/app.css` owns
+marketing composition, Cinzel Hellenic headings, and square bronze actions. Do not target generated Ardo classes or import
 `@palamedes/site-ui` into this site. That package remains available to other
 consumers; the OSS site no longer needs its second chrome and token system.
 
 Ferramenta has a plain link in the header and footer. There is no Tools menu or
 family directory. See the [style audit](style-audit.md) for the ownership boundary
-and the upstream fixes adopted through Ardo 6.2.0.
+and the upstream fixes adopted through Ardo 6.3.0.
 
-The site currently forces light mode. Ardo supplies its complete theme palette;
-local specimens and licensed illustrations need a separate dark-mode review
-before exposing the theme toggle.
+The site currently forces light mode. The local palette, specimens, and licensed
+illustrations need a separate dark-mode review before exposing the theme toggle.
 
 App code uses `ardo/react`, `ardo/react-dom/*`, and `ArdoLink` from `ardo/runtime`.
 Links load prerendered HTML documents. The build timestamp comes from Ardo,

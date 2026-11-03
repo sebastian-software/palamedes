@@ -1,3 +1,4 @@
+import { ArdoContentContainer } from "ardo/ui";
 import { useCallback, useEffect, useRef, useState } from "ardo/react";
 import { ArdoLink as Link } from "ardo/runtime";
 
@@ -109,192 +110,195 @@ export function RustRace() {
       aria-labelledby="rust-title"
       className="pmds-band pmds-band--mist relative"
     >
-      <div>
-        <p className="pmds-kicker">Why Rust?</p>
-        <h2 id="rust-title" className="pmds-title max-w-[17em]">
-          Because nobody likes waiting for their tools.
-        </h2>
-        <p className="pmds-lede">
-          Your i18n tooling runs every time you save, commit, or open a pull request. Choose a
-          framework and platform to compare the CLI workflows on 1,500 files and 6,000 messages.
-          Each table compares tools on the same platform. The historical local recording replays
-          each tool's measured median.
-        </p>
-      </div>
-
-      <BenchmarkFrameworkPicker value={framework} onChange={selectFramework} />
-      <noscript>
-        <p className="mt-4 text-[14px]">
-          Framework switching needs JavaScript.{" "}
-          <a href="/proof#framework-benchmarks" className="text-accent underline">
-            Read all framework tables →
-          </a>
-        </p>
-      </noscript>
-
-      <PlatformBenchmarks framework={framework} />
-      <details data-local-benchmark className="mt-6" open={blacksmithBench.status === "pending"}>
-        <summary className="w-fit cursor-pointer text-[15px] font-semibold underline underline-offset-4">
-          Replay the historical Mac recording
-        </summary>
-        <div ref={ref} className="mt-6 border border-hair bg-paper">
-          <p
-            className="border-b border-hair px-5 py-4 text-[14px] leading-relaxed"
-            aria-live="polite"
-          >
-            <strong>{view.label}</strong> · {view.corpus} · historical local macOS recording
+      <ArdoContentContainer>
+        <div>
+          <p className="pmds-kicker">Why Rust?</p>
+          <h2 id="rust-title" className="pmds-title max-w-[17em]">
+            Because nobody likes waiting for their tools.
+          </h2>
+          <p className="pmds-lede">
+            Your i18n tooling runs every time you save, commit, or open a pull request. Choose a
+            framework and platform to compare the CLI workflows on 1,500 files and 6,000 messages.
+            Each table compares tools on the same platform. The historical local recording replays
+            each tool's measured median.
           </p>
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hair px-5 py-4">
-            <p className="mono-nums text-[15px] text-ink" aria-hidden>
-              {(elapsed / 1000).toFixed(2)} s
+        </div>
+
+        <BenchmarkFrameworkPicker value={framework} onChange={selectFramework} />
+        <noscript>
+          <p className="mt-4 text-[14px]">
+            Framework switching needs JavaScript.{" "}
+            <a href="/proof#framework-benchmarks" className="text-accent underline">
+              Read all framework tables →
+            </a>
+          </p>
+        </noscript>
+
+        <PlatformBenchmarks framework={framework} />
+        <details data-local-benchmark className="mt-6" open={blacksmithBench.status === "pending"}>
+          <summary className="w-fit cursor-pointer text-[15px] font-semibold underline underline-offset-4">
+            Replay the historical Mac recording
+          </summary>
+          <div ref={ref} className="mt-6 border border-hair bg-paper">
+            <p
+              className="border-b border-hair px-5 py-4 text-[14px] leading-relaxed"
+              aria-live="polite"
+            >
+              <strong>{view.label}</strong> · {view.corpus} · historical local macOS recording
             </p>
-            {reducedMotion ? null : (
-              <button
-                data-analytics-id="benchmark-race-replay"
-                type="button"
-                onClick={run}
-                disabled={phase === "running"}
-                className="pmds-button pmds-button--outline disabled:opacity-60"
-              >
-                {phase === "running" ? "Running…" : "Run it again"}
-              </button>
-            )}
-          </div>
-          <div>
-            <table className="w-full border-collapse">
-              <caption className="sr-only">
-                Extract and catalog update for {view.label} on {view.corpus}, median of{" "}
-                {view.meta.runs} runs. Times are rounded.
-              </caption>
-              <thead>
-                <tr className="border-b border-hair text-left">
-                  <th
-                    scope="col"
-                    className="micro px-3 sm:px-5 py-3 text-[11px] tracking-label whitespace-nowrap text-slate"
-                  >
-                    Tool · what it does
-                  </th>
-                  <th
-                    scope="col"
-                    className="micro w-full px-3 sm:px-5 py-3 text-[11px] tracking-label text-slate max-sm:hidden"
-                  >
-                    <span className="sr-only">Progress</span>
-                  </th>
-                  <th
-                    scope="col"
-                    className="micro px-3 sm:px-5 py-3 text-right text-[11px] tracking-label text-slate"
-                  >
-                    Time
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const percent = (row.medianMs / trackMs) * 100;
-                  const done = phase === "finished" || elapsed >= row.medianMs;
-                  const width = phase === "ready" ? 0 : percent;
-                  return (
-                    <tr key={row.tool} className="border-b border-hair last:border-b-0">
-                      <th
-                        scope="row"
-                        className="px-3 sm:px-5 py-4 text-left align-middle sm:whitespace-nowrap"
-                      >
-                        <span
-                          className={`block text-[16px] font-semibold ${row.accent ? "text-accent" : "text-ink"}`}
-                        >
-                          <span>{row.displayName}</span> <BenchmarkVersion version={row.version} />
-                        </span>
-                        <span className="block text-[12.5px] font-normal whitespace-normal text-gray-spec">
-                          {row.scope}
-                        </span>
-                        <span aria-hidden className="mt-2 block h-2 w-full bg-mist sm:hidden">
-                          <span
-                            className={`block h-full ${row.accent ? "bg-accent" : "bg-slate/70"}`}
-                            style={{
-                              width: `max(${width}%, ${width > 0 ? "3px" : "0px"})`,
-                              transition:
-                                phase === "running" ? `width ${row.medianMs}ms linear` : "none",
-                            }}
-                          />
-                        </span>
-                      </th>
-                      <td className="px-3 sm:px-5 py-4 align-middle max-sm:hidden" aria-hidden>
-                        <span className="block h-3 w-full bg-mist">
-                          <span
-                            className={`block h-full ${row.accent ? "bg-accent" : "bg-slate/70"}`}
-                            style={{
-                              width: `max(${width}%, ${width > 0 ? "3px" : "0px"})`,
-                              transition:
-                                phase === "running" ? `width ${row.medianMs}ms linear` : "none",
-                            }}
-                          />
-                        </span>
-                      </td>
-                      <td
-                        data-median-ms={row.medianMs}
-                        className={`mono-nums px-3 sm:px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-0"} ${row.accent ? "text-accent" : "text-ink"}`}
-                      >
-                        {displayBenchmarkTime(row.medianMs)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="border-t border-hair px-5 py-4 text-[13.5px] leading-relaxed text-ink/75">
-            {view.warm ? (
-              <p>
-                {displayBenchmarkTime(view.warm.warmMs)} on a cached re-run after{" "}
-                {view.warm.touchedFiles} changed source files — Palamedes keeps an extraction cache,
-                the other tools re-read everything, so no speedup is claimed for it. React Intl's
-                narrower extraction-only lane is on the proof page.
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hair px-5 py-4">
+              <p className="mono-nums text-[15px] text-ink" aria-hidden>
+                {(elapsed / 1000).toFixed(2)} s
               </p>
-            ) : (
-              <p>
-                {framework !== "vue"
-                  ? "Wuchale also transforms components and compiles catalogs; its command covers more work. "
-                  : ""}
-                Intlayer is excluded from timings after catalog checks failed.
-                <a href="/proof#framework-benchmarks" className="ml-1 text-accent underline">
-                  Inspect catalog checks and methodology →
+              {reducedMotion ? null : (
+                <button
+                  data-analytics-id="benchmark-race-replay"
+                  type="button"
+                  onClick={run}
+                  disabled={phase === "running"}
+                  className="pmds-button pmds-button--outline disabled:opacity-60"
+                >
+                  {phase === "running" ? "Running…" : "Run it again"}
+                </button>
+              )}
+            </div>
+            <div>
+              <table className="w-full border-collapse">
+                <caption className="sr-only">
+                  Extract and catalog update for {view.label} on {view.corpus}, median of{" "}
+                  {view.meta.runs} runs. Times are rounded.
+                </caption>
+                <thead>
+                  <tr className="border-b border-hair text-left">
+                    <th
+                      scope="col"
+                      className="micro px-3 sm:px-5 py-3 text-[11px] tracking-label whitespace-nowrap text-slate"
+                    >
+                      Tool · what it does
+                    </th>
+                    <th
+                      scope="col"
+                      className="micro w-full px-3 sm:px-5 py-3 text-[11px] tracking-label text-slate max-sm:hidden"
+                    >
+                      <span className="sr-only">Progress</span>
+                    </th>
+                    <th
+                      scope="col"
+                      className="micro px-3 sm:px-5 py-3 text-right text-[11px] tracking-label text-slate"
+                    >
+                      Time
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const percent = (row.medianMs / trackMs) * 100;
+                    const done = phase === "finished" || elapsed >= row.medianMs;
+                    const width = phase === "ready" ? 0 : percent;
+                    return (
+                      <tr key={row.tool} className="border-b border-hair last:border-b-0">
+                        <th
+                          scope="row"
+                          className="px-3 sm:px-5 py-4 text-left align-middle sm:whitespace-nowrap"
+                        >
+                          <span
+                            className={`block text-[16px] font-semibold ${row.accent ? "text-accent" : "text-ink"}`}
+                          >
+                            <span>{row.displayName}</span>{" "}
+                            <BenchmarkVersion version={row.version} />
+                          </span>
+                          <span className="block text-[12.5px] font-normal whitespace-normal text-gray-spec">
+                            {row.scope}
+                          </span>
+                          <span aria-hidden className="mt-2 block h-2 w-full bg-mist sm:hidden">
+                            <span
+                              className={`block h-full ${row.accent ? "bg-accent" : "bg-slate/70"}`}
+                              style={{
+                                width: `max(${width}%, ${width > 0 ? "3px" : "0px"})`,
+                                transition:
+                                  phase === "running" ? `width ${row.medianMs}ms linear` : "none",
+                              }}
+                            />
+                          </span>
+                        </th>
+                        <td className="px-3 sm:px-5 py-4 align-middle max-sm:hidden" aria-hidden>
+                          <span className="block h-3 w-full bg-mist">
+                            <span
+                              className={`block h-full ${row.accent ? "bg-accent" : "bg-slate/70"}`}
+                              style={{
+                                width: `max(${width}%, ${width > 0 ? "3px" : "0px"})`,
+                                transition:
+                                  phase === "running" ? `width ${row.medianMs}ms linear` : "none",
+                              }}
+                            />
+                          </span>
+                        </td>
+                        <td
+                          data-median-ms={row.medianMs}
+                          className={`mono-nums px-3 sm:px-5 py-4 text-right align-middle text-[17px] whitespace-nowrap transition-opacity ${done ? "opacity-100" : "opacity-0"} ${row.accent ? "text-accent" : "text-ink"}`}
+                        >
+                          {displayBenchmarkTime(row.medianMs)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-hair px-5 py-4 text-[13.5px] leading-relaxed text-ink/75">
+              {view.warm ? (
+                <p>
+                  {displayBenchmarkTime(view.warm.warmMs)} on a cached re-run after{" "}
+                  {view.warm.touchedFiles} changed source files — Palamedes keeps an extraction
+                  cache, the other tools re-read everything, so no speedup is claimed for it. React
+                  Intl's narrower extraction-only lane is on the proof page.
+                </p>
+              ) : (
+                <p>
+                  {framework !== "vue"
+                    ? "Wuchale also transforms components and compiles catalogs; its command covers more work. "
+                    : ""}
+                  Intlayer is excluded from timings after catalog checks failed.
+                  <a href="/proof#framework-benchmarks" className="ml-1 text-accent underline">
+                    Inspect catalog checks and methodology →
+                  </a>
+                </p>
+              )}
+              <p className="mt-2">
+                Median of {view.meta.runs} runs · {view.meta.cpu ? `${view.meta.cpu} · ` : ""}
+                {view.meta.platform} · Node {view.meta.node} · {view.meta.generated}. Machine-local
+                measurements from earlier releases. Framework reports were captured separately.
+                <a href={repoHref(view.reportPath)} className="ml-1 text-accent underline">
+                  Checked report →
                 </a>
               </p>
-            )}
-            <p className="mt-2">
-              Median of {view.meta.runs} runs · {view.meta.cpu ? `${view.meta.cpu} · ` : ""}
-              {view.meta.platform} · Node {view.meta.node} · {view.meta.generated}. Machine-local
-              measurements from earlier releases. Framework reports were captured separately.
-              <a href={repoHref(view.reportPath)} className="ml-1 text-accent underline">
-                Checked report →
-              </a>
-            </p>
+            </div>
           </div>
+        </details>
+
+        <ul className="mt-14 grid grid-cols-1 gap-x-10 gap-y-10 md:grid-cols-3">
+          {REASONS.map((reason) => (
+            <li key={reason.title} className="border-t border-accent/50 pt-5">
+              <h3 className="text-[19px] leading-snug font-bold">{reason.title}</h3>
+              <p className="mt-3 text-[16px] leading-relaxed text-ink/80">{reason.body}</p>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-12 flex flex-wrap items-end gap-x-10 gap-y-4">
+          <CopyCommand
+            command={view.command}
+            label="Re-run it yourself"
+            className="w-full max-w-[26rem]"
+          />
+          <Link to="/proof" className="pmds-arrow-link">
+            Every benchmark, and how it is checked →
+          </Link>
+          <a href={docsHref("benchmark-e2e-workflow")} className="pmds-arrow-link">
+            Methodology →
+          </a>
         </div>
-      </details>
-
-      <ul className="mt-14 grid grid-cols-1 gap-x-10 gap-y-10 md:grid-cols-3">
-        {REASONS.map((reason) => (
-          <li key={reason.title} className="border-t border-accent/50 pt-5">
-            <h3 className="text-[19px] leading-snug font-bold">{reason.title}</h3>
-            <p className="mt-3 text-[16px] leading-relaxed text-ink/80">{reason.body}</p>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-12 flex flex-wrap items-end gap-x-10 gap-y-4">
-        <CopyCommand
-          command={view.command}
-          label="Re-run it yourself"
-          className="w-full max-w-[26rem]"
-        />
-        <Link to="/proof" className="pmds-arrow-link">
-          Every benchmark, and how it is checked →
-        </Link>
-        <a href={docsHref("benchmark-e2e-workflow")} className="pmds-arrow-link">
-          Methodology →
-        </a>
-      </div>
+      </ArdoContentContainer>
     </section>
   );
 }

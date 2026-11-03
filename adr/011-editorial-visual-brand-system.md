@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-11-02
+**Last updated:** 2026-11-03
 
 Palamedes keeps its identity in local content and brand choices while delegating
 site structure and component styling to Ardo.
@@ -13,13 +13,18 @@ Use Ardo's public components and theme options for the OSS site's header,
 footer, search, document layout, navigation, outline, code, and focus styles.
 Keep a small local marketing layer for product specimens and editorial sections.
 
-- Local hue choices give the site warm accents and cool neutrals. Ardo derives
-  the rest of the palette; do not maintain parallel surface and text tokens.
+- Set the paper, parchment, mist, navy, and bronze palette through Ardo's typed
+  theme options. Marketing utilities reference the same semantic tokens; do not
+  maintain a parallel palette or restyle Ardo's internal selectors.
 - Keep the logo, Cinzel Hellenic marketing headings, product specimens, and
   licensed artwork local. Exact values live in the theme and stylesheet.
-- Prefer ordinary spacing and type hierarchy. Scroll reveals, decorative
-  ornaments, animated connectors, forced square corners, and flat-surface
-  overrides are not required brand features.
+- Keep inscription-style marketing headings, fine rules, and square bronze
+  marketing actions. Ardo retains its own document typography, component corners,
+  and elevation. Scroll reveals, ornamental meanders, and animated connectors
+  are not required brand features.
+- Use Ardo's full-width shell and public `ArdoContentContainer` for bounded
+  marketing content. Guides retain a reading measure; API references use the
+  wider page measure. Ardo owns gutters and responsive layout.
 - Use one simple Ferramenta link instead of a family tool menu or sibling list.
 - Explain unfamiliar concepts beside their artifacts, including the existing
   "In plain words" asides. Editorial rails remain local one-pixel rules.
@@ -31,9 +36,9 @@ Keep a small local marketing layer for product specimens and editorial sections.
 - Existing Streamline artwork remains subject to the asset handling rules below.
   New artwork must explain content rather than fill empty space.
 
-The earlier inscription-and-ledger treatment is deliberately reduced. Future
-visual additions must justify their local maintenance cost instead of restoring
-the former theme wholesale.
+Restore the recognizable inscription-and-ledger identity through this small
+local layer. Future visual additions must justify their maintenance cost;
+restoring the brand does not require a second site shell.
 
 ### Benchmark Presentation
 

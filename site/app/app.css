@@ -13,7 +13,7 @@
   --color-hover-fill: var(--ardo-color-bgSoft);
   --color-track: var(--ardo-color-bgMute);
   --color-parchment: var(--ardo-color-bgSoft);
-  --color-mist: var(--ardo-color-bgSoft);
+  --color-mist: var(--ardo-color-bgMute);
   --color-mist-deep: var(--ardo-color-bgMute);
   --color-slate: var(--ardo-color-textLight);
   --color-listing: var(--ardo-color-codeBg);
@@ -71,16 +71,7 @@
   font-weight: 400;
 }
 
-/* Product specimens use local composition; they do not restyle documentation. */
-:root {
-  --pmds-measure: var(--ardo-layout-pageMaxWidth);
-  --pmds-gutter: var(--ardo-space-lg);
-}
-@media (max-width: 48rem) {
-  :root {
-    --pmds-gutter: var(--ardo-space-md);
-  }
-}
+/* ArdoContentContainer owns horizontal measure and responsive gutters. */
 .pmds-page {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -88,14 +79,14 @@
 .pmds-band,
 .pmds-section,
 .pmds-page-hero {
-  padding: var(--ardo-space-section) max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
+  padding-block: var(--ardo-space-section);
   border-top: 1px solid var(--color-hair);
-}
-.pmds-measured {
-  padding-inline: max(var(--pmds-gutter), calc((100% - var(--pmds-measure)) / 2));
 }
 .pmds-band--parchment {
   background: var(--color-parchment);
+}
+.pmds-band--mist {
+  background: var(--color-mist);
 }
 .pmds-code {
   border: 1px solid var(--color-hair);
@@ -119,6 +110,8 @@
 .pmds-docs-micro-label {
   font-family: var(--font-mono);
   font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--color-accent);
 }
 .pmds-title,
@@ -148,7 +141,7 @@
   color: var(--ardo-color-textLight);
 }
 .pmds-hero {
-  padding: var(--ardo-space-section) var(--pmds-gutter);
+  padding-block: var(--ardo-space-section);
 }
 .pmds-hero-lede {
   margin-inline: auto;
@@ -177,15 +170,16 @@
   justify-content: center;
   padding: 0.75rem 1.25rem;
   border: 1px solid var(--color-ink);
-  border-radius: var(--ardo-radius-base);
+  border-radius: 0;
   font-size: 0.875rem;
   font-weight: 600;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 .pmds-button--primary {
-  background: var(--color-ink);
-  color: var(--color-paper);
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--ardo-color-brandInk);
 }
 .pmds-button--outline,
 .pmds-button--small {
