@@ -492,7 +492,6 @@ export function withPalamedes(
   } = options;
   const clientCatalogDelivery =
     experimentalClientCatalogAssets && process.env.NODE_ENV === "production" ? "assets" : "graph";
-  const distDir = baseConfig.distDir ?? ".next";
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Source metadata is optional diagnostics; compiled catalogs supply all message output.
@@ -633,23 +632,36 @@ export function withPalamedes(
     }
   }
 
+  // The server resolves the manifest against its working directory, which is
+  // the project directory in every deployment shape (see server.ts).
+  const runtimeDistDir = path
+    .relative(projectRoot, path.resolve(projectRoot, baseConfig.distDir ?? ".next"))
+    .split(path.sep)
+    .join("/");
   const userAfterCompile = baseConfig.compiler?.runAfterProductionCompile;
   const publicPrefix = (baseConfig.assetPrefix || baseConfig.basePath || "").replace(/\/+$/u, "");
   const clientCatalogConfig: Partial<NextConfig> =
     clientCatalogDelivery === "assets"
       ? {
-          env: { ...baseConfig.env, PALAMEDES_NEXT_DIST_DIR: distDir },
+          env: { ...baseConfig.env, PALAMEDES_NEXT_DIST_DIR: runtimeDistDir },
           compiler: {
             ...baseConfig.compiler,
             async runAfterProductionCompile(metadata) {
               await userAfterCompile?.(metadata);
-              const { emitClientCatalogAssets } = await import("./client-catalog-assets");
+              const { CLIENT_CATALOG_MANIFEST, emitClientCatalogAssets } =
+                await import("./client-catalog-assets");
               await emitClientCatalogAssets({
                 distDir: metadata.distDir,
                 projectRoot,
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
                 failOnMissing,
                 publicPrefix,
+              });
+              const { traceClientCatalogManifest } = await import("./client-catalog-trace");
+              await traceClientCatalogManifest({
+                distDir: metadata.distDir,
+                manifestPath: path.join(metadata.distDir, CLIENT_CATALOG_MANIFEST),
+                hashSalt: (baseConfig.outputHashSalt ?? "") + (process.env.NEXT_HASH_SALT ?? ""),
               });
             },
           },

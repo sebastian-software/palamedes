@@ -223,3 +223,28 @@ mixing bare loaders with rule configs has no defined meaning.
 
 `workspaceRoot` can be set explicitly in monorepos when automatic root
 detection from the Next project root is not correct.
+
+### Deploying experimental client catalog assets
+
+With `experimentalClientCatalogAssets`, a production build writes message
+assets to `<distDir>/static/palamedes/` and the server-side manifest to
+`<distDir>/palamedes-client-catalogs.json`. Both appear after compilation, so
+they need no extra deploy step beyond what Next already expects:
+
+- **Message assets** are ordinary `/_next/static` files. `next start` serves
+  them, a CDN or Vercel receives them with the rest of `.next/static`, and an
+  `output: "standalone"` build needs the usual
+  `cp -r .next/static .next/standalone/<app>/.next/` copy.
+- **The manifest** is added to every server route's output file trace, so
+  `.next/standalone` and deployment adapters include it in each server
+  function. Turbopack resolves `outputFileTracingIncludes` while it compiles,
+  before the manifest exists, so Palamedes appends it to the traces itself.
+
+`clientCatalogMap()` reads the manifest from the dist dir below the server's
+working directory. That's the project directory under `next start`, the
+standalone `server.js` directory (it changes into it), and the function root
+on hosts that run traced functions. A custom `distDir` works the same way.
+Start `next start` in the project directory; `next start apps/web` from
+another directory can't find the manifest. A missing manifest throws a server
+error that names the expected path, instead of rendering pages whose client
+components can't load their messages.

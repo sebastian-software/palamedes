@@ -15,6 +15,28 @@ import path from "node:path";
 
 let clientCatalogManifest: Record<string, Record<string, string>> | null | undefined;
 
+const CLIENT_CATALOG_MANIFEST = "palamedes-client-catalogs.json";
+
+/*
+ * The manifest is written after compilation, so the server reads it from the
+ * build output at runtime. `PALAMEDES_NEXT_DIST_DIR` is the dist dir relative
+ * to the project, and the working directory is the project directory under
+ * `next start`, in the standalone `server.js` (it changes into its own
+ * directory), and in hosted functions. withPalamedes() adds the manifest to
+ * the server traces, so it travels with every deployment of the build.
+ */
+function readClientCatalogManifest(distDir: string): Record<string, Record<string, string>> {
+  const manifestPath = path.resolve(process.cwd(), distDir, CLIENT_CATALOG_MANIFEST);
+  try {
+    return JSON.parse(readFileSync(/* turbopackIgnore: true */ manifestPath, "utf8")).locales;
+  } catch (error) {
+    throw new Error(
+      `Palamedes Next client catalogs: cannot read ${manifestPath}. This build delivers client catalogs as assets, so the server needs the manifest from its build output. Start the server in the project directory (next start) or from the standalone output (node server.js), and keep ${distDir}/${CLIENT_CATALOG_MANIFEST} when you copy the build.`,
+      { cause: error },
+    );
+  }
+}
+
 /**
  * Experimental: the JSON for a `<script id="palamedes-client-catalogs"
  * type="application/json">` element in the root layout's `<head>`, or
@@ -23,18 +45,7 @@ let clientCatalogManifest: Record<string, Record<string, string>> | null | undef
 export function clientCatalogMap(locale: string): string | undefined {
   if (clientCatalogManifest === undefined) {
     const distDir = process.env.PALAMEDES_NEXT_DIST_DIR;
-    try {
-      clientCatalogManifest = distDir
-        ? JSON.parse(
-            readFileSync(
-              path.join(process.cwd(), distDir, "palamedes-client-catalogs.json"),
-              "utf8",
-            ),
-          ).locales
-        : null;
-    } catch {
-      clientCatalogManifest = null;
-    }
+    clientCatalogManifest = distDir ? readClientCatalogManifest(distDir) : null;
   }
   const assets = clientCatalogManifest?.[locale];
   if (!assets) return undefined;
