@@ -232,6 +232,63 @@ another lookup. Its size grows with the number of translated client modules,
 about 8 bytes gzip per module, but the document only carries its URL, and
 browsers cache the map across pages and visits until the next deployment.
 
+#### Deploying client catalog assets
+
+With `experimentalClientCatalogAssets`, a production build writes message
+assets to `<distDir>/static/palamedes/` and the server-side manifest to
+`<distDir>/palamedes-client-catalogs.json`. Both appear after compilation, so
+they need no extra deploy step beyond what Next already expects:
+
+- **Message assets** are ordinary `/_next/static` files. `next start` serves
+  them, a CDN or Vercel receives them with the rest of `.next/static`, and an
+  `output: "standalone"` build needs the usual
+  `cp -r .next/static .next/standalone/<app>/.next/` copy.
+- **The manifest** is added to every server route's output file trace, so
+  `.next/standalone` and deployment adapters include it in each server
+  function. Turbopack resolves `outputFileTracingIncludes` while it compiles,
+  before the manifest exists, so Palamedes appends it to the traces itself.
+
+`PalamedesClientCatalogs` reads the manifest from the dist dir below the server's
+working directory. That's the project directory under `next start`, the
+standalone `server.js` directory (it changes into it), and the function root
+on hosts that run traced functions. A custom `distDir` works the same way.
+Start `next start` in the project directory; `next start apps/web` from
+another directory can't find the manifest. A missing manifest throws a server
+error that names the expected path, instead of rendering pages whose client
+components can't load their messages.
+
+#### Bundlers, build cache, and URL prefixes
+
+`experimentalClientCatalogAssets` only changes production builds. `next dev`
+keeps in-graph fragments under both bundlers.
+
+| Mode                                          | Status                   |
+| --------------------------------------------- | ------------------------ |
+| `next build` (Turbopack)                      | Supported, checked in CI |
+| `next build --webpack`                        | Supported, checked in CI |
+| Turbopack and webpack persistent build caches | Supported                |
+| `basePath`, path or absolute `assetPrefix`    | Supported                |
+
+Both bundlers run `compiler.runAfterProductionCompile`, keep the `pmds-next:`
+marker literals through minification, and leave the asset `import()` native.
+The post-compile step reads the chunks of the current build and recompiles
+the catalogs every time, so a warm build cache still picks up source and
+catalog-only edits. Next clears old chunks before each build, and the step
+replaces `.next/static/palamedes/`, so earlier assets are not served.
+
+Asset URLs use the prefix Next puts in front of its own `/_next/` chunks:
+`assetPrefix` when set, with one trailing slash removed, and `basePath`
+otherwise. Next does not join the two, so with both set, the assets use
+`assetPrefix` alone, like the chunks. Palamedes reads both values from the
+config passed to `withPalamedes()`, so set them there and not in a wrapper
+applied after it.
+
+The browser loads the catalog map and the message assets with a native `import()`, which always uses CORS.
+Next's chunks are classic scripts and do not need CORS. When `assetPrefix`
+points to another origin, that host must send `Access-Control-Allow-Origin`
+for `/_next/static/palamedes/`, or the page shows its error view. The build
+logs a warning for absolute prefixes.
+
 Eager translation calls belong inside functions after initialization. Module
 scope and Server Function parameter-initializer macros remain compile errors.
 
@@ -262,28 +319,3 @@ mixing bare loaders with rule configs has no defined meaning.
 
 `workspaceRoot` can be set explicitly in monorepos when automatic root
 detection from the Next project root is not correct.
-
-### Deploying experimental client catalog assets
-
-With `experimentalClientCatalogAssets`, a production build writes message
-assets to `<distDir>/static/palamedes/` and the server-side manifest to
-`<distDir>/palamedes-client-catalogs.json`. Both appear after compilation, so
-they need no extra deploy step beyond what Next already expects:
-
-- **Message assets** are ordinary `/_next/static` files. `next start` serves
-  them, a CDN or Vercel receives them with the rest of `.next/static`, and an
-  `output: "standalone"` build needs the usual
-  `cp -r .next/static .next/standalone/<app>/.next/` copy.
-- **The manifest** is added to every server route's output file trace, so
-  `.next/standalone` and deployment adapters include it in each server
-  function. Turbopack resolves `outputFileTracingIncludes` while it compiles,
-  before the manifest exists, so Palamedes appends it to the traces itself.
-
-`clientCatalogMap()` reads the manifest from the dist dir below the server's
-working directory. That's the project directory under `next start`, the
-standalone `server.js` directory (it changes into it), and the function root
-on hosts that run traced functions. A custom `distDir` works the same way.
-Start `next start` in the project directory; `next start apps/web` from
-another directory can't find the manifest. A missing manifest throws a server
-error that names the expected path, instead of rendering pages whose client
-components can't load their messages.
