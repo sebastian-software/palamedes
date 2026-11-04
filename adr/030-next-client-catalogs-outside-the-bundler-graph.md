@@ -147,13 +147,16 @@ Make the flag the production default once:
 
 - the contract check passes for the pinned Next in CI and the canary workflow
   has stayed green across at least one Next minor release;
-- a real Vercel deployment serves the late-written assets and finds the
-  traced manifest, as the standalone check and an adapter probe show for
-  self-hosting; and
-- at least one production application has run with the flag.
+- the hosted `nextjs-route` demo, which builds with the flag, serves the maps
+  and assets through the demo CDN and passes a browser check; and
+- at least one production application has run with the flag on Vercel, which
+  shows that Vercel serves the late-written assets and finds the traced
+  manifest, as the standalone check and an adapter probe show for
+  self-hosting.
 
 `next build --webpack`, warm build caches, `basePath`, `assetPrefix`,
-`output: "standalone"`, and the map component are already covered.
+`output: "standalone"`, and the map component are already covered. The other
+Next examples and `build:graph` keep the default in-graph delivery covered.
 
 Revisit this record when Next offers a chunk-level hook or a documented chunk
 manifest that makes the marker scan unnecessary, or when a canary failure turns

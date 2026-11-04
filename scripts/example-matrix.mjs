@@ -57,7 +57,8 @@ export const EXAMPLE_MATRIX = [
       {
         path: "/de",
         htmlLang: "de",
-        substrings: ["Deutsch", "Plätze frei"],
+        // The catalog map link shows that out-of-graph delivery is on.
+        substrings: ["Deutsch", "Plätze frei", 'id="palamedes-client-catalogs"'],
       },
       {
         headers: { host: "de.lvh.me:4011" },
