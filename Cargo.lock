@@ -69,9 +69,9 @@ dependencies = [
 
 [[package]]
 name = "app-tracking"
-version = "0.5.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee74f98b29fc2b3e29d7096a345c2a264a10d5d43645281af9f64b12d825bd48"
+checksum = "15d354869e2aea7cd0e59f2d971ce3c610da4a47c6c6ff570bcc09c664ff9e3d"
 dependencies = [
  "getrandom 0.4.3",
  "semver",
