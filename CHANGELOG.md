@@ -117,6 +117,21 @@ history and use the migration guide for 2.0 behavior.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [2.1.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.0.0...palamedes-v2.1.0) (2026-11-04)
+
+
+### Features
+
+* **core:** add standalone number and date formatting ([#1486](https://github.com/sebastian-software/palamedes/issues/1486)) ([93060e0](https://github.com/sebastian-software/palamedes/commit/93060e02b509119e9c2c73dd1320ebc18badaad5))
+* **site:** restore editorial styling with Ardo 6.3.0 ([6a31a00](https://github.com/sebastian-software/palamedes/commit/6a31a00bc9da105df251756fa66b5c9bd7244715))
+* **vite-plugin:** share one message asset per output chunk ([56092a4](https://github.com/sebastian-software/palamedes/commit/56092a4c1e55a79989873973c5c29f2736ced966)), closes [#1483](https://github.com/sebastian-software/palamedes/issues/1483)
+
+
+### Bug Fixes
+
+* **deps:** adopt app-tracking 0.7.1 ([bb28c93](https://github.com/sebastian-software/palamedes/commit/bb28c9349c287a359c64d4f50569ff60d8fd08dd))
+* **site:** preserve muted footer text contrast ([b6f36e6](https://github.com/sebastian-software/palamedes/commit/b6f36e6bda0bf5e3c5dd6d41322dd91da4f352ce))
+
 ## [2.0.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.25.1...palamedes-v2.0.0) (2026-10-29)
 
 
