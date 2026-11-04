@@ -30,7 +30,8 @@
     "palamedes-po-loader.cjs",
     "palamedes-server-catalogs-loader.cjs",
     "catalog-fragment.cjs",
-    "client-catalog.mjs"
+    "client-catalog.mjs",
+    "client-catalog-preload.cjs"
   ],
   "type": "module",
   "sideEffects": false,

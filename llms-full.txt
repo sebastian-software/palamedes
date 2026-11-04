@@ -803,6 +803,7 @@ ADRs:
 - `/adr/028-readme-theme-composition.md`
 - `/adr/029-effective-flow-project-setup.md`
 - `/adr/030-next-client-catalogs-outside-the-bundler-graph.md`
+- `/adr/031-next-server-selected-client-chunk-permutations.md`
 
 ## Development commands
 
