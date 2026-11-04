@@ -6,11 +6,9 @@ import { catalogMatchesSource, catalogResourcePath, loadPalamedesConfig } from "
 import { compileCatalogArtifactSelectedAsync, renderCatalogModule } from "@palamedes/core-node";
 import { createMissingErrorMessage } from "@palamedes/transform";
 
-import { CLIENT_CATALOG_MANIFEST, type ClientCatalogManifest } from "./client-catalog-manifest";
+import { clientCatalogMapName } from "./client-catalog-map";
 
 const MARKER_PATTERN = /["'`]pmds-next:([0-9a-f]{12}):([\w-]+)["'`]/gu;
-// Group and module names are 12 hex characters, so this prefix cannot collide.
-const CATALOG_MAP_PREFIX = "catalogs.";
 const RENDERED_CATALOG_IMPORT =
   'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";';
 const RENDERED_CATALOG_DEFAULT_EXPORT = "export default { messages };";
@@ -22,8 +20,8 @@ export type EmitClientCatalogAssetsOptions = {
   projectRoot: string;
   configPath?: string;
   failOnMissing: boolean;
-  /** URL prefix for `/_next/static`, from `assetPrefix` or `basePath`. */
-  publicPrefix: string;
+  /** The build token withPalamedes() inlined into the server code. */
+  buildToken: string;
 };
 
 async function listChunks(directory: string): Promise<string[]> {
@@ -64,10 +62,11 @@ function mergeSelections(selections: Record<string, string>[]): Record<string, s
 
 /*
  * One map per locale lists every translated module, so a soft navigation to
- * any route finds its asset without another lookup. It is a content-hashed
- * static module: the document carries only its URL, and the browser caches it
- * across pages. Module keys have a fixed length, so each asset lists its
- * modules as one concatenated string, and asset names are relative to the map.
+ * any route finds its asset without another lookup. It is a static module
+ * named by the build token: the document carries only its URL, and the
+ * browser caches it across pages. Module keys have a fixed length, so each
+ * asset lists its modules as one concatenated string, and asset names are
+ * relative to the map.
  */
 function renderCatalogMap(locale: string, assets: Record<string, string[]>): string {
   const entries = Object.entries(assets)
@@ -89,7 +88,7 @@ function groupName(keys: string[]): string {
  */
 export async function emitClientCatalogAssets(
   options: EmitClientCatalogAssetsOptions,
-): Promise<ClientCatalogManifest> {
+): Promise<Record<string, string>> {
   const staticDir = path.join(options.distDir, "static");
   const sidecars = new Map<string, Sidecar>();
   const chunkKeys = new Map<string, string[]>();
@@ -177,7 +176,8 @@ export async function emitClientCatalogAssets(
   const outputDir = path.join(staticDir, "palamedes");
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
-  const manifest: ClientCatalogManifest = { maps: {} };
+  // Locale to the file name of its map, for the build checks.
+  const maps: Record<string, string> = {};
   for (const locale of cfg.locales) {
     const assets: Record<string, string[]> = {};
     const compiled = await compileLocale(locale);
@@ -195,15 +195,14 @@ export async function emitClientCatalogAssets(
         assets[fileName] = members;
       }
     }
-    const map = renderCatalogMap(locale, assets);
-    const mapHash = createHash("sha256").update(map).digest("hex").slice(0, 8);
-    const mapName = `${CATALOG_MAP_PREFIX}${locale}-${mapHash}.js`;
-    await writeFile(path.join(outputDir, mapName), map);
-    manifest.maps[locale] = `${options.publicPrefix}/_next/static/palamedes/${mapName}`;
+    const mapName = clientCatalogMapName(locale, options.buildToken);
+    if (!mapName) {
+      throw new Error(
+        `Palamedes Next client catalogs: locale "${locale}" cannot name a catalog map. Use letters, digits, "_" and "-" in locale codes.`,
+      );
+    }
+    await writeFile(path.join(outputDir, mapName), renderCatalogMap(locale, assets));
+    maps[locale] = mapName;
   }
-  await writeFile(
-    path.join(options.distDir, CLIENT_CATALOG_MANIFEST),
-    JSON.stringify(manifest, null, 2),
-  );
-  return manifest;
+  return maps;
 }

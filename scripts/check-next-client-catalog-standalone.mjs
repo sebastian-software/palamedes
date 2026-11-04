@@ -11,7 +11,7 @@
 // port unless `PORT` is set.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -27,7 +27,15 @@ assert.ok(
 
 const serverFiles = JSON.parse(readFileSync(path.join(distDir, "required-server-files.json")));
 const appDir = path.relative(serverFiles.config.outputFileTracingRoot, exampleDir);
-const manifest = JSON.parse(readFileSync(path.join(distDir, "palamedes-client-catalogs.json")));
+// The server derives each map URL from the build token it inlined; the maps on
+// disk carry the same token. The example sets no assetPrefix or basePath.
+const maps = Object.fromEntries(
+  readdirSync(path.join(distDir, "static/palamedes")).flatMap((fileName) => {
+    const locale = /^catalogs\.([\w-]+)\.[0-9a-f]{12}\.js$/u.exec(fileName)?.[1];
+    return locale ? [[locale, `/_next/static/palamedes/${fileName}`]] : [];
+  }),
+);
+assert.notEqual(Object.keys(maps).length, 0, "The build wrote no client catalog maps");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -83,7 +91,7 @@ try {
   await waitForServer(origin, server, output);
 
   let assets = 0;
-  for (const [locale, mapUrl] of Object.entries(manifest.maps)) {
+  for (const [locale, mapUrl] of Object.entries(maps)) {
     const response = await fetch(`${origin}/${locale}`);
     assert.equal(response.status, 200, `${locale} document: HTTP ${response.status}`);
     const html = await response.text();
@@ -111,7 +119,7 @@ try {
     }
   }
   console.log(
-    `[next-catalog-assets] standalone server outside the project rendered ${Object.keys(manifest.maps).length} locale maps and served ${assets} message assets`,
+    `[next-catalog-assets] standalone server outside the project rendered ${Object.keys(maps).length} locale maps and served ${assets} message assets`,
   );
 } catch (error) {
   if (output.length > 0) console.error(`Standalone server output:\n${output.join("")}`);

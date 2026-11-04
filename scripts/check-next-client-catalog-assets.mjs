@@ -7,7 +7,7 @@
 //   node scripts/check-next-client-catalog-assets.mjs <example-dir> [dist-dir]
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { readFileSync, readdirSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -58,14 +58,20 @@ assert.equal(
   "Asset delivery must not leave in-graph catalog fragments in the client chunks",
 );
 
-const manifestPath = path.join(distDir, "palamedes-client-catalogs.json");
-assert.ok(existsSync(manifestPath), `Missing ${manifestPath}`);
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-assert.deepEqual(Object.keys(manifest.maps).sort(), [...config.locales].sort());
+// Each locale's map is named by the build token that the server code inlines.
+const assetDir = path.join(distDir, "static/palamedes");
+const maps = new Map();
+const tokens = new Set();
+for (const fileName of readdirSync(assetDir)) {
+  const match = /^catalogs\.([\w-]+)\.([0-9a-f]{12})\.js$/u.exec(fileName);
+  if (!match) continue;
+  maps.set(match[1], fileName);
+  tokens.add(match[2]);
+}
+assert.deepEqual([...maps.keys()].sort(), [...config.locales].sort());
+assert.equal(tokens.size, 1, "Every catalog map of one build must carry the same build token");
 
 // Assets are browser ES modules; the example package is not "type": "module".
-const staticFile = (url) =>
-  path.join(distDir, url.slice(url.indexOf("/_next/") + "/_next/".length));
 const importFile = (file) =>
   import(`data:text/javascript;base64,${readFileSync(file).toString("base64")}`);
 
@@ -73,9 +79,9 @@ let assets = 0;
 for (const locale of config.locales) {
   // Read the map the browser reads: asset names relative to the map, each
   // listing its modules as concatenated 12-character keys.
-  const mapFile = staticFile(manifest.maps[locale]);
+  const mapFile = path.join(assetDir, maps.get(locale));
   const { default: map } = await importFile(mapFile);
-  assert.equal(map.locale, locale, `${manifest.maps[locale]} is not the ${locale} map`);
+  assert.equal(map.locale, locale, `${maps.get(locale)} is not the ${locale} map`);
   const moduleAssets = new Map();
   for (const [fileName, keys] of Object.entries(map.assets)) {
     assert.equal(keys.length % 12, 0, `${fileName} lists a malformed module key`);

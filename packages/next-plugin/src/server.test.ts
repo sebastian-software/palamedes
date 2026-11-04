@@ -1,11 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createI18n as createCoreI18n } from "@palamedes/core";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import "next/dist/server/node-environment.js";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external.js";
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
@@ -62,58 +60,6 @@ describe("@palamedes/next-plugin/server", () => {
         expect(scope.get()).toBe(i18n);
         expect(getI18n()).toBe(i18n);
       });
-    });
-  });
-});
-
-describe("readClientCatalogManifest", () => {
-  let projectDir: string;
-
-  beforeEach(() => {
-    vi.resetModules();
-    projectDir = mkdtempSync(path.join(tmpdir(), "palamedes-next-map-"));
-    vi.spyOn(process, "cwd").mockReturnValue(projectDir);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-    rmSync(projectDir, { recursive: true, force: true });
-  });
-
-  it("reads the manifest from the dist dir below the server's working directory", async () => {
-    vi.stubEnv("PALAMEDES_NEXT_DIST_DIR", "build/out");
-    mkdirSync(path.join(projectDir, "build/out"), { recursive: true });
-    writeFileSync(
-      path.join(projectDir, "build/out/palamedes-client-catalogs.json"),
-      JSON.stringify({ maps: { de: "/_next/static/palamedes/catalogs.de-1.js" } }),
-    );
-    const { readClientCatalogManifest } = await import("./client-catalog-manifest");
-
-    expect(readClientCatalogManifest()).toEqual({
-      maps: { de: "/_next/static/palamedes/catalogs.de-1.js" },
-    });
-  });
-
-  it("returns null when the build delivers catalogs in the module graph", async () => {
-    vi.stubEnv("PALAMEDES_NEXT_DIST_DIR", "");
-    const { readClientCatalogManifest } = await import("./client-catalog-manifest");
-
-    expect(readClientCatalogManifest()).toBeNull();
-  });
-
-  it("fails with the manifest path when a deployment lost the manifest", async () => {
-    vi.stubEnv("PALAMEDES_NEXT_DIST_DIR", ".next");
-    const { PalamedesClientCatalogs } = await import("./server");
-    const manifestPath = path.join(projectDir, ".next/palamedes-client-catalogs.json");
-
-    expect(() => PalamedesClientCatalogs({ locale: "de" })).toThrow(manifestPath);
-
-    // A failed read is not cached, so the next render sees a restored file.
-    mkdirSync(path.join(projectDir, ".next"));
-    writeFileSync(manifestPath, JSON.stringify({ maps: { de: "/catalogs.de-1.js" } }));
-    expect(PalamedesClientCatalogs({ locale: "de" })?.props).toMatchObject({
-      href: "/catalogs.de-1.js",
     });
   });
 });
