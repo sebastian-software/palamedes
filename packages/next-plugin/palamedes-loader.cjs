@@ -156,7 +156,7 @@ function clientPermutationBootstrap(config, sourcePath, compiledIds) {
   const identifier = `__pmds_${marker.key}`;
   return `import { createI18n as ${identifier}_createI18n, defineCompiledCatalog as ${identifier}_defineCompiledCatalog } from "@palamedes/core/compiled";
 import { initializeClientI18n as ${identifier}_initializeClientI18n } from "@palamedes/runtime/internal";
-import { clientCatalogMessages as ${identifier}_clientCatalogMessages } from "@palamedes/next-plugin/client-catalog-messages";
+import { clientCatalogMessages as ${identifier}_clientCatalogMessages } from "@palamedes/next-plugin/client-catalog";
 const ${identifier}_locale = document.documentElement.lang;
 ${identifier}_initializeClientI18n(
   ${identifier}_locale,

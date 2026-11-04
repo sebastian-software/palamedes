@@ -138,12 +138,14 @@ export function inlineMessageExpression(messages: Record<string, string>): strin
  */
 export function renderManifestAdapter(
   locales: readonly string[],
+  fallback: string,
   variants: Readonly<Record<string, readonly string[]>>,
 ): string {
   return `
 ${ADAPTER_MARKER}
 (function () {
   var locales = ${JSON.stringify(locales)};
+  var fallback = ${JSON.stringify(fallback)};
   var variants = ${JSON.stringify(variants)};
   var keys = Object.keys(variants);
   var resolve = null;
@@ -177,7 +179,7 @@ ${ADAPTER_MARKER}
           if (resolve === null) {
             throw new Error("Palamedes client catalog permutations: this process renders without a bound locale resolver, so it cannot select locale chunks. Call bindClientCatalogPermutations() from register() in instrumentation.ts; during next build, the prerender workers need the Palamedes Node preload (experimental.workerThreads is not supported).");
           }
-          var index = locales.indexOf(resolve(locales));
+          var index = locales.indexOf(resolve(locales, fallback));
           if (index === -1) throw new Error("Palamedes client catalog permutations: the resolved locale has no chunk permutation.");
           return tables[index];
         },
@@ -257,6 +259,8 @@ export type ClientCatalogPermutationReport = {
   locales: string[];
   /** Neutral chunk path to its variant path per locale, in `locales` order. */
   variants: Record<string, string[]>;
+  /** Renders without a known locale use this locale's copies. */
+  fallbackLocale: string;
   /** Client reference manifests that received the adapter. */
   manifests: string[];
   /** Hints removed from react-loadable-manifest.json files. */
@@ -315,11 +319,7 @@ export async function emitClientCatalogPermutations(
   for (const file of await findFiles(distDir, "react-loadable-manifest.json")) {
     if (file.includes(`${path.sep}standalone${path.sep}`)) continue;
     const manifest = JSON.parse(await readFile(file, "utf8")) as LoadableManifest;
-    for (const entry of Object.values(manifest)) {
-      if (Array.isArray(entry.files)) {
-        for (const hint of entry.files) if (affected.has(hint)) covered.add(hint);
-      }
-    }
+    // Hints are removed below, so they count for nothing here.
     removedLoadableHints += filterLoadableManifest(manifest, affected);
     await writeFile(file, JSON.stringify(manifest));
   }
@@ -328,7 +328,12 @@ export async function emitClientCatalogPermutations(
     path.join(distDir, "server", "app"),
     /_client-reference-manifest\.js$/u,
   );
-  const adapter = renderManifestAdapter(compiler.locales, variants);
+  if (!compiler.locales.includes(compiler.sourceLocale)) {
+    throw new Error(
+      `Palamedes client catalog permutations: the source locale "${compiler.sourceLocale}" is not in the configured locales, so renders without a locale have no fallback chunk copy.`,
+    );
+  }
+  const adapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants);
   for (const file of manifests) {
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
     for (const key of affected) if (source.includes(key)) covered.add(key);
@@ -344,6 +349,7 @@ export async function emitClientCatalogPermutations(
   }
   return {
     locales: compiler.locales,
+    fallbackLocale: compiler.sourceLocale,
     variants,
     manifests: manifests.map(toKey),
     removedLoadableHints,

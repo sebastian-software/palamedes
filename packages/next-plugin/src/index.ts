@@ -216,9 +216,9 @@ export type WithPalamedesOptions = {
    * Experimental: deliver production client catalogs as per-locale copies of
    * the client chunks that use them, selected by the server per request.
    * Turbopack only. Call `bindClientCatalogPermutations()` from
-   * `@palamedes/next-plugin/server` in `instrumentation.ts`; without a root
-   * `[locale]` param, pass the resolved locale from `proxy.ts` with
-   * `setRequestLocale()` from `@palamedes/next-plugin/proxy`. Development
+   * `@palamedes/next-plugin/server` in `instrumentation.ts`. The locale comes
+   * from the `x-palamedes-locale` header a Proxy sets, else from the root
+   * route param named `locale`, else from the source locale. Development
    * keeps the in-graph fragments. Mutually exclusive with
    * `experimentalClientCatalogAssets`.
    * @default false
@@ -477,12 +477,13 @@ function hasWorkspaces(packageJsonPath: string) {
 
 /*
  * Next's prerender workers are child processes that inherit NODE_OPTIONS from
- * the build process after it evaluated this config, and instrumentation.ts
- * does not run in them. The preload binds the manifests once the post-compile
- * step wrote them; the workers start after that step.
+ * the build process, and instrumentation.ts does not run in them. The preload
+ * is installed from the post-compile hook, after the manifests exist and
+ * before the workers start, so `next start` and other processes that evaluate
+ * the config never see it.
  */
 function installClientCatalogPreload(absoluteDistDir: string): void {
-  const preload = require.resolve("@palamedes/next-plugin/client-catalog-preload");
+  const preload = require.resolve("../client-catalog-preload.cjs");
   process.env[CLIENT_CATALOG_PERMUTATIONS_DIST_ENV] = absoluteDistDir;
   const current = process.env.NODE_OPTIONS ?? "";
   if (current.includes(preload)) return;
@@ -693,9 +694,6 @@ export function withPalamedes(
       ? (process.env[CLIENT_CATALOG_BUILD_ENV] ??= randomBytes(6).toString("hex"))
       : undefined;
   const distDir = baseConfig.distDir ?? ".next";
-  if (clientCatalogDelivery === "permutations") {
-    installClientCatalogPreload(path.join(projectRoot, distDir));
-  }
   const clientCatalogConfig: Partial<NextConfig> =
     clientCatalogDelivery === "permutations"
       ? {
@@ -713,6 +711,7 @@ export function withPalamedes(
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
                 failOnMissing,
               });
+              installClientCatalogPreload(metadata.distDir);
               console.log(
                 `Palamedes wrote ${report.locales.length} locale copies of ${Object.keys(report.variants).length} client chunks and bound ${report.manifests.length} client reference manifests.`,
               );

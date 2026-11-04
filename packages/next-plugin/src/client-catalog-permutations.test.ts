@@ -163,7 +163,7 @@ globalThis.__RSC_MANIFEST["/[locale]/page"] = ${JSON.stringify({
       entryJSFiles: { layout: ["static/chunks/page.js", "static/chunks/shared.js"] },
     })};`;
     const context: Record<string, unknown> = { process: { env: {} } };
-    vm.runInNewContext(manifest + renderManifestAdapter(["de", "en"], variants), context);
+    vm.runInNewContext(manifest + renderManifestAdapter(["de", "en"], "en", variants), context);
     const route = (
       context.__RSC_MANIFEST as Record<
         string,
@@ -184,12 +184,15 @@ globalThis.__RSC_MANIFEST["/[locale]/page"] = ${JSON.stringify({
   it("returns the bound locale's table with prefixes and queries kept", () => {
     const { context, route } = evaluate();
     let locale = "de";
-    (context.__PALAMEDES_CLIENT_CATALOG_BIND as (fn: (locales: string[]) => string) => void)(
-      (locales) => {
-        expect(locales).toEqual(["de", "en"]);
-        return locale;
-      },
-    );
+    (
+      context.__PALAMEDES_CLIENT_CATALOG_BIND as (
+        fn: (locales: string[], fallback: string) => string,
+      ) => void
+    )((locales, fallback) => {
+      expect(locales).toEqual(["de", "en"]);
+      expect(fallback).toBe("en");
+      return locale;
+    });
     expect(route.clientModules!.a!.chunks).toEqual(["/_next/static/chunks/page.de-1.js?dpl=d1"]);
     expect(route.entryJSFiles!.layout).toEqual([
       "static/chunks/page.de-1.js",
@@ -207,42 +210,45 @@ globalThis.__RSC_MANIFEST["/[locale]/page"] = ${JSON.stringify({
 
 describe("locale resolution", () => {
   const locales = ["de", "en"];
-  type Render = Parameters<typeof resolveRenderLocale>[1];
-  type Unit = Parameters<typeof resolveRenderLocale>[2];
+  type Render = Parameters<typeof resolveRenderLocale>[2];
+  type Unit = Parameters<typeof resolveRenderLocale>[3];
   const render = (route: string) => ({ route }) as unknown as Render;
   const unit = (fields: Record<string, unknown>) => fields as unknown as Unit;
+  const header = (locale: string) => new Headers({ "x-palamedes-locale": locale });
 
-  it("prefers a root param with a configured locale over the header", () => {
-    const headers = new Headers({ "x-palamedes-locale": "en" });
+  it("prefers the Proxy header over the root param named locale", () => {
     expect(
       resolveRenderLocale(
         locales,
+        "en",
         undefined,
-        unit({ rootParams: { slug: "x", locale: "de" }, headers }),
+        unit({ rootParams: { locale: "de" }, headers: header("en") }),
       ),
-    ).toBe("de");
-    expect(
-      resolveRenderLocale(locales, undefined, unit({ rootParams: { slug: "x" }, headers })),
     ).toBe("en");
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { locale: "de" } })),
+    ).toBe("de");
+  });
+
+  it("does not guess from other params and falls back for unknown or missing locales", () => {
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { slug: "de" } })),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { locale: "zz" } })),
+    ).toBe("en");
+    expect(resolveRenderLocale(locales, "en", undefined, unit({ headers: header("fr") }))).toBe(
+      "en",
+    );
+    expect(resolveRenderLocale(locales, "de", undefined, undefined)).toBe("de");
   });
 
   it("memoizes per render, so later serialization without a unit store keeps the locale", () => {
     const work = render("/[locale]/page");
-    expect(resolveRenderLocale(locales, work, unit({ rootParams: { locale: "de" } }))).toBe("de");
-    expect(resolveRenderLocale(locales, work, undefined)).toBe("de");
-    expect(resolveRenderLocale(locales, work, unit({ rootParams: { locale: "en" } }))).toBe("de");
-  });
-
-  it("fails without a locale or with one the build did not compile", () => {
-    expect(() => resolveRenderLocale(locales, render("/x"), unit({ rootParams: {} }))).toThrow(
-      /no locale for this render of \/x/u,
+    expect(resolveRenderLocale(locales, "en", work, unit({ rootParams: { locale: "de" } }))).toBe(
+      "de",
     );
-    expect(() =>
-      resolveRenderLocale(
-        locales,
-        undefined,
-        unit({ headers: new Headers({ "x-palamedes-locale": "fr" }) }),
-      ),
-    ).toThrow(/"fr" has no chunk permutation/u);
+    expect(resolveRenderLocale(locales, "en", work, undefined)).toBe("de");
+    expect(resolveRenderLocale(locales, "en", work, unit({ headers: header("en") }))).toBe("de");
   });
 });

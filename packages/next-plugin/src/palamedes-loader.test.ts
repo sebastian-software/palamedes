@@ -387,7 +387,7 @@ describe("palamedes-loader.cjs", () => {
 
     expect(output).not.toContain("await ");
     expect(output).not.toContain("import(");
-    expect(output).toContain('from "@palamedes/next-plugin/client-catalog-messages"');
+    expect(output).toContain('from "@palamedes/next-plugin/client-catalog"');
     const marker = /_clientCatalogMessages\("pmds-next:([0-9a-f]{12}):([\w-]+)"\)/u.exec(output);
     expect(marker).not.toBeNull();
     expect(JSON.parse(Buffer.from(marker![2]!, "base64url").toString("utf8")).ids).toEqual([

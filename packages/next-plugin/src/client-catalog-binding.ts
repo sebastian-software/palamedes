@@ -6,7 +6,8 @@ import type { evalManifest as evalManifestType } from "next/dist/server/load-man
 import type { workAsyncStorage as workAsyncStorageType } from "next/dist/server/app-render/work-async-storage.external.js";
 import type { workUnitAsyncStorage as workUnitAsyncStorageType } from "next/dist/server/app-render/work-unit-async-storage.external.js";
 
-import { CLIENT_CATALOG_LOCALE_HEADER } from "./client-catalog-locale-header";
+/** The request header an app's Proxy sets with the locale it resolved. */
+export const CLIENT_CATALOG_LOCALE_HEADER = "x-palamedes-locale";
 
 /*
  * Binds the locale resolver into the client reference manifests of a
@@ -24,7 +25,7 @@ export const CLIENT_CATALOG_PERMUTATIONS_ENV = "PALAMEDES_NEXT_CATALOG_PERMUTATI
 export const CLIENT_CATALOG_PERMUTATIONS_DIST_ENV = "__PALAMEDES_NEXT_CATALOG_PERMUTATIONS_DIST";
 const BIND_GLOBAL = "__PALAMEDES_CLIENT_CATALOG_BIND";
 
-type LocaleResolver = (locales: readonly string[]) => string;
+type LocaleResolver = (locales: readonly string[], fallback: string) => string;
 type BindableManifest = { [BIND_GLOBAL]?: (resolve: LocaleResolver) => void };
 
 type RenderStore = ReturnType<typeof workAsyncStorageType.getStore>;
@@ -33,39 +34,34 @@ type UnitStore = ReturnType<typeof workUnitAsyncStorageType.getStore>;
 const localeByRender = new WeakMap<object, string>();
 
 /*
- * The root param wins: Next matched it, so a client cannot change it. The
- * header is for trees without a locale segment; the app's Proxy sets it with
- * setRequestLocale() and overwrites incoming values. The result is memoized
- * per render because Next serializes segment prefetch files and ISR output
- * after the request store is gone.
+ * The header wins: the app's Proxy sets it from its own strategy and
+ * overwrites any incoming value, so it is the explicit, trusted choice. Without
+ * it, the root route param named `locale` decides; another param name or a
+ * param value that happens to look like a locale is not guessed at. Anything
+ * else, including an unknown locale, renders with the fallback locale, so
+ * `notFound()`, `_not-found`, and `_global-error` work without the app
+ * validating locales in the Proxy. The result is memoized per render because
+ * Next serializes segment prefetch files and ISR output after the request
+ * store is gone.
  */
 export function resolveRenderLocale(
   locales: readonly string[],
+  fallback: string,
   render: RenderStore,
   unit: UnitStore,
 ): string {
   const memoized = render && localeByRender.get(render);
   if (memoized) return memoized;
 
-  let locale: string | undefined;
-  if (unit && "rootParams" in unit && unit.rootParams) {
-    locale = Object.values(unit.rootParams).find(
-      (value): value is string => typeof value === "string" && locales.includes(value),
-    );
+  let candidate: unknown;
+  if (unit && "headers" in unit && unit.headers) {
+    candidate = unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER);
   }
-  if (!locale && unit && "headers" in unit && unit.headers) {
-    locale = unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER) ?? undefined;
+  if (!candidate && unit && "rootParams" in unit && unit.rootParams) {
+    candidate = unit.rootParams.locale;
   }
-  if (!locale) {
-    throw new Error(
-      `Palamedes client catalog permutations: no locale for this render${render ? ` of ${render.route}` : ""}. Put the locale in a root route param, or resolve it in proxy.ts and pass it with setRequestLocale() from @palamedes/next-plugin/proxy.`,
-    );
-  }
-  if (!locales.includes(locale)) {
-    throw new Error(
-      `Palamedes client catalog permutations: locale "${locale}" has no chunk permutation; the build compiled ${locales.join(", ")}.`,
-    );
-  }
+  const locale =
+    typeof candidate === "string" && locales.includes(candidate) ? candidate : fallback;
   if (render) localeByRender.set(render, locale);
   return locale;
 }
@@ -112,10 +108,11 @@ export function bindClientCatalogPermutationsAt(distDir: string): string[] {
     storages = loaded;
     return loaded;
   }
-  const resolve: LocaleResolver = (locales) => {
+  const resolve: LocaleResolver = (locales, fallback) => {
     const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
     return resolveRenderLocale(
       locales,
+      fallback,
       workAsyncStorage.getStore(),
       workUnitAsyncStorage.getStore(),
     );

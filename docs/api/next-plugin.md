@@ -20,8 +20,8 @@ for the storage/import boundary.
 - `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
 - `PalamedesClientCatalogs` from `@palamedes/next-plugin/server` (experimental,
   see [Client catalog assets](#client-catalog-assets-experimental))
-- `bindClientCatalogPermutations` from `@palamedes/next-plugin/server` and
-  `setRequestLocale` from `@palamedes/next-plugin/proxy` (experimental, see
+- `bindClientCatalogPermutations` from `@palamedes/next-plugin/server`
+  (experimental, see
   [Client chunk permutations](#client-chunk-permutations-experimental))
 
 `withPalamedes()` also wires these **Internal** subpaths into the Next.js
@@ -350,28 +350,42 @@ It looks for the build output under `process.cwd()` and the configured
 supported. A render in a process without a binding throws instead of serving
 locale-neutral chunks.
 
-The locale comes from the first root route param whose value is a configured
-locale, so an app under `app/[locale]/` needs nothing else. An app that
-resolves the locale from a cookie, subdomain, or domain hands it over from
-`proxy.ts`, optionally together with a rewrite to an internal locale route:
+The server picks the locale before any layout runs, in this order:
+
+1. the `x-palamedes-locale` request header, which the app's Proxy sets from
+   its own strategy (cookie, subdomain, domain, or anything else), overwriting
+   whatever the client sent;
+2. otherwise the root route param named `locale`, so an app under
+   `app/[locale]/` needs no Proxy;
+3. otherwise the source locale from `palamedes.yaml`.
+
+Other param names are not guessed at: name the segment `[locale]` or set the
+header. Setting the header takes two lines in `proxy.ts`, optionally together
+with a rewrite to an internal route:
 
 ```ts
 import { NextResponse, type NextRequest } from "next/server";
-import { setRequestLocale } from "@palamedes/next-plugin/proxy";
 
 export function proxy(request: NextRequest) {
-  const locale = resolveLocale(request);
-  return NextResponse.next({
-    request: { headers: setRequestLocale(request.headers, locale) },
-  });
+  const headers = new Headers(request.headers);
+  headers.set("x-palamedes-locale", resolveLocale(request));
+  return NextResponse.next({ request: { headers } });
 }
 ```
 
-The helper overwrites any incoming `x-palamedes-locale` header. A page that is
-prerendered at build time needs the locale in a root param, because no Proxy
-runs there. Locale switches must be document navigations: every copy of a
-chunk registers the same module IDs, so a soft navigation keeps the loaded
-locale's modules.
+A route that gets its locale from the header alone, such as a cookie strategy
+on fixed paths, has to render dynamically: declare
+`export const dynamic = "force-dynamic"` on the segment (or use another
+dynamic API there), because chunk selection runs before the layout, and a
+page prerendered at build time has no request headers. Pages prerendered at
+build time otherwise need the locale in the `[locale]` param.
+
+A render with no locale or an unknown one, for example `/zz` in a
+`[locale]` tree, uses the source locale's chunk copies and proceeds, so the
+layout's `notFound()`, the `_not-found` route, and `global-error.tsx` work
+without the Proxy validating locales. Locale switches must be document
+navigations: every copy of a chunk registers the same module IDs, so a soft
+navigation keeps the loaded locale's modules.
 
 The build rejects translations in bootstrap code (anything
 `build-manifest.json` names, such as `instrumentation-client`), cyclic imports

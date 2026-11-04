@@ -196,6 +196,19 @@ try {
   }
   assert.notEqual(lazy, 0, "No served chunk copy named a lazily imported chunk copy");
 
+  // An unknown locale reaches the layout's notFound(): chunk selection falls
+  // back to the source locale instead of failing before the app can answer.
+  // Next answers the document with 404 and a Flight navigation with its
+  // not-found payload under 200.
+  for (const [headers, statuses] of [
+    [{}, [404]],
+    [{ RSC: "1" }, [200, 404]],
+  ]) {
+    const response = await fetch(`${origin}/zz`, { headers });
+    assert.ok(statuses.includes(response.status), `/zz: HTTP ${response.status}`);
+    assertLocaleReferences(await response.text(), "en", "/zz not-found response");
+  }
+
   // Mixed locales in flight at once must not share a resolved locale.
   const concurrent = Array.from({ length: 24 }, (_, index) => {
     const locale = LOCALES[index % LOCALES.length];

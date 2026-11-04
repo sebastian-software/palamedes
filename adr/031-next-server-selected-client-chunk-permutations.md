@@ -20,11 +20,11 @@ keep the in-graph fragments.
 
 - **Marker literal, synchronous.** The transform loader leaves the same
   `"pmds-next:<key>:<payload>"` literal as asset mode in each translated
-  client module, but passes it to a synchronous `clientCatalogMessages()`
-  from `@palamedes/next-plugin/client-catalog-messages` with static imports
-  and no top-level `await`. The post-compile step replaces the literal; a
-  module that still receives the string was loaded from a locale-neutral chunk
-  and throws with the module path.
+  client module, but passes it to the synchronous `clientCatalogMessages()`
+  of `@palamedes/next-plugin/client-catalog` with static imports and no
+  top-level `await`. The post-compile step replaces the literal; a module
+  that still receives the string was loaded from a locale-neutral chunk and
+  throws with the module path.
 - **Permutations after compile.** `compiler.runAfterProductionCompile` scans
   `.next/static/chunks` for markers, compiles each catalog once per locale,
   and writes `<chunk>.<locale>-<hash8>.js` next to each affected chunk, with
@@ -44,29 +44,36 @@ keep the in-graph fragments.
   output, so the tables ship without a trace edit; the duplication per route
   stays on the server. The adapter exposes one bind function on the
   manifest's VM global. An unbound getter throws; Next's `deepFreeze()` pass
-  never reads it because it enumerates properties.
+  does not read it because it only visits enumerable properties.
 - **Binding in every rendering process.** `bindClientCatalogPermutations()`
   from `@palamedes/next-plugin/server` evaluates each manifest through Next's
   cached `evalManifest()` and binds the resolver. The app calls it from
   `register()` in `instrumentation.ts`, which runs before the first render in
   `next start`, standalone `server.js`, and hosted adapters. The build's
-  prerender workers do not run that hook, so `withPalamedes()` appends a Node
-  preload to `NODE_OPTIONS` while the build evaluates the config; the workers
-  inherit it and start after the post-compile step wrote the manifests.
-- **Locale source.** The resolver reads the first root route param whose
-  value is a configured locale, then the `x-palamedes-locale` request header,
-  and memoizes the result per render in a `WeakMap` keyed by Next's render
-  store, because segment prefetch files and ISR output are serialized after
-  the request store is gone. An app whose tree has no root locale segment
-  resolves the locale in `proxy.ts` and passes it with `setRequestLocale()`
-  from `@palamedes/next-plugin/proxy`, which overwrites any incoming value.
-  A render without a locale, or with one the build did not compile, fails.
+  prerender workers do not run that hook, so the post-compile step, after it
+  wrote the manifests, appends a Node preload to `NODE_OPTIONS`; the workers
+  start afterwards and inherit it. Evaluating the config has no such side
+  effect, so `next start` and the app's own child processes never see it.
+- **Locale source.** The resolver reads the `x-palamedes-locale` request
+  header first: the app's Proxy sets it from its own strategy with
+  `new Headers(request.headers)` and `headers.set(...)`, overwriting any
+  incoming value, so it is the explicit, trusted choice. Without it, the root
+  route param named `locale` decides; other param names and locale-looking
+  values are not guessed at, because a `[slug]` route with a cookie locale
+  would otherwise get the cookie's HTML with the slug's chunks. Anything else,
+  including an unknown locale, renders with the source locale's copies, so a
+  layout's `notFound()`, the `_not-found` route, and `global-error.tsx` work
+  without Proxy validation. The result is memoized per render in a `WeakMap`
+  keyed by Next's render store, because segment prefetch files and ISR output
+  are serialized after the request store is gone. A header-only route has to
+  render dynamically, since selection runs before the layout and prerendering
+  has no headers.
 - **Rejected at build time.** A webpack build, translated code reachable from
   `build-manifest.json` (the bootstrap scripts, including
   `instrumentation-client`), a cyclic affected chunk graph, and an affected
-  chunk that no manifest, importer, or `react-loadable-manifest.json` entry
-  names fail with a Palamedes error. Affected JavaScript entries leave
-  `react-loadable-manifest.json`; CSS entries stay.
+  chunk that no manifest or importer chunk names fail with a Palamedes error.
+  Affected JavaScript entries leave `react-loadable-manifest.json` and do not
+  count as coverage; CSS entries stay.
 - **Documented, not solved.** Per-variant source maps, Subresource Integrity
   for the copies, the Edge runtime, `experimental.workerThreads`, and the
   unknown-locale fallback segments of Cache Components are unsupported. A
@@ -91,19 +98,23 @@ until the result is memoized per render; and that a translation-only catalog
 edit renames one locale's affected copies and their importers while every
 other file keeps its name.
 
-The mode depends on these Next internals. Each is version-verified against
-`16.4.1`, and the build or the first render fails when one changes:
+The mode depends on these Next internals, verified against `16.4.1`. The
+right-hand column says what happens when one changes; not every change fails
+fast, and the contract check in `scripts/check-next-client-catalog-permutations.mjs`
+is the guard for the quiet ones. `instrumentation.ts` and
+`compiler.runAfterProductionCompile` are public Next contracts and not listed.
 
-| Internal                                                                                                          | Use                                                                            | If it changes                                                                 |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `next/dist/server/load-manifest.external.js`, `evalManifest(path)`                                                | Returns the cached, frozen VM context of a manifest by absolute path.          | Binding finds no bind function; the first render read throws.                 |
-| `server/app/**/*_client-reference-manifest.js` assigning `globalThis.__RSC_MANIFEST[route]`                       | Chunk arrays with `static/chunks/<name>.js` entries become locale getters.     | No array matches; the build fails because affected chunks are uncovered.      |
-| `react-loadable-manifest.json` entries `{ files: string[] }`                                                      | Affected JavaScript hints are removed.                                         | The build fails on the unexpected shape.                                      |
-| `build-manifest.json`                                                                                             | Rejects translated bootstrap chunks.                                           | A translated bootstrap chunk could pass; the neutral chunk then throws.       |
-| Turbopack browser chunks naming lazy chunks as `"static/chunks/<name>.js"` literals                               | Importer copies get rewritten literals.                                        | A lazy neutral chunk loads and its marker throws in the browser.              |
-| `work-async-storage.external.js` and `work-unit-async-storage.external.js` (`rootParams`, `headers`)              | Locale source and per-render memo.                                             | The resolver finds no locale and the render fails.                            |
-| Prerender workers as child processes that inherit `NODE_OPTIONS` after the config was evaluated                   | The preload binds the manifests in each worker.                                | Prerendering fails on the first unbound read.                                 |
-| `instrumentation.register()` before the first render; `evalManifest` paths of `<projectDir>/<distDir>/server/app` | Runtime binding and its directory, `process.cwd()` plus the inlined `distDir`. | The bind call finds no manifests and throws, or the first render read throws. |
+| Internal                                                                                                 | Use                                                                              | If it changes                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next/dist/server/load-manifest.external.js`, `evalManifest(path)`                                       | Returns the cached, frozen VM context of a manifest by absolute path.            | Binding finds no bind function or another context; the first render read throws.                                                                                                                                                      |
+| `server/app/**/*_client-reference-manifest.js` assigning `globalThis.__RSC_MANIFEST[route]`              | Chunk arrays with `static/chunks/<name>.js` entries become locale getters.       | A renamed file or a non-array shape leaves entry chunks uncovered and fails the build; the coverage check is a substring match, so a changed shape that still contains the paths passes it without getters and serves neutral chunks. |
+| `deepFreeze()` visiting enumerable properties; consumers reading `chunks` and `entryJSFiles[*]` directly | Non-enumerable getters survive the freeze and fail loudly while unbound.         | A future enumeration, spread, or serialization of these objects drops the getters silently and serves neutral chunks.                                                                                                                 |
+| `react-loadable-manifest.json` entries `{ files: string[] }`                                             | Affected JavaScript hints are removed.                                           | The build fails on the unexpected shape; a new URL emitter elsewhere is not detected.                                                                                                                                                 |
+| `build-manifest.json`                                                                                    | Rejects translated bootstrap chunks.                                             | A translated bootstrap chunk could pass; its neutral copy then throws in the browser.                                                                                                                                                 |
+| Turbopack browser chunks naming lazy chunks as quoted `"static/chunks/<name>.js"` literals               | Importer copies get rewritten literals.                                          | A changed literal format escapes the rewrite; the lazy neutral chunk loads and its marker throws in the browser only.                                                                                                                 |
+| `work-async-storage.external.js` and `work-unit-async-storage.external.js` (`rootParams`, `headers`)     | Locale source and per-render memo.                                               | A missing store means the fallback locale; a changed store identity could select or retain the wrong locale without an error.                                                                                                         |
+| Prerender workers as child processes that inherit `NODE_OPTIONS` at spawn time                           | The preload binds the manifests in each worker.                                  | Prerendering fails on the first unbound read (`experimental.workerThreads` does this today).                                                                                                                                          |
+| `evalManifest` paths of `<projectDir>/<distDir>/server/app/...`                                          | The runtime binding finds them under `process.cwd()` plus the inlined `distDir`. | The bind call finds no manifests and throws, or binds other paths and the first render read throws.                                                                                                                                   |
 
 ## Alternatives Considered
 
@@ -148,8 +159,8 @@ or every chunk carries every locale.
 - Every server process has to bind before its first render, including build
   workers and hosted adapters; forgetting it is a loud failure, not a silent
   fallback to neutral chunks.
-- The locale must be known before the layout runs: from a root route param or
-  from the Proxy.
+- The locale must be known before the layout runs: from the Proxy header or
+  the `locale` root param; header-only routes render dynamically.
 - Deploy chunk copies, manifests, and prerendered artifacts of one build
   together; an old document with new chunk names, or the reverse, fails the
   same way as any Next build mismatch.
@@ -161,8 +172,9 @@ or every chunk carries every locale.
 against a relocated standalone server: content-hashed copies without markers
 or map pointers, prerendered documents, Flight payloads, and segment files
 that name only their locale's copies, documents and Flight responses for four
-locales and two routes, lazy chunk copies behind them, 24 concurrent
-mixed-locale requests, and a Chromium session that hydrates German client
+locales and two routes, lazy chunk copies behind them, an unknown locale
+answered with 404 and source-locale copies, 24 concurrent mixed-locale
+requests, and a Chromium session that hydrates German client
 text, updates a plural on click, loads the lazy chunk, and requests no neutral
 or foreign-locale chunk.
 

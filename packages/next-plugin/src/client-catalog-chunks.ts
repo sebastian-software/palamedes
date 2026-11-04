@@ -72,6 +72,7 @@ export type CatalogCompilerOptions = {
 
 export type CatalogCompiler = {
   locales: string[];
+  sourceLocale: string;
   pseudoLocale: string | undefined;
   /** Module key to its selected messages for the locale. */
   compileLocale(locale: string): Promise<Map<string, Record<string, string>>>;
@@ -105,6 +106,7 @@ export async function createCatalogCompiler(
 
   return {
     locales: [...cfg.locales],
+    sourceLocale: cfg.sourceLocale,
     pseudoLocale: cfg.pseudoLocale,
     async compileLocale(locale) {
       const selections = new Map<string, Record<string, string>>(
