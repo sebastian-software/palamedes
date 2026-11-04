@@ -98,12 +98,11 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
 }
 
 /*
- * Production asset delivery keeps catalog fragments out of the bundler graph.
- * The module's key, source path, and selected IDs stay in the emitted chunk as
- * one string literal, which the post-compile step reads back to group the
- * messages of each chunk into one asset per locale.
+ * Both out-of-graph deliveries leave the module's key, source path, and
+ * selected IDs in the emitted chunk as one string literal, which the
+ * post-compile step reads back.
  */
-function clientAssetBootstrap(config, sourcePath, compiledIds) {
+function clientCatalogMarker(config, sourcePath, compiledIds) {
   if (!config.catalogs.some((catalog) => catalogMatchesSource(config, catalog, sourcePath))) {
     return null;
   }
@@ -114,14 +113,26 @@ function clientAssetBootstrap(config, sourcePath, compiledIds) {
   const payload = Buffer.from(JSON.stringify({ source: modulePath, ids: compiledIds })).toString(
     "base64url",
   );
-  const identifier = `__pmds_${key}`;
+  return { key, literal: `pmds-next:${key}:${payload}` };
+}
+
+/*
+ * Production asset delivery keeps catalog fragments out of the bundler graph
+ * and loads one message asset per chunk and locale at runtime.
+ */
+function clientAssetBootstrap(config, sourcePath, compiledIds) {
+  const marker = clientCatalogMarker(config, sourcePath, compiledIds);
+  if (!marker) {
+    return null;
+  }
+  const identifier = `__pmds_${marker.key}`;
   return `const ${identifier}_modules = await Promise.all([
   import("@palamedes/core/compiled"),
   import("@palamedes/runtime/internal"),
   import("@palamedes/next-plugin/client-catalog"),
 ]);
 const ${identifier}_locale = document.documentElement.lang;
-const ${identifier}_messages = await ${identifier}_modules[2].loadClientCatalog(${JSON.stringify(`pmds-next:${key}:${payload}`)});
+const ${identifier}_messages = await ${identifier}_modules[2].loadClientCatalog(${JSON.stringify(marker.literal)});
 const ${identifier}_i18n = ${identifier}_modules[1].initializeClientI18n(
   ${identifier}_locale,
   () => ${identifier}_modules[0].createI18n({ timeZone: document.documentElement.dataset.palamedesTimeZone }),
@@ -130,9 +141,36 @@ ${identifier}_i18n.load(${identifier}_locale, ${identifier}_modules[0].defineCom
 `;
 }
 
+/*
+ * Permutation delivery inlines the messages after compile: the post-compile
+ * step copies each chunk per locale and replaces the marker literal with that
+ * locale's compiled messages, so the bootstrap is synchronous and the chunk
+ * graph stays free of async modules. The imports are static; import
+ * declarations are hoisted wherever they appear in the module.
+ */
+function clientPermutationBootstrap(config, sourcePath, compiledIds) {
+  const marker = clientCatalogMarker(config, sourcePath, compiledIds);
+  if (!marker) {
+    return null;
+  }
+  const identifier = `__pmds_${marker.key}`;
+  return `import { createI18n as ${identifier}_createI18n, defineCompiledCatalog as ${identifier}_defineCompiledCatalog } from "@palamedes/core/compiled";
+import { initializeClientI18n as ${identifier}_initializeClientI18n } from "@palamedes/runtime/internal";
+import { clientCatalogMessages as ${identifier}_clientCatalogMessages } from "@palamedes/next-plugin/client-catalog-messages";
+const ${identifier}_locale = document.documentElement.lang;
+${identifier}_initializeClientI18n(
+  ${identifier}_locale,
+  () => ${identifier}_createI18n({ timeZone: document.documentElement.dataset.palamedesTimeZone }),
+).load(${identifier}_locale, ${identifier}_defineCompiledCatalog(${identifier}_clientCatalogMessages(${JSON.stringify(marker.literal)})));
+`;
+}
+
 function clientMessageBootstrap(config, sourcePath, compiledIds, delivery) {
   if (delivery === "assets") {
     return clientAssetBootstrap(config, sourcePath, compiledIds);
+  }
+  if (delivery === "permutations") {
+    return clientPermutationBootstrap(config, sourcePath, compiledIds);
   }
   const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds);
   if (!importsByCatalog) {

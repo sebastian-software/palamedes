@@ -30,7 +30,9 @@
     "palamedes-po-loader.cjs",
     "palamedes-server-catalogs-loader.cjs",
     "catalog-fragment.cjs",
-    "client-catalog.mjs"
+    "client-catalog.mjs",
+    "client-catalog-messages.mjs",
+    "client-catalog-preload.cjs"
   ],
   "type": "module",
   "sideEffects": false,
@@ -56,6 +58,16 @@
       "require": {
         "types": "./dist/server.d.cts",
         "default": "./dist/server.cjs"
+      }
+    },
+    "./proxy": {
+      "import": {
+        "types": "./dist/proxy.d.mts",
+        "default": "./dist/proxy.mjs"
+      },
+      "require": {
+        "types": "./dist/proxy.d.cts",
+        "default": "./dist/proxy.cjs"
       }
     },
     "./server-function-initializer": {
@@ -92,7 +104,9 @@
     },
     "./palamedes-server-catalogs-loader": "./palamedes-server-catalogs-loader.cjs",
     "./catalog-fragment": "./catalog-fragment.cjs",
-    "./client-catalog": "./client-catalog.mjs"
+    "./client-catalog": "./client-catalog.mjs",
+    "./client-catalog-messages": "./client-catalog-messages.mjs",
+    "./client-catalog-preload": "./client-catalog-preload.cjs"
   },
   "publishConfig": {
     "access": "public"

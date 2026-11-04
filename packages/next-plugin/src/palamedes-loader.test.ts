@@ -373,6 +373,32 @@ describe("palamedes-loader.cjs", () => {
     expect(output).toContain(".defineCompiledCatalog(");
   });
 
+  it("inlines the marker for permutation delivery without top-level await", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a"],
+    });
+
+    const output = await runLoader({
+      clientMessageSplitting: true,
+      clientCatalogDelivery: "permutations",
+    });
+
+    expect(output).not.toContain("await ");
+    expect(output).not.toContain("import(");
+    expect(output).toContain('from "@palamedes/next-plugin/client-catalog-messages"');
+    const marker = /_clientCatalogMessages\("pmds-next:([0-9a-f]{12}):([\w-]+)"\)/u.exec(output);
+    expect(marker).not.toBeNull();
+    expect(JSON.parse(Buffer.from(marker![2]!, "base64url").toString("utf8")).ids).toEqual([
+      "id-a",
+    ]);
+    expect(output).toContain("_defineCompiledCatalog(");
+    expect(output.indexOf("_initializeClientI18n(")).toBeLessThan(
+      output.indexOf("export const translated"),
+    );
+  });
+
   it("boots a client module before its compiled module-scope call and its importers", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: [

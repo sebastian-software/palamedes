@@ -4,6 +4,7 @@ import { ClientReady } from "@/components/ClientReady";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { ProofPanel } from "@/components/ProofPanel";
 import { SuggestionBanner } from "@/components/SuggestionBanner";
+import { TicketFaq } from "@/components/TicketFaq";
 import { TicketPanel } from "@/components/TicketPanel";
 import { createActiveServerI18n, getRouteLocale, runWithServerI18n } from "@/lib/i18n.server";
 import { getLocaleLabel, type Locale } from "@/lib/i18n";
@@ -77,6 +78,8 @@ export default async function RouteHome({ params }: { params: Promise<{ locale: 
         <TicketPanel locale={locale} />
         <ProofPanel locale={locale} />
       </div>
+
+      <TicketFaq />
 
       <footer className="foot">
         <span className="foot-badge">Palamedes</span>

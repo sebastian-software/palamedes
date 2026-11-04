@@ -756,3 +756,60 @@ describe("withPalamedes webpack config", () => {
     ).toBe(false);
   });
 });
+
+describe("withPalamedes client catalog permutations", () => {
+  const preload = "client-catalog-preload.cjs";
+
+  it("rejects both experimental deliveries at once", () => {
+    expect(() =>
+      withPalamedes(
+        {},
+        { experimentalClientCatalogAssets: true, experimentalClientCatalogPermutations: true },
+      ),
+    ).toThrow(/enable one of them/u);
+  });
+
+  it("keeps development in the module graph", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NODE_OPTIONS", "");
+    const config = withPalamedes({}, { experimentalClientCatalogPermutations: true });
+    expect(config.env).toBeUndefined();
+    expect(process.env.NODE_OPTIONS).not.toContain(preload);
+  });
+
+  it("inlines the dist directory, installs the build preload, and adds the post-compile step", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NODE_OPTIONS", "--max-old-space-size=4096");
+    vi.stubEnv("__PALAMEDES_NEXT_CATALOG_PERMUTATIONS_DIST", "");
+    useNextExampleProject();
+
+    const config = withPalamedes(
+      { distDir: "build" },
+      { experimentalClientCatalogPermutations: true },
+    );
+    expect(config.env).toEqual({ PALAMEDES_NEXT_CATALOG_PERMUTATIONS: "build" });
+    expect(typeof config.compiler?.runAfterProductionCompile).toBe("function");
+    expect(process.env.__PALAMEDES_NEXT_CATALOG_PERMUTATIONS_DIST).toBe(
+      path.join(nextExampleRoot, "build"),
+    );
+    expect(process.env.NODE_OPTIONS).toMatch(
+      new RegExp(`^--max-old-space-size=4096 --require=\\S*${preload}$`, "u"),
+    );
+    // A build worker evaluates the config again and must not add it twice.
+    withPalamedes({ distDir: "build" }, { experimentalClientCatalogPermutations: true });
+    expect(process.env.NODE_OPTIONS!.split(preload)).toHaveLength(2);
+
+    const browserRule = getRules(config)["*"] as RuleItem[];
+    expect(browserRule[0]?.loaders?.[0]?.options?.clientCatalogDelivery).toBe("permutations");
+  });
+
+  it("fails a webpack build with a clear message", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NODE_OPTIONS", "");
+    useNextExampleProject();
+    const { webpack } = withPalamedes({}, { experimentalClientCatalogPermutations: true });
+    expect(() => webpack!({ module: { rules: [] } }, { isServer: false } as never)).toThrow(
+      /Turbopack builds only/u,
+    );
+  });
+});
