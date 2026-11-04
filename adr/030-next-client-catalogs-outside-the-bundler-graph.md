@@ -28,15 +28,17 @@ default and `next dev` keep the in-graph fragments that
   chunks, and separate assets when message IDs conflict. Assets are rendered by
   the native catalog renderer ([ADR-019](./019-native-catalog-rendering-produces-bundler-modules.md)),
   named by content hash, and written to `.next/static/palamedes/`.
-- **One map per locale.** The same step writes one content-hashed catalog map
-  module per locale next to the assets. It lists every translated client
-  module of the locale as concatenated keys per asset, so soft navigations to
-  other routes resolve without another lookup, and the browser caches it
-  across pages. The server-side manifest `.next/palamedes-client-catalogs.json`
-  maps each locale to its map URL. The step appends the manifest to every
-  server route's `.nft.json` trace, because Turbopack resolves
-  `outputFileTracingIncludes` before the manifest exists; standalone output
-  and deployment adapters then ship it with each server function.
+- **One map per locale.** The same step writes one catalog map module per
+  locale next to the assets. It lists every translated client module of the
+  locale as concatenated keys per asset, so soft navigations to other routes
+  resolve without another lookup, and the browser caches it across pages. The
+  map is named by a build token that `withPalamedes()` picks per build and
+  inlines into the server code through Next's `env` option, so the server
+  derives each map URL from the locale and reads no file from the build
+  output. A new build gets a new token, so an immutably cached map never goes
+  stale. Build workers that evaluate the config again inherit the token from
+  the environment. The token leaves client chunk names and warm Turbopack
+  build caches unchanged.
 - **Map link in the document.** The root layout renders
   `<PalamedesClientCatalogs locale={locale} />` from
   `@palamedes/next-plugin/server` in `<head>`. It emits
@@ -47,8 +49,7 @@ default and `next dev` keep the in-graph fragments that
   is a full document navigation that renders a new map.
 - **Failures fail closed.** A missing map link, a map for another locale than
   `<html lang>`, a module key without an asset, and an asset without `messages`
-  throw at once: they are deterministic build or deployment faults. A server
-  that cannot read the manifest throws an error naming the expected path. A
+  throw at once: they are deterministic build or deployment faults. A
   failed map or asset `import()` is retried once under the same URL plus `?pmds-retry=1`,
   because browsers keep a failed module fetch in the module map for its URL.
   The final error names the module source and the URL and carries the
@@ -137,9 +138,6 @@ It would also hide a broken deployment from error reporting.
 - Each locale's map lists every translated client module. It costs about
   8 bytes gzip per module, once per locale and deployment, because the
   document only carries its URL.
-- The server traces gain one file that Palamedes appends after compilation.
-  Editing `.nft.json` is not a documented Next contract; the standalone check
-  catches a change to where or when Next writes the traces.
 
 ## Validation And Review Triggers
 
@@ -150,9 +148,8 @@ Make the flag the production default once:
 - the hosted `nextjs-route` demo, which builds with the flag, serves the maps
   and assets through the demo CDN and passes a browser check; and
 - at least one production application has run with the flag on Vercel, which
-  shows that Vercel serves the late-written assets and finds the traced
-  manifest, as the standalone check and an adapter probe show for
-  self-hosting.
+  shows that Vercel serves the late-written assets, as the standalone check
+  shows for self-hosting.
 
 `next build --webpack`, warm build caches, `basePath`, `assetPrefix`,
 `output: "standalone"`, and the map component are already covered. The other

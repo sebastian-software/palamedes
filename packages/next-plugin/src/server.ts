@@ -11,7 +11,7 @@ import type { I18nInstance } from "@palamedes/runtime";
 import { createI18n, type CreateI18nOptions, type PalamedesI18n } from "@palamedes/core";
 import { loadServerCatalog } from "@palamedes/next-plugin/server-catalogs";
 import { createElement, type ReactElement } from "react";
-import { readClientCatalogManifest } from "./client-catalog-manifest";
+import { clientCatalogMapName } from "./client-catalog-map";
 
 /** The element ID that `@palamedes/next-plugin/client-catalog` looks up. */
 const CLIENT_CATALOG_MAP_ID = "palamedes-client-catalogs";
@@ -30,9 +30,14 @@ export type PalamedesClientCatalogsProps = {
 export function PalamedesClientCatalogs({
   locale,
 }: PalamedesClientCatalogsProps): ReactElement | null {
-  const maps = readClientCatalogManifest()?.maps;
-  const href = maps && Object.hasOwn(maps, locale) ? maps[locale] : undefined;
-  if (!href) return null;
+  // withPalamedes() inlines both values into asset builds; graph builds and
+  // development leave them unset.
+  const buildToken = process.env.PALAMEDES_NEXT_CATALOG_BUILD;
+  const base = process.env.PALAMEDES_NEXT_CATALOG_BASE;
+  if (!buildToken || base === undefined) return null;
+  const mapName = clientCatalogMapName(locale, buildToken);
+  if (!mapName) return null;
+  const href = base + mapName;
   // A module preload starts fetching the map while the parser is still in
   // <head>, and the browser helper reads the map URL back from its href.
   return createElement("link", { id: CLIENT_CATALOG_MAP_ID, rel: "modulepreload", href });

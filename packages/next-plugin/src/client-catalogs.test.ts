@@ -26,26 +26,24 @@ describe("PalamedesClientCatalogs", () => {
   }
 
   it("renders nothing when the build keeps catalogs in the module graph", async () => {
-    vi.stubEnv("PALAMEDES_NEXT_DIST_DIR", undefined);
+    vi.stubEnv("PALAMEDES_NEXT_CATALOG_BUILD", undefined);
+    vi.stubEnv("PALAMEDES_NEXT_CATALOG_BASE", undefined);
     expect(await render("de")).toBeNull();
   });
 
-  it("links the locale's catalog map as a module preload", async () => {
-    await writeFile(
-      path.join(distDir, "palamedes-client-catalogs.json"),
-      JSON.stringify({ maps: { de: "/_next/static/palamedes/catalogs.de-0123abcd.js" } }),
-    );
-    vi.stubEnv("PALAMEDES_NEXT_DIST_DIR", path.relative(process.cwd(), distDir));
+  it("links the locale's catalog map, named by the build token, as a module preload", async () => {
+    vi.stubEnv("PALAMEDES_NEXT_CATALOG_BUILD", "0123456789ab");
+    vi.stubEnv("PALAMEDES_NEXT_CATALOG_BASE", "/cdn/_next/static/palamedes/");
 
-    const element = await render("de");
+    const element = await render("de-AT");
     expect(element?.type).toBe("link");
     expect(element?.props).toEqual({
       id: "palamedes-client-catalogs",
       rel: "modulepreload",
-      href: "/_next/static/palamedes/catalogs.de-0123abcd.js",
+      href: "/cdn/_next/static/palamedes/catalogs.de-AT.0123456789ab.js",
     });
-    expect(await render("constructor")).toBeNull();
-    expect(await render("fr")).toBeNull();
+    // A locale that is not one path segment never reaches the URL.
+    expect(await render("../de")).toBeNull();
   });
 });
 
@@ -58,7 +56,7 @@ describe("loadClientCatalog", () => {
     const assets = path.join(distDir, "palamedes");
     await mkdir(assets);
     await writeFile(
-      path.join(assets, "catalogs.de-0123abcd.mjs"),
+      path.join(assets, "catalogs.de.0123456789ab.mjs"),
       `export default ${JSON.stringify({
         locale: "de",
         assets: { "group.de-1.mjs": `${first}${second}`, "lone.de-2.mjs": lone },
@@ -72,7 +70,7 @@ describe("loadClientCatalog", () => {
       path.join(assets, "lone.de-2.mjs"),
       'export const messages = { b: "Allein" };\n',
     );
-    const href = pathToFileURL(path.join(assets, "catalogs.de-0123abcd.mjs")).href;
+    const href = pathToFileURL(path.join(assets, "catalogs.de.0123456789ab.mjs")).href;
     vi.stubGlobal("document", {
       readyState: "complete",
       documentElement: { lang },

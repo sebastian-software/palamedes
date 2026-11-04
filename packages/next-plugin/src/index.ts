@@ -5,6 +5,7 @@
  * No Babel required!
  */
 
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -24,6 +25,7 @@ import {
   resolveMacroRuntimeModule,
 } from "@palamedes/transform";
 
+import { CLIENT_CATALOG_BUILD_ENV } from "./client-catalog-map";
 import { clientCatalogPublicPrefix, crossOriginClientCatalogHost } from "./client-catalog-url";
 
 const require = createRequire(import.meta.url);
@@ -635,20 +637,25 @@ export function withPalamedes(
     }
   }
 
-  // The server resolves the manifest against its working directory, which is
-  // the project directory in every deployment shape (see server.ts).
-  const runtimeDistDir = path
-    .relative(projectRoot, path.resolve(projectRoot, baseConfig.distDir ?? ".next"))
-    .split(path.sep)
-    .join("/");
   const userAfterCompile = baseConfig.compiler?.runAfterProductionCompile;
   // Read from the config passed to withPalamedes(); a plugin wrapped around it
   // that sets assetPrefix or basePath later is not visible here.
   const publicPrefix = clientCatalogPublicPrefix(baseConfig);
-  const clientCatalogConfig: Partial<NextConfig> =
+  // One token per build names the catalog maps (see client-catalog-map.ts).
+  // Build workers that evaluate this config again inherit it from the
+  // environment, so the server code and the post-compile step agree.
+  const clientCatalogBuild =
     clientCatalogDelivery === "assets"
+      ? (process.env[CLIENT_CATALOG_BUILD_ENV] ??= randomBytes(6).toString("hex"))
+      : undefined;
+  const clientCatalogConfig: Partial<NextConfig> =
+    clientCatalogBuild !== undefined
       ? {
-          env: { ...baseConfig.env, PALAMEDES_NEXT_DIST_DIR: runtimeDistDir },
+          env: {
+            ...baseConfig.env,
+            PALAMEDES_NEXT_CATALOG_BUILD: clientCatalogBuild,
+            PALAMEDES_NEXT_CATALOG_BASE: `${publicPrefix}/_next/static/palamedes/`,
+          },
           compiler: {
             ...baseConfig.compiler,
             async runAfterProductionCompile(metadata) {
@@ -665,14 +672,7 @@ export function withPalamedes(
                 projectRoot,
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
                 failOnMissing,
-                publicPrefix,
-              });
-              const { CLIENT_CATALOG_MANIFEST } = await import("./client-catalog-manifest");
-              const { traceClientCatalogManifest } = await import("./client-catalog-trace");
-              await traceClientCatalogManifest({
-                distDir: metadata.distDir,
-                manifestPath: path.join(metadata.distDir, CLIENT_CATALOG_MANIFEST),
-                hashSalt: (baseConfig.outputHashSalt ?? "") + (process.env.NEXT_HASH_SALT ?? ""),
+                buildToken: clientCatalogBuild,
               });
             },
           },
