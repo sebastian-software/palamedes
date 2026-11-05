@@ -10,6 +10,8 @@ import {
   publicWorkspacePackages,
 } from "./release-packages.mjs";
 
+import { copyLicenseFiles, LICENSE_FILES } from "./sync-package-licenses.mjs";
+
 const root = process.cwd();
 // On Windows the package manager binaries resolve to `pnpm.cmd`/`npm.cmd`.
 // Node refuses to spawn `.cmd`/`.bat` files without a shell (CVE-2024-27980),
@@ -71,6 +73,10 @@ if (viewResult.status === 0) {
   }
 }
 
+// Filtered release builds bypass the root build's license sync. Prepare the
+// selected package here so dry runs and actual publication carry both texts.
+copyLicenseFiles(workspacePackage.directory, root);
+
 if (dryRun) {
   // Native packages are published with npm from their own directory, carry no
   // workspace references, and get their artifact checks in publish-native.
@@ -115,8 +121,8 @@ if (publishResult.error) {
 process.exit(publishResult.status ?? 1);
 
 // Packs the package the way `pnpm publish` does and checks the manifest that
-// consumers would receive, so a dry run proves the workspace rewrites without
-// uploading anything.
+// consumers would receive, including both license texts, so a dry run proves
+// the release contents without uploading anything.
 function verifyPackedManifest() {
   const destination = mkdtempSync(path.join(os.tmpdir(), "palamedes-pack-"));
   try {
@@ -153,8 +159,22 @@ function verifyPackedManifest() {
       publicWorkspacePackages(root).map((packageInfo) => [packageInfo.name, packageInfo.version]),
     );
     const problems = packedManifestProblems(packageJson, packedManifest, workspaceVersions);
+    for (const licenseFile of LICENSE_FILES) {
+      const licenseResult = spawnSync("tar", [
+        "-xzOf",
+        path.join(destination, tarballs[0]),
+        `package/${licenseFile}`,
+      ]);
+      if (
+        licenseResult.error ||
+        licenseResult.status !== 0 ||
+        !licenseResult.stdout.equals(readFileSync(path.join(root, licenseFile)))
+      ) {
+        problems.push(`missing or incorrect ${licenseFile} in the packed package`);
+      }
+    }
     if (problems.length > 0) {
-      console.error(`${packageSpec} packs an invalid release manifest:`);
+      console.error(`${packageSpec} packs an invalid release package:`);
       for (const problem of problems) console.error(`  ${problem}`);
       return 1;
     }
