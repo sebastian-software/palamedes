@@ -1,6 +1,6 @@
 [package]
 name = "palamedes-node"
-version = "2.1.0"
+version = "2.1.1"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
@@ -25,7 +25,7 @@ test-support = ["palamedes/test-support"]
 [dependencies]
 napi = { version = "3.12.2", default-features = false, features = ["napi9"] }
 napi-derive = "3.6.3"
-palamedes = { version = "2.1.0", path = "../.." }
+palamedes = { version = "2.1.1", path = "../.." }
 serde_json = "1.0.151"
 
 [dev-dependencies]

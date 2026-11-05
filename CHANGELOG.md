@@ -117,6 +117,13 @@ history and use the migration guide for 2.0 behavior.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [2.1.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.1.0...palamedes-v2.1.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **release:** include license texts in npm packages ([e7642bd](https://github.com/sebastian-software/palamedes/commit/e7642bdf44fad9dce8023c8e1a8447a410c4bcbb))
+
 ## [2.1.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.0.0...palamedes-v2.1.0) (2026-11-04)
 
 
