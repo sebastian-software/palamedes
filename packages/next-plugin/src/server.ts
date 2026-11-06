@@ -10,6 +10,38 @@ import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/
 import type { I18nInstance } from "@palamedes/runtime";
 import { createI18n, type CreateI18nOptions, type PalamedesI18n } from "@palamedes/core";
 import { loadServerCatalog } from "@palamedes/next-plugin/server-catalogs";
+import { createElement, type ReactElement } from "react";
+import { clientCatalogMapName } from "./client-catalog-map";
+
+/** The element ID that `@palamedes/next-plugin/client-catalog` looks up. */
+const CLIENT_CATALOG_MAP_ID = "palamedes-client-catalogs";
+
+export type PalamedesClientCatalogsProps = {
+  /** The document locale, the same value as `<html lang>`. */
+  locale: string;
+};
+
+/**
+ * Experimental: points the browser at this locale's client catalog map when
+ * the build uses `experimentalClientCatalogAssets`. Render it in the root
+ * layout's `<head>`. It renders nothing when client catalogs are delivered in
+ * the module graph, which includes development.
+ */
+export function PalamedesClientCatalogs({
+  locale,
+}: PalamedesClientCatalogsProps): ReactElement | null {
+  // withPalamedes() inlines both values into asset builds; graph builds and
+  // development leave them unset.
+  const buildToken = process.env.PALAMEDES_NEXT_CATALOG_BUILD;
+  const base = process.env.PALAMEDES_NEXT_CATALOG_BASE;
+  if (!buildToken || base === undefined) return null;
+  const mapName = clientCatalogMapName(locale, buildToken);
+  if (!mapName) return null;
+  const href = base + mapName;
+  // A module preload starts fetching the map while the parser is still in
+  // <head>, and the browser helper reads the map URL back from its href.
+  return createElement("link", { id: CLIENT_CATALOG_MAP_ID, rel: "modulepreload", href });
+}
 
 const NEXT_RENDER_REQUEST_KEY_PROVIDER = Symbol.for(
   "palamedes.nextPlugin.renderRequestKeyProvider",

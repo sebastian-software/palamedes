@@ -18,6 +18,8 @@ for the storage/import boundary.
 - `WithPalamedesOptions`
 - `createNextServerI18n({ locale, timeZone?, ...options })` from `@palamedes/next-plugin/server`
 - `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
+- `PalamedesClientCatalogs` from `@palamedes/next-plugin/server` (experimental,
+  see [Client catalog assets](#client-catalog-assets-experimental))
 
 `withPalamedes()` also wires these **Internal** subpaths into the Next.js
 build by path: `server-function-initializer`, `server-function-entry`,
@@ -223,3 +225,90 @@ mixing bare loaders with rule configs has no defined meaning.
 
 `workspaceRoot` can be set explicitly in monorepos when automatic root
 detection from the Next project root is not correct.
+
+### Client catalog assets (experimental)
+
+`withPalamedes(config, { experimentalClientCatalogAssets: true })` delivers
+production client catalogs as static message assets outside the bundler graph,
+one per client chunk and locale. Development keeps the in-graph fragments.
+
+The browser finds those assets through a per-locale catalog map. Render
+`PalamedesClientCatalogs` in the root layout's `<head>` with the document
+locale:
+
+```tsx
+import { PalamedesClientCatalogs } from "@palamedes/next-plugin/server";
+
+export default async function RootLayout({ children, params }) {
+  const { locale } = await params;
+  return (
+    <html lang={locale}>
+      <head>
+        <PalamedesClientCatalogs locale={locale} />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+It renders a `<link rel="modulepreload">` to the map, so the browser fetches
+the map alongside Next's own chunks. It renders nothing when the build keeps
+catalogs in the module graph, so the layout needs no condition for
+development or for builds without the option.
+
+The map is a static module that lists every translated client module of the
+locale, so soft navigations to other routes resolve without another lookup.
+Its size grows with the number of translated client modules, about 8 bytes
+gzip per module, but the document only carries its URL, and browsers cache the
+map across pages and visits until the next deployment.
+
+#### Deploying client catalog assets
+
+With `experimentalClientCatalogAssets`, a production build writes the message
+assets and one catalog map per locale to `<distDir>/static/palamedes/` after
+compilation. They are ordinary `/_next/static` files, so they need no extra
+deploy step beyond what Next already expects: `next start` serves them, a CDN
+or Vercel receives them with the rest of `.next/static`, and an
+`output: "standalone"` build needs the usual
+`cp -r .next/static .next/standalone/<app>/.next/` copy.
+
+The server needs no file from the build output. `withPalamedes()` picks a
+token for each build and inlines it into the server code through Next's `env`
+option, and the maps are named by that token, so `PalamedesClientCatalogs`
+derives the map URL from the locale alone. Every build gets a new token, which
+keeps immutably cached maps from going stale. Message assets keep
+content-hashed names, so browsers reuse unchanged ones across deployments, and
+the token changes neither client chunk names nor warm Turbopack build caches.
+
+#### Bundlers, build cache, and URL prefixes
+
+`experimentalClientCatalogAssets` only changes production builds. `next dev`
+keeps in-graph fragments under both bundlers.
+
+| Mode                                          | Status                   |
+| --------------------------------------------- | ------------------------ |
+| `next build` (Turbopack)                      | Supported, checked in CI |
+| `next build --webpack`                        | Supported, checked in CI |
+| Turbopack and webpack persistent build caches | Supported                |
+| `basePath`, path or absolute `assetPrefix`    | Supported                |
+
+Both bundlers run `compiler.runAfterProductionCompile`, keep the `pmds-next:`
+marker literals through minification, and leave the asset `import()` native.
+The post-compile step reads the chunks of the current build and recompiles
+the catalogs every time, so a warm build cache still picks up source and
+catalog-only edits. Next clears old chunks before each build, and the step
+replaces `.next/static/palamedes/`, so earlier assets are not served.
+
+Asset URLs use the prefix Next puts in front of its own `/_next/` chunks:
+`assetPrefix` when set, with one trailing slash removed, and `basePath`
+otherwise. Next does not join the two, so with both set, the assets use
+`assetPrefix` alone, like the chunks. Palamedes reads both values from the
+config passed to `withPalamedes()`, so set them there and not in a wrapper
+applied after it.
+
+The browser loads the catalog map and the message assets with a native `import()`, which always uses CORS.
+Next's chunks are classic scripts and do not need CORS. When `assetPrefix`
+points to another origin, that host must send `Access-Control-Allow-Origin`
+for `/_next/static/palamedes/`, or the page shows its error view. The build
+logs a warning for absolute prefixes.

@@ -171,6 +171,13 @@ releases fall inside the peer range; a release counts as verified once it
 passes the request isolation, server action, and Turbopack and webpack build
 proofs.
 
+The `experimentalClientCatalogAssets` option is **Preview** and outside this
+Stable contract. In production builds it finds translated client modules
+through `pmds-next:` string literals in the emitted chunks, and Next does not
+promise to keep those literals intact. CI checks the pinned Next release, and a
+scheduled workflow checks `next@canary`. See
+[ADR-030](../adr/030-next-client-catalogs-outside-the-bundler-graph.md).
+
 ### Waku contract
 
 The examples verify Waku `1.0.0-rc.4` with React, React DOM, and

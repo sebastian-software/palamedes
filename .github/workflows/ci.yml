@@ -183,6 +183,17 @@ jobs:
           pnpm --dir proof/vue-vite test
           node scripts/verify-component-demos.mjs --local
 
+      # Out-of-graph Next catalogs read marker literals back from the emitted
+      # chunks; this fails when a Next release stops keeping them intact under
+      # either bundler's minifier. The example runs that delivery by default,
+      # so `build:graph` keeps the in-graph catalogs' locale isolation covered.
+      - name: Verify Next client catalog asset contract
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: |
+          pnpm --dir examples/nextjs-route build:catalog-assets
+          pnpm --dir examples/nextjs-route build:catalog-assets:webpack
+          pnpm --dir examples/nextjs-route build:graph
+
       - name: Run tests
         if: ${{ matrix.full }}
         run: pnpm test
