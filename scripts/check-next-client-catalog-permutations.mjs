@@ -223,6 +223,9 @@ try {
     headless: true,
   });
   const page = await browser.newPage();
+  // This fixture has no favicon. Keep the browser's implicit request from
+  // obscuring catalog failures; every other resource error still fails below.
+  await page.route("**/favicon.ico", (route) => route.fulfill({ status: 204 }));
   const requested = [];
   const errors = [];
   page.on("request", (request) => {
