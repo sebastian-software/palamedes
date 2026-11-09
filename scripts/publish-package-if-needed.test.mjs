@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const script = path.resolve(import.meta.dirname, "publish-package-if-needed.mjs");
+const licenseFiles = ["LICENSE-APACHE", "LICENSE-MIT"];
 
 test("publishes JavaScript workspace dependencies before their dependents", (t) => {
   const fixture = publishFixture(t);
@@ -95,16 +96,53 @@ test("a dry run fails when a packed manifest keeps a workspace reference", (t) =
   assert.deepEqual(fixture.published(), ["pack @example/runtime", "pack @example/dependent"]);
 });
 
+for (const licenseFile of licenseFiles) {
+  test(`a dry run rejects a tarball missing ${licenseFile}`, (t) => {
+    const fixture = publishFixture(t);
+    fixture.package("runtime", "@example/runtime");
+
+    const result = fixture.publish({ dryRun: true, omitLicense: licenseFile });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, new RegExp(`missing or incorrect ${licenseFile}`, "u"));
+  });
+}
+
+test("a dry run rejects a tarball with an incorrect license text", (t) => {
+  const fixture = publishFixture(t);
+  fixture.package("runtime", "@example/runtime");
+
+  const result = fixture.publish({ dryRun: true, corruptLicense: "LICENSE-MIT" });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /missing or incorrect LICENSE-MIT/u);
+});
+
+test("a dry run ships both license texts with the real pnpm pack from a clean package", (t) => {
+  const fixture = publishFixture(t);
+  fixture.package("runtime", "@example/runtime", {}, { files: licenseFiles });
+
+  const result = fixture.publish({ dryRun: true, realPack: true });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /packs a valid release manifest/u);
+  assert.deepEqual(fixture.published(), ["pack @example/runtime"]);
+});
+
 function publishFixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), "palamedes-publish-packages-"));
   const binDirectory = path.join(root, "bin");
   const logPath = path.join(root, "publish.log");
   mkdirSync(path.join(root, "packages"), { recursive: true });
   mkdirSync(binDirectory);
+  for (const licenseFile of licenseFiles) {
+    writeFileSync(path.join(root, licenseFile), `${licenseFile} fixture text\n`);
+  }
   writeFileSync(
     path.join(binDirectory, "pnpm"),
     `#!/usr/bin/env node
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
+import assert from "node:assert/strict"
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
@@ -118,12 +156,26 @@ if (args[0] === "view") {
   process.exit(1)
 }
 if (args[0] === "--filter" && args[2] === "publish") {
+  for (const licenseFile of ["LICENSE-APACHE", "LICENSE-MIT"]) {
+    assert.equal(
+      readFileSync(path.join(args[1], licenseFile), "utf8"),
+      readFileSync(licenseFile, "utf8"),
+    )
+  }
   appendFileSync(process.env.PUBLISH_LOG, args[1] + "\\n")
   process.exit(args[1] === process.env.FAIL_FILTER ? 1 : 0)
 }
 if (args[0] === "pack" && args[1] === "--pack-destination") {
   const manifest = JSON.parse(readFileSync("package.json", "utf8"))
   appendFileSync(process.env.PUBLISH_LOG, "pack " + manifest.name + "\\n")
+  if (process.env.REAL_PACK === "true") {
+    const result = spawnSync("pnpm", args, {
+      env: { ...process.env, PATH: process.env.REAL_PATH },
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    })
+    process.exit(result.status ?? 1)
+  }
   for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
       if (!specifier.startsWith("workspace:") || process.env.PACK_LEAK === name) continue
@@ -134,6 +186,13 @@ if (args[0] === "pack" && args[1] === "--pack-destination") {
   const staging = mkdtempSync(path.join(args[2], "staging-"))
   mkdirSync(path.join(staging, "package"))
   writeFileSync(path.join(staging, "package", "package.json"), JSON.stringify(manifest))
+  for (const licenseFile of ["LICENSE-APACHE", "LICENSE-MIT"]) {
+    if (licenseFile === process.env.OMIT_LICENSE) continue
+    const content = licenseFile === process.env.CORRUPT_LICENSE
+      ? "incorrect license"
+      : readFileSync(licenseFile, "utf8")
+    writeFileSync(path.join(staging, "package", licenseFile), content)
+  }
   execFileSync("tar", ["-czf", path.join(args[2], "package.tgz"), "-C", staging, "package"])
   process.exit(0)
 }
@@ -152,13 +211,25 @@ process.exit(1)
         JSON.stringify({ name, version: "1.0.0", dependencies, ...fields }),
       );
     },
-    publish({ dryRun = false, failFilter, packLeak, viewState } = {}) {
+    publish({
+      dryRun = false,
+      failFilter,
+      packLeak,
+      viewState,
+      omitLicense,
+      corruptLicense,
+      realPack = false,
+    } = {}) {
       return spawnSync(process.execPath, [script, "--all-js", ...(dryRun ? ["--dry-run"] : [])], {
         cwd: root,
         encoding: "utf8",
         env: {
           ...process.env,
           FAIL_FILTER: failFilter,
+          OMIT_LICENSE: omitLicense,
+          CORRUPT_LICENSE: corruptLicense,
+          REAL_PACK: String(realPack),
+          REAL_PATH: process.env.PATH,
           PACK_LEAK: packLeak,
           VIEW_STATE: viewState,
           PATH: `${binDirectory}${path.delimiter}${process.env.PATH}`,
