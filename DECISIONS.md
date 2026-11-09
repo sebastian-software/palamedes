@@ -75,6 +75,12 @@ Read these when changing shared documentation surfaces or the repository workflo
 28. [ADR-028: README Theme Composition](./adr/028-readme-theme-composition.md)
 29. [ADR-029: Effective Flow Project Setup](./adr/029-effective-flow-project-setup.md)
 
+## Proposed decisions
+
+These records describe experimental contracts and the criteria for adopting them.
+
+30. [ADR-030: Next Production Client Catalogs Outside the Bundler Graph](./adr/030-next-client-catalogs-outside-the-bundler-graph.md)
+
 ## Maintaining living decisions
 
 Palamedes deliberately uses a living variant of ADRs. The

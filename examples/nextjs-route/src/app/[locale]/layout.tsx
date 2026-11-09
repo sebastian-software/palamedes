@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import "@palamedes/example-ui/styles.css";
+import { PalamedesClientCatalogs } from "@palamedes/next-plugin/server";
 import { LOCALES, locales } from "@/lib/i18n";
 
 export const metadata: Metadata = {
@@ -29,6 +30,9 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} data-palamedes-time-zone="Europe/Berlin">
+      <head>
+        <PalamedesClientCatalogs locale={locale} />
+      </head>
       <body>{children}</body>
     </html>
   );

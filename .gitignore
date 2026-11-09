@@ -86,3 +86,4 @@ packages/*/LICENSE-MIT
 examples/node-backend/build/
 examples/node-backend/dist-tsdown/
 examples/node-backend/dist-rolldown/
+benchmarks/next-client-catalogs/.app/

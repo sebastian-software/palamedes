@@ -15,6 +15,11 @@ examples verify:
 - localized `"use server"` actions
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
+`nextjs-route` builds with the experimental `experimentalClientCatalogAssets`
+flag, so its hosted demo serves client catalogs outside the bundler graph. Its
+`build:graph` script builds the default in-graph delivery, which the other
+three examples also use.
+
 Palamedes-side fixes already baked into these examples:
 
 - `"use client"` import injection safety in the transform path

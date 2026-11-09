@@ -29,7 +29,8 @@
     "palamedes-dev-warning.cjs",
     "palamedes-po-loader.cjs",
     "palamedes-server-catalogs-loader.cjs",
-    "catalog-fragment.cjs"
+    "catalog-fragment.cjs",
+    "client-catalog.mjs"
   ],
   "type": "module",
   "sideEffects": false,
@@ -90,7 +91,8 @@
       }
     },
     "./palamedes-server-catalogs-loader": "./palamedes-server-catalogs-loader.cjs",
-    "./catalog-fragment": "./catalog-fragment.cjs"
+    "./catalog-fragment": "./catalog-fragment.cjs",
+    "./client-catalog": "./client-catalog.mjs"
   },
   "publishConfig": {
     "access": "public"
@@ -109,13 +111,16 @@
     "@palamedes/transform": "workspace:^"
   },
   "devDependencies": {
+    "@types/react": "^19.2.18",
     "next": "16.4.1",
+    "react": "^19.2.8",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
-    "next": "^16.4.1"
+    "next": "^16.4.1",
+    "react": "^19.0.0"
   },
   "engines": {
     "node": ">=24.3.0"

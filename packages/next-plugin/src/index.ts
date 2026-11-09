@@ -5,6 +5,7 @@
  * No Babel required!
  */
 
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -23,6 +24,9 @@ import {
   PALAMEDES_MACRO_PACKAGES,
   resolveMacroRuntimeModule,
 } from "@palamedes/transform";
+
+import { CLIENT_CATALOG_BUILD_ENV } from "./client-catalog-map";
+import { clientCatalogPublicPrefix, crossOriginClientCatalogHost } from "./client-catalog-url";
 
 const require = createRequire(import.meta.url);
 
@@ -193,6 +197,16 @@ export type WithPalamedesOptions = {
    * Automatically enabled when the conventional entry exists.
    */
   serverFunctions?: boolean;
+
+  /**
+   * Experimental: deliver production client catalogs as message assets
+   * outside the bundler graph, one per client chunk and locale. Render
+   * `<PalamedesClientCatalogs locale={locale} />` from
+   * `@palamedes/next-plugin/server` in the root layout's `<head>`.
+   * Development keeps the in-graph fragments.
+   * @default false
+   */
+  experimentalClientCatalogAssets?: boolean;
 };
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
@@ -479,7 +493,10 @@ export function withPalamedes(
     projectRoot: explicitProjectRoot,
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
+    experimentalClientCatalogAssets = false,
   } = options;
+  const clientCatalogDelivery =
+    experimentalClientCatalogAssets && process.env.NODE_ENV === "production" ? "assets" : "graph";
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Source metadata is optional diagnostics; compiled catalogs supply all message output.
@@ -566,6 +583,7 @@ export function withPalamedes(
           ...transformLoaderOptions,
           clientMessageSplitting: true,
           clientFragmentFailureMode,
+          clientCatalogDelivery,
         },
       },
     ],
@@ -619,8 +637,51 @@ export function withPalamedes(
     }
   }
 
+  const userAfterCompile = baseConfig.compiler?.runAfterProductionCompile;
+  // Read from the config passed to withPalamedes(); a plugin wrapped around it
+  // that sets assetPrefix or basePath later is not visible here.
+  const publicPrefix = clientCatalogPublicPrefix(baseConfig);
+  // One token per build names the catalog maps (see client-catalog-map.ts).
+  // Build workers that evaluate this config again inherit it from the
+  // environment, so the server code and the post-compile step agree.
+  const clientCatalogBuild =
+    clientCatalogDelivery === "assets"
+      ? (process.env[CLIENT_CATALOG_BUILD_ENV] ??= randomBytes(6).toString("hex"))
+      : undefined;
+  const clientCatalogConfig: Partial<NextConfig> =
+    clientCatalogBuild !== undefined
+      ? {
+          env: {
+            ...baseConfig.env,
+            PALAMEDES_NEXT_CATALOG_BUILD: clientCatalogBuild,
+            PALAMEDES_NEXT_CATALOG_BASE: `${publicPrefix}/_next/static/palamedes/`,
+          },
+          compiler: {
+            ...baseConfig.compiler,
+            async runAfterProductionCompile(metadata) {
+              await userAfterCompile?.(metadata);
+              const crossOriginHost = crossOriginClientCatalogHost(publicPrefix);
+              if (crossOriginHost) {
+                console.warn(
+                  `Palamedes loads client catalog assets from ${crossOriginHost} with import(), which always uses CORS. When pages are served from another origin, ${publicPrefix}/_next/static/palamedes/ must send Access-Control-Allow-Origin for it.`,
+                );
+              }
+              const { emitClientCatalogAssets } = await import("./client-catalog-assets");
+              await emitClientCatalogAssets({
+                distDir: metadata.distDir,
+                projectRoot,
+                ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+                failOnMissing,
+                buildToken: clientCatalogBuild,
+              });
+            },
+          },
+        }
+      : {};
+
   return {
     ...baseConfig,
+    ...clientCatalogConfig,
     ...(outputFileTracingRoot ? { outputFileTracingRoot } : {}),
 
     // Turbopack configuration
@@ -725,7 +786,7 @@ export function withPalamedes(
             options: {
               ...webpackTransformLoaderOptions,
               ...(!context.isServer
-                ? { clientMessageSplitting: true, clientFragmentFailureMode }
+                ? { clientMessageSplitting: true, clientFragmentFailureMode, clientCatalogDelivery }
                 : {}),
             },
           },
