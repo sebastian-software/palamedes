@@ -1,12 +1,17 @@
 "use strict";
 
 const path = require("node:path");
+const { readFile } = require("node:fs/promises");
 const { catalogResourcePath, loadPalamedesConfig } = require("@palamedes/config");
 const {
   compileCatalogArtifactSelectedAsync,
   compileCatalogModuleAsync,
 } = require("@palamedes/core-node");
-const { createCatalogLoaderResult, createMissingErrorMessage } = require("@palamedes/transform");
+const {
+  createCatalogLoaderResult,
+  createMissingErrorMessage,
+  transformPalamedesMacros,
+} = require("@palamedes/transform");
 const { loadConfigCached } = require("./palamedes-config-cache.cjs");
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs");
 
@@ -35,6 +40,11 @@ module.exports = function palamedesPoLoader() {
     const parameters = new URLSearchParams(this.resourceQuery ?? "");
     const catalog = parameters.get("palamedes-catalog");
     const selection = parameters.get(SELECTED_MESSAGES_QUERY);
+    const sourceModule = parameters.get("palamedes-source");
+    if (sourceModule === "") {
+      throw new TypeError("Invalid Palamedes catalog fragment source.");
+    }
+    const sourcePath = sourceModule === null ? null : path.resolve(cfg.rootDir, sourceModule);
     const resourcePath = catalog === null ? this.resourcePath : path.resolve(cfg.rootDir, catalog);
     const resource = path.resolve(resourcePath);
     const configuredLocale = cfg.locales.find((candidate) =>
@@ -67,15 +77,45 @@ module.exports = function palamedesPoLoader() {
       if (!Array.isArray(compiledIds) || !compiledIds.every((id) => typeof id === "string")) {
         throw new TypeError("Invalid Palamedes selected-message query.");
       }
-      const artifact = await compileCatalogArtifactSelectedAsync(
-        artifactConfig,
-        resourcePath,
-        compiledIds,
-      );
+      let artifact;
+      let staleWarning;
+      try {
+        artifact = await compileCatalogArtifactSelectedAsync(
+          artifactConfig,
+          resourcePath,
+          compiledIds,
+        );
+      } catch (error) {
+        if (sourcePath === null) throw error;
+
+        // Turbopack can replay an old fragment task after its importing module
+        // changed or disappeared. Recheck only a failed task's authored source;
+        // unknown IDs still selected by current source remain a hard error.
+        let source;
+        try {
+          source = await readFile(sourcePath, "utf8");
+        } catch (readError) {
+          if (readError.code !== "ENOENT") throw readError;
+          source = "";
+        }
+        const currentIds = new Set(transformPalamedesMacros(source, sourcePath).compiledIds ?? []);
+        const activeIds = compiledIds.filter((id) => currentIds.has(id));
+        if (activeIds.length === compiledIds.length) throw error;
+
+        // Retry through the same compiler even for an empty selection, so an
+        // invalid current catalog or configuration cannot become a success.
+        artifact = await compileCatalogArtifactSelectedAsync(
+          artifactConfig,
+          resourcePath,
+          activeIds,
+        );
+        staleWarning = `Ignored an outdated Palamedes catalog fragment for ${sourceModule}: its source no longer selects ${compiledIds.length - activeIds.length} message(s).`;
+      }
       result = {
         ...createCatalogLoaderResult(artifact, loaderOptions),
         watchFiles: artifact.watchFiles,
       };
+      if (staleWarning) result.warnings.push(staleWarning);
       const resolvedLocale = artifact.resolvedLocaleChain?.[0] ?? locale;
       if (!failOnMissing && resolvedLocale !== cfg.pseudoLocale && artifact.missing.length > 0) {
         result.warnings.push(createMissingErrorMessage(resolvedLocale, artifact.missing));
@@ -91,6 +131,7 @@ module.exports = function palamedesPoLoader() {
       result.watchFiles.forEach((file) => {
         this.addDependency(file);
       });
+      if (sourcePath !== null) this.addDependency(sourcePath);
     } else if (selection) {
       // Selected artifacts fold fallback catalogs into a split sidecar. Without
       // addDependency a host cannot invalidate those indirect inputs.
