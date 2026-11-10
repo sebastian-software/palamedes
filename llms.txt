@@ -198,6 +198,12 @@ serves bundled and unbundled backends. See `docs/backend-servers.md`.
 
 ## Translation automation APIs
 
+`matchTerminology({ message, entries })` accepts caller-supplied protected/advisory
+terms and finds exact case-sensitive substrings within decoded native ICU literals.
+It performs no normalization or word segmentation. Results retain overlaps and mark
+a longest-first preferred subset; ranges index decoded literal UTF-8 bytes, not raw
+ICU source or JavaScript UTF-16 positions. This supplies relevance, not target QA.
+
 For custom translation tooling, `@palamedes/core-node` exposes
 `listTranslationCandidates(...)` and `applyTranslationPatches(...)`; create a
 patch from the candidate `fingerprint` so stale catalog state is rejected.

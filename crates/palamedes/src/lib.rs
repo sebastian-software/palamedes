@@ -44,6 +44,7 @@ mod source_macros;
 mod source_message;
 mod svelte;
 mod target_text;
+mod terminology;
 #[cfg(test)]
 mod test_support;
 mod transform;
@@ -157,6 +158,11 @@ pub use source::{
 pub use target_text::{
     TargetTextCheckOptions, TargetTextSpan, TranslationTargetText, TranslationTargetTextDiagnostic,
     TranslationTargetTextRequest, TranslationTargetTextResult, check_translation_targets,
+};
+#[doc(hidden)]
+pub use terminology::{
+    TerminologyEntry, TerminologyError, TerminologyKind, TerminologyMatch, TerminologyRequest,
+    match_terminology,
 };
 #[doc(hidden)]
 pub use transform::{

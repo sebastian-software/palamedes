@@ -16,6 +16,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `checkTranslationTargets(request)`
+- `matchTerminology(request)`
 - `inspectCatalogMachineTranslations(config, options?)`
 - `inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?: AsyncTaskOptions)`
 - `deriveMessageMetadata(message, context?)`
@@ -45,6 +46,13 @@ core. Most apps use it indirectly through the CLI and plugins.
 `analyzeMdxNative` returns messages, structured diagnostics, generated
 framework JSX, compiled message IDs, and a native source map from one semantic
 analysis pass. See [MDX messages](../mdx.md).
+
+`matchTerminology()` accepts structured caller-owned protected/advisory terms
+and returns exact substring relevance within parsed ICU literals. It preserves
+overlaps and marks a deterministic longest-first preference. Its UTF-8 byte
+ranges index the returned decoded literal, never raw ICU source or JavaScript
+UTF-16 positions. See [Caller-supplied terminology](../translation-candidate-patches.md#caller-supplied-terminology)
+for entry validation, Unicode semantics, paths, and examples.
 
 `compileCatalogArtifact()` and `compileCatalogArtifactSelected()` include
 runtime formatter diagnostics in their `diagnostics` arrays. Unsupported

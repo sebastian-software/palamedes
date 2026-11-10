@@ -1,4 +1,8 @@
 import type {
+  TerminologyEntry as GeneratedTerminologyEntry,
+  TerminologyKind as GeneratedTerminologyKind,
+  TerminologyMatch as GeneratedTerminologyMatch,
+  TerminologyRequest as GeneratedTerminologyRequest,
   TranslationTargetTextResult as GeneratedTranslationTargetTextResult,
   TargetTextCheckOptions as GeneratedTargetTextCheckOptions,
   TargetTextSpan as GeneratedTargetTextSpan,
@@ -99,6 +103,10 @@ export {
 } from "./removedOptions";
 
 export type NativeInfo = GeneratedNativeInfo;
+export type TerminologyEntry = GeneratedTerminologyEntry;
+export type TerminologyKind = GeneratedTerminologyKind;
+export type TerminologyMatch = GeneratedTerminologyMatch;
+export type TerminologyRequest = GeneratedTerminologyRequest;
 export type AsyncTaskOptions = {
   /** Cancel the native task while it is still waiting for a libuv worker. */
   signal?: AbortSignal;
@@ -471,6 +479,11 @@ function mapNativeSourceDiagnosticSeverity(
 
 export function getNativeInfo(): NativeInfo {
   return native.getNativeInfo();
+}
+
+/** Exact substring relevance in parsed ICU literals; offsets index decoded UTF-8 bytes. */
+export function matchTerminology(request: TerminologyRequest): TerminologyMatch[] {
+  return native.matchTerminology(request);
 }
 
 /** Read-only, opt-in review warnings for proposed translation values. */

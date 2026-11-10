@@ -37,6 +37,7 @@ import {
   extractMessagesNative,
   getNativeInfo,
   listTranslationCandidates,
+  matchTerminology,
   mergeCatalogFilesThreeWay,
   mergeCatalogsThreeWay,
   parsePo,
@@ -85,6 +86,68 @@ afterEach(async () => {
 });
 
 describe("@palamedes/core-node", () => {
+  it("matches caller terminology in visible ICU literals with honest byte coordinates", () => {
+    const entries = [
+      { id: "java", source: "Java", kind: "protected" as const },
+      {
+        id: "script",
+        source: "JavaScript",
+        kind: "advisory" as const,
+        preferredTarget: "JavaScript",
+        note: "Caller-owned guidance",
+      },
+      { id: "city", source: "東京", kind: "protected" as const },
+    ];
+    const request = { message: "🙂 JavaScript {Java} <Java>東京</Java>", entries };
+    const results = matchTerminology(request);
+    expect(
+      results.map(({ entryId, kind, start, end, preferred }) => ({
+        entryId,
+        kind,
+        start,
+        end,
+        preferred,
+      })),
+    ).toStrictEqual([
+      { entryId: "script", kind: "advisory", start: 5, end: 15, preferred: true },
+      { entryId: "java", kind: "protected", start: 5, end: 9, preferred: false },
+      { entryId: "city", kind: "protected", start: 0, end: 6, preferred: true },
+    ]);
+    expect(results[0]?.literalPath).toStrictEqual([0]);
+    expect(results[2]?.literalPath).toStrictEqual([3, 0]);
+    for (const matched of results) {
+      expect(Buffer.from(matched.literal).subarray(matched.start, matched.end).toString()).toBe(
+        entries.find(({ id }) => id === matched.entryId)?.source,
+      );
+    }
+    expect(matchTerminology({ ...request, entries: [...entries].reverse() })).toStrictEqual(
+      results,
+    );
+  });
+
+  it("rejects invalid terminology and malformed ICU rather than returning partial relevance", () => {
+    const entry = { id: "java", source: "Java", kind: "protected" as const };
+    expect(() => matchTerminology({ message: "Java", entries: [entry, entry] })).toThrow(
+      /Duplicate terminology entry ID/,
+    );
+    expect(() =>
+      matchTerminology({ message: "Java", entries: [{ ...entry, source: " " }] }),
+    ).toThrow(/blank source/);
+    expect(() =>
+      matchTerminology({ message: "Java", entries: [{ ...entry, preferredTarget: "" }] }),
+    ).toThrow(/blank preferredTarget/);
+    expect(() => matchTerminology({ message: "{broken", entries: [] })).toThrow(/Expected/);
+    expect(() =>
+      matchTerminology({
+        message: "Java",
+        entries: [{ ...entry, kind: "unknown" as "protected" }],
+      }),
+    ).toThrow(/unknown/);
+    expect(() => matchTerminology({ message: "\uD800", entries: [entry] })).toThrow(
+      /malformed Unicode/,
+    );
+  });
+
   it("keeps same-key initial catalog builds out of the worker pool", async () => {
     let releaseLeader: (() => void) | undefined;
     const leaderGate = new Promise<void>((resolve) => {
