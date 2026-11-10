@@ -153,6 +153,7 @@ describe("palamedes-loader.cjs", () => {
       expect(
         JSON.parse(Buffer.from(parameters.get("palamedes-selected")!, "base64url").toString()),
       ).toEqual(["id-a", "id-b"]);
+      expect(parameters.get("palamedes-source")).toBe("src/page.tsx");
       return parameters.get("palamedes-catalog");
     });
     expect(catalogs).toEqual(["src/locales/en.po", "src/locales/de.po"]);
