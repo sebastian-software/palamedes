@@ -1031,6 +1031,26 @@ function Greeting({ name }) { return <p>{translate\`Hello \${name}\`}</p>; }`;
     expect(result.diagnostics[0]?.help).toContain("Solid's `<Trans>`");
   });
 
+  it("gates opt-in pseudo-plural diagnostics on an explicit English source locale", () => {
+    const source = `import { t } from "@palamedes/core/macro";
+function Selection({ count }) { return t\`Imported \${count} record(s)\`; }`;
+    const english = analyzeSourceNative(source, "selection.ts", {
+      sourceLocale: "en",
+      rules: { pseudoPlural: "error" },
+    });
+    expect(english.diagnostics).toMatchObject([
+      { code: "pmds/no-pseudo-plural", severity: "error", primary: { line: 2 } },
+    ]);
+    for (const sourceLocale of [undefined, "de"]) {
+      const result = analyzeSourceNative(source, "selection.ts", {
+        sourceLocale,
+        rules: { pseudoPlural: "warning" },
+      });
+      expect(result.messages).toStrictEqual(english.messages);
+      expect(result.diagnostics).toStrictEqual([]);
+    }
+  });
+
   it("renders executable catalog modules from in-memory messages", () => {
     const code = renderCatalogModule({
       greeting: "Hallo {name}",

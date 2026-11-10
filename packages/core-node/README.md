@@ -175,10 +175,17 @@ stable code, lowercase severity, filename, exact UTF-8 byte range, one-based
 line and Unicode-scalar column, actionable help, and an optional related range.
 The recommended `placeholderOnly` rule defaults to `"warning"`; the narrower
 `emptyComponentOnly` rule defaults to `"off"`; and the readability-oriented
-`preferTransInJsx` suggestion defaults to `"info"`. All three accept `"off"`,
+`preferTransInJsx` suggestion defaults to `"info"`. These rules accept `"off"`,
 `"info"`, `"warning"`, or `"error"` through `options.rules`. The JSX rule never
 treats `t` as invalid and the initial diagnostic does not auto-fix imports or
 unsafe attribute, restricted-element, or non-render rewrites.
+
+The opt-in `pseudoPlural` rule defaults to `"off"`. Pass
+`{ sourceLocale: "en", rules: { pseudoPlural: "warning" } }` to diagnose a
+single runtime interpolation followed by an English `word(s)` spelling.
+Unknown and non-English source locales are skipped. The
+[source lint configuration](../../docs/configuration.md#source-lint) defines
+the narrow syntax and ignored ambiguous forms; this diagnostic has no autofix.
 
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party Vite, Next, and Remix `.po` loaders. Pass

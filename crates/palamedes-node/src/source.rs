@@ -10,10 +10,12 @@ pub struct NativeSourceRuleOptions {
     pub placeholder_only: Option<String>,
     pub empty_component_only: Option<String>,
     pub prefer_trans_in_jsx: Option<String>,
+    pub pseudo_plural: Option<String>,
 }
 
 #[napi(object)]
 pub struct NativeSourceAnalysisOptions {
+    pub source_locale: Option<String>,
     pub mdx: Option<NativeMdxOptions>,
     pub rules: Option<NativeSourceRuleOptions>,
 }
@@ -138,6 +140,8 @@ impl TryFrom<NativeSourceRuleOptions> for palamedes::SourceRuleOptions {
                 "rules.preferTransInJsx",
             )?
             .unwrap_or(defaults.prefer_trans_in_jsx),
+            pseudo_plural: source_rule_level(value.pseudo_plural, "rules.pseudoPlural")?
+                .unwrap_or(defaults.pseudo_plural),
         })
     }
 }
@@ -147,6 +151,7 @@ impl TryFrom<NativeSourceAnalysisOptions> for palamedes::SourceAnalysisOptions {
 
     fn try_from(value: NativeSourceAnalysisOptions) -> Result<Self> {
         Ok(Self {
+            source_locale: value.source_locale,
             mdx: value.mdx.map(Into::into).unwrap_or_default(),
             rules: value
                 .rules

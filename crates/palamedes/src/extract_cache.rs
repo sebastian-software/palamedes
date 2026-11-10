@@ -121,6 +121,8 @@ struct CacheStamp {
     mdx_stamp: String,
     /// Rule levels affect diagnostics but never extracted messages.
     rules: SourceRuleOptions,
+    /// Locale-specific authoring diagnostics depend on the source language.
+    source_locale: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -154,6 +156,7 @@ impl ExtractCache {
                 reference_scopes: false,
                 mdx_stamp: String::new(),
                 rules: SourceRuleOptions::disabled(),
+                source_locale: None,
             },
             entries: HashMap::new(),
             dirty: false,
@@ -195,6 +198,7 @@ impl ExtractCache {
             reference_scopes: options.reference_scopes,
             mdx_stamp: options.mdx.extraction_stamp(),
             rules: options.rules.clone(),
+            source_locale: options.source_locale.clone(),
         };
 
         let entries = std::fs::read(path)
@@ -309,7 +313,8 @@ impl ExtractCache {
             || (self.stamp.root_dir == root_dir
                 && self.stamp.reference_scopes == options.reference_scopes
                 && self.stamp.mdx_stamp == mdx_stamp
-                && self.stamp.rules == options.rules)
+                && self.stamp.rules == options.rules
+                && self.stamp.source_locale == options.source_locale)
         {
             return;
         }
@@ -318,6 +323,7 @@ impl ExtractCache {
         self.stamp.reference_scopes = options.reference_scopes;
         self.stamp.mdx_stamp = mdx_stamp;
         self.stamp.rules = options.rules.clone();
+        self.stamp.source_locale = options.source_locale.clone();
         if !self.entries.is_empty() {
             self.entries.clear();
             self.dirty = true;
@@ -655,6 +661,23 @@ mod tests {
         assert!(
             rules_changed.is_empty(),
             "changed source rule levels must discard cached diagnostics"
+        );
+
+        let locale_changed_options = ExtractCatalogMessagesOptions {
+            source_locale: Some("en".to_owned()),
+            ..options(true)
+        };
+        let locale_changed =
+            ExtractCache::load_with_options(&cache_path, "root-one", &locale_changed_options);
+        assert!(
+            locale_changed.is_empty(),
+            "source locale must enter the disk cache stamp"
+        );
+        let mut retained = same;
+        retained.reset_if_request_differs("root-one", &locale_changed_options);
+        assert!(
+            retained.is_empty(),
+            "locale changes must invalidate in-memory diagnostics"
         );
 
         std::fs::remove_dir_all(root).expect("cleanup");

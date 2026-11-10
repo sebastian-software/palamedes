@@ -64,6 +64,7 @@ export type PalamedesLintConfig = {
     placeholderOnly?: PalamedesSourceRuleLevel;
     emptyComponentOnly?: PalamedesSourceRuleLevel;
     preferTransInJsx?: PalamedesSourceRuleLevel;
+    pseudoPlural?: PalamedesSourceRuleLevel;
   };
 };
 
@@ -470,12 +471,14 @@ const LINT_RULE_DATA_CONFIG_KEYS = [
   "placeholder-only",
   "empty-component-only",
   "prefer-trans-in-jsx",
+  "pseudo-plural",
 ] as const;
 
 const LINT_RULE_CONFIG_KEYS = [
   "placeholderOnly",
   "emptyComponentOnly",
   "preferTransInJsx",
+  "pseudoPlural",
 ] as const;
 
 const CATALOG_CONFIG_KEYS = ["path", "format", "po", "include", "exclude"] as const;
@@ -751,6 +754,7 @@ function normalizeLintDataConfig(
       ["placeholderOnly", "placeholder-only"],
       ["emptyComponentOnly", "empty-component-only"],
       ["preferTransInJsx", "prefer-trans-in-jsx"],
+      ["pseudoPlural", "pseudo-plural"],
     ]) {
       if (camel in record) {
         throw new Error(
@@ -770,6 +774,9 @@ function normalizeLintDataConfig(
         : {}),
       ...(record["prefer-trans-in-jsx"] !== undefined
         ? { preferTransInJsx: record["prefer-trans-in-jsx"] as PalamedesSourceRuleLevel }
+        : {}),
+      ...(record["pseudo-plural"] !== undefined
+        ? { pseudoPlural: record["pseudo-plural"] as PalamedesSourceRuleLevel }
         : {}),
     },
   };
@@ -1253,7 +1260,12 @@ function validateLint(value: unknown, configPath: string): void {
   }
   const record = rules as Record<string, unknown>;
   rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_CONFIG_KEYS);
-  for (const field of ["placeholderOnly", "emptyComponentOnly", "preferTransInJsx"] as const) {
+  for (const field of [
+    "placeholderOnly",
+    "emptyComponentOnly",
+    "preferTransInJsx",
+    "pseudoPlural",
+  ] as const) {
     const level = record[field];
     if (level !== undefined && !["off", "info", "warning", "error"].includes(level as string)) {
       throw new TypeError(
