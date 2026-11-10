@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-04T08:48:34.835Z",
-  "sourceCommit": "baa2d72305ba9072cb7e6e0d05dab41ade265caf",
+  "measuredAt": "2026-11-10T00:20:24.091Z",
+  "sourceCommit": "fa5c2c6bce8a70254f9531a794d3fc243d492032",
   "worktreeDirty": true,
-  "sourceSha256": "3b61ecaa51ce0d36fc6e27bea04f054012bfb9f9773740caff6c7ff53b2f4626",
+  "sourceSha256": "e8b799170be60c6f0ca393bb69b57950dc2d23faa8e69f1b2f59c74805e28b3f",
   "environment": {
     "node": "v24.22.2",
     "vite": "8.2.4",
@@ -25,16 +25,17 @@
     {
       "id": "core",
       "bytes": {
-        "raw": 14099,
-        "gzip": 4766,
-        "brotli": 4198
+        "raw": 14667,
+        "gzip": 4957,
+        "brotli": 4376
       },
-      "sha256": "2b0b06365542fde1fc4bf73ac68ab0c20e6754e760e827ee6a2ee1c9ceee30b9",
+      "sha256": "71175f1c006db5a8ff7c23433f9f0a3dc3161bee62b5b0c0cccaa6c5b92940eb",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
         "activateServerI18n",
         "createCompiledMessageRuntime",
+        "createDevelopmentCatalogUpdater",
         "createI18n",
         "defineCompiledCatalog",
         "formatMessageArgument",
@@ -73,7 +74,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -84,11 +85,11 @@
     {
       "id": "react",
       "bytes": {
-        "raw": 16387,
-        "gzip": 5524,
-        "brotli": 4890
+        "raw": 16955,
+        "gzip": 5717,
+        "brotli": 5059
       },
-      "sha256": "9ea69be19d15f84efffc33c750f735577aa1ab99e944a7fd8ff9b54fa4b4bfa1",
+      "sha256": "37b986b3667974a31d8d84d04efc6f66ed27c6c16d32f746ff613436403cac64",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -97,6 +98,7 @@
         "activateServerI18n",
         "buildLocaleSwitchItems",
         "createCompiledMessageRuntime",
+        "createDevelopmentCatalogUpdater",
         "createI18n",
         "defineCompiledCatalog",
         "formatMessageArgument",
@@ -147,7 +149,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -158,11 +160,11 @@
     {
       "id": "solid",
       "bytes": {
-        "raw": 15699,
-        "gzip": 5247,
-        "brotli": 4636
+        "raw": 16267,
+        "gzip": 5438,
+        "brotli": 4803
       },
-      "sha256": "46770aef81398f979a2b75d4b30688f4d2665902841764fc74a33828ed2afe8a",
+      "sha256": "4dcafb451b44028532d2fe404b1e1c0c30b564ff59647204ed87212a76811b5c",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -170,6 +172,7 @@
         "activateServerI18n",
         "buildLocaleSwitchItems",
         "createCompiledMessageRuntime",
+        "createDevelopmentCatalogUpdater",
         "createI18n",
         "defineCompiledCatalog",
         "formatMessageArgument",
@@ -212,7 +215,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -227,11 +230,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 16079,
-        "gzip": 5376,
-        "brotli": 4757
+        "raw": 16647,
+        "gzip": 5567,
+        "brotli": 4929
       },
-      "sha256": "ae64e22bb074d7f0769a8a02a9baee4bf80be8e13d5b9c034d1a39110185beac",
+      "sha256": "efe8701b8d34adf1a6ca27124c1d0a85067cfcb1ef8ce7e137d44a557fe801a2",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -239,6 +242,7 @@
         "Trans",
         "activateServerI18n",
         "createCompiledMessageRuntime",
+        "createDevelopmentCatalogUpdater",
         "createI18n",
         "defineCompiledCatalog",
         "formatMessageArgument",
@@ -281,7 +285,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -321,7 +325,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -373,7 +377,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -417,7 +421,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -469,7 +473,7 @@
         },
         {
           "path": "packages/runtime/dist/internal.mjs",
-          "sha256": "4fa1f2750a12e1bbe781c8fe06e531e78fdb269438e0dea02cd4ab6d2c41d45c"
+          "sha256": "5d0d28e592335f58cfb49f9b8af4b75870104166885de981946099c5cc89fe22"
         },
         {
           "path": "packages/runtime/dist/shared/runtime.5Vtf7NvU.mjs",
@@ -509,9 +513,9 @@
     "bytes": {
       "raw": 2361,
       "gzip": 1266,
-      "brotli": 1099
+      "brotli": 1098
     },
-    "sha256": "a7b4a12d20e06028e701ce43e15673cca0177b230e9440fc2581da0432dbe318",
+    "sha256": "c782ff5171bcf384c0a9c46d1a8334d054f68fa253bcde47826f81162edb2647",
     "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
   }
 }

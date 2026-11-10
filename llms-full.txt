@@ -143,6 +143,17 @@ dependencies from the evaluated module graph. Do not create an app-owned
 compiled fragment before translated code runs. Set the document's `lang` before
 its module entry; locale selection remains host policy.
 
+Plain Vite React apps can opt into `palamedes({ experimentalReactCatalogHmr:
+true })` for state-preserving PO/FCL translation edits through existing Fast
+Refresh boundaries. Development uses a complete active-locale catalog snapshot
+with stale-generation rejection and invalid-edit recovery; production stays
+split. Matching-catalog source/ID validation remains enforced. Conflicting values
+for the same ID across catalogs are rejected in this experimental snapshot mode.
+Message membership/config changes and removed identities reload the document;
+ordinary React source edits keep Fast Refresh.
+Solid keeps reload-based updates. Other SSR/RSC hosts have no in-place-update
+guarantee. See `/docs/api/vite-plugin.md#experimental-react-catalog-hmr`.
+
 Package roots and `compiled` aliases share one parser-free v2 runtime. Raw ICU
 strings are build-time inputs; application-owned catalog maps and serialized ICU
 transport are not part of standard framework delivery. See

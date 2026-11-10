@@ -14,6 +14,7 @@ import type { Plugin } from "vite";
 const mocks = vi.hoisted(() => ({
   loadPalamedesConfig: vi.fn(),
   analyzeMdxNative: vi.fn(),
+  compileCatalogArtifact: vi.fn(),
   compileCatalogArtifactSelected: vi.fn(),
   compileCatalogModule: vi.fn(),
   createMissingErrorMessage: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("@palamedes/core-node", async (importOriginal) => ({
   assertNoRemovedPalamedesOptions: (await importOriginal<typeof PalamedesCoreNodeModule>())
     .assertNoRemovedPalamedesOptions,
   analyzeMdxNative: mocks.analyzeMdxNative,
+  compileCatalogArtifactAsync: mocks.compileCatalogArtifact,
   compileCatalogArtifactSelectedAsync: mocks.compileCatalogArtifactSelected,
   compileCatalogModuleAsync: mocks.compileCatalogModule,
   renderCatalogModule: mocks.renderCatalogModule,
@@ -54,6 +56,7 @@ vi.mock("@palamedes/transform", async (importOriginal) => {
     PALAMEDES_BUNDLER_TRANSFORM_INCLUDE: actual.PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     PALAMEDES_MACRO_PACKAGES: ["@palamedes/core/macro", "@palamedes/react/macro"],
     createMissingErrorMessage: mocks.createMissingErrorMessage,
+    createCatalogLoaderResult: actual.createCatalogLoaderResult,
     transformPalamedesMacros: mocks.transformPalamedesMacros,
     resolveMacroRuntimeModule: actual.resolveMacroRuntimeModule,
     mdxFrameworkFor: actual.mdxFrameworkFor,
@@ -110,6 +113,12 @@ beforeEach(() => {
     watchFiles: ["/repo/src/locales/de.po", "/repo/src/locales/en.po"],
     resolvedLocaleChain: ["de", "en"],
   });
+  mocks.compileCatalogArtifact.mockReset().mockResolvedValue({
+    messages: {},
+    missing: [],
+    diagnostics: [],
+    watchFiles: [],
+  });
   mocks.createMissingErrorMessage.mockImplementation(
     (locale: string, missing: unknown[]) =>
       `Missing ${missing.length} translation(s) for locale ${locale}`,
@@ -122,6 +131,230 @@ beforeEach(() => {
 });
 
 describe("palamedes vite plugin", () => {
+  it.each(["excluded", "deleted"])(
+    "ignores a %s historical source during catalog updates",
+    async (change) => {
+      const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
+        (candidate) => candidate.name === "palamedes:transform",
+      ) as any;
+      mocks.transformPalamedesMacros.mockReturnValue({
+        code: "transformed",
+        hasChanged: true,
+        compiledIds: ["old-label"],
+        map: null,
+      });
+      await transformHandler(plugin.transform)!.call(
+        { error: vi.fn() } as never,
+        'import { t } from "@palamedes/core/macro"; export const label = t`Old`;',
+        "/repo/src/Old.tsx",
+      );
+      const send = vi.fn();
+      const server = {
+        environments: {
+          client: {
+            hot: { send },
+            moduleGraph: {
+              idToModuleMap: new Map(),
+              getModulesByFile: () => [{ transformResult: null, importedModules: new Set([{}]) }],
+              invalidateModule: vi.fn(),
+            },
+            reloadModule: vi.fn(),
+          },
+        },
+      };
+      Object.assign(server, { restart: vi.fn(async () => plugin.configureServer(server)) });
+      plugin.configureServer(server);
+      if (change === "excluded") {
+        const config = await mocks.loadPalamedesConfig();
+        mocks.loadPalamedesConfig.mockResolvedValue({
+          ...config,
+          catalogs: [{ path: "src/locales/{locale}", include: ["src/current/**"] }],
+        });
+        await plugin.hotUpdate.handler({
+          file: "/repo/palamedes.yaml",
+          type: "update",
+          timestamp: 1,
+          server,
+        });
+      } else {
+        await plugin.hotUpdate.handler({
+          file: "/repo/src/Old.tsx",
+          type: "delete",
+          timestamp: 1,
+          server,
+        });
+      }
+      mocks.compileCatalogArtifactSelected.mockRejectedValue(
+        new Error("obsolete source ID is absent"),
+      );
+      await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 2, server });
+      await vi.waitFor(() =>
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "custom" })),
+      );
+      expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
+      expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
+    },
+  );
+
+  it("validates experimental IDs in the source's matching catalog", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "src/a/locales/{locale}", include: ["src/a/**"] },
+        { path: "src/b/locales/{locale}", include: ["src/b/**"] },
+      ],
+    });
+    mocks.compileCatalogArtifactSelected.mockRejectedValue(
+      new Error("Unknown compiled message ID message-x in matching catalog A"),
+    );
+    const { load, key } = await runSidecarLoad(
+      ["message-x"],
+      {},
+      {
+        sourceId: "/repo/src/a/View.tsx",
+        pluginOptions: { experimentalReactCatalogHmr: true },
+      },
+    );
+    await expect(load(`\0palamedes:messages/${key}`)).rejects.toThrow(
+      "Unknown compiled message ID message-x",
+    );
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogs: [expect.objectContaining({ path: "src/a/locales/{locale}" })],
+      }),
+      expect.stringContaining("/src/a/locales/"),
+      ["message-x"],
+    );
+  });
+
+  it("rejects an excluded experimental message source", async () => {
+    const { load, key } = await runSidecarLoad(
+      ["message-x"],
+      {},
+      {
+        sourceId: "/repo/excluded/View.tsx",
+        pluginOptions: { experimentalReactCatalogHmr: true },
+      },
+    );
+    await expect(load(`\0palamedes:messages/${key}`)).rejects.toThrow(
+      "not included in a configured catalog",
+    );
+  });
+
+  it("rejects conflicting development snapshot values instead of using another catalog's translation", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "src/a/locales/{locale}", include: ["src/a/**"] },
+        { path: "src/b/locales/{locale}", include: ["src/b/**"] },
+      ],
+    });
+    mocks.compileCatalogArtifact.mockImplementation(async (_config, resource) => ({
+      messages: { "message-x": resource.includes("/src/a/") ? "A translation" : "B translation" },
+      missing: [],
+      diagnostics: [],
+      watchFiles: [],
+    }));
+    const { load } = await runSidecarLoad(
+      ["message-x"],
+      {},
+      {
+        sourceId: "/repo/src/a/View.tsx",
+        pluginOptions: { experimentalReactCatalogHmr: true },
+      },
+    );
+    await expect(load("\0palamedes:react-catalog-snapshot/0/de")).rejects.toThrow("conflicting");
+  });
+
+  it("discards failed and queued catalog validations superseded by a configuration reload", async () => {
+    let rejectOld!: (error: Error) => void;
+    mocks.compileCatalogArtifact.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+    );
+    const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
+      (candidate) => candidate.name === "palamedes:transform",
+    ) as any;
+    const send = vi.fn();
+    const server = {
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: { idToModuleMap: new Map(), getModulesByFile: () => [] },
+        },
+      },
+    };
+    Object.assign(server, { restart: vi.fn(async () => plugin.configureServer(server)) });
+    plugin.configureServer(server);
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1, server });
+    await vi.waitFor(() => expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(3));
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1.5, server });
+    await plugin.hotUpdate.handler({
+      file: "/repo/palamedes.yaml",
+      type: "update",
+      timestamp: 2,
+      server,
+    });
+    rejectOld(new Error("obsolete catalog validation failed"));
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 3, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "custom" })),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(6);
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
+  });
+
+  it("still reports a current refresh failure after committing its catalog generation", async () => {
+    const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
+      (candidate) => candidate.name === "palamedes:transform",
+    ) as any;
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "transformed",
+      hasChanged: true,
+      compiledIds: ["label"],
+      map: null,
+    });
+    await transformHandler(plugin.transform)!.call(
+      { error: vi.fn() } as never,
+      'import { t } from "@palamedes/core/macro"; export const label = t`Hello`;',
+      "/repo/src/App.tsx",
+    );
+    const send = vi.fn();
+    const server = {
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: {
+            idToModuleMap: new Map(),
+            getModulesByFile: () => [{ transformResult: null, importedModules: new Set([{}]) }],
+            invalidateModule: vi.fn(),
+          },
+          reloadModule: vi.fn().mockRejectedValue(new Error("current React refresh failed")),
+        },
+      },
+    };
+    Object.assign(server, { restart: vi.fn(async () => plugin.configureServer(server)) });
+    plugin.configureServer(server);
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: "current React refresh failed" }),
+        }),
+      ),
+    );
+  });
+
   it("generates a server-only lazy catalog virtual module", async () => {
     const plugin = palamedes().find((candidate) => candidate.name === "palamedes:server-catalogs");
     const hooks = plugin as any;

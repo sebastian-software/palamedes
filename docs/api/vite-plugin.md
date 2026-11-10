@@ -34,6 +34,7 @@ interface PalamedesPluginOptions {
   includeSourceMetadata?: boolean;
   mdx?: PalamedesMdxConfig | false;
   environment?: "auto" | "server";
+  experimentalReactCatalogHmr?: boolean;
 }
 ```
 
@@ -51,6 +52,7 @@ Defaults:
 - `includeSourceMetadata`: `false`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 - `environment`: `"auto"`
+- `experimentalReactCatalogHmr`: `false`
 
 The plugin throws a migration error during setup when it receives a removed v1
 option: `failOnCompileError`, `keepSourceFallbacks` (renamed to
@@ -105,6 +107,56 @@ Modules that Rollup places in one output chunk share one message asset per
 locale, so message requests follow chunks rather than source modules.
 Set the document's `lang` before its module entry runs; the adapter initializes
 the client instance. Locale changes require document navigation.
+
+### Experimental React catalog HMR
+
+Plain Vite React apps with Fast Refresh boundaries can opt into:
+
+```ts
+palamedes({ experimentalReactCatalogHmr: true });
+```
+
+This mode keeps the active document locale fixed and updates PO/FCL translations
+without remounting the React root. Both `Trans` and ordinary macro calls refresh
+through the host's existing React boundaries. Application state is preserved
+when those boundaries support Fast Refresh; a host that requires a reload keeps
+its ordinary fallback. The verified browser proof uses a plain Vite React app.
+Other SSR/RSC hosts have no in-place-update guarantee from this option.
+
+Development loads one complete compiled catalog snapshot for the document's
+active locale. All configured catalog/locale snapshots are validated before an
+edit is delivered, including the `failOnMissing` gate when enabled. Catalogs
+retain their source include/exclude and selected-message validation. An unused
+catalog cannot supply a missing identity for another source. This experimental
+complete-snapshot mode rejects conflicting values for the same ID across
+catalogs; use distinct source/context identities or disable the option for
+ordinary scoped fragment delivery. Eager and later lazy modules use the same
+generation. A delayed older response cannot overwrite a
+newer committed snapshot. Invalid edits show Vite's development error overlay
+and keep the last valid UI; correcting the catalog resumes updates.
+Vite retains its first-update error recovery policy: a correction before the
+first normal HMR update can reload the document. Later valid translation edits
+preserve Fast Refresh state.
+
+Configuration changes restart the Vite development server and reload the
+document, discarding its cached host module graph. Source message membership
+changes and removed compiled message identities also reload the document.
+Ordinary React source edits keep
+their existing Fast Refresh behavior. Production keeps its normal split
+fragments. Locale switches still navigate to a new document. The mode requires
+`framework: "react"`; Solid and other integrations keep reload-based catalog
+updates. Solid's current refresh boundary can recreate component-local signals,
+so disabling document reload alone would not preserve its application state.
+
+After building packages, run the PO/FCL browser proof with:
+
+```sh
+node scripts/proof-react-catalog-hmr.mjs
+```
+
+It also runs from the existing Vite development proof in the example browser
+lane. It requires the example's dependencies, the matching native addon, and the
+Chromium revision installed by `pnpm exec playwright install chromium`.
 
 Vite's resolved `base` must be root-relative, such as `/app/`, or an absolute
 URL. Relative bases are rejected because nested document URLs would resolve
