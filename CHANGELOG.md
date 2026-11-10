@@ -117,6 +117,19 @@ history and use the migration guide for 2.0 behavior.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [2.2.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.1.1...palamedes-v2.2.0) (2026-11-10)
+
+
+### Features
+
+* **next-plugin:** deliver production client catalogs outside the bundler graph (experimental) ([fa5c2c6](https://github.com/sebastian-software/palamedes/commit/fa5c2c6bce8a70254f9531a794d3fc243d492032))
+
+
+### Bug Fixes
+
+* **deps:** align native Ferramenta dependencies ([#1510](https://github.com/sebastian-software/palamedes/issues/1510)) ([a1a1819](https://github.com/sebastian-software/palamedes/commit/a1a1819805f6821f1b9897e5c6d3c39bcfb2fe8e))
+* **next-plugin:** ignore obsolete cached catalog selections ([#1499](https://github.com/sebastian-software/palamedes/issues/1499)) ([7e8f6df](https://github.com/sebastian-software/palamedes/commit/7e8f6df277a400ea8e44f9dddc5489f6f993b0cb))
+
 ## [2.1.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.1.0...palamedes-v2.1.1) (2026-11-05)
 
 
