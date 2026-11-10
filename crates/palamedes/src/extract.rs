@@ -1960,20 +1960,25 @@ fn analyze_source_in(
             diagnostics: Vec::new(),
             comments: Vec::new(),
         };
-        for script in crate::component::script_blocks(source, filename)? {
+        let component = crate::component::scan(source, filename)?;
+        let mut markup_macros = HashMap::new();
+        for script in component.scripts() {
             let analyzed = analyze_javascript_in(
                 allocator,
                 source,
                 filename,
                 reference_scopes,
                 rules,
-                &script,
+                script,
+                component
+                    .exposes_script(script)
+                    .then_some(&mut markup_macros),
             )?;
             result.messages.extend(analyzed.messages);
             result.diagnostics.extend(analyzed.diagnostics);
             result.comments.extend(analyzed.comments);
         }
-        crate::component::reject_markup_macro_uses(source, filename)?;
+        component.reject_markup_macro_uses(source, filename, &markup_macros)?;
         return Ok(result);
     }
 
@@ -1988,6 +1993,7 @@ fn analyze_source_in(
             source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
             instance: false,
         },
+        None,
     )
 }
 
@@ -1998,6 +2004,7 @@ fn analyze_javascript_in(
     reference_scopes: bool,
     rules: &SourceRuleOptions,
     script: &crate::component::ScriptBlock,
+    markup_macros: Option<&mut HashMap<String, String>>,
 ) -> PalamedesResult<SourceAnalysisResult> {
     let parse_source = crate::component::masked_source(source, &script.range);
     let parsed = Parser::new(allocator, &parse_source, script.source_type).parse();
@@ -2028,6 +2035,14 @@ fn analyze_javascript_in(
 
     let mut collector = MacroCollector::new();
     collector.visit_program(&parsed.program);
+    if let Some(macros) = markup_macros {
+        macros.extend(
+            collector
+                .imported_macros
+                .iter()
+                .map(|(local, imported)| (local.clone(), imported.imported_name.clone())),
+        );
+    }
 
     /*
      * Without a single imported Palamedes macro, the only remaining extraction

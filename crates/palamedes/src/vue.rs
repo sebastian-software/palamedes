@@ -38,7 +38,17 @@ impl Tag<'_> {
 /// are raw text in Vue's SFC grammar. A script-looking tag in those blocks or
 /// in a comment must never become an extraction surface.
 pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec<ScriptBlock>> {
+    scan(source, filename).map(|scan| scan.scripts)
+}
+
+pub(crate) struct Scan {
+    pub scripts: Vec<ScriptBlock>,
+    templates: Vec<std::ops::Range<usize>>,
+}
+
+pub(crate) fn scan(source: &str, filename: &str) -> PalamedesResult<Scan> {
     let mut scripts = Vec::new();
+    let mut templates = Vec::new();
     let mut cursor = 0;
     let mut seen_script = [false; 2];
     while let Some(start) = next_tag(source, &mut cursor) {
@@ -54,6 +64,9 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
         let end = block_end(source, &tag, raw)
             .ok_or_else(|| sfc_error(filename, "Missing closing language-block tag."))?;
         cursor = end.end;
+        if tag.name == "template" && !raw && tag.attribute("v-pre").is_none() {
+            templates.push(tag.end..end.start);
+        }
         if tag.name != "script" {
             continue;
         }
@@ -96,41 +109,20 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
             instance: setup == 1,
         });
     }
-    Ok(scripts)
+    Ok(Scan { scripts, templates })
 }
 
 /// Templates are not macro surfaces. Diagnose imported setup bindings before
 /// their imports are removed, using OXC to distinguish references from property
 /// keys, strings, comments, and locally shadowed function parameters.
-pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> PalamedesResult<()> {
-    if !source.contains("/macro") {
-        return Ok(());
-    }
-    let scripts = script_blocks(source, filename)?
-        .into_iter()
-        .filter(|script| script.instance)
-        .collect::<Vec<_>>();
-    let macros = crate::component::imported_macros(source, &scripts);
-    if macros.is_empty() {
-        return Ok(());
-    }
-    let mut cursor = 0;
-    while let Some(start) = next_tag(source, &mut cursor) {
-        let Some(tag) = parse_tag(source, start) else {
-            continue;
-        };
-        cursor = tag.end;
-        if tag.closing || tag.self_closing {
-            continue;
-        }
-        let raw =
-            tag.name != "template" || tag.attribute("lang").is_some_and(|lang| lang != "html");
-        let end = block_end(source, &tag, raw)
-            .ok_or_else(|| sfc_error(filename, "Missing closing language-block tag."))?;
-        if tag.name == "template" && !raw && tag.attribute("v-pre").is_none() {
-            check_template(source, filename, tag.end, end.start, &macros)?;
-        }
-        cursor = end.end;
+pub(crate) fn reject_markup_macro_uses(
+    source: &str,
+    filename: &str,
+    scan: Scan,
+    macros: &std::collections::HashMap<String, String>,
+) -> PalamedesResult<()> {
+    for template in scan.templates {
+        check_template(source, filename, template.start, template.end, macros)?;
     }
     Ok(())
 }
@@ -304,6 +296,15 @@ fn check_template_expression(
     use oxc_allocator::Allocator;
     use oxc_parser::Parser;
     use oxc_semantic::SemanticBuilder;
+    let expression_source = &source[start..end];
+    // A reference must contain its imported spelling or an identifier escape.
+    // This is only a conservative candidate gate: OXC still decides reference
+    // identity and shadowing, including escaped and Unicode identifiers.
+    if !expression_source.contains('\\')
+        && !macros.keys().any(|name| expression_source.contains(name))
+    {
+        return Ok(());
+    }
     let bindings = scopes.iter().flat_map(|(_, bindings)| bindings);
     let prefix = bindings
         .map(|binding| format!("({binding}) => {{"))
@@ -312,7 +313,7 @@ fn check_template_expression(
     for expression in [true, false] {
         let opening = if expression { "(" } else { "() => {" };
         let closing = if expression { ")" } else { "}" };
-        let text = format!("{prefix}{opening}{}{closing}{suffix}", &source[start..end]);
+        let text = format!("{prefix}{opening}{expression_source}{closing}{suffix}");
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, &text, SourceType::ts()).parse();
         if !parsed.diagnostics.is_empty() {
@@ -665,6 +666,35 @@ mod tests {
 #[cfg(test)]
 mod markup_tests {
     use crate::{extract_messages, transform_macros};
+
+    #[test]
+    fn vue_markup_analysis_keeps_setup_imports_and_escaped_unicode_references() {
+        let normal = "<script>import { plural as text } from '@palamedes/core/macro';</script>";
+        let setup = "<script setup>import { t as text, plural as zählen } from '@palamedes/core/macro';</script>";
+        for scripts in [format!("{normal}\n{setup}"), format!("{setup}\n{normal}")] {
+            for (expression, macro_name) in [(r"\u0074ext", "t"), ("zählen", "plural")] {
+                let source = format!("{scripts}\n<template>😀{{{{ {expression} }}}}</template>");
+                let extracted = extract_messages(&source, "View.vue").unwrap_err();
+                let transformed = transform_macros(&source, "View.vue", None).unwrap_err();
+                assert_eq!(extracted.to_string(), transformed.to_string());
+                match extracted {
+                    crate::PalamedesError::UnsupportedMacroSyntax {
+                        macro_name: name,
+                        location,
+                        ..
+                    } => {
+                        assert_eq!(name, macro_name);
+                        assert_eq!(location, "View.vue:3:15");
+                    }
+                    other => panic!("unexpected error: {other}"),
+                }
+            }
+        }
+        // A normal script's imports are not exposed to the Vue template.
+        let source = format!("{normal}<template>{{{{ text }}}}</template>");
+        assert!(extract_messages(&source, "View.vue").is_ok());
+        assert!(transform_macros(&source, "View.vue", None).is_ok());
+    }
 
     #[test]
     fn rejects_template_macro_references_with_the_original_location() {

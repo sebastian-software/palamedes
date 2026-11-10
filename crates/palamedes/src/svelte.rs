@@ -40,16 +40,13 @@ pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec
 /// within the same brace expression. A macro use outside the binding's real
 /// scope that reuses a shadowed name therefore goes unreported; the check
 /// prefers that rare miss over rejecting valid markup.
-pub(crate) fn reject_markup_macro_uses(source: &str, filename: &str) -> PalamedesResult<()> {
-    if !source.contains("/macro") {
-        return Ok(());
-    }
-    let scan = scan(source, filename)?;
+pub(crate) fn reject_markup_macro_uses(
+    source: &str,
+    filename: &str,
+    scan: Scan<'_>,
+    macros: &std::collections::HashMap<String, String>,
+) -> PalamedesResult<()> {
     if scan.expressions.is_empty() {
-        return Ok(());
-    }
-    let macros = crate::component::imported_macros(source, &scan.scripts);
-    if macros.is_empty() {
         return Ok(());
     }
     let mut markup_bindings = scan.bindings;
@@ -138,15 +135,15 @@ fn next_byte(bytes: &[u8], index: usize) -> Option<u8> {
         .copied()
 }
 
-struct Scan<'a> {
-    scripts: Vec<ScriptBlock>,
+pub(crate) struct Scan<'a> {
+    pub scripts: Vec<ScriptBlock>,
     /// Start offsets of markup and attribute brace expressions.
     expressions: Vec<usize>,
     /// Names bound by `let:` directives.
     bindings: Vec<&'a str>,
 }
 
-fn scan<'a>(source: &'a str, filename: &str) -> PalamedesResult<Scan<'a>> {
+pub(crate) fn scan<'a>(source: &'a str, filename: &str) -> PalamedesResult<Scan<'a>> {
     let mut scripts = Vec::new();
     let mut expressions = Vec::new();
     let mut bindings = Vec::new();
@@ -909,6 +906,28 @@ mod tests {
                 (macro_name, location)
             }
             other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn svelte_markup_analysis_keeps_imports_from_both_scripts_without_messages() {
+        let module =
+            "<script module>import { plural as count } from '@palamedes/core/macro';</script>";
+        let instance = r"<script>import { t as \u0074ext } from '@palamedes/core/macro';</script>";
+        for scripts in [
+            format!("{module}\n{instance}"),
+            format!("{instance}\n{module}"),
+        ] {
+            for (reference, expected) in [("text", "t"), ("count", "plural")] {
+                let source = format!("{scripts}\n<p>😀{{handler({reference})}}</p>");
+                assert_eq!(
+                    markup_macro_error(&source),
+                    (expected.to_owned(), "View.svelte:3:14".to_owned())
+                );
+            }
+            let valid = format!("{scripts}\n<p>{{items.map(text => text.name)}} {{obj.count}}</p>");
+            assert!(extract_messages(&valid, "View.svelte").is_ok());
+            assert!(transform_macros(&valid, "View.svelte", None).is_ok());
         }
     }
 
