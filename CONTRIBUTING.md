@@ -300,10 +300,10 @@ For each normal release:
 
 Registry names, ownership, trusted publishers, and the initial functional Rust
 SDK publication were completed in [#1309](https://github.com/sebastian-software/palamedes/issues/1309).
-That issue remains open for a crates.io-only installed application proof, not
-publication credentials. The coordinated v2 acceptance epic
+[#1309](https://github.com/sebastian-software/palamedes/issues/1309) tracks the
+crates.io-only installed application proof. The coordinated v2 acceptance epic
 [#1204](https://github.com/sebastian-software/palamedes/issues/1204) is closed.
-`node scripts/check-first-publish.mjs` checks npm name availability; a passing
+`node scripts/check-first-publish.mjs` verifies that the expected npm package names already exist; a passing
 dry run does not establish publication permissions. The
 [Rust distribution guide](docs/rust-applications.md#preview-and-publication)
 explains the SDK release lane. `pnpm release:rust:dry-run` runs its staging check
