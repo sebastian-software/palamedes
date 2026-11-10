@@ -35,8 +35,13 @@ export async function verifyCliUpdateLifecycle(binary, catalogDirectory, { stall
       mkdirSync(home);
       const env = {
         HOME: home,
+        USERPROFILE: home,
         XDG_CACHE_HOME: home,
+        XDG_STATE_HOME: home,
+        XDG_CONFIG_HOME: home,
+        XDG_DATA_HOME: home,
         LOCALAPPDATA: home,
+        APP_TRACKING_STATE_DIR: join(home, "state"),
         PALAMEDES_UI_LOCALE: "en",
         PALAMEDES_UI_CATALOG_DIR: catalogDirectory,
         PALAMEDES_TELEMETRY: "off",
@@ -111,12 +116,17 @@ export async function verifyCliUpdateLifecycle(binary, catalogDirectory, { stall
       ["offline", { PALAMEDES_UPDATE_CHECK: "1", PALAMEDES_OFFLINE: "1" }, false],
       ["do-not-track", { PALAMEDES_UPDATE_CHECK: "1", DO_NOT_TRACK: "1" }, false],
       ["cached", { PALAMEDES_UPDATE_CHECK: "1" }, true],
+      ["declined", { PALAMEDES_UPDATE_CHECK: "1", PALAMEDES_TELEMETRY: "on" }, true],
       ["ci-explicit", { CI: "1", PALAMEDES_UPDATE_CHECK: "1" }, true],
     ];
     for (const [name, settings, expectedNotice] of cases) {
       const times = [];
       for (let sample = 0; sample < 5; sample++) {
         const p = profile(`${name}-${sample}`);
+        if (name === "declined") {
+          const refused = await run(p, { PALAMEDES_OFFLINE: "1" }, ["telemetry", "decline"]);
+          assert.equal(refused.code, 0);
+        }
         seed(p);
         const result = await run(p, settings);
         assert.equal(result.code, baseline.code, result.stderr);
