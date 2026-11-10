@@ -105,6 +105,23 @@ Use `pnpm verify:examples` when a change touches framework integration,
 runtime wiring, or `.po` loading. It is intentionally broader and slower than
 the package unit tests.
 
+The Waku browser slice also starts a development server in a temporary consumer
+installed from freshly packed Palamedes archives. It checks source and translated
+SSR, concurrent request/server-action locale isolation, client navigation, lazy
+catalog delivery, catalog edits, and failure/reload recovery without workspace
+links. Run that proof alone after building the Waku and React dependency graphs
+and the shared demo UI:
+
+```sh
+pnpm --filter @palamedes/waku... --filter @palamedes/react... --filter @palamedes/example-ui build
+pnpm exec playwright install chromium
+node scripts/proof-waku-development.mjs --packed
+```
+
+It requires the repository's Node/pnpm versions, the matching native addon,
+registry access to install the host/bundler dependencies, Chromium, and a free
+local port 4198. The temporary consumer and server are removed after the proof.
+
 ## TypeScript Versions
 
 The workspace deliberately runs two TypeScript majors. Every published package

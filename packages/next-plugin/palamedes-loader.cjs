@@ -84,6 +84,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
   }
 
   const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url");
+  const source = encodeURIComponent(normalizePath(path.relative(config.rootDir, sourcePath)));
   return catalogs.map((catalog) =>
     config.locales.map((locale) => {
       const resourcePath = nextCatalogResourcePath(config, catalog, locale);
@@ -91,7 +92,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
         locale,
         // A query creates a separate bundler module. Using the full PO file as
         // its resource repeats that large loader input for every selection.
-        specifier: `${relativeImport(sourcePath, require.resolve("@palamedes/next-plugin/catalog-fragment"))}?palamedes-catalog=${encodeURIComponent(normalizePath(path.relative(config.rootDir, resourcePath)))}&${SELECTED_MESSAGES_QUERY}=${selection}`,
+        specifier: `${relativeImport(sourcePath, require.resolve("@palamedes/next-plugin/catalog-fragment"))}?palamedes-catalog=${encodeURIComponent(normalizePath(path.relative(config.rootDir, resourcePath)))}&${SELECTED_MESSAGES_QUERY}=${selection}&palamedes-source=${source}`,
       };
     }),
   );
