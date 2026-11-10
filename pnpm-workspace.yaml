@@ -167,5 +167,15 @@ minimumReleaseAgeExclude:
   - "@remix-run/render-middleware@0.2.0"
   - "@remix-run/spa@0.1.0"
   - "@remix-run/ui@0.8.0"
-  - ardo@6.3.0
+  - ardo@6.6.0
   - "@vitejs/plugin-react@6.2.1"
+
+  - "ferrolink@0.2.2"
+  - "@ferrolink/darwin-arm64@0.2.2"
+  - "@ferrolink/darwin-x64@0.2.2"
+  - "@ferrolink/linux-arm64-gnu@0.2.2"
+  - "@ferrolink/linux-arm64-musl@0.2.2"
+  - "@ferrolink/linux-x64-gnu@0.2.2"
+  - "@ferrolink/linux-x64-musl@0.2.2"
+  - "@ferrolink/win32-arm64-msvc@0.2.2"
+  - "@ferrolink/win32-x64-msvc@0.2.2"
