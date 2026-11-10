@@ -383,6 +383,16 @@ allowed. Compatibility errors retain audit's `icu.*` codes and explanations;
 audit warnings do not reject patches. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
 
+`findTranslationReferences({ references, targets, maxReferences: 5, maxOrigins: 8 })`
+returns exact source-message/context/target-locale reference hints, capped at 20
+per target with deterministic catalog ordering, target values, origins, and reasons.
+The caller selects eligible facts; known explicit `listTranslationCandidates`
+`targets` can read translated PO/FCL entries, while default enumeration only returns
+missing translations. One native snapshot index validates compatibility once per
+reference and serves the whole batch. Duplicate, empty, or incompatible references
+produce diagnostics and are excluded. No quality inference, fuzzy matching,
+automatic freshness, remote calls, or replacement is performed.
+
 `checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
 metadataLeakage: true } })` checks proposed `TranslationValue` content without
 catalog I/O. Both checks default to disabled. `auditCatalogs(config, { checks:

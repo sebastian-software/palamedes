@@ -212,6 +212,16 @@ patch, compile, and extraction variants so native work runs on Node's shared
 libuv worker pool instead of the event-loop thread; bound caller concurrency
 because queued native work is not cancellable.
 
+`findTranslationReferences({ references, targets, maxReferences: 5, maxOrigins: 8 })`
+returns exact source-message/context/target-locale reference hints, capped at 20
+per target with deterministic catalog ordering, target values, origins, and reasons.
+The caller selects eligible facts; known explicit `listTranslationCandidates`
+`targets` can read translated PO/FCL entries, while default enumeration only returns
+missing translations. One native snapshot index validates compatibility once per
+reference and serves the whole batch. Duplicate, empty, or incompatible references
+produce diagnostics and are excluded. No quality inference, fuzzy matching,
+automatic freshness, remote calls, or replacement is performed.
+
 `checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
 metadataLeakage: true } })` adds read-only, opt-in target-text review warnings.
 `auditCatalogs` shares these checks through `checks.targetText`; spans are UTF-8

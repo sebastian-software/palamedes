@@ -168,12 +168,16 @@ pub use transform::{
 pub use translation_candidates::apply_translation_patches_with_injected_write_failure;
 #[doc(hidden)]
 pub use translation_candidates::{
-    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS, TranslationCandidate, TranslationCandidateId,
+    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS, DEFAULT_TRANSLATION_REFERENCE_LIMIT,
+    MAX_TRANSLATION_REFERENCE_LIMIT, TranslationCandidate, TranslationCandidateId,
     TranslationCandidateRequest, TranslationCandidateResult, TranslationMachineProvenance,
     TranslationPatch, TranslationPatchOutcome, TranslationPatchOutcomeStatus,
     TranslationPatchRequest, TranslationPatchResult, TranslationPatchStats, TranslationPluralKind,
+    TranslationReferenceEntry, TranslationReferenceIndex, TranslationReferenceMatch,
+    TranslationReferenceMatches, TranslationReferenceRequest, TranslationReferenceResult,
     TranslationReviewState, TranslationValue, TranslationWorkflowDiagnostic,
-    TranslationWorkflowOrigin, apply_translation_patches, list_translation_candidates,
+    TranslationWorkflowOrigin, apply_translation_patches, find_translation_references,
+    list_translation_candidates,
 };
 
 /// `ferrocat` version that Cargo.lock pins for the native builds.

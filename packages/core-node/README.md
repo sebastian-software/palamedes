@@ -91,6 +91,12 @@ console.log(info.palamedesVersion);
 console.log(po.headers.Language);
 ```
 
+`findTranslationReferences({ references, targets, maxReferences: 5 })` returns
+bounded exact source/context/locale hints from caller-selected translated facts.
+It builds one native index per batch and never infers quality or replaces values.
+Use known explicit candidate IDs to read translated PO/FCL facts; default candidate
+enumeration supplies missing entries. See [reference hints](../../docs/translation-candidate-patches.md#exact-reference-hints).
+
 `checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
 metadataLeakage: true } })` provides read-only, opt-in review warnings before
 patch writeback. The same native checks run during `auditCatalogs` through
@@ -106,6 +112,7 @@ for source-aware exemptions and span semantics.
 - `updateCatalogFileAsync(request, taskOptions?)`
 - `parseCatalog(request)`
 - `listTranslationCandidates(request)`
+- `findTranslationReferences(request)`
 - `applyTranslationPatches(request)`
 - `applyTranslationPatchesAsync(request, taskOptions?)`
 - `isTranslationPatchWriteError(error)`

@@ -14,6 +14,14 @@ use sha2::{Digest, Sha256};
 
 mod fcl_collation;
 mod fcl_collation_table;
+mod references;
+
+pub use references::{
+    DEFAULT_TRANSLATION_REFERENCE_LIMIT, MAX_TRANSLATION_REFERENCE_LIMIT,
+    TranslationReferenceEntry, TranslationReferenceIndex, TranslationReferenceMatch,
+    TranslationReferenceMatches, TranslationReferenceRequest, TranslationReferenceResult,
+    find_translation_references,
+};
 
 use self::fcl_collation::{CollationKey, collation_key};
 
@@ -108,7 +116,7 @@ pub struct TranslationCandidate {
 }
 
 /// Source origin exposed to translation workflow consumers.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationWorkflowOrigin {
     /// Source filename.
