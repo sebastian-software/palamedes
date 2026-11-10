@@ -29,7 +29,7 @@ palamedes = { version = "2.2.0", path = "../.." }
 # palamedes-i18n items, so both crates must come from the same release.
 palamedes-i18n = { workspace = true }
 # A caret requirement, like the core crate; Cargo.lock pins the tested version.
-ferrocat = "3.5.0"
+ferrocat = "3.5.1"
 proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 syn = { version = "2.0.119", features = ["full", "parsing"] }
 serde = { version = "1", features = ["derive"] }

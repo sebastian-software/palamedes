@@ -181,7 +181,7 @@ pub use translation_candidates::{
 /// The manifest uses a caret requirement, so another Cargo graph can link a
 /// newer compatible version.
 #[doc(hidden)]
-pub const FERROCAT_VERSION: &str = "3.5.0";
+pub const FERROCAT_VERSION: &str = "3.5.1";
 
 /// Version metadata for the loaded native core.
 #[doc(hidden)]
