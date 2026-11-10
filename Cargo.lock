@@ -53,7 +53,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -64,7 +64,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -400,7 +400,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -411,9 +411,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferralk"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dbedb34f7a55ef8ba75b3b102a5faefa7cea9597bf9e0d70ea15ee6ad3db5c9"
+checksum = "24d8b6b174a04abec7088d0032b0809ed1d9e918c2481c6bfb009d1064ff5ae6"
 dependencies = [
  "crossbeam-deque",
  "ferralk-glob",
@@ -424,18 +424,18 @@ dependencies = [
 
 [[package]]
 name = "ferralk-glob"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54de39b15f06b86ad258cb62f68d77c99aaffb7b1053635777ea81b6948b06ff"
+checksum = "d5a35e75365154dfd13fbe0bfcabae38dc31a21b75ff7951432635a74475b720"
 dependencies = [
  "memchr",
 ]
 
 [[package]]
 name = "ferrocat"
-version = "3.4.2"
+version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65e24238a7e7464d91c58a3f68327ca71742727fdd29dc1a6c8369a2f2216772"
+checksum = "2fd222ca8432f337456b1d15ea3b15a0ed71bf83f37471abaafd9d74eda7b6fe"
 dependencies = [
  "ferrocat-icu",
  "ferrocat-po",
@@ -443,9 +443,9 @@ dependencies = [
 
 [[package]]
 name = "ferrocat-icu"
-version = "3.4.2"
+version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a05e08c426188954709de42f6a5483253d7da6fa6350e0c7135ca777d4964e8f"
+checksum = "ae07bfa8f94cae0d01cf6341aa54de6ee4dad7e310d6ee474e160fdabdb77d93"
 dependencies = [
  "memchr",
  "serde",
@@ -453,9 +453,9 @@ dependencies = [
 
 [[package]]
 name = "ferrocat-po"
-version = "3.4.2"
+version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e8f57272ccb10e82e41669c3d24bb6a85968f42d462583d8eac95fffc3e37ad"
+checksum = "e6d41ab5f2872fbf21d98e8542edce8129274b47163e9c7f81737bf28263fe32"
 dependencies = [
  "ferrocat-icu",
  "icu_locale",
@@ -471,9 +471,9 @@ dependencies = [
 
 [[package]]
 name = "ferromark"
-version = "3.7.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9580c392584c38a07cd5b6ae1bf042e8e26566a9f846c728b0b2b457ed120f25"
+checksum = "9659026622657300e3c7cb414a34b5c6c6a2560626ca000d069d35f025e754fb"
 dependencies = [
  "bumpalo",
  "compact_str",
@@ -1620,7 +1620,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1902,7 +1902,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2147,7 +2147,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2328,7 +2328,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

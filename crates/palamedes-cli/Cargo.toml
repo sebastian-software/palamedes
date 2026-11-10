@@ -31,7 +31,7 @@ palamedes-i18n = { version = "2.1.1", path = "../palamedes-i18n" }
 clap = { version = "4.6.6", features = ["derive"] }
 config = { version = "0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
 # Source traversal and watch matching share Ferralk's stable walker dialect.
-ferralk = "1.1.0"
+ferralk = "1.2.0"
 notify = "8.2.0"
 palamedes = { version = "2.1.1", path = "../.." }
 palamedes-plugin = { version = "2.1.1", path = "../palamedes-plugin" }
