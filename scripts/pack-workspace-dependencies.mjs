@@ -5,7 +5,8 @@ import path from "node:path";
 
 /** Pack the complete local dependency graph, so unreleased fixtures never mix registry versions. */
 export function packWorkspaceDependencies(packageDir, archiveDir) {
-  const packagesRoot = path.resolve(packageDir, "..");
+  const directories = Array.isArray(packageDir) ? packageDir : [packageDir];
+  const packagesRoot = path.resolve(directories[0], "..");
   const packages = new Map(
     readdirSync(packagesRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -45,6 +46,6 @@ export function packWorkspaceDependencies(packageDir, archiveDir) {
       }
     }
   };
-  pack(packageDir);
+  for (const directory of directories) pack(directory);
   return overrides;
 }
