@@ -267,79 +267,63 @@ including forced package publication. With `publicationEnabled: false`, Release
 Please does not run and the Publish workflow uploads nothing; with `true`, it
 still rejects versions below `minimumMajor` and prerelease versions. Demo
 container publication follows `main` independently; it does not authorize a
-package release. Publication is enabled for the coordinated `2.0.0` release, and
-the next Release Please version is explicitly `2.0.0`; the current version files
-continue to describe the last release until its generated release PR lands. A
-Publish workflow dispatch with `dry_run` still builds and verifies artifacts
-without publishing.
+package release. Publication is enabled for stable releases from major 2 onward.
+The current coordinated version is recorded in `.release-please-manifest.json`;
+Release Please derives the next version from the conventional commits and
+updates the version files in its generated PR. The initial v2 release and its
+one-time version/changelog overrides are complete; normal releases do not need
+those overrides.
 
-The v2 migration, representative TanStack React and Solid 2 Start Mode/Nitro
-verification, focused French examples, Node deployment proofs, and the
-release-layout migration are complete. Rust SDK archives, independent consumers,
-and the dependency-ordered release lane are implemented; #1309 tracks the
-remaining registry ownership and credential verification. #1204 owns final
-coordinated acceptance. The [support tiers](docs/stability.md),
-[framework evidence](docs/framework-example-notes.md), and
-[migration guide](docs/migration-v2.md) define the supported scope. TanStack
-Solid Start and additional translation-assistance features are outside the v2
-release requirements.
+For each normal release:
 
-The release-enablement change followed these steps. Repeat them if publication
-is ever held again and later re-enabled:
+1. Review the generated Release Please PR and run `pnpm check:release-set` and
+   `pnpm check:workflow-contracts`. The support scope is defined by the
+   [support tiers](docs/stability.md),
+   [framework evidence](docs/framework-example-notes.md), and
+   [migration guide](docs/migration-v2.md).
+2. Run the Publish workflow with `dry_run` on that PR's exact revision before
+   merging it. This builds and verifies the native, JavaScript, and Rust SDK
+   artifacts without uploading packages. The dry run checks all six native
+   platforms, packed JavaScript manifests in publish order, and the staged Rust
+   SDK consumer. Both dry runs and actual releases also call Example
+   Verification on that revision, including the browser matrix and framework
+   delivery proofs, regardless of PR path filters. A dry run of an earlier
+   source revision does not replace this versioned artifact check.
+3. Merge the verified release PR to start publication. Only a commit titled
+   `chore: release main` (optionally with its pull request number) starts a
+   publication on push. Before any upload, the Cargo preflight exchanges the
+   workflow's OIDC identity for a crates.io token and verifies policy,
+   allowlists, and ownership, so npm cannot ship a release that crates.io then
+   rejects.
+4. Verify that every coordinated npm and Cargo package is available. If any
+   upload fails, follow [partial-release recovery](#recovering-a-partial-release).
 
-1. Run `pnpm check:release-set`, `pnpm check:workflow-contracts`, and the Publish
-   workflow with `dry_run` against the held source revision. This verifies the
-   implementation with the current manifest versions; it is not evidence for
-   the future versioned 2.0 artifacts. The dry run checks package builds,
-   declarations, tests, native artifacts for all six platforms, the packed
-   JavaScript manifests in publish order, crates.io names and ownership, and
-   the staged Rust SDK consumer without uploading packages.
-2. Resolve registry readiness separately: `node scripts/check-first-publish.mjs`
-   checks that npm package names already exist; it does not verify trusted
-   publisher configuration. Follow #1309 and the
-   [Rust distribution guide](docs/rust-applications.md#preview-and-publication)
-   for crates.io ownership and release credentials. A passing dry run does not
-   establish publication permissions.
-3. Obtain explicit release authorization before enabling `publicationEnabled`
-   in a reviewed PR. Cargo publication additionally requires explicit
-   `publish = ["crates-io"]` allowlists on the three SDK crates (`palamedes-i18n`,
-   `palamedes`, and `palamedes-build`); `palamedes-cli`, `palamedes-node`, and
-   `palamedes-plugin` keep `publish = false`. Keep the current versions until the
-   generated Release Please PR applies the coordinated `2.0.0` version.
+Registry names, ownership, trusted publishers, and the initial functional Rust
+SDK publication were completed in [#1309](https://github.com/sebastian-software/palamedes/issues/1309).
+That issue remains open for a crates.io-only installed application proof, not
+publication credentials. The coordinated v2 acceptance epic
+[#1204](https://github.com/sebastian-software/palamedes/issues/1204) is closed.
+`node scripts/check-first-publish.mjs` checks npm name availability; a passing
+dry run does not establish publication permissions. The
+[Rust distribution guide](docs/rust-applications.md#preview-and-publication)
+explains the SDK release lane. `pnpm release:rust:dry-run` runs its staging check
+locally without uploading.
 
-After authorized enablement generates the Release Please PR, run the Publish
-workflow with `dry_run` on that PR's exact 2.0 revision before merging it. The
-release PR merge triggers actual publication; a source dry run at `1.25.1` does
-not replace this versioned artifact check. Only a commit titled
-`chore: release main` (optionally with its pull request number) starts a
-publication. Before any upload, the actual publication also runs the Cargo
-preflight: it exchanges the workflow's OIDC identity for a crates.io token and
-checks the policy, allowlists, and ownership, so npm cannot ship a release that
-crates.io then rejects. Real releases and dry runs also call the Example
-Verification workflow on the exact release revision, so the example smoke
-checks, the browser matrix, and the framework delivery proofs must pass before
-any upload, whatever the PR path filters selected.
+If publication is held again, keep the existing manifest versions while
+validating the held source revision. Re-enabling `publicationEnabled` requires
+explicit release authorization in a reviewed PR. Keep the three SDK crates
+(`palamedes-i18n`, `palamedes`, and `palamedes-build`) on their explicit
+`publish = ["crates-io"]` allowlists; `palamedes-cli`, `palamedes-node`, and
+`palamedes-plugin` remain `publish = false`. Then follow the normal release
+procedure above. Versions below `minimumMajor` and prerelease versions remain
+rejected.
 
-`pnpm release:rust:dry-run` can run the SDK staging check locally without
-uploading. Once enabled, publication still rejects versions below
-`minimumMajor` and prerelease versions. After publishing, verify that every
-coordinated npm and Cargo package is available before closing #1204.
-
-`.release-please-config.json` carries two one-time overrides for 2.0.0:
-`release-as` and the top-level `last-release-sha`, which starts the 2.0.0
-changelog at the unpublished 1.25.1 release commit (tag `palamedes-v1.25.1`)
-instead of re-listing 1.x entries. Leave both in place through the generated
-release PR: Release Please rebuilds that PR from the config on `main` and
-force-pushes its branch, so edits there do not last. Once 2.0.0 is released,
-remove both in a normal follow-up PR on `main`. `pnpm check:release-set` asks
-`origin` for the `palamedes-v<manifest version>` tag. While that tag points at
-a commit other than the one being checked, it fails if `release-as` is still
-at the manifest version, so the next feat or fix cannot open another
-"release 2.0.0" PR, and if `last-release-sha` remains. A corrective follow-up
-commit must remove them too, but that cleanup does not make an already-published
-version reusable; follow [partial-release recovery](#recovering-a-partial-release).
-If the tag cannot be read, the check only warns in CI but fails in the Publish
-workflow's release validation.
+`pnpm check:release-set` asks `origin` for the
+`palamedes-v<manifest version>` tag. When that tag points at a different commit,
+it rejects a `release-as` override fixed at the manifest version and any
+`last-release-sha` override. If the tag cannot be read, the check warns in CI but
+fails in the Publish workflow's release validation. Removing stale overrides
+does not make an already-published version reusable.
 
 `palamedes-build` inherits an exact `=` requirement on `palamedes-i18n` from
 the root `[workspace.dependencies]`, because the code it generates constructs
