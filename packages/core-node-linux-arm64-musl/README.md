@@ -38,6 +38,6 @@ pnpm add @palamedes/core-node
 
 ## License
 
-[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+[![Sebastian Software](https://brand.sebastian-software.com/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
 
 MIT OR Apache-2.0 © 2026 Sebastian Software
