@@ -286,6 +286,108 @@ fn merges_in_a_project_configured_in_typescript() {
 const PO_CATALOG: &str = "apps/web/locales/de.po";
 const FCL_CATALOG: &str = "apps/web/fcl/de.fcl";
 
+#[test]
+fn merge_driver_reports_configless_fallback_with_a_nested_app_config() {
+    let fixture = fixture_dir("catalog-driver-nested-config");
+    initialize_git_fixture(&fixture);
+
+    let implicit = run_config_merge_driver(&fixture, None);
+    assert!(implicit.status.success(), "{implicit:?}");
+    assert!(implicit.stdout.is_empty(), "{implicit:?}");
+    let stderr = String::from_utf8_lossy(&implicit.stderr);
+    assert!(stderr.contains("no Palamedes config found"), "{stderr}");
+    assert!(stderr.contains("--config"), "{stderr}");
+    assert!(stderr.contains("--path"), "{stderr}");
+    let merged = fs::read_to_string(fixture.join("merged.po")).expect("read catalog");
+    assert!(
+        !merged.contains(&format!("msgid \"{}\"", long_message())),
+        "{merged}"
+    );
+
+    let explicit = run_config_merge_driver(&fixture, Some("apps/web/palamedes.yaml"));
+    assert!(explicit.status.success(), "{explicit:?}");
+    assert!(explicit.stdout.is_empty(), "{explicit:?}");
+    assert!(explicit.stderr.is_empty(), "{explicit:?}");
+    let merged = fs::read_to_string(fixture.join("merged.po")).expect("read catalog");
+    for field in ["msgid", "msgstr"] {
+        assert!(
+            merged.contains(&format!("{field} \"{}\"", long_message())),
+            "{merged}"
+        );
+    }
+
+    // Explicit config errors must fail without overwriting a previous result.
+    fs::write(fixture.join("invalid.yaml"), "locales: []\n").expect("write invalid config");
+    for config in ["missing.yaml", "invalid.yaml"] {
+        let failed = run_config_merge_driver(&fixture, Some(config));
+        assert!(!failed.status.success(), "{failed:?}");
+        assert_eq!(
+            fs::read_to_string(fixture.join("merged.po")).unwrap(),
+            merged
+        );
+    }
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn merge_driver_can_select_config_from_a_trusted_checkout() {
+    let fixture = fixture_dir("catalog-driver-worktree-config");
+    let trusted = fixture_dir("catalog-driver-trusted-config");
+    initialize_git_fixture(&fixture);
+    initialize_git_fixture(&trusted);
+    fs::write(fixture.join("palamedes.yaml"), "locales: []\n").expect("write invalid config");
+    fs::write(fixture.join("apps/web/palamedes.yaml"), "locales: []\n")
+        .expect("write invalid app config");
+
+    let config = trusted.join("apps/web/palamedes.yaml");
+    let result = run_config_merge_driver(&fixture, Some(config.to_str().expect("config path")));
+    assert!(result.status.success(), "{result:?}");
+    assert!(result.stdout.is_empty(), "{result:?}");
+    assert!(result.stderr.is_empty(), "{result:?}");
+    let merged = fs::read_to_string(fixture.join("merged.po")).expect("read catalog");
+    for field in ["msgid", "msgstr"] {
+        assert!(
+            merged.contains(&format!("{field} \"{}\"", long_message())),
+            "{merged}"
+        );
+    }
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+    fs::remove_dir_all(trusted).expect("cleanup trusted fixture");
+}
+
+fn run_config_merge_driver(
+    fixture: &std::path::Path,
+    config: Option<&str>,
+) -> std::process::Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_pmds"));
+    command
+        .env(
+            "PALAMEDES_UI_CATALOG_DIR",
+            concat!(env!("OUT_DIR"), "/catalogs"),
+        )
+        .env("PALAMEDES_UI_LOCALE", "en")
+        .args([
+            "catalog",
+            "merge-driver",
+            PO_CATALOG,
+            PO_CATALOG,
+            PO_CATALOG,
+            "merged.po",
+            "--path",
+            PO_CATALOG,
+            "--operation",
+            "merge",
+            "--offline",
+        ])
+        .current_dir(fixture);
+    if let Some(config) = config {
+        command.args(["--config", config]);
+    }
+    command.output().expect("run catalog merge driver")
+}
+
 fn initialize_git_fixture(fixture: &std::path::Path) {
     initialize_git(fixture);
     write_translation(fixture, "Base");
