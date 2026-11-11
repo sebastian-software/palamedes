@@ -625,6 +625,29 @@ Git's temporary roles so `use-first` consistently means the branch being
 merged or rebased. Use `--operation merge` or `--operation rebase` only for
 unusual Git orchestration.
 
+Git runs the driver at the worktree root; config discovery searches upward
+from there. `--path` does not discover an app config. For a monorepo, register
+a separate driver per app and pass its config explicitly:
+
+```gitattributes
+apps/web/locales/**/*.po merge=palamedes-web
+apps/web/locales/**/*.fcl merge=palamedes-web
+```
+
+```bash
+git config merge.palamedes-web.driver \
+  'pmds catalog merge-driver %O %A %B %A --path %P --config apps/web/palamedes.yaml --conflict-strategy=use-first'
+```
+
+Put app patterns after generic patterns in the root `.gitattributes`.
+Relative `--config` paths start at the worktree root; catalog patterns remain
+relative to the config directory. An absolute `--config` can select settings
+from a trusted checkout for automation. Without a discoverable config, the
+driver reports the fallback on stderr and merges with default PO formatting
+and `--source-locale` or `en`. This can rewrap messages configured with
+`po.line-breaks: "off"`. An explicit missing or invalid config fails without
+changing the output file.
+
 Extraction performance is already handled by the CLI and needs no user tuning by default. `pmds extract` runs a bounded parallel read/parse pass (`--threads <COUNT>`, or `extract-threads` in the config) and reuses an on-disk extraction cache (`--no-cache` disables it for one run; `extract-cache: false` disables it permanently).
 
 The thread default is `4`, clamped to the available cores and the number of files; `1` runs serial. It is a measured floor, not a core count: a one-shot `pmds extract` pays worker setup on every invocation and gets slower again above it. Do not recommend raising `--threads` without a measurement on the user's own corpus and hardware. Both keys are read by the native CLI only — the JS config loader in `@palamedes/config` ignores them. See `/adr/023-bounded-parallel-extraction.md` and `/adr/022-extraction-cache.md`.
