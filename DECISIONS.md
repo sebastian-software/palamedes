@@ -80,6 +80,7 @@ Read these when changing shared documentation surfaces or the repository workflo
 These records describe experimental contracts and the criteria for adopting them.
 
 30. [ADR-030: Next Production Client Catalogs Outside the Bundler Graph](./adr/030-next-client-catalogs-outside-the-bundler-graph.md)
+31. [ADR-031: Next Server-Selected Client Chunk Permutations](./adr/031-next-server-selected-client-chunk-permutations.md)
 
 ## Maintaining living decisions
 

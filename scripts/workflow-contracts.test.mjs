@@ -1039,7 +1039,7 @@ describe("workflow contracts", () => {
     expect(dependencyAudit).toContain("scripts/open-or-refresh-issue.mjs");
   });
 
-  it("runs the Next canary guard on a schedule against the asset contract", async () => {
+  it("runs independent asset and permutation canary contracts with browser coverage", async () => {
     const [canary, example] = await Promise.all([
       readRepositoryFile(".github/workflows/next-canary.yml"),
       readRepositoryFile("examples/nextjs-route/package.json"),
@@ -1052,10 +1052,19 @@ describe("workflow contracts", () => {
     expect(canary).toContain(
       'pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"',
     );
-    expect(canary).toContain("run: pnpm --dir examples/nextjs-route build:catalog-assets");
-    expect(JSON.parse(example).scripts["build:catalog-assets"]).toContain(
-      "check-next-client-catalog-assets.mjs",
+    expect(canary).toContain("fail-fast: false");
+    for (const delivery of ["assets", "permutations"]) {
+      expect(canary).toContain(`delivery: ${delivery}`);
+      expect(JSON.parse(example).scripts[`build:catalog-${delivery}`]).toContain(
+        `check-next-client-catalog-${delivery}.mjs`,
+      );
+    }
+    expect(canary).toContain(
+      "run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}",
     );
+    expect(canary).toContain("if: matrix.delivery == 'permutations'");
+    expect(canary).toContain("pnpm exec playwright install --with-deps chromium");
+    expect(canary).toContain("client catalog ${{ matrix.label }} contract");
     expect(canary).toContain(
       "if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'",
     );

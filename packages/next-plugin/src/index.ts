@@ -25,6 +25,10 @@ import {
   resolveMacroRuntimeModule,
 } from "@palamedes/transform";
 
+import {
+  CLIENT_CATALOG_PERMUTATIONS_DIST_ENV,
+  CLIENT_CATALOG_PERMUTATIONS_ENV,
+} from "./client-catalog-binding";
 import { CLIENT_CATALOG_BUILD_ENV } from "./client-catalog-map";
 import { clientCatalogPublicPrefix, crossOriginClientCatalogHost } from "./client-catalog-url";
 
@@ -207,6 +211,19 @@ export type WithPalamedesOptions = {
    * @default false
    */
   experimentalClientCatalogAssets?: boolean;
+
+  /**
+   * Experimental: deliver production client catalogs as per-locale copies of
+   * the client chunks that use them, selected by the server per request.
+   * Turbopack only. Call `bindClientCatalogPermutations()` from
+   * `@palamedes/next-plugin/server` in `instrumentation.ts`. The locale comes
+   * from the `x-palamedes-locale` header a Proxy sets, else from the root
+   * route param named `locale`, else from the source locale. Development
+   * keeps the in-graph fragments. Mutually exclusive with
+   * `experimentalClientCatalogAssets`.
+   * @default false
+   */
+  experimentalClientCatalogPermutations?: boolean;
 };
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
@@ -458,6 +475,22 @@ function hasWorkspaces(packageJsonPath: string) {
   }
 }
 
+/*
+ * Next's prerender workers are child processes that inherit NODE_OPTIONS from
+ * the build process, and instrumentation.ts does not run in them. The preload
+ * is installed from the post-compile hook, after the manifests exist and
+ * before the workers start, so `next start` and other processes that evaluate
+ * the config never see it.
+ */
+function installClientCatalogPreload(absoluteDistDir: string): void {
+  const preload = require.resolve("../client-catalog-preload.cjs");
+  process.env[CLIENT_CATALOG_PERMUTATIONS_DIST_ENV] = absoluteDistDir;
+  const current = process.env.NODE_OPTIONS ?? "";
+  if (current.includes(preload)) return;
+  const flag = `--require=${preload.includes(" ") ? JSON.stringify(preload) : preload}`;
+  process.env.NODE_OPTIONS = current ? `${current} ${flag}` : flag;
+}
+
 /**
  * Wraps a Next.js config to add Palamedes OXC transformation.
  *
@@ -494,9 +527,21 @@ export function withPalamedes(
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
     experimentalClientCatalogAssets = false,
+    experimentalClientCatalogPermutations = false,
   } = options;
+  if (experimentalClientCatalogAssets && experimentalClientCatalogPermutations) {
+    throw new Error(
+      "Palamedes: experimentalClientCatalogAssets and experimentalClientCatalogPermutations are two production deliveries for client catalogs; enable one of them.",
+    );
+  }
   const clientCatalogDelivery =
-    experimentalClientCatalogAssets && process.env.NODE_ENV === "production" ? "assets" : "graph";
+    process.env.NODE_ENV !== "production"
+      ? "graph"
+      : experimentalClientCatalogPermutations
+        ? "permutations"
+        : experimentalClientCatalogAssets
+          ? "assets"
+          : "graph";
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule);
   // Source metadata is optional diagnostics; compiled catalogs supply all message output.
@@ -648,36 +693,60 @@ export function withPalamedes(
     clientCatalogDelivery === "assets"
       ? (process.env[CLIENT_CATALOG_BUILD_ENV] ??= randomBytes(6).toString("hex"))
       : undefined;
+  const distDir = baseConfig.distDir ?? ".next";
   const clientCatalogConfig: Partial<NextConfig> =
-    clientCatalogBuild !== undefined
+    clientCatalogDelivery === "permutations"
       ? {
-          env: {
-            ...baseConfig.env,
-            PALAMEDES_NEXT_CATALOG_BUILD: clientCatalogBuild,
-            PALAMEDES_NEXT_CATALOG_BASE: `${publicPrefix}/_next/static/palamedes/`,
-          },
+          // The server binding derives the manifest directory from it.
+          env: { ...baseConfig.env, [CLIENT_CATALOG_PERMUTATIONS_ENV]: distDir },
           compiler: {
             ...baseConfig.compiler,
             async runAfterProductionCompile(metadata) {
               await userAfterCompile?.(metadata);
-              const crossOriginHost = crossOriginClientCatalogHost(publicPrefix);
-              if (crossOriginHost) {
-                console.warn(
-                  `Palamedes loads client catalog assets from ${crossOriginHost} with import(), which always uses CORS. When pages are served from another origin, ${publicPrefix}/_next/static/palamedes/ must send Access-Control-Allow-Origin for it.`,
-                );
-              }
-              const { emitClientCatalogAssets } = await import("./client-catalog-assets");
-              await emitClientCatalogAssets({
+              const { emitClientCatalogPermutations } =
+                await import("./client-catalog-permutations");
+              const report = await emitClientCatalogPermutations({
                 distDir: metadata.distDir,
                 projectRoot,
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
                 failOnMissing,
-                buildToken: clientCatalogBuild,
               });
+              installClientCatalogPreload(metadata.distDir);
+              console.log(
+                `Palamedes wrote ${report.locales.length} locale copies of ${Object.keys(report.variants).length} client chunks and bound ${report.manifests.length} client reference manifests.`,
+              );
             },
           },
         }
-      : {};
+      : clientCatalogBuild !== undefined
+        ? {
+            env: {
+              ...baseConfig.env,
+              PALAMEDES_NEXT_CATALOG_BUILD: clientCatalogBuild,
+              PALAMEDES_NEXT_CATALOG_BASE: `${publicPrefix}/_next/static/palamedes/`,
+            },
+            compiler: {
+              ...baseConfig.compiler,
+              async runAfterProductionCompile(metadata) {
+                await userAfterCompile?.(metadata);
+                const crossOriginHost = crossOriginClientCatalogHost(publicPrefix);
+                if (crossOriginHost) {
+                  console.warn(
+                    `Palamedes loads client catalog assets from ${crossOriginHost} with import(), which always uses CORS. When pages are served from another origin, ${publicPrefix}/_next/static/palamedes/ must send Access-Control-Allow-Origin for it.`,
+                  );
+                }
+                const { emitClientCatalogAssets } = await import("./client-catalog-assets");
+                await emitClientCatalogAssets({
+                  distDir: metadata.distDir,
+                  projectRoot,
+                  ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+                  failOnMissing,
+                  buildToken: clientCatalogBuild,
+                });
+              },
+            },
+          }
+        : {};
 
   return {
     ...baseConfig,
@@ -701,6 +770,11 @@ export function withPalamedes(
 
     // Webpack configuration
     webpack(config, context) {
+      if (clientCatalogDelivery === "permutations") {
+        throw new Error(
+          "Palamedes: experimentalClientCatalogPermutations supports Turbopack builds only. Build without --webpack, or use experimentalClientCatalogAssets.",
+        );
+      }
       const webpackProjectRoot = resolveProjectRoot(
         { projectRoot: explicitProjectRoot },
         baseConfig,

@@ -13,6 +13,11 @@ import { loadServerCatalog } from "@palamedes/next-plugin/server-catalogs";
 import { createElement, type ReactElement } from "react";
 import { clientCatalogMapName } from "./client-catalog-map";
 
+export {
+  bindClientCatalogPermutations,
+  type BindClientCatalogPermutationsOptions,
+} from "./client-catalog-binding";
+
 /** The element ID that `@palamedes/next-plugin/client-catalog` looks up. */
 const CLIENT_CATALOG_MAP_ID = "palamedes-client-catalogs";
 
