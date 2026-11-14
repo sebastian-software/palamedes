@@ -464,7 +464,13 @@ function transformStaticViteDocument(
       throw new Error("Static scripts must use local JavaScript URLs.");
     if (attrs.type?.toLowerCase() === "importmap")
       throw new Error("Static document must not contain an existing import map.");
-    if (attrs.type?.toLowerCase() !== "module") continue;
+    if (attrs.type?.toLowerCase() !== "module") {
+      if ("defer" in attrs)
+        throw new Error(
+          "Static catalog delivery does not support deferred classic scripts; remove defer or handle this document separately.",
+        );
+      continue;
+    }
     if ((script.attrs ?? []).some((attr) => !["type", "src", "async"].includes(attr.name)))
       throw new Error("Unsupported static module script attribute.");
     if (attrs.src && (!localScriptUrl(attrs.src) || content.trim()))

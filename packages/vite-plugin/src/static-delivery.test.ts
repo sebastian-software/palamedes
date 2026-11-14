@@ -73,6 +73,15 @@ it("delays explicitly approved inline startup until the selected map is installe
       allowedScripts: [hash(classic), hash(startup)],
     }),
   ).toThrow(/byte limit/i);
+  const deferred = '<script defer src="/assets/classic.js"></script>';
+  expect(() =>
+    createStaticViteCatalogBootstrap({ clientDirectory }).transformDocument({
+      html: html.replace("</body>", `${deferred}</body>`),
+      scriptLimits,
+      locale: { kind: "document" },
+      allowedScripts: [hash(classic), hash(startup), hash(deferred)],
+    }),
+  ).toThrow(/deferred classic scripts/i);
   const remote = '<script type="module" src="https://evil.example/app.js"></script>';
   expect(() =>
     createStaticViteCatalogBootstrap({ clientDirectory }).transformDocument({

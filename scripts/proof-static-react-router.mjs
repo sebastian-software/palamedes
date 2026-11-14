@@ -144,6 +144,26 @@ try {
   );
   writeFileSync(path.join(clientDirectory, relative.bootstrap.fileName), relative.bootstrap.source);
   policies["en/relative.html"] = relative.cspHashes;
+  // A later deferred classic script shares parser-ordered startup with an
+  // earlier module. Refuse this shape rather than silently reversing it.
+  const orderedModule = '<script type="module">window.originalOrder = ["module"];</script>';
+  const deferredClassic = '<script defer src="/deferred-classic.js"></script>';
+  const orderedHtml = `<html lang="en"><head>${orderedModule}${deferredClassic}</head><body></body></html>`;
+  assert.throws(
+    () =>
+      delivery.transformDocument({
+        html: orderedHtml,
+        scriptLimits: { maxCount: 2, maxElementBytes: 1024, maxTotalBytes: 2048 },
+        allowedScripts: [hash(orderedModule), hash(deferredClassic)],
+        locale: { kind: "document" },
+      }),
+    /deferred classic scripts/iu,
+  );
+  writeFileSync(path.join(clientDirectory, "ordered.html"), orderedHtml);
+  writeFileSync(
+    path.join(clientDirectory, "deferred-classic.js"),
+    'window.originalOrder.push("classic");',
+  );
   server = createServer(async (request, response) => {
     const pathname = new URL(request.url, "http://localhost").pathname;
     const file =
@@ -228,6 +248,12 @@ try {
     await page.waitForFunction(() => globalThis.proofOrder?.length === 2);
     assert.deepEqual(await page.evaluate(() => globalThis.proofOrder), ["first", "second"]);
     assert.equal(await page.evaluate(() => globalThis.relativeModuleLoaded), true);
+    await page.close();
+  }
+  {
+    const page = await browser.newPage();
+    await page.goto("http://127.0.0.1:25120/ordered.html");
+    assert.deepEqual(await page.evaluate(() => globalThis.originalOrder), ["module", "classic"]);
     await page.close();
   }
   for (const phase of ["initial", "lazy"]) {

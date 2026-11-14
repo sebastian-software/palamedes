@@ -369,8 +369,10 @@ The allowlist must come from a separately reviewed host policy, never by blindly
 hashing every script in the document at build time. Set script count and byte limits appropriate for the host. Digests cover the complete
 original element bytes and must match in count and order. Unknown or changed
 scripts fail the build. Review framework output whenever an approved digest
-changes. The transform rejects remote scripts, unsupported module attributes,
-existing import maps, unsafe policy URLs and invalid generated map bindings.
+changes. The transform rejects remote scripts, deferred classic scripts, unsupported
+module attributes, existing import maps, unsafe policy URLs and invalid
+generated map bindings. Remove `defer` from classic scripts or handle that
+document separately when its startup order depends on them.
 It supports local root-relative JavaScript URLs and optional `assetBase` for a
 root-relative deployment prefix ending in `/`. The returned `cspHashes` are
 SHA-256 hashes of exact generated import-map and inline-module contents; they
