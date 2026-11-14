@@ -539,16 +539,16 @@ it the output path is used, which is enough outside a merge driver.
 
 Options:
 
-| Option                           | Description                                                      |
-| -------------------------------- | ---------------------------------------------------------------- |
-| `--output <path>`                | Required output path.                                            |
-| `-c, --config <path>`            | Use a specific config file when inferring `source-locale`.       |
-| `--format <format>`              | `po` or `fcl`. Overrides path inference when supplied.           |
-| `--base <path>`                  | Optional common ancestor for a three-way merge.                  |
-| `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`. Default: `use-first`.       |
-| `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`. |
-| `--locale <locale>`              | Locale of the merged catalog.                                    |
-| `--path <path>`                  | Real catalog pathname; pass `%P` in a Git merge driver.          |
+| Option                           | Description                                                       |
+| -------------------------------- | ----------------------------------------------------------------- |
+| `--output <path>`                | Required output path.                                             |
+| `-c, --config <path>`            | Use a specific config for `source-locale` and catalog PO options. |
+| `--format <format>`              | `po` or `fcl`. Overrides path inference when supplied.            |
+| `--base <path>`                  | Optional common ancestor for a three-way merge.                   |
+| `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`. Default: `use-first`.        |
+| `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`.  |
+| `--locale <locale>`              | Locale of the merged catalog.                                     |
+| `--path <path>`                  | Real catalog pathname; pass `%P` in a Git merge driver.           |
 
 ### Git merge driver
 
@@ -575,10 +575,37 @@ PO or FCL. This one driver supports mixed PO/FCL repositories. Outside a merge
 driver, omit `--path` and format inference continues to use the input/output
 catalog paths.
 
+Git runs the driver at the worktree root. Config discovery starts there and
+searches upward; `--path` only identifies a catalog within the loaded config
+and does not discover app-local configuration. For a monorepo with
+`apps/web/palamedes.yaml`, register an app-specific driver:
+
+```gitattributes
+apps/web/locales/**/*.po merge=palamedes-web
+apps/web/locales/**/*.fcl merge=palamedes-web
+```
+
+```bash
+git config merge.palamedes-web.driver \
+  'pmds catalog merge-driver %O %A %B %A --path %P --config apps/web/palamedes.yaml --conflict-strategy use-first'
+```
+
+Put these patterns in the root `.gitattributes`, after any generic catalog
+patterns. Use a separate driver name and config path for each app. Relative
+`--config` paths are resolved from the worktree root; catalog patterns inside
+the config remain relative to its directory. Automation can also pass an
+absolute `--config` path to settings in a trusted checkout instead of relying
+on discovery in the merge worktree.
+
 The driver merges even where no data config is discoverable — including
 projects configured through `palamedes.config.ts` — because a registered driver
 runs wherever the conflicted worktree is. Configured PO output options and
 `source-locale` are then not applied, and the driver says so on stderr.
+Without a config, PO output uses default formatting and the source locale is
+`--source-locale` or `en`. This keeps intentional configless and global drivers
+usable, but can rewrap messages written with `po.line-breaks: "off"`.
+An explicit missing or invalid `--config` fails the merge without changing the
+output file.
 
 ## `pmds catalog compile`
 

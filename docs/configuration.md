@@ -216,6 +216,12 @@ different collation (Swedish, Turkish, Czech and others) are not tailored for;
 the catalog order follows the source message, which is the same in every locale
 anyway.
 
+Palamedes uses Ferrocat's public `collation` API when validating FCL order.
+Ferrocat owns the key builder, generated Unicode table, and generator checks;
+Palamedes keeps raw message/context and obsolete-state tie-breaks for distinct
+identities whose collation keys compare equal, including covered NFC/NFD
+spellings.
+
 Ferrocat implements the order with a generated table covering Latin text,
 punctuation, symbols and digits rather than a full Unicode collation
 implementation. Two consequences, both outside what source messages hold in

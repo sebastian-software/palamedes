@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli-win32-x64-msvc",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Windows x64 native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",

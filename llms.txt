@@ -183,6 +183,7 @@ serves bundled and unbundled backends. See `docs/backend-servers.md`.
 - Extraction-cache write failures are non-fatal but always warn on stderr, including for `pmds lint` and without `--verbose`; watch mode reports a persistent failure once per process rather than once per file event. Use `--no-cache` or `extract-cache: false` when the cache location is intentionally unwritable.
 - `pmds catalog merge --conflict-strategy=use-first --output out.po a.po b.po`: semantic merge of exactly two catalogs; add `--base base.po` for a deletion-aware three-way merge. Supported PO/FCL extensions infer the format; use `--format po|fcl` only as an explicit override.
 - `pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first`: one deletion-aware Git merge driver for PO and FCL. `%P` is the logical catalog path, so it selects the format even when Git temporary paths are extensionless; use `--format po|fcl` only as an explicit override. It maps merge and rebase roles so `use-first` stays the branch being merged or rebased.
+- Git runs merge drivers at the worktree root, and config discovery searches upward from there. `--path` does not discover app configs: use an app-specific driver with `--config apps/web/palamedes.yaml` for monorepos. Without a config, the merge uses default PO formatting and reports the fallback on stderr; an explicit missing or invalid config fails without changing the output. See `/docs/cli.md#git-merge-driver`.
 - `pmds catalog convert --to fcl input.po`: convert PO catalogs to the opt-in FCL format
 
 ### CLI exit codes
