@@ -1,0 +1,887 @@
+{
+  "question": "Does reusing component analysis reduce release extraction time without changing catalogs?",
+  "scope": "Local implementation comparison; not a reference campaign or cross-platform claim.",
+  "measuredBoundary": "CLI startup, discovery, extraction, catalog merge and output writes; setup and validation excluded",
+  "cachePolicy": "cold: catalogs and tool caches reset; cached: catalogs reset, compatible unchanged-source cache retained",
+  "limits": "OS page cache, physical host contention, power and thermal state are not controlled. Cached is an unchanged-source hit, not an edit simulation.",
+  "createdAt": "2026-11-10T00:38:34.641Z",
+  "harnessSha256": "2d3e4ee75521012699bb2bd34655c6951f9393bcd6a1aeb8f7a588300dc7b56f",
+  "baseline": {
+    "revision": "fa5c2c6bce8a70254f9531a794d3fc243d492032",
+    "sha256": "d2da37c33b6b06bccf99713baee92a5b7bdeef68f9f98c5a63007771e315e56d"
+  },
+  "candidate": {
+    "revision": "working-tree-with-source-diff-sha256",
+    "sha256": "5ab5f77ecd4db258c429ea4a0d5e2db22e8ecba30c9107860febff85599d8d73"
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "os": "27.0.0",
+    "cpu": "Apple M1 Ultra",
+    "cpuCount": 20,
+    "node": "v24.22.2",
+    "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
+    "build": "cargo build --release --locked -p palamedes-cli; default features and release profile",
+    "rustflags": null,
+    "background": "Other workers finished heavy release builds; parallel site browser crawls remained. Host contention, thermal and power state uncontrolled.",
+    "sourceRevision": "fa5c2c6bce8a70254f9531a794d3fc243d492032",
+    "sourceDirty": "M crates/palamedes/src/component.rs\n M crates/palamedes/src/extract.rs\n M crates/palamedes/src/svelte.rs\n M crates/palamedes/src/vue.rs\n?? benchmarks/e2e-workflow/frameworks/src/compare-component-parsing.mjs",
+    "sourceDiffSha256": "f29545f4092048ff643387b4d5c11c572c4a27c3a31eef1b2c58fcb77df8f9cc"
+  },
+  "corpus": {
+    "profile": "realistic",
+    "seed": 20260703,
+    "layout": "realistic",
+    "messages": 6000,
+    "markedFiles": 750,
+    "unmarkedFiles": 750,
+    "markedFileLines": 374,
+    "unmarkedFileLines": 160,
+    "changedCount": 450,
+    "newCount": 600,
+    "removedCount": 450
+  },
+  "warmup": 3,
+  "runs": 7,
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "results": [
+    {
+      "framework": "vue",
+      "cache": "cold",
+      "block": 0,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        16.37548828125,
+        19.267578125,
+        19.13427734375
+      ],
+      "medianMs": 128.748875,
+      "minMs": 110.225375,
+      "maxMs": 134.381708,
+      "medianAbsoluteDeviationMs": 3.016124999999988,
+      "samplesMs": [
+        134.381708,
+        129.654875,
+        127.408333,
+        128.748875,
+        110.225375,
+        131.765,
+        118.21125
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cold",
+      "block": 1,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        16.37548828125,
+        19.267578125,
+        19.13427734375
+      ],
+      "medianMs": 93.111292,
+      "minMs": 86.510666,
+      "maxMs": 102.499417,
+      "medianAbsoluteDeviationMs": 5.271999999999991,
+      "samplesMs": [
+        86.510666,
+        102.499417,
+        101.689584,
+        93.111292,
+        92.774667,
+        98.383292,
+        93.065417
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cold",
+      "block": 2,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        15.78466796875,
+        19.0966796875,
+        19.07470703125
+      ],
+      "medianMs": 100.871208,
+      "minMs": 94.026375,
+      "maxMs": 124.025375,
+      "medianAbsoluteDeviationMs": 6.844832999999994,
+      "samplesMs": [
+        94.431625,
+        94.026375,
+        97.488,
+        100.871208,
+        108.556292,
+        115.534875,
+        124.025375
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cold",
+      "block": 3,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        15.8017578125,
+        19.044921875,
+        19.056640625
+      ],
+      "medianMs": 131.904166,
+      "minMs": 119.117917,
+      "maxMs": 135.849541,
+      "medianAbsoluteDeviationMs": 1.9904170000000079,
+      "samplesMs": [
+        131.904166,
+        133.894583,
+        119.117917,
+        119.322542,
+        132.43725,
+        131.702,
+        135.849541
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cached",
+      "block": 0,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        15.9775390625,
+        19.02734375,
+        19.05029296875
+      ],
+      "medianMs": 37.458292,
+      "minMs": 36.195709,
+      "maxMs": 53.569625,
+      "medianAbsoluteDeviationMs": 0.3995000000000033,
+      "samplesMs": [
+        37.058792,
+        37.268917,
+        37.93,
+        36.195709,
+        53.569625,
+        37.658542,
+        37.458292
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cached",
+      "block": 1,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        15.9775390625,
+        19.02734375,
+        19.05029296875
+      ],
+      "medianMs": 36.188166,
+      "minMs": 34.516459,
+      "maxMs": 78.384667,
+      "medianAbsoluteDeviationMs": 1.671707000000005,
+      "samplesMs": [
+        35.116875,
+        35.326208,
+        78.384667,
+        42.259625,
+        36.188166,
+        38.367792,
+        34.516459
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cached",
+      "block": 2,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        15.49853515625,
+        18.87744140625,
+        18.9970703125
+      ],
+      "medianMs": 34.9925,
+      "minMs": 34.226334,
+      "maxMs": 37.29075,
+      "medianAbsoluteDeviationMs": 0.628542000000003,
+      "samplesMs": [
+        34.363958,
+        34.9925,
+        34.226334,
+        34.956542,
+        37.29075,
+        35.220875,
+        35.781666
+      ]
+    },
+    {
+      "framework": "vue",
+      "cache": "cached",
+      "block": 3,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11229763,
+      "sourceSha256": "865cb723c98cbb50fb621e3080f39b29a0dcc43b7d8a7cd123363f1869fb9df0",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        15.13818359375,
+        18.74658203125,
+        18.9501953125
+      ],
+      "medianMs": 35.626583,
+      "minMs": 34.971709,
+      "maxMs": 37.581208,
+      "medianAbsoluteDeviationMs": 0.4892499999999984,
+      "samplesMs": [
+        37.581208,
+        34.971709,
+        35.93175,
+        35.626583,
+        35.038541,
+        35.137333,
+        35.881
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cold",
+      "block": 0,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        17.208984375,
+        19.11572265625,
+        19.0791015625
+      ],
+      "medianMs": 106.009042,
+      "minMs": 101.137333,
+      "maxMs": 122.037125,
+      "medianAbsoluteDeviationMs": 2.0368329999999872,
+      "samplesMs": [
+        113.0865,
+        103.972209,
+        122.037125,
+        106.009042,
+        104.528167,
+        107.250625,
+        101.137333
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cold",
+      "block": 1,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        19.43408203125,
+        19.54541015625,
+        19.23095703125
+      ],
+      "medianMs": 100.300875,
+      "minMs": 91.908291,
+      "maxMs": 113.100291,
+      "medianAbsoluteDeviationMs": 2.6479169999999925,
+      "samplesMs": [
+        91.908291,
+        98.059542,
+        100.300875,
+        94.87725,
+        102.306542,
+        113.100291,
+        102.948792
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cold",
+      "block": 2,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        19.43408203125,
+        19.54541015625,
+        19.23095703125
+      ],
+      "medianMs": 99.850709,
+      "minMs": 91.391791,
+      "maxMs": 108.1885,
+      "medianAbsoluteDeviationMs": 3.2129169999999903,
+      "samplesMs": [
+        91.391791,
+        96.637792,
+        97.953334,
+        100.977083,
+        103.638167,
+        99.850709,
+        108.1885
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cold",
+      "block": 3,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        20.92041015625,
+        19.8515625,
+        19.3408203125
+      ],
+      "medianMs": 111.673625,
+      "minMs": 100.435708,
+      "maxMs": 130.506292,
+      "medianAbsoluteDeviationMs": 11.237916999999996,
+      "samplesMs": [
+        108.402458,
+        130.506292,
+        126.3015,
+        111.673625,
+        130.015792,
+        106.344916,
+        100.435708
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cached",
+      "block": 0,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        22.6884765625,
+        20.23583984375,
+        19.47900390625
+      ],
+      "medianMs": 34.185333,
+      "minMs": 33.970958,
+      "maxMs": 35.870625,
+      "medianAbsoluteDeviationMs": 0.21437499999999687,
+      "samplesMs": [
+        35.870625,
+        33.976833,
+        34.185333,
+        34.592708,
+        33.970958,
+        34.130459,
+        35.626917
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cached",
+      "block": 1,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        22.6884765625,
+        20.23583984375,
+        19.47900390625
+      ],
+      "medianMs": 33.092208,
+      "minMs": 32.256125,
+      "maxMs": 35.34775,
+      "medianAbsoluteDeviationMs": 0.5566669999999974,
+      "samplesMs": [
+        33.092208,
+        35.34775,
+        34.239292,
+        32.256125,
+        32.778833,
+        33.648875,
+        32.767292
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cached",
+      "block": 2,
+      "implementation": "candidate",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        23.67431640625,
+        20.48046875,
+        19.56982421875
+      ],
+      "medianMs": 33.488792,
+      "minMs": 32.413167,
+      "maxMs": 34.052917,
+      "medianAbsoluteDeviationMs": 0.38920800000000355,
+      "samplesMs": [
+        32.903458,
+        34.052917,
+        32.413167,
+        33.488792,
+        33.401917,
+        33.878,
+        33.584416
+      ]
+    },
+    {
+      "framework": "svelte",
+      "cache": "cached",
+      "block": 3,
+      "implementation": "baseline",
+      "fileCount": 1500,
+      "sourceBytes": 11231903,
+      "sourceSha256": "4d98945e21421d725a721d847c92ab9d8a2c59bce170e880b260f80dc1d99f0f",
+      "validation": {
+        "activeMessagesPerLocale": 6000,
+        "observed": {
+          "en": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          },
+          "de": {
+            "total": 6000,
+            "missingCount": 0,
+            "unexpectedCount": 0,
+            "duplicateCount": 0,
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "expectedPreservedTranslations": 4950,
+        "preservedTranslations": 4950,
+        "lostTranslations": [],
+        "retainedChangedTranslations": 0
+      },
+      "loadAverage": [
+        23.67431640625,
+        20.48046875,
+        19.56982421875
+      ],
+      "medianMs": 36.100667,
+      "minMs": 34.327792,
+      "maxMs": 36.835167,
+      "medianAbsoluteDeviationMs": 0.6883340000000047,
+      "samplesMs": [
+        34.327792,
+        36.100667,
+        36.835167,
+        35.872542,
+        36.834375,
+        36.571375,
+        35.412333
+      ]
+    }
+  ]
+}

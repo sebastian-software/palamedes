@@ -14,6 +14,15 @@ use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, stringify_icu}
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod references;
+
+pub use references::{
+    DEFAULT_TRANSLATION_REFERENCE_LIMIT, MAX_TRANSLATION_REFERENCE_LIMIT,
+    TranslationReferenceEntry, TranslationReferenceIndex, TranslationReferenceMatch,
+    TranslationReferenceMatches, TranslationReferenceRequest, TranslationReferenceResult,
+    find_translation_references,
+};
+
 #[cfg(test)]
 thread_local! {
     static SOURCE_CATALOG_PARSE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -105,7 +114,7 @@ pub struct TranslationCandidate {
 }
 
 /// Source origin exposed to translation workflow consumers.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationWorkflowOrigin {
     /// Source filename.

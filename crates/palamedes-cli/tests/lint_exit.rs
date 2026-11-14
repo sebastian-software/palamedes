@@ -4,6 +4,68 @@ use std::process::{Command, Output};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
+fn lint_pseudo_plural_is_opt_in_locale_scoped_and_uses_standard_suppressions() {
+    let fixture = fixture_dir("pseudo-plural");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    let config = |locale: &str, level: &str| {
+        format!(
+            "locales: [{locale}]\nsource-locale: {locale}\nlint:\n  rules:\n    pseudo-plural: {level}\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: [src]\n"
+        )
+    };
+    fs::write(fixture.join("palamedes.yaml"), config("en", "warning")).expect("write config");
+    fs::write(
+        fixture.join("src/view.ts"),
+        r#"import { t as translate } from "@palamedes/core/macro";
+export function Label({ count }) {
+  // palamedes-lint-disable-next-line pmds/no-pseudo-plural
+  const ignored = translate`Imported ${count} record(s)`;
+  return translate`Selected ${count} file(s)`;
+}
+"#,
+    )
+    .expect("write source");
+    let output = pmds(&fixture, &["lint", "--json", "--fail-on", "warning"]);
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).expect("lint JSON");
+    assert_eq!(document["summary"]["suppressed"], 1);
+    assert_eq!(
+        document["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .len(),
+        1
+    );
+    assert_eq!(document["diagnostics"][0]["code"], "pmds/no-pseudo-plural");
+    assert_eq!(document["diagnostics"][0]["severity"], "warning");
+    assert_eq!(document["diagnostics"][0]["primary"]["line"], 5);
+
+    fs::write(fixture.join("palamedes.yaml"), config("en", "error")).expect("change severity");
+    let error = pmds(&fixture, &["lint", "--json"]);
+    assert_eq!(error.status.code(), Some(4), "{error:?}");
+    let document: serde_json::Value = serde_json::from_slice(&error.stdout).expect("lint JSON");
+    assert_eq!(document["diagnostics"][0]["severity"], "error");
+
+    fs::write(
+        fixture.join("src/view.ts"),
+        "import { t } from '@palamedes/core/macro';\nexport function Label({ count }) { return t`Selected ${count} file(s)`; }",
+    )
+    .expect("write unsuppressed source");
+    for (locale, level) in [("de", "error"), ("en", "off")] {
+        fs::write(fixture.join("palamedes.yaml"), config(locale, level)).expect("change policy");
+        let output = pmds(&fixture, &["lint", "--json", "--fail-on", "warning"]);
+        assert!(output.status.success(), "{output:?}");
+        let document: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("lint JSON");
+        assert_eq!(document["diagnostics"], serde_json::json!([]));
+    }
+    assert!(
+        !fixture.join("locales").exists(),
+        "lint must not create catalogs"
+    );
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
 fn lint_verdicts_have_a_dedicated_exit_code() {
     let fixture = fixture_dir("verdict");
     fs::create_dir_all(fixture.join("src")).expect("create source directory");

@@ -44,6 +44,7 @@ mod source_macros;
 mod source_message;
 mod svelte;
 mod target_text;
+mod terminology;
 #[cfg(test)]
 mod test_support;
 mod transform;
@@ -148,15 +149,21 @@ pub use runtime_message::{
 #[doc(hidden)]
 pub use source::{
     SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
-    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
-    SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions, SourceAnalysisResult, SourceComment,
-    SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult,
-    SourceRange, SourceRuleLevel, SourceRuleOptions,
+    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL,
+    SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX, SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions,
+    SourceAnalysisResult, SourceComment, SourceCommentKind, SourceDiagnostic,
+    SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceRange, SourceRuleLevel,
+    SourceRuleOptions,
 };
 #[doc(hidden)]
 pub use target_text::{
     TargetTextCheckOptions, TargetTextSpan, TranslationTargetText, TranslationTargetTextDiagnostic,
     TranslationTargetTextRequest, TranslationTargetTextResult, check_translation_targets,
+};
+#[doc(hidden)]
+pub use terminology::{
+    TerminologyEntry, TerminologyError, TerminologyKind, TerminologyMatch, TerminologyRequest,
+    match_terminology,
 };
 #[doc(hidden)]
 pub use transform::{
@@ -168,12 +175,16 @@ pub use transform::{
 pub use translation_candidates::apply_translation_patches_with_injected_write_failure;
 #[doc(hidden)]
 pub use translation_candidates::{
-    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS, TranslationCandidate, TranslationCandidateId,
+    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS, DEFAULT_TRANSLATION_REFERENCE_LIMIT,
+    MAX_TRANSLATION_REFERENCE_LIMIT, TranslationCandidate, TranslationCandidateId,
     TranslationCandidateRequest, TranslationCandidateResult, TranslationMachineProvenance,
     TranslationPatch, TranslationPatchOutcome, TranslationPatchOutcomeStatus,
     TranslationPatchRequest, TranslationPatchResult, TranslationPatchStats, TranslationPluralKind,
+    TranslationReferenceEntry, TranslationReferenceIndex, TranslationReferenceMatch,
+    TranslationReferenceMatches, TranslationReferenceRequest, TranslationReferenceResult,
     TranslationReviewState, TranslationValue, TranslationWorkflowDiagnostic,
-    TranslationWorkflowOrigin, apply_translation_patches, list_translation_candidates,
+    TranslationWorkflowOrigin, apply_translation_patches, find_translation_references,
+    list_translation_candidates,
 };
 
 /// `ferrocat` version that Cargo.lock pins for the native builds.

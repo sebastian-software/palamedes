@@ -189,6 +189,7 @@ describe("loadPalamedesConfig", () => {
             placeholder-only: error
             empty-component-only: warning
             prefer-trans-in-jsx: off
+            pseudo-plural: warning
         catalogs:
           - path: src/locales/{locale}
             include: [src]
@@ -202,6 +203,7 @@ describe("loadPalamedesConfig", () => {
         placeholderOnly: "error",
         emptyComponentOnly: "warning",
         preferTransInJsx: "off",
+        pseudoPlural: "warning",
       },
     });
   });

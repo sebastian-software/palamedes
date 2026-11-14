@@ -277,6 +277,12 @@ Options:
 | `--threads <COUNT>`   | Worker threads for bounded parallel source analysis. Overrides `extract-threads`; defaults to `4`; `1` runs serial. |
 | `--no-cache`          | Ignore and do not write the shared source-analysis cache.                                                           |
 
+The opt-in `lint.rules.pseudo-plural` rule emits `pmds/no-pseudo-plural` for
+narrow English count-like spellings such as `` t`Imported ${count} record(s)` ``.
+It uses the project's `source-locale`, configured severity, and standard
+suppressions. See [source lint configuration](./configuration.md#source-lint)
+for the recognized syntax and deliberately unreported cases.
+
 Human diagnostics contain file, line, column, severity, stable code, message,
 and actionable help. JSON contains `diagnostics`, `failedFiles`, and a
 `summary` with file and severity counts plus the number of suppressed findings.

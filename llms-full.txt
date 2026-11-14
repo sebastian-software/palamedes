@@ -143,6 +143,17 @@ dependencies from the evaluated module graph. Do not create an app-owned
 compiled fragment before translated code runs. Set the document's `lang` before
 its module entry; locale selection remains host policy.
 
+Plain Vite React apps can opt into `palamedes({ experimentalReactCatalogHmr:
+true })` for state-preserving PO/FCL translation edits through existing Fast
+Refresh boundaries. Development uses a complete active-locale catalog snapshot
+with stale-generation rejection and invalid-edit recovery; production stays
+split. Matching-catalog source/ID validation remains enforced. Conflicting values
+for the same ID across catalogs are rejected in this experimental snapshot mode.
+Message membership/config changes and removed identities reload the document;
+ordinary React source edits keep Fast Refresh.
+Solid keeps reload-based updates. Other SSR/RSC hosts have no in-place-update
+guarantee. See `/docs/api/vite-plugin.md#experimental-react-catalog-hmr`.
+
 Package roots and `compiled` aliases share one parser-free v2 runtime. Raw ICU
 strings are build-time inputs; application-owned catalog maps and serialized ICU
 transport are not part of standard framework delivery. See
@@ -355,6 +366,23 @@ Important consequences:
 
 ### Translation candidate and patch APIs
 
+`matchTerminology({ message, entries })` accepts caller-owned terminology in
+`@palamedes/core-node` (Rust: `match_terminology`). Each entry has a unique nonblank
+`id`, nonblank literal `source`, `kind: "protected" | "advisory"`, and optional
+`preferredTarget` and `note`. Supplied target spellings must be nonblank.
+Protected intent preserves the target spelling when supplied, otherwise the source;
+advisory guidance permits grammatical adaptation. The matcher enforces neither on
+target text. It rejects invalid entries and malformed ICU without partial results.
+Matching uses exact case-sensitive substrings without Unicode normalization or word
+segmentation, only in decoded native ICU literals. Placeholder/tag names, selectors,
+and formatter styles are excluded, and terms never cross literal boundaries.
+Every occurrence remains present; `preferred` selects nonoverlapping matches longest
+UTF-8 byte length first, then start and ID, without implicit protected precedence.
+Results carry `entryId`, `kind`, `literalPath`, decoded `literal`, `start`, `end`, and
+`preferred`. Ranges index UTF-8 bytes within that literal, not raw ICU or UTF-16.
+Use these relevance facts for context packaging or caller-owned review; substring
+agreement cannot establish linguistic quality. No dictionaries or providers are built in.
+
 Custom translation tooling can use the typed APIs from
 `@palamedes/core-node`:
 
@@ -382,6 +410,16 @@ before any catalog write. Compatible target-language plural categories are
 allowed. Compatibility errors retain audit's `icu.*` codes and explanations;
 audit warnings do not reject patches. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
+
+`findTranslationReferences({ references, targets, maxReferences: 5, maxOrigins: 8 })`
+returns exact source-message/context/target-locale reference hints, capped at 20
+per target with deterministic catalog ordering, target values, origins, and reasons.
+The caller selects eligible facts; known explicit `listTranslationCandidates`
+`targets` can read translated PO/FCL entries, while default enumeration only returns
+missing translations. One native snapshot index validates compatibility once per
+reference and serves the whole batch. Duplicate, empty, or incompatible references
+produce diagnostics and are excluded. No quality inference, fuzzy matching,
+automatic freshness, remote calls, or replacement is performed.
 
 `checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
 metadataLeakage: true } })` checks proposed `TranslationValue` content without
@@ -565,6 +603,14 @@ files after edits, run `pmds extract --check --json --fail-on-empty-catalog` for
 catalog drift after extraction, and use `pmds audit --json --fail-on warning` for
 catalog translation and ICU checks. A targeted lint pass is not a full-project
 or catalog validation.
+`lint.rules.pseudo-plural` defaults to `off`. With an English `source-locale`,
+`warning` enables `pmds/no-pseudo-plural` for exactly one interpolation followed
+by whitespace and an ASCII `word(s)` suffix. Literal documentation, proper
+plural choices, rich-text boundaries, multiple values, and non-English locales
+are skipped. The rule recommends complete sentences in `Plural` branches,
+supports normal severity/suppression controls, and never auto-fixes. Native
+`analyzeSourceNative` callers also supply `sourceLocale`; an unknown locale skips
+the rule. Locale and rule configuration invalidate cached diagnostics.
 An extraction-cache write failure does not change the command verdict, but it
 always emits a stderr warning even without `--verbose`. Watch mode reports a
 persistent write failure once per process rather than once per file event. Use

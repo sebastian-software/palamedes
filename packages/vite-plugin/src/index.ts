@@ -27,12 +27,17 @@ import {
 import {
   analyzeMdxNative,
   assertNoRemovedPalamedesOptions,
+  compileCatalogArtifactAsync,
   compileCatalogArtifactSelectedAsync,
   compileCatalogModuleAsync,
   renderCatalogModule,
   type CatalogArtifactConfig,
 } from "@palamedes/core-node";
-import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform";
+import {
+  createCatalogLoaderResult,
+  createMissingErrorMessage,
+  transformPalamedesMacros,
+} from "@palamedes/transform";
 import {
   PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
   PALAMEDES_MACRO_PACKAGES,
@@ -58,6 +63,10 @@ const RESOLVED_SERVER_CATALOGS = "\0palamedes:server-catalogs";
 const NODE_I18N = "@palamedes/runtime/node";
 const BUNDLED_NODE_I18N = "@palamedes/runtime/server/bundled";
 const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/";
+const REACT_CATALOG_HMR = "virtual:palamedes/react-catalog-hmr";
+const RESOLVED_REACT_CATALOG_HMR = "\0palamedes:react-catalog-hmr";
+const REACT_SNAPSHOT_PREFIX = "virtual:palamedes/react-catalog-snapshot/";
+const RESOLVED_REACT_SNAPSHOT_PREFIX = "\0palamedes:react-catalog-snapshot/";
 const BARE_MESSAGES_PREFIX = "#pmds/";
 const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json";
 const RENDERED_CATALOG_IMPORT =
@@ -371,6 +380,15 @@ export type PalamedesPluginOptions = {
    * @default "auto"
    */
   environment?: "auto" | "server";
+
+  /**
+   * Experimental React development updates that preserve Fast Refresh state.
+   * Development loads one complete active-locale snapshot; production keeps
+   * normal fragments. Solid and hosts without React refresh boundaries keep
+   * reload-based catalog delivery.
+   * @default false
+   */
+  experimentalReactCatalogHmr?: boolean;
 };
 
 /**
@@ -393,11 +411,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     includeSourceMetadata,
     mdx: mdxOverride,
     environment = "auto",
+    experimentalReactCatalogHmr = false,
     configPath,
     projectRoot: explicitProjectRoot,
     skipValidation,
   } = options;
   const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule);
+  if (experimentalReactCatalogHmr && framework !== "react") {
+    throw new Error('experimentalReactCatalogHmr requires framework: "react".');
+  }
   if (environment !== "auto" && environment !== "server") {
     throw new Error(
       `Palamedes environment must be "auto" or "server", received ${JSON.stringify(environment)}.`,
@@ -460,13 +482,213 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     if (!graphSplitting || compiledIds.length === 0) {
       return code;
     }
+    const epoch = reactCatalogEpoch;
     return sidecarKey(sourceId).then((key) => {
+      if (experimentalReactCatalogHmr && epoch !== reactCatalogEpoch) return code;
       registerSidecar(key, sourceId, compiledIds);
       return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`;
     });
   }
 
   let devServer: ViteDevServer | undefined;
+  let reactCatalogGeneration = 0;
+  let reactCatalogEpoch = 0;
+  let reactCatalogRestarting = false;
+  type ReactCatalogSnapshot = { code: string; ids: string[] };
+  let reactCatalogSnapshots = new Map<string, Promise<ReactCatalogSnapshot>>();
+  let lastReactCatalogUpdate = "";
+  let lastReactReload = "";
+  let reactCatalogUpdate = Promise.resolve();
+
+  async function compileReactCatalogSnapshot(
+    cfg: LoadedPalamedesConfig,
+    locale: string,
+    addWatchFile: (file: string) => void = () => {},
+    warn: (message: string) => void = (message) => devServer?.config.logger.warn(message),
+  ): Promise<ReactCatalogSnapshot> {
+    const messages: Record<string, string> = {};
+    for (const catalog of cfg.catalogs) {
+      const artifact = await compileCatalogArtifactAsync(
+        catalogArtifactConfig(cfg, [catalog]),
+        catalogResourcePath(cfg, catalog, locale),
+      );
+      artifact.watchFiles.forEach(addWatchFile);
+      const validated = createCatalogLoaderResult(artifact, {
+        locale,
+        pseudoLocale: cfg.pseudoLocale,
+        failOnMissing,
+        missingFailureHint:
+          "You see this error because `failOnMissing=true` in Vite plugin configuration.",
+      });
+      validated.warnings.forEach(warn);
+      for (const [id, message] of Object.entries(artifact.messages)) {
+        if (Object.hasOwn(messages, id) && messages[id] !== message) {
+          throw new Error(
+            `Experimental React catalog HMR cannot combine conflicting ${locale} values for compiled message ID "${id}" across catalogs. Use distinct messages/contexts or disable experimentalReactCatalogHmr for scoped fragment delivery.`,
+          );
+        }
+        messages[id] = message;
+      }
+    }
+    return { code: renderCatalogModule(messages), ids: Object.keys(messages) };
+  }
+
+  type SidecarEntry = { sourceId: string; compiledIds: string[] };
+
+  // Duplicate compiled IDs warn once per locale and ID, however many
+  // sidecars or rebuilds meet them.
+  const warnedDuplicateIds = new Set<string>();
+
+  // `warn` is required rather than optional: an omitted channel would
+  // silently disable the `failOnMissing` gate below along with the warning,
+  // and every caller has a plugin context that provides one.
+  async function compileSidecarLocale(
+    cfg: LoadedPalamedesConfig,
+    entry: SidecarEntry,
+    locale: string,
+    context: { addWatchFile?: (file: string) => void; warn: (message: string) => void },
+  ): Promise<Record<string, string> | null> {
+    const catalogs = cfg.catalogs.filter((catalog) =>
+      catalogMatchesSource(cfg, catalog, entry.sourceId),
+    );
+    if (catalogs.length === 0) {
+      throw new Error(
+        `Palamedes message source ${entry.sourceId} is not included in a configured catalog.`,
+      );
+    }
+
+    const selected: Record<string, string> = {};
+    for (const catalog of catalogs) {
+      const artifactConfig = catalogArtifactConfig(cfg, [catalog]);
+      const resourcePath = catalogResourcePath(cfg, catalog, locale);
+      const result = await compileCatalogArtifactSelectedAsync(
+        artifactConfig,
+        resourcePath,
+        entry.compiledIds,
+      );
+      result.watchFiles.forEach((file: string) => context.addWatchFile?.(file));
+      if (result.missing.length > 0) {
+        const message =
+          `${createMissingErrorMessage(locale, result.missing)}\n\n` +
+          `Referenced by ${entry.sourceId}.`;
+        if (failOnMissing) {
+          throw new Error(message);
+        }
+        context.warn(message);
+      }
+      for (const [id, message] of Object.entries(result.messages)) {
+        // Catalogs apply in configuration order and the last one wins, so the
+        // result is deterministic; the warning only makes the override visible.
+        if (Object.hasOwn(selected, id) && selected[id] !== message) {
+          const key = `${locale}\0${id}`;
+          if (!warnedDuplicateIds.has(key)) {
+            warnedDuplicateIds.add(key);
+            context.warn(
+              `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog ` +
+                `(seen again in ${catalog.path}); the last catalog in the configuration wins. ` +
+                "Give the messages distinct IDs or make the catalogs agree.",
+            );
+          }
+        }
+        selected[id] = message;
+      }
+    }
+    return selected;
+  }
+
+  function queueReactCatalogUpdate(file: string, timestamp: number): void {
+    const updateKey = `${file}:${timestamp}`;
+    if (lastReactCatalogUpdate === updateKey) return;
+    lastReactCatalogUpdate = updateKey;
+    const epoch = reactCatalogEpoch;
+    reactCatalogUpdate = reactCatalogUpdate.then(async () => {
+      if (epoch !== reactCatalogEpoch || reactCatalogRestarting) return;
+      const server = devServer;
+      if (!server) return;
+      let ownedGeneration = reactCatalogGeneration;
+      try {
+        const cfg = await getConfigLazy();
+        const client = server.environments.client;
+        const sourceEntries = [...sidecarModules.values()].filter(
+          (entry) =>
+            cfg.catalogs.some((catalog) => catalogMatchesSource(cfg, catalog, entry.sourceId)) &&
+            [...(client?.moduleGraph.getModulesByFile(entry.sourceId) ?? [])].some(
+              (module) => module.importedModules.size > 0,
+            ),
+        );
+        // Preserve production's source/catalog and selected-ID contract before
+        // a complete snapshot can make an unrelated catalog's message visible.
+        for (const entry of sourceEntries)
+          for (const locale of cfg.locales)
+            await compileSidecarLocale(cfg, entry, locale, {
+              warn: (message) => server.config.logger.warn(message),
+            });
+        // Validate every snapshot before changing the browser generation. A
+        // broken edit keeps the running UI and its state behind Vite's overlay.
+        const snapshots = await Promise.all(
+          cfg.locales.map(
+            async (locale) => [locale, await compileReactCatalogSnapshot(cfg, locale)] as const,
+          ),
+        );
+        let removedMessages = false;
+        for (const [locale, snapshot] of snapshots) {
+          const previous = await reactCatalogSnapshots.get(locale)?.catch(() => null);
+          const ids = new Set(snapshot.ids);
+          removedMessages ||= previous?.ids.some((id) => !ids.has(id)) ?? false;
+        }
+        if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
+        reactCatalogGeneration += 1;
+        ownedGeneration = reactCatalogGeneration;
+        reactCatalogSnapshots = new Map(
+          snapshots.map(([locale, code]) => [locale, Promise.resolve(code)]),
+        );
+        const sourceModules = new Set(
+          sourceEntries.flatMap((entry) =>
+            [...(client?.moduleGraph.getModulesByFile(entry.sourceId) ?? [])].filter(
+              (module) => module.importedModules.size > 0,
+            ),
+          ),
+        );
+        for (const devEnvironment of Object.values(server.environments)) {
+          for (const [id, module] of devEnvironment.moduleGraph.idToModuleMap) {
+            if (
+              id.startsWith(RESOLVED_MESSAGES_PREFIX) ||
+              id.startsWith(RESOLVED_REACT_SNAPSHOT_PREFIX) ||
+              id === RESOLVED_SERVER_CATALOGS
+            ) {
+              devEnvironment.moduleGraph.invalidateModule(module);
+            }
+          }
+          for (const module of devEnvironment.moduleGraph.getModulesByFile(file) ?? []) {
+            devEnvironment.moduleGraph.invalidateModule(module);
+          }
+        }
+        if (removedMessages) {
+          client?.hot.send({ type: "full-reload" });
+          return;
+        }
+        client?.hot.send({
+          type: "custom",
+          event: "palamedes:catalog-update",
+          data: { generation: reactCatalogGeneration },
+        });
+        // Refresh the application's existing React boundaries instead of
+        // remounting its root or introducing subscriptions into getI18n().
+        for (const module of sourceModules) await client!.reloadModule(module);
+      } catch (error) {
+        if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
+        server.environments.client?.hot.send({
+          type: "error",
+          err: {
+            message: error instanceof Error ? error.message : String(error),
+            stack: "",
+            plugin: "palamedes:react-catalog-hmr",
+            id: file,
+          },
+        });
+      }
+    });
+  }
 
   /*
    * The sidecar specifier is derived from the source path only, so it stays
@@ -484,6 +706,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     sidecarModules.set(key, { sourceId, compiledIds });
     if (!devServer || !previous || sameMessageSet(previous.compiledIds, compiledIds)) {
       return;
+    }
+    if (experimentalReactCatalogHmr) {
+      devServer.environments.client?.hot.send({ type: "full-reload" });
     }
     const sidecarId = `${RESOLVED_MESSAGES_PREFIX}${key}`;
     const isSidecarModule = (id: string) => id === sidecarId || id.startsWith(`${sidecarId}/`);
@@ -509,14 +734,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     return `Palamedes transform error in ${sourceId}: ${message}`;
   }
 
-  async function getConfigLazy() {
+  async function getConfigLazy(): Promise<LoadedPalamedesConfig> {
     if (!config) {
+      const epoch = reactCatalogEpoch;
       const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, configPath);
-      config = await loadPalamedesConfig({
+      const loaded = await loadPalamedesConfig({
         projectRoot,
         ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
         ...(skipValidation === undefined ? {} : { skipValidation }),
       });
+      if (experimentalReactCatalogHmr && epoch !== reactCatalogEpoch) return getConfigLazy();
+      config = loaded;
       configDependencies = new Set(getConfigDependencies(config).map(canonicalPath));
       macroIds = new Set(PALAMEDES_MACRO_PACKAGES);
     }
@@ -808,11 +1036,64 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
 
     configureServer(server) {
+      const previousServer = devServer;
       devServer = server;
+      if (experimentalReactCatalogHmr) {
+        reactCatalogEpoch += 1;
+        reactCatalogGeneration = 0;
+        reactCatalogSnapshots = new Map();
+        reactCatalogUpdate = Promise.resolve();
+        lastReactCatalogUpdate = "";
+        if (previousServer) sidecarModules.clear();
+        resetConfig();
+        reactCatalogRestarting = false;
+      }
     },
 
     watchChange(id) {
       resetConfigOnChange(id);
+    },
+
+    hotUpdate: {
+      order: "pre",
+      async handler(context) {
+        if (!experimentalReactCatalogHmr) return;
+        const file = canonicalPath(context.file);
+        const reloadKey = `${file}:${context.timestamp}:${context.type}`;
+        if (lastReactReload === reloadKey) return [];
+        if (reactCatalogRestarting) return [];
+        if (
+          isConfigChange(file) ||
+          (context.type === "delete" &&
+            [...sidecarModules.values()].some((entry) => canonicalPath(entry.sourceId) === file))
+        ) {
+          lastReactReload = reloadKey;
+          if (isConfigChange(file)) {
+            reactCatalogEpoch += 1;
+            reactCatalogRestarting = true;
+            try {
+              await context.server.restart();
+            } finally {
+              reactCatalogRestarting = false;
+            }
+            return [];
+          }
+          for (const [key, entry] of sidecarModules)
+            if (canonicalPath(entry.sourceId) === file) sidecarModules.delete(key);
+          resetConfigOnChange(file);
+          context.server.environments.client?.hot.send({ type: "full-reload" });
+          return [];
+        }
+        const cfg = await getConfigLazy();
+        const isCatalog = cfg.catalogs.some((catalog) =>
+          cfg.locales.some(
+            (locale) => canonicalPath(catalogResourcePath(cfg, catalog, locale)) === file,
+          ),
+        );
+        if (!isCatalog) return;
+        queueReactCatalogUpdate(file, context.timestamp);
+        return [];
+      },
     },
 
     config(viteConfig, env) {
@@ -1033,73 +1314,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // aggregator that registers the branded exports with the runtime. The
   // bundler then distributes messages along the module graph.
   if (graphSplitting) {
-    type SidecarEntry = { sourceId: string; compiledIds: string[] };
-
-    // Duplicate compiled IDs warn once per locale and ID, however many
-    // sidecars or rebuilds meet them.
-    const warnedDuplicateIds = new Set<string>();
-
-    // `warn` is required rather than optional: an omitted channel would
-    // silently disable the `failOnMissing` gate below along with the warning,
-    // and every caller has a plugin context that provides one.
-    async function compileSidecarLocale(
-      cfg: LoadedPalamedesConfig,
-      entry: SidecarEntry,
-      locale: string,
-      context: { addWatchFile?: (file: string) => void; warn: (message: string) => void },
-    ): Promise<Record<string, string> | null> {
-      const catalogs = cfg.catalogs.filter((catalog) =>
-        catalogMatchesSource(cfg, catalog, entry.sourceId),
-      );
-      if (catalogs.length === 0) {
-        throw new Error(
-          `Palamedes message source ${entry.sourceId} is not included in a configured catalog.`,
-        );
-      }
-
-      const selected: Record<string, string> = {};
-      for (const catalog of catalogs) {
-        const artifactConfig = catalogArtifactConfig(cfg, [catalog]);
-        const resourcePath = catalogResourcePath(cfg, catalog, locale);
-        const result = await compileCatalogArtifactSelectedAsync(
-          artifactConfig,
-          resourcePath,
-          entry.compiledIds,
-        );
-        result.watchFiles.forEach((file: string) => context.addWatchFile?.(file));
-        if (result.missing.length > 0) {
-          const message =
-            `${createMissingErrorMessage(locale, result.missing)}\n\n` +
-            `Referenced by ${entry.sourceId}.`;
-          if (failOnMissing) {
-            throw new Error(message);
-          }
-          context.warn(message);
-        }
-        for (const [id, message] of Object.entries(result.messages)) {
-          // Catalogs apply in configuration order and the last one wins, so the
-          // result is deterministic; the warning only makes the override visible.
-          if (Object.hasOwn(selected, id) && selected[id] !== message) {
-            const key = `${locale}\0${id}`;
-            if (!warnedDuplicateIds.has(key)) {
-              warnedDuplicateIds.add(key);
-              context.warn(
-                `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog ` +
-                  `(seen again in ${catalog.path}); the last catalog in the configuration wins. ` +
-                  "Give the messages distinct IDs or make the catalogs agree.",
-              );
-            }
-          }
-          selected[id] = message;
-        }
-      }
-      return selected;
-    }
-
     plugins.push({
       name: "palamedes:message-sidecars",
 
       resolveId(id) {
+        if (experimentalReactCatalogHmr && !isBuildCommand) {
+          if (id === REACT_CATALOG_HMR) return RESOLVED_REACT_CATALOG_HMR;
+          if (id.startsWith(REACT_SNAPSHOT_PREFIX))
+            return `${RESOLVED_REACT_SNAPSHOT_PREFIX}${id.slice(REACT_SNAPSHOT_PREFIX.length)}`;
+        }
         if (id.startsWith(BARE_MESSAGES_PREFIX)) return { id, external: true };
         if (id.startsWith(VIRTUAL_MESSAGES_PREFIX)) {
           return `${RESOLVED_MESSAGES_PREFIX}${id.slice(VIRTUAL_MESSAGES_PREFIX.length)}`;
@@ -1118,6 +1341,45 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
        * modules is cheaper than keeping that state correct.
        */
       async load(id, loadOptions) {
+        if (experimentalReactCatalogHmr && !isBuildCommand && id === RESOLVED_REACT_CATALOG_HMR) {
+          return {
+            code: `import { getI18n } from "@palamedes/runtime";\nimport { createDevelopmentCatalogUpdater } from "@palamedes/runtime/internal";\nconst locale=document.documentElement.lang;\nconst update=createDevelopmentCatalogUpdater(generation=>import(/* @vite-ignore */ ${JSON.stringify(`${resolvedBase}@id/__x00__palamedes:react-catalog-snapshot/`)}+generation+"/"+locale),messages=>getI18n().load(locale,messages));\nexport const loadDevelopmentCatalog=update;\nif(import.meta.hot)import.meta.hot.on("palamedes:catalog-update",({generation})=>{void update(generation).catch(()=>{});});`,
+            map: null,
+          };
+        }
+        if (
+          experimentalReactCatalogHmr &&
+          !isBuildCommand &&
+          id.startsWith(RESOLVED_REACT_SNAPSHOT_PREFIX)
+        ) {
+          const snapshotLocale = id.slice(RESOLVED_REACT_SNAPSHOT_PREFIX.length).split("/", 2)[1];
+          const snapshotConfig = await getConfigLazy();
+          if (!snapshotLocale || !snapshotConfig.locales.includes(snapshotLocale))
+            this.error("Unknown development catalog locale.");
+          addConfigWatchFiles(snapshotConfig, (file) => this.addWatchFile(file));
+          for (const catalog of snapshotConfig.catalogs)
+            for (const configuredLocale of snapshotConfig.locales)
+              this.addWatchFile(catalogResourcePath(snapshotConfig, catalog, configuredLocale));
+          let snapshot = reactCatalogSnapshots.get(snapshotLocale);
+          if (!snapshot) {
+            snapshot = compileReactCatalogSnapshot(
+              snapshotConfig,
+              snapshotLocale,
+              (file) => this.addWatchFile(file),
+              (message) => this.warn(message),
+            );
+            reactCatalogSnapshots.set(snapshotLocale, snapshot);
+            snapshot.catch(() => {
+              if (reactCatalogSnapshots.get(snapshotLocale) === snapshot)
+                reactCatalogSnapshots.delete(snapshotLocale);
+            });
+          }
+          const generation = reactCatalogGeneration;
+          return {
+            code: `export const generation=${generation};\n${(await snapshot).code}`,
+            map: null,
+          };
+        }
         if (!id.startsWith(RESOLVED_MESSAGES_PREFIX)) {
           return null;
         }
@@ -1158,6 +1420,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               }if (l !== locale) throw new Error("Compiled catalog locale does not match the document.");\n` +
               `i18n.load(locale, defineCompiledCatalog(m));\n${runtimeExport}`;
             return { code: boundCode, map: null, moduleSideEffects: true };
+          }
+
+          if (experimentalReactCatalogHmr) {
+            // The complete snapshot owns catalog watch dependencies. Attaching
+            // them here would let Vite invalidate React source boundaries
+            // before the catalog transaction captures them for refresh.
+            for (const name of locales)
+              await compileSidecarLocale(cfg, entry, name, {
+                warn: (message) => this.warn(message),
+              });
+            return {
+              code: `${initialize}import { loadDevelopmentCatalog } from ${JSON.stringify(REACT_CATALOG_HMR)};\nawait loadDevelopmentCatalog(${reactCatalogGeneration});\n${runtimeExport}`,
+              map: null,
+              moduleSideEffects: true,
+            };
           }
 
           // Development still loads only the active locale; every locale is a

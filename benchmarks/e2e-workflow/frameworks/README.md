@@ -140,3 +140,38 @@ Results are local evidence. Background activity, OS page cache, and thermal/powe
 state are not controlled. A small profile does not establish large-project
 performance. Benchmark dependencies are private tooling and are not shipped in
 Palamedes browser packages.
+
+## Component-analysis implementation comparison
+
+`src/compare-component-parsing.mjs` reuses this suite's deterministic realistic
+Vue/Svelte sources and catalog validators to compare two packaged release CLIs.
+It runs baseline–candidate–candidate–baseline blocks, each with three warmups
+and seven samples. Cold blocks reset catalogs and caches; cached blocks reset
+catalogs while retaining a complete unchanged-source cache. The cached lane is
+not an edit simulation. Inventory, all unchanged German translations, source
+integrity, and persisted cache completeness are checked outside every timer.
+This comparison never replaces `latest` or the reference campaign.
+
+Build each revision with `cargo build --release --locked -p palamedes-cli` and
+copy its executable together with that build's matching `out_dir/catalogs`
+directory as a `pmds-locales` sibling. Then run from the repository root:
+
+```sh
+node benchmarks/e2e-workflow/frameworks/src/compare-component-parsing.mjs \
+  --baseline /path/to/baseline/pmds --baseline-revision BASE_SHA \
+  --candidate /path/to/candidate/pmds --candidate-revision CANDIDATE_SHA \
+  --background "Describe concurrent host work and other known limits" \
+  --output benchmarks/e2e-workflow/results/frameworks/YYYY-MM-DD-component-parsing.json
+```
+
+The [retained local comparison](../results/frameworks/2026-11-10-component-parsing.json)
+records the binary hashes, native source diff hash, environment, every raw
+sample, spread and semantic receipts. Vue cold block medians were
+128.749/93.111/100.871/131.904 ms in observation order; Svelte was
+106.009/100.301/99.851/111.674 ms. Cached medians overlap around 33–37 ms;
+these samples do not establish a cached-path improvement. Parallel site browser
+checks remained active, and physical-host contention, power and thermal state
+were not controlled. These are implementation evidence on one macOS ARM64 host,
+not updated published cross-platform benchmark claims.
+The recording retains 112 measured samples across 16 blocks; 48 additional
+warmup invocations bring the total validated invocations to 160.
