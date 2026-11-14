@@ -1,10 +1,11 @@
-// A loopback sparse registry serves the exact Cargo archives, while forwarding
-// third-party index records/downloads to crates.io. No credential reaches it.
+// By default a loopback registry verifies the exact prepublication archives.
+// --published-version checks the same consumer against crates.io and npm.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdir, mkdtemp, readFile, writeFile, copyFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   archivePath,
@@ -15,15 +16,41 @@ import {
   run,
   sdkMetadata,
   sha256,
+  waitForRegistryVersion,
 } from "./rust-sdk-packages.mjs";
 
 const root = process.cwd();
-const target = resolve(root, "target/rust-sdk-proof");
-const packages = await sdkMetadata(root);
+const args = process.argv.slice(2);
+assert(
+  args.length === 0 ||
+    (args.length === 2 && args[0] === "--published-version" && /^\d+\.\d+\.\d+$/u.test(args[1])),
+  "Usage: node scripts/verify-rust-sdk.mjs [--published-version <version>]",
+);
+const publishedVersion = args[1];
+const target = resolve(
+  root,
+  publishedVersion
+    ? `target/rust-sdk-published-proof/${publishedVersion}`
+    : "target/rust-sdk-proof",
+);
+const packages = publishedVersion
+  ? RUST_SDK_PACKAGES.map((name) => ({ name, version: publishedVersion }))
+  : await sdkMetadata(root);
 const entries = new Map();
 const archives = new Map();
 const proxyCache = new Map();
 const environment = { ...process.env, CARGO_TARGET_DIR: target };
+if (publishedVersion) {
+  // Do not inherit registry replacements, patches, credentials or Cargo config.
+  for (const key of Object.keys(environment)) {
+    if (key.startsWith("CARGO_")) delete environment[key];
+  }
+  environment.CARGO_HOME = await mkdtemp(join(tmpdir(), "palamedes-sdk-cargo-home-"));
+  environment.CARGO_TARGET_DIR = target;
+  environment.RUSTUP_TOOLCHAIN = (
+    await run("rustup", ["show", "active-toolchain"], { cwd: root })
+  ).split(/\s/u)[0];
+}
 // Anonymous local staging must never receive a release credential.
 delete environment.CARGO_REGISTRY_TOKEN;
 delete environment.CARGO_REGISTRIES_CRATES_IO_TOKEN;
@@ -67,19 +94,21 @@ const server = createServer(async (request, response) => {
     response.writeHead(502).end();
   }
 });
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const address = `http://127.0.0.1:${server.address().port}`;
-const config = [
-  "--config",
-  'source.crates-io.replace-with="sdk-staging"',
-  "--config",
-  `source.sdk-staging.registry="sparse+${address}/"`,
-];
+if (!publishedVersion) await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const address = server.listening ? `http://127.0.0.1:${server.address().port}` : undefined;
+const config = publishedVersion
+  ? []
+  : [
+      "--config",
+      'source.crates-io.replace-with="sdk-staging"',
+      "--config",
+      `source.sdk-staging.registry="sparse+${address}/"`,
+    ];
 const cargo = (args, cwd = root) => run("cargo", [...args, ...config], { cwd, env: environment });
 const receipts = [];
 const extractedArchives = await mkdtemp(join(tmpdir(), "palamedes-sdk-archives-"));
 try {
-  for (const pkg of packages) {
+  for (const pkg of publishedVersion ? [] : packages) {
     console.log(`Packaging and verifying ${pkg.name}@${pkg.version}`);
     const listing = await cargo(["package", "-p", pkg.name, "--list", "--allow-dirty"]);
     const files = listing.trim().split("\n");
@@ -153,7 +182,7 @@ try {
   const version = packages[0].version;
   await writeFile(
     join(consumer, "Cargo.toml"),
-    `[package]\nname="rust-sdk-registry-consumer"\nversion="0.0.0"\nedition="2024"\n[workspace]\n[dependencies]\npalamedes-i18n="=${version}"\n[build-dependencies]\npalamedes-build="=${version}"\n`,
+    `[package]\nname="rust-sdk-registry-consumer"\nversion="0.0.0"\nedition="2024"\n[workspace]\n[dependencies]\npalamedes-i18n="=${version}"\n[build-dependencies]\npalamedes-build="=${version}"\npalamedes="=${version}"\n`,
   );
   await writeFile(
     join(consumer, "build.rs"),
@@ -175,8 +204,24 @@ try {
   );
   for (const name of RUST_SDK_PACKAGES) {
     const pkg = metadata.packages.find((entry) => entry.name === name);
+    assert.equal(pkg?.version, version, `${name} resolved a different SDK version`);
     assert(pkg?.source?.startsWith("registry+"), `${name} did not resolve from a registry`);
     assert(!pkg.manifest_path.startsWith(root), `${name} fell back to the checkout`);
+    if (publishedVersion) {
+      assert.equal(pkg.source, "registry+https://github.com/rust-lang/crates.io-index");
+      assert(pkg.manifest_path.startsWith(join(environment.CARGO_HOME, "registry", "src")));
+      const registry = basename(dirname(dirname(pkg.manifest_path)));
+      const checksum = await sha256(
+        join(environment.CARGO_HOME, "registry/cache", registry, `${name}-${version}.crate`),
+      );
+      await waitForRegistryVersion(pkg, checksum);
+      receipts.push({ name, version: pkg.version, source: pkg.source, checksum });
+    }
+  }
+  if (publishedVersion) {
+    for (const pkg of metadata.packages.filter((entry) => entry.id !== metadata.resolve.root)) {
+      assert.equal(pkg.source, "registry+https://github.com/rust-lang/crates.io-index");
+    }
   }
   const installed = await mkdtemp(join(tmpdir(), "palamedes-sdk-installed-"));
   const executable = join(installed, process.platform === "win32" ? "greeting.exe" : "greeting");
@@ -220,26 +265,64 @@ try {
   assert.equal(JSON.parse(await readFile(schema)).version, 2);
   const germanPo = join(consumer, "locales/de.po");
   await writeFile(germanPo, (await readFile(germanPo, "utf8")).replace("Hallo ", "Guten Tag "));
-  const buildOutput = await run(
-    "cargo",
-    ["build", "-p", "palamedes-cli", "--locked", "--message-format=json", "-j", "2"],
-    { cwd: root, env: environment },
-  );
-  const messages = buildOutput
-    .split("\n")
-    .filter((line) => line.startsWith("{"))
-    .map((line) => JSON.parse(line));
-  const binary = messages.find(
-    (item) => item.reason === "compiler-artifact" && item.target.name === "pmds" && item.executable,
-  );
-  const build = messages.find(
-    (item) => item.reason === "build-script-executed" && item.package_id === binary.package_id,
-  );
-  const compiler = join(installed, `pmds${process.platform === "win32" ? ".exe" : ""}`);
-  const uiCatalogs = join(installed, "pmds-locales");
-  await copyFile(binary.executable, compiler);
-  await mkdir(uiCatalogs);
-  await copyFile(join(build.out_dir, "catalogs/en.pmd.json"), join(uiCatalogs, "en.pmd.json"));
+  let compiler;
+  let uiCatalogs;
+  let compilerPackage;
+  if (publishedVersion) {
+    const compilerRoot = await mkdtemp(join(tmpdir(), "palamedes-sdk-published-cli-"));
+    await run(
+      process.platform === "win32" ? "npm.cmd" : "npm",
+      [
+        "install",
+        "--prefix",
+        compilerRoot,
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--registry",
+        "https://registry.npmjs.org",
+        `@palamedes/cli@${publishedVersion}`,
+      ],
+      { cwd: compilerRoot, shell: process.platform === "win32" },
+    );
+    const wrapperRoot = join(compilerRoot, "node_modules/@palamedes/cli");
+    const wrapper = JSON.parse(await readFile(join(wrapperRoot, "package.json"), "utf8"));
+    assert.equal(wrapper.version, publishedVersion);
+    const { resolveNativeExecutable } = await import(
+      pathToFileURL(join(wrapperRoot, "scripts/platform.mjs")).href
+    );
+    compiler = resolveNativeExecutable();
+    uiCatalogs = join(dirname(compiler), "pmds-locales");
+    const native = JSON.parse(await readFile(join(dirname(compiler), "../package.json"), "utf8"));
+    assert.equal(native.version, publishedVersion);
+    compilerPackage = {
+      name: native.name,
+      version: native.version,
+      checksum: await sha256(compiler),
+    };
+  } else {
+    const buildOutput = await run(
+      "cargo",
+      ["build", "-p", "palamedes-cli", "--locked", "--message-format=json", "-j", "2"],
+      { cwd: root, env: environment },
+    );
+    const messages = buildOutput
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map((line) => JSON.parse(line));
+    const binary = messages.find(
+      (item) =>
+        item.reason === "compiler-artifact" && item.target.name === "pmds" && item.executable,
+    );
+    const build = messages.find(
+      (item) => item.reason === "build-script-executed" && item.package_id === binary.package_id,
+    );
+    compiler = join(installed, `pmds${process.platform === "win32" ? ".exe" : ""}`);
+    uiCatalogs = join(installed, "pmds-locales");
+    await copyFile(binary.executable, compiler);
+    await mkdir(uiCatalogs);
+    await copyFile(join(build.out_dir, "catalogs/en.pmd.json"), join(uiCatalogs, "en.pmd.json"));
+  }
   await run(
     compiler,
     [
@@ -262,6 +345,9 @@ try {
         PATH: "",
         PALAMEDES_UI_CATALOG_DIR: uiCatalogs,
         PALAMEDES_UPDATE_CHECK: "0",
+        PALAMEDES_TELEMETRY: "off",
+        DO_NOT_TRACK: "1",
+        APP_TRACKING_STATE_DIR: join(installed, "app-tracking-state"),
         LC_ALL: "en",
       },
     },
@@ -272,6 +358,12 @@ try {
     assert(!(await readFile(executable)).includes(Buffer.from(text)), `Executable embeds ${text}`);
   }
   const receipt = {
+    mode: publishedVersion ? "crates.io" : "staged-registry",
+    platform: `${process.platform}/${process.arch}`,
+    toolchain: publishedVersion
+      ? (await run("rustc", ["--version"], { cwd: root, env: environment })).trim()
+      : undefined,
+    compilerPackage,
     packages: receipts,
     consumer,
     installed,
@@ -282,7 +374,7 @@ try {
   };
   await mkdir(target, { recursive: true });
   await writeFile(join(target, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
-  console.log(`Rust SDK staged-registry proof passed: ${join(target, "receipt.json")}`);
+  console.log(`Rust SDK ${receipt.mode} proof passed: ${join(target, "receipt.json")}`);
 } finally {
-  await new Promise((resolve) => server.close(resolve));
+  if (server.listening) await new Promise((resolve) => server.close(resolve));
 }

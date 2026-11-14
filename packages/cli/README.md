@@ -260,6 +260,31 @@ Git's temporary paths may be extensionless, so `--path %P` supplies the
 logical catalog path and lets this one driver infer PO or FCL. Add
 `--format=po` or `--format=fcl` only to explicitly override that inference.
 
+Git runs the driver at the worktree root, and config discovery searches upward
+from there. `--path` does not discover an app config. For a monorepo with
+`apps/web/palamedes.yaml`, use an app-specific driver:
+
+```gitattributes
+apps/web/locales/**/*.po merge=palamedes-web
+apps/web/locales/**/*.fcl merge=palamedes-web
+```
+
+```bash
+git config merge.palamedes-web.driver \
+  'pmds catalog merge-driver %O %A %B %A --path %P --config apps/web/palamedes.yaml --conflict-strategy=use-first'
+```
+
+Place the app patterns after any generic patterns in the root `.gitattributes`.
+Register a separate driver and config path for each app. Relative `--config`
+paths start at the worktree root; catalog patterns stay relative to the config
+directory. An absolute `--config` path can select settings from a trusted
+checkout for automation.
+
+Without a discoverable config, the merge still succeeds with default PO
+formatting and a note on stderr. This can rewrap messages configured with
+`po.line-breaks: "off"`. An explicit missing or invalid `--config` fails without
+changing the output file.
+
 `--source-locale` is optional. The command uses an explicit value first, then
 the configured Palamedes config when available, then `en`.
 

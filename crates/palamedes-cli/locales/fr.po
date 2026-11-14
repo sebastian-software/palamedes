@@ -354,6 +354,9 @@ msgstr "Avertissement : le catalogue {catalog} ne correspond à aucun fichier so
 msgid "Warning: could not write the extraction cache to {path}: {error}"
 msgstr "Avertissement : impossible d’écrire le cache d’extraction dans {path} : {error}"
 
+msgid "Note: no Palamedes config found from {cwd} upward; configured PO output options and source-locale are not applied. Pass --config for app-local settings; --path does not discover config files."
+msgstr "Remarque : aucune configuration Palamedes trouvée depuis {cwd} vers les répertoires parents ; les options de sortie PO configurées et source-locale ne sont pas appliquées. Utilisez --config pour les paramètres de l’application ; --path ne recherche pas de fichiers de configuration."
+
 msgid "Note: pmds cannot read {path}, so configured PO output options and source-locale are not applied to this merge."
 msgstr "Remarque : pmds ne peut pas lire {path} ; les options de sortie PO configurées et source-locale ne sont donc pas appliquées à cette fusion."
 
