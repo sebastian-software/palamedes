@@ -43,7 +43,7 @@ test-support = []
 ferrocat = "3.6.0"
 ferrocat-icu = "3.6.0"
 ferrocat-po = "3.6.0"
-ferromark = { version = "4.0.0", features = ["jsx"] }
+ferromark = { version = "4.1.0", features = ["jsx"] }
 oxc_allocator = "0.146.0"
 oxc_ast = "0.146.0"
 oxc_ast_visit = "0.146.0"
