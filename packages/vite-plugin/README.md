@@ -178,6 +178,10 @@ SSR hosts use `createBundledServerI18n` from
 lazy active-locale catalog, and `@palamedes/vite-plugin/delivery` to bind
 import maps before modulepreloads and modules execute.
 Static Vite HTML entries receive the same locale binding automatically.
+Frameworks that emit HTML after Vite's build, including React Router's static
+SPA mode, use `createStaticViteCatalogBootstrap` after prerender. The host
+provides its locale policy and an explicit script allowlist; see the
+[static document integration](../../docs/api/vite-plugin.md#static-documents-generated-after-the-vite-build).
 
 The package requires Vite 8. The macro transform declares `id` and `code` hook
 filters so files without a Palamedes macro import are skipped before the

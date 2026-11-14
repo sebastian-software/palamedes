@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-14T15:47:40.240Z",
-  "sourceCommit": "1dac7d68d81b14f2c40a1dcb4d56f3b5e7a67954",
+  "measuredAt": "2026-11-14T18:40:05.957Z",
+  "sourceCommit": "795ce6c60b0a96db90293b769eb4653ced618228",
   "worktreeDirty": true,
-  "sourceSha256": "b513ed75efd2d87e3d44c631ce77b1c4223eeeb17dfa331f1eda32cb6bbc7f85",
+  "sourceSha256": "c51889fe2eabc3feb0a401e629230d1dc3012ed36ff4e5f0ed8a39e36c91eca6",
   "environment": {
     "node": "v24.22.3",
     "vite": "8.2.4",
@@ -511,11 +511,11 @@
     "locale": "en",
     "messages": 38,
     "bytes": {
-      "raw": 2370,
-      "gzip": 1273,
-      "brotli": 1113
+      "raw": 2376,
+      "gzip": 1277,
+      "brotli": 1120
     },
-    "sha256": "366381d979870f1937b5d26348507732e30de0315e9666e53ef6787a0d6d82d0",
+    "sha256": "d4c149b1f651bfa9824742f2a2d10148b8a1a997019612e063dfe8dd1d287ddd",
     "scope": "Complete booking demo source-locale catalog; compiled core is external and counted in runtime profiles. Not a per-message estimate or a route payload."
   }
 }

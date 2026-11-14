@@ -1617,22 +1617,27 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           .digest("hex")
       );
     },
-    generateBundle(_options, bundle) {
-      for (const chunk of Object.values(bundle)) {
-        if (
-          chunk.type !== "chunk" ||
-          !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
-        )
-          continue;
-        const facade = createRouteFacade(chunk);
-        this.emitFile({
-          type: "asset",
-          fileName: facade.assetFileName,
-          source: facade.assetSource,
-        });
-        chunk.code = facade.facadeSource;
-        chunk.map = null;
-      }
+    generateBundle: {
+      // Vite resolves lazy-import preload markers during generateBundle. Move
+      // route code only afterward so emitted assets never retain those markers.
+      order: "post",
+      handler(_options, bundle) {
+        for (const chunk of Object.values(bundle)) {
+          if (
+            chunk.type !== "chunk" ||
+            !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
+          )
+            continue;
+          const facade = createRouteFacade(chunk);
+          this.emitFile({
+            type: "asset",
+            fileName: facade.assetFileName,
+            source: facade.assetSource,
+          });
+          chunk.code = facade.facadeSource;
+          chunk.map = null;
+        }
+      },
     },
   });
 
