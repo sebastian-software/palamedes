@@ -15,10 +15,11 @@ use crate::mdx::{MdxOptions, analyze_mdx};
 use crate::placeholder_name::expression_name;
 use crate::source::{
     DiagnosticLocation, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
-    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
-    SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
-    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
-    SourceRange, SourceRuleOptions, display_filename, format_parser_diagnostics,
+    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL,
+    SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX, SourceAnalysisOptions, SourceAnalysisResult,
+    SourceComment, SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity,
+    SourceFileAnalysisResult, SourceLocator, SourceRange, SourceRuleOptions, display_filename,
+    format_parser_diagnostics,
 };
 use crate::source_macros::{
     ImportedMacro, MacroImports, create_element_macro_error, create_element_type,
@@ -107,6 +108,8 @@ pub struct SourceFileAnalysisRequest {
 /// Optional behavior for aggregated catalog extraction.
 #[derive(Clone, Debug)]
 pub struct ExtractCatalogMessagesOptions {
+    /// Authored message locale used to gate locale-specific source rules.
+    pub source_locale: Option<String>,
     /// Whether stable source scopes should be extracted for catalog references.
     pub reference_scopes: bool,
     /// MDX translation-unit and configured-field behavior.
@@ -122,6 +125,7 @@ pub struct ExtractCatalogMessagesOptions {
 impl Default for ExtractCatalogMessagesOptions {
     fn default() -> Self {
         Self {
+            source_locale: None,
             reference_scopes: true,
             mdx: MdxOptions::default(),
             rules: SourceRuleOptions::disabled(),
@@ -304,6 +308,45 @@ impl AuthoredMessageFacts {
             [AuthoredMessagePart::Component { children }] if children.is_empty()
         )
     }
+
+    fn has_pseudo_plural(&self) -> bool {
+        // Do not guess how several values or rich-text boundaries relate to
+        // the suffix. The initial rule handles one value and plain text only.
+        if self
+            .parts
+            .iter()
+            .filter(|part| matches!(part, AuthoredMessagePart::ValuePlaceholder))
+            .count()
+            != 1
+            || self
+                .parts
+                .iter()
+                .any(|part| matches!(part, AuthoredMessagePart::Component { .. }))
+        {
+            return false;
+        }
+        self.parts.windows(2).any(|pair| {
+            let [
+                AuthoredMessagePart::ValuePlaceholder,
+                AuthoredMessagePart::Literal(text),
+            ] = pair
+            else {
+                return false;
+            };
+            let word = text.trim_start_matches(char::is_whitespace);
+            if word.len() == text.len() {
+                return false;
+            }
+            let letters = word.bytes().take_while(u8::is_ascii_alphabetic).count();
+            // A single letter followed by `(s)` can be function notation.
+            letters >= 2
+                && word[letters..].strip_prefix("(s)").is_some_and(|tail| {
+                    tail.chars().next().is_none_or(|next| {
+                        next.is_whitespace() || matches!(next, '.' | ',' | '!' | '?' | ':' | ';')
+                    })
+                })
+        })
+    }
 }
 
 struct ExtractionVisitor<'a> {
@@ -376,6 +419,20 @@ impl<'a> ExtractionVisitor<'a> {
                 | SourceMessageSurface::Trans
         ) {
             return;
+        }
+
+        if let Some(severity) = self.rules.pseudo_plural.severity()
+            && facts.has_pseudo_plural()
+        {
+            self.diagnostics.push(SourceDiagnostic {
+                code: SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL.to_owned(),
+                severity,
+                file: self.filename.clone(),
+                primary: facts.range.clone(),
+                message: "This count-like message uses a literal `(s)` suffix instead of a grammatical plural choice.".to_owned(),
+                help: "Use a Plural macro with a complete sentence in each branch; choose the count and grammatical forms explicitly. No automatic fix is available.".to_owned(),
+                related: None,
+            });
         }
 
         if !facts.has_literal_text() && facts.has_value_placeholder() {
@@ -1674,7 +1731,9 @@ pub fn analyze_source_with_options(
         filename,
         true,
         &options.mdx,
-        &options.rules,
+        &options
+            .rules
+            .for_source_locale(options.source_locale.as_deref()),
     )
 }
 
@@ -1838,7 +1897,9 @@ fn analyze_one_source_file_cached(
             &file.path,
             options.reference_scopes,
             &options.mdx,
-            &options.rules,
+            &options
+                .rules
+                .for_source_locale(options.source_locale.as_deref()),
         );
         arena.reset();
         analysis
@@ -2156,6 +2217,9 @@ pub fn extract_catalog_messages_cached(
     options: ExtractCatalogMessagesOptions,
     cache: &mut ExtractCache,
 ) -> PalamedesResult<ExtractCatalogMessagesResult> {
+    // Watch mode can retain a cache across config reloads; keep locale and
+    // rule policy in its stamp before deriving the effective rule levels.
+    cache.reset_if_request_differs(&request.root_dir, &options);
     let root_dir = PathBuf::from(&request.root_dir);
     let mut catalog = BTreeMap::<String, AggregatedCatalogEntry>::new();
     let mut failed_files = Vec::new();
@@ -2163,22 +2227,9 @@ pub fn extract_catalog_messages_cached(
     let file_count = request.files.len();
     let reference_scopes = options.reference_scopes;
     let mdx_options = options.mdx;
-    let rules = options.rules;
-
-    /*
-     * A cache handed to us may have been loaded for a different request — watch
-     * mode keeps one instance alive across config reloads, so a changed
-     * reference root or scope setting would otherwise serve entries whose
-     * origins and records belong to the previous configuration.
-     */
-    cache.reset_if_request_differs(
-        &request.root_dir,
-        &ExtractCatalogMessagesOptions {
-            reference_scopes,
-            mdx: mdx_options.clone(),
-            rules: rules.clone(),
-        },
-    );
+    let rules = options
+        .rules
+        .for_source_locale(options.source_locale.as_deref());
 
     /*
      * Reading and parsing each file is independent work and dominates extraction
@@ -2894,6 +2945,98 @@ const rich = <Trans><strong>Delete project</strong></Trans>;
             &source[diagnostic.primary.start..diagnostic.primary.end],
             "<Trans>{/* formatting */}<><Button /></></Trans>"
         );
+    }
+
+    #[test]
+    fn pseudo_plural_reports_explicit_interpolation_suffix_shapes_only_when_enabled() {
+        let source = r#"import { t as translate } from "@palamedes/core/macro";
+import { Trans as Message } from "@palamedes/react/macro";
+function Selection({ count }) {
+  const imported = translate`Imported ${count} record(s)`;
+  return <Message>{count} file(s) selected</Message>;
+}
+"#;
+        let options = serde_json::from_value::<SourceAnalysisOptions>(serde_json::json!({
+            "sourceLocale": "en-GB",
+            "rules": { "pseudoPlural": "warning" }
+        }))
+        .expect("source analysis options");
+        let result = analyze_source_with_options(source, "selection.tsx", &options)
+            .expect("analyze pseudo-plural forms");
+        let findings = result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "pmds/no-pseudo-plural")
+            .collect::<Vec<_>>();
+
+        assert_eq!(findings.len(), 2);
+        for finding in findings {
+            assert_eq!(finding.severity, SourceDiagnosticSeverity::Warning);
+            assert!(finding.help.contains("Plural"));
+            assert!(finding.help.contains("complete sentence"));
+            assert!(source[finding.primary.start..finding.primary.end].contains("(s)"));
+        }
+        assert!(
+            analyze_source(source, "selection.tsx")
+                .expect("default analysis")
+                .diagnostics
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn pseudo_plural_leaves_literal_technical_choice_and_ambiguous_forms_unreported() {
+        let options = serde_json::from_value::<SourceAnalysisOptions>(serde_json::json!({
+            "sourceLocale": "en",
+            "rules": { "pseudoPlural": "error" }
+        }))
+        .expect("source analysis options");
+        for body in [
+            "return t`The suffix (s) is documentation`;",
+            "return t`(s)`;",
+            "return t`The ${label} suffix is (s)`;",
+            "return t`Evaluate ${value} f(s)`;",
+            "return t`Range ${value} (start, end)`;",
+            "return t`Use ${value} option(s)Name`;",
+            "return t`Use ${value} arg(s)_value`;",
+            "return <Trans>file(s) selected</Trans>;",
+            "return <Trans>{count} <strong>file(s)</strong></Trans>;",
+            "return <Plural value={count} one=\"# file\" other=\"# files\" />;",
+        ] {
+            let source = format!(
+                "import {{ t }} from '@palamedes/core/macro';\nimport {{ Trans, Plural }} from '@palamedes/react/macro';\nfunction View({{ count, value, label }}) {{ {body} }}"
+            );
+            let result = analyze_source_with_options(&source, "fixture.tsx", &options)
+                .expect("analyze ignored or ambiguous syntax");
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diagnostic| diagnostic.code != "pmds/no-pseudo-plural"),
+                "unexpected pseudo-plural finding for {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn pseudo_plural_skips_non_english_and_unknown_source_locales() {
+        let source = r#"import { t } from "@palamedes/core/macro";
+function Selection({ count }) { return t`Imported ${count} record(s)`; }
+"#;
+        for locale in [
+            serde_json::Value::Null,
+            serde_json::json!("de"),
+            serde_json::json!("fr"),
+        ] {
+            let options = serde_json::from_value::<SourceAnalysisOptions>(serde_json::json!({
+                "sourceLocale": locale,
+                "rules": { "pseudoPlural": "warning" }
+            }))
+            .expect("source analysis options");
+            let result = analyze_source_with_options(source, "selection.ts", &options)
+                .expect("analyze another source locale");
+            assert!(result.diagnostics.is_empty());
+        }
     }
 
     #[test]

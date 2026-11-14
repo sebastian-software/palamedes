@@ -143,6 +143,17 @@ dependencies from the evaluated module graph. Do not create an app-owned
 compiled fragment before translated code runs. Set the document's `lang` before
 its module entry; locale selection remains host policy.
 
+Plain Vite React apps can opt into `palamedes({ experimentalReactCatalogHmr:
+true })` for state-preserving PO/FCL translation edits through existing Fast
+Refresh boundaries. Development uses a complete active-locale catalog snapshot
+with stale-generation rejection and invalid-edit recovery; production stays
+split. Matching-catalog source/ID validation remains enforced. Conflicting values
+for the same ID across catalogs are rejected in this experimental snapshot mode.
+Message membership/config changes and removed identities reload the document;
+ordinary React source edits keep Fast Refresh.
+Solid keeps reload-based updates. Other SSR/RSC hosts have no in-place-update
+guarantee. See `/docs/api/vite-plugin.md#experimental-react-catalog-hmr`.
+
 Package roots and `compiled` aliases share one parser-free v2 runtime. Raw ICU
 strings are build-time inputs; application-owned catalog maps and serialized ICU
 transport are not part of standard framework delivery. See
@@ -211,7 +222,7 @@ parsing is configured by Palamedes; Solid needs the explicit `.mdx` extension
 shown above. React development output is lowered through Vite after native
 macro transforms so `.mdx` edits can rebuild without an additional MDX plugin.
 
-MDX parsing uses Ferromark 3.7.0's source-ranged AST with strict JavaScript/JSX
+MDX parsing uses Ferromark 4.1.0's source-ranged AST with strict JavaScript/JSX
 validation. Image alt text includes the complete accessible description,
 including inline-code words. Separate paragraphs inside JSX remain separate
 messages. Structured alt metadata provides original source references, and
@@ -575,6 +586,14 @@ files after edits, run `pmds extract --check --json --fail-on-empty-catalog` for
 catalog drift after extraction, and use `pmds audit --json --fail-on warning` for
 catalog translation and ICU checks. A targeted lint pass is not a full-project
 or catalog validation.
+`lint.rules.pseudo-plural` defaults to `off`. With an English `source-locale`,
+`warning` enables `pmds/no-pseudo-plural` for exactly one interpolation followed
+by whitespace and an ASCII `word(s)` suffix. Literal documentation, proper
+plural choices, rich-text boundaries, multiple values, and non-English locales
+are skipped. The rule recommends complete sentences in `Plural` branches,
+supports normal severity/suppression controls, and never auto-fixes. Native
+`analyzeSourceNative` callers also supply `sourceLocale`; an unknown locale skips
+the rule. Locale and rule configuration invalidate cached diagnostics.
 An extraction-cache write failure does not change the command verdict, but it
 always emits a stderr warning even without `--verbose`. Watch mode reports a
 persistent write failure once per process rather than once per file event. Use
@@ -634,6 +653,29 @@ This one driver supports mixed-format repositories; set `--format po` or
 Git's temporary roles so `use-first` consistently means the branch being
 merged or rebased. Use `--operation merge` or `--operation rebase` only for
 unusual Git orchestration.
+
+Git runs the driver at the worktree root; config discovery searches upward
+from there. `--path` does not discover an app config. For a monorepo, register
+a separate driver per app and pass its config explicitly:
+
+```gitattributes
+apps/web/locales/**/*.po merge=palamedes-web
+apps/web/locales/**/*.fcl merge=palamedes-web
+```
+
+```bash
+git config merge.palamedes-web.driver \
+  'pmds catalog merge-driver %O %A %B %A --path %P --config apps/web/palamedes.yaml --conflict-strategy=use-first'
+```
+
+Put app patterns after generic patterns in the root `.gitattributes`.
+Relative `--config` paths start at the worktree root; catalog patterns remain
+relative to the config directory. An absolute `--config` can select settings
+from a trusted checkout for automation. Without a discoverable config, the
+driver reports the fallback on stderr and merges with default PO formatting
+and `--source-locale` or `en`. This can rewrap messages configured with
+`po.line-breaks: "off"`. An explicit missing or invalid config fails without
+changing the output file.
 
 Extraction performance is already handled by the CLI and needs no user tuning by default. `pmds extract` runs a bounded parallel read/parse pass (`--threads <COUNT>`, or `extract-threads` in the config) and reuses an on-disk extraction cache (`--no-cache` disables it for one run; `extract-cache: false` disables it permanently).
 
@@ -813,6 +855,7 @@ ADRs:
 - `/adr/028-readme-theme-composition.md`
 - `/adr/029-effective-flow-project-setup.md`
 - `/adr/030-next-client-catalogs-outside-the-bundler-graph.md`
+- `/adr/031-next-server-selected-client-chunk-permutations.md`
 
 ## Development commands
 

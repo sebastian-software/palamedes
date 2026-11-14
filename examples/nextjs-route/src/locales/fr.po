@@ -82,6 +82,18 @@ msgstr "l'unité"
 msgid "Fewer tickets"
 msgstr "Moins de billets"
 
+#: examples/nextjs-route/src/components/TicketFaqContent.tsx#TicketFaqContent
+msgid "Frequently asked questions"
+msgstr "Questions fréquentes"
+
+#: examples/nextjs-route/src/components/TicketFaq.tsx#TicketFaq
+msgid "Hide the FAQ"
+msgstr "Masquer la FAQ"
+
+#: examples/nextjs-route/src/components/TicketFaq.tsx#TicketFaq
+msgid "Loading answers…"
+msgstr "Chargement des réponses…"
+
 #: examples/nextjs-route/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Langue"
@@ -106,6 +118,10 @@ msgstr "un seul commutateur, tous les formats"
 msgid "Plural"
 msgstr "Pluriel"
 
+#: examples/nextjs-route/src/app/[locale]/prerendered/page.tsx#translateHeadline
+msgid "Prerendered at build time"
+msgstr "Prérendu à la compilation"
+
 #: examples/nextjs-route/src/components/ProofPanel.tsx#ProofPanel
 msgid "Refresh server result"
 msgstr "Actualiser le résultat du serveur"
@@ -126,6 +142,10 @@ msgstr "L'action serveur a confirmé la langue {locale}."
 msgid "server locale"
 msgstr "langue du serveur"
 
+#: examples/nextjs-route/src/components/TicketFaq.tsx#TicketFaq
+msgid "Show the FAQ"
+msgstr "Afficher la FAQ"
+
 #: examples/nextjs-route/src/app/[locale]/page.tsx#translateSwitchToRecommended
 msgid "Switch to the recommended locale"
 msgstr "Passer à la langue recommandée"
@@ -134,7 +154,13 @@ msgstr "Passer à la langue recommandée"
 msgid ""
 "Three days of talks on the craft of building for the web. Choose your tickets "
 "below."
-msgstr "Trois jours de conférences sur l'art de créer pour le web. Choisissez vos billets ci-dessous."
+msgstr ""
+"Trois jours de conférences sur l'art de créer pour le web. Choisissez vos "
+"billets ci-dessous."
+
+#: examples/nextjs-route/src/components/TicketFaqContent.tsx#TicketFaqContent
+msgid "Tickets are refundable until seven days before the event."
+msgstr "Les billets sont remboursables jusqu'à sept jours avant l'événement."
 
 #: examples/nextjs-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Total"

@@ -28,6 +28,7 @@ import {
 } from "./state";
 
 export type { RegisteredMessageLoader, RegisteredMessages };
+export { createDevelopmentCatalogUpdater } from "./developmentCatalog";
 
 /**
  * Register compiled messages at module-evaluation time. The message sidecar

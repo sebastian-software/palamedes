@@ -82,6 +82,18 @@ msgstr "each"
 msgid "Fewer tickets"
 msgstr "Fewer tickets"
 
+#: examples/nextjs-route/src/components/TicketFaqContent.tsx#TicketFaqContent
+msgid "Frequently asked questions"
+msgstr "Frequently asked questions"
+
+#: examples/nextjs-route/src/components/TicketFaq.tsx#TicketFaq
+msgid "Hide the FAQ"
+msgstr "Hide the FAQ"
+
+#: examples/nextjs-route/src/components/TicketFaq.tsx#TicketFaq
+msgid "Loading answers…"
+msgstr "Loading answers…"
+
 #: examples/nextjs-route/src/components/LocaleSwitcher.tsx#LocaleSwitcher
 msgid "Locale"
 msgstr "Locale"
@@ -106,6 +118,10 @@ msgstr "one switch, every format"
 msgid "Plural"
 msgstr "Plural"
 
+#: examples/nextjs-route/src/app/[locale]/prerendered/page.tsx#translateHeadline
+msgid "Prerendered at build time"
+msgstr "Prerendered at build time"
+
 #: examples/nextjs-route/src/components/ProofPanel.tsx#ProofPanel
 msgid "Refresh server result"
 msgstr "Refresh server result"
@@ -126,6 +142,10 @@ msgstr "Server action confirmed locale {locale}."
 msgid "server locale"
 msgstr "server locale"
 
+#: examples/nextjs-route/src/components/TicketFaq.tsx#TicketFaq
+msgid "Show the FAQ"
+msgstr "Show the FAQ"
+
 #: examples/nextjs-route/src/app/[locale]/page.tsx#translateSwitchToRecommended
 msgid "Switch to the recommended locale"
 msgstr "Switch to the recommended locale"
@@ -137,6 +157,10 @@ msgid ""
 msgstr ""
 "Three days of talks on the craft of building for the web. Choose your tickets "
 "below."
+
+#: examples/nextjs-route/src/components/TicketFaqContent.tsx#TicketFaqContent
+msgid "Tickets are refundable until seven days before the event."
+msgstr "Tickets are refundable until seven days before the event."
 
 #: examples/nextjs-route/src/components/TicketPanel.tsx#TicketPanel
 msgid "Total"

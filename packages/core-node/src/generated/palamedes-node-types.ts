@@ -567,8 +567,10 @@ export interface NativeSourceRuleOptions {
   placeholderOnly?: string;
   emptyComponentOnly?: string;
   preferTransInJsx?: string;
+  pseudoPlural?: string;
 }
 export interface NativeSourceAnalysisOptions {
+  sourceLocale?: string;
   mdx?: NativeMdxOptions;
   rules?: NativeSourceRuleOptions;
 }

@@ -397,11 +397,12 @@ export type SourceAnalysisResult = Omit<
 export type SourceRuleLevel = "off" | "info" | "warning" | "error";
 export type SourceRuleOptions = Omit<
   GeneratedNativeSourceRuleOptions,
-  "placeholderOnly" | "emptyComponentOnly" | "preferTransInJsx"
+  "placeholderOnly" | "emptyComponentOnly" | "preferTransInJsx" | "pseudoPlural"
 > & {
   placeholderOnly?: SourceRuleLevel;
   emptyComponentOnly?: SourceRuleLevel;
   preferTransInJsx?: SourceRuleLevel;
+  pseudoPlural?: SourceRuleLevel;
 };
 export type SourceAnalysisOptions = Omit<GeneratedNativeSourceAnalysisOptions, "mdx" | "rules"> & {
   mdx?: MdxOptions;

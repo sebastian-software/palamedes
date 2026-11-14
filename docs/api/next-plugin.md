@@ -20,6 +20,9 @@ for the storage/import boundary.
 - `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
 - `PalamedesClientCatalogs` from `@palamedes/next-plugin/server` (experimental,
   see [Client catalog assets](#client-catalog-assets-experimental))
+- `bindClientCatalogPermutations` from `@palamedes/next-plugin/server`
+  (experimental, see
+  [Client chunk permutations](#client-chunk-permutations-experimental))
 
 `withPalamedes()` also wires these **Internal** subpaths into the Next.js
 build by path: `server-function-initializer`, `server-function-entry`,
@@ -312,3 +315,90 @@ Next's chunks are classic scripts and do not need CORS. When `assetPrefix`
 points to another origin, that host must send `Access-Control-Allow-Origin`
 for `/_next/static/palamedes/`, or the page shows its error view. The build
 logs a warning for absolute prefixes.
+
+### Client chunk permutations (experimental)
+
+`withPalamedes(config, { experimentalClientCatalogPermutations: true })` is a
+second experimental production delivery, exclusive with
+`experimentalClientCatalogAssets` and Turbopack-only: `next build --webpack`
+fails with a Palamedes error. One build writes a copy of every client chunk
+that carries translations per locale, `<chunk>.<locale>-<hash>.js`, with the
+locale's compiled messages inlined, and copies of the chunks that lazily
+import them. The server then references the request locale's copies in the
+document, the Flight payload, segment prefetches, and prerendered output, so
+the browser loads one locale's code with no catalog request before it runs.
+Development keeps the in-graph fragments, and `PalamedesClientCatalogs`
+renders nothing.
+
+Every process that renders has to bind the locale selection before its first
+render. Call it from `instrumentation.ts`; the call is a no-op for builds
+without the option:
+
+```ts
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { bindClientCatalogPermutations } = await import("@palamedes/next-plugin/server");
+    bindClientCatalogPermutations();
+  }
+}
+```
+
+It looks for the build output under `process.cwd()` and the configured
+`distDir`; pass `{ dir }` when the server starts from another directory.
+`next build` binds its own prerender workers through a Node preload that
+`withPalamedes()` adds to `NODE_OPTIONS`; `experimental.workerThreads` is not
+supported. A render in a process without a binding throws instead of serving
+locale-neutral chunks.
+
+The server picks the locale before any layout runs, in this order:
+
+1. the `x-palamedes-locale` request header, which the app's Proxy sets from
+   its own strategy (cookie, subdomain, domain, or anything else), overwriting
+   whatever the client sent;
+2. otherwise the root route param named `locale`, so an app under
+   `app/[locale]/` needs no Proxy;
+3. otherwise the source locale from `palamedes.yaml`.
+
+Other param names are not guessed at: name the segment `[locale]` or set the
+header. Setting the header takes two lines in `proxy.ts`, optionally together
+with a rewrite to an internal route:
+
+```ts
+import { NextResponse, type NextRequest } from "next/server";
+
+export function proxy(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.set("x-palamedes-locale", resolveLocale(request));
+  return NextResponse.next({ request: { headers } });
+}
+```
+
+A route that gets its locale from the header alone, such as a cookie strategy
+on fixed paths, has to render dynamically: declare
+`export const dynamic = "force-dynamic"` on the segment (or use another
+dynamic API there), because chunk selection runs before the layout, and a
+page prerendered at build time has no request headers. Pages prerendered at
+build time otherwise need the locale in the `[locale]` param.
+
+A render with no locale or an unknown one, for example `/zz` in a
+`[locale]` tree, uses the source locale's chunk copies and proceeds, so the
+layout's `notFound()`, the `_not-found` route, and `global-error.tsx` work
+without the Proxy validating locales. Locale switches must be document
+navigations: every copy of a chunk registers the same module IDs, so a soft
+navigation keeps the loaded locale's modules.
+
+The build rejects translations in bootstrap code (anything
+`build-manifest.json` names, such as `instrumentation-client`), cyclic imports
+among translated chunks, and an affected chunk that nothing selects. Not
+supported in this version: per-copy source maps (copies carry no
+`sourceMappingURL`), Subresource Integrity for the copies, the Edge runtime,
+and the unknown-locale fallback segments of Cache Components. See
+[ADR-031](../../adr/031-next-server-selected-client-chunk-permutations.md)
+for the Next internals the mode depends on.
+
+| Mode                                 | Status                                             |
+| ------------------------------------ | -------------------------------------------------- |
+| `next build` (Turbopack)             | Supported, checked by `build:catalog-permutations` |
+| `next build --webpack`               | Rejected at build time                             |
+| `next start`, `output: "standalone"` | Supported                                          |
+| Hosted adapters                      | Untested; `instrumentation.ts` binds at startup    |

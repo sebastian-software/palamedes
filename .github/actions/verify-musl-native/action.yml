@@ -12,7 +12,7 @@ inputs:
     description: Rust target required by a musl CLI package.
     required: true
   cargo-cache:
-    description: Cache Cargo downloads used inside the Alpine build container.
+    description: Cache Cargo downloads and compilation inside the Alpine build container.
     required: false
     default: "false"
 
@@ -46,34 +46,48 @@ runs:
 
     # A core-node musl addon is a dynamically linked cdylib. Build it in the
     # same native-musl environment used to prove that it will load in Alpine.
+    - name: Resolve musl build image
+      if: startsWith(inputs.package_name, '@palamedes/core-node-')
+      id: musl-toolchain
+      shell: bash
+      run: |
+        image=rust:1.96-alpine
+        docker pull "$image"
+        image_id=$(docker image inspect --format='{{.Id}}' "$image")
+        echo "image=$image_id" >> "$GITHUB_OUTPUT"
+
     - name: Restore musl container Cargo cache
       if: startsWith(inputs.package_name, '@palamedes/core-node-') && inputs.cargo-cache == 'true'
       uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
       with:
         path: ${{ runner.temp }}/palamedes-musl-cargo/${{ inputs.rust_target }}
-        key: palamedes-musl-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-${{ hashFiles('Cargo.lock') }}
+        # Restore only within one lockfile and actual toolchain image. The final
+        # source hash lets immutable caches retain updated workspace compilation.
+        key: palamedes-musl-cargo-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-${{ steps.musl-toolchain.outputs.image }}-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'crates/**', '.cargo/**', 'rust-toolchain.toml', 'packages/core-node/scripts/**', 'scripts/build-native-lib.mjs') }}
         restore-keys: |
-          palamedes-musl-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-
+          palamedes-musl-cargo-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-${{ steps.musl-toolchain.outputs.image }}-${{ hashFiles('Cargo.lock') }}-
 
     - name: Build musl core-node addon (native musl toolchain)
       if: startsWith(inputs.package_name, '@palamedes/core-node-')
       shell: bash
       run: |
-        cargo_mounts=()
+        cargo_cache_args=()
         if [ "${{ inputs.cargo-cache }}" = "true" ]; then
           cache_root="$RUNNER_TEMP/palamedes-musl-cargo/${{ inputs.rust_target }}"
-          mkdir -p "$cache_root/registry" "$cache_root/git"
-          cargo_mounts+=(
+          mkdir -p "$cache_root/registry" "$cache_root/git" "$cache_root/target"
+          cargo_cache_args+=(
             -v "$cache_root/registry:/usr/local/cargo/registry"
             -v "$cache_root/git:/usr/local/cargo/git"
+            -v "$cache_root/target:/cache/target"
+            -e CARGO_TARGET_DIR=/cache/target
           )
         fi
         docker run --rm \
-          "${cargo_mounts[@]}" \
+          "${cargo_cache_args[@]}" \
           -v "$PWD:/workspace" \
           -w "/workspace/${{ inputs.package_dir }}" \
           -e PALAMEDES_RUST_PROFILE=release \
-          rust:1.96-alpine \
+          "${{ steps.musl-toolchain.outputs.image }}" \
           sh -c "apk add --no-cache nodejs build-base &&
           node ../core-node/scripts/build-native.mjs"
 

@@ -148,10 +148,11 @@ pub use runtime_message::{
 #[doc(hidden)]
 pub use source::{
     SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
-    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
-    SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions, SourceAnalysisResult, SourceComment,
-    SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult,
-    SourceRange, SourceRuleLevel, SourceRuleOptions,
+    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL,
+    SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX, SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions,
+    SourceAnalysisResult, SourceComment, SourceCommentKind, SourceDiagnostic,
+    SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceRange, SourceRuleLevel,
+    SourceRuleOptions,
 };
 #[doc(hidden)]
 pub use target_text::{
@@ -185,7 +186,7 @@ pub use translation_candidates::{
 /// The manifest uses a caret requirement, so another Cargo graph can link a
 /// newer compatible version.
 #[doc(hidden)]
-pub const FERROCAT_VERSION: &str = "3.4.2";
+pub const FERROCAT_VERSION: &str = "3.6.0";
 
 /// Version metadata for the loaded native core.
 #[doc(hidden)]

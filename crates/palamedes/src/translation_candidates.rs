@@ -6,14 +6,14 @@ use std::path::PathBuf;
 
 use ferrocat::{
     CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr,
-    PoFile, PoItem, SerializeOptions, convert_catalog, machine_translation_hash,
+    PoFile, PoItem, SerializeOptions,
+    collation::{CollationKey, collation_key},
+    convert_catalog, machine_translation_hash,
 };
 use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, stringify_icu};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-mod fcl_collation;
-mod fcl_collation_table;
 mod references;
 
 pub use references::{
@@ -22,8 +22,6 @@ pub use references::{
     TranslationReferenceMatches, TranslationReferenceRequest, TranslationReferenceResult,
     find_translation_references,
 };
-
-use self::fcl_collation::{CollationKey, collation_key};
 
 #[cfg(test)]
 thread_local! {
@@ -2018,65 +2016,68 @@ mod tests {
     }
 
     #[test]
-    fn fcl_order_validation_matches_ferrocat_for_canonical_and_adjacent_swaps() {
-        let po = r#"
-msgid "<0>Continue</0>"
-msgstr "markup"
-
-msgctxt "button"
-msgid "Alpha"
-msgstr "alpha"
-
-msgid "Zulu"
-msgstr "zulu"
-
-msgid "cafe"
-msgstr "plain"
-
-msgid "café"
-msgstr "accented"
-
-msgid "{count, plural, one {#} other {#}}"
-msgstr "placeholder"
-"#;
-        let canonical = convert_catalog(
-            ConvertCatalogOptions::new(po, "en", CatalogMode::IcuPo, CatalogMode::IcuFcl)
-                .with_locale("de"),
-        )
-        .expect("render Ferrocat's canonical collated order")
-        .content;
-
-        assert!(parse_catalog_as_po(&canonical, "en", "de", PalamedesCatalogFormat::Fcl).is_ok());
-        assert!(
-            parse_catalog(
-                ParseCatalogOptions::new(&canonical, "en")
-                    .with_locale("de")
-                    .with_mode(CatalogMode::IcuFcl),
-            )
-            .is_ok()
+    fn fcl_order_validation_preserves_unicode_and_raw_identity_ties() {
+        // Fixed behavioral order: punctuation and digits, case, context accents,
+        // NFC/NFD raw ties, typographic characters, and uncovered-script fallback.
+        // This fixture survives removing the old private key/table mirror.
+        let entries = [
+            ("“Quoted”", ""),
+            ("{count, plural, one {#} other {#}}", ""),
+            ("<0>Continue</0>", ""),
+            ("10", ""),
+            ("2", ""),
+            ("alpha", ""),
+            ("Alpha", "aá"),
+            ("Alpha", "aà"),
+            ("Alpha", "áa"),
+            ("Alpha", "àa"),
+            ("cafe", ""),
+            ("cafe\u{0301}", ""),
+            ("café", ""),
+            ("Em — dash", ""),
+            ("Zebra", ""),
+            ("ω", ""),
+            ("Ω", ""),
+            ("日本語", ""),
+        ];
+        let lines = entries
+            .iter()
+            .map(|(message, context)| format!("{message}\t{context}\ttranslated"))
+            .collect::<Vec<_>>();
+        let content = format!(
+            "%FCL1\tsource=en\tlocale=de\torder=collated\n{}\n",
+            lines.join("\n")
+        );
+        let decoded = parse_catalog_as_po(&content, "en", "de", PalamedesCatalogFormat::Fcl)
+            .expect("decode fixed Unicode order");
+        assert_eq!(
+            decoded
+                .items
+                .iter()
+                .map(|item| (item.msgid.as_str(), item.msgctxt.as_deref().unwrap_or("")))
+                .collect::<Vec<_>>(),
+            entries,
         );
 
-        let lines = canonical.lines().collect::<Vec<_>>();
-        for first in 1..lines.len() - 1 {
+        for first in 0..lines.len() - 1 {
             let mut swapped = lines.clone();
             swapped.swap(first, first + 1);
-            let invalid = format!("{}\n", swapped.join("\n"));
-            assert!(
-                parse_catalog_as_po(&invalid, "en", "de", PalamedesCatalogFormat::Fcl).is_err(),
-                "single-pass decoder accepted swapped lines {first}/{}",
-                first + 1
+            let invalid = format!(
+                "%FCL1\tsource=en\tlocale=de\torder=collated\n{}\n",
+                swapped.join("\n")
             );
             assert!(
-                parse_catalog(
-                    ParseCatalogOptions::new(&invalid, "en")
-                        .with_locale("de")
-                        .with_mode(CatalogMode::IcuFcl),
-                )
-                .is_err(),
-                "Ferrocat accepted swapped lines {first}/{}",
+                parse_catalog_as_po(&invalid, "en", "de", PalamedesCatalogFormat::Fcl).is_err(),
+                "decoder accepted swapped entries {first}/{}",
                 first + 1
             );
         }
+
+        // Canonically equivalent spellings above remain distinct identities;
+        // an exact raw duplicate must still be rejected.
+        let duplicate =
+            "%FCL1\tsource=en\tlocale=de\torder=collated\ncafé\t\tfirst\ncafé\t\tsecond\n";
+        assert!(parse_catalog_as_po(duplicate, "en", "de", PalamedesCatalogFormat::Fcl).is_err());
     }
 
     #[test]

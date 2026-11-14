@@ -199,7 +199,7 @@ Markdown heuristics.
 
 ## Parser Contract
 
-The native adapter uses Ferromark 3.7.0 with its `jsx` feature and both `mdx`
+The native adapter uses Ferromark 4.1.0 with its `jsx` feature and both `mdx`
 and `mdx_compatible` parser options. Structured image-alt analysis is enabled
 for source provenance. The adapter consumes the public arena AST. Its MIT license,
 Rust requirement, and OXC version

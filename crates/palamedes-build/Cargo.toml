@@ -1,6 +1,6 @@
 [package]
 name = "palamedes-build"
-version = "2.1.1"
+version = "2.2.0"
 authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
@@ -24,12 +24,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-palamedes = { version = "2.1.1", path = "../.." }
+palamedes = { version = "2.2.0", path = "../.." }
 # Exact `=` pin inherited from the workspace: generated code constructs hidden
 # palamedes-i18n items, so both crates must come from the same release.
 palamedes-i18n = { workspace = true }
 # A caret requirement, like the core crate; Cargo.lock pins the tested version.
-ferrocat = "3.4.2"
+ferrocat = "3.6.0"
 proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 syn = { version = "2.0.119", features = ["full", "parsing"] }
 serde = { version = "1", features = ["derive"] }
