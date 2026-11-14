@@ -92,12 +92,17 @@ if (process.argv.includes("--verify-report")) {
     };
   });
   const assets = new Map();
-  async function bundle(entry, { external = externals, source } = {}) {
+  async function bundle(entry, { external = externals, source, buildRoot = root } = {}) {
+    const virtualId = `\0${entry}`;
     if (source !== undefined)
-      entry = path.join(root, "benchmarks/browser-runtime", `${entry.replaceAll(":", "-")}.mjs`);
+      entry = path.join(
+        buildRoot,
+        "benchmarks/browser-runtime",
+        `${entry.replaceAll(":", "-")}.mjs`,
+      );
     const result = await build({
       configFile: false,
-      root,
+      root: buildRoot,
       logLevel: "error",
       define: { "process.env.NODE_ENV": '"production"' },
       resolve: { alias, conditions: ["browser"] },
@@ -108,10 +113,10 @@ if (process.argv.includes("--verify-report")) {
               {
                 name: "runtime-footprint-fixture",
                 resolveId(id) {
-                  if (id === entry) return `\0${entry}`;
+                  if (id === entry) return virtualId;
                 },
                 load(id) {
-                  if (id === `\0${entry}`) return source;
+                  if (id === virtualId) return source;
                 },
               },
             ],
@@ -217,6 +222,18 @@ if (process.argv.includes("--verify-report")) {
     source: renderCatalogModule(messages),
   });
   assert.deepEqual(catalog.imports, ["@palamedes/core/compiled"]);
+  assert(!catalog.code.includes(root), "Catalog output must not contain the checkout root");
+  assert.equal(
+    (
+      await bundle("virtual:booking-catalog", {
+        external: ["@palamedes/core/compiled"],
+        source: renderCatalogModule(messages),
+        buildRoot: path.join(root, "benchmarks"),
+      })
+    ).code,
+    catalog.code,
+    "Catalog output must be identical across build roots",
+  );
   assets.set("/catalog.js", catalog.code);
 
   // Framework code is only supplied to the correctness probe, never counted in
