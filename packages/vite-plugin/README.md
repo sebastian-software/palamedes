@@ -142,7 +142,8 @@ snapshot; production keeps ordinary fragments. Message membership/config changes
 message identities reload the document. Solid and other hosts retain their
 existing reload behavior. Source/catalog scoping stays validated; conflicting
 same-ID values across catalogs require ordinary fragment delivery instead.
-See the [experimental React HMR contract](../../docs/api/vite-plugin.md#experimental-react-catalog-hmr).
+See the [experimental React HMR contract](../../docs/api/vite-plugin.md#experimental-react-catalog-hmr). Solid apps can opt into tracked updates with `framework: "solid"` and
+`experimentalSolidCatalogHmr: true`; see the [Solid HMR contract](../../docs/api/vite-plugin.md#experimental-solid-catalog-hmr).
 
 `environment` defaults to `"auto"`, which reads the Vite environment to tell
 server builds from browser builds. Bundlers without Vite environments, such as

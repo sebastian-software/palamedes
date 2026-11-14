@@ -241,6 +241,7 @@ when a row names a subpath that no package exports.
 | `@palamedes/react/compiled`                       | Stable   | Alias of the package root and the transform target for `Trans`.                             |
 | `@palamedes/react/macro`                          | Stable   | Compile-time `Trans`, `Plural`, `Select`, and `SelectOrdinal`.                              |
 | `@palamedes/solid/compiled`                       | Stable   | Alias of the package root and the transform target for `Trans`.                             |
+| `@palamedes/solid/internal`                       | Internal | Development adapter renderer for generated code.                                            |
 | `@palamedes/solid/macro`                          | Stable   | Compile-time `Trans`, `Plural`, `Select`, and `SelectOrdinal`.                              |
 | `@palamedes/solid/server`                         | Stable   | Solid Start catalog delivery middleware.                                                    |
 | `@palamedes/vite-plugin/delivery`                 | Stable   | `createViteCatalogDelivery` for SSR hosts that bind documents to catalogs.                  |
