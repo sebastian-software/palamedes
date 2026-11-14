@@ -1,6 +1,6 @@
 {
   "name": "palamedes",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Reserved top-level package name for the future Palamedes entry point",
   "keywords": [
     "i18n",
