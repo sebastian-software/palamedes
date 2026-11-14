@@ -73,8 +73,24 @@ export function observeBrowserArtifacts(page, example) {
     );
   });
   let initial;
+  const drain = async () => {
+    let responses;
+    let count;
+    do {
+      count = pending.length;
+      responses = await Promise.all(pending);
+      for (const response of responses) if (response.error) throw response.error;
+    } while (pending.length !== count);
+    return responses;
+  };
+  const beforeNavigation = async () => {
+    // Chromium can discard response bodies when the document changes. Finish
+    // reading this document's JavaScript before a locale switch or reload.
+    await page.waitForLoadState("networkidle");
+    return drain();
+  };
   const finish = async () => {
-    const responses = await Promise.all(pending);
+    const responses = await beforeNavigation();
     assert.ok(responses.length, `${example.id} did not fetch browser JavaScript`);
     let decodedBytes = 0;
     let catalogBytes = 0;
@@ -99,9 +115,9 @@ export function observeBrowserArtifacts(page, example) {
       scope: "observed host interaction and locale navigation; decoded response bodies",
     });
   };
+  finish.beforeNavigation = beforeNavigation;
   finish.checkpoint = async () => {
-    const responses = await Promise.all(pending);
-    for (const response of responses) if (response.error) throw response.error;
+    const responses = await beforeNavigation();
     initial = {
       responses: responses.length,
       uniqueModuleUrls: new Set(responses.map(({ url }) => url)).size,

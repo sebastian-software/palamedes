@@ -137,3 +137,19 @@ export async function loadClientCatalog(marker) {
   }
   return fragment.messages;
 }
+
+/*
+ * Permutation delivery (experimentalClientCatalogPermutations): the loader
+ * passes the marker through this function, and the post-compile step replaces
+ * the literal with the locale's compiled messages in every locale copy of the
+ * chunk. Only a locale-neutral chunk still carries the string.
+ */
+export function clientCatalogMessages(value) {
+  if (typeof value === "string" && value.startsWith(MARKER_PREFIX)) {
+    const key = value.slice(MARKER_PREFIX.length).split(":", 1)[0];
+    throw new Error(
+      `Palamedes loaded a locale-neutral client chunk for ${moduleName(value, key)}. The server did not select this locale's chunk copy: bind the permutations in every rendering process and make locale switches full document navigations.`,
+    );
+  }
+  return value;
+}
