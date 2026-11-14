@@ -176,3 +176,5 @@ try {
   await stopCommand(server);
   await ensurePortFree(4197);
 }
+
+await import("./proof-react-catalog-hmr.mjs");

@@ -368,7 +368,13 @@ import {
   SelectOrdinal as SolidSelectOrdinal,
   Trans as SolidTrans,
 } from "@palamedes/solid/macro"
-import { checkTranslationTargets, inspectCatalogMachineTranslations, inspectCatalogMachineTranslationsAsync, type CatalogMachineTranslationStatus } from "@palamedes/core-node"
+import { checkTranslationTargets, inspectCatalogMachineTranslations, inspectCatalogMachineTranslationsAsync, matchTerminology, type CatalogMachineTranslationStatus, type TerminologyEntry, type TerminologyKind } from "@palamedes/core-node"
+const terms: TerminologyEntry[] = [{ id: "java", source: "Java", kind: "protected" }]
+export const termMatches = matchTerminology({ message: "JavaScript {Java}", entries: terms })
+export const termKind: TerminologyKind = termMatches[0]!.kind
+export const termByteOffset: number = termMatches[0]!.start
+// @ts-expect-error The matching boundary has no provider-specific terminology kind.
+export const invalidTermKind: TerminologyKind = "provider-policy"
 const inspectionConfig = { rootDir: ".", locales: ["en", "de"], sourceLocale: "en", catalogs: [] }
 export const inspection = inspectCatalogMachineTranslations(inspectionConfig)
 export const inspectionAsync = inspectCatalogMachineTranslationsAsync(inspectionConfig, { locales: ["de"] }, { signal: new AbortController().signal })

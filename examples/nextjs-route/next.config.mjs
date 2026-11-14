@@ -5,6 +5,9 @@ export default withPalamedes(
   // run the build away from the project directory.
   process.env.PALAMEDES_NEXT_STANDALONE === "1" ? { output: "standalone" } : {},
   // This example and its hosted demo run the experimental out-of-graph
-  // delivery; `build:graph` builds the default in-graph catalogs instead.
-  { experimentalClientCatalogAssets: process.env.PALAMEDES_NEXT_CATALOG_ASSETS !== "0" },
+  // delivery; `build:graph` builds the default in-graph catalogs instead, and
+  // `build:catalog-permutations` the server-selected per-locale chunk copies.
+  process.env.PALAMEDES_NEXT_CATALOG_PERMUTATIONS === "1"
+    ? { experimentalClientCatalogPermutations: true }
+    : { experimentalClientCatalogAssets: process.env.PALAMEDES_NEXT_CATALOG_ASSETS !== "0" },
 );

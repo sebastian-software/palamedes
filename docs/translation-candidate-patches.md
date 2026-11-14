@@ -19,7 +19,7 @@ is the reference for that shipped boundary.
 Adjacent local foundations may build on it without moving repository-owned
 catalog semantics into a separate product stack:
 
-- terminology and protected-term loading for candidate preparation and QA;
+- caller-supplied terminology and protected-term matching (see below);
 - deterministic QA for placeholders, ICU structure, whitespace, and review
   signals;
 - compact PO metadata and stale-metadata detection;
@@ -35,6 +35,78 @@ That split lets an optional managed layer compose discovery, request building,
 remote calls, retry coordination, incremental writeback, and reporting without
 reimplementing catalog semantics. Palamedes remains the complete open-source
 local toolchain and never requires that managed layer.
+
+## Caller-supplied terminology
+
+`matchTerminology()` in `@palamedes/core-node`, and `match_terminology()` in
+Rust, find relevant caller-owned terms in one authored ICU message. They do not
+load files or dictionaries, call providers, change catalogs, or evaluate a
+translation's linguistic quality. A caller can pass a candidate's `id.message`
+and use the result to prepare guidance or implement its own review policy.
+
+Each `TerminologyEntry` has a stable `id`, literal `source`, and a `kind`:
+
+- `protected` expresses an exact spelling to preserve. The intended spelling
+  is `preferredTarget` when supplied, otherwise `source`.
+- `advisory` expresses translation guidance. Grammar, inflection, compounding,
+  and context can justify a different target spelling.
+
+Both kinds accept optional `preferredTarget` and `note` strings. The matcher
+does not search those fields or enforce either intention on target text. IDs
+and sources must be nonblank; supplied target spellings must also be nonblank.
+IDs are unique by exact, case-sensitive equality. Values are preserved without
+trimming, and duplicate IDs are rejected even when their terms do not match.
+Malformed ICU rejects the whole call, including with an empty entry list.
+
+```ts
+import { matchTerminology, type TerminologyEntry } from "@palamedes/core-node";
+
+const entries: TerminologyEntry[] = [
+  { id: "java", source: "Java", kind: "protected" },
+  {
+    id: "javascript",
+    source: "JavaScript",
+    kind: "advisory",
+    preferredTarget: "JavaScript",
+    note: "Use the language name in this context.",
+  },
+];
+const matches = matchTerminology({ message: "Try JavaScript, {Java}!", entries });
+// Two occurrences in the first literal: JavaScript (preferred), Java (overlap).
+// The placeholder named Java is not an occurrence.
+```
+
+Matching is exact and case-sensitive, with no Unicode normalization, case
+folding, word segmentation, punctuation rewriting, or whitespace rewriting.
+It deliberately uses substrings: `Java` matches inside `JavaScript`; `java`
+does not. Composed `café` does not match decomposed `cafe\u0301`. CJK phrases
+and punctuation follow the same rule. Callers that need language-specific word
+boundaries must apply their own policy; a substring is a relevance signal,
+not a universal translation QA gate.
+
+Only decoded native ICU literal nodes are searched. Placeholder and formatter
+names, formatter styles, tag names, and choice selectors are excluded. All
+plural, selectordinal, select, and rich-text child literals are visited. Terms
+never span separate literals, placeholders, tags, or branches. The runtime's
+apostrophe policy applies, so quoted ICU braces are literal searchable text.
+
+Every occurrence is returned, including overlapping occurrences of the same
+term. `preferred` marks a greedy nonoverlapping selection within each literal:
+longest UTF-8 byte length first, then earlier start, then lexicographically
+smaller entry ID. Protection has no implicit priority over advisory guidance;
+nonpreferred protected matches remain available to the caller. Results follow
+native AST traversal, then start, descending length, and ID, independent of the
+entry list's order.
+
+Each `TerminologyMatch` includes `entryId`, `kind`, decoded `literal`, and a
+`literalPath`. The path contains a root node index, followed by a child node
+index for a tag, or an option index and child node index for a choice,
+recursively. Indices follow native parser order. `start` and `end` are half-open
+UTF-8 byte offsets **within that decoded literal**. They are neither raw ICU
+source offsets nor JavaScript UTF-16 indices. For Node consumers,
+`Buffer.from(match.literal).subarray(match.start, match.end).toString("utf8")`
+recovers the matched phrase. Quoting can change the decoded text's length;
+do not use these ranges to edit the original ICU source.
 
 ## Enumerating candidates
 
@@ -69,6 +141,72 @@ invalidating the remaining candidates.
 
 Fingerprint payload changes are versioned. When upgrading across a fingerprint
 version, discard in-flight candidates and list them again before patching.
+
+## Exact reference hints
+
+`findTranslationReferences()` finds existing translations with exactly the same
+source message, context, and target locale. The caller supplies the eligible
+reference facts and target identities; Core performs no catalog discovery,
+quality inference, fuzzy matching, remote requests, or automatic replacement.
+A context-free short label such as `Open` never matches a context-qualified
+entry. Locale tags and message text match exactly, without normalization.
+
+To obtain translated facts from configured PO/FCL catalogs, pass known explicit
+reference identities to `listTranslationCandidates({ config, targets })`.
+Its default enumeration returns missing translations, so it does **not** supply
+a complete translated reference pool. The host must already know which catalog
+entries it wants to inspect and decide their eligibility. Review flags and
+machine metadata are available on those candidates; their absence or presence
+alone establishes no translation quality.
+
+```ts
+import {
+  findTranslationReferences,
+  listTranslationCandidates,
+  type CatalogArtifactConfig,
+  type TranslationCandidateId,
+} from "@palamedes/core-node";
+
+declare const config: CatalogArtifactConfig;
+
+// These identities come from the host's selected reference entries.
+const referenceIds: TranslationCandidateId[] = [
+  { catalog: "shared/{locale}", locale: "de", message: "Open", context: "verb" },
+];
+const facts = listTranslationCandidates({ config, targets: referenceIds });
+if (facts.diagnostics.length > 0) throw new Error("Reference catalogs need attention");
+const hints = findTranslationReferences({
+  references: facts.candidates.map(({ id, translation, origins }) => ({
+    id,
+    translation,
+    origins,
+  })),
+  targets: [{ catalog: "app/{locale}", locale: "de", message: "Open", context: "verb" }],
+  maxReferences: 5,
+  maxOrigins: 3,
+});
+```
+
+Each target has one result in request order, including empty results. Each hint
+contains the reference `id` (catalog, locale, source message, context), target
+`translation`, bounded sorted origins, `matchKind: "exact"`, and a match
+explanation. References are ordered by catalog identity, excluding the target's
+own identity. `maxReferences` defaults to 5 and is capped at 20; `maxOrigins`
+defaults to 8. Zero limits return no hints or no origins respectively.
+
+The native index validates each reference once with the existing ICU
+compatibility rules. Empty values, incompatible arguments or ICU structure,
+and duplicate reference identities are excluded with deterministic diagnostics;
+duplicates produce `translation.duplicate_reference`, empty values produce
+`translation.empty_reference`, and ICU findings retain their existing codes.
+References may add compatible target-language plural categories. Hints do not
+replace writeback validation or its fingerprint check.
+
+Rust integrations can construct `TranslationReferenceIndex::new(&references)`
+and reuse `references_for(&target, max_references, max_origins)`. This is a
+caller-owned snapshot: rebuild it when the selected catalog facts change.
+The Node batch API builds one index for all targets, avoiding a full reference
+scan per candidate. Neither API tracks catalog freshness automatically.
 
 ## Applying completed translations
 

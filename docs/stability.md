@@ -178,6 +178,14 @@ promise to keep those literals intact. CI checks the pinned Next release, and a
 scheduled workflow checks `next@canary`. See
 [ADR-030](../adr/030-next-client-catalogs-outside-the-bundler-graph.md).
 
+The `experimentalClientCatalogPermutations` option is **Preview** as well. It
+also depends on Next's client reference manifest files, its manifest loader
+`next/dist/server/load-manifest.external.js`, its request storage
+`next/dist/server/app-render/work-unit-async-storage.external.js`, and the
+way `next build` starts its prerender workers;
+[ADR-031](../adr/031-next-server-selected-client-chunk-permutations.md) lists
+each dependency and what fails when it changes.
+
 ### Waku contract
 
 The examples verify Waku `1.0.0-rc.4` with React, React DOM, and

@@ -108,6 +108,7 @@ palamedes({
   projectRoot: undefined,
   skipValidation: false,
   failOnMissing: false,
+  experimentalReactCatalogHmr: false,
   framework: "react",
   includeSourceMetadata: undefined,
   mdx: {
@@ -133,6 +134,15 @@ component contract for compiled `.mdx`. It defaults to `"react"`, so **Solid
 apps must set `framework: "solid"`**; use `"none"` for a project that is
 neither. Macro and generated MDX runtime access is always hook-free. Locale
 changes require a document navigation.
+
+React apps with Fast Refresh boundaries can opt into
+`experimentalReactCatalogHmr: true` for state-preserving PO/FCL translation
+edits during development. This experimental mode loads a complete active-locale
+snapshot; production keeps ordinary fragments. Message membership/config changes and removed
+message identities reload the document. Solid and other hosts retain their
+existing reload behavior. Source/catalog scoping stays validated; conflicting
+same-ID values across catalogs require ordinary fragment delivery instead.
+See the [experimental React HMR contract](../../docs/api/vite-plugin.md#experimental-react-catalog-hmr).
 
 `environment` defaults to `"auto"`, which reads the Vite environment to tell
 server builds from browser builds. Bundlers without Vite environments, such as

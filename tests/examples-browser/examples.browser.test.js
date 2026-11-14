@@ -673,6 +673,7 @@ async function verifyRemixBrowserContract(example) {
     if (request.url().includes("/catalog-fragments/")) fragments.push(request.url());
   });
   for (const locale of remixLocales()) {
+    if (!firstDocument) await verifyObservedArtifacts.beforeNavigation();
     if (example.strategy === "cookie")
       await page.context().addCookies([{ name: "locale", value: locale, url: example.baseUrl }]);
     const response = await page.goto(remixDocumentUrl(example, locale), {
@@ -718,6 +719,7 @@ async function verifyRemixBrowserContract(example) {
       expect(frame.locale).toBe(locale);
       expect(frame.body).toContain(`Frame locale code: ${locale}`);
     }
+    await verifyObservedArtifacts.beforeNavigation();
     await page.reload({ waitUntil: "domcontentloaded" });
     await waitForClientReady(page);
     await expectRemixClientProof(page, locale, 1);
@@ -725,6 +727,7 @@ async function verifyRemixBrowserContract(example) {
       window.__remixParityDocument = true;
     });
     const next = locale === "de" ? "es" : "de";
+    await verifyObservedArtifacts.beforeNavigation();
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded" }),
       page.getByTestId(`locale-switch-${next}`).click({ noWaitAfter: true }),
@@ -840,6 +843,7 @@ test("matrix example browser contract", async () => {
   await captureScreenshot(page, example, "initial");
 
   if (example.strategy === "cookie") {
+    await verifyObservedArtifacts.beforeNavigation();
     const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 });
     await page
       .getByTestId("locale-switch-de")
@@ -916,6 +920,7 @@ test("matrix example browser contract", async () => {
   if (example.strategy === "subdomain") {
     // Switching locale loads a different host (de.<base>); the leftmost DNS
     // label is authoritative, so the path stays "/".
+    await verifyObservedArtifacts.beforeNavigation();
     await page
       .getByTestId("locale-switch-de")
       .click({ force: true, noWaitAfter: true, timeout: 15_000 });
@@ -940,6 +945,7 @@ test("matrix example browser contract", async () => {
   if (example.strategy === "tld") {
     // Switching locale swaps the top-level domain (the .com host becomes a .de
     // host); the tld is authoritative for the locale, so the path stays "/".
+    await verifyObservedArtifacts.beforeNavigation();
     await page
       .getByTestId("locale-switch-de")
       .click({ force: true, noWaitAfter: true, timeout: 15_000 });
@@ -961,6 +967,7 @@ test("matrix example browser contract", async () => {
     return;
   }
 
+  await verifyObservedArtifacts.beforeNavigation();
   await page
     .getByTestId("locale-switch-de")
     .click({ force: true, noWaitAfter: true, timeout: 15_000 });
@@ -992,8 +999,10 @@ test("matrix example browser contract", async () => {
     return;
   }
 
+  await verifyObservedArtifacts.beforeNavigation();
   await page.goto(example.hostMismatchUrl, { waitUntil: "domcontentloaded" });
   await page.getByTestId("locale-suggestion-cta").waitFor({ state: "visible", timeout: 15_000 });
+  await verifyObservedArtifacts.beforeNavigation();
   await page
     .getByTestId("locale-suggestion-cta")
     .click({ force: true, noWaitAfter: true, timeout: 15_000 });

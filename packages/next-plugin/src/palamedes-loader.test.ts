@@ -153,6 +153,7 @@ describe("palamedes-loader.cjs", () => {
       expect(
         JSON.parse(Buffer.from(parameters.get("palamedes-selected")!, "base64url").toString()),
       ).toEqual(["id-a", "id-b"]);
+      expect(parameters.get("palamedes-source")).toBe("src/page.tsx");
       return parameters.get("palamedes-catalog");
     });
     expect(catalogs).toEqual(["src/locales/en.po", "src/locales/de.po"]);
@@ -371,6 +372,32 @@ describe("palamedes-loader.cjs", () => {
       ids: ["id-a", "id-b"],
     });
     expect(output).toContain(".defineCompiledCatalog(");
+  });
+
+  it("inlines the marker for permutation delivery without top-level await", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a"],
+    });
+
+    const output = await runLoader({
+      clientMessageSplitting: true,
+      clientCatalogDelivery: "permutations",
+    });
+
+    expect(output).not.toContain("await ");
+    expect(output).not.toContain("import(");
+    expect(output).toContain('from "@palamedes/next-plugin/client-catalog"');
+    const marker = /_clientCatalogMessages\("pmds-next:([0-9a-f]{12}):([\w-]+)"\)/u.exec(output);
+    expect(marker).not.toBeNull();
+    expect(JSON.parse(Buffer.from(marker![2]!, "base64url").toString("utf8")).ids).toEqual([
+      "id-a",
+    ]);
+    expect(output).toContain("_defineCompiledCatalog(");
+    expect(output.indexOf("_initializeClientI18n(")).toBeLessThan(
+      output.indexOf("export const translated"),
+    );
   });
 
   it("boots a client module before its compiled module-scope call and its importers", async () => {

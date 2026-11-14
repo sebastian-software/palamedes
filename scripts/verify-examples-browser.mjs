@@ -144,9 +144,9 @@ async function verifyExample(example, options) {
   }
 }
 
-function runDeliveryProof(script) {
+function runDeliveryProof(script, args = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(ROOT, "scripts", script)], {
+    const child = spawn(process.execPath, [path.join(ROOT, "scripts", script), ...args], {
       cwd: ROOT,
       env: process.env,
       stdio: "inherit",
@@ -193,6 +193,7 @@ async function main() {
   if (wakuIds.every((id) => plan.some(({ example }) => example.id === id))) {
     await runDeliveryProof("proof-waku-catalog-delivery.mjs");
     await runDeliveryProof("proof-waku-development.mjs");
+    await runDeliveryProof("proof-waku-development.mjs", ["--packed"]);
   }
 }
 

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -150,6 +151,10 @@ describe("workflow contracts", () => {
     expect(workflow).toContain("timeout-minutes: 45");
     expect(workflow).toContain("cargo install cargo-fuzz --version 0.13.2 --locked");
     expect(workflow).toContain("manifest-path: fuzz/Cargo.toml");
+    const policyStep = workflow
+      .split("- name: Check isolated fuzz dependency policy")[1]
+      ?.split("- name: Set up fuzz toolchain")[0];
+    expect(policyStep).toContain('arguments: "--locked"');
     expect(workflow).toContain("nightly-2026-07-20");
     expect(workflow).toContain("'smoke' || 'scheduled'");
     expect(workflow).not.toMatch(/secrets\.|pull_request_target|continue-on-error/u);
@@ -613,6 +618,69 @@ describe("workflow contracts", () => {
     expect(verifyMuslNative).toContain("execFileSync('./bin/pmds', ['version']");
   });
 
+  it("isolates musl compilation caches by environment and refreshes them for source changes", async () => {
+    const action = await readRepositoryFile(".github/actions/verify-musl-native/action.yml");
+    const cache = action
+      .split("- name: Restore musl container Cargo cache")[1]
+      .split("\n    - name:")[0];
+    const keyPrefix =
+      "palamedes-musl-cargo-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.rust_target }}-${{ steps.musl-toolchain.outputs.image }}-${{ hashFiles('Cargo.lock') }}-";
+    expect(cache).toContain(`key: ${keyPrefix}\${{ hashFiles(`);
+    expect(cache).toContain(`restore-keys: |\n          ${keyPrefix}\n`);
+    for (const input of [
+      "Cargo.toml",
+      "crates/**",
+      ".cargo/**",
+      "packages/core-node/scripts/**",
+      "scripts/build-native-lib.mjs",
+    ]) {
+      expect(cache).toContain(`'${input}'`);
+    }
+    expect(action).toContain('docker pull "$image"');
+    expect(action).toContain("docker image inspect --format='{{.Id}}' \"$image\"");
+  });
+
+  it("mounts restored musl compilation output only for cache-enabled builds on either architecture", async () => {
+    const action = await readRepositoryFile(".github/actions/verify-musl-native/action.yml");
+    const step = action
+      .split("- name: Build musl core-node addon (native musl toolchain)")[1]
+      .split("\n    - name:")[0];
+    const script = step.split("run: |\n")[1].replace(/^ {8}/gmu, "");
+    const runnerTemp = await mkdtemp(join(tmpdir(), "palamedes musl cache-"));
+    try {
+      for (const target of ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]) {
+        for (const enabled of ["true", "false"]) {
+          const rendered = script
+            .replaceAll("${{ inputs.cargo-cache }}", enabled)
+            .replaceAll("${{ inputs.rust_target }}", target)
+            .replaceAll("${{ inputs.package_dir }}", "packages/core-node-test-musl")
+            .replaceAll("${{ steps.musl-toolchain.outputs.image }}", "sha256:test-image");
+          // Exercise Bash quoting and argument expansion without requiring a Docker daemon.
+          const result = spawnSync(
+            "bash",
+            ["-e", "-c", `docker() { printf '%s\\0' "$@"; }\n${rendered}`],
+            {
+              cwd: repositoryRoot,
+              env: { ...process.env, RUNNER_TEMP: runnerTemp },
+              encoding: "utf8",
+            },
+          );
+          expect(result.stderr).toBe("");
+          expect(result.status).toBe(0);
+          const args = result.stdout.split("\0").filter(Boolean);
+          expect(args).toContain("sha256:test-image");
+          expect(
+            args.includes(`${runnerTemp}/palamedes-musl-cargo/${target}/target:/cache/target`),
+          ).toBe(enabled === "true");
+          expect(args.includes("CARGO_TARGET_DIR=/cache/target")).toBe(enabled === "true");
+          expect(args).toContain(`${repositoryRoot}:/workspace`);
+        }
+      }
+    } finally {
+      await rm(runnerTemp, { recursive: true, force: true });
+    }
+  });
+
   it("runs the browser contract on pull requests and main changes", async () => {
     const workflow = await readRepositoryFile(".github/workflows/example-verification.yml");
     for (const step of [
@@ -971,7 +1039,7 @@ describe("workflow contracts", () => {
     expect(dependencyAudit).toContain("scripts/open-or-refresh-issue.mjs");
   });
 
-  it("runs the Next canary guard on a schedule against the asset contract", async () => {
+  it("runs independent asset and permutation canary contracts with browser coverage", async () => {
     const [canary, example] = await Promise.all([
       readRepositoryFile(".github/workflows/next-canary.yml"),
       readRepositoryFile("examples/nextjs-route/package.json"),
@@ -984,10 +1052,19 @@ describe("workflow contracts", () => {
     expect(canary).toContain(
       'pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"',
     );
-    expect(canary).toContain("run: pnpm --dir examples/nextjs-route build:catalog-assets");
-    expect(JSON.parse(example).scripts["build:catalog-assets"]).toContain(
-      "check-next-client-catalog-assets.mjs",
+    expect(canary).toContain("fail-fast: false");
+    for (const delivery of ["assets", "permutations"]) {
+      expect(canary).toContain(`delivery: ${delivery}`);
+      expect(JSON.parse(example).scripts[`build:catalog-${delivery}`]).toContain(
+        `check-next-client-catalog-${delivery}.mjs`,
+      );
+    }
+    expect(canary).toContain(
+      "run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}",
     );
+    expect(canary).toContain("if: matrix.delivery == 'permutations'");
+    expect(canary).toContain("pnpm exec playwright install --with-deps chromium");
+    expect(canary).toContain("client catalog ${{ matrix.label }} contract");
     expect(canary).toContain(
       "if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'",
     );

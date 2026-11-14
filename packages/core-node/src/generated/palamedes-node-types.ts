@@ -537,12 +537,40 @@ export interface ParsedPoFile {
   headerOrder: Array<string>;
   items: Array<ParsedPoItem>;
 }
+export interface TranslationReferenceEntry {
+  id: TranslationCandidateId;
+  translation: TranslationValue;
+  origins?: Array<TranslationWorkflowOrigin>;
+}
+export interface TranslationReferenceRequest {
+  references: Array<TranslationReferenceEntry>;
+  targets: Array<TranslationCandidateId>;
+  maxReferences?: number;
+  maxOrigins?: number;
+}
+export interface TranslationReferenceMatch {
+  id: TranslationCandidateId;
+  translation: TranslationValue;
+  origins: Array<TranslationWorkflowOrigin>;
+  matchKind: string;
+  reason: string;
+}
+export interface TranslationReferenceMatches {
+  id: TranslationCandidateId;
+  references: Array<TranslationReferenceMatch>;
+}
+export interface TranslationReferenceResult {
+  matches: Array<TranslationReferenceMatches>;
+  diagnostics: Array<TranslationWorkflowDiagnostic>;
+}
 export interface NativeSourceRuleOptions {
   placeholderOnly?: string;
   emptyComponentOnly?: string;
   preferTransInJsx?: string;
+  pseudoPlural?: string;
 }
 export interface NativeSourceAnalysisOptions {
+  sourceLocale?: string;
   mdx?: NativeMdxOptions;
   rules?: NativeSourceRuleOptions;
 }
@@ -565,6 +593,27 @@ export interface NativeSourceDiagnostic {
 export interface NativeSourceAnalysisResult {
   messages: Array<NativeExtractedMessage>;
   diagnostics: Array<NativeSourceDiagnostic>;
+}
+export type TerminologyKind = "protected" | "advisory"
+export interface TerminologyEntry {
+  id: string;
+  source: string;
+  kind: TerminologyKind;
+  preferredTarget?: string;
+  note?: string;
+}
+export interface TerminologyRequest {
+  message: string;
+  entries: Array<TerminologyEntry>;
+}
+export interface TerminologyMatch {
+  entryId: string;
+  kind: TerminologyKind;
+  literalPath: Array<number>;
+  literal: string;
+  start: number;
+  end: number;
+  preferred: boolean;
 }
 export interface NativeServerFunctionTransformOptions {
   initializerModule: string;
@@ -634,6 +683,8 @@ export interface NativeBindings {
   analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;
   getNativeInfo(): NativeInfo;
   parsePo(source: string): ParsedPoFile;
+  findTranslationReferences(request: TranslationReferenceRequest): TranslationReferenceResult;
   analyzeSource(source: string, filename: string, options?: NativeSourceAnalysisOptions | undefined | null): NativeSourceAnalysisResult;
+  matchTerminology(request: TerminologyRequest): Array<TerminologyMatch>;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;
 }
