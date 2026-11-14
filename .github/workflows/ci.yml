@@ -187,11 +187,14 @@ jobs:
       # chunks; this fails when a Next release stops keeping them intact under
       # either bundler's minifier. The example runs that delivery by default,
       # so `build:graph` keeps the in-graph catalogs' locale isolation covered.
+      # The permutation build also checks that Next still references only the
+      # request locale's chunk copies (ADR-031).
       - name: Verify Next client catalog asset contract
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: |
           pnpm --dir examples/nextjs-route build:catalog-assets
           pnpm --dir examples/nextjs-route build:catalog-assets:webpack
+          pnpm --dir examples/nextjs-route build:catalog-permutations
           pnpm --dir examples/nextjs-route build:graph
 
       - name: Run tests

@@ -38,6 +38,7 @@ import {
   getNativeInfo,
   listTranslationCandidates,
   matchTerminology,
+  findTranslationReferences,
   mergeCatalogFilesThreeWay,
   mergeCatalogsThreeWay,
   parsePo,
@@ -146,6 +147,54 @@ describe("@palamedes/core-node", () => {
     expect(() => matchTerminology({ message: "\uD800", entries: [entry] })).toThrow(
       /malformed Unicode/,
     );
+  });
+
+  it("returns bounded exact reference hints with typed plural values and locale isolation", () => {
+    const message = "{count, plural, one {# file} other {# files}}";
+    const id = { catalog: "current/{locale}", locale: "de", message, context: "downloads" };
+    const translation = {
+      kind: "plural" as const,
+      variable: "count",
+      pluralKind: "cardinal" as const,
+      offset: 0,
+      values: { one: "# Datei", other: "# Dateien" },
+    };
+    const reference = {
+      id: { ...id, catalog: "shared/{locale}" },
+      translation,
+      origins: [{ file: "src/z.tsx" }, { file: "src/a.tsx" }],
+    };
+    const result = findTranslationReferences({
+      references: [reference, { ...reference, id: { ...reference.id, locale: "fr" } }],
+      targets: [id, { ...id, context: "other" }, reference.id],
+      maxReferences: 1,
+      maxOrigins: 1,
+    });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.matches.map((match) => match.references.length)).toEqual([1, 0, 0]);
+    expect(result.matches[0]?.references[0]).toEqual({
+      ...reference,
+      origins: [{ file: "src/a.tsx" }],
+      matchKind: "exact",
+      reason: "Source message, context, and target locale match exactly.",
+    });
+  });
+
+  it("diagnoses incompatible reference targets instead of suggesting replacements", () => {
+    const id = { catalog: "current", locale: "de", message: "Hello {name}, {name}" };
+    const result = findTranslationReferences({
+      references: [
+        {
+          id: { ...id, catalog: "shared" },
+          translation: { kind: "singular", value: "Hallo {name}" },
+        },
+      ],
+      targets: [id],
+    });
+    expect(result.matches[0]?.references).toEqual([]);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({ code: "icu.argument_occurrence_mismatch" }),
+    ]);
   });
 
   it("keeps same-key initial catalog builds out of the worker pool", async () => {
@@ -1092,6 +1141,26 @@ function Greeting({ name }) { return <p>{translate\`Hello \${name}\`}</p>; }`;
     ]);
     expect(result.diagnostics[0]?.message).toContain("`t` remains supported");
     expect(result.diagnostics[0]?.help).toContain("Solid's `<Trans>`");
+  });
+
+  it("gates opt-in pseudo-plural diagnostics on an explicit English source locale", () => {
+    const source = `import { t } from "@palamedes/core/macro";
+function Selection({ count }) { return t\`Imported \${count} record(s)\`; }`;
+    const english = analyzeSourceNative(source, "selection.ts", {
+      sourceLocale: "en",
+      rules: { pseudoPlural: "error" },
+    });
+    expect(english.diagnostics).toMatchObject([
+      { code: "pmds/no-pseudo-plural", severity: "error", primary: { line: 2 } },
+    ]);
+    for (const sourceLocale of [undefined, "de"]) {
+      const result = analyzeSourceNative(source, "selection.ts", {
+        sourceLocale,
+        rules: { pseudoPlural: "warning" },
+      });
+      expect(result.messages).toStrictEqual(english.messages);
+      expect(result.diagnostics).toStrictEqual([]);
+    }
   });
 
   it("renders executable catalog modules from in-memory messages", () => {

@@ -105,3 +105,13 @@ test("prints a skip line and exits 0 while the manifest is below 2.0.0", () => {
   assert.equal(output.trim(), "skipped: version 1.25.1 < 2.0.0");
   rmSync(fixture, { recursive: true, force: true });
 });
+
+test("guards the contributor runbook against obsolete first-release instructions", () => {
+  assert.ok(RELEASE_WORDING_FILES.includes("CONTRIBUTING.md"));
+  const result = findPrereleaseWording({
+    version: "2.1.1",
+    files: { "CONTRIBUTING.md": "The next Release Please version is explicitly 2.0.0." },
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.hits[0].file, "CONTRIBUTING.md");
+});

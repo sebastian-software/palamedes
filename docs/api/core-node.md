@@ -11,6 +11,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `updateCatalogFile(request)`
 - `updateCatalogFileAsync(request, options?: AsyncTaskOptions)`
 - `listTranslationCandidates(request)`
+- `findTranslationReferences(request)`
 - `applyTranslationPatches(request)`
 - `applyTranslationPatchesAsync(request, options?: AsyncTaskOptions)`
 - `isTranslationPatchWriteError(error)`
@@ -131,6 +132,14 @@ per-file outcomes: identify that error with `isTranslationPatchWriteError()`
 and read its `report`. See [Translation candidate patches](../translation-candidate-patches.md).
 
 ## Review proposed or stored target text
+
+`findTranslationReferences()` indexes caller-selected translated facts once per
+batch and returns bounded exact source/context/target-locale hints with origins
+and explanations. References must be structurally compatible with their source;
+Core does not infer quality or discover the pool. Read translated catalog facts
+using known explicit `listTranslationCandidates({ config, targets })` identities;
+default candidate enumeration only returns missing entries. See
+[Exact reference hints](../translation-candidate-patches.md#exact-reference-hints).
 
 `checkTranslationTargets()` runs optional local review checks before writeback.
 It accepts the same `TranslationValue` used by candidates and patches; Core renders

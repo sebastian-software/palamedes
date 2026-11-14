@@ -16,11 +16,14 @@ pub const SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE: &str =
     "pmds/no-empty-component-only-message";
 /// Diagnostic code for JSX render positions where `<Trans>` may be clearer.
 pub const SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX: &str = "pmds/prefer-trans-in-jsx";
+/// Diagnostic code for English count-like messages using a literal `(s)` suffix.
+pub const SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL: &str = "pmds/no-pseudo-plural";
 /// All diagnostic codes emitted by built-in source-authoring rules.
 pub const SOURCE_DIAGNOSTIC_CODES: &[&str] = &[
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
+    SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL,
 ];
 
 /// Source range with an exact UTF-8 byte span and one-based start location.
@@ -106,6 +109,8 @@ pub struct SourceRuleOptions {
     pub empty_component_only: SourceRuleLevel,
     /// Suggest JSX-native `<Trans>` authoring in directly renderable positions.
     pub prefer_trans_in_jsx: SourceRuleLevel,
+    /// Diagnose explicit English interpolation-plus-word(s) authoring shapes.
+    pub pseudo_plural: SourceRuleLevel,
 }
 
 impl Default for SourceRuleOptions {
@@ -114,6 +119,7 @@ impl Default for SourceRuleOptions {
             placeholder_only: SourceRuleLevel::Warning,
             empty_component_only: SourceRuleLevel::Off,
             prefer_trans_in_jsx: SourceRuleLevel::Info,
+            pseudo_plural: SourceRuleLevel::Off,
         }
     }
 }
@@ -124,7 +130,19 @@ impl SourceRuleOptions {
             placeholder_only: SourceRuleLevel::Off,
             empty_component_only: SourceRuleLevel::Off,
             prefer_trans_in_jsx: SourceRuleLevel::Off,
+            pseudo_plural: SourceRuleLevel::Off,
         }
+    }
+
+    pub(crate) fn for_source_locale(&self, source_locale: Option<&str>) -> Self {
+        let mut rules = self.clone();
+        if !source_locale
+            .and_then(|locale| locale.split(['-', '_']).next())
+            .is_some_and(|language| language.eq_ignore_ascii_case("en"))
+        {
+            rules.pseudo_plural = SourceRuleLevel::Off;
+        }
+        rules
     }
 }
 
@@ -132,6 +150,8 @@ impl SourceRuleOptions {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SourceAnalysisOptions {
+    /// Authored message locale; locale-specific rules skip unknown locales.
+    pub source_locale: Option<String>,
     /// MDX extraction and compilation semantics.
     pub mdx: MdxOptions,
     /// Built-in source-authoring rule levels.

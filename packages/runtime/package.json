@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/runtime",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Palamedes runtime primitives for resolving the active i18n instance",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
@@ -186,7 +186,7 @@
   },
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/server-bundled.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts src/node-macros.test.ts src/node.test.ts",
+    "test": "vitest run --globals src/index.test.ts src/developmentCatalog.test.ts src/server.test.ts src/server-bundled.test.ts src/serverCatalog.test.ts src/server-test.test.ts src/server-unavailable.test.ts src/node-macros.test.ts src/node.test.ts",
     "stub": "unbuild --stub"
   },
   "dependencies": {

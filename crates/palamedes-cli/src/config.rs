@@ -91,6 +91,7 @@ pub struct ConfigLintRules {
     pub placeholder_only: SourceRuleLevel,
     pub empty_component_only: SourceRuleLevel,
     pub prefer_trans_in_jsx: SourceRuleLevel,
+    pub pseudo_plural: SourceRuleLevel,
 }
 
 impl Default for ConfigLintRules {
@@ -100,6 +101,7 @@ impl Default for ConfigLintRules {
             placeholder_only: defaults.placeholder_only,
             empty_component_only: defaults.empty_component_only,
             prefer_trans_in_jsx: defaults.prefer_trans_in_jsx,
+            pseudo_plural: defaults.pseudo_plural,
         }
     }
 }
@@ -110,6 +112,7 @@ impl From<ConfigLintRules> for SourceRuleOptions {
             placeholder_only: value.placeholder_only,
             empty_component_only: value.empty_component_only,
             prefer_trans_in_jsx: value.prefer_trans_in_jsx,
+            pseudo_plural: value.pseudo_plural,
         }
     }
 }
@@ -381,11 +384,13 @@ fn check_nested_keys(value: &serde_json::Value, path: &Path) -> Result<(), Confi
         "placeholder-only",
         "empty-component-only",
         "prefer-trans-in-jsx",
+        "pseudo-plural",
     ];
     const LINT_RULE_CAMEL_CASE_KEYS: &[(&str, &str)] = &[
         ("placeholderOnly", "placeholder-only"),
         ("emptyComponentOnly", "empty-component-only"),
         ("preferTransInJsx", "prefer-trans-in-jsx"),
+        ("pseudoPlural", "pseudo-plural"),
     ];
     const PO_CAMEL_CASE_KEYS: &[(&str, &str)] = &[("lineBreaks", "line-breaks")];
     const PO_KEYS: &[&str] = &["line-breaks", "line_breaks"];
@@ -497,6 +502,7 @@ impl LoadedConfig {
     /// Options that define the source-analysis result and its cache stamp.
     pub fn analysis_options(&self) -> ExtractCatalogMessagesOptions {
         ExtractCatalogMessagesOptions {
+            source_locale: Some(self.source_locale.clone()),
             reference_scopes: self.reference_scopes,
             mdx: self.mdx.clone(),
             rules: self.lint.rules.clone().into(),
@@ -1081,6 +1087,7 @@ lint:
     placeholder-only: error
     empty-component-only: warning
     prefer-trans-in-jsx: off
+    pseudo-plural: warning
 catalogs:
   - path: src/locales/{locale}
     include: [src]
@@ -1101,6 +1108,10 @@ catalogs:
         assert_eq!(
             config.lint.rules.prefer_trans_in_jsx,
             palamedes::SourceRuleLevel::Off
+        );
+        assert_eq!(
+            config.lint.rules.pseudo_plural,
+            palamedes::SourceRuleLevel::Warning
         );
     }
 

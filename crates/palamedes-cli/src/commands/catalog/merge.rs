@@ -113,7 +113,16 @@ impl Command for MergeOptions {
          */
         let config = match context.load_config(self.config.as_deref()) {
             Ok(config) => Some(config),
-            Err(CliError::Config(ConfigError::NotFound)) if self.config.is_none() => None,
+            Err(CliError::Config(ConfigError::NotFound)) if self.config.is_none() => {
+                eprintln!(
+                    "{}",
+                    tr!(
+                        "Note: no Palamedes config found from {cwd} upward; configured PO output options and source-locale are not applied. Pass --config for app-local settings; --path does not discover config files.",
+                        cwd = context.cwd()?.display()
+                    )
+                );
+                None
+            }
             /*
              * A JS/TS config is a fully supported project setup that only the
              * JS toolchain can read, so refusing here would break the merge
@@ -187,7 +196,8 @@ impl Command for MergeOptions {
 
     /// The merged catalog file is the result. Git merge drivers run inside
     /// `git merge`, where stdout chatter on every conflicted catalog is noise,
-    /// so a successful merge stays silent and the exit code carries the answer.
+    /// so stdout stays silent and the exit code carries the answer. Config
+    /// fallback diagnostics go to stderr.
     fn render(&self, _output: &Self::Output) -> Result<(), CliError> {
         Ok(())
     }

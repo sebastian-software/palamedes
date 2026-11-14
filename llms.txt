@@ -33,6 +33,7 @@ IDs to source text plus context in every locale before extraction or removal.
 - Palamedes v2 package roots and `compiled` aliases share one parser-free runtime. Catalog entries must be compiled before use. Missing entries and execution failures throw; `onMissing` and `onError` observe failures, and `includeSourceMetadata` (renamed from v1 `keepSourceFallbacks`, which now throws) only retains diagnostic metadata. Its v2 default is `false` (v1 adapters defaulted to `true`), which keeps output compact. Standard adapters provide adapter-owned active-locale catalog delivery, shared server catalog storage and ordinary host error UI; applications do not build catalog maps or serialized ICU transport. See `docs/migration-v2.md`.
 - Next.js catalog delivery is automatic: do not set `messageSplitting`; it was removed and any value throws a migration error. Server Function i18n initialization is enabled automatically when one `palamedes.server` module exists in the project root or `src`; it must export `initializeServerFunctionI18n`. `serverFunctions: false` opts out.
 - Vite, Next.js, and Remix share one path contract: `projectRoot` (renamed from `cwd`, which throws a migration error; Vite defaults it to its resolved `root`) is the base for config discovery, a relative `configPath`, and relative `include`/`exclude` globs. `include`/`exclude` accept a glob, a RegExp, or an array of both. See `/docs/configuration.md#adapter-paths`.
+- Plain Vite React apps can opt into `experimentalReactCatalogHmr: true` for state-preserving PO/FCL translation edits through Fast Refresh. Development uses complete active-locale snapshots; production stays split. Message membership/config changes and identity removals reload, and Solid keeps reload-based updates. Ordinary React edits keep Fast Refresh. See `/docs/api/vite-plugin.md#experimental-react-catalog-hmr`.
 - Next.js locale negotiation is read-only: do not renew locale cookies in Server Function initializers or on every middleware/proxy action POST. Persist explicit choices separately and skip unchanged writes; application data mutations own revalidation.
 - Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
 - Remix targets stable `remix@^3.0.0` and uses `remix/component` runtime and JSX paths. RC.1 is unsupported. Set `data-palamedes-time-zone` on `<html>` and the same time zone in the server `i18nOptions` for matching date/time output during hydration.
@@ -178,10 +179,12 @@ serves bundled and unbundled backends. See `docs/backend-servers.md`.
 - Vue SFC scripts (Preview, browser-only): put `palamedes({ framework: "none", mdx: false })` before `@vitejs/plugin-vue`. Core macros work directly in inline `<script setup>` and `<script>` blocks, with native CLI extraction and automatic active-locale delivery. Setup-level calls execute per component; normal scripts retain function-scope rules. Template expressions/text and Vue rich text are not supported. See `/proof/vue-vite/README.md`. A separate private Nuxt 4 Node SSR proof verifies hydration, lazy routes, Nitro APIs, and concurrent request isolation in four languages; it targets root-mounted, same-origin query-locale deployment and is outside the supported example matrix. There is no published Nuxt package. See `/proof/nuxt-ssr/README.md`.
 - Svelte component scripts (Preview, browser-only): put `palamedes({ framework: "none", mdx: false })` before `@sveltejs/vite-plugin-svelte`. Core macros work in inline JS/TS instance and module scripts, with native extraction, transforms, source maps, and automatic active-locale fragments. Instance-level calls execute per component; module scripts retain function-scope rules. Import macros in the script that uses them. Template expressions/text, Svelte rich text, and catalog HMR are outside the proof. See `/proof/svelte-vite/README.md`. A separate private SvelteKit 3 Node SSR proof verifies hydration, lazy components/routes, endpoint macros, parallel request isolation, and standalone output in four languages. It targets root-mounted, same-origin query-locale deployment with absolute asset paths and is outside the supported example matrix. There is no published SvelteKit package. See `/proof/sveltekit-ssr/README.md`.
 - `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, MDX, Vue, and Svelte script blocks. Pass explicit files, for example `pmds lint src/view.tsx --json --fail-on warning`, for agent feedback; omit files for the full configured check. File paths are relative to the invocation directory and bypass catalog include/exclude patterns. Targeted runs preserve other files in the shared cache.
+- `lint.rules.pseudo-plural` is off by default. In an English source locale, opt in to `pmds/no-pseudo-plural` for a single interpolation followed by a narrow `word(s)` spelling; use complete plural sentences rather than an autofix. See the source-lint configuration for exclusions.
 - `pmds extract --check --json --fail-on-empty-catalog`: CI drift check with an empty-source guard. `--fail-on-empty-catalog` exits with code 1 before any configured catalog is written or marked obsolete when one catalog matches no source files. Without the flag, extraction warns and projects the empty catalog. Check JSON uses status `error`; watch mode leaves catalogs unchanged for the failed cycle and continues watching. The check can still update the extraction cache unless `--no-cache` is passed.
 - Extraction-cache write failures are non-fatal but always warn on stderr, including for `pmds lint` and without `--verbose`; watch mode reports a persistent failure once per process rather than once per file event. Use `--no-cache` or `extract-cache: false` when the cache location is intentionally unwritable.
 - `pmds catalog merge --conflict-strategy=use-first --output out.po a.po b.po`: semantic merge of exactly two catalogs; add `--base base.po` for a deletion-aware three-way merge. Supported PO/FCL extensions infer the format; use `--format po|fcl` only as an explicit override.
 - `pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first`: one deletion-aware Git merge driver for PO and FCL. `%P` is the logical catalog path, so it selects the format even when Git temporary paths are extensionless; use `--format po|fcl` only as an explicit override. It maps merge and rebase roles so `use-first` stays the branch being merged or rebased.
+- Git runs merge drivers at the worktree root, and config discovery searches upward from there. `--path` does not discover app configs: use an app-specific driver with `--config apps/web/palamedes.yaml` for monorepos. Without a config, the merge uses default PO formatting and reports the fallback on stderr; an explicit missing or invalid config fails without changing the output. See `/docs/cli.md#git-merge-driver`.
 - `pmds catalog convert --to fcl input.po`: convert PO catalogs to the opt-in FCL format
 
 ### CLI exit codes
@@ -218,6 +221,16 @@ patch, compile, and extraction variants so native work runs on Node's shared
 libuv worker pool instead of the event-loop thread; bound caller concurrency
 because queued native work is not cancellable.
 
+`findTranslationReferences({ references, targets, maxReferences: 5, maxOrigins: 8 })`
+returns exact source-message/context/target-locale reference hints, capped at 20
+per target with deterministic catalog ordering, target values, origins, and reasons.
+The caller selects eligible facts; known explicit `listTranslationCandidates`
+`targets` can read translated PO/FCL entries, while default enumeration only returns
+missing translations. One native snapshot index validates compatibility once per
+reference and serves the whole batch. Duplicate, empty, or incompatible references
+produce diagnostics and are excluded. No quality inference, fuzzy matching,
+automatic freshness, remote calls, or replacement is performed.
+
 `checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
 metadataLeakage: true } })` adds read-only, opt-in target-text review warnings.
 `auditCatalogs` shares these checks through `checks.targetText`; spans are UTF-8
@@ -242,7 +255,7 @@ changes; cache failures are non-fatal. See `/docs/cli.md` and
 - `/docs/cli.md`: full CLI reference
 - `/docs/platform-support.md`: published native targets and unsupported Node processes
 - `/docs/catalog-formats.md`: PO default and opt-in FCL
-- MDX ships with v2 and uses Ferromark 3.7 strict JavaScript/JSX parsing with structured alt provenance and public callout metadata. Image alt messages include the complete accessible text. Parse failures return typed diagnostics using the shared SourceRange type with bounded recovery.
+- MDX ships with v2 and uses Ferromark 4.1 strict JavaScript/JSX parsing with structured alt provenance and public callout metadata. Image alt messages include the complete accessible text. Parse failures return typed diagnostics using the shared SourceRange type with bounded recovery.
 - `/docs/mdx.md`: native MDX extraction, Vite compilation, limits, and verified setup
 - `/docs/principles.md`: architectural principles
 - `/docs/migrate-from-lingui.md`: migration guidance for Lingui-shaped projects

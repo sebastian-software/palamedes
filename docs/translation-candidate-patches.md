@@ -142,6 +142,72 @@ invalidating the remaining candidates.
 Fingerprint payload changes are versioned. When upgrading across a fingerprint
 version, discard in-flight candidates and list them again before patching.
 
+## Exact reference hints
+
+`findTranslationReferences()` finds existing translations with exactly the same
+source message, context, and target locale. The caller supplies the eligible
+reference facts and target identities; Core performs no catalog discovery,
+quality inference, fuzzy matching, remote requests, or automatic replacement.
+A context-free short label such as `Open` never matches a context-qualified
+entry. Locale tags and message text match exactly, without normalization.
+
+To obtain translated facts from configured PO/FCL catalogs, pass known explicit
+reference identities to `listTranslationCandidates({ config, targets })`.
+Its default enumeration returns missing translations, so it does **not** supply
+a complete translated reference pool. The host must already know which catalog
+entries it wants to inspect and decide their eligibility. Review flags and
+machine metadata are available on those candidates; their absence or presence
+alone establishes no translation quality.
+
+```ts
+import {
+  findTranslationReferences,
+  listTranslationCandidates,
+  type CatalogArtifactConfig,
+  type TranslationCandidateId,
+} from "@palamedes/core-node";
+
+declare const config: CatalogArtifactConfig;
+
+// These identities come from the host's selected reference entries.
+const referenceIds: TranslationCandidateId[] = [
+  { catalog: "shared/{locale}", locale: "de", message: "Open", context: "verb" },
+];
+const facts = listTranslationCandidates({ config, targets: referenceIds });
+if (facts.diagnostics.length > 0) throw new Error("Reference catalogs need attention");
+const hints = findTranslationReferences({
+  references: facts.candidates.map(({ id, translation, origins }) => ({
+    id,
+    translation,
+    origins,
+  })),
+  targets: [{ catalog: "app/{locale}", locale: "de", message: "Open", context: "verb" }],
+  maxReferences: 5,
+  maxOrigins: 3,
+});
+```
+
+Each target has one result in request order, including empty results. Each hint
+contains the reference `id` (catalog, locale, source message, context), target
+`translation`, bounded sorted origins, `matchKind: "exact"`, and a match
+explanation. References are ordered by catalog identity, excluding the target's
+own identity. `maxReferences` defaults to 5 and is capped at 20; `maxOrigins`
+defaults to 8. Zero limits return no hints or no origins respectively.
+
+The native index validates each reference once with the existing ICU
+compatibility rules. Empty values, incompatible arguments or ICU structure,
+and duplicate reference identities are excluded with deterministic diagnostics;
+duplicates produce `translation.duplicate_reference`, empty values produce
+`translation.empty_reference`, and ICU findings retain their existing codes.
+References may add compatible target-language plural categories. Hints do not
+replace writeback validation or its fingerprint check.
+
+Rust integrations can construct `TranslationReferenceIndex::new(&references)`
+and reuse `references_for(&target, max_references, max_origins)`. This is a
+caller-owned snapshot: rebuild it when the selected catalog facts change.
+The Node batch API builds one index for all targets, avoiding a full reference
+scan per candidate. Neither API tracks catalog freshness automatically.
+
 ## Applying completed translations
 
 `applyTranslationPatches()` validates the complete request before writing any

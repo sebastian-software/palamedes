@@ -1,11 +1,9 @@
 name: Next.js Canary
 
-# Out-of-graph Next client catalogs read `pmds-next:` marker literals back from
-# the emitted chunks, which no Next API promises (ADR-030). This builds the
-# route example against the newest Next canary, so a release that rewrites or
-# drops the markers shows up here before it reaches the peer range. Canary moves
-# independently of this repository, so it runs on a schedule, not per pull
-# request.
+# Both out-of-graph deliveries depend on emitted marker literals (ADR-030).
+# Permutations also depend on Next's manifests, render stores and lazy chunk
+# paths (ADR-031). Exercise both independently against canary, including the
+# permutation browser contract, before a breaking release reaches the peer range.
 on:
   schedule:
     - cron: "41 4 * * 1-5"
@@ -30,9 +28,17 @@ env:
 
 jobs:
   contract:
-    name: client catalog asset contract
+    name: client catalog ${{ matrix.label }} contract
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - delivery: assets
+            label: asset
+          - delivery: permutations
+            label: permutation
 
     steps:
       - name: Check out repository
@@ -43,6 +49,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for the permutation browser contract
+        if: matrix.delivery == 'permutations'
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Build workspace packages
         run: pnpm build
@@ -61,31 +71,30 @@ jobs:
           fi
           version="$(npm view "next@$NEXT_TAG" version)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Verifying the client catalog asset contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
+          echo "Verifying the client catalog ${{ matrix.label }} contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
           pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"
 
-      - name: Verify Next client catalog asset contract
+      - name: Verify Next client catalog ${{ matrix.label }} contract
         id: contract
-        run: pnpm --dir examples/nextjs-route build:catalog-assets
+        run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}
 
-      # One long-lived issue that is refreshed in place and closed by the next
-      # passing scheduled run.
+      # Separate long-lived issues let one delivery recover independently.
       - name: Open or refresh the tracking issue
         if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog asset contract"
+          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog ${{ matrix.label }} contract"
           NEXT_VERSION: ${{ steps.next.outputs.version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           {
-            echo "\`pnpm --dir examples/nextjs-route build:catalog-assets\` failed against \`next@$NEXT_VERSION\`."
+            echo "\`pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}\` failed against \`next@$NEXT_VERSION\`."
             echo
-            echo "\`experimentalClientCatalogAssets\` finds translated client modules through their"
-            echo "\`pmds-next:\` marker literals in the emitted chunks. Check whether this canary"
-            echo "rewrites or drops them before the release reaches the \`next\` peer range; see"
-            echo "[ADR-030](https://github.com/${{ github.repository }}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md)."
+            echo "Check emitted markers and, for permutations, manifest selection, request isolation"
+            echo "and lazy chunk URLs before this release reaches the \`next\` peer range. See"
+            echo "[ADR-030](https://github.com/${{ github.repository }}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and"
+            echo "[ADR-031](https://github.com/${{ github.repository }}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md)."
             echo
             echo "Run: $RUN_URL"
           } > issue-body.md
@@ -99,9 +108,9 @@ jobs:
         if: success() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog asset contract"
+          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog ${{ matrix.label }} contract"
         run: >
           node ./scripts/open-or-refresh-issue.mjs
           --title "$TITLE"
           --label stability
-          --close-comment "The scheduled Next.js canary run passes the client catalog asset contract again."
+          --close-comment "The scheduled Next.js canary run passes the client catalog ${{ matrix.label }} contract again."

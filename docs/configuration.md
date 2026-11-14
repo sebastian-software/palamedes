@@ -127,6 +127,7 @@ lint:
     placeholder-only: warning
     empty-component-only: off
     prefer-trans-in-jsx: info
+    pseudo-plural: off
 ```
 
 Those are also the defaults. `placeholder-only` catches messages made only of
@@ -135,6 +136,21 @@ authoring needs more project context. `prefer-trans-in-jsx` is an informational
 readability suggestion for safe direct render positions; `t` remains fully
 supported. Advanced dictionary and ambiguity policies are not part of this
 open-source config surface.
+
+Set `pseudo-plural: warning` to enable `pmds/no-pseudo-plural` for an English
+`source-locale` (`en` or a regional English locale). The initial rule recognizes
+exactly one runtime interpolation immediately followed by whitespace and an
+ASCII word of at least two letters ending in `(s)`, such as
+`` t`Imported ${count} record(s)` `` or `<Trans>{count} file(s) selected</Trans>`.
+The suffix must end the message or precede whitespace or ordinary sentence
+punctuation. It uses parsed authored-message parts and does not infer a value's
+type or identify counts by variable name.
+
+Literal `(s)` documentation, single-letter function notation such as `f(s)`,
+proper plural choices, rich-text boundaries, multiple interpolations, and
+non-English source locales are outside this rule. It suggests a `Plural` macro
+with a complete sentence in each branch and never applies an automatic fix.
+Use the standard source-lint suppressions for an intentional matching spelling.
 
 ## Catalogs
 
@@ -199,6 +215,12 @@ Ordering is not locale-aware beyond root collation. Languages with genuinely
 different collation (Swedish, Turkish, Czech and others) are not tailored for;
 the catalog order follows the source message, which is the same in every locale
 anyway.
+
+Palamedes uses Ferrocat's public `collation` API when validating FCL order.
+Ferrocat owns the key builder, generated Unicode table, and generator checks;
+Palamedes keeps raw message/context and obsolete-state tie-breaks for distinct
+identities whose collation keys compare equal, including covered NFC/NFD
+spellings.
 
 Ferrocat implements the order with a generated table covering Latin text,
 punctuation, symbols and digits rather than a full Unicode collation

@@ -77,6 +77,10 @@ import type {
   TranslationCandidateId as GeneratedTranslationCandidateId,
   TranslationCandidateRequest as GeneratedTranslationCandidateRequest,
   TranslationCandidateResult as GeneratedTranslationCandidateResult,
+  TranslationReferenceEntry as GeneratedTranslationReferenceEntry,
+  TranslationReferenceRequest as GeneratedTranslationReferenceRequest,
+  TranslationReferenceMatch as GeneratedTranslationReferenceMatch,
+  TranslationReferenceResult as GeneratedTranslationReferenceResult,
   TranslationPatch as GeneratedTranslationPatch,
   TranslationPatchOutcome as GeneratedTranslationPatchOutcome,
   TranslationPatchRequest as GeneratedTranslationPatchRequest,
@@ -211,6 +215,26 @@ export type TranslationCandidateRequest = {
 export type TranslationCandidateResult = {
   candidates: TranslationCandidate[];
   diagnostics: TranslationWorkflowDiagnostic[];
+};
+/** Caller-selected translated facts; eligibility and catalog freshness belong to the caller. */
+export type TranslationReferenceEntry = Omit<GeneratedTranslationReferenceEntry, "translation"> & {
+  translation: TranslationValue;
+};
+export type TranslationReferenceRequest = Omit<
+  GeneratedTranslationReferenceRequest,
+  "references"
+> & {
+  references: TranslationReferenceEntry[];
+};
+export type TranslationReferenceMatch = Omit<
+  GeneratedTranslationReferenceMatch,
+  "translation" | "matchKind"
+> & {
+  translation: TranslationValue;
+  matchKind: "exact";
+};
+export type TranslationReferenceResult = Omit<GeneratedTranslationReferenceResult, "matches"> & {
+  matches: { id: TranslationCandidateId; references: TranslationReferenceMatch[] }[];
 };
 export type TranslationMachineProvenance = {
   ai?: {
@@ -381,11 +405,12 @@ export type SourceAnalysisResult = Omit<
 export type SourceRuleLevel = "off" | "info" | "warning" | "error";
 export type SourceRuleOptions = Omit<
   GeneratedNativeSourceRuleOptions,
-  "placeholderOnly" | "emptyComponentOnly" | "preferTransInJsx"
+  "placeholderOnly" | "emptyComponentOnly" | "preferTransInJsx" | "pseudoPlural"
 > & {
   placeholderOnly?: SourceRuleLevel;
   emptyComponentOnly?: SourceRuleLevel;
   preferTransInJsx?: SourceRuleLevel;
+  pseudoPlural?: SourceRuleLevel;
 };
 export type SourceAnalysisOptions = Omit<GeneratedNativeSourceAnalysisOptions, "mdx" | "rules"> & {
   mdx?: MdxOptions;
@@ -557,6 +582,31 @@ export function listTranslationCandidates(
   return {
     candidates: result.candidates.map(fromNativeTranslationCandidate),
     diagnostics: result.diagnostics,
+  };
+}
+
+/** Builds one native snapshot index for a batch of exact source/context/locale hints. */
+export function findTranslationReferences(
+  request: TranslationReferenceRequest,
+): TranslationReferenceResult {
+  const snapshot = snapshotNativeArgument("findTranslationReferences", request);
+  const result = native.findTranslationReferences({
+    ...snapshot,
+    references: snapshot.references.map((reference) => ({
+      ...reference,
+      translation: toNativeTranslationValue(reference.translation),
+    })),
+  });
+  return {
+    ...result,
+    matches: result.matches.map((matches) => ({
+      ...matches,
+      references: matches.references.map((reference) => ({
+        ...reference,
+        translation: fromNativeTranslationValue(reference.translation),
+        matchKind: "exact",
+      })),
+    })),
   };
 }
 

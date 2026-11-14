@@ -96,3 +96,20 @@ describe("loadClientCatalog", () => {
     );
   });
 });
+
+describe("clientCatalogMessages", () => {
+  it("returns inlined messages and rejects the marker of a locale-neutral chunk", async () => {
+    const helper = new URL("../client-catalog.mjs", import.meta.url).href;
+    const { clientCatalogMessages } = (await import(helper)) as {
+      clientCatalogMessages(value: unknown): unknown;
+    };
+    const messages = { a: "Hallo" };
+    expect(clientCatalogMessages(messages)).toBe(messages);
+    const payload = Buffer.from(JSON.stringify({ source: "src/a.tsx", ids: ["a"] })).toString(
+      "base64url",
+    );
+    expect(() => clientCatalogMessages(`pmds-next:0123456789ab:${payload}`)).toThrow(
+      /locale-neutral client chunk for src\/a\.tsx/u,
+    );
+  });
+});

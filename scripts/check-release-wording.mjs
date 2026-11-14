@@ -24,11 +24,15 @@ export const PRERELEASE_WORDING_PHRASES = Object.freeze([
   "Registry latest still supplies 1.x",
   "npm currently ships 1.x",
   "1.x contract",
+  "the next Release Please version is explicitly",
+  "carries two one-time overrides for 2.0.0",
+  "remaining registry ownership and credential verification",
 ]);
 
 // Public documentation, site, and agent-facing surfaces that describe the v2
 // release status. Paths are relative to the repository root.
 export const RELEASE_WORDING_FILES = Object.freeze([
+  "CONTRIBUTING.md",
   "docs/release-notes-v2.md",
   "docs/migration-v2.md",
   "README.md.src",

@@ -8,6 +8,7 @@
     "build:graph": "PALAMEDES_NEXT_CATALOG_ASSETS=0 next build && node ../../scripts/normalize-next-required-server-files.mjs && node ../../scripts/check-next-client-catalog-bundle.mjs",
     "build:catalog-assets": "PALAMEDES_NEXT_STANDALONE=1 next build && node ../../scripts/check-next-client-catalog-assets.mjs . && node ../../scripts/check-next-client-catalog-standalone.mjs .",
     "build:catalog-assets:webpack": "PALAMEDES_NEXT_STANDALONE=1 next build --webpack && node ../../scripts/check-next-client-catalog-assets.mjs . && node ../../scripts/check-next-client-catalog-standalone.mjs .",
+    "build:catalog-permutations": "PALAMEDES_NEXT_STANDALONE=1 PALAMEDES_NEXT_CATALOG_PERMUTATIONS=1 next build && node ../../scripts/check-next-client-catalog-permutations.mjs .",
     "start": "next start --port 4011",
     "extract": "pmds extract"
   },

@@ -242,9 +242,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrocat"
-version = "3.4.2"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65e24238a7e7464d91c58a3f68327ca71742727fdd29dc1a6c8369a2f2216772"
+checksum = "a825e03eb2a60c858b80ee0b5f37447b8ed99abe55067f377209b84312d3490a"
 dependencies = [
  "ferrocat-icu",
  "ferrocat-po",
@@ -252,9 +252,9 @@ dependencies = [
 
 [[package]]
 name = "ferrocat-icu"
-version = "3.4.2"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a05e08c426188954709de42f6a5483253d7da6fa6350e0c7135ca777d4964e8f"
+checksum = "c874fa9b613b7751c9c9b1d456f842c879491029702d93c3f25fbf25b050593b"
 dependencies = [
  "memchr",
  "serde",
@@ -262,9 +262,9 @@ dependencies = [
 
 [[package]]
 name = "ferrocat-po"
-version = "3.4.2"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e8f57272ccb10e82e41669c3d24bb6a85968f42d462583d8eac95fffc3e37ad"
+checksum = "a9f385c5bcf9eb8deecd2b74f777b6daea7cb575be106ce89c5398c0b113631b"
 dependencies = [
  "ferrocat-icu",
  "icu_locale",
@@ -280,9 +280,9 @@ dependencies = [
 
 [[package]]
 name = "ferromark"
-version = "3.7.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9580c392584c38a07cd5b6ae1bf042e8e26566a9f846c728b0b2b457ed120f25"
+checksum = "477bc427a958ee44596d14e1fc006a52a2b0ac48db618a475e3f2dd95f73d29d"
 dependencies = [
  "bumpalo",
  "compact_str",
@@ -826,7 +826,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes"
-version = "1.25.1"
+version = "2.2.0"
 dependencies = [
  "ferrocat",
  "ferrocat-icu",
@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-plugin"
-version = "1.25.1"
+version = "2.2.0"
 dependencies = [
  "serde",
  "serde_json",
