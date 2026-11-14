@@ -108,6 +108,13 @@ create an app-owned `i18n` module, import locale catalogs, or call `load()` and
 compiled active-locale dependency and awaits it before the module runs. Set the
 document's `lang` before the module entry, for example `<html lang="de">`.
 
+Framework-produced static HTML emitted after Vite's build uses
+`createStaticViteCatalogBootstrap` from `@palamedes/vite-plugin/delivery`
+after prerender. Public pages keep their document locale; an unprefixed SPA
+fallback calls the host's local locale policy before modules run. The host
+supplies reviewed exact script-element digests and its CSP allowlist. See
+`docs/api/vite-plugin.md#static-documents-generated-after-the-vite-build`.
+
 Package roots and `compiled` aliases share one parser-free runtime in v2. Raw ICU
 source is compiled before use; application-owned catalog maps and serialized ICU
 transport are not part of the standard framework flow.

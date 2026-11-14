@@ -65,7 +65,8 @@
     "@palamedes/core": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:*",
-    "@palamedes/transform": "workspace:^"
+    "@palamedes/transform": "workspace:^",
+    "parse5": "8.0.1"
   },
   "devDependencies": {
     "@solidjs/vite-plugin": "3.0.0-next.50",

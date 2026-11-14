@@ -389,6 +389,9 @@ export type PalamedesPluginOptions = {
    * @default false
    */
   experimentalReactCatalogHmr?: boolean;
+
+  /** Experimental tracked Solid catalog updates in development. @default false */
+  experimentalSolidCatalogHmr?: boolean;
 };
 
 /**
@@ -412,6 +415,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     mdx: mdxOverride,
     environment = "auto",
     experimentalReactCatalogHmr = false,
+    experimentalSolidCatalogHmr = false,
     configPath,
     projectRoot: explicitProjectRoot,
     skipValidation,
@@ -420,6 +424,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   if (experimentalReactCatalogHmr && framework !== "react") {
     throw new Error('experimentalReactCatalogHmr requires framework: "react".');
   }
+  if (experimentalSolidCatalogHmr && framework !== "solid") {
+    throw new Error('experimentalSolidCatalogHmr requires framework: "solid".');
+  }
+  const experimentalCatalogHmr = experimentalReactCatalogHmr || experimentalSolidCatalogHmr;
   if (environment !== "auto" && environment !== "server") {
     throw new Error(
       `Palamedes environment must be "auto" or "server", received ${JSON.stringify(environment)}.`,
@@ -484,7 +492,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     }
     const epoch = reactCatalogEpoch;
     return sidecarKey(sourceId).then((key) => {
-      if (experimentalReactCatalogHmr && epoch !== reactCatalogEpoch) return code;
+      if (experimentalCatalogHmr && epoch !== reactCatalogEpoch) return code;
       registerSidecar(key, sourceId, compiledIds);
       return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`;
     });
@@ -496,6 +504,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   let reactCatalogRestarting = false;
   type ReactCatalogSnapshot = { code: string; ids: string[] };
   let reactCatalogSnapshots = new Map<string, Promise<ReactCatalogSnapshot>>();
+  let solidCatalogError = false;
   let lastReactCatalogUpdate = "";
   let lastReactReload = "";
   let reactCatalogUpdate = Promise.resolve();
@@ -524,7 +533,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       for (const [id, message] of Object.entries(artifact.messages)) {
         if (Object.hasOwn(messages, id) && messages[id] !== message) {
           throw new Error(
-            `Experimental React catalog HMR cannot combine conflicting ${locale} values for compiled message ID "${id}" across catalogs. Use distinct messages/contexts or disable experimentalReactCatalogHmr for scoped fragment delivery.`,
+            `Experimental ${experimentalReactCatalogHmr ? "React" : "Solid"} catalog HMR cannot combine conflicting ${locale} values for compiled message ID "${id}" across catalogs. Use distinct messages/contexts or disable experimental${experimentalReactCatalogHmr ? "React" : "Solid"}CatalogHmr for scoped fragment delivery.`,
           );
         }
         messages[id] = message;
@@ -663,8 +672,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             devEnvironment.moduleGraph.invalidateModule(module);
           }
         }
-        if (removedMessages) {
+        if (removedMessages || (experimentalSolidCatalogHmr && solidCatalogError)) {
+          const recoverSolid = experimentalSolidCatalogHmr && solidCatalogError;
+          solidCatalogError = false;
           client?.hot.send({ type: "full-reload" });
+          if (recoverSolid)
+            client?.hot.send({ type: "custom", event: "palamedes:catalog-reload", data: {} });
           return;
         }
         client?.hot.send({
@@ -674,15 +687,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         });
         // Refresh the application's existing React boundaries instead of
         // remounting its root or introducing subscriptions into getI18n().
-        for (const module of sourceModules) await client!.reloadModule(module);
+        if (experimentalReactCatalogHmr)
+          for (const module of sourceModules) await client!.reloadModule(module);
       } catch (error) {
         if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
+        if (experimentalSolidCatalogHmr) solidCatalogError = true;
         server.environments.client?.hot.send({
           type: "error",
           err: {
             message: error instanceof Error ? error.message : String(error),
             stack: "",
-            plugin: "palamedes:react-catalog-hmr",
+            plugin: experimentalReactCatalogHmr
+              ? "palamedes:react-catalog-hmr"
+              : "palamedes:solid-catalog-hmr",
             id: file,
           },
         });
@@ -707,7 +724,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     if (!devServer || !previous || sameMessageSet(previous.compiledIds, compiledIds)) {
       return;
     }
-    if (experimentalReactCatalogHmr) {
+    if (experimentalCatalogHmr) {
       devServer.environments.client?.hot.send({ type: "full-reload" });
     }
     const sidecarId = `${RESOLVED_MESSAGES_PREFIX}${key}`;
@@ -743,7 +760,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
         ...(skipValidation === undefined ? {} : { skipValidation }),
       });
-      if (experimentalReactCatalogHmr && epoch !== reactCatalogEpoch) return getConfigLazy();
+      if (experimentalCatalogHmr && epoch !== reactCatalogEpoch) return getConfigLazy();
       config = loaded;
       configDependencies = new Set(getConfigDependencies(config).map(canonicalPath));
       macroIds = new Set(PALAMEDES_MACRO_PACKAGES);
@@ -1038,7 +1055,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     configureServer(server) {
       const previousServer = devServer;
       devServer = server;
-      if (experimentalReactCatalogHmr) {
+      if (experimentalCatalogHmr) {
         reactCatalogEpoch += 1;
         reactCatalogGeneration = 0;
         reactCatalogSnapshots = new Map();
@@ -1047,6 +1064,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (previousServer) sidecarModules.clear();
         resetConfig();
         reactCatalogRestarting = false;
+        solidCatalogError = false;
       }
     },
 
@@ -1057,7 +1075,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     hotUpdate: {
       order: "pre",
       async handler(context) {
-        if (!experimentalReactCatalogHmr) return;
+        if (!experimentalCatalogHmr) return;
         const file = canonicalPath(context.file);
         const reloadKey = `${file}:${context.timestamp}:${context.type}`;
         if (lastReactReload === reloadKey) return [];
@@ -1213,7 +1231,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       try {
         const result = transformPalamedesMacros(code, cleanId, {
-          runtimeModule: macroRuntimeModule,
+          runtimeModule:
+            experimentalSolidCatalogHmr && !isBuildCommand && !isServer(this)
+              ? "virtual:palamedes/solid-catalog-reactivity"
+              : macroRuntimeModule,
           includeSourceMetadata: resolvedIncludeSourceMetadata,
           stripNonEssentialProps,
         });
@@ -1316,9 +1337,23 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   if (graphSplitting) {
     plugins.push({
       name: "palamedes:message-sidecars",
+      ...(experimentalSolidCatalogHmr ? { enforce: "pre" as const } : {}),
 
-      resolveId(id) {
-        if (experimentalReactCatalogHmr && !isBuildCommand) {
+      resolveId(id, importer, resolveOptions) {
+        if (
+          experimentalSolidCatalogHmr &&
+          !isBuildCommand &&
+          !isServer(this, resolveOptions?.ssr === true)
+        ) {
+          if (id === "virtual:palamedes/solid-catalog-reactivity")
+            return "\0palamedes:solid-catalog-reactivity";
+          if (
+            id === "@palamedes/solid/compiled" &&
+            importer !== "\0palamedes:solid-catalog-reactivity"
+          )
+            return "\0palamedes:solid-catalog-reactivity";
+        }
+        if (experimentalCatalogHmr && !isBuildCommand) {
           if (id === REACT_CATALOG_HMR) return RESOLVED_REACT_CATALOG_HMR;
           if (id.startsWith(REACT_SNAPSHOT_PREFIX))
             return `${RESOLVED_REACT_SNAPSHOT_PREFIX}${id.slice(REACT_SNAPSHOT_PREFIX.length)}`;
@@ -1341,14 +1376,24 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
        * modules is cheaper than keeping that state correct.
        */
       async load(id, loadOptions) {
-        if (experimentalReactCatalogHmr && !isBuildCommand && id === RESOLVED_REACT_CATALOG_HMR) {
+        if (
+          experimentalSolidCatalogHmr &&
+          !isBuildCommand &&
+          id === "\0palamedes:solid-catalog-reactivity"
+        ) {
           return {
-            code: `import { getI18n } from "@palamedes/runtime";\nimport { createDevelopmentCatalogUpdater } from "@palamedes/runtime/internal";\nconst locale=document.documentElement.lang;\nconst update=createDevelopmentCatalogUpdater(generation=>import(/* @vite-ignore */ ${JSON.stringify(`${resolvedBase}@id/__x00__palamedes:react-catalog-snapshot/`)}+generation+"/"+locale),messages=>getI18n().load(locale,messages));\nexport const loadDevelopmentCatalog=update;\nif(import.meta.hot)import.meta.hot.on("palamedes:catalog-update",({generation})=>{void update(generation).catch(()=>{});});`,
+            code: `import { createSignal, getObserver } from "solid-js";\nimport { getI18n as getRuntimeI18n } from ${JSON.stringify(macroRuntimeModule)};\nimport { createTrans } from "@palamedes/solid/internal";\nimport { getI18n as getTransRuntimeI18n } from "@palamedes/runtime";\nexport { buildLocaleSwitchItems } from "@palamedes/solid/compiled";\nconst [revision, setRevision] = createSignal(0);\nlet hasUntrackedRead = false;\nfunction track(){ if (getObserver()) revision(); else hasUntrackedRead = true; }\nexport function getI18n(){ track(); return getRuntimeI18n(); }\nexport const Trans = createTrans(() => { track(); return getTransRuntimeI18n(); });\nexport function notifyCatalog(){ if (hasUntrackedRead) location.reload(); else setRevision(value => value + 1); }`,
+            map: null,
+          };
+        }
+        if (experimentalCatalogHmr && !isBuildCommand && id === RESOLVED_REACT_CATALOG_HMR) {
+          return {
+            code: `${experimentalSolidCatalogHmr ? 'import { notifyCatalog } from "virtual:palamedes/solid-catalog-reactivity";\n' : ""}import { getI18n } from "@palamedes/runtime";\nimport { createDevelopmentCatalogUpdater } from "@palamedes/runtime/internal";\nconst locale=document.documentElement.lang;\nconst update=createDevelopmentCatalogUpdater(generation=>import(/* @vite-ignore */ ${JSON.stringify(`${resolvedBase}@id/__x00__palamedes:react-catalog-snapshot/`)}+generation+"/"+locale),messages=>{getI18n().load(locale,messages);${experimentalSolidCatalogHmr ? "notifyCatalog();" : ""}});\nexport const loadDevelopmentCatalog=update;\nif(import.meta.hot){${experimentalSolidCatalogHmr ? 'let unloading=false;window.addEventListener("beforeunload",()=>{unloading=true;},{once:true});import.meta.hot.on("palamedes:catalog-reload",()=>setTimeout(()=>{if(!unloading)location.reload();},100));' : ""}import.meta.hot.on("palamedes:catalog-update",({generation})=>{void update(generation).catch(()=>{});});}`,
             map: null,
           };
         }
         if (
-          experimentalReactCatalogHmr &&
+          experimentalCatalogHmr &&
           !isBuildCommand &&
           id.startsWith(RESOLVED_REACT_SNAPSHOT_PREFIX)
         ) {
@@ -1422,7 +1467,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             return { code: boundCode, map: null, moduleSideEffects: true };
           }
 
-          if (experimentalReactCatalogHmr) {
+          if (experimentalCatalogHmr) {
             // The complete snapshot owns catalog watch dependencies. Attaching
             // them here would let Vite invalidate React source boundaries
             // before the catalog transaction captures them for refresh.
@@ -1617,22 +1662,27 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           .digest("hex")
       );
     },
-    generateBundle(_options, bundle) {
-      for (const chunk of Object.values(bundle)) {
-        if (
-          chunk.type !== "chunk" ||
-          !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
-        )
-          continue;
-        const facade = createRouteFacade(chunk);
-        this.emitFile({
-          type: "asset",
-          fileName: facade.assetFileName,
-          source: facade.assetSource,
-        });
-        chunk.code = facade.facadeSource;
-        chunk.map = null;
-      }
+    generateBundle: {
+      // Vite resolves lazy-import preload markers during generateBundle. Move
+      // route code only afterward so emitted assets never retain those markers.
+      order: "post",
+      handler(_options, bundle) {
+        for (const chunk of Object.values(bundle)) {
+          if (
+            chunk.type !== "chunk" ||
+            !chunk.facadeModuleId?.includes("?__react-router-build-client-route")
+          )
+            continue;
+          const facade = createRouteFacade(chunk);
+          this.emitFile({
+            type: "asset",
+            fileName: facade.assetFileName,
+            source: facade.assetSource,
+          });
+          chunk.code = facade.facadeSource;
+          chunk.map = null;
+        }
+      },
     },
   });
 

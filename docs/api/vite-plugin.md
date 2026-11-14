@@ -144,15 +144,22 @@ changes and removed compiled message identities also reload the document.
 Ordinary React source edits keep
 their existing Fast Refresh behavior. Production keeps its normal split
 fragments. Locale switches still navigate to a new document. The mode requires
-`framework: "react"`; Solid and other integrations keep reload-based catalog
-updates. Solid's current refresh boundary can recreate component-local signals,
-so disabling document reload alone would not preserve its application state.
+`framework: "react"`. Other integrations keep reload-based catalog updates unless
+they opt into their own supported mode.
 
 After building packages, run the PO/FCL browser proof with:
 
 ```sh
 node scripts/proof-react-catalog-hmr.mjs
 ```
+
+### Experimental Solid catalog HMR
+
+Plain Vite Solid apps can opt into `palamedes({ framework: "solid", experimentalSolidCatalogHmr: true })`. During development, `Trans` and macro reads that remain in tracked render paths update from the active document locale's complete compiled catalog snapshot. Tracked updates preserve component-local state and use the same generation for eager and lazy modules. A stale response cannot replace a newer generation.
+
+A macro call evaluated outside a tracking scope may have been captured as a fixed value. After any such direct read, a catalog update reloads the document instead. This conservative rule also includes calls in event handlers. Keep translated values in tracked render paths: a memo can compute a translation inside tracking and then be read once outside tracking into a fixed value. The plugin cannot detect that downstream capture, so that value stays stale until the document reloads. This shape is unsupported by in-place updates. Invalid catalogs leave the last valid UI visible with Vite's error overlay; correcting an error reloads the document. Conflicting catalog values are rejected, and source message membership or configuration changes reload. Production delivery and document locale navigation are unchanged. Ordinary Solid component HMR follows the host's behavior and can recreate local signals.
+
+After building packages, run `node scripts/proof-solid-catalog-hmr.mjs` for the PO/FCL browser proof. `node scripts/proof-solid-refresh-baseline.mjs` separately demonstrates the pinned framework's tracked and untracked reads and ordinary component refresh.
 
 It also runs from the existing Vite development proof in the example browser
 lane. It requires the example's dependencies, the matching native addon, and the
@@ -311,3 +318,88 @@ Static HTML applications receive a generated module entry that installs the
 active locale's import map and awaits application dependencies. An optional
 `<template data-palamedes-error>` supplies the host's error view. Existing module
 script nonces propagate to the generated entry and import map.
+
+### Static documents generated after the Vite build
+
+Some frameworks generate HTML after Vite's `generateBundle` hook. React Router
+Framework Mode with `ssr: false`, for example, can prerender locale pages and
+emit an unprefixed SPA fallback. Run `createStaticViteCatalogBootstrap` from
+`@palamedes/vite-plugin/delivery` **after** prerender, on each document. It
+reads generated maps, replaces approved module startup scripts with inert
+placeholders, and returns rewritten HTML and a content-addressed bootstrap.
+Write both to the client directory. The bootstrap installs the selected map,
+checks initial catalog dependencies, and restores each module at its original
+position. Lazy dependencies remain bound to that document's locale.
+
+```ts
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { createStaticViteCatalogBootstrap } from "@palamedes/vite-plugin/delivery";
+
+const clientDirectory = path.resolve("build/client");
+const delivery = createStaticViteCatalogBootstrap({ clientDirectory });
+// Separately reviewed SHA-256 digests of complete original <script> elements,
+// in document order, for each output document.
+const approved = JSON.parse(await readFile("approved-scripts.json", "utf8"));
+for (const file of ["en/index.html", "de/index.html", "index.html"]) {
+  const htmlPath = path.join(clientDirectory, file);
+  const result = delivery.transformDocument({
+    html: await readFile(htmlPath, "utf8"),
+    allowedScripts: approved[file],
+    scriptLimits: { maxCount: 20, maxElementBytes: 32768, maxTotalBytes: 131072 },
+    locale:
+      file === "index.html"
+        ? { kind: "fallback", policyModule: "/policy.js" }
+        : { kind: "document" },
+  });
+  await mkdir(path.dirname(path.join(clientDirectory, result.bootstrap.fileName)), {
+    recursive: true,
+  });
+  await writeFile(path.join(clientDirectory, result.bootstrap.fileName), result.bootstrap.source);
+  await writeFile(htmlPath, result.html);
+  // Add result.cspHashes to script-src, retain the host's approved classic
+  // script hashes, and authorize its local bootstrap and policy assets.
+}
+```
+
+For a prerendered public page, `kind: "document"` treats its `<html lang>` as
+authoritative, regardless of browser preferences or query parameters. For the
+SPA fallback, the local, catalog-independent policy module exports a pure
+`resolveLocale({ pathname, search, languages })` function. It returns a
+configured locale string, synchronously or asynchronously. Palamedes sets
+`<html lang>` to that selection before startup; the SPA shell must tolerate
+that intentional correction during hydration. The host owns path, query and
+browser preference precedence and changes locale by document navigation or
+reload.
+
+The allowlist must come from a separately reviewed host policy, never by blindly
+hashing every script in the document at build time. Set script count and byte limits appropriate for the host. Digests cover the complete
+original element bytes and must match in count and order. Unknown or changed
+scripts fail the build. Review framework output whenever an approved digest
+changes. The transform rejects remote scripts, deferred classic scripts, unsupported
+module attributes, existing import maps, unsafe policy URLs and invalid
+generated map bindings. Remove `defer` from classic scripts or handle that
+document separately when its startup order depends on them.
+It supports local root-relative JavaScript URLs and optional `assetBase` for a
+root-relative deployment prefix ending in `/`. The returned `cspHashes` are
+SHA-256 hashes of exact generated import-map and inline-module contents; they
+are distinct from element-approval digests. `bootstrap.integrity` is the
+bootstrap's SRI digest. The host must also allow its existing classic scripts,
+policy module and local executable assets under its CSP. No `unsafe-inline` is
+required for scripts. The allowlist treats each approved inline module as trusted
+code; it does not inspect its imports. The CSP must restrict their origins.
+Initial catalog recovery observes dependencies associated with the document's
+modulepreload links and external module entries, plus failures reported by the
+restored module elements. A host whose startup launches additional unpreloaded
+dynamic imports must handle rejected imports itself. A trusted `<template data-palamedes-error>` can provide
+catalog-independent initial-failure markup; otherwise Reload and Home are shown.
+The host supplies a catalog-independent boundary for lazy failures.
+
+For React Router prerendering, use React Router 8.5 or newer, configure the
+server adapter with `catalogDelivery: false`, and keep `ssr: false`. The
+prerender environment must select Node exports, for example
+`environments: { ssr: { resolve: { conditions: ["node", "module", "development|production"] } } }`
+in Vite. See the packed static proof in
+`tests/fixtures/react-router-static` and run
+`node scripts/proof-static-react-router.mjs` after building the package graph.
+The proof requires Chromium and a free local port 25120.

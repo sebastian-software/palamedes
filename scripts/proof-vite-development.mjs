@@ -178,3 +178,6 @@ try {
 }
 
 await import("./proof-react-catalog-hmr.mjs");
+
+await import("./proof-solid-refresh-baseline.mjs");
+await import("./proof-solid-catalog-hmr.mjs");

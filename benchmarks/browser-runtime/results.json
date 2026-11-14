@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-14T18:08:58.645Z",
-  "sourceCommit": "795ce6c60b0a96db90293b769eb4653ced618228",
+  "measuredAt": "2026-11-14T21:02:02.652Z",
+  "sourceCommit": "ba5fd788392b0629eacca3c5b5d5325a3156c236",
   "worktreeDirty": true,
-  "sourceSha256": "1d752585c548504b93021d89fb66d9ff8ec5a33c29a3eead804637e0bf5e070b",
+  "sourceSha256": "33f992f600604d61586c29727e083f54262d9eb75d1b7f1d07ba5cc3fcfdef59",
   "environment": {
     "node": "v24.22.3",
     "vite": "8.2.4",
@@ -160,11 +160,11 @@
     {
       "id": "solid",
       "bytes": {
-        "raw": 16267,
-        "gzip": 5438,
-        "brotli": 4803
+        "raw": 16336,
+        "gzip": 5455,
+        "brotli": 4814
       },
-      "sha256": "4dcafb451b44028532d2fe404b1e1c0c30b564ff59647204ed87212a76811b5c",
+      "sha256": "a72668ef7697039deb0d9a11a5d81ed3225cbf1a6451ac3407ea2ed4d907cd84",
       "exports": [
         "DEFAULT_LOCALE",
         "MissingCompiledMessageError",
@@ -223,7 +223,11 @@
         },
         {
           "path": "packages/solid/dist/compiled.mjs",
-          "sha256": "6c7990952f037ed2a25a04a7adc40a59d7ab0c05a26a842beeabcddfad115aa4"
+          "sha256": "9666950277fb4dd32c27171bae7081b0ea2076d53034063047734a0537281b6d"
+        },
+        {
+          "path": "packages/solid/dist/shared/solid.DHzJdwS2.mjs",
+          "sha256": "61f79ee8d08482bb9b270dd69466cadc6664303e6de8fa57b61e4c84cfee3641"
         }
       ]
     },
@@ -388,11 +392,11 @@
     {
       "id": "solid",
       "bytes": {
-        "raw": 12320,
-        "gzip": 4255,
-        "brotli": 3763
+        "raw": 12389,
+        "gzip": 4268,
+        "brotli": 3775
       },
-      "sha256": "6de33ec18f0ecb2a8745859efc15704e7a95e99fda8234be8aa100518be765f3",
+      "sha256": "26f80c927732f13ce3adcbf2317b6ab04f437d73bdb615a079e72b147be545c0",
       "exports": [
         "Trans",
         "createI18n",
@@ -429,7 +433,11 @@
         },
         {
           "path": "packages/solid/dist/compiled.mjs",
-          "sha256": "6c7990952f037ed2a25a04a7adc40a59d7ab0c05a26a842beeabcddfad115aa4"
+          "sha256": "9666950277fb4dd32c27171bae7081b0ea2076d53034063047734a0537281b6d"
+        },
+        {
+          "path": "packages/solid/dist/shared/solid.DHzJdwS2.mjs",
+          "sha256": "61f79ee8d08482bb9b270dd69466cadc6664303e6de8fa57b61e4c84cfee3641"
         }
       ]
     },

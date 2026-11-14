@@ -266,6 +266,11 @@ async function createFixture(): Promise<string> {
     await cp(path.join(packageRoot, name, "dist"), path.join(target, "dist"), { recursive: true });
   }
   await symlink(path.join(packageRoot, "core"), path.join(scope, "core"), "junction");
+  await symlink(
+    path.join(packageRoot, "vite-plugin/node_modules/parse5"),
+    path.join(root, "node_modules/parse5"),
+    "junction",
+  );
   await writeFile(path.join(root, "package.json"), '{"type":"module"}');
   await writeFile(
     path.join(root, "entry.ts"),

@@ -154,6 +154,13 @@ ordinary React source edits keep Fast Refresh.
 Solid keeps reload-based updates. Other SSR/RSC hosts have no in-place-update
 guarantee. See `/docs/api/vite-plugin.md#experimental-react-catalog-hmr`.
 
+Framework-produced static HTML emitted after Vite's build uses
+`createStaticViteCatalogBootstrap` from `@palamedes/vite-plugin/delivery`
+after prerender. Public pages keep their document locale; an unprefixed SPA
+fallback calls the host's local locale policy before modules run. The host
+supplies reviewed exact script-element digests and its CSP allowlist. See
+`docs/api/vite-plugin.md#static-documents-generated-after-the-vite-build`.
+
 Package roots and `compiled` aliases share one parser-free v2 runtime. Raw ICU
 strings are build-time inputs; application-owned catalog maps and serialized ICU
 transport are not part of standard framework delivery. See
