@@ -131,6 +131,34 @@ beforeEach(() => {
 });
 
 describe("palamedes vite plugin", () => {
+  it("bounds Solid catalog HMR to opted-in Solid development clients", async () => {
+    expect(() => palamedes({ experimentalSolidCatalogHmr: true })).toThrow(
+      'experimentalSolidCatalogHmr requires framework: "solid"',
+    );
+    const plugin = palamedes({
+      framework: "solid",
+      experimentalSolidCatalogHmr: true,
+      mdx: false,
+    }).find((candidate) => candidate.name === "palamedes:message-sidecars") as any;
+    expect(plugin.enforce).toBe("pre");
+    const resolve = plugin.resolveId;
+    expect(resolve.call({}, "@palamedes/solid/compiled", "/src/App.tsx", { ssr: false })).toBe(
+      "\0palamedes:solid-catalog-reactivity",
+    );
+    expect(
+      resolve.call({}, "@palamedes/solid/compiled", "/src/App.tsx", { ssr: true }),
+    ).toBeUndefined();
+    expect(
+      resolve.call({}, "@palamedes/solid/compiled", "\0palamedes:solid-catalog-reactivity", {
+        ssr: false,
+      }),
+    ).toBeUndefined();
+    expect(
+      palamedes({ framework: "solid", mdx: false }).find(
+        (candidate) => candidate.name === "palamedes:message-sidecars",
+      )?.enforce,
+    ).toBeUndefined();
+  });
   it.each(["excluded", "deleted"])(
     "ignores a %s historical source during catalog updates",
     async (change) => {
