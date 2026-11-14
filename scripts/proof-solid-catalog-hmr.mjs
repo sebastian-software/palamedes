@@ -49,14 +49,16 @@ async function verifyFormat(browser, format) {
     );
     const appPath = path.join(fixture, "src/App.tsx");
     const app =
-      `import { createSignal, lazy, Loading, Show } from "solid-js";
+      `import { createSignal, createMemo, untrack, lazy, Loading, Show } from "solid-js";
 import { Trans } from "@palamedes/solid/macro";
 import { t } from "@palamedes/core/macro";
 const Lazy = lazy(() => import("./Lazy"));
 export default function App() {
+  const memo = createMemo(() => t\`Call label\`);
+  const capturedMemo = untrack(memo);
   const [count, setCount] = createSignal(1);
   const [show, setShow] = createSignal(false);
-  return <><h1><Trans>Eager label</Trans></h1><p data-testid="call">{t` +
+  return <><p data-testid="memo-captured">{capturedMemo}</p><h1><Trans>Eager label</Trans></h1><p data-testid="call">{t` +
       "`Call label`" +
       `}</p>
     <button onClick={() => setCount(count() + 1)}>Add</button><span data-testid="count">{count()}</span>
@@ -142,6 +144,9 @@ export default function App() {
     await expect(page.getByTestId("call")).toHaveText("Call label DE 1", { timeout: 15_000 });
     await expect(page.getByRole("heading")).toHaveText("Eager label DE 1", { timeout: 15_000 });
     await expect(page.getByTestId("call")).toHaveText("Call label DE 1");
+    // A memo can be tracked when evaluated and later captured outside tracking.
+    // This shape cannot be detected at the underlying translation read.
+    await expect(page.getByTestId("memo-captured")).toHaveText("Call label DE 0");
     assert.equal(await page.evaluate(() => globalThis.__catalogHmrDocument), "retained");
     await expect(page.getByTestId("count")).toHaveText("2");
     await page.getByRole("button", { name: "Lazy", exact: true }).click();
