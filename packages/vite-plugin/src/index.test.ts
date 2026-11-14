@@ -225,7 +225,7 @@ describe("palamedes vite plugin", () => {
       expect.objectContaining({
         catalogs: [expect.objectContaining({ path: "src/a/locales/{locale}" })],
       }),
-      expect.stringContaining("/src/a/locales/"),
+      expect.stringContaining(path.join("src", "a", "locales") + path.sep),
       ["message-x"],
     );
   });
@@ -256,7 +256,11 @@ describe("palamedes vite plugin", () => {
       ],
     });
     mocks.compileCatalogArtifact.mockImplementation(async (_config, resource) => ({
-      messages: { "message-x": resource.includes("/src/a/") ? "A translation" : "B translation" },
+      messages: {
+        "message-x": resource.includes(path.join("src", "a") + path.sep)
+          ? "A translation"
+          : "B translation",
+      },
       missing: [],
       diagnostics: [],
       watchFiles: [],

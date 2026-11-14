@@ -1,6 +1,6 @@
 [package]
 name = "palamedes"
-version = "2.1.1"
+version = "2.2.0"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
@@ -40,10 +40,10 @@ test-support = []
 # Published crates use caret requirements so downstream graphs can resolve a
 # newer compatible Ferrocat. Cargo.lock still pins the exact versions that the
 # npm packages, the CLI, and CI build and test.
-ferrocat = "3.4.2"
-ferrocat-icu = "3.4.2"
-ferrocat-po = "3.4.2"
-ferromark = { version = "3.7.0", features = ["jsx"] }
+ferrocat = "3.6.0"
+ferrocat-icu = "3.6.0"
+ferrocat-po = "3.6.0"
+ferromark = { version = "4.0.0", features = ["jsx"] }
 oxc_allocator = "0.146.0"
 oxc_ast = "0.146.0"
 oxc_ast_visit = "0.146.0"
@@ -82,7 +82,7 @@ resolver = "2"
 # (the serde/serde_derive pattern). The pin lives here because release-please's
 # Cargo updater rewrites a member's `=` requirement to a caret one; a generic
 # extra-file bumps this marked line instead. check-release-set keeps it exact.
-palamedes-i18n = { version = "=2.1.1", path = "crates/palamedes-i18n" } # x-release-please-version
+palamedes-i18n = { version = "=2.2.0", path = "crates/palamedes-i18n" } # x-release-please-version
 
 [workspace.package]
 authors = ["Sebastian Software GmbH"]
