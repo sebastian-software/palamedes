@@ -1389,6 +1389,7 @@ dependencies = [
  "palamedes-build",
  "palamedes-i18n",
  "palamedes-plugin",
+ "same-file",
  "serde",
  "serde_json",
  "sha2",

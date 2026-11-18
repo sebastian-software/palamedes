@@ -279,6 +279,9 @@ msgstr "La conversion de catalogues nécessite un fichier d’entrée ou --confi
 msgid "Catalog convert --output can only be used with a single input file."
 msgstr "L’option catalog convert --output nécessite un seul fichier d’entrée."
 
+msgid "Catalog convert output must not refer to the input catalog."
+msgstr "La sortie de la conversion ne doit pas désigner le catalogue d’entrée."
+
 msgid "Catalog convert --to=fcl only supports PO source catalogs."
 msgstr "L’option catalog convert --to=fcl accepte uniquement les catalogues sources PO."
 

@@ -279,6 +279,9 @@ msgstr "La conversión requiere un archivo de entrada o --config."
 msgid "Catalog convert --output can only be used with a single input file."
 msgstr "En la conversión, --output solo admite un archivo de entrada."
 
+msgid "Catalog convert output must not refer to the input catalog."
+msgstr "La salida de la conversión no debe apuntar al catálogo de entrada."
+
 msgid "Catalog convert --to=fcl only supports PO source catalogs."
 msgstr "Catalog convert --to=fcl solo admite catálogos de origen PO."
 

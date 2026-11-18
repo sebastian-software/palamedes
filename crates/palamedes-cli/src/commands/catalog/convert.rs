@@ -174,6 +174,23 @@ fn convert_one_catalog(
     {
         return Err(CliError::UnsupportedConvertSource);
     }
+    // Existing destinations can be aliases via relative paths, symlinks or hard links.
+    // Compare file identities before creating directories or writing the output.
+    match fs::metadata(output) {
+        Ok(output_metadata) => {
+            let same = same_catalog_file(input, output, &output_metadata)?;
+            if same {
+                return Err(CliError::ConvertOutputIsInput);
+            }
+        }
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+        Err(source) => {
+            return Err(CliError::Io {
+                path: output.to_path_buf(),
+                source,
+            });
+        }
+    }
     if let Some(parent) = output
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -192,6 +209,58 @@ fn convert_one_catalog(
         locale: locale.map(str::to_owned),
     })?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn same_catalog_file(
+    input: &Path,
+    _output: &Path,
+    output_metadata: &fs::Metadata,
+) -> Result<bool, CliError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let input_metadata = fs::metadata(input).map_err(|source| CliError::Io {
+        path: input.to_path_buf(),
+        source,
+    })?;
+    Ok(input_metadata.dev() == output_metadata.dev()
+        && input_metadata.ino() == output_metadata.ino())
+}
+
+#[cfg(windows)]
+fn same_catalog_file(
+    input: &Path,
+    output: &Path,
+    _output_metadata: &fs::Metadata,
+) -> Result<bool, CliError> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let identity = |path: &Path| {
+        let file = fs::OpenOptions::new()
+            .access_mode(0)
+            .open(path)
+            .map_err(|source| CliError::Io {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        same_file::Handle::from_file(file).map_err(|source| CliError::Io {
+            path: path.to_path_buf(),
+            source,
+        })
+    };
+    Ok(identity(input)? == identity(output)?)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn same_catalog_file(
+    input: &Path,
+    output: &Path,
+    _output_metadata: &fs::Metadata,
+) -> Result<bool, CliError> {
+    same_file::is_same_file(input, output).map_err(|source| CliError::Io {
+        path: input.to_path_buf(),
+        source,
+    })
 }
 
 const fn convert_extension(to: ConvertFormat) -> &'static str {
