@@ -175,11 +175,13 @@ fn watch_counts_on_entry_and_never_counts_rebuilds_or_termination() {
     let mut child = command.spawn().unwrap();
     let catalog = project.path().join("locales/en.po");
     let deadline = Instant::now() + Duration::from_secs(10);
-    let mut wait_for = |message: &str| {
-        while !fs::read_to_string(&catalog).is_ok_and(|text| text.contains(message))
-            || !fs::read_to_string(profile.path().join("watch.stdout"))
-                .is_ok_and(|text| text.contains("Watching for changes..."))
-        {
+    let mut wait_for = |message: &str, completed_extractions: usize| {
+        // Do not open the catalog while Windows may be replacing it. The
+        // extraction message is printed only after the catalog write finishes.
+        while !fs::read_to_string(profile.path().join("watch.stdout")).is_ok_and(|text| {
+            text.contains("Watching for changes...")
+                && text.matches("Extracted 1 message from 1 file").count() >= completed_extractions
+        }) {
             if Instant::now() >= deadline || child.try_wait().unwrap().is_some() {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -191,15 +193,20 @@ fn watch_counts_on_entry_and_never_counts_rebuilds_or_termination() {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+        let text = fs::read_to_string(&catalog).expect("read completed catalog");
+        assert!(
+            text.contains(message),
+            "catalog did not contain {message}: {text}"
+        );
     };
-    wait_for("First");
+    wait_for("First", 1);
     let before = status(profile.path(), project.path())["unsent_invocations"].clone();
     fs::write(
         &source,
         "import {t} from '@palamedes/core/macro'; export function title() { return t`Second`; }\n",
     )
     .unwrap();
-    wait_for("Second");
+    wait_for("Second", 2);
     #[cfg(unix)]
     {
         assert!(
