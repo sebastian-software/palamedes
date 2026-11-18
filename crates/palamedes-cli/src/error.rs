@@ -47,6 +47,8 @@ pub enum CliError {
     MissingConvertInput,
     #[error("Catalog convert --output can only be used with a single input file.")]
     InvalidConvertOutput,
+    #[error("Catalog convert output must not refer to the input catalog.")]
+    ConvertOutputIsInput,
     #[error("Catalog convert --to=fcl only supports PO source catalogs.")]
     UnsupportedConvertSource,
     #[error("Invalid --fail-if-below value. Expected a percent from 0 to 100.")]
@@ -146,6 +148,9 @@ impl CliError {
             Self::InvalidConvertOutput => {
                 tr!("Catalog convert --output can only be used with a single input file.")
                     .to_owned()
+            }
+            Self::ConvertOutputIsInput => {
+                tr!("Catalog convert output must not refer to the input catalog.").to_owned()
             }
             Self::UnsupportedConvertSource => {
                 tr!("Catalog convert --to=fcl only supports PO source catalogs.").to_owned()

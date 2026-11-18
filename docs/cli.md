@@ -707,7 +707,8 @@ for a complete update against an unchanged executable.
 
 Converts supported PO catalogs to Ferrocat Catalog Lines (FCL). Translator
 comments, obsolete state, and review markers such as `fuzzy` are preserved.
-The output file is replaced only after conversion succeeds.
+The output file is replaced only after conversion succeeds. An output that
+refers to the input file, including through a link, is rejected.
 
 ```bash
 pmds catalog convert src/locales/de.po --to fcl --output src/locales/de.fcl
