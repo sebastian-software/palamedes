@@ -168,6 +168,19 @@ pub(super) fn run_watch_mode(
     initial_config: &LoadedConfig,
     options: &ExtractOptions,
 ) -> Result<(), CliError> {
+    run_watch_mode_impl(
+        initial_config,
+        options,
+        #[cfg(test)]
+        &mut |_| false,
+    )
+}
+
+fn run_watch_mode_impl(
+    initial_config: &LoadedConfig,
+    options: &ExtractOptions,
+    #[cfg(test)] after_extraction: &mut dyn FnMut(bool) -> bool,
+) -> Result<(), CliError> {
     let mut config = initial_config.clone();
     /*
      * One cache for the life of the watcher. Every rebuild after the first
@@ -176,8 +189,6 @@ pub(super) fn run_watch_mode(
      */
     let mut cache = load_extract_cache(&config, options.no_cache);
     let mut cache_warnings = CachePersistenceWarnings::default();
-    run_watch_extraction(&config, options, &mut cache, &mut cache_warnings)?;
-
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
     let initial_watch_paths = WatchPaths::build(&config);
@@ -191,40 +202,53 @@ pub(super) fn run_watch_mode(
     watcher.watch(&watched_config_path, RecursiveMode::NonRecursive)?;
 
     let mut matchers = WatchMatchers::build_with_aliases(&config, initial_watch_paths.aliases);
-    println!("{}", tr!("Watching for changes..."));
-
+    // Re-read after registration to cover config saves since the caller loaded
+    // it. The first extraction happens through the same reload path as later
+    // changes, while notifications accumulate during that extraction.
+    let mut startup = true;
     loop {
-        let event = match rx.recv() {
-            Ok(Ok(event)) => event,
-            Ok(Err(error)) => return Err(CliError::Watch(error)),
-            Err(_) => return Ok(()),
+        let (mut config_changed, mut relevant) = if startup {
+            (true, true)
+        } else {
+            let event = match rx.recv() {
+                Ok(Ok(event)) => event,
+                Ok(Err(error)) => return Err(CliError::Watch(error)),
+                Err(_) => return Ok(()),
+            };
+            let changed = touches_config(&event.paths, &config.config_path, &watched_config_path);
+            (
+                changed,
+                changed || event.paths.iter().any(|path| matchers.matches(path)),
+            )
         };
-
-        let mut config_changed =
-            touches_config(&event.paths, &config.config_path, &watched_config_path);
-        let mut relevant = config_changed || event.paths.iter().any(|path| matchers.matches(path));
 
         // Debounce: editors and generators emit event bursts; keep draining
         // until the stream is quiet before running a single extraction, but
         // never longer than WATCH_DEBOUNCE_MAX so a continuous event stream
         // cannot starve extraction.
         let drain_deadline = Instant::now() + WATCH_DEBOUNCE_MAX;
-        loop {
-            let remaining = drain_deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                break;
-            }
-
-            match rx.recv_timeout(WATCH_DEBOUNCE.min(remaining)) {
-                Ok(Ok(event)) => {
-                    config_changed = config_changed
-                        || touches_config(&event.paths, &config.config_path, &watched_config_path);
-                    relevant = relevant
-                        || config_changed
-                        || event.paths.iter().any(|path| matchers.matches(path));
+        if !startup {
+            loop {
+                let remaining = drain_deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
                 }
-                Ok(Err(error)) => return Err(CliError::Watch(error)),
-                Err(_) => break,
+
+                match rx.recv_timeout(WATCH_DEBOUNCE.min(remaining)) {
+                    Ok(Ok(event)) => {
+                        config_changed = config_changed
+                            || touches_config(
+                                &event.paths,
+                                &config.config_path,
+                                &watched_config_path,
+                            );
+                        relevant = relevant
+                            || config_changed
+                            || event.paths.iter().any(|path| matchers.matches(path));
+                    }
+                    Ok(Err(error)) => return Err(CliError::Watch(error)),
+                    Err(_) => break,
+                }
             }
         }
 
@@ -240,13 +264,15 @@ pub(super) fn run_watch_mode(
                 options.config.as_deref(),
             ) {
                 Ok(()) => {
-                    eprintln!(
-                        "{}",
-                        tr!(
-                            "Config changed; reloaded {path}",
-                            path = config.config_path.display()
-                        )
-                    );
+                    if !startup {
+                        eprintln!(
+                            "{}",
+                            tr!(
+                                "Config changed; reloaded {path}",
+                                path = config.config_path.display()
+                            )
+                        );
+                    }
                     let next_watch_paths = WatchPaths::build(&config);
                     let next_config_path = next_watch_paths.config;
                     if next_config_path != watched_config_path {
@@ -314,10 +340,25 @@ pub(super) fn run_watch_mode(
             }
         }
 
-        if options.verbose {
+        if options.verbose && !startup {
             eprintln!("{}", tr!("Source changed; extracting catalogs"));
         }
-        run_watch_extraction(&config, options, &mut cache, &mut cache_warnings)?;
+        #[cfg(test)]
+        let mut stop = false;
+        run_watch_extraction_inner(&config, options, &mut cache, &mut cache_warnings, || {
+            #[cfg(test)]
+            {
+                stop = after_extraction(startup);
+            }
+        })?;
+        if startup {
+            println!("{}", tr!("Watching for changes..."));
+        }
+        #[cfg(test)]
+        if stop {
+            return Ok(());
+        }
+        startup = false;
     }
 }
 
@@ -345,13 +386,25 @@ fn touches_config(paths: &[PathBuf], configured: &Path, canonical: &Path) -> boo
 /// Watch mode must survive every extraction failure — including fatal
 /// authoring errors like a half-typed `t({ message })` — because the developer
 /// is mid-edit and the next save usually fixes the problem.
+#[cfg(test)]
 fn run_watch_extraction(
     config: &LoadedConfig,
     options: &ExtractOptions,
     cache: &mut ExtractCache,
     cache_warnings: &mut CachePersistenceWarnings,
 ) -> Result<(), CliError> {
+    run_watch_extraction_inner(config, options, cache, cache_warnings, || {})
+}
+
+fn run_watch_extraction_inner(
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+    cache: &mut ExtractCache,
+    cache_warnings: &mut CachePersistenceWarnings,
+    after_scan: impl FnOnce(),
+) -> Result<(), CliError> {
     let result = run_extraction_with_cache(config, options, cache);
+    after_scan();
     persist_extract_cache_for_watch(config, cache, cache_warnings);
     match result {
         Ok(_) => Ok(()),
@@ -398,6 +451,66 @@ mod tests {
             cache,
             &mut CachePersistenceWarnings::default(),
         )
+    }
+
+    #[test]
+    fn startup_reloads_config_and_processes_queued_events() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        for config_event in [false, true] {
+            let app = temp_dir("watch-startup-events");
+            fs::create_dir_all(app.join("app")).expect("create app");
+            write_config(&app, None);
+            let config_path = app.join("palamedes.yaml");
+            let initial = load_config(&app, Some(&config_path)).expect("initial config");
+            // Save after loading but before registering watches.
+            let config_text = fs::read_to_string(&config_path).expect("read config");
+            fs::write(&config_path, config_text.replace("[en, de]", "[en, fr]"))
+                .expect("save config before registration");
+            let source = app.join("app/page.tsx");
+            fs::write(&source, "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Before`; }\n").unwrap();
+            let mut options = extract_options();
+            options.config = Some(config_path.clone());
+            let (done_tx, done_rx) = mpsc::channel();
+            let worker_app = app.clone();
+            std::thread::spawn(move || {
+                let result = super::run_watch_mode_impl(&initial, &options, &mut |startup| {
+                    if startup {
+                        assert!(
+                            worker_app.join("locales/fr/messages.po").exists(),
+                            "startup reload used the new config"
+                        );
+                        // The initial scan has read the old source, but the
+                        // watch loop has not yet consumed queued events.
+                        if config_event {
+                            fs::write(&config_path, config_text.replace("[en, de]", "[en, it]"))
+                                .unwrap();
+                        } else {
+                            fs::write(&source, "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`After`; }\n").unwrap();
+                        }
+                        false
+                    } else {
+                        true
+                    }
+                });
+                done_tx
+                    .send(result.map_err(|error| error.to_string()))
+                    .unwrap();
+            });
+            done_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("watch did not process startup event")
+                .expect("watch failed");
+            let (locale, message) = if config_event {
+                ("it", "Before")
+            } else {
+                ("fr", "After")
+            };
+            let output = fs::read_to_string(app.join(format!("locales/{locale}/messages.po")))
+                .expect("catalog");
+            assert!(output.contains(&format!("msgid \"{message}\"")), "{output}");
+        }
     }
 
     #[test]
