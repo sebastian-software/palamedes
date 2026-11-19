@@ -8,6 +8,7 @@ import {
   type ChunkGraph,
   affectedChunks,
   assertNoBootstrapChunks,
+  assertChunkCoverage,
   chunkReferences,
   filterLoadableManifest,
   inlineMessageExpression,
@@ -172,6 +173,24 @@ globalThis.__RSC_MANIFEST["/[locale]/page"] = ${JSON.stringify({
     )["/[locale]/page"]!;
     return { context, route };
   }
+
+  it("reports only arrays the adapter replaces, including constructed paths", () => {
+    const manifest = `globalThis.__RSC_MANIFEST = { route: {
+      chunks: ["/_next/static/chunks/" + "page.js?dpl=example"],
+      ignored: "static/chunks/page.js"
+    } };`;
+    const coverage = vm.runInNewContext(
+      manifest + renderManifestAdapter(["de", "en"], "en", variants),
+    );
+    expect(coverage).toEqual(["static/chunks/page.js"]);
+    const uncovered = vm.runInNewContext(
+      `globalThis.__RSC_MANIFEST = { route: { ignored: "static/chunks/page.js" } };${renderManifestAdapter(["de", "en"], "en", variants)}`,
+    );
+    expect(uncovered).toEqual([]);
+    expect(() =>
+      assertChunkCoverage(new Set(["static/chunks/unrelated.js"]), new Set(coverage)),
+    ).toThrow(/unrelated\.js/u);
+  });
 
   it("hides affected arrays from enumeration and fails an unbound read", () => {
     const { route } = evaluate();

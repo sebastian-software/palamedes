@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import vm from "node:vm";
 
 import { renderCatalogModule } from "@palamedes/core-node";
 
@@ -149,6 +150,7 @@ ${ADAPTER_MARKER}
   var variants = ${JSON.stringify(variants)};
   var keys = Object.keys(variants);
   var resolve = null;
+  var covered = Object.create(null);
   globalThis[${JSON.stringify(CLIENT_CATALOG_BIND_GLOBAL)}] = function (fn) { resolve = fn; };
   function locate(value) {
     if (typeof value !== "string") return null;
@@ -164,6 +166,7 @@ ${ADAPTER_MARKER}
   function table(array, index) {
     return Object.freeze(array.map(function (value) {
       var hit = locate(value);
+      if (hit) covered[hit.key] = true;
       return hit ? value.slice(0, hit.at) + variants[hit.key][index] + value.slice(hit.end) : value;
     }));
   }
@@ -187,6 +190,7 @@ ${ADAPTER_MARKER}
     });
   }
   visit(globalThis.__RSC_MANIFEST);
+  return Object.keys(covered);
 })();
 `;
 }
@@ -231,6 +235,21 @@ export function assertNoBootstrapChunks(
   if (bootstrap.length > 0) {
     throw new Error(
       `Palamedes client catalog permutations: translated client code reaches Next's bootstrap scripts (${bootstrap.join(", ")} in build-manifest.json). Keep instrumentation-client and other bootstrap code free of translations.`,
+    );
+  }
+}
+
+/** Fail when an affected chunk has no locale-selectable path. */
+export function assertChunkCoverage(
+  affected: ReadonlySet<string>,
+  covered: ReadonlySet<string>,
+): void {
+  // An affected chunk that no manifest or importer names has no
+  // selection path, which means Next changed where it writes chunk URLs.
+  const uncovered = [...affected].filter((key) => !covered.has(key));
+  if (uncovered.length > 0) {
+    throw new Error(
+      `Palamedes client catalog permutations: no client reference manifest or importer chunk names ${uncovered.join(", ")}, so no request could select a locale copy. The installed Next writes chunk URLs somewhere this mode does not know.`,
     );
   }
 }
@@ -336,17 +355,36 @@ export async function emitClientCatalogPermutations(
   const adapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants);
   for (const file of manifests) {
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
-    for (const key of affected) if (source.includes(key)) covered.add(key);
+    // Next may construct paths from shared prefixes, so inspect the evaluated
+    // arrays that the adapter actually replaces, not substrings in source.
+    let manifestCoverage: unknown;
+    try {
+      manifestCoverage = vm.runInNewContext(
+        `globalThis.process = { env: {} };\n${source}${adapter}`,
+        Object.create(null),
+        {
+          timeout: 1000,
+          contextCodeGeneration: { strings: false, wasm: false },
+          microtaskMode: "afterEvaluate",
+        },
+      );
+    } catch (error) {
+      throw new Error(
+        `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
+        {
+          cause: error,
+        },
+      );
+    }
+    if (!Array.isArray(manifestCoverage)) {
+      throw new TypeError(
+        `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
+      );
+    }
+    for (const key of manifestCoverage) if (typeof key === "string") covered.add(key);
     await writeFile(file, `${source}${adapter}`);
   }
-  // An affected chunk that no manifest, importer, or hint names has no
-  // selection path, which means Next changed where it writes chunk URLs.
-  const uncovered = [...affected].filter((key) => !covered.has(key));
-  if (uncovered.length > 0) {
-    throw new Error(
-      `Palamedes client catalog permutations: no client reference manifest or importer chunk names ${uncovered.join(", ")}, so no request could select a locale copy. The installed Next writes chunk URLs somewhere this mode does not know.`,
-    );
-  }
+  assertChunkCoverage(affected, covered);
   return {
     locales: compiler.locales,
     fallbackLocale: compiler.sourceLocale,
