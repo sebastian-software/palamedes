@@ -17,8 +17,8 @@
     "@palamedes/runtime": "workspace:^",
     "@react-router/node": "8.5.0",
     "@react-router/serve": "8.5.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "~19.2.9",
+    "react-dom": "~19.2.9",
     "react-router": "8.5.0"
   },
   "devDependencies": {
@@ -29,7 +29,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
-    "react-server-dom-webpack": "^19.2.8",
+    "react-server-dom-webpack": "~19.2.9",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   }
