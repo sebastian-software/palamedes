@@ -1,5 +1,5 @@
 import { t } from "@palamedes/core/macro";
-import { Component, lazy, Suspense, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 
 const Details = lazy(() => import("../details"));
 class CatalogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -25,10 +25,14 @@ class CatalogBoundary extends Component<{ children: ReactNode }, { failed: boole
 }
 export default function Home() {
   const [open, setOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   return (
     <>
       <h1>{t`Hello`}</h1>
-      <button onClick={() => setOpen(true)}>Show details</button>
+      <button disabled={!hydrated} onClick={() => setOpen(true)}>
+        Show details
+      </button>
       <CatalogBoundary>
         <Suspense fallback={<p>Loading</p>}>{open && <Details />}</Suspense>
       </CatalogBoundary>
