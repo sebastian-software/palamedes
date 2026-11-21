@@ -244,6 +244,30 @@ try {
   }
   {
     const page = await browser.newPage();
+    let releaseStartup;
+    const startupGate = new Promise((resolve) => {
+      releaseStartup = resolve;
+    });
+    await page.route("**/assets/entry.client-*.js", async (route) => {
+      await startupGate;
+      await route.continue();
+    });
+    const startupRequest = page.waitForRequest("**/assets/entry.client-*.js");
+    await page.goto("http://127.0.0.1:25120/en/", { waitUntil: "domcontentloaded" });
+    const button = page.getByRole("button", { name: "Show details" });
+    try {
+      await startupRequest;
+      await button.waitFor();
+      assert.equal(await button.isDisabled(), true);
+    } finally {
+      releaseStartup();
+    }
+    await button.click();
+    await page.getByTestId("details").waitFor();
+    await page.close();
+  }
+  {
+    const page = await browser.newPage();
     await page.goto("http://127.0.0.1:25120/en/relative.html");
     await page.waitForFunction(() => globalThis.proofOrder?.length === 2);
     assert.deepEqual(await page.evaluate(() => globalThis.proofOrder), ["first", "second"]);
