@@ -114,7 +114,7 @@
   "devDependencies": {
     "@types/react": "^19.2.18",
     "next": "16.4.6",
-    "react": "^19.2.8",
+    "react": "19.2.9",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.11"
