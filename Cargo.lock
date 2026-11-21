@@ -1333,7 +1333,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "ferrocat",
  "ferrocat-icu",
@@ -1360,7 +1360,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-build"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "ferrocat",
  "palamedes",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-cli"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "app-tracking",
  "clap",
@@ -1400,7 +1400,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-example-rust-cli"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "palamedes-build",
  "palamedes-i18n",
@@ -1409,7 +1409,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-i18n"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "fixed_decimal",
  "icu_locale_core",
@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-node"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-plugin"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "serde",
  "serde_json",

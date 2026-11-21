@@ -117,6 +117,37 @@ history and use the migration guide for 2.0 behavior.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [2.3.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.2.0...palamedes-v2.3.0) (2026-11-21)
+
+
+### Features
+
+* add translation tools and React catalog HMR ([795ce6c](https://github.com/sebastian-software/palamedes/commit/795ce6c60b0a96db90293b769eb4653ced618228))
+* **next-plugin:** add experimental per-locale client chunk permutations ([e722926](https://github.com/sebastian-software/palamedes/commit/e722926ca13dc73e930fd2a3810f2aeff59a643d))
+* **vite:** bootstrap post-prerender static catalogs ([0450ed7](https://github.com/sebastian-software/palamedes/commit/0450ed7b73909dd09eb5d68a4727888c00a408fc))
+* **vite:** support static catalog bootstrap and Solid HMR ([050d486](https://github.com/sebastian-software/palamedes/commit/050d4865c381ea8839cb71cf0f026592fa2a08c3))
+* **vite:** update tracked Solid translations in place ([25781d8](https://github.com/sebastian-software/palamedes/commit/25781d847cfa73cf67a7687a487ff7ad896ae5e1))
+
+
+### Bug Fixes
+
+* **benchmarks:** make catalog measurements independent of checkout path ([af76497](https://github.com/sebastian-software/palamedes/commit/af76497c484ca464c0fad4289aba37490118ee3f))
+* **benchmarks:** make catalog measurements independent of checkout path ([07caa96](https://github.com/sebastian-software/palamedes/commit/07caa9673de97dc547dc75b2cfa47d69768a1e7a))
+* **cli:** catch changes during watch startup ([#1530](https://github.com/sebastian-software/palamedes/issues/1530)) ([87da046](https://github.com/sebastian-software/palamedes/commit/87da046d5c29d67575fb42c07e77abec693e4f95))
+* **cli:** protect catalog input during conversion ([#1529](https://github.com/sebastian-software/palamedes/issues/1529)) ([afcc0c3](https://github.com/sebastian-software/palamedes/commit/afcc0c3424aac14a0ccf309f354e155dce0d74c5))
+* **cli:** report missing merge-driver config ([2e491d4](https://github.com/sebastian-software/palamedes/commit/2e491d45e71401ea2f8bb5b89639b9f3416cf4e6))
+* **deps:** patch vulnerable runtime dependencies ([#1532](https://github.com/sebastian-software/palamedes/issues/1532)) ([a42c714](https://github.com/sebastian-software/palamedes/commit/a42c714091d0dadad64119d4cb4384c8ee2e8af5))
+* **deps:** secure benchmark dependency graphs ([#1534](https://github.com/sebastian-software/palamedes/issues/1534)) ([72304a4](https://github.com/sebastian-software/palamedes/commit/72304a46a01a49e9318b2efe1f9d1d41449f5e25))
+* **next-plugin:** inspect evaluated catalog manifest paths ([#1531](https://github.com/sebastian-software/palamedes/issues/1531)) ([2c6294c](https://github.com/sebastian-software/palamedes/commit/2c6294c4a97874b5cc80bfab9dc0056eada8b5df))
+* **test:** drain browser artifact receipts before navigation ([8b689e7](https://github.com/sebastian-software/palamedes/commit/8b689e76a51af2e28c9fba2115a07e983006595e))
+* **vite:** make catalog HMR fixtures portable ([99fe458](https://github.com/sebastian-software/palamedes/commit/99fe458b5464be896c8165e82232cce6ff57e26c))
+* **vite:** reject deferred classic startup scripts ([ea5c1e6](https://github.com/sebastian-software/palamedes/commit/ea5c1e66c86993b5c875e7fcd7695d38cfda4510))
+
+
+### Performance Improvements
+
+* **ci:** reuse musl addon compilation between runs ([#1498](https://github.com/sebastian-software/palamedes/issues/1498)) ([5257aa4](https://github.com/sebastian-software/palamedes/commit/5257aa4b69b49bc7e4af3e90d4f19228ebdcdd8b))
+
 ## [2.2.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.1.1...palamedes-v2.2.0) (2026-11-10)
 
 
