@@ -22,7 +22,7 @@
     "fbtee": "4.0.0",
     "gt-react": "11.1.18",
     "gtx-cli": "2.17.2",
-    "i18next-cli": "1.72.1"
+    "i18next-cli": "1.83.0"
   },
   "engines": {
     "node": ">=24.3.0"

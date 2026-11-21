@@ -22,7 +22,7 @@
     "@wuchale/jsx": "0.13.0",
     "@wuchale/svelte": "0.21.4",
     "estree-walker": "3.0.3",
-    "i18next-cli": "1.72.1",
+    "i18next-cli": "1.83.0",
     "i18next-cli-plugin-svelte": "2.4.1",
     "i18next-cli-vue": "1.0.4",
     "intlayer": "9.7.0",
