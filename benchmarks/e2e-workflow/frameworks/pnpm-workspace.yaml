@@ -6,3 +6,7 @@ allowBuilds:
   "@swc/core": true
   esbuild: true
   unrs-resolver: true
+
+overrides:
+  # GHSA-mrhx-c7xc-m3w5: keep the Intlayer graph on the patched release.
+  "zod@4.6.5": 4.6.6
