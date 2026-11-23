@@ -321,7 +321,7 @@ jobs:
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
         with:
-          node-version: 24
+          node-version: 26
           pnpm-cache: "false"
           rust-toolchain: ${{ matrix.toolchain }}
           rust-components: clippy, rustfmt
