@@ -142,6 +142,11 @@ fn normalize_anchor_root(root_dir: &Path) -> &Path {
     }
 }
 
+/// Signature written into `.pmds-lock` before publication so both Unix and
+/// Windows writers distinguish Palamedes lock files from unrelated user files.
+#[cfg(any(unix, windows))]
+const DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
+
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileIdentity {
@@ -338,7 +343,7 @@ mod platform {
     };
 
     pub(super) const UNIX_DIR_LOCK_NAME: &std::ffi::CStr = c".pmds-lock";
-    pub(super) const UNIX_DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
+    pub(super) const UNIX_DIR_LOCK_MAGIC: &[u8] = super::DIR_LOCK_MAGIC;
 
     #[derive(Debug)]
     struct UnixDirLock {
@@ -2347,6 +2352,7 @@ mod platform {
             .unwrap_or(false);
         let pid = std::process::id();
         let mut generation: u32 = 0;
+        let mut verified_prior_claims: Vec<(CString, FileIdentity)> = Vec::new();
 
         loop {
             match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
@@ -2439,17 +2445,17 @@ mod platform {
                                 result = Err(ContainedFsError::Io(error));
                             }
                         }
-                        // Clean up any dead prior-generation claims, then our own
-                        // verified claim entry.
-                        for prior_gen in 0..generation {
-                            let prior_name = CString::new(format!(
-                                ".pmds-claim-{}-{prior_gen}",
-                                existing_id.ino
-                            ))
-                            .expect("ASCII recovery claim name has no NUL bytes");
-                            // SAFETY: `dir_raw` is open and `prior_name` is a dead prior claim.
-                            unsafe {
-                                let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
+                        // Clean up only prior-generation claims whose identity
+                        // still matches the verified dead claim we inspected,
+                        // then remove our own verified claim entry.
+                        for (prior_name, prior_id) in &verified_prior_claims {
+                            if let Ok(stat) = fstatat_nofollow(dir_raw, prior_name)
+                                && stat_identity(&stat) == *prior_id
+                            {
+                                // SAFETY: `dir_raw` is open and `prior_name` matches the verified dead claim.
+                                unsafe {
+                                    let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
+                                }
                             }
                         }
                         if let Ok(stat) = fstatat_nofollow(dir_raw, &claim_name)
@@ -2506,6 +2512,7 @@ mod platform {
                     "refusing to overwrite or remove pre-existing non-lock recovery claim file",
                 )));
             }
+            let other_id = stat_identity(&other_stat);
             flock_shared(other_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
             let still_abandoned = match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                 Ok(stat) => stat_identity(&stat) == existing_id,
@@ -2515,6 +2522,7 @@ mod platform {
             if !still_abandoned {
                 return Ok(());
             }
+            verified_prior_claims.push((claim_name, other_id));
             generation += 1;
         }
     }
@@ -4846,7 +4854,14 @@ mod platform {
                         | FILE_SYNCHRONOUS_IO_NONALERT,
                     std::ptr::null_mut(),
                 ) {
-                    Ok(handle) => break handle,
+                    Ok(handle) => {
+                        // Stamp the shared Palamedes lock signature so Unix
+                        // clients on the same SMB share also recognize this
+                        // lock file if the connection drops abruptly.
+                        let mut file = fs::File::from(handle);
+                        let _ = io::Write::write_all(&mut file, super::DIR_LOCK_MAGIC);
+                        break OwnedHandle::from(file);
+                    }
                     Err(STATUS_SHARING_VIOLATION | STATUS_DELETE_PENDING) => {
                         if std::time::Instant::now() >= deadline {
                             return Err(ContainedFsError::Io(io::Error::new(
@@ -4861,13 +4876,13 @@ mod platform {
                         backoff_ms = (backoff_ms * 2).min(50);
                     }
                     Err(STATUS_OBJECT_NAME_COLLISION) => {
-                        // Distinguish an active `FILE_DELETE_ON_CLOSE` exclusive
-                        // lock holder from a pre-existing unowned file without
-                        // ever modifying or deleting the existing entry.
+                        // Distinguish an active exclusive lock holder, an
+                        // abandoned Palamedes lock (for example left by a
+                        // crashed Unix SMB writer), and an unrelated user file.
                         match nt_create_relative(
                             self.handle.as_raw_handle(),
                             lock_name,
-                            FILE_READ_DATA | SYNCHRONIZE,
+                            FILE_READ_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
                             FILE_ATTRIBUTE_NORMAL,
                             0,
                             FILE_OPEN,
@@ -4890,7 +4905,64 @@ mod platform {
                                 backoff_ms = (backoff_ms * 2).min(50);
                             }
                             Err(status) if is_not_found_status(status) => continue,
-                            Ok(_) | Err(_) => {
+                            Ok(existing_handle) => {
+                                let is_abandoned_lock =
+                                    file_information(existing_handle.as_raw_handle())
+                                        .ok()
+                                        .is_some_and(|info| {
+                                            (info.file_attributes
+                                                & (FILE_ATTRIBUTE_DIRECTORY
+                                                    | FILE_ATTRIBUTE_REPARSE_POINT))
+                                                == 0
+                                                && info.number_of_links == 1
+                                                && info.file_size_high == 0
+                                                && usize::try_from(info.file_size_low).ok()
+                                                    == Some(super::DIR_LOCK_MAGIC.len())
+                                        });
+                                let mut existing_file = fs::File::from(existing_handle);
+                                if is_abandoned_lock {
+                                    let mut magic = [0_u8; super::DIR_LOCK_MAGIC.len()];
+                                    match io::Read::read_exact(&mut existing_file, &mut magic) {
+                                        Ok(()) if magic == super::DIR_LOCK_MAGIC => {
+                                            if nt_mark_delete_on_close(
+                                                existing_file.as_raw_handle(),
+                                            )
+                                            .is_ok()
+                                            {
+                                                drop(existing_file);
+                                                continue;
+                                            }
+                                        }
+                                        Err(err) if err.raw_os_error() == Some(33) => {
+                                            // ERROR_LOCK_VIOLATION: active SMB byte-range lock.
+                                            drop(existing_file);
+                                            if std::time::Instant::now() >= deadline {
+                                                return Err(ContainedFsError::Io(io::Error::new(
+                                                    io::ErrorKind::TimedOut,
+                                                    format!(
+                                                        "timed out waiting for exclusive catalog lock for \"{}\"",
+                                                        file_name.to_string_lossy()
+                                                    ),
+                                                )));
+                                            }
+                                            std::thread::sleep(std::time::Duration::from_millis(
+                                                backoff_ms,
+                                            ));
+                                            backoff_ms = (backoff_ms * 2).min(50);
+                                            continue;
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                return Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "refusing to overwrite or delete pre-existing entry \"{}\"",
+                                        lock_name.to_string_lossy()
+                                    ),
+                                )));
+                            }
+                            Err(_) => {
                                 return Err(ContainedFsError::Io(io::Error::new(
                                     io::ErrorKind::AlreadyExists,
                                     format!(
@@ -6771,25 +6843,33 @@ mod tests {
         let live_stat = super::platform::fstat_fd(live_ro_fd.as_raw_fd()).expect("fstat live lock");
         let live_id = super::platform::stat_identity(&live_stat);
 
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
         let dir_path = root.path().to_path_buf();
         let waiter = std::thread::spawn(move || {
             let waiter_dir = ContainedDir::open_root(&dir_path).expect("waiter open root");
-            let t0 = std::time::Instant::now();
+            ready_tx.send(()).expect("signal waiter ready");
             super::platform::wait_for_readonly_lock_release(&waiter_dir, live_ro_fd, live_id)
                 .expect("wait for live lock");
-            t0.elapsed()
+            done_tx.send(()).expect("signal waiter done");
         });
-        std::thread::sleep(std::time::Duration::from_millis(60));
+        ready_rx.recv().expect("waiter ready");
+        assert!(
+            matches!(
+                done_rx.recv_timeout(std::time::Duration::from_millis(60)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ),
+            "waiter must remain blocked while active holder owns LOCK_EX"
+        );
         assert!(
             lock_path.exists(),
             "waiter must not unlink active holder's lock"
         );
         drop(live_guard);
-        let waited = waiter.join().expect("waiter join");
-        assert!(
-            waited >= std::time::Duration::from_millis(45),
-            "waiter should block until active holder releases lock (waited {waited:?})"
-        );
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("waiter should wake immediately after holder releases lock");
+        waiter.join().expect("waiter join");
         assert!(!lock_path.exists());
 
         // 3. Foreign locked `.pmds-lock` file must fail immediately with

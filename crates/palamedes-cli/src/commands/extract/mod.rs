@@ -1346,8 +1346,8 @@ fn resolve_directory_equivalence(
     };
     let equivalence = dir
         .filename_equivalence()
-        .or(same_vol_parent)
         .or_else(|| probe_unknown_dir_equivalence(dir))
+        .or(same_vol_parent)
         .unwrap_or_else(default_platform_equivalence);
     if let Some(id) = identity {
         cache.insert(id, equivalence);

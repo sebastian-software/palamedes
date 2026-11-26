@@ -2876,6 +2876,13 @@ fn plugin_host_env<'a>(
     ]
 }
 
+#[cfg(any(windows, test))]
+fn is_windows_batch_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
+}
+
 fn spawn_resolved_binary(
     resolved: &ResolvedPlugin,
     cwd: &Path,
@@ -2885,7 +2892,9 @@ fn spawn_resolved_binary(
     let _pinned_guard = resolved.pinned_binary.as_ref();
     let env_overrides = plugin_host_env(resolved, native_executable);
     #[cfg(windows)]
-    if resolved.invocation_path != resolved.binary_path {
+    if resolved.invocation_path != resolved.binary_path
+        && !is_windows_batch_file(&resolved.binary_path)
+    {
         return windows_alias_spawn::spawn_alias_binary(
             &resolved.binary_path,
             &resolved.invocation_path,
@@ -5687,6 +5696,11 @@ catalogs:
                 "path=C:\\Windows",
             ]
         );
+        assert!(super::is_windows_batch_file(Path::new("wrapper.cmd")));
+        assert!(super::is_windows_batch_file(Path::new("wrapper.CMD")));
+        assert!(super::is_windows_batch_file(Path::new("wrapper.bat")));
+        assert!(super::is_windows_batch_file(Path::new("wrapper.BAT")));
+        assert!(!super::is_windows_batch_file(Path::new("plugin.exe")));
     }
 
     #[test]
