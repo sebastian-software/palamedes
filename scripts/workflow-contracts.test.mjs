@@ -1642,12 +1642,93 @@ describe("workflow contracts", () => {
         `# syntax=docker/dockerfile:1@${digest}\nFROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY <<'EOF' /tmp/docs.txt\nFROM ubuntu:latest\nEOF\nRUN --mount=type=bind,from=toolchain,source=/usr/local,target=/mnt/rust --mount=type=bind,from=golang:1.24@${digest},source=/bin,target=/mnt/go true\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
       ),
     ).toEqual([]);
-    // Arithmetic shift `<<` inside Dockerfile `RUN` must not be mistaken for a heredoc.
+    // Arithmetic shift `<<` inside Dockerfile `RUN` must not be mistaken for a heredoc,
+    // and full-line comments inside backslash-continued instructions are skipped.
     expect(
       unpinnedContainerfileReferences(
         `FROM node:24-bookworm@${digest} AS build\nRUN echo "$((1 << 4))"\nFROM alpine:3.20\n`,
       ),
     ).toEqual(["<memory>:3: alpine:3.20 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedContainerfileReferences(
+        `FROM \\\n  # runtime base\n  node:24@${digest} AS runtime\n`,
+      ),
+    ).toEqual([]);
+    // Empty quoted arguments (`--entrypoint ''`), branch-reachable shell
+    // assignments, command-local prefix assignment scoping, `GITHUB_ENV`
+    // propagation into subsequent steps (not the writing step), and pre-cutoff
+    // matrix exclusion / fail-closed truncation are all enforced.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `steps:\n  - run: docker run --entrypoint '' node:24@${digest} node -v\n`,
+      ),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  branch-and-env:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - run: |",
+          "          IMAGE=node:24",
+          '          if [ "$USE_PINNED" = "1" ]; then',
+          `            IMAGE=node:24@${digest}`,
+          "          fi",
+          '          docker pull "$IMAGE"',
+          "          LOCAL=alpine:3.20",
+          `          LOCAL=alpine:3.20@${digest} docker pull "$LOCAL"`,
+          '          echo "NEXT_IMAGE=busybox:1.37" >> "$GITHUB_ENV"',
+          '          docker pull "$NEXT_IMAGE"',
+          '      - run: docker pull "$NEXT_IMAGE"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:6: node:24 is not pinned to a sha256 digest",
+      "<memory>:11: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:13: busybox:1.37 is not pinned to a sha256 digest",
+    ]);
+    const bigAxis = Array.from({ length: 20 }, (_, idx) => `          - ${idx}`).join("\n");
+    const bigExcludes = Array.from({ length: 18 }, (_, idx) => `          - a: ${idx}`).join("\n");
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  pruned-matrix:",
+          "    strategy:",
+          "      matrix:",
+          "        a:",
+          bigAxis,
+          "        b:",
+          bigAxis,
+          "        exclude:",
+          bigExcludes,
+          "        include:",
+          "          - a: 19",
+          "            b: 19",
+          "            image: node:24",
+          "    container: ${{ matrix.image }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:69: node:24 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  oversized-matrix:",
+          "    strategy:",
+          "      matrix:",
+          "        a:",
+          bigAxis,
+          "        b:",
+          bigAxis,
+          `    container: node:24@${digest}`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:5: matrix exceeds 256 combinations and cannot be verified exhaustively"]);
 
     // Renovate custom manager extracts the digest-pinned musl action images.
     const [renovateConfig, verifyMuslAction] = await Promise.all([

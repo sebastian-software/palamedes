@@ -15,8 +15,6 @@ const EMBEDDED_VAR_PATTERN =
   /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
 const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/gu;
-const SINGLE_ENV_EXPRESSION_PATTERN =
-  /^\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}$/u;
 const MATRIX_EXPRESSION_PATTERN =
   /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/gu;
 const SINGLE_MATRIX_EXPRESSION_PATTERN =
@@ -58,6 +56,10 @@ const IGNORED_DIRECTORIES = new Set([
   "target",
 ]);
 const MAX_YAML_CONVERSION_STEPS = 20_000;
+const MAX_MATRIX_ROWS = 256;
+const MAX_MATRIX_WORK = 10_000;
+const MAX_VAR_VALUES = 32;
+const MAX_TOKEN_EXPANSIONS = 64;
 
 const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--config",
@@ -291,36 +293,121 @@ function isLocalDockerActionImage(imageReference) {
   );
 }
 
-function resolveEnvExpressions(text, stepEnv) {
-  return text.replace(ENV_EXPRESSION_PATTERN, (match, _p1, _p2, _p3, _offset, _str, groups) => {
-    const name = groups.dot ?? groups.sq ?? groups.dq;
-    return stepEnv.has(name) ? stepEnv.get(name).value : match;
-  });
+function cloneVarMap(varMap) {
+  const copy = new Map();
+  for (const [key, entries] of varMap) {
+    copy.set(key, [...entries]);
+  }
+  return copy;
+}
+
+function mergeVarEntries(existing, incoming) {
+  const merged = [];
+  const seen = new Set();
+  for (const entry of [...existing, ...incoming]) {
+    const key = `${entry.line}:${entry.value}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(entry);
+    if (merged.length >= MAX_VAR_VALUES) {
+      break;
+    }
+  }
+  return merged;
+}
+
+function joinVarMaps(maps) {
+  const joined = new Map();
+  for (const map of maps) {
+    for (const [key, entries] of map) {
+      joined.set(key, mergeVarEntries(joined.get(key) ?? [], entries));
+    }
+  }
+  return joined;
+}
+
+function expandPatternCandidates(candidates, pattern, lookup) {
+  let results = candidates;
+  let guard = 0;
+
+  while (guard < 16) {
+    guard += 1;
+    let expandedAny = false;
+    const nextResults = [];
+    const seen = new Set();
+
+    for (const candidate of results) {
+      pattern.lastIndex = 0;
+      const match = pattern.exec(candidate.text);
+      if (!match) {
+        const key = `${candidate.line}:${candidate.text}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          nextResults.push(candidate);
+        }
+        continue;
+      }
+
+      const entries = lookup(match);
+      if (!entries || entries.length === 0) {
+        const key = `${candidate.line}:${candidate.text}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          nextResults.push(candidate);
+        }
+        continue;
+      }
+
+      expandedAny = true;
+      const isWholeToken = match.index === 0 && match[0].length === candidate.text.length;
+      const prefix = candidate.text.slice(0, match.index);
+      const suffix = candidate.text.slice(match.index + match[0].length);
+
+      for (const entry of entries) {
+        const nextText = `${prefix}${entry.value}${suffix}`;
+        const nextLine = isWholeToken ? entry.line : candidate.line;
+        const key = `${nextLine}:${nextText}`;
+        if (!seen.has(key) && nextResults.length < MAX_TOKEN_EXPANSIONS) {
+          seen.add(key);
+          nextResults.push({ text: nextText, line: nextLine });
+        }
+      }
+    }
+
+    results = nextResults;
+    if (!expandedAny) {
+      break;
+    }
+  }
+
+  return results;
+}
+
+function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
+  return expandPatternCandidates(
+    [{ text, line: fallbackLine }],
+    new RegExp(ENV_EXPRESSION_PATTERN.source, "u"),
+    (match) => {
+      const name = match.groups.dot ?? match.groups.sq ?? match.groups.dq;
+      return stepEnv.get(name) ?? null;
+    },
+  );
 }
 
 // GitHub Actions evaluates `${{ env.* }}` against the immutable step `env`
-// before bash runs, whereas `$VAR`/`${VAR}` reflect shell assignments.
-function resolveImageToken(token, stepEnv, shellVars) {
-  const withActionsEnv = resolveEnvExpressions(token, stepEnv);
-  return withActionsEnv.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
-    const name = groups.braced ?? groups.bare;
-    return shellVars.has(name) ? shellVars.get(name).value : match;
-  });
-}
-
-function lookupSingleVarLine(token, stepEnv, shellVars, fallbackLine) {
-  const envExpr = SINGLE_ENV_EXPRESSION_PATTERN.exec(token);
-  if (envExpr) {
-    const name = envExpr.groups.dot ?? envExpr.groups.sq ?? envExpr.groups.dq;
-    return stepEnv.get(name)?.line ?? fallbackLine;
-  }
-  const singleVar =
-    /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u.exec(token);
-  if (singleVar) {
-    const name = singleVar.groups.braced ?? singleVar.groups.bare;
-    return shellVars.get(name)?.line ?? fallbackLine;
-  }
-  return fallbackLine;
+// before bash runs, whereas `$VAR`/`${VAR}` reflect reachable shell assignments.
+function resolveImageTokenCandidates(token, stepEnv, shellVars, fallbackLine) {
+  const afterActionsEnv = resolveEnvExpressionCandidates(token, stepEnv, fallbackLine);
+  return expandPatternCandidates(
+    afterActionsEnv,
+    new RegExp(EMBEDDED_VAR_PATTERN.source, "u"),
+    (match) => {
+      const name = match.groups.braced ?? match.groups.bare;
+      return shellVars.get(name) ?? null;
+    },
+  );
 }
 
 function hasUnquotedComment(line) {
@@ -720,16 +807,39 @@ function extractUnquotedHeredocSubstitutions(bodyText, startLine) {
   return substitutions;
 }
 
+function isGithubEnvTarget(token) {
+  return token === "$GITHUB_ENV" || token === "${GITHUB_ENV}";
+}
+
+function redirectsToGithubEnv(tokens) {
+  for (let index = 0; index < tokens.length; index += 1) {
+    if ((tokens[index] === ">" || tokens[index] === ">>") && isGithubEnvTarget(tokens[index + 1])) {
+      return true;
+    }
+  }
+  const commandIndex = tokens.findIndex(
+    (token) => !SHELL_COMMAND_PREFIXES.has(token) && !ENV_PREFIX_ASSIGNMENT_PATTERN.test(token),
+  );
+  if (commandIndex !== -1 && path.basename(tokens[commandIndex]) === "tee") {
+    return tokens.slice(commandIndex + 1).some((token) => isGithubEnvTarget(token));
+  }
+  return false;
+}
+
 // Lex an entire shell script preserving quotes across physical newlines,
-// tracking heredocs (while ignoring `<<<` here-strings and arithmetic `<<`),
-// attaching unquoted/double-quoted command substitutions to their owning
-// command, and emitting explicit subshell enter/exit scope markers.
+// preserving empty quoted arguments (`''` / `""`), tracking heredocs (while
+// ignoring `<<<` here-strings and arithmetic `<<`), attaching unquoted and
+// double-quoted command substitutions to their owning command, and emitting
+// explicit subshell and conditional/case markers.
 function lexShellScript(text, startLine) {
   const events = [];
   let tokens = [];
   let commandSubstitutions = [];
   let commandLine = startLine;
+  let commandConditional = false;
+  let nextConditional = false;
   let current = "";
+  let tokenStarted = false;
   let quote = null;
   let escaping = false;
   let arithDepth = 0;
@@ -737,13 +847,23 @@ function lexShellScript(text, startLine) {
   let line = startLine;
   const pendingHeredocs = [];
 
+  const markTokenStart = () => {
+    if (!tokenStarted && tokens.length === 0) {
+      commandLine = line;
+      commandConditional = nextConditional;
+      nextConditional = false;
+    }
+    tokenStarted = true;
+  };
+
   const flushToken = () => {
-    if (current.length > 0) {
+    if (tokenStarted) {
       if (tokens.length === 0) {
         commandLine = line;
       }
       tokens.push(current);
       current = "";
+      tokenStarted = false;
     }
   };
 
@@ -754,10 +874,12 @@ function lexShellScript(text, startLine) {
         kind: "command",
         tokens,
         lineNumber: commandLine,
+        conditional: commandConditional,
         substitutions: commandSubstitutions,
       });
       tokens = [];
       commandSubstitutions = [];
+      commandConditional = false;
     }
   };
 
@@ -788,14 +910,26 @@ function lexShellScript(text, startLine) {
         events.push({ kind: "enter-subshell" });
         events.push(...lexShellScript(bodyText, bodyStartLine));
         events.push({ kind: "exit-subshell" });
-      } else if (!spec.quoted) {
-        const heredocSubs = extractUnquotedHeredocSubstitutions(bodyText, bodyStartLine);
-        if (heredocSubs.length > 0) {
+      } else {
+        if (!spec.quoted) {
+          const heredocSubs = extractUnquotedHeredocSubstitutions(bodyText, bodyStartLine);
+          if (heredocSubs.length > 0) {
+            events.push({
+              kind: "command",
+              tokens: [],
+              lineNumber: bodyStartLine,
+              conditional: spec.conditional,
+              substitutions: heredocSubs,
+            });
+          }
+        }
+        if (redirectsToGithubEnv(spec.ownerTokens)) {
           events.push({
-            kind: "command",
-            tokens: [],
-            lineNumber: bodyStartLine,
-            substitutions: heredocSubs,
+            kind: "github-env-heredoc",
+            lines: bodyLines,
+            startLine: bodyStartLine,
+            quoted: spec.quoted,
+            conditional: spec.conditional,
           });
         }
       }
@@ -812,6 +946,7 @@ function lexShellScript(text, startLine) {
         line += 1;
         continue;
       }
+      markTokenStart();
       current += ch;
       continue;
     }
@@ -886,18 +1021,14 @@ function lexShellScript(text, startLine) {
     }
 
     if (ch === "'" || ch === '"') {
-      if (tokens.length === 0 && current.length === 0) {
-        commandLine = line;
-      }
+      markTokenStart();
       quote = ch;
       continue;
     }
 
     // Command substitution `$(...)` outside single quotes.
     if (ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
-      if (tokens.length === 0 && current.length === 0) {
-        commandLine = line;
-      }
+      markTokenStart();
       const subStartLine = line;
       const scanned = scanDollarCommandSubstitution(text, index, line);
       if (scanned) {
@@ -911,9 +1042,7 @@ function lexShellScript(text, startLine) {
 
     // Backtick command substitution `` `...` `` outside single quotes.
     if (ch === "`") {
-      if (tokens.length === 0 && current.length === 0) {
-        commandLine = line;
-      }
+      markTokenStart();
       const subStartLine = line;
       const scanned = scanBacktickSubstitution(text, index, line, false);
       if (scanned) {
@@ -927,12 +1056,14 @@ function lexShellScript(text, startLine) {
 
     // Arithmetic expansion `$((...))` or arithmetic command `((...))`.
     if (ch === "$" && text[index + 1] === "(" && text[index + 2] === "(") {
+      markTokenStart();
       arithDepth += 1;
       current += "$((";
       index += 2;
       continue;
     }
-    if (ch === "(" && text[index + 1] === "(" && current.length === 0) {
+    if (ch === "(" && text[index + 1] === "(" && !tokenStarted) {
+      markTokenStart();
       arithDepth += 1;
       current += "((";
       index += 1;
@@ -943,9 +1074,7 @@ function lexShellScript(text, startLine) {
     if (ch === "$" && text[index + 1] === "{" && text[index + 2] === "{") {
       const closeIndex = text.indexOf("}}", index + 3);
       if (closeIndex !== -1) {
-        if (tokens.length === 0 && current.length === 0) {
-          commandLine = line;
-        }
+        markTokenStart();
         const expr = text.slice(index, closeIndex + 2);
         for (const ec of expr) {
           if (ec === "\n") {
@@ -959,16 +1088,38 @@ function lexShellScript(text, startLine) {
     }
 
     // POSIX shell comments start with an unquoted `#` at a token boundary.
-    if (ch === "#" && current.length === 0) {
+    if (ch === "#" && !tokenStarted) {
       flushCommand();
       while (index < text.length && text[index] !== "\n") {
         index += 1;
       }
       if (text[index] === "\n") {
         line += 1;
+        nextConditional = false;
         if (pendingHeredocs.length > 0) {
           index = consumeHeredocBodies(index + 1) - 1;
         }
+      }
+      continue;
+    }
+
+    // Output redirection `>` / `>>` / `>&` as distinct tokens so attached targets
+    // like `>>"$GITHUB_ENV"` or `>/tmp/log` split cleanly.
+    if (ch === ">") {
+      flushToken();
+      if (tokens.length === 0) {
+        commandLine = line;
+        commandConditional = nextConditional;
+        nextConditional = false;
+      }
+      if (text[index + 1] === ">") {
+        tokens.push(">>");
+        index += 1;
+      } else if (text[index + 1] === "&") {
+        tokens.push(">&");
+        index += 1;
+      } else {
+        tokens.push(">");
       }
       continue;
     }
@@ -1035,6 +1186,8 @@ function lexShellScript(text, startLine) {
           stripTabs,
           quoted: delimQuoted,
           executable: isShellInterpreterCommand(tokens),
+          ownerTokens: tokens,
+          conditional: commandConditional,
         });
       }
       index = cursor - 1;
@@ -1043,6 +1196,7 @@ function lexShellScript(text, startLine) {
 
     if (ch === "\n") {
       flushCommand();
+      nextConditional = false;
       line += 1;
       if (pendingHeredocs.length > 0) {
         index = consumeHeredocBodies(index + 1) - 1;
@@ -1052,21 +1206,29 @@ function lexShellScript(text, startLine) {
 
     if (ch === ";") {
       flushCommand();
+      nextConditional = false;
+      if (text[index + 1] === ";") {
+        events.push({ kind: "case-end" });
+        index += 1;
+      }
       continue;
     }
 
     if (ch === "(") {
       if (current.endsWith("=")) {
+        markTokenStart();
         arrayParenDepth += 1;
         current += ch;
         continue;
       }
       if (current === "$") {
         current = "";
+        tokenStarted = false;
         flushCommand();
         continue;
       }
       flushCommand();
+      nextConditional = false;
       events.push({ kind: "enter-subshell" });
       continue;
     }
@@ -1080,6 +1242,7 @@ function lexShellScript(text, startLine) {
       // Treat an unquoted `)` as a subshell delimiter even when it immediately
       // follows a word (e.g. `(docker pull node:24@sha256:...)`).
       flushCommand();
+      nextConditional = false;
       events.push({ kind: "exit-subshell" });
       continue;
     }
@@ -1087,7 +1250,10 @@ function lexShellScript(text, startLine) {
     if (ch === "&" || ch === "|") {
       flushCommand();
       if (text[index + 1] === ch) {
+        nextConditional = true;
         index += 1;
+      } else {
+        nextConditional = false;
       }
       continue;
     }
@@ -1097,9 +1263,7 @@ function lexShellScript(text, startLine) {
       continue;
     }
 
-    if (tokens.length === 0 && current.length === 0) {
-      commandLine = line;
-    }
+    markTokenStart();
     current += ch;
   }
 
@@ -1158,7 +1322,21 @@ function matrixNodesEqual(left, right) {
   return false;
 }
 
-function extractJobMatrixRows(jobNode) {
+function matchesExcludePartial(row, excludeRows) {
+  return excludeRows.some((excludeMap) => {
+    if (excludeMap.size === 0) {
+      return false;
+    }
+    for (const [k, v] of excludeMap) {
+      if (!row.has(k) || !matrixNodesEqual(row.get(k), v)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function extractJobMatrixRows(jobNode, filePath, problems) {
   const strategyNode = jobNode?.value?.get("strategy");
   const matrixNode = strategyNode?.kind === "map" ? strategyNode.value.get("matrix") : null;
   if (matrixNode?.kind !== "map") {
@@ -1197,38 +1375,43 @@ function extractJobMatrixRows(jobNode) {
     }
   }
 
-  let rows = axes.length > 0 ? [new Map()] : [];
-  for (const [axisKey, axisValues] of axes) {
-    const next = [];
-    for (const baseRow of rows) {
+  // Expand the Cartesian product while pruning excluded combinations as early as
+  // possible; fail closed if more than MAX_MATRIX_ROWS surviving combinations
+  // exist or exploration exceeds MAX_MATRIX_WORK.
+  const rows = [];
+  let work = 0;
+  let truncated = false;
+
+  if (axes.length > 0) {
+    const expandAxis = (axisIndex, partialRow) => {
+      const [axisKey, axisValues] = axes[axisIndex];
+      const isLast = axisIndex + 1 === axes.length;
       for (const valueNode of axisValues) {
-        const clone = new Map(baseRow);
-        clone.set(axisKey, valueNode);
-        next.push(clone);
-        if (next.length >= 256) {
-          break;
+        work += 1;
+        if (work > MAX_MATRIX_WORK) {
+          truncated = true;
+          return;
+        }
+        const nextRow = new Map(partialRow);
+        nextRow.set(axisKey, valueNode);
+        if (excludeRows.length > 0 && matchesExcludePartial(nextRow, excludeRows)) {
+          continue;
+        }
+        if (isLast) {
+          if (rows.length >= MAX_MATRIX_ROWS) {
+            truncated = true;
+            return;
+          }
+          rows.push(nextRow);
+        } else {
+          expandAxis(axisIndex + 1, nextRow);
+          if (truncated) {
+            return;
+          }
         }
       }
-      if (next.length >= 256) {
-        break;
-      }
-    }
-    rows = next;
-  }
-
-  // Apply GitHub Actions `exclude`: drop base rows matching every key in an exclude entry.
-  if (excludeRows.length > 0) {
-    rows = rows.filter(
-      (row) =>
-        !excludeRows.some((excludeMap) => {
-          for (const [k, v] of excludeMap) {
-            if (!row.has(k) || !matrixNodesEqual(row.get(k), v)) {
-              return false;
-            }
-          }
-          return excludeMap.size > 0;
-        }),
-    );
+    };
+    expandAxis(0, new Map());
   }
 
   // Apply GitHub Actions `include`: merge non-axis properties into every
@@ -1256,7 +1439,14 @@ function extractJobMatrixRows(jobNode) {
     }
   }
 
-  return [...rows, ...standaloneIncludeRows];
+  const allRows = [...rows, ...standaloneIncludeRows];
+  if (truncated || allRows.length > MAX_MATRIX_ROWS) {
+    problems.push(
+      `${filePath}:${matrixNode.line}: matrix exceeds ${MAX_MATRIX_ROWS} combinations and cannot be verified exhaustively`,
+    );
+  }
+
+  return allRows;
 }
 
 function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
@@ -1343,6 +1533,202 @@ function extractShellDashCScript(tokens, cursor) {
   return null;
 }
 
+function parseGithubEnvPayload(lines, startLine) {
+  const assignments = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lineNumber = startLine + index;
+    const heredocMatch = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)<<(?<delim>.+)$/u.exec(line);
+    if (heredocMatch) {
+      const valueLines = [];
+      let cursor = index + 1;
+      while (cursor < lines.length && lines[cursor] !== heredocMatch.groups.delim) {
+        valueLines.push(lines[cursor]);
+        cursor += 1;
+      }
+      assignments.push({
+        name: heredocMatch.groups.name,
+        value: valueLines.join("\n"),
+        line: lineNumber,
+      });
+      index = cursor;
+      continue;
+    }
+    const assignMatch = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(line);
+    if (assignMatch) {
+      assignments.push({
+        name: assignMatch.groups.name,
+        value: assignMatch.groups.value,
+        line: lineNumber,
+      });
+    }
+  }
+  return assignments;
+}
+
+function recordGithubEnvWrite(emittedGithubEnv, name, entries, conditional) {
+  if (!emittedGithubEnv || entries.length === 0) {
+    return;
+  }
+  const existing = emittedGithubEnv.get(name);
+  if (!existing) {
+    emittedGithubEnv.set(name, { entries: [...entries], conditional });
+    return;
+  }
+  if (conditional) {
+    emittedGithubEnv.set(name, {
+      entries: mergeVarEntries(existing.entries, entries),
+      conditional: existing.conditional,
+    });
+  } else {
+    emittedGithubEnv.set(name, { entries: [...entries], conditional: false });
+  }
+}
+
+function extractRedirectedWriteLines(tokens, startIndex) {
+  const stripped = [];
+  let targetsGithubEnv = false;
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+      if ((token === ">" || token === ">>") && isGithubEnvTarget(tokens[index + 1])) {
+        targetsGithubEnv = true;
+      }
+      index += 1;
+      continue;
+    }
+    if (
+      /^\d+$/u.test(token) &&
+      (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">&")
+    ) {
+      if (
+        (tokens[index + 1] === ">" || tokens[index + 1] === ">>") &&
+        isGithubEnvTarget(tokens[index + 2])
+      ) {
+        targetsGithubEnv = true;
+      }
+      index += 2;
+      continue;
+    }
+    stripped.push(token);
+  }
+
+  if (!targetsGithubEnv || stripped.length === 0) {
+    return null;
+  }
+
+  const cmd = path.basename(stripped[0]);
+  if (cmd === "echo") {
+    let argIndex = 1;
+    while (argIndex < stripped.length && /^-[neE]+$/u.test(stripped[argIndex])) {
+      argIndex += 1;
+    }
+    return stripped.slice(argIndex).join(" ").split(/\r?\n/u);
+  }
+
+  if (cmd === "printf" && stripped.length >= 2) {
+    const format = stripped[1];
+    if (format === "%s" || format === "%s\\n" || format === "%s\n") {
+      return stripped.slice(2).join("\n").split(/\r?\n/u);
+    }
+    const expanded = format.replace(/\\n/gu, "\n");
+    return expanded.split(/\r?\n/u);
+  }
+
+  return null;
+}
+
+function peelControlKeywords(tokens, frame) {
+  let start = 0;
+  while (start < tokens.length) {
+    const keyword = tokens[start];
+    if (keyword === "if") {
+      frame.branches.push({
+        kind: "if",
+        entryVars: cloneVarMap(frame.vars),
+        branchEndVars: [],
+        hasElse: false,
+      });
+      start += 1;
+      continue;
+    }
+    if (keyword === "then" || keyword === "do") {
+      start += 1;
+      continue;
+    }
+    if (keyword === "elif") {
+      const top = frame.branches.at(-1);
+      if (top?.kind === "if") {
+        top.branchEndVars.push(cloneVarMap(frame.vars));
+        frame.vars = cloneVarMap(top.entryVars);
+      }
+      start += 1;
+      continue;
+    }
+    if (keyword === "else") {
+      const top = frame.branches.at(-1);
+      if (top?.kind === "if") {
+        top.branchEndVars.push(cloneVarMap(frame.vars));
+        top.hasElse = true;
+        frame.vars = cloneVarMap(top.entryVars);
+      }
+      start += 1;
+      continue;
+    }
+    if (keyword === "fi") {
+      const top = frame.branches.at(-1);
+      if (top?.kind === "if") {
+        frame.branches.pop();
+        top.branchEndVars.push(cloneVarMap(frame.vars));
+        if (!top.hasElse) {
+          top.branchEndVars.push(top.entryVars);
+        }
+        frame.vars = joinVarMaps(top.branchEndVars);
+      }
+      start += 1;
+      continue;
+    }
+    if (keyword === "for" || keyword === "while" || keyword === "until") {
+      frame.branches.push({
+        kind: "loop",
+        entryVars: cloneVarMap(frame.vars),
+      });
+      start += 1;
+      continue;
+    }
+    if (keyword === "done") {
+      const top = frame.branches.at(-1);
+      if (top?.kind === "loop") {
+        frame.branches.pop();
+        frame.vars = joinVarMaps([top.entryVars, frame.vars]);
+      }
+      start += 1;
+      continue;
+    }
+    if (keyword === "case") {
+      frame.branches.push({
+        kind: "case",
+        entryVars: cloneVarMap(frame.vars),
+        branchEndVars: [],
+      });
+      start += 1;
+      continue;
+    }
+    if (keyword === "esac") {
+      const top = frame.branches.at(-1);
+      if (top?.kind === "case") {
+        frame.branches.pop();
+        top.branchEndVars.push(cloneVarMap(frame.vars), top.entryVars);
+        frame.vars = joinVarMaps(top.branchEndVars);
+      }
+      start += 1;
+      continue;
+    }
+    break;
+  }
+  return tokens.slice(start);
+}
+
 function inspectShellText(
   scriptText,
   startLine,
@@ -1352,28 +1738,55 @@ function inspectShellText(
   matrixRows,
   filePath,
   problems,
+  emittedGithubEnv = null,
   depth = 0,
 ) {
   if (depth > MAX_SHELL_NESTING_DEPTH) {
     return;
   }
 
-  const varStack = [shellVars];
+  const scopeStack = [{ vars: cloneVarMap(shellVars), branches: [] }];
 
   for (const event of lexShellScript(scriptText, startLine)) {
     if (event.kind === "enter-subshell") {
-      varStack.push(new Map(varStack.at(-1)));
+      scopeStack.push({ vars: cloneVarMap(scopeStack.at(-1).vars), branches: [] });
       continue;
     }
     if (event.kind === "exit-subshell") {
-      if (varStack.length > 1) {
-        varStack.pop();
+      if (scopeStack.length > 1) {
+        scopeStack.pop();
       }
       continue;
     }
 
-    const currentVars = varStack.at(-1);
-    const { tokens, lineNumber, substitutions } = event;
+    const frame = scopeStack.at(-1);
+
+    if (event.kind === "case-end") {
+      const top = frame.branches.at(-1);
+      if (top?.kind === "case") {
+        top.branchEndVars.push(cloneVarMap(frame.vars));
+        frame.vars = cloneVarMap(top.entryVars);
+      }
+      continue;
+    }
+
+    if (event.kind === "github-env-heredoc") {
+      const isConditional = frame.branches.length > 0 || event.conditional;
+      for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
+        const resolved = event.quoted
+          ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
+          : resolveImageTokenCandidates(assignment.value, stepEnv, frame.vars, assignment.line);
+        recordGithubEnvWrite(
+          emittedGithubEnv,
+          assignment.name,
+          resolved.map((entry) => ({ value: entry.text, line: assignment.line })),
+          isConditional,
+        );
+      }
+      continue;
+    }
+
+    const { lineNumber, conditional, substitutions } = event;
 
     for (const nested of substitutions) {
       inspectShellText(
@@ -1381,14 +1794,20 @@ function inspectShellText(
         nested.lineNumber,
         sourceLines,
         stepEnv,
-        new Map(currentVars),
+        frame.vars,
         matrixRows,
         filePath,
         problems,
+        emittedGithubEnv,
         depth + 1,
       );
     }
 
+    if (event.tokens.length === 0 || event.tokens[0].startsWith("#")) {
+      continue;
+    }
+
+    const tokens = peelControlKeywords(event.tokens, frame);
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
@@ -1402,16 +1821,30 @@ function inspectShellText(
       for (const token of tokens.slice(assignStart)) {
         const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
         if (match) {
-          currentVars.set(match.groups.name, {
-            value: resolveImageToken(match.groups.value, stepEnv, currentVars),
-            line: lineNumber,
-          });
+          const resolved = resolveImageTokenCandidates(
+            match.groups.value,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+          ).map((entry) => ({ value: entry.text, line: lineNumber }));
+          if (conditional) {
+            frame.vars.set(
+              match.groups.name,
+              mergeVarEntries(frame.vars.get(match.groups.name) ?? [], resolved),
+            );
+          } else {
+            frame.vars.set(match.groups.name, resolved);
+          }
         }
       }
       continue;
     }
 
-    const commandVars = new Map(currentVars);
+    // Keep argument-expansion scope (`frame.vars`) separate from the child
+    // process environment (`commandVars`): prefix assignments like
+    // `IMAGE=new docker pull "$IMAGE"` only change the child environment, while
+    // the shell expands `"$IMAGE"` from `frame.vars`.
+    const commandVars = cloneVarMap(frame.vars);
     let cursor = 0;
     while (cursor < tokens.length) {
       const token = tokens[cursor];
@@ -1421,10 +1854,13 @@ function inspectShellText(
       }
       const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
       if (prefixAssign) {
-        commandVars.set(prefixAssign.groups.name, {
-          value: resolveImageToken(prefixAssign.groups.value, stepEnv, commandVars),
-          line: lineNumber,
-        });
+        const resolved = resolveImageTokenCandidates(
+          prefixAssign.groups.value,
+          stepEnv,
+          frame.vars,
+          lineNumber,
+        ).map((entry) => ({ value: entry.text, line: lineNumber }));
+        commandVars.set(prefixAssign.groups.name, resolved);
         cursor += 1;
         continue;
       }
@@ -1436,6 +1872,26 @@ function inspectShellText(
       continue;
     }
 
+    const githubEnvLines = extractRedirectedWriteLines(tokens, cursor);
+    if (githubEnvLines) {
+      const isConditional = frame.branches.length > 0 || conditional;
+      for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
+        const resolved = resolveImageTokenCandidates(
+          assignment.value,
+          stepEnv,
+          frame.vars,
+          lineNumber,
+        );
+        recordGithubEnvWrite(
+          emittedGithubEnv,
+          assignment.name,
+          resolved.map((entry) => ({ value: entry.text, line: lineNumber })),
+          isConditional,
+        );
+      }
+      continue;
+    }
+
     if (SHELL_INTERPRETERS.has(path.basename(cli))) {
       const dashCScript = extractShellDashCScript(tokens, cursor);
       if (dashCScript) {
@@ -1444,10 +1900,11 @@ function inspectShellText(
           lineNumber,
           sourceLines,
           stepEnv,
-          new Map(commandVars),
+          commandVars,
           matrixRows,
           filePath,
           problems,
+          emittedGithubEnv,
           depth + 1,
         );
       }
@@ -1461,8 +1918,15 @@ function inspectShellText(
     const globalValueFlags =
       cli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
     let argIndex = cursor + 1;
-    while (argIndex < tokens.length && tokens[argIndex].startsWith("-")) {
+    while (argIndex < tokens.length) {
       const flag = tokens[argIndex];
+      if (flag === ">" || flag === ">>" || flag === ">&" || flag === "<") {
+        argIndex += 2;
+        continue;
+      }
+      if (!flag.startsWith("-")) {
+        break;
+      }
       argIndex += !flag.includes("=") && globalValueFlags.has(flag) ? 2 : 1;
     }
 
@@ -1499,6 +1963,17 @@ function inspectShellText(
         imageToken = tokens[index + 1] ?? null;
         break;
       }
+      if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+        index += 1;
+        continue;
+      }
+      if (
+        /^\d+$/u.test(token) &&
+        (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">&")
+      ) {
+        index += 2;
+        continue;
+      }
       if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
         continue;
       }
@@ -1516,30 +1991,46 @@ function inspectShellText(
       continue;
     }
 
-    const varLine = lookupSingleVarLine(imageToken, stepEnv, commandVars, lineNumber);
-    const defaultLine =
-      varLine !== lineNumber
-        ? varLine
-        : sourceLines
-          ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
-          : lineNumber;
+    const fallbackLine = sourceLines
+      ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
+      : lineNumber;
 
-    const resolvedWithVars = resolveImageToken(imageToken, stepEnv, commandVars);
-    for (const candidate of expandMatrixReferences(resolvedWithVars, matrixRows, defaultLine)) {
-      if (isDynamicReference(candidate.text)) {
-        continue;
-      }
-      if (!isPinnedDigest(candidate.text)) {
-        problems.push(
-          `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`,
-        );
+    const varExpandedCandidates = resolveImageTokenCandidates(
+      imageToken,
+      stepEnv,
+      frame.vars,
+      fallbackLine,
+    );
+    const seenProblems = new Set();
+    for (const varCandidate of varExpandedCandidates) {
+      for (const candidate of expandMatrixReferences(
+        varCandidate.text,
+        matrixRows,
+        varCandidate.line,
+      )) {
+        if (isDynamicReference(candidate.text)) {
+          continue;
+        }
+        if (!isPinnedDigest(candidate.text)) {
+          const message = `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`;
+          if (!seenProblems.has(message)) {
+            seenProblems.add(message);
+            problems.push(message);
+          }
+        }
       }
     }
   }
 }
 
-function inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems) {
-  const shellVars = new Map(stepEnv);
+function inspectShellRunScript(
+  runNode,
+  stepEnv,
+  matrixRows,
+  filePath,
+  problems,
+  emittedGithubEnv = null,
+) {
   const scriptText =
     runNode.folded && Array.isArray(runNode.lines)
       ? runNode.value
@@ -1553,21 +2044,22 @@ function inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems)
     runNode.line,
     sourceLines,
     stepEnv,
-    shellVars,
+    stepEnv,
     matrixRows,
     filePath,
     problems,
+    emittedGithubEnv,
   );
 }
 
 function extractEnvMap(envNode, baseEnv) {
-  const merged = new Map(baseEnv);
+  const merged = cloneVarMap(baseEnv);
   if (envNode?.kind !== "map") {
     return merged;
   }
   for (const [key, valueNode] of envNode.value) {
     if (valueNode?.kind === "scalar") {
-      merged.set(key, { value: String(valueNode.value), line: valueNode.line });
+      merged.set(key, [{ value: String(valueNode.value), line: valueNode.line }]);
     }
   }
   return merged;
@@ -1585,19 +2077,27 @@ function checkImageField(
     return;
   }
   const rawRef = String(node.value).trim();
-  const envResolved = resolveEnvExpressions(rawRef, envMap);
-  const envLine = lookupSingleVarLine(rawRef, envMap, envMap, node.line);
-
-  for (const candidate of expandMatrixReferences(envResolved, matrixRows, envLine)) {
-    const imageRef = candidate.text.trim();
-    if (!imageRef || isDynamicReference(imageRef)) {
-      continue;
-    }
-    if (allowLocalDockerAction && isLocalDockerActionImage(imageRef)) {
-      continue;
-    }
-    if (!isPinnedDigest(imageRef)) {
-      problems.push(`${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`);
+  const seenProblems = new Set();
+  for (const envCandidate of resolveEnvExpressionCandidates(rawRef, envMap, node.line)) {
+    for (const candidate of expandMatrixReferences(
+      envCandidate.text,
+      matrixRows,
+      envCandidate.line,
+    )) {
+      const imageRef = candidate.text.trim();
+      if (!imageRef || isDynamicReference(imageRef)) {
+        continue;
+      }
+      if (allowLocalDockerAction && isLocalDockerActionImage(imageRef)) {
+        continue;
+      }
+      if (!isPinnedDigest(imageRef)) {
+        const message = `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`;
+        if (!seenProblems.has(message)) {
+          seenProblems.add(message);
+          problems.push(message);
+        }
+      }
     }
   }
 }
@@ -1606,14 +2106,24 @@ function checkStepsList(stepsNode, baseEnv, matrixRows, filePath, problems) {
   if (stepsNode?.kind !== "seq") {
     return;
   }
+  const runningEnv = cloneVarMap(baseEnv);
   for (const stepNode of stepsNode.value) {
     if (stepNode?.kind !== "map") {
       continue;
     }
-    const stepEnv = extractEnvMap(stepNode.value.get("env"), baseEnv);
+    const stepEnv = extractEnvMap(stepNode.value.get("env"), runningEnv);
+    const stepConditional = stepNode.value.has("if");
+    const emittedGithubEnv = new Map();
     const runNode = stepNode.value.get("run");
     if (runNode?.kind === "scalar") {
-      inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems);
+      inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems, emittedGithubEnv);
+    }
+    for (const [name, write] of emittedGithubEnv) {
+      if (stepConditional || write.conditional || !runningEnv.has(name)) {
+        runningEnv.set(name, mergeVarEntries(runningEnv.get(name) ?? [], write.entries));
+      } else {
+        runningEnv.set(name, write.entries);
+      }
     }
   }
 }
@@ -1855,7 +2365,7 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         continue;
       }
       const jobEnv = extractEnvMap(jobNode.value.get("env"), workflowEnv);
-      const jobMatrixRows = extractJobMatrixRows(jobNode);
+      const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, problems);
       checkContainerNode(jobNode.value.get("container"), jobEnv, jobMatrixRows);
       checkServicesNode(jobNode.value.get("services"), jobEnv, jobMatrixRows);
       checkStepsList(jobNode.value.get("steps"), jobEnv, jobMatrixRows, filePath, problems);
@@ -2046,8 +2556,15 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
     const startLine = index + 1;
     let combined = trimmed;
     while (combined.endsWith("\\") && index + 1 < rawLines.length) {
-      combined = `${combined.slice(0, -1)} ${rawLines[index + 1].trim()}`;
       index += 1;
+      const nextTrimmed = rawLines[index].trim();
+      if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
+        continue;
+      }
+      combined = `${combined.slice(0, -1)} ${nextTrimmed}`;
+    }
+    if (combined.endsWith("\\")) {
+      combined = combined.slice(0, -1).trimEnd();
     }
     pendingHeredocs.push(...extractDockerfileHeredocDelimiters(combined));
     logicalLines.push({ lineNumber: startLine, text: combined });
