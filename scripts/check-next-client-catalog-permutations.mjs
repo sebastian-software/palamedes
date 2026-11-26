@@ -451,14 +451,19 @@ export function Greeting() {
 `,
       );
       writeFileSync(
+        path.join(fixtureDir, "app/[[...locale]]/script-probe.js"),
+        `export const tolongScript = /\\p{Script=Tolong_Siki}/u;\n`,
+      );
+      writeFileSync(
         path.join(fixtureDir, "app/[[...locale]]/page.tsx"),
         `import { Greeting } from "./greeting";
+import { tolongScript } from "./script-probe.js";
 export const dynamic = "force-dynamic";
 const metrics = { with: (value: number) => value };
 const intervals: Record<string, number> = { "m/s": 1, "km/h": 3.6 };
 const scale = (unit: string) => intervals[unit] ?? 1;
 export default async function Page() {
-  let counter = 1;
+  let counter = tolongScript.test("ok") ? 2 : 1;
   for await (const line of ["ok", "end]"]) /\\]$/.test(line) && counter++;
   const { of, period } = { of: 72, period: "km/h" };
   const speed = of / scale(period ?? "km/h");

@@ -1560,53 +1560,60 @@ type TurbopackFactoryGroup = { ids: string[]; factory: string };
 type TurbopackExtractedChunk = { groups: TurbopackFactoryGroup[] };
 type TurbopackChunkModuleCache = Map<string, TurbopackExtractedChunk | null>;
 
-type AcornNode = {
+type JsAstNode = {
   type: string;
   start: number;
   end: number;
   [key: string]: unknown;
 };
 
-type AcornModule = {
+type BabelParserModule = {
   parse(
     input: string,
     options: {
-      ecmaVersion: "latest";
       sourceType: "script" | "module";
-      allowHashBang?: boolean;
       allowReturnOutsideFunction?: boolean;
+      allowSuperOutsideMethod?: boolean;
       allowImportExportEverywhere?: boolean;
       allowAwaitOutsideFunction?: boolean;
-      allowSuperOutsideMethod?: boolean;
+      allowUndeclaredExports?: boolean;
+      plugins?: readonly string[];
     },
-  ): AcornNode;
+  ): { program?: JsAstNode };
 };
 
-let cachedAcorn: AcornModule | undefined;
+const BABEL_PARSER_PLUGINS = [
+  "explicitResourceManagement",
+  "importAttributes",
+  "deferredImportEvaluation",
+  "sourcePhaseImports",
+] as const;
 
-function loadAcorn(resolveFromDir?: string): AcornModule | null {
-  if (cachedAcorn) return cachedAcorn;
-  const attempts: Array<() => AcornModule> = [];
+let cachedBabelParser: BabelParserModule | undefined;
+
+function loadBabelParser(resolveFromDir?: string): BabelParserModule | null {
+  if (cachedBabelParser) return cachedBabelParser;
+  const attempts: Array<() => BabelParserModule> = [];
   if (resolveFromDir) {
     attempts.push(
       () =>
         createRequire(path.join(resolveFromDir, "package.json"))(
-          "next/dist/compiled/acorn",
-        ) as AcornModule,
+          "next/dist/compiled/babel/parser.js",
+        ) as BabelParserModule,
     );
   }
   attempts.push(
-    () => createRequire(import.meta.url)("next/dist/compiled/acorn") as AcornModule,
+    () => createRequire(import.meta.url)("next/dist/compiled/babel/parser.js") as BabelParserModule,
     () =>
       createRequire(path.join(process.cwd(), "package.json"))(
-        "next/dist/compiled/acorn",
-      ) as AcornModule,
+        "next/dist/compiled/babel/parser.js",
+      ) as BabelParserModule,
   );
   for (const attempt of attempts) {
     try {
       const mod = attempt();
       if (mod && typeof mod.parse === "function") {
-        cachedAcorn = mod;
+        cachedBabelParser = mod;
         return mod;
       }
     } catch {
@@ -1616,33 +1623,36 @@ function loadAcorn(resolveFromDir?: string): AcornModule | null {
   return null;
 }
 
-function parseJsProgram(source: string, resolveFromDir?: string): AcornNode | null {
-  const acorn = loadAcorn(resolveFromDir);
-  if (!acorn) return null;
+function parseJsProgram(source: string, resolveFromDir?: string): JsAstNode | null {
+  const parser = loadBabelParser(resolveFromDir);
+  if (!parser) return null;
   try {
-    return acorn.parse(source, {
-      ecmaVersion: "latest",
+    const file = parser.parse(source, {
       sourceType: "script",
-      allowHashBang: true,
+      allowReturnOutsideFunction: true,
+      allowSuperOutsideMethod: true,
+      plugins: BABEL_PARSER_PLUGINS,
     });
+    return file.program ?? null;
   } catch {
     try {
-      return acorn.parse(source, {
-        ecmaVersion: "latest",
+      const file = parser.parse(source, {
         sourceType: "module",
-        allowHashBang: true,
         allowReturnOutsideFunction: true,
+        allowSuperOutsideMethod: true,
         allowImportExportEverywhere: true,
         allowAwaitOutsideFunction: true,
-        allowSuperOutsideMethod: true,
+        allowUndeclaredExports: true,
+        plugins: BABEL_PARSER_PLUGINS,
       });
+      return file.program ?? null;
     } catch {
       return null;
     }
   }
 }
 
-function isAcornNode(value: unknown): value is AcornNode {
+function isAstNode(value: unknown): value is JsAstNode {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -1650,37 +1660,71 @@ function isAcornNode(value: unknown): value is AcornNode {
   );
 }
 
-function walkAcornAst(
-  node: AcornNode,
-  parent: AcornNode | undefined,
-  visit: (node: AcornNode, parent: AcornNode | undefined) => boolean | void,
+function getStringLiteralValue(node: JsAstNode): string | undefined {
+  if (
+    (node.type === "StringLiteral" || node.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return node.value;
+  }
+  return;
+}
+
+function getNumberLiteralValue(node: JsAstNode): number | undefined {
+  if (
+    (node.type === "NumericLiteral" || node.type === "Literal") &&
+    typeof node.value === "number" &&
+    Number.isFinite(node.value)
+  ) {
+    return node.value;
+  }
+  return;
+}
+
+function walkJsAst(
+  node: JsAstNode,
+  parent: JsAstNode | undefined,
+  visit: (node: JsAstNode, parent: JsAstNode | undefined) => boolean | void,
 ): void {
   if (visit(node, parent) === false) return;
   for (const [key, value] of Object.entries(node)) {
-    if (key === "type" || key === "start" || key === "end") continue;
+    if (
+      key === "type" ||
+      key === "start" ||
+      key === "end" ||
+      key === "loc" ||
+      key === "extra" ||
+      key === "comments" ||
+      key === "tokens" ||
+      key === "leadingComments" ||
+      key === "trailingComments" ||
+      key === "innerComments"
+    ) {
+      continue;
+    }
     if (Array.isArray(value)) {
       for (const item of value) {
-        if (isAcornNode(item)) walkAcornAst(item, node, visit);
+        if (isAstNode(item)) walkJsAst(item, node, visit);
       }
-    } else if (isAcornNode(value)) {
-      walkAcornAst(value, node, visit);
+    } else if (isAstNode(value)) {
+      walkJsAst(value, node, visit);
     }
   }
 }
 
-function isModuleExportsMember(node: AcornNode): boolean {
+function isModuleExportsMember(node: JsAstNode): boolean {
   if (node.type !== "MemberExpression") return false;
   const obj = node.object;
   const prop = node.property;
-  if (!isAcornNode(obj) || !isAcornNode(prop)) return false;
+  if (!isAstNode(obj) || !isAstNode(prop)) return false;
   if (obj.type !== "Identifier" || obj.name !== "module") return false;
   if (node.computed) {
-    return prop.type === "Literal" && prop.value === "exports";
+    return getStringLiteralValue(prop) === "exports";
   }
   return prop.type === "Identifier" && prop.name === "exports";
 }
 
-function unwrapTurbopackArrayNode(node: AcornNode): AcornNode | undefined {
+function unwrapTurbopackArrayNode(node: JsAstNode): JsAstNode | undefined {
   if (node.type === "ArrayExpression") return node;
   // Strict-mode IIFE table: `(() => { "use strict"; return [...]; })()` or
   // `(function() { "use strict"; return [...]; })()`.
@@ -1688,20 +1732,26 @@ function unwrapTurbopackArrayNode(node: AcornNode): AcornNode | undefined {
   const args = node.arguments;
   if (!Array.isArray(args) || args.length !== 0) return;
   const callee = node.callee;
-  if (!isAcornNode(callee)) return;
+  if (!isAstNode(callee)) return;
   if (callee.type !== "ArrowFunctionExpression" && callee.type !== "FunctionExpression") return;
   const params = callee.params;
   if (!Array.isArray(params) || params.length !== 0 || callee.async || callee.generator) return;
   const fnBody = callee.body;
-  if (!isAcornNode(fnBody)) return;
+  if (!isAstNode(fnBody)) return;
   if (fnBody.type === "ArrayExpression") return fnBody;
   if (fnBody.type !== "BlockStatement" || !Array.isArray(fnBody.body)) return;
-  const statements = (fnBody.body as AcornNode[]).filter((stmt) => {
+  if (Array.isArray(fnBody.directives)) {
+    for (const dir of fnBody.directives as JsAstNode[]) {
+      const dirVal = isAstNode(dir.value) ? dir.value.value : undefined;
+      if (dirVal !== "use strict") return;
+    }
+  }
+  const statements = (fnBody.body as JsAstNode[]).filter((stmt) => {
     if (stmt.type === "EmptyStatement") return false;
     if (stmt.type === "ExpressionStatement") {
       if (stmt.directive === "use strict") return false;
       const expr = stmt.expression;
-      if (isAcornNode(expr) && expr.type === "Literal" && expr.value === "use strict") {
+      if (isAstNode(expr) && getStringLiteralValue(expr) === "use strict") {
         return false;
       }
     }
@@ -1709,12 +1759,12 @@ function unwrapTurbopackArrayNode(node: AcornNode): AcornNode | undefined {
   });
   if (statements.length !== 1) return;
   const only = statements[0]!;
-  if (only.type !== "ReturnStatement" || !isAcornNode(only.argument)) return;
+  if (only.type !== "ReturnStatement" || !isAstNode(only.argument)) return;
   return only.argument.type === "ArrayExpression" ? only.argument : undefined;
 }
 
 function extractTurbopackFactoryTableFromArrayNode(
-  arrayNode: AcornNode,
+  arrayNode: JsAstNode,
   source: string,
   groups: TurbopackFactoryGroup[],
   depth = 0,
@@ -1725,11 +1775,11 @@ function extractTurbopackFactoryTableFromArrayNode(
   // also place strict-mode factories inside a leading nested table (`[[id, fn],
   // id2, fn2]` or `[(() => { "use strict"; return [id, fn]; })(), id2, fn2]`).
   let pendingIds: string[] = [];
-  for (const elem of arrayNode.elements as Array<AcornNode | null>) {
+  for (const elem of arrayNode.elements as Array<JsAstNode | null>) {
     if (!elem) return false;
     if (pendingIds.length === 0) {
       const nestedCandidate =
-        elem.type === "SpreadElement" && isAcornNode(elem.argument) ? elem.argument : elem;
+        elem.type === "SpreadElement" && isAstNode(elem.argument) ? elem.argument : elem;
       const nestedArray = unwrapTurbopackArrayNode(nestedCandidate);
       if (nestedArray) {
         if (!extractTurbopackFactoryTableFromArrayNode(nestedArray, source, groups, depth + 1)) {
@@ -1739,15 +1789,15 @@ function extractTurbopackFactoryTableFromArrayNode(
       }
     }
     if (elem.type === "SpreadElement") return false;
-    if (elem.type === "Literal") {
-      if (typeof elem.value === "number" && Number.isFinite(elem.value) && elem.value >= 0) {
-        pendingIds.push(`n:${elem.value}`);
-        continue;
-      }
-      if (typeof elem.value === "string") {
-        pendingIds.push(`s:${elem.value}`);
-        continue;
-      }
+    const numericId = getNumberLiteralValue(elem);
+    if (numericId !== undefined && numericId >= 0) {
+      pendingIds.push(`n:${numericId}`);
+      continue;
+    }
+    const stringId = getStringLiteralValue(elem);
+    if (stringId !== undefined) {
+      pendingIds.push(`s:${stringId}`);
+      continue;
     }
     if (pendingIds.length === 0) return false;
     groups.push({ ids: pendingIds, factory: source.slice(elem.start, elem.end).trim() });
@@ -1766,20 +1816,20 @@ function extractTurbopackModulesFromSource(
   let foundFactoryTable = false;
   let invalid = false;
 
-  const topLevelTables = new Set<AcornNode>();
-  for (const stmt of program.body as AcornNode[]) {
-    if (stmt.type !== "ExpressionStatement" || !isAcornNode(stmt.expression)) continue;
+  const topLevelTables = new Set<JsAstNode>();
+  for (const stmt of program.body as JsAstNode[]) {
+    if (stmt.type !== "ExpressionStatement" || !isAstNode(stmt.expression)) continue;
     const exprs =
       stmt.expression.type === "SequenceExpression" && Array.isArray(stmt.expression.expressions)
-        ? (stmt.expression.expressions as AcornNode[])
+        ? (stmt.expression.expressions as JsAstNode[])
         : [stmt.expression];
     for (const expr of exprs) {
       if (
         expr.type === "AssignmentExpression" &&
         expr.operator === "=" &&
-        isAcornNode(expr.left) &&
+        isAstNode(expr.left) &&
         isModuleExportsMember(expr.left) &&
-        isAcornNode(expr.right)
+        isAstNode(expr.right)
       ) {
         const arrayNode = unwrapTurbopackArrayNode(expr.right);
         if (arrayNode) {
@@ -1798,11 +1848,11 @@ function extractTurbopackModulesFromSource(
   if (options.requireTable) {
     // Reject chunks that also assign `module.exports` inside nested blocks or
     // control flow outside the extracted factory table.
-    walkAcornAst(program, undefined, (node) => {
+    walkJsAst(program, undefined, (node) => {
       if (invalid || topLevelTables.has(node)) return false;
       if (
         node.type === "AssignmentExpression" &&
-        isAcornNode(node.left) &&
+        isAstNode(node.left) &&
         isModuleExportsMember(node.left)
       ) {
         invalid = true;
@@ -4514,15 +4564,15 @@ function extractTurbopackLoadedChunks(
   const loadedChunks: string[] = [];
   let invalid = false;
 
-  walkAcornAst(program, undefined, (node, parent) => {
+  walkJsAst(program, undefined, (node, parent) => {
     if (invalid) return false;
     // Skip inline factory tables (`module.exports = [...]`) so unrelated
     // expressions inside factories cannot collide with `runtimeVar`.
     if (
       node.type === "AssignmentExpression" &&
-      isAcornNode(node.left) &&
+      isAstNode(node.left) &&
       isModuleExportsMember(node.left) &&
-      isAcornNode(node.right) &&
+      isAstNode(node.right) &&
       unwrapTurbopackArrayNode(node.right) !== undefined
     ) {
       return false;
@@ -4530,12 +4580,13 @@ function extractTurbopackLoadedChunks(
     if (node.type !== "MemberExpression") return;
     const obj = node.object;
     const prop = node.property;
-    if (!isAcornNode(obj) || !isAcornNode(prop)) return;
+    if (!isAstNode(obj) || !isAstNode(prop)) return;
     if (obj.type !== "Identifier" || obj.name !== runtimeVar) return;
+    const propStr = node.computed ? getStringLiteralValue(prop) : undefined;
     const isChunkLoadAccess = node.computed
-      ? prop.type === "Literal" && prop.value === "c"
+      ? propStr === "c"
       : prop.type === "Identifier" && prop.name === "c";
-    if (node.computed && prop.type !== "Literal") {
+    if (node.computed && propStr === undefined && getNumberLiteralValue(prop) === undefined) {
       invalid = true;
       return false;
     }
@@ -4550,11 +4601,11 @@ function extractTurbopackLoadedChunks(
       return false;
     }
     const arg = args[0];
-    if (!isAcornNode(arg) || arg.type !== "Literal" || typeof arg.value !== "string") {
+    const chunkRel = isAstNode(arg) ? getStringLiteralValue(arg) : undefined;
+    if (chunkRel === undefined) {
       invalid = true;
       return false;
     }
-    const chunkRel = arg.value;
     if (!chunkRel || path.isAbsolute(chunkRel)) {
       invalid = true;
       return false;
