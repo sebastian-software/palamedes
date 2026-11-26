@@ -62,6 +62,9 @@ string_wizard = "=1.2.7"
 tempfile = "3.27.0"
 thiserror = "2.0.20"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.189"
+
 [dev-dependencies]
 ignore = "0.4.33"
 

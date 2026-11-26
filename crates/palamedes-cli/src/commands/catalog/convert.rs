@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    CatalogFileConvertRequest, PalamedesCatalogFormat, convert_catalog_content,
-    convert_catalog_file,
+    CatalogFileConvertRequest, ContainedDir, ContainedNewFileMode, ContainedWriteDurability,
+    PalamedesCatalogFormat, convert_catalog_content, convert_catalog_file,
+    split_relative_catalog_path,
 };
 
 use crate::command::{Command, Context};
-use crate::contained_fs::{ContainedDir, split_relative_catalog_path};
 use crate::error::CliError;
 
 #[derive(Debug, Args)]
@@ -98,38 +98,69 @@ impl Command for ConvertOptions {
                         )?;
                         let (input_parent, input_file) =
                             split_relative_catalog_path(&config.root_dir, &input).map_err(
-                                |source| CliError::Io {
+                                |error| CliError::Io {
                                     path: input.clone(),
-                                    source,
+                                    source: error.into_io_error(),
                                 },
                             )?;
                         let Some(input_dir) =
                             ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
-                                .map_err(|source| CliError::Io {
+                                .map_err(|error| CliError::Io {
                                     path: input.clone(),
-                                    source,
+                                    source: error.into_io_error(),
                                 })?
                         else {
                             skipped += 1;
                             continue;
                         };
                         let Some(source) =
-                            input_dir
-                                .read_optional_file(&input_file)
-                                .map_err(|source| CliError::Io {
+                            input_dir.read_optional_file(&input_file).map_err(|error| {
+                                CliError::Io {
                                     path: input.clone(),
-                                    source,
-                                })?
+                                    source: error.into_io_error(),
+                                }
+                            })?
                         else {
                             skipped += 1;
                             continue;
                         };
+                        let input_identity =
+                            input_dir
+                                .file_identity(&input_file)
+                                .map_err(|error| CliError::Io {
+                                    path: input.clone(),
+                                    source: error.into_io_error(),
+                                })?;
                         let output = config.resolve_contained_catalog_path(
                             &catalog.path,
                             locale,
                             target_catalog_format(self.to),
                         )?;
                         if input == output {
+                            return Err(CliError::ConvertOutputIsInput);
+                        }
+                        let (output_parent, output_file) =
+                            split_relative_catalog_path(&config.root_dir, &output).map_err(
+                                |error| CliError::Io {
+                                    path: output.clone(),
+                                    source: error.into_io_error(),
+                                },
+                            )?;
+                        let output_dir =
+                            ContainedDir::open_subpath(&config.root_dir, &output_parent, true)
+                                .map_err(|error| CliError::Io {
+                                    path: output.clone(),
+                                    source: error.into_io_error(),
+                                })?
+                                .expect("create_missing always opens destination directory");
+                        let output_identity =
+                            output_dir.file_identity(&output_file).map_err(|error| {
+                                CliError::Io {
+                                    path: output.clone(),
+                                    source: error.into_io_error(),
+                                }
+                            })?;
+                        if input_identity.is_some() && input_identity == output_identity {
                             return Err(CliError::ConvertOutputIsInput);
                         }
                         let converted_content = convert_catalog_content(
@@ -139,25 +170,16 @@ impl Command for ConvertOptions {
                             &config.source_locale,
                             Some(locale),
                         )?;
-                        let (output_parent, output_file) =
-                            split_relative_catalog_path(&config.root_dir, &output).map_err(
-                                |source| CliError::Io {
-                                    path: output.clone(),
-                                    source,
-                                },
-                            )?;
-                        let output_dir =
-                            ContainedDir::open_subpath(&config.root_dir, &output_parent, true)
-                                .map_err(|source| CliError::Io {
-                                    path: output.clone(),
-                                    source,
-                                })?
-                                .expect("create_missing always opens destination directory");
                         output_dir
-                            .write_file_atomically(&output_file, converted_content.as_bytes())
-                            .map_err(|source| CliError::Io {
+                            .write_file_atomically(
+                                &output_file,
+                                converted_content.as_bytes(),
+                                ContainedNewFileMode::Private,
+                                ContainedWriteDurability::Full,
+                            )
+                            .map_err(|error| CliError::Io {
                                 path: output.clone(),
-                                source,
+                                source: error.into_io_error(),
                             })?;
                         converted += 1;
                     }
@@ -479,5 +501,48 @@ catalogs:
         let converted = fs::read_to_string(output).expect("read output");
         assert!(converted.contains("tc=Translator note"));
         assert!(converted.contains("f=fuzzy"));
+    }
+
+    #[test]
+    fn configured_conversion_rejects_hard_linked_input_output_alias() {
+        let fixture = temp_dir("convert-hardlink-alias");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        let input = catalog_dir.join("messages.po");
+        let output = catalog_dir.join("messages.fcl");
+        let original =
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n";
+        fs::write(&input, original).expect("write input");
+        fs::hard_link(&input, &output).expect("hard link output to input");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let error = options
+            .run(&Context::with_cwd(&fixture))
+            .expect_err("hard-linked alias must be rejected");
+        assert!(matches!(
+            error,
+            crate::error::CliError::ConvertOutputIsInput
+        ));
+        assert_eq!(fs::read_to_string(&input).expect("read input"), original);
+        assert_eq!(fs::read_to_string(&output).expect("read output"), original);
     }
 }

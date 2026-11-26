@@ -74,7 +74,7 @@ fn catalog_file_paths_preserve_logical_dots_and_canonicalize_storage_extensions(
             r"locales\{locale}\messages.v2",
             "de",
             PalamedesCatalogFormat::Po,
-            r"locales\de\messages.v2.po",
+            "locales/de/messages.v2.po",
         ),
     ];
 

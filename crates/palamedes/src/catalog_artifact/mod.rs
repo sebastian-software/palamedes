@@ -154,10 +154,7 @@ pub fn try_resolve_catalog_file_path(
             reason: reason.to_owned(),
         }
     })?;
-    // Normalize portable separators before building the concrete path so
-    // matching, containment checks, and filesystem I/O all open the same file.
-    let portable_catalog_path = catalog_path.replace('\\', "/");
-    let resolved = resolve_catalog_file_path(root_dir, &portable_catalog_path, locale, format);
+    let resolved = resolve_catalog_file_path(root_dir, catalog_path, locale, format);
     let normalized_root = normalize_lexical_path(root_dir);
     let normalized_resolved = normalize_lexical_path(&resolved);
     if normalized_resolved == normalized_root || !normalized_resolved.starts_with(&normalized_root)
@@ -303,9 +300,10 @@ pub fn resolve_catalog_file_path(
     locale: &str,
     format: PalamedesCatalogFormat,
 ) -> PathBuf {
-    let expanded = root_dir.join(catalog_path.replace("{locale}", locale));
+    let portable_catalog_path = catalog_path.replace('\\', "/");
+    let expanded = root_dir.join(portable_catalog_path.replace("{locale}", locale));
     let extension = format.extension();
-    let configured_extension = Path::new(catalog_path)
+    let configured_extension = Path::new(&portable_catalog_path)
         .extension()
         .and_then(|value| value.to_str());
 

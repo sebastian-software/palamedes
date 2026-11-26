@@ -19,15 +19,15 @@ use std::time::Instant;
 
 use clap::Args;
 use palamedes::{
-    CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
+    CatalogUpdateMessage, CatalogUpdateRequest, ContainedDir, ContainedFsError,
+    ContainedNewFileMode, ContainedWriteDurability, ExtractCache, ExtractCatalogFileFailure,
     SourceFileAnalysisRequest, collect_runtime_macro_manifest, extract_catalog_messages_cached,
-    preview_catalog_update_from_content,
+    preview_catalog_update_from_content, split_relative_catalog_path,
 };
 use serde::Serialize;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
-use crate::contained_fs::{ContainedDir, split_relative_catalog_path};
 use crate::error::CliError;
 use cache::{load_extract_cache, persist_extract_cache};
 use sources::{collect_source_files, sort_and_dedupe_paths};
@@ -608,9 +608,9 @@ fn process_catalog(
     let catalog_path =
         config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
     let (relative_parent, file_name) = split_relative_catalog_path(&config.root_dir, &catalog_path)
-        .map_err(|source| CliError::Io {
+        .map_err(|error| CliError::Io {
             path: catalog_path.clone(),
-            source,
+            source: error.into_io_error(),
         })?;
     let request = CatalogUpdateRequest {
         target_path: catalog_path.to_string_lossy().into_owned(),
@@ -627,24 +627,30 @@ fn process_catalog(
     let drift = match operation {
         CatalogOperation::Write => {
             let parent_dir = ContainedDir::open_subpath(&config.root_dir, &relative_parent, true)
-                .map_err(|source| CliError::Io {
+                .map_err(|error| CliError::Io {
                     path: catalog_path.clone(),
-                    source,
+                    source: error.into_io_error(),
                 })?
                 .expect("create_missing always opens the destination directory");
-            let existing = parent_dir
-                .read_optional_file(&file_name)
-                .map_err(|source| CliError::Io {
-                    path: catalog_path.clone(),
-                    source,
-                })?;
+            let existing =
+                parent_dir
+                    .read_optional_file(&file_name)
+                    .map_err(|error| CliError::Io {
+                        path: catalog_path.clone(),
+                        source: error.into_io_error(),
+                    })?;
             let result = preview_catalog_update_from_content(request, existing.as_deref())?;
             if result.created || result.updated {
                 parent_dir
-                    .write_file_atomically(&file_name, result.content.as_bytes())
-                    .map_err(|source| CliError::Io {
+                    .write_file_atomically(
+                        &file_name,
+                        result.content.as_bytes(),
+                        ContainedNewFileMode::Private,
+                        ContainedWriteDurability::Rename,
+                    )
+                    .map_err(|error: ContainedFsError| CliError::Io {
                         path: catalog_path.clone(),
-                        source,
+                        source: error.into_io_error(),
                     })?;
             }
             if options.verbose {
@@ -662,16 +668,16 @@ fn process_catalog(
         CatalogOperation::Preview => {
             let existing =
                 match ContainedDir::open_subpath(&config.root_dir, &relative_parent, false)
-                    .map_err(|source| CliError::Io {
+                    .map_err(|error| CliError::Io {
                         path: catalog_path.clone(),
-                        source,
+                        source: error.into_io_error(),
                     })? {
                     Some(parent_dir) => {
                         parent_dir
                             .read_optional_file(&file_name)
-                            .map_err(|source| CliError::Io {
+                            .map_err(|error| CliError::Io {
                                 path: catalog_path.clone(),
-                                source,
+                                source: error.into_io_error(),
                             })?
                     }
                     None => None,

@@ -14,15 +14,15 @@ use std::path::{Component, Path, PathBuf};
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
-    CatalogParseRequest, FallbackLocales, compile_catalog_artifact, compiled_message_key,
-    is_valid_locale, parse_catalog, render_catalog_module,
+    CatalogParseRequest, ContainedDir, ContainedNewFileMode, ContainedWriteDurability,
+    FallbackLocales, compile_catalog_artifact, compiled_message_key, is_valid_locale,
+    parse_catalog, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
-use crate::contained_fs::ContainedDir;
 use crate::error::CliError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -375,10 +375,30 @@ fn compile_js(
     } else {
         locales.to_vec()
     };
-    if let Some(invalid) = locales.iter().find(|locale| !is_valid_locale(locale)) {
-        return Err(format!(
-            "Invalid locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
-        ));
+    let invalid_locale_diagnostics: Vec<CompileDiagnostic> = locales
+        .iter()
+        .filter(|locale| !is_valid_locale(locale))
+        .map(|invalid| CompileDiagnostic {
+            severity: CatalogArtifactDiagnosticSeverity::Error,
+            code: INVALID_LOCALE.to_owned(),
+            message: format!(
+                "Invalid locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+            ),
+            catalog_path: None,
+            locale: Some(invalid.clone()),
+            requested_locale: Some(invalid.clone()),
+            source_key: None,
+            conflicting_catalog_path: None,
+        })
+        .collect();
+    if !invalid_locale_diagnostics.is_empty() {
+        return Ok(CompileReport {
+            update: CatalogUpdate {
+                catalogs: Vec::new(),
+                missing: Vec::new(),
+            },
+            diagnostics: invalid_locale_diagnostics,
+        });
     }
     let mut requested = BTreeSet::new();
     if let Some(repeated) = locales
@@ -393,9 +413,24 @@ fn compile_js(
         .iter()
         .find(|fallback| !is_valid_locale(fallback))
     {
-        return Err(format!(
-            "Invalid --fallback-locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
-        ));
+        return Ok(CompileReport {
+            update: CatalogUpdate {
+                catalogs: Vec::new(),
+                missing: Vec::new(),
+            },
+            diagnostics: vec![CompileDiagnostic {
+                severity: CatalogArtifactDiagnosticSeverity::Error,
+                code: INVALID_LOCALE.to_owned(),
+                message: format!(
+                    "Invalid --fallback-locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+                ),
+                catalog_path: None,
+                locale: Some(invalid.clone()),
+                requested_locale: None,
+                source_key: None,
+                conflicting_catalog_path: None,
+            }],
+        });
     }
     if let Some(unknown) = fallback_locales
         .iter()
@@ -622,7 +657,12 @@ fn compile_js(
         for (file_name, module_path, code) in modules {
             let contents = format!("{code}\n");
             output_dir
-                .write_file_atomically(&file_name, contents.as_bytes())
+                .write_file_atomically(
+                    &file_name,
+                    contents.as_bytes(),
+                    ContainedNewFileMode::RespectUmask,
+                    ContainedWriteDurability::Rename,
+                )
                 .map_err(|error| format!("{}: {error}", module_path.display()))?;
             update.catalogs.push(module_path);
         }
@@ -757,9 +797,13 @@ mod tests {
         let config = load_config(&app, None).expect("load config");
         let output = app.join("out");
 
-        let error = compile_js(&config, &["../escaped".to_owned()], &[], false, &output)
-            .expect_err("traversal locale must be rejected");
-        assert!(error.contains("Invalid locale"), "got: {error}");
+        let report = compile_js(&config, &["../escaped".to_owned()], &[], false, &output)
+            .expect("invalid locale should return a CompileReport diagnostic");
+        assert!(report.update.catalogs.is_empty());
+        assert_eq!(report.diagnostics.len(), 1);
+        assert_eq!(report.diagnostics[0].code, "compile.invalid_locale");
+        assert_eq!(report.diagnostics[0].locale.as_deref(), Some("../escaped"));
+        assert!(report.diagnostics[0].message.contains("Invalid locale"));
         assert!(!app.join("escaped.mjs").exists());
         assert!(!output.exists());
     }
@@ -854,16 +898,19 @@ mod tests {
             & 0o7777;
         assert_eq!(created_mode, baseline_mode);
 
-        // Existing custom permissions must survive atomic replacement.
-        fs::set_permissions(output.join("en.mjs"), fs::Permissions::from_mode(0o640))
-            .expect("chmod existing module");
-        compile_js(&config, &["en".to_owned()], &[], false, &output).expect("recompile succeeds");
-        let preserved_mode = fs::metadata(output.join("en.mjs"))
-            .expect("preserved metadata")
-            .permissions()
-            .mode()
-            & 0o7777;
-        assert_eq!(preserved_mode, 0o640);
+        // Existing custom permissions (including private 0600 files) must survive atomic replacement.
+        for mode in [0o640, 0o600] {
+            fs::set_permissions(output.join("en.mjs"), fs::Permissions::from_mode(mode))
+                .expect("chmod existing module");
+            compile_js(&config, &["en".to_owned()], &[], false, &output)
+                .expect("recompile succeeds");
+            let preserved_mode = fs::metadata(output.join("en.mjs"))
+                .expect("preserved metadata")
+                .permissions()
+                .mode()
+                & 0o7777;
+            assert_eq!(preserved_mode, mode);
+        }
     }
 
     #[cfg(unix)]

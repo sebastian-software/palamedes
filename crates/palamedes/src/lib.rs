@@ -24,6 +24,7 @@ mod catalog_three_way;
 mod catalog_update;
 mod choice;
 mod component;
+mod contained_fs;
 mod descriptor;
 mod diagnostic;
 mod error;
@@ -107,6 +108,11 @@ pub use catalog_update::{
     CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
     PoOutputOptions, parse_catalog, preview_catalog_file_update,
     preview_catalog_update_from_content, update_catalog_file,
+};
+#[doc(hidden)]
+pub use contained_fs::{
+    ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, FileIdentity,
+    split_relative_catalog_path,
 };
 #[doc(hidden)]
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
