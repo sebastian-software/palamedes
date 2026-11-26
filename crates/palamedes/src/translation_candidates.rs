@@ -553,6 +553,45 @@ where
         ));
     }
 
+    let mut target_batches: HashMap<(PathBuf, OsString), Vec<CatalogBatchKey>> = HashMap::new();
+    for batch in groups.keys() {
+        let catalog = &request.config.catalogs[batch.catalog_index];
+        let path = resolve_catalog_path(&request.config, catalog, &batch.locale)?;
+        let (relative_parent, file_name) =
+            split_relative_catalog_path(Path::new(&request.config.root_dir), &path).map_err(
+                |error| PalamedesError::UnsafeCatalogPath {
+                    path: path.to_string_lossy().into_owned(),
+                    reason: error.to_string(),
+                },
+            )?;
+        target_batches
+            .entry((relative_parent, file_name))
+            .or_default()
+            .push(batch.clone());
+    }
+    for colliding in target_batches.values().filter(|batches| batches.len() > 1) {
+        for batch in colliding {
+            if let Some(patch_indexes) = groups.get(batch) {
+                for &patch_index in patch_indexes {
+                    rejected.insert(patch_index);
+                    diagnostics.push(workflow_diagnostic(
+                        "translation.ambiguous_catalog",
+                        "Multiple configured catalog scopes resolve to the same target file.",
+                        Some(request.patches[patch_index].id.clone()),
+                    ));
+                }
+            }
+        }
+    }
+    if !rejected.is_empty() {
+        return Ok(rejected_translation_patch_result(
+            request.patches,
+            requested_count,
+            &rejected,
+            diagnostics,
+        ));
+    }
+
     let mut pinned_dirs: HashMap<PathBuf, Arc<ContainedDir>> = HashMap::new();
     let mut prepared = Vec::new();
     for (batch, patch_indexes) in groups {
@@ -3716,6 +3755,80 @@ mod tests {
             fs::read_to_string(moved_dir.join("de.po"))
                 .expect("read moved original dir")
                 .contains("msgstr \"Hallo\"")
+        );
+    }
+
+    #[test]
+    fn rejects_batches_whose_catalog_scopes_normalize_to_the_same_target_file() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let before = fs::read_to_string(&path).expect("read original catalog");
+
+        let config = CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: r"messages\{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: CatalogArtifactConfig {
+                root_dir: config.root_dir.clone(),
+                locales: config.locales.clone(),
+                source_locale: config.source_locale.clone(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                }],
+            },
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+        let mut alias_patch = singular_patch(hello, "Servus");
+        alias_patch.id.catalog = r"messages\{locale}".to_owned();
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config,
+            po: None,
+            patches: vec![singular_patch(hello, "Hallo"), alias_patch],
+        })
+        .expect("conflicting normalized catalog scopes must be rejected cleanly");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.requested, 2);
+        assert_eq!(result.stats.applied, 0);
+        assert_eq!(result.outcomes.len(), 2);
+        assert!(
+            result
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status == TranslationPatchOutcomeStatus::Rejected)
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diag| diag.code == "translation.ambiguous_catalog")
+        );
+        assert_eq!(
+            fs::read_to_string(&path).expect("read unchanged catalog"),
+            before
         );
     }
 
