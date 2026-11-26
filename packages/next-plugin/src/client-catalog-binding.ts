@@ -21,6 +21,22 @@ export const CLIENT_CATALOG_LOCALE_HEADER = "x-palamedes-locale";
  */
 export type ClientCatalogLocaleSource = "route-first" | "route" | "header";
 
+const VALID_LOCALE_SOURCES: ReadonlySet<string> = new Set<ClientCatalogLocaleSource>([
+  "route-first",
+  "route",
+  "header",
+]);
+
+function resolveLocaleSourceOption(options: ClientCatalogHeaderOptions): ClientCatalogLocaleSource {
+  if (!("localeSource" in options)) return "route-first";
+  if (typeof options.localeSource === "string" && VALID_LOCALE_SOURCES.has(options.localeSource)) {
+    return options.localeSource as ClientCatalogLocaleSource;
+  }
+  throw new Error(
+    `Palamedes client catalog permutations: unsupported localeSource ${JSON.stringify(options.localeSource)}. Expected "route-first", "route", or "header".`,
+  );
+}
+
 export type ClientCatalogHeaderOptions = {
   /**
    * Precedence between `rootParams.locale` and `x-palamedes-locale`.
@@ -140,7 +156,7 @@ export function resolveRenderLocale(
   const memoized = render && localeByRender.get(render);
   if (memoized) return memoized;
 
-  const localeSource = options.localeSource ?? "route-first";
+  const localeSource = resolveLocaleSourceOption(options);
   const rootParams =
     unit && "rootParams" in unit && unit.rootParams && typeof unit.rootParams === "object"
       ? unit.rootParams
@@ -196,6 +212,8 @@ export function bindClientCatalogPermutationsAt(
   distDir: string,
   options: ClientCatalogHeaderOptions = {},
 ): string[] {
+  const hasLocaleSource = "localeSource" in options;
+  const validatedLocaleSource = resolveLocaleSourceOption(options);
   const hasHeaderSecret = "headerSecret" in options;
   if (
     hasHeaderSecret &&
@@ -229,7 +247,7 @@ export function bindClientCatalogPermutationsAt(
     return loaded;
   }
   const resolveOptions: ClientCatalogHeaderOptions = {
-    ...(options.localeSource ? { localeSource: options.localeSource } : {}),
+    ...(hasLocaleSource ? { localeSource: validatedLocaleSource } : {}),
     ...(hasHeaderSecret ? { headerSecret: options.headerSecret } : {}),
   };
 

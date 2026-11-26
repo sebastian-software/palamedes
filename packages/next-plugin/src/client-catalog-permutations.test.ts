@@ -662,7 +662,7 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
       );
       writeFileSync(
         templateChunk,
-        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{},layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]]},{"global-error":[g,"builtin"]},[]];}];`,
+        `module.exports=[1,a=>{let unrelated=["",{children:["other",{},{},[]]},{layout:[u,"other"]},[]];let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{},layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
       );
 
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
@@ -696,9 +696,17 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
       // layout file exists.
       writeFileSync(
         templateChunk,
-        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];}];`,
+        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+      // If no entrypoint binds `tree` for this page, return undefined so the
+      // source-tree fallback runs instead of trusting an unrelated array.
+      writeFileSync(
+        templateChunk,
+        `module.exports=[1,a=>{let unrelated=["",{children:["other",{},{},[]]},{layout:[u,"other"]},[]];}];`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -724,6 +732,23 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         localeSource: "route",
       }),
     ).toBe("en");
+    // Unknown or explicitly undefined localeSource policies fail loudly instead
+    // of silently falling back to a mode that reads headers.
+    expect(() =>
+      bindClientCatalogPermutationsAt("/nonexistent", {
+        localeSource: "route-only" as unknown as "route",
+      }),
+    ).toThrow(/unsupported localeSource/u);
+    expect(() =>
+      bindClientCatalogPermutationsAt("/nonexistent", {
+        localeSource: undefined,
+      }),
+    ).toThrow(/unsupported localeSource/u);
+    expect(() =>
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }), {
+        localeSource: "route-only" as unknown as "route",
+      }),
+    ).toThrow(/unsupported localeSource/u);
   });
 
   it("verifies HMAC-signed Proxy locale headers when headerSecret is configured", () => {

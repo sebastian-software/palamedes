@@ -347,18 +347,91 @@ function walkCompiledLoaderTree(
   return walkCompiledLoaderTree(childrenExpr, 0, hasOptionalLocale);
 }
 
+function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
+  const escapedDouble = JSON.stringify(expectedPage).replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const escapedSingle = `'${expectedPage.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&")}'`;
+  const pageLiteralPattern = new RegExp(
+    `(?:\\bpage|"page"|'page')\\s*:\\s*(?:${escapedDouble}|${escapedSingle})`,
+    "gu",
+  );
+  const matches: string[] = [];
+  for (const match of source.matchAll(pageLiteralPattern)) {
+    // Walk backward to the enclosing object literal `{ ... tree: ..., page: "<expectedPage>" ... }`.
+    let objectStart = -1;
+    let depth = 0;
+    let quote: '"' | "'" | undefined;
+    for (let index = match.index - 1; index >= 0; index -= 1) {
+      const ch = source[index];
+      if (quote) {
+        if (ch === quote) {
+          let backslashes = 0;
+          for (let bs = index - 1; bs >= 0 && source[bs] === "\\"; bs -= 1) backslashes += 1;
+          if (backslashes % 2 === 0) quote = undefined;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === "}") depth += 1;
+      else if (ch === "{") {
+        if (depth === 0) {
+          objectStart = index;
+          break;
+        }
+        depth -= 1;
+      }
+    }
+    if (objectStart === -1) continue;
+    const objectEnd = scanBalancedEnd(source, objectStart);
+    if (objectEnd === -1 || objectEnd < match.index) continue;
+    const props = parseTopLevelObjectProperties(source.slice(objectStart, objectEnd));
+    if (!props) continue;
+    const pageValue = props.get("page");
+    if (!pageValue || parseJsStringLiteral(pageValue) !== expectedPage) continue;
+    const treeExpr = props.get("tree");
+    if (!treeExpr) continue;
+    if (treeExpr.startsWith("[")) {
+      matches.push(treeExpr);
+      continue;
+    }
+    if (!/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) continue;
+    // Locate the lexical binding `<ident> = [...]` preceding this entrypoint call.
+    const prefix = source.slice(0, objectStart);
+    const bindingPattern = new RegExp(
+      `(?:^|[;,{(\\s])${treeExpr.replaceAll("$", "\\$")}\\s*=\\s*\\[`,
+      "gu",
+    );
+    let lastArrayStart = -1;
+    for (const bindingMatch of prefix.matchAll(bindingPattern)) {
+      lastArrayStart = bindingMatch.index + bindingMatch[0].length - 1;
+    }
+    if (lastArrayStart === -1) continue;
+    const arrayEnd = scanBalancedEnd(prefix, lastArrayStart);
+    if (arrayEnd === -1) continue;
+    matches.push(prefix.slice(lastArrayStart, arrayEnd));
+  }
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 /**
  * Inspects Next.js's compiled `loaderTree` for a route manifest to determine
  * whether an optional catch-all `[[...locale]]` segment sits at or above the
  * route's first `layout`, matching Next.js's `getRootParamsImpl()`. Uses the
- * compiled route tree directly so wrapper-supplied `pageExtensions`, `%5F`
- * escaped segments, server-only layouts, and colocated directories all match
- * Next's actual build output.
+ * compiled route tree bound to this exact page entry so wrapper-supplied
+ * `pageExtensions`, `%5F` escaped segments, server-only layouts, and colocated
+ * directories all match Next's actual build output.
  */
 export function compiledRouteHasOptionalRootLocale(
   distDir: string,
   manifestFile: string,
 ): boolean | undefined {
+  const serverAppDir = path.join(distDir, "server", "app");
+  const manifestRelativePath = path.relative(serverAppDir, manifestFile).split(path.sep).join("/");
+  const routeSegments = manifestRelativePath.split("/").slice(0, -1);
+  if (!routeSegments.includes("[[...locale]]")) return false;
+
   const pageEntry = manifestFile.replace(/_client-reference-manifest\.js$/u, ".js");
   if (pageEntry === manifestFile || !existsSync(pageEntry)) return;
   let entrySource: string;
@@ -368,47 +441,37 @@ export function compiledRouteHasOptionalRootLocale(
     return;
   }
 
+  const expectedPage = `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`;
   const chunkPaths: string[] = [];
   for (const match of entrySource.matchAll(/\.c\(\s*["']([^"']+\.js)["']\s*\)/gu)) {
     const chunkRel = match[1];
     if (chunkRel) chunkPaths.push(path.join(distDir, chunkRel));
   }
-  // Prioritize Next's app-page template chunk, which carries the route's loaderTree.
+  // Prioritize Next's app-page template chunk, which carries the route's loaderTree,
+  // and read candidate chunks lazily so unrelated bundles are never read.
   chunkPaths.sort((a, b) => {
     const aIsTemplate = a.includes("app-page") ? 0 : 1;
     const bIsTemplate = b.includes("app-page") ? 0 : 1;
     return aIsTemplate - bIsTemplate;
   });
 
-  const candidateSources = [
-    ...chunkPaths.flatMap((chunkPath) => {
-      try {
-        return [readFileSync(chunkPath, "utf8")];
-      } catch {
-        return [];
-      }
-    }),
-    entrySource,
-  ];
+  const inspectSource = (source: string): boolean | undefined => {
+    const treeExpr = findTreeExpressionForPage(source, expectedPage);
+    if (!treeExpr) return;
+    return walkCompiledLoaderTree(treeExpr, 0, false);
+  };
 
-  for (const source of candidateSources) {
-    for (const match of source.matchAll(/\[\s*["']["']\s*,\s*\{/gu)) {
-      const elements = splitTopLevelArrayElements(source, match.index);
-      if (!elements || elements.length < 3) continue;
-      const parallelRoutes = parseTopLevelObjectProperties(elements[1]!);
-      const modules = parseTopLevelObjectProperties(elements[2]!);
-      if (
-        !parallelRoutes ||
-        !modules ||
-        (!parallelRoutes.has("children") && !modules.has("layout") && !modules.has("global-error"))
-      ) {
-        continue;
-      }
-      const result = walkCompiledLoaderTree(source, match.index, false);
-      if (result !== undefined) return result;
+  for (const chunkPath of chunkPaths) {
+    let chunkSource: string;
+    try {
+      chunkSource = readFileSync(chunkPath, "utf8");
+    } catch {
+      continue;
     }
+    const result = inspectSource(chunkSource);
+    if (result !== undefined) return result;
   }
-  return;
+  return inspectSource(entrySource);
 }
 
 function resolveSourceSegmentDirectory(
@@ -728,9 +791,14 @@ export async function emitClientCatalogPermutations(
   );
   for (const file of manifests) {
     const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
-    const optionalRootLocale =
-      compiledRouteHasOptionalRootLocale(distDir, file) ??
-      routeHasOptionalRootLocale(options.projectRoot, manifestRelativePath, pageExtensions);
+    const hasOptionalLocaleSegment = manifestRelativePath
+      .split("/")
+      .slice(0, -1)
+      .includes("[[...locale]]");
+    const optionalRootLocale = hasOptionalLocaleSegment
+      ? (compiledRouteHasOptionalRootLocale(distDir, file) ??
+        routeHasOptionalRootLocale(options.projectRoot, manifestRelativePath, pageExtensions))
+      : false;
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
     // Next may construct paths from shared prefixes, so inspect the evaluated
