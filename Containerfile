@@ -22,25 +22,38 @@
 # A reverse proxy mapping each port to its own domain is intentionally out of
 # scope; the fixed ports exist so that mapping can be added later.
 
+# --- Rust toolchain stage ----------------------------------------------------
+# Digest-pinned official Rust toolchain image avoids remote shell installers.
+FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 AS rust-toolchain
+
 # --- Build stage -------------------------------------------------------------
 # glibc (Debian) base so the native @palamedes/core-node addon builds for
 # linux-*-gnu without cross-compilation.
-FROM node:24-bookworm AS build
+FROM node:24-bookworm@sha256:49f7adaf9f1574bc45c20ea317139b39a59d7e758d0e93745e112fd85cb42623 AS build
 
-# Rust toolchain (for the native N-API addon) plus build essentials.
+# Build essentials for compiling the native N-API addon plus the Rust toolchain
+# copied from the digest-pinned official image above.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends build-essential curl ca-certificates \
+  && apt-get install -y --no-install-recommends build-essential ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-ENV PATH="/root/.cargo/bin:${PATH}"
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+ENV RUSTUP_HOME="/usr/local/rustup" \
+    CARGO_HOME="/usr/local/cargo" \
+    PATH="/usr/local/cargo/bin:${PATH}"
 
 # Build the native addon in release mode (build-native.mjs reads this).
-ENV PALAMEDES_RUST_PROFILE=release
+ENV PALAMEDES_RUST_PROFILE=release \
+    COREPACK_HOME="/usr/local/share/corepack"
 
 WORKDIR /app
-# corepack provisions pnpm at the exact version pinned in package.json
-# (packageManager) on first use — no hardcoded version here.
-RUN corepack enable
+# corepack provisions pnpm at the exact packageManager specification in
+# package.json (preserving any integrity hash) into COREPACK_HOME, which is
+# copied read-only into the runtime stage.
+COPY package.json ./
+RUN corepack enable \
+  && corepack prepare --activate \
+  && chmod -R a+rX /usr/local/share/corepack
 
 # Materialize the workspace-pinned toolchain before pnpm launches the CLI and
 # Node native builds concurrently. Otherwise both cargo proxies can race while
@@ -56,29 +69,45 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm build
 RUN pnpm build:examples
 RUN node scripts/build-component-demos.mjs
-# Drop build-only artifacts before they reach the runtime image: the compiled
-# .node was already copied into the platform package (target/ is dead weight),
-# and the Next.js build caches are not needed by `next start`.
-RUN rm -rf target && rm -rf examples/*/.next/cache
+# Drop build-only artifacts and non-runtime directories before they reach the
+# runtime image: the compiled .node was already copied into the platform
+# package (target/ is dead weight), Next.js build caches are not needed by
+# `next start`, and source/docs/test trees are unused at runtime.
+RUN rm -rf target \
+  examples/*/.next/cache \
+  crates \
+  docs \
+  adr \
+  tests \
+  test-fixtures \
+  benchmarks \
+  fuzz \
+  site \
+  video
 
 # --- Runtime stage -----------------------------------------------------------
 # Dev dependencies stay installed on purpose: TanStack's `vite preview` needs
 # them. Solid v2 starts Nitro's generated `.output` directly.
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS runtime
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    COREPACK_HOME="/usr/local/share/corepack" \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_ENABLE_NETWORK=0
 
 # tini as PID 1 reaps reparented grandchildren reliably, even when the container
 # is started without `podman run --init` (e.g. later via Compose/Quadlet).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends tini \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable
 
 WORKDIR /app
-COPY --from=build --chown=node:node /app /app
-# Global pnpm at the version pinned in package.json (packageManager) so the
-# unprivileged `node` user can run the example start scripts.
-RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
+# Own /app and the pre-populated Corepack cache as root:root so the
+# unprivileged `node` runtime user has read-only access to application code
+# and supervisor scripts.
+COPY --from=build --chown=root:root /usr/local/share/corepack /usr/local/share/corepack
+COPY --from=build --chown=root:root /app /app
 # Run all 41 example servers as a non-root user (least privilege).
 USER node
 
@@ -86,6 +115,11 @@ USER node
 # scripts/example-matrix.mjs and scripts/component-demos.mjs. Publish them without drift via:
 #   podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 EXPOSE 4080 4010 4011 4012 4013 4020 4021 4022 4023 4030 4031 4032 4033 4040 4041 4042 4043 4050 4051 4052 4053 4060 4061 4062 4063 4070 4090 4091 4092 4093 4100 4101 4102 4103 4110 4111 4112 4113 4120 4121 4122 4123
+
+# Probe the supervisor readiness endpoint using the bundled Node runtime
+# (the slim base intentionally omits curl).
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:4080/ready',{signal:AbortSignal.timeout(8000)}).then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 
 # tini is the init/reaper (no external `--init` needed). `-s` registers it as a
 # subreaper so reaping still works if it ends up not as PID 1 (e.g. when the

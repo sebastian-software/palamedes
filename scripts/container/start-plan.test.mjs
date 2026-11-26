@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -104,6 +104,38 @@ describe("container publish contract", () => {
       "utf8",
     );
     expect(containerfile).toMatch(/^EXPOSE .*\b4070\b/m);
+  });
+
+  it("hardens Containerfile base images, toolchain provisioning, runtime permissions, and health checks", async () => {
+    const containerfile = await readFile(
+      resolve(import.meta.dirname, "../../Containerfile"),
+      "utf8",
+    );
+
+    const nonCommentLines = containerfile
+      .split(/\r?\n/u)
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+
+    expect(nonCommentLines).not.toContain("sh.rustup.rs");
+    expect(nonCommentLines).not.toContain("npm install -g");
+    expect(containerfile).toMatch(/^FROM rust:\S+@sha256:[0-9a-f]{64} AS rust-toolchain$/mu);
+    expect(containerfile).toMatch(/^FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$/mu);
+    expect(containerfile).toMatch(/^FROM node:24-bookworm-slim@sha256:[0-9a-f]{64} AS runtime$/mu);
+    expect(containerfile).toContain("COPY --from=build --chown=root:root /app /app");
+    expect(containerfile).not.toContain("--chown=node:node");
+    expect(containerfile).toContain("USER node");
+    expect(containerfile).toMatch(/^HEALTHCHECK\b.*127\.0\.0\.1:4080\/ready/msu);
+
+    for (const dir of ["crates", "docs", "adr", "tests", "benchmarks", "fuzz", "site", "video"]) {
+      expect(containerfile).toMatch(new RegExp(`\\b${dir}\\b`, "u"));
+    }
+
+    for (const strategy of ["cookie", "route", "subdomain", "tld"]) {
+      await expect(
+        access(resolve(import.meta.dirname, `../../examples/react-router-${strategy}/Dockerfile`)),
+      ).rejects.toThrow();
+    }
   });
 });
 

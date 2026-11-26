@@ -15,9 +15,10 @@ on:
         default: canary
         type: string
 
+# The contract job installs unvetted Next.js canary packages and runs Playwright,
+# so it stays read-only; only the downstream reporting job opts into `issues: write`.
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: next-canary-${{ github.ref }}
@@ -78,39 +79,146 @@ jobs:
         id: contract
         run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}
 
-      # Separate long-lived issues let one delivery recover independently.
-      - name: Open or refresh the tracking issue
-        if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'
+      - name: Record scheduled canary outcome
+        if: always() && github.event_name == 'schedule'
         env:
-          GH_TOKEN: ${{ github.token }}
-          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog ${{ matrix.label }} contract"
+          DELIVERY: ${{ matrix.delivery }}
+          LABEL: ${{ matrix.label }}
           NEXT_VERSION: ${{ steps.next.outputs.version }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONTRACT_OUTCOME: ${{ steps.contract.outcome }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          set -euo pipefail
-          {
-            echo "\`pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}\` failed against \`next@$NEXT_VERSION\`."
-            echo
-            echo "Check emitted markers and, for permutations, manifest selection, request isolation"
-            echo "and lazy chunk URLs before this release reaches the \`next\` peer range. See"
-            echo "[ADR-030](https://github.com/${{ github.repository }}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and"
-            echo "[ADR-031](https://github.com/${{ github.repository }}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md)."
-            echo
-            echo "Run: $RUN_URL"
-          } > issue-body.md
+          node <<'NODE'
+          const fs = require("node:fs");
+          const action =
+            process.env.JOB_STATUS === "success"
+              ? "close"
+              : process.env.JOB_STATUS === "failure" && process.env.CONTRACT_OUTCOME === "failure"
+                ? "open"
+                : "none";
+          fs.writeFileSync(
+            `canary-outcome-${process.env.DELIVERY}.json`,
+            JSON.stringify({
+              delivery: process.env.DELIVERY,
+              label: process.env.LABEL,
+              nextVersion: process.env.NEXT_VERSION || "",
+              action,
+            }),
+          );
+          NODE
 
-          node ./scripts/open-or-refresh-issue.mjs \
-            --title "$TITLE" \
-            --body-file issue-body.md \
-            --label stability
+      - name: Upload scheduled canary outcome
+        if: always() && github.event_name == 'schedule'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: next-canary-outcome-${{ matrix.delivery }}
+          path: canary-outcome-${{ matrix.delivery }}.json
+          retention-days: 7
 
-      - name: Close the tracking issue
-        if: success() && github.event_name == 'schedule'
+  # Separate long-lived issues let one delivery recover independently while
+  # keeping `issues: write` out of the job that installs Next.js canary.
+  report-issues:
+    name: update canary tracking issues
+    needs: contract
+    if: always() && github.event_name == 'schedule' && needs.contract.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download scheduled canary outcomes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: next-canary-outcome-*
+          path: canary-outcomes
+          merge-multiple: true
+
+      - name: Open, refresh, or close tracking issues
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog ${{ matrix.label }} contract"
-        run: >
-          node ./scripts/open-or-refresh-issue.mjs
-          --title "$TITLE"
-          --label stability
-          --close-comment "The scheduled Next.js canary run passes the client catalog ${{ matrix.label }} contract again."
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONTRACT_RESULT: ${{ needs.contract.result }}
+        run: |
+          node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const DELIVERIES = [
+            { delivery: "assets", label: "asset" },
+            { delivery: "permutations", label: "permutation" },
+          ];
+          const VERSION_PATTERN = /^[A-Za-z0-9._-]+$/u;
+
+          for (const { delivery, label } of DELIVERIES) {
+            const outcomePath = path.join("canary-outcomes", `canary-outcome-${delivery}.json`);
+            if (!fs.existsSync(outcomePath)) {
+              continue;
+            }
+
+            const outcome = JSON.parse(fs.readFileSync(outcomePath, "utf8"));
+            const title = `fix(next-plugin): Next.js canary breaks the client catalog ${label} contract`;
+
+            if (outcome.action === "close") {
+              execFileSync(
+                process.execPath,
+                [
+                  "./scripts/open-or-refresh-issue.mjs",
+                  "--title",
+                  title,
+                  "--label",
+                  "stability",
+                  "--close-comment",
+                  `The scheduled Next.js canary run passes the client catalog ${label} contract again.`,
+                ],
+                { stdio: "inherit" },
+              );
+              continue;
+            }
+
+            if (outcome.action === "open") {
+              if (process.env.CONTRACT_RESULT !== "failure") {
+                throw new Error(
+                  `Refusing to open tracking issue for ${delivery} when contract job result is ${process.env.CONTRACT_RESULT}`,
+                );
+              }
+              const nextVersion =
+                typeof outcome.nextVersion === "string" && VERSION_PATTERN.test(outcome.nextVersion)
+                  ? outcome.nextVersion
+                  : "unknown";
+              const bodyFile = `issue-body-${delivery}.md`;
+              const body = [
+                `\`pnpm --dir examples/nextjs-route build:catalog-${delivery}\` failed against \`next@${nextVersion}\`.`,
+                "",
+                "Check emitted markers and, for permutations, manifest selection, request isolation",
+                "and lazy chunk URLs before this release reaches the `next` peer range. See",
+                `[ADR-030](https://github.com/${process.env.REPOSITORY}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and`,
+                `[ADR-031](https://github.com/${process.env.REPOSITORY}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md).`,
+                "",
+                `Run: ${process.env.RUN_URL}`,
+                "",
+              ].join("\n");
+              fs.writeFileSync(bodyFile, body);
+              execFileSync(
+                process.execPath,
+                [
+                  "./scripts/open-or-refresh-issue.mjs",
+                  "--title",
+                  title,
+                  "--body-file",
+                  bodyFile,
+                  "--label",
+                  "stability",
+                ],
+                { stdio: "inherit" },
+              );
+            }
+          }
+          NODE

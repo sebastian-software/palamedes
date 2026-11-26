@@ -5,7 +5,12 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkWorkflowPins, unpinnedActionReferences } from "./check-workflow-pins.mjs";
+import {
+  checkWorkflowPins,
+  unpinnedActionReferences,
+  unpinnedContainerfileReferences,
+  unpinnedWorkflowContainerReferences,
+} from "./check-workflow-pins.mjs";
 import { COVERAGE_GATES } from "./coverage-gate.mjs";
 import { selectScreenshotExamples } from "./example-matrix.mjs";
 import {
@@ -1022,53 +1027,95 @@ describe("workflow contracts", () => {
     expect(job(source, "verify-hosts", "__missing__")).not.toContain("BUNNYNET_API_KEY");
   });
 
-  it("lets the dependency audit exit code reach the tracking issue step", async () => {
+  it("lets the dependency audit exit code reach the downstream tracking issue job", async () => {
     const dependencyAudit = await readRepositoryFile(".github/workflows/dependency-audit.yml");
+    const header = dependencyAudit.slice(0, dependencyAudit.indexOf("\njobs:\n"));
+    const jobs = workflowJobs(dependencyAudit);
+    const audit = jobs.get("audit");
+    const report = jobs.get("report-issue");
+
+    // Workflow defaults to read-only; only the downstream reporting job holds `issues: write`.
+    expect(header).toContain("permissions:\n  contents: read");
+    expect(header).not.toMatch(/^ {2}issues:/mu);
+    expect(audit.text).not.toMatch(/^ {6}issues:/mu);
+    expect(audit.text).toContain("npm_audit_outcome: ${{ steps.npm-audit.outcome }}");
+    expect(audit.text).toContain("cargo_audit_outcome: ${{ steps.cargo-audit.outcome }}");
 
     // `|| true` here would pin both step outcomes to success and make the issue
-    // step below permanently unreachable.
-    expect(dependencyAudit).not.toContain("pnpm audit --audit-level=high 2>&1 || true");
-    expect(dependencyAudit).not.toContain("cargo audit 2>&1 || true");
-    expect(dependencyAudit).toContain(
+    // job below permanently unreachable.
+    expect(audit.text).not.toContain("pnpm audit --audit-level=high 2>&1 || true");
+    expect(audit.text).not.toContain("cargo audit 2>&1 || true");
+    expect(audit.text).toContain(
       "pnpm audit --audit-level=high >> audit-report.md 2>&1 || status=$?",
     );
-    expect(dependencyAudit).toContain("cargo audit >> audit-report.md 2>&1 || status=$?");
-    expect(dependencyAudit).toContain(
-      "if: steps.npm-audit.outcome == 'failure' || steps.cargo-audit.outcome == 'failure'",
-    );
-    expect(dependencyAudit).toContain("scripts/open-or-refresh-issue.mjs");
+    expect(audit.text).toContain("cargo audit >> audit-report.md 2>&1 || status=$?");
+
+    expect(report).toBeDefined();
+    expect(report.needs).toEqual(["audit"]);
+    expect(report.text).toMatch(/permissions:\n {6}contents: read\n {6}issues: write/u);
+    expect(report.text).toContain("needs.audit.outputs.npm_audit_outcome == 'failure'");
+    expect(report.text).toContain("needs.audit.outputs.cargo_audit_outcome == 'failure'");
+    expect(report.text).toContain("scripts/open-or-refresh-issue.mjs");
   });
 
-  it("runs independent asset and permutation canary contracts with browser coverage", async () => {
+  it("runs independent asset and permutation canary contracts with browser coverage and isolated issue reporting", async () => {
     const [canary, example] = await Promise.all([
       readRepositoryFile(".github/workflows/next-canary.yml"),
       readRepositoryFile("examples/nextjs-route/package.json"),
     ]);
+    const header = canary.slice(0, canary.indexOf("\njobs:\n"));
+    const jobs = workflowJobs(canary);
+    const contract = jobs.get("contract");
+    const report = jobs.get("report-issues");
 
     // Canary changes independently of pull requests, so it must not gate them.
     expect(canary).toMatch(/^ {2}schedule:$/mu);
     expect(canary).toContain("workflow_dispatch:");
     expect(canary).not.toMatch(/^ {2}(push|pull_request):/mu);
-    expect(canary).toContain(
+    expect(header).toContain("permissions:\n  contents: read");
+    expect(header).not.toMatch(/^ {2}issues:/mu);
+    expect(contract.text).not.toMatch(/^ {6}issues:/mu);
+    expect(contract.text).toContain(
       'pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"',
     );
-    expect(canary).toContain("fail-fast: false");
+    expect(contract.text).toContain("fail-fast: false");
     for (const delivery of ["assets", "permutations"]) {
-      expect(canary).toContain(`delivery: ${delivery}`);
+      expect(contract.text).toContain(`delivery: ${delivery}`);
       expect(JSON.parse(example).scripts[`build:catalog-${delivery}`]).toContain(
         `check-next-client-catalog-${delivery}.mjs`,
       );
     }
-    expect(canary).toContain(
+    expect(contract.text).toContain(
       "run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}",
     );
-    expect(canary).toContain("if: matrix.delivery == 'permutations'");
-    expect(canary).toContain("pnpm exec playwright install --with-deps chromium");
-    expect(canary).toContain("client catalog ${{ matrix.label }} contract");
-    expect(canary).toContain(
-      "if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'",
-    );
-    expect(canary).toContain("scripts/open-or-refresh-issue.mjs");
+    expect(contract.text).toContain("if: matrix.delivery == 'permutations'");
+    expect(contract.text).toContain("pnpm exec playwright install --with-deps chromium");
+    expect(contract.text).toContain("client catalog ${{ matrix.label }} contract");
+    expect(contract.text).toContain("CONTRACT_OUTCOME: ${{ steps.contract.outcome }}");
+
+    expect(report).toBeDefined();
+    expect(report.needs).toEqual(["contract"]);
+    expect(report.if).toContain("always()");
+    expect(report.if).toContain("github.event_name == 'schedule'");
+    expect(report.text).toMatch(/permissions:\n {6}contents: read\n {6}issues: write/u);
+    expect(report.text).toContain("scripts/open-or-refresh-issue.mjs");
+  });
+
+  it("scopes GitHub Pages write permissions strictly to the site deploy job", async () => {
+    const deploySite = await readRepositoryFile(".github/workflows/deploy-site.yml");
+    const header = deploySite.slice(0, deploySite.indexOf("\njobs:\n"));
+    const jobs = workflowJobs(deploySite);
+    const build = jobs.get("build");
+    const deploy = jobs.get("deploy");
+    const verify = jobs.get("verify");
+
+    expect(header).toContain("permissions:\n  contents: read");
+    expect(header).not.toMatch(/^ {2}(?:pages|id-token):/mu);
+    expect(build.text).not.toMatch(/^ {6}(?:pages|id-token):|actions\/configure-pages/mu);
+    expect(deploy.text).toMatch(/permissions:\n {6}pages: write\n {6}id-token: write/u);
+    expect(deploy.text).toContain("actions/configure-pages@");
+    expect(deploy.text).toContain("actions/deploy-pages@");
+    expect(verify.text).toContain("permissions: {}");
   });
 
   it("offers every screenshot-capturable example in the capture dropdown", async () => {
@@ -1156,11 +1203,12 @@ describe("workflow contracts", () => {
     );
   });
 
-  it("pins every third-party action to a commit SHA with a version comment", async () => {
-    const { checked, problems } = checkWorkflowPins(repositoryRoot);
+  it("pins every third-party action and container image to an immutable digest", async () => {
+    const { checked, containerFilesChecked, problems } = checkWorkflowPins(repositoryRoot);
 
     expect(problems).toEqual([]);
     expect(checked).toBeGreaterThan(0);
+    expect(containerFilesChecked).toBeGreaterThan(0);
 
     // Local composite actions carry no reference to pin; everything else must
     // name a commit and say which release it is.
@@ -1168,11 +1216,56 @@ describe("workflow contracts", () => {
       [],
     );
     expect(unpinnedActionReferences("      - uses: actions/checkout@v7\n")).toHaveLength(1);
+    expect(unpinnedActionReferences("      - uses: docker://alpine:3.20\n")).toHaveLength(1);
+    const digest = `sha256:${"a".repeat(64)}`;
+    expect(unpinnedActionReferences(`      - uses: docker://alpine:3.20@${digest}\n`)).toEqual([]);
 
     const uncommented = `actions/checkout@${"a".repeat(40)}`;
     expect(unpinnedActionReferences(`      - uses: ${uncommented}\n`)).toEqual([
       `<memory>:1: ${uncommented} has no version comment`,
     ]);
+
+    // Workflow and composite-action container references must carry a sha256 digest.
+    expect(unpinnedWorkflowContainerReferences("    image: node:24-alpine\n")).toHaveLength(1);
+    expect(unpinnedWorkflowContainerReferences(`    image: node:24-alpine@${digest}\n`)).toEqual(
+      [],
+    );
+    expect(
+      unpinnedWorkflowContainerReferences(
+        '      - name: Pull\n        run: |\n          image=rust:1.96-alpine\n          docker pull "$image"\n',
+      ),
+    ).toEqual(["<memory>:3: rust:1.96-alpine is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `      - name: Pull\n        run: |\n          image=rust:1.96-alpine@${digest}\n          docker pull "$image"\n`,
+      ),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        '      - name: Smoke\n        run: >\n          docker run --rm\n          -v "$PWD:/workspace"\n          node:24-alpine\n          node -v\n',
+      ),
+    ).toEqual(["<memory>:5: node:24-alpine is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `      - name: Smoke\n        run: >\n          docker run --rm\n          -v "$PWD:/workspace"\n          node:24-alpine@${digest}\n          node -v\n`,
+      ),
+    ).toEqual([]);
+
+    // Containerfiles/Dockerfiles must pin FROM and external COPY --from stages,
+    // while allowing `scratch` and internal build stage aliases.
+    expect(
+      unpinnedContainerfileReferences(
+        `FROM rust:1.96-bookworm AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nCOPY --from=busybox:1.37 /bin/sh /bin/sh\nFROM scratch\n`,
+      ),
+    ).toEqual([
+      "<memory>:1: rust:1.96-bookworm is not pinned to a sha256 digest",
+      "<memory>:4: busybox:1.37 is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedContainerfileReferences(
+        `FROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
+      ),
+    ).toEqual([]);
   });
 
   it("runs the dependency policy and the pin check in CI", async () => {
