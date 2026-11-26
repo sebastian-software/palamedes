@@ -458,13 +458,9 @@ function walkCompiledLoaderTree(
     const layoutExpr = modules.get("layout")!;
     const layoutStart = skipWhitespaceAndComments(layoutExpr, 0);
     const trimmedLayout = layoutExpr.slice(layoutStart).trim();
-    if (
-      trimmedLayout === "undefined" ||
-      trimmedLayout === "null" ||
-      /^void\s+0$/u.test(trimmedLayout)
-    ) {
-      // Explicit absent layout value: continue down `children`, matching Next's
-      // `if (typeof layout !== 'undefined')` check in `getRootParamsImpl()`.
+    if (trimmedLayout === "undefined" || /^void\s+0$/u.test(trimmedLayout)) {
+      // Explicit `undefined` layout value: continue down `children`, matching
+      // Next's `if (typeof layout !== 'undefined')` check in `getRootParamsImpl()`.
     } else if (layoutExpr[layoutStart] === "[") {
       const layoutEnd = scanBalancedEnd(layoutExpr, layoutStart);
       if (
@@ -538,75 +534,11 @@ function scanRegexLiteralEnd(source: string, start: number): number {
   return -1;
 }
 
-function findMatchingOpenParenBackward(source: string, closeParenIndex: number): number {
-  let depth = 0;
-  let quote: '"' | "'" | undefined;
-  for (let index = closeParenIndex; index >= 0; index -= 1) {
-    const ch = source[index];
-    if (quote) {
-      if (ch === quote) {
-        let backslashes = 0;
-        for (let bs = index - 1; bs >= 0 && source[bs] === "\\"; bs -= 1) backslashes += 1;
-        if (backslashes % 2 === 0) quote = undefined;
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (ch === ")") depth += 1;
-    else if (ch === "(") {
-      depth -= 1;
-      if (depth === 0) return index;
-    }
-  }
-  return -1;
-}
-
-function readPrecedingWord(source: string, beforeIndex: number): string {
-  let end = beforeIndex;
-  while (end >= 0 && /\s/u.test(source[end] ?? "")) end -= 1;
-  let start = end;
-  while (start >= 0 && /[\w$]/u.test(source[start] ?? "")) start -= 1;
-  return source.slice(start + 1, end + 1);
-}
-
-function blockHeaderShadowsIdentifier(source: string, braceIndex: number, ident: string): boolean {
-  const identWord = new RegExp(`(?<![\\w$.])${escapeRegExpLiteral(ident)}(?![\\w$])`, "u");
-  let index = braceIndex - 1;
-  while (index >= 0 && /\s/u.test(source[index] ?? "")) index -= 1;
-  if (index < 0) return false;
-  if (source[index] === ">" && source[index - 1] === "=") {
-    let arrowBefore = index - 2;
-    while (arrowBefore >= 0 && /\s/u.test(source[arrowBefore] ?? "")) arrowBefore -= 1;
-    if (arrowBefore < 0) return false;
-    if (source[arrowBefore] === ")") {
-      const openParen = findMatchingOpenParenBackward(source, arrowBefore);
-      if (openParen === -1) return true;
-      return identWord.test(source.slice(openParen + 1, arrowBefore));
-    }
-    return readPrecedingWord(source, arrowBefore) === ident;
-  }
-  if (source[index] === ")") {
-    const openParen = findMatchingOpenParenBackward(source, index);
-    if (openParen === -1) return true;
-    const headWord = readPrecedingWord(source, openParen - 1);
-    if (CONTROL_FLOW_KEYWORDS.has(headWord)) return false;
-    const headerSlice = source.slice(openParen + 1, index);
-    if (headWord === "for") {
-      return /\b(?:let|const|var)\b/u.test(headerSlice) && identWord.test(headerSlice);
-    }
-    return identWord.test(headerSlice);
-  }
-  return false;
-}
-
 /**
- * Resolves an identifier bound to an array literal in the lexical scope chain
- * enclosing `objectStart`. Ignores `let`/`const` bindings confined to closed
- * sibling blocks (such as helper functions or earlier modules in the same
- * chunk) and returns `undefined` whenever scope identity or mutation is
+ * Resolves an identifier bound to an array literal in the same straight-line
+ * scope enclosing `objectStart`. Ignores `let`/`const` bindings confined to
+ * closed sibling blocks (such as helper functions or earlier modules in the
+ * same chunk) and returns `undefined` whenever scope identity or mutation is
  * uncertain so callers fall back to inspecting the source tree.
  */
 function resolveIdentifierArrayInScope(
@@ -698,9 +630,7 @@ function resolveIdentifierArrayInScope(
       }
       top.conditionalStmt = false;
       top.pendingCondition = false;
-      const shadowed = blockHeaderShadowsIdentifier(source, index, ident);
       scopeStack.push({
-        ...(shadowed ? { binding: { value: null, blockScoped: true } } : {}),
         tainted: false,
         exprDepth: 0,
         pendingCondition: false,

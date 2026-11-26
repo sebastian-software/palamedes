@@ -891,6 +891,15 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // `layout: null` satisfies `typeof layout !== "undefined"` in Next's
+      // `getRootParamsImpl()`, so it must NOT descend past the parent layout;
+      // treat it as inconclusive so the source-tree fallback runs.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }] }, { layout: null }]; ${ep("tree")};`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
 
       // Lexical scoping: block-scoped `let`/`const` bindings inside sibling
       // functions or earlier modules do not override the outer scope's tree,
@@ -921,6 +930,14 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; { const { t: label } = meta; t[2]={}; } ${ep("tree:t")};`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      // A destructured parameter alias (`function helper({ t: label })`) does
+      // not shadow outer `t`, so writes to `t` inside `helper` taint outer `t`.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; function helper({ t: label }){ t[2]={}; return label; } helper(meta); ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();

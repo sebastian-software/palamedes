@@ -455,14 +455,15 @@ export async function register() {
 }
 ```
 
-When the layout also reads `x-palamedes-locale` to load its server catalog, verify
-and unwrap the signed header value with `verifyClientCatalogLocaleHeader()`, check
+When a header-only top-level layout (`app/layout.tsx`, with no `[locale]` root
+param) also reads `x-palamedes-locale` to load its server catalog, verify and
+unwrap the signed header value with `verifyClientCatalogLocaleHeader()`, check
 that the verified locale is one of your configured locales, and fall back to the
 same `source-locale` configured in `palamedes.yaml` so HTML and client chunks
 always agree:
 
 ```ts
-// app/layout.tsx
+// app/layout.tsx (header-only layout without a root [locale] segment)
 import { headers } from "next/headers";
 import {
   CLIENT_CATALOG_LOCALE_HEADER,
@@ -494,6 +495,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   );
 }
 ```
+
+In a root `[locale]` layout (`app/[locale]/layout.tsx`) using
+`localeSource: "header"`, `bindClientCatalogPermutations()` falls back to the
+`[locale]` route param before `source-locale` whenever `x-palamedes-locale` is
+missing or fails verification; mirror that fallback order in the layout
+(verified header, then supported `params.locale`, then `SOURCE_LOCALE`) so
+server HTML and client chunks stay aligned on every request.
 
 A route that gets its locale from the header alone, such as a cookie strategy
 on fixed paths, has to render dynamically: declare
