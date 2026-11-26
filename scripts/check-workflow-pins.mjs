@@ -5290,6 +5290,8 @@ function inspectShellText(
       const rawPlatforms = [];
       const rawBuildImageOverrides = [];
       const rawAttestSpecs = [];
+      const rawPodmanSbomPresets = [];
+      let hasPodmanSbomScanner = false;
       let contextArg = null;
       for (let index = buildArgStart; index < tokens.length; index += 1) {
         const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
@@ -5367,13 +5369,22 @@ function inspectShellText(
         }
         if (token === "--sbom") {
           if (tokens[index + 1] !== undefined) {
-            rawAttestSpecs.push({ requireSbomType: false, rawValue: tokens[index + 1] });
+            if (normalizedCli === "podman" || normalizedCli === "buildah") {
+              rawPodmanSbomPresets.push(tokens[index + 1]);
+            } else {
+              rawAttestSpecs.push({ requireSbomType: false, rawValue: tokens[index + 1] });
+            }
           }
           index += 1;
           continue;
         }
         if (token.startsWith("--sbom=")) {
-          rawAttestSpecs.push({ requireSbomType: false, rawValue: token.slice("--sbom=".length) });
+          const sbomVal = token.slice("--sbom=".length);
+          if (normalizedCli === "podman" || normalizedCli === "buildah") {
+            rawPodmanSbomPresets.push(sbomVal);
+          } else {
+            rawAttestSpecs.push({ requireSbomType: false, rawValue: sbomVal });
+          }
           continue;
         }
         if (token === "--attest") {
@@ -5389,6 +5400,9 @@ function inspectShellText(
         }
         if (normalizedCli === "podman" || normalizedCli === "buildah") {
           if (token === "--from" || token === "--sbom-scanner-image") {
+            if (token === "--sbom-scanner-image") {
+              hasPodmanSbomScanner = true;
+            }
             if (tokens[index + 1] !== undefined) {
               rawBuildImageOverrides.push({ flag: token, rawValue: tokens[index + 1] });
             }
@@ -5403,6 +5417,7 @@ function inspectShellText(
             continue;
           }
           if (token.startsWith("--sbom-scanner-image=")) {
+            hasPodmanSbomScanner = true;
             rawBuildImageOverrides.push({
               flag: "--sbom-scanner-image",
               rawValue: token.slice("--sbom-scanner-image=".length),
@@ -5554,6 +5569,39 @@ function inspectShellText(
                     seenContextProblems.add(msg);
                     problems.push(msg);
                   }
+                }
+              }
+            }
+          }
+        }
+
+        if (rawPodmanSbomPresets.length > 0 && !hasPodmanSbomScanner) {
+          for (const rawPreset of rawPodmanSbomPresets) {
+            const expandedPreset = resolveImageTokenCandidates(
+              rawPreset,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            for (const varCandidate of expandedPreset.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                rowList,
+                varCandidate.line,
+              )) {
+                const preset = candidate.text.trim();
+                if (
+                  !preset ||
+                  preset.toLowerCase() === "false" ||
+                  isDynamicReference(preset, shellMode)
+                ) {
+                  continue;
+                }
+                const msg = `${filePath}:${candidate.line}: ${normalizedCli} build --sbom preset uses unpinned default scanner image (pass --sbom-scanner-image ...@sha256:...)`;
+                if (!seenContextProblems.has(msg)) {
+                  seenContextProblems.add(msg);
+                  problems.push(msg);
                 }
               }
             }
@@ -6878,6 +6926,57 @@ function checkStepsList(
       );
     } else if (
       usesNode?.kind === "scalar" &&
+      /^docker\/setup-qemu-action@/iu.test(String(usesNode.value).trim())
+    ) {
+      const imageNode = getMapField(withNode, "image");
+      const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
+      const seenQemuProblems = new Set();
+      const pushQemuProblem = (message) => {
+        if (!seenQemuProblems.has(message)) {
+          seenQemuProblems.add(message);
+          problems.push(message);
+        }
+      };
+
+      for (const row of actionRows) {
+        const rowStepEnv = getRowStepEnv(row);
+        const rowList = row ? [row] : [];
+        const rawImage = imageNode?.kind === "scalar" ? String(imageNode.value).trim() : "";
+        if (!rawImage) {
+          pushQemuProblem(
+            `${filePath}:${usesNode.line}: docker/setup-qemu-action uses unpinned default QEMU image (pin with.image to ...@sha256:...)`,
+          );
+          continue;
+        }
+        const expandedImage = resolveEnvExpressionCandidates(rawImage, rowStepEnv, imageNode.line);
+        if (expandedImage.truncated) {
+          pushQemuProblem(
+            `${filePath}:${imageNode.line}: ${rawImage} exceeds expansion limit and cannot be verified exhaustively`,
+          );
+        }
+        for (const envCandidate of expandedImage.candidates) {
+          for (const candidate of expandMatrixReferences(
+            envCandidate.text,
+            rowList,
+            envCandidate.line,
+          )) {
+            const imageRef = candidate.text.trim();
+            if (!imageRef) {
+              pushQemuProblem(
+                `${filePath}:${usesNode.line}: docker/setup-qemu-action uses unpinned default QEMU image (pin with.image to ...@sha256:...)`,
+              );
+              continue;
+            }
+            if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
+              pushQemuProblem(
+                `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+              );
+            }
+          }
+        }
+      }
+    } else if (
+      usesNode?.kind === "scalar" &&
       /^docker\/setup-buildx-action@/iu.test(String(usesNode.value).trim())
     ) {
       const driverNode = getMapField(withNode, "driver");
@@ -7623,6 +7722,7 @@ function checkStepsList(
                 callerEnv: rowStepEnv,
                 actionCallStack: nextCallStack,
                 checkedLocalActionPins,
+                calleeResultCache: buildFileContext.calleeResultCache,
                 checkoutPrefixes: rowCheckoutPrefixes,
                 foreignCheckoutPrefixes: rowForeignPrefixes,
                 emittedGithubEnv: actionEmittedEnv,
@@ -7785,6 +7885,25 @@ export function collectWorkflowFiles(directory) {
     }
 
     if (/\.ya?ml$/u.test(entry)) {
+      entries.push(entryPath);
+    }
+  }
+
+  return entries.sort();
+}
+
+function collectActionManifestFiles(directory) {
+  const entries = [];
+
+  for (const entry of readdirSync(directory)) {
+    const entryPath = path.join(directory, entry);
+
+    if (statSync(entryPath).isDirectory()) {
+      entries.push(...collectActionManifestFiles(entryPath));
+      continue;
+    }
+
+    if (/^action\.ya?ml$/iu.test(entry)) {
       entries.push(entryPath);
     }
   }
@@ -8130,22 +8249,119 @@ function collectReferencedInputNames(
 
 const CONTAINER_CLI_HINT_PATTERN = /\b(?:docker|podman|buildah)(?:\.exe)?\b/iu;
 
+function collectReferencedEnvVarNames(node, found = new Set(), seen = new Set()) {
+  if (!node || seen.has(node)) {
+    return found;
+  }
+  seen.add(node);
+  if (node.kind === "scalar") {
+    const text = String(node.value);
+    for (const match of text.matchAll(new RegExp(ENV_EXPRESSION_PATTERN.source, "giu"))) {
+      const name = (match.groups.dot ?? match.groups.sq ?? match.groups.dq).toLowerCase();
+      found.add(name);
+    }
+    for (const match of text.matchAll(new RegExp(EMBEDDED_VAR_PATTERN.source, "gu"))) {
+      const name = (match.groups.braced ?? match.groups.bare).toLowerCase();
+      found.add(name);
+    }
+    for (const match of text.matchAll(new RegExp(PWSH_ENV_VAR_PATTERN.source, "giu"))) {
+      const name = (match.groups.braced ?? match.groups.bare).toLowerCase();
+      found.add(name);
+    }
+    for (const match of text.matchAll(new RegExp(CMD_VAR_PATTERN.source, "gu"))) {
+      found.add(match.groups.name.toLowerCase());
+    }
+    for (const match of text.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-|:=|:\+|-|=|\+)/gu)) {
+      found.add(match[1].toLowerCase());
+    }
+    return found;
+  }
+  if (node.kind === "seq") {
+    for (const item of node.value) {
+      collectReferencedEnvVarNames(item, found, seen);
+    }
+    return found;
+  }
+  if (node.kind === "map") {
+    for (const val of node.value.values()) {
+      collectReferencedEnvVarNames(val, found, seen);
+    }
+  }
+  return found;
+}
+
+function nodeReferencesMatrix(node, seen = new Set()) {
+  if (!node || seen.has(node)) {
+    return false;
+  }
+  seen.add(node);
+  if (node.kind === "scalar") {
+    return new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(String(node.value));
+  }
+  if (node.kind === "seq") {
+    return node.value.some((item) => nodeReferencesMatrix(item, seen));
+  }
+  if (node.kind === "map") {
+    for (const val of node.value.values()) {
+      if (nodeReferencesMatrix(val, seen)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function collectPinRelevantDispatchInputNames(doc) {
   const referenced = new Set();
   const addFromNode = (node) => {
     collectReferencedInputNames(node, referenced, new Set(), { includeEventInputs: true });
   };
 
+  const traceEnvMaps = (envNodes, envNames, matrixNeeded) => {
+    const resolvedEnvNames = new Set(envNames);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const envNode of envNodes) {
+        if (envNode?.kind !== "map") {
+          continue;
+        }
+        for (const [envKey, envVal] of envNode.value) {
+          if (!resolvedEnvNames.has(envKey.toLowerCase())) {
+            continue;
+          }
+          addFromNode(envVal);
+          if (nodeReferencesMatrix(envVal)) {
+            matrixNeeded.needed = true;
+          }
+          const nested = collectReferencedEnvVarNames(envVal);
+          for (const nestedName of nested) {
+            if (!resolvedEnvNames.has(nestedName)) {
+              resolvedEnvNames.add(nestedName);
+              grew = true;
+            }
+          }
+        }
+      }
+    }
+  };
+
   addFromNode(getMapField(doc, "container"));
   addFromNode(getMapField(doc, "services"));
   addFromNode(getMapField(doc, "image"));
 
-  const isPinRelevantActionUses = (usesText) =>
+  const isPinRelevantContainerActionUses = (usesText) =>
     usesText.startsWith("./") ||
-    /^docker\/(?:build-push-action|setup-buildx-action|bake-action)@/iu.test(usesText) ||
-    /^actions\/checkout@/iu.test(usesText);
+    /^docker\/(?:build-push-action|setup-buildx-action|setup-qemu-action|bake-action)@/iu.test(
+      usesText,
+    );
 
-  const inspectStepsForRelevantInputs = (stepsNode, parentScopeNodes) => {
+  const inspectStepsForRelevantInputs = (
+    stepsNode,
+    parentEnvNodes,
+    parentDefaultsNodes,
+    jobStrategyNode = null,
+  ) => {
     if (stepsNode?.kind !== "seq") {
       return;
     }
@@ -8156,7 +8372,10 @@ function collectPinRelevantDispatchInputNames(doc) {
       }
       const usesNode = getMapField(stepNode, "uses");
       const runNode = getMapField(stepNode, "run");
-      if (usesNode?.kind === "scalar" && isPinRelevantActionUses(String(usesNode.value).trim())) {
+      if (
+        usesNode?.kind === "scalar" &&
+        isPinRelevantContainerActionUses(String(usesNode.value).trim())
+      ) {
         hasContainerOrActionStep = true;
         break;
       }
@@ -8168,35 +8387,71 @@ function collectPinRelevantDispatchInputNames(doc) {
     if (!hasContainerOrActionStep) {
       return;
     }
-    for (const scopeNode of parentScopeNodes) {
-      addFromNode(scopeNode);
+    const referencedEnvNames = new Set();
+    const matrixNeeded = { needed: false };
+    const collectFromPinNode = (node) => {
+      if (!node) {
+        return;
+      }
+      addFromNode(node);
+      collectReferencedEnvVarNames(node, referencedEnvNames);
+      if (nodeReferencesMatrix(node)) {
+        matrixNeeded.needed = true;
+      }
+    };
+    for (const defaultsNode of parentDefaultsNodes) {
+      collectFromPinNode(defaultsNode);
     }
+    const stepEnvNodes = [];
     for (const stepNode of stepsNode.value) {
       if (stepNode?.kind !== "map") {
         continue;
       }
       const usesNode = getMapField(stepNode, "uses");
-      if (usesNode?.kind === "scalar" && isPinRelevantActionUses(String(usesNode.value).trim())) {
-        addFromNode(usesNode);
-        addFromNode(getMapField(stepNode, "with"));
-        addFromNode(getMapField(stepNode, "env"));
+      const usesText = usesNode?.kind === "scalar" ? String(usesNode.value).trim() : "";
+      const isCheckout = /^actions\/checkout@/iu.test(usesText);
+      const isLocalOrDockerAction = isPinRelevantContainerActionUses(usesText);
+      if (isLocalOrDockerAction || isCheckout) {
+        collectFromPinNode(usesNode);
+        collectFromPinNode(getMapField(stepNode, "with"));
+        const stepEnv = getMapField(stepNode, "env");
+        if (usesText.startsWith("./")) {
+          // Local composite actions can consume arbitrary caller env variables.
+          collectFromPinNode(stepEnv);
+          for (const parentEnv of parentEnvNodes) {
+            collectFromPinNode(parentEnv);
+          }
+        } else if (stepEnv) {
+          stepEnvNodes.push(stepEnv);
+        }
       }
       const runNode = getMapField(stepNode, "run");
       if (runNode?.kind === "scalar") {
         const runText = String(runNode.value);
         if (CONTAINER_CLI_HINT_PATTERN.test(runText) || /GITHUB_ENV/iu.test(runText)) {
-          addFromNode(runNode);
-          addFromNode(getMapField(stepNode, "env"));
-          addFromNode(getMapField(stepNode, "working-directory"));
-          addFromNode(getMapField(stepNode, "shell"));
+          collectFromPinNode(runNode);
+          collectFromPinNode(getMapField(stepNode, "working-directory"));
+          collectFromPinNode(getMapField(stepNode, "shell"));
+          const stepEnv = getMapField(stepNode, "env");
+          if (stepEnv) {
+            stepEnvNodes.push(stepEnv);
+          }
         }
       }
+    }
+    traceEnvMaps([...parentEnvNodes, ...stepEnvNodes], referencedEnvNames, matrixNeeded);
+    if (matrixNeeded.needed && jobStrategyNode) {
+      addFromNode(jobStrategyNode);
     }
   };
 
   const workflowEnvNode = getMapField(doc, "env");
   const workflowDefaultsNode = getMapField(doc, "defaults");
-  inspectStepsForRelevantInputs(getMapField(doc, "steps"), [workflowEnvNode, workflowDefaultsNode]);
+  inspectStepsForRelevantInputs(
+    getMapField(doc, "steps"),
+    [workflowEnvNode],
+    [workflowDefaultsNode],
+  );
 
   const jobsNode = getMapField(doc, "jobs");
   if (jobsNode?.kind === "map") {
@@ -8210,28 +8465,44 @@ function collectPinRelevantDispatchInputNames(doc) {
       const jobContainerNode = getMapField(jobNode, "container");
       const jobServicesNode = getMapField(jobNode, "services");
       if (jobContainerNode || jobServicesNode) {
-        addFromNode(jobContainerNode);
-        addFromNode(jobServicesNode);
-        addFromNode(workflowEnvNode);
-        addFromNode(jobEnvNode);
-        addFromNode(jobStrategyNode);
+        const envNames = new Set();
+        const matrixNeeded = { needed: false };
+        for (const node of [jobContainerNode, jobServicesNode]) {
+          addFromNode(node);
+          collectReferencedEnvVarNames(node, envNames);
+          if (nodeReferencesMatrix(node)) {
+            matrixNeeded.needed = true;
+          }
+        }
+        traceEnvMaps([workflowEnvNode, jobEnvNode], envNames, matrixNeeded);
+        if (matrixNeeded.needed && jobStrategyNode) {
+          addFromNode(jobStrategyNode);
+        }
       }
       const jobUsesNode = getMapField(jobNode, "uses");
       if (jobUsesNode?.kind === "scalar" && String(jobUsesNode.value).trim().startsWith("./")) {
-        addFromNode(jobUsesNode);
-        addFromNode(getMapField(jobNode, "with"));
-        addFromNode(workflowEnvNode);
-        addFromNode(jobEnvNode);
-        addFromNode(jobStrategyNode);
+        const envNames = new Set();
+        const matrixNeeded = { needed: false };
+        const jobWithNode = getMapField(jobNode, "with");
+        for (const node of [jobUsesNode, jobWithNode]) {
+          addFromNode(node);
+          collectReferencedEnvVarNames(node, envNames);
+          if (nodeReferencesMatrix(node)) {
+            matrixNeeded.needed = true;
+          }
+        }
+        traceEnvMaps([workflowEnvNode, jobEnvNode], envNames, matrixNeeded);
+        if (matrixNeeded.needed && jobStrategyNode) {
+          addFromNode(jobStrategyNode);
+        }
         continue;
       }
-      inspectStepsForRelevantInputs(getMapField(jobNode, "steps"), [
-        workflowEnvNode,
-        workflowDefaultsNode,
-        jobEnvNode,
-        jobDefaultsNode,
+      inspectStepsForRelevantInputs(
+        getMapField(jobNode, "steps"),
+        [workflowEnvNode, jobEnvNode],
+        [workflowDefaultsNode, jobDefaultsNode],
         jobStrategyNode,
-      ]);
+      );
     }
   }
 
@@ -8437,6 +8708,7 @@ export function unpinnedWorkflowContainerReferences(
     callerEnv = null,
     actionCallStack = null,
     checkedLocalActionPins = null,
+    calleeResultCache = null,
     checkoutPrefixes = null,
     foreignCheckoutPrefixes = null,
     emittedGithubEnv = null,
@@ -8465,6 +8737,7 @@ export function unpinnedWorkflowContainerReferences(
         buildInvocations,
         actionCallStack: initialCallStack,
         checkedLocalActionPins: checkedLocalActionPins ?? new Set(),
+        calleeResultCache: calleeResultCache ?? new Map(),
         checkoutPrefixes:
           checkoutPrefixes !== undefined && checkoutPrefixes !== null
             ? [...checkoutPrefixes]
@@ -8814,6 +9087,7 @@ export function unpinnedWorkflowContainerReferences(
               pushCalleeProblem(pinProblem);
             }
           }
+          const sharedCalleeCache = ctxBuildFileContext.calleeResultCache ?? new Map();
           for (const row of callRows) {
             const rowList = row ? [row] : [];
             const calleeInputCombos = expandWithInputCombinations(
@@ -8825,18 +9099,31 @@ export function unpinnedWorkflowContainerReferences(
               pushCalleeProblem,
             );
             for (const calleeInputOverrides of calleeInputCombos) {
-              for (const calleeProblem of unpinnedWorkflowContainerReferences(
-                calleeSource,
-                calleeRelPath,
-                {
+              const serializedInputs = JSON.stringify(
+                [...calleeInputOverrides.entries()]
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([k, v]) => [k, v.value]),
+              );
+              const cacheKey = `wf\0${safeWorkflowFile}\0${serializedInputs}`;
+              let calleeProblems = sharedCalleeCache.get(cacheKey);
+              if (!calleeProblems) {
+                calleeProblems = unpinnedWorkflowContainerReferences(calleeSource, calleeRelPath, {
                   root: ctxBuildFileContext.root,
                   explicitBuildFiles: ctxBuildFileContext.explicitBuildFiles,
                   buildInvocations: ctxBuildFileContext.buildInvocations,
                   inputOverrides: calleeInputOverrides,
                   actionCallStack: nextCallStack,
                   checkedLocalActionPins,
-                },
-              )) {
+                  calleeResultCache: sharedCalleeCache,
+                });
+                const hitDepthLimit = calleeProblems.some((msg) =>
+                  msg.includes("exceeds maximum nesting depth"),
+                );
+                if (!hitDepthLimit) {
+                  sharedCalleeCache.set(cacheKey, calleeProblems);
+                }
+              }
+              for (const calleeProblem of calleeProblems) {
                 pushCalleeProblem(calleeProblem);
               }
             }
@@ -9678,9 +9965,9 @@ export function unpinnedContainerfileReferences(
 }
 
 export function checkWorkflowPins(root = process.cwd()) {
-  const directories = [
-    path.join(root, ".github", "workflows"),
-    path.join(root, ".github", "actions"),
+  const workflowSources = [
+    { dir: path.join(root, ".github", "workflows"), collector: collectWorkflowFiles },
+    { dir: path.join(root, ".github", "actions"), collector: collectActionManifestFiles },
   ];
   const problems = [];
   const seenProblems = new Set();
@@ -9693,13 +9980,14 @@ export function checkWorkflowPins(root = process.cwd()) {
   const explicitBuildFiles = new Set();
   const buildInvocations = [];
   const checkedLocalActionPins = new Set();
+  const calleeResultCache = new Map();
   let checked = 0;
 
-  for (const directory of directories) {
-    if (!existsSync(directory)) {
+  for (const { dir, collector } of workflowSources) {
+    if (!existsSync(dir)) {
       continue;
     }
-    for (const filePath of collectWorkflowFiles(directory)) {
+    for (const filePath of collector(dir)) {
       checked += 1;
       const source = readFileSync(filePath, "utf8");
       const relativePath = formatPortableRelativePath(root, filePath);
@@ -9712,6 +10000,7 @@ export function checkWorkflowPins(root = process.cwd()) {
         explicitBuildFiles,
         buildInvocations,
         checkedLocalActionPins,
+        calleeResultCache,
       })) {
         pushProblem(problem);
       }

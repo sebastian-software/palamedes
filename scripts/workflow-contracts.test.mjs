@@ -3108,6 +3108,118 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r37Fixture, { recursive: true, force: true });
     }
+    // `docker/setup-qemu-action` requires a digest-pinned image; checkout +
+    // workflow-level `env` choices unused by container steps do not explode;
+    // Podman `--sbom` presets pair with `--sbom-scanner-image` instead of
+    // BuildKit `generator=`; non-manifest YAML files beside `action.yml` are
+    // ignored; and repeated matrix calls to a local reusable workflow are memoized.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      a:",
+          "        type: choice",
+          "        default: opt-0",
+          "        options:",
+          seventeenChoices,
+          "      b:",
+          "        type: choice",
+          "        default: opt-0",
+          "        options:",
+          seventeenChoices,
+          "env:",
+          "  A: ${{ inputs.a }}",
+          "  B: ${{ inputs.b }}",
+          "jobs:",
+          "  checkout-and-echo:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
+          '      - run: echo "$A $B"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - uses: docker/setup-qemu-action@1111111111111111111111111111111111111111 # v3",
+          "  - uses: docker/setup-qemu-action@1111111111111111111111111111111111111111 # v3",
+          "    with:",
+          "      image: tonistiigi/binfmt:qemu-v9.2.2",
+          "  - uses: docker/setup-qemu-action@1111111111111111111111111111111111111111 # v3",
+          "    with:",
+          `      image: tonistiigi/binfmt:qemu-v9.2.2@${digest}`,
+          "  - run: |",
+          `      podman build --sbom syft --sbom-scanner-image syft:1.0@${digest} .`,
+          "      podman build --sbom syft .",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:2: docker/setup-qemu-action uses unpinned default QEMU image (pin with.image to ...@sha256:...)",
+      "<memory>:5: tonistiigi/binfmt:qemu-v9.2.2 is not pinned to a sha256 digest",
+      "<memory>:11: podman build --sbom preset uses unpinned default scanner image (pass --sbom-scanner-image ...@sha256:...)",
+    ]);
+    const r38Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r38-"));
+    try {
+      await mkdir(join(r38Fixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(r38Fixture, ".github", "actions", "deploy"), { recursive: true });
+      await writeFile(
+        join(r38Fixture, ".github", "actions", "deploy", "action.yml"),
+        "name: Deploy\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: echo ok\n",
+      );
+      await writeFile(
+        join(r38Fixture, ".github", "actions", "deploy", "k8s-manifests.yml"),
+        "---\napiVersion: v1\nkind: ConfigMap\n---\napiVersion: v1\nkind: Service\n",
+      );
+      await writeFile(
+        join(r38Fixture, ".github", "workflows", "leaf.yml"),
+        "on:\n  workflow_call:\n    inputs:\n      image:\n        type: string\njobs:\n  run:\n    runs-on: ubuntu-24.04\n    container: ${{ inputs.image }}\n",
+      );
+      await writeFile(
+        join(r38Fixture, ".github", "workflows", "mid.yml"),
+        [
+          "on:",
+          "  workflow_call:",
+          "    inputs:",
+          "      image:",
+          "        type: string",
+          "jobs:",
+          "  fan:",
+          "    strategy:",
+          "      matrix:",
+          "        slot: [1, 2, 3, 4, 5, 6, 7, 8]",
+          "    uses: ./.github/workflows/leaf.yml",
+          "    with:",
+          "      image: ${{ inputs.image }}",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r38Fixture, ".github", "workflows", "top.yml"),
+        [
+          "jobs:",
+          "  fan:",
+          "    strategy:",
+          "      matrix:",
+          "        slot: [1, 2, 3, 4, 5, 6, 7, 8]",
+          "    uses: ./.github/workflows/mid.yml",
+          "    with:",
+          "      image: alpine:3.20",
+          "",
+        ].join("\n"),
+      );
+      const r38Result = checkWorkflowPins(r38Fixture);
+      expect(r38Result.problems).toEqual([
+        ".github/workflows/leaf.yml:9: alpine:3.20 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r38Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
