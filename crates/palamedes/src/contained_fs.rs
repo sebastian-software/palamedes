@@ -2453,31 +2453,25 @@ mod platform {
                         drop(claim_fd);
                         continue 'recovery;
                     }
-                    // Clean up only prior-generation claims whose identity
-                    // still matches the verified dead claim we inspected
-                    // (best-effort when owned by a different UID in a sticky dir).
-                    for (prior_name, prior_id) in &verified_prior_claims {
-                        if let Ok(stat) = fstatat_nofollow(dir_raw, prior_name)
-                            && stat_identity(&stat) == *prior_id
-                        {
-                            // SAFETY: `dir_raw` is open and `prior_name` matches the verified dead claim.
-                            unsafe {
-                                let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
-                            }
-                        }
-                    }
                     let mut result = Ok(ReadonlyRecoveryOutcome::LockReleased);
+                    let mut main_lock_retired = false;
                     match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                         Ok(stat) if stat_identity(&stat) == existing_id => {
-                            if let Err(error) = unlink_lock(dir_raw) {
-                                match error.raw_os_error() {
-                                    Some(libc::ENOENT) => {}
+                            match unlink_lock(dir_raw) {
+                                Ok(()) => {
+                                    main_lock_retired = true;
+                                }
+                                Err(error) => match error.raw_os_error() {
+                                    Some(libc::ENOENT) => {
+                                        main_lock_retired = true;
+                                    }
                                     Some(libc::EPERM | libc::EACCES) => {
                                         // Distinct UID in a sticky directory cannot delete
-                                        // another user's `.pmds-lock`. Hold `LOCK_SH` on
-                                        // `existing_fd` (blocking the owner's `LOCK_EX`)
-                                        // plus `LOCK_EX` on our own `claim_fd` (blocking
-                                        // all other distinct-UID waiters) directly.
+                                        // another user's `.pmds-lock`. Keep earlier claims
+                                        // intact so no concurrent waiter can claim a vacant
+                                        // lower generation while we hold `claim_name`, and
+                                        // return `HeldViaClaim` holding `LOCK_SH` on
+                                        // `existing_fd` plus `LOCK_EX` on `claim_fd`.
                                         return Ok(ReadonlyRecoveryOutcome::HeldViaClaim {
                                             claim_name,
                                             claim_id,
@@ -2488,13 +2482,33 @@ mod platform {
                                     _ => {
                                         result = Err(ContainedFsError::Io(error));
                                     }
-                                }
+                                },
                             }
                         }
-                        Ok(_) => {}
-                        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {}
+                        Ok(_) => {
+                            main_lock_retired = true;
+                        }
+                        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                            main_lock_retired = true;
+                        }
                         Err(error) => {
                             result = Err(ContainedFsError::Io(error));
+                        }
+                    }
+                    // Clean up prior-generation claims ONLY after the main
+                    // `.pmds-lock` inode has actually been retired so a lower
+                    // generation slot can never become vacant while a higher
+                    // generation claim is active.
+                    if main_lock_retired {
+                        for (prior_name, prior_id) in &verified_prior_claims {
+                            if let Ok(stat) = fstatat_nofollow(dir_raw, prior_name)
+                                && stat_identity(&stat) == *prior_id
+                            {
+                                // SAFETY: `dir_raw` is open and `prior_name` matches the verified dead claim.
+                                unsafe {
+                                    let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
+                                }
+                            }
                         }
                     }
                     if let Ok(stat) = fstatat_nofollow(dir_raw, &claim_name)
@@ -5045,17 +5059,205 @@ mod platform {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+    fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        let mut names_buf = Vec::new();
+        for _ in 0..4 {
+            // SAFETY: querying list size with null buffer.
+            let size = unsafe {
+                libc::extattr_list_fd(fd, libc::EXTATTR_NAMESPACE_USER, std::ptr::null_mut(), 0)
+            };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                let raw = error.raw_os_error();
+                if raw == Some(libc::EOPNOTSUPP)
+                    || raw == Some(libc::ENOTSUP)
+                    || raw == Some(libc::ENOSYS)
+                {
+                    return Ok(Vec::new());
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                return Ok(Vec::new());
+            }
+            names_buf.resize(usize::try_from(size).unwrap_or(0), 0u8);
+            // SAFETY: `names_buf` has `names_buf.len()` writable bytes.
+            let read = unsafe {
+                libc::extattr_list_fd(
+                    fd,
+                    libc::EXTATTR_NAMESPACE_USER,
+                    names_buf.as_mut_ptr().cast::<libc::c_void>(),
+                    names_buf.len(),
+                )
+            };
+            if read >= 0 {
+                names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                break;
+            }
+            let error = io::Error::last_os_error();
+            let raw = error.raw_os_error();
+            if raw == Some(libc::ERANGE) {
+                continue;
+            }
+            if raw == Some(libc::EOPNOTSUPP)
+                || raw == Some(libc::ENOTSUP)
+                || raw == Some(libc::ENOSYS)
+            {
+                return Ok(Vec::new());
+            }
+            return Err(error);
+        }
+
+        // BSD `extattr_list_fd` returns `[len: u8][name bytes...]` records.
+        let mut xattrs = Vec::new();
+        let mut offset = 0usize;
+        while offset < names_buf.len() {
+            let name_len = usize::from(names_buf[offset]);
+            offset += 1;
+            if offset + name_len > names_buf.len() {
+                break;
+            }
+            let raw_name = &names_buf[offset..offset + name_len];
+            offset += name_len;
+            if raw_name.is_empty() {
+                continue;
+            }
+            let Ok(c_name) = CString::new(raw_name) else {
+                continue;
+            };
+            let mut value_opt = None;
+            for _ in 0..4 {
+                // SAFETY: querying attribute size with null buffer.
+                let size = unsafe {
+                    libc::extattr_get_fd(
+                        fd,
+                        libc::EXTATTR_NAMESPACE_USER,
+                        c_name.as_ptr(),
+                        std::ptr::null_mut(),
+                        0,
+                    )
+                };
+                if size < 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ENOATTR) {
+                        break;
+                    }
+                    return Err(error);
+                }
+                let mut value = vec![0u8; usize::try_from(size).unwrap_or(0)];
+                if value.is_empty() {
+                    value_opt = Some(value);
+                    break;
+                }
+                // SAFETY: `value` has `value.len()` writable bytes.
+                let read = unsafe {
+                    libc::extattr_get_fd(
+                        fd,
+                        libc::EXTATTR_NAMESPACE_USER,
+                        c_name.as_ptr(),
+                        value.as_mut_ptr().cast::<libc::c_void>(),
+                        value.len(),
+                    )
+                };
+                if read >= 0 {
+                    value.truncate(usize::try_from(read).unwrap_or(0));
+                    value_opt = Some(value);
+                    break;
+                }
+                let error = io::Error::last_os_error();
+                let raw = error.raw_os_error();
+                if raw == Some(libc::ERANGE) {
+                    continue;
+                }
+                if raw == Some(libc::ENOATTR) {
+                    break;
+                }
+                return Err(error);
+            }
+            if let Some(value) = value_opt {
+                xattrs.push((c_name, value));
+            }
+        }
+        xattrs.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
+        Ok(xattrs)
+    }
+
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+    fn apply_existing_user_xattrs(
+        temp_fd: std::os::fd::RawFd,
+        xattrs: &[(CString, Vec<u8>)],
+    ) -> io::Result<()> {
+        for (name, value) in xattrs {
+            // SAFETY: `temp_fd` is open, `name` is NUL-terminated, and
+            // `value.as_ptr()` is valid for `value.len()` bytes.
+            let written = unsafe {
+                libc::extattr_set_fd(
+                    temp_fd,
+                    libc::EXTATTR_NAMESPACE_USER,
+                    name.as_ptr(),
+                    value.as_ptr().cast::<libc::c_void>(),
+                    value.len(),
+                )
+            };
+            if written < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if usize::try_from(written).ok() != Some(value.len()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "short write while restoring BSD user extended attribute",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "openbsd")]
     fn read_existing_user_xattrs(_fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        // OpenBSD does not support extended attributes.
         Ok(Vec::new())
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
+    #[cfg(target_os = "openbsd")]
     fn apply_existing_user_xattrs(
         _temp_fd: std::os::fd::RawFd,
         _xattrs: &[(CString, Vec<u8>)],
     ) -> io::Result<()> {
         Ok(())
+    }
+
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn read_existing_user_xattrs(_fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cannot verify or preserve user extended attributes on this Unix target",
+        ))
+    }
+
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn apply_existing_user_xattrs(
+        _temp_fd: std::os::fd::RawFd,
+        _xattrs: &[(CString, Vec<u8>)],
+    ) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cannot preserve user extended attributes on this Unix target",
+        ))
     }
 
     fn restore_existing_metadata(
@@ -5103,16 +5305,24 @@ mod platform {
         if let Some(acl) = existing.acl.as_ref() {
             apply_existing_acl(temp_fd, acl)?;
         }
-        #[cfg(any(
-            target_os = "macos",
-            target_os = "ios",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        ))]
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "openbsd"))]
         if existing.entry.flags != temp_stat.st_flags {
             // SAFETY: `temp_fd` is an open file descriptor we just staged.
             if unsafe { libc::fchflags(temp_fd, existing.entry.flags) } != 0 {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    error.kind(),
+                    format!(
+                        "cannot safely preserve original BSD file flags on replacement: {error}"
+                    ),
+                ));
+            }
+        }
+        #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+        if existing.entry.flags != temp_stat.st_flags {
+            // SAFETY: `temp_fd` is an open file descriptor we just staged;
+            // FreeBSD and NetBSD declare `fchflags`'s second argument as `c_ulong`.
+            if unsafe { libc::fchflags(temp_fd, libc::c_ulong::from(existing.entry.flags)) } != 0 {
                 let error = io::Error::last_os_error();
                 return Err(io::Error::new(
                     error.kind(),
@@ -5166,22 +5376,49 @@ mod platform {
 
     const FILE_WRITE_DATA: u32 = 0x0000_0002;
     const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
+    const FILE_WRITE_ATTRIBUTES: u32 = 0x0000_0100;
     const FILE_TRAVERSE: u32 = 0x0000_0020;
     const DELETE: u32 = 0x0001_0000;
     const READ_CONTROL: u32 = 0x0002_0000;
     const WRITE_DAC: u32 = 0x0004_0000;
     const WRITE_OWNER: u32 = 0x0008_0000;
     const SYNCHRONIZE: u32 = 0x0010_0000;
+    const ACCESS_SYSTEM_SECURITY: u32 = 0x0100_0000;
     const GENERIC_READ: u32 = 0x8000_0000;
     const GENERIC_WRITE: u32 = 0x4000_0000;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
     const FILE_SHARE_WRITE: u32 = 0x0000_0002;
     const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+    const FILE_ATTRIBUTE_SYSTEM: u32 = 0x0000_0004;
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
+    const FILE_ATTRIBUTE_ARCHIVE: u32 = 0x0000_0020;
     const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    const FILE_ATTRIBUTE_COMPRESSED: u32 = 0x0000_0800;
+    const FILE_ATTRIBUTE_OFFLINE: u32 = 0x0000_1000;
+    const FILE_ATTRIBUTE_NOT_CONTENT_INDEXED: u32 = 0x0000_2000;
     const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
+    const FILE_ATTRIBUTE_INTEGRITY_STREAM: u32 = 0x0000_8000;
+    const FILE_ATTRIBUTE_NO_SCRUB_DATA: u32 = 0x0002_0000;
+    const FILE_ATTRIBUTE_PINNED: u32 = 0x0008_0000;
+    const FILE_ATTRIBUTE_UNPINNED: u32 = 0x0010_0000;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
+    const PRESERVED_BASIC_ATTRIBUTES: u32 = FILE_ATTRIBUTE_HIDDEN
+        | FILE_ATTRIBUTE_SYSTEM
+        | FILE_ATTRIBUTE_ARCHIVE
+        | FILE_ATTRIBUTE_TEMPORARY
+        | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+    const UNPRESERVABLE_STORAGE_ATTRIBUTES: u32 = FILE_ATTRIBUTE_SPARSE_FILE
+        | FILE_ATTRIBUTE_OFFLINE
+        | FILE_ATTRIBUTE_INTEGRITY_STREAM
+        | FILE_ATTRIBUTE_NO_SCRUB_DATA
+        | FILE_ATTRIBUTE_PINNED
+        | FILE_ATTRIBUTE_UNPINNED;
+    const FSCTL_SET_COMPRESSION: u32 = 0x0009_C040;
+    const COMPRESSION_FORMAT_NONE: u16 = 0;
+    const COMPRESSION_FORMAT_DEFAULT: u16 = 1;
 
     const FILE_OPEN: u32 = 0x0000_0001;
     const FILE_CREATE: u32 = 0x0000_0002;
@@ -5191,12 +5428,30 @@ mod platform {
     const FILE_NON_DIRECTORY_FILE: u32 = 0x0000_0040;
     const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
+    const FILE_BASIC_INFORMATION_CLASS: u32 = 4;
     const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
     const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
     const FILE_STREAM_INFORMATION_CLASS: u32 = 22;
     const OWNER_SECURITY_INFORMATION: u32 = 0x0000_0001;
     const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
+    const SACL_SECURITY_INFORMATION: u32 = 0x0000_0008;
+    const LABEL_SECURITY_INFORMATION: u32 = 0x0000_0010;
+    const ATTRIBUTE_SECURITY_INFORMATION: u32 = 0x0000_0020;
+    const SCOPE_SECURITY_INFORMATION: u32 = 0x0000_0040;
     const SE_DACL_PROTECTED: u16 = 0x1000;
+    const SE_SACL_PROTECTED: u16 = 0x2000;
+    const STATUS_ACCESS_DENIED: NtStatus = 0xC000_0022_u32 as i32;
+    const STATUS_PRIVILEGE_NOT_HELD: NtStatus = 0xC000_0061_u32 as i32;
+
+    #[repr(C)]
+    struct FileBasicInformation {
+        creation_time: i64,
+        last_access_time: i64,
+        last_write_time: i64,
+        change_time: i64,
+        file_attributes: u32,
+        _padding: u32,
+    }
 
     #[repr(C)]
     struct FileStreamInformation {
@@ -5219,6 +5474,11 @@ mod platform {
     struct ExistingWindowsSecurity {
         owner_sd: Option<Vec<usize>>,
         dacl_sd: Option<Vec<usize>>,
+        label_sd: Option<Vec<usize>>,
+        sacl_sd: Option<Vec<usize>>,
+        attribute_sd: Option<Vec<usize>>,
+        scope_sd: Option<Vec<usize>>,
+        file_attributes: u32,
         is_encrypted: bool,
         has_named_streams: bool,
     }
@@ -5315,6 +5575,16 @@ mod platform {
             file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
         ) -> i32;
+        fn DeviceIoControl(
+            device: *mut c_void,
+            io_control_code: u32,
+            in_buffer: *mut c_void,
+            in_buffer_size: u32,
+            out_buffer: *mut c_void,
+            out_buffer_size: u32,
+            bytes_returned: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
     }
 
     #[link(name = "advapi32")]
@@ -5346,6 +5616,12 @@ mod platform {
             dacl_present: *mut i32,
             dacl: *mut *mut c_void,
             dacl_defaulted: *mut i32,
+        ) -> i32;
+        fn GetSecurityDescriptorSacl(
+            security_descriptor: *mut c_void,
+            sacl_present: *mut i32,
+            sacl: *mut *mut c_void,
+            sacl_defaulted: *mut i32,
         ) -> i32;
         fn EqualSid(sid1: *mut c_void, sid2: *mut c_void) -> i32;
     }
@@ -5700,9 +5976,12 @@ mod platform {
                     Ok(handle) => {
                         // Stamp the shared Palamedes lock signature so Unix
                         // clients on the same SMB share also recognize this
-                        // lock file if the connection drops abruptly.
+                        // lock file if the connection drops abruptly. Propagate
+                        // any I/O error so the delete-on-close handle cleans up
+                        // instead of proceeding with an unstamped lock.
                         let mut file = File::from(handle);
-                        let _ = io::Write::write_all(&mut file, super::DIR_LOCK_MAGIC);
+                        io::Write::write_all(&mut file, super::DIR_LOCK_MAGIC)?;
+                        file.flush()?;
                         break OwnedHandle::from(file);
                     }
                     Err(STATUS_SHARING_VIOLATION | STATUS_DELETE_PENDING) => {
@@ -6025,10 +6304,27 @@ mod platform {
                     .map_or(std::ptr::null_mut(), |buffer| {
                         buffer.as_mut_ptr().cast::<c_void>()
                     });
+                let initial_attributes = existing_security
+                    .as_ref()
+                    .map(|sec| sec.file_attributes & PRESERVED_BASIC_ATTRIBUTES)
+                    .filter(|&attrs| attrs != 0)
+                    .unwrap_or(FILE_ATTRIBUTE_NORMAL);
+                let preserving_sacl = existing_security
+                    .as_ref()
+                    .is_some_and(|sec| sec.sacl_sd.is_some());
 
-                let mut temp_guard = WindowsTempFileGuard::new(
-                    self.create_temp_file(initial_dacl, existing_security.is_some())?,
-                );
+                let mut temp_guard = WindowsTempFileGuard::new(self.create_temp_file(
+                    initial_dacl,
+                    initial_attributes,
+                    existing_security.is_some(),
+                    preserving_sacl,
+                )?);
+                if let Some(existing_security) = existing_security.as_ref() {
+                    restore_and_verify_windows_attributes(
+                        temp_guard.file.as_raw_handle(),
+                        existing_security.file_attributes,
+                    )?;
+                }
                 temp_guard.file.write_all(bytes)?;
                 temp_guard.file.flush()?;
                 if let Some(existing_security) = existing_security.as_mut() {
@@ -6037,6 +6333,34 @@ mod platform {
                     }
                     if let Some(dacl_sd) = existing_security.dacl_sd.as_mut() {
                         restore_and_verify_windows_dacl(temp_guard.file.as_raw_handle(), dacl_sd)?;
+                    }
+                    if let Some(label_sd) = existing_security.label_sd.as_mut() {
+                        restore_and_verify_windows_sacl_info(
+                            temp_guard.file.as_raw_handle(),
+                            LABEL_SECURITY_INFORMATION,
+                            label_sd,
+                        )?;
+                    }
+                    if let Some(attribute_sd) = existing_security.attribute_sd.as_mut() {
+                        restore_and_verify_windows_sacl_info(
+                            temp_guard.file.as_raw_handle(),
+                            ATTRIBUTE_SECURITY_INFORMATION,
+                            attribute_sd,
+                        )?;
+                    }
+                    if let Some(scope_sd) = existing_security.scope_sd.as_mut() {
+                        restore_and_verify_windows_sacl_info(
+                            temp_guard.file.as_raw_handle(),
+                            SCOPE_SECURITY_INFORMATION,
+                            scope_sd,
+                        )?;
+                    }
+                    if let Some(sacl_sd) = existing_security.sacl_sd.as_mut() {
+                        restore_and_verify_windows_sacl_info(
+                            temp_guard.file.as_raw_handle(),
+                            SACL_SECURITY_INFORMATION,
+                            sacl_sd,
+                        )?;
                     }
                 }
                 if durability.syncs_file() {
@@ -6148,16 +6472,44 @@ mod platform {
                     read_security_descriptor(handle.as_raw_handle(), OWNER_SECURITY_INFORMATION)?;
                 let dacl_sd =
                     read_security_descriptor(handle.as_raw_handle(), DACL_SECURITY_INFORMATION)?;
-                if !is_encrypted && !has_named_streams && owner_sd.is_none() && dacl_sd.is_none() {
-                    None
-                } else {
-                    Some(ExistingWindowsSecurity {
-                        owner_sd,
-                        dacl_sd,
-                        is_encrypted,
-                        has_named_streams,
-                    })
-                }
+                let label_sd =
+                    read_security_descriptor(handle.as_raw_handle(), LABEL_SECURITY_INFORMATION)?;
+                let attribute_sd = read_security_descriptor(
+                    handle.as_raw_handle(),
+                    ATTRIBUTE_SECURITY_INFORMATION,
+                )?;
+                let scope_sd =
+                    read_security_descriptor(handle.as_raw_handle(), SCOPE_SECURITY_INFORMATION)?;
+                let sacl_sd = match nt_create_relative(
+                    self.handle.as_raw_handle(),
+                    file_name,
+                    ACCESS_SYSTEM_SECURITY | SYNCHRONIZE,
+                    FILE_ATTRIBUTE_NORMAL,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    FILE_OPEN,
+                    FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                    std::ptr::null_mut(),
+                ) {
+                    Ok(sacl_handle) => read_security_descriptor(
+                        sacl_handle.as_raw_handle(),
+                        SACL_SECURITY_INFORMATION,
+                    )?,
+                    Err(STATUS_PRIVILEGE_NOT_HELD | STATUS_ACCESS_DENIED) => None,
+                    Err(status) => {
+                        return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                    }
+                };
+                Some(ExistingWindowsSecurity {
+                    owner_sd,
+                    dacl_sd,
+                    label_sd,
+                    sacl_sd,
+                    attribute_sd,
+                    scope_sd,
+                    file_attributes: info.file_attributes,
+                    is_encrypted,
+                    has_named_streams,
+                })
             } else {
                 None
             };
@@ -6174,13 +6526,26 @@ mod platform {
         fn create_temp_file(
             &self,
             security_descriptor: *mut c_void,
+            file_attributes: u32,
             preserving_security: bool,
+            preserving_sacl: bool,
         ) -> Result<File, ContainedFsError> {
-            let desired_access = if preserving_security {
-                GENERIC_WRITE | READ_CONTROL | WRITE_DAC | WRITE_OWNER | DELETE | SYNCHRONIZE
+            let mut desired_access = if preserving_security {
+                GENERIC_WRITE
+                    | FILE_READ_DATA
+                    | FILE_READ_ATTRIBUTES
+                    | FILE_WRITE_ATTRIBUTES
+                    | READ_CONTROL
+                    | WRITE_DAC
+                    | WRITE_OWNER
+                    | DELETE
+                    | SYNCHRONIZE
             } else {
                 GENERIC_WRITE | DELETE | SYNCHRONIZE
             };
+            if preserving_sacl {
+                desired_access |= ACCESS_SYSTEM_SECURITY;
+            }
             let pid = std::process::id();
             for _ in 0..128 {
                 let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
@@ -6189,7 +6554,7 @@ mod platform {
                     self.handle.as_raw_handle(),
                     &name,
                     desired_access,
-                    FILE_ATTRIBUTE_NORMAL,
+                    file_attributes,
                     0,
                     FILE_CREATE,
                     FILE_NON_DIRECTORY_FILE
@@ -6355,10 +6720,15 @@ mod platform {
             return Ok(None);
         }
         let error = io::Error::last_os_error();
+        const ERROR_INVALID_PARAMETER: i32 = 87;
         if matches!(
             error.raw_os_error(),
             Some(ERROR_INVALID_FUNCTION | ERROR_NOT_SUPPORTED)
-        ) {
+        ) || (matches!(
+            requested_information,
+            ATTRIBUTE_SECURITY_INFORMATION | SCOPE_SECURITY_INFORMATION
+        ) && error.raw_os_error() == Some(ERROR_INVALID_PARAMETER))
+        {
             return Ok(None);
         }
         if error.raw_os_error() != Some(ERROR_INSUFFICIENT_BUFFER) || needed == 0 {
@@ -6646,6 +7016,217 @@ mod platform {
         }
     }
 
+    fn extract_windows_sacl(sd: &mut [usize]) -> io::Result<(bool, bool, Option<&[u8]>)> {
+        let mut control: u16 = 0;
+        let mut revision: u32 = 0;
+        // SAFETY: `sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+        if unsafe {
+            GetSecurityDescriptorControl(
+                sd.as_mut_ptr().cast::<c_void>(),
+                &mut control,
+                &mut revision,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let mut sacl_present: i32 = 0;
+        let mut sacl_ptr: *mut c_void = std::ptr::null_mut();
+        let mut sacl_defaulted: i32 = 0;
+        // SAFETY: `sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+        if unsafe {
+            GetSecurityDescriptorSacl(
+                sd.as_mut_ptr().cast::<c_void>(),
+                &mut sacl_present,
+                &mut sacl_ptr,
+                &mut sacl_defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let protected = (control & SE_SACL_PROTECTED) != 0;
+        if sacl_present == 0 {
+            return Ok((protected, false, None));
+        }
+        if sacl_ptr.is_null() {
+            return Ok((protected, true, None));
+        }
+        // SAFETY: `sacl_ptr` points to a valid Windows `ACL` header inside `sd`.
+        let header = unsafe { &*sacl_ptr.cast::<AclHeader>() };
+        let acl_size = usize::from(header.acl_size);
+        // SAFETY: `acl_size` bytes starting at `sacl_ptr` belong to the valid ACL inside `sd`.
+        let bytes = unsafe { std::slice::from_raw_parts(sacl_ptr.cast::<u8>(), acl_size) };
+        Ok((protected, true, Some(bytes)))
+    }
+
+    fn windows_sacl_matches(
+        expected_sd: &mut [usize],
+        actual_sd: Option<&mut [usize]>,
+    ) -> io::Result<bool> {
+        let Some(actual_sd) = actual_sd else {
+            return Ok(false);
+        };
+        let expected = extract_windows_sacl(expected_sd)?;
+        let actual = extract_windows_sacl(actual_sd)?;
+        Ok(expected == actual)
+    }
+
+    fn optional_sacl_matches(
+        expected: Option<&mut [usize]>,
+        actual: Option<&mut [usize]>,
+    ) -> io::Result<bool> {
+        match (expected, actual) {
+            (None, None) => Ok(true),
+            (Some(exp_sd), act_sd) => windows_sacl_matches(exp_sd, act_sd),
+            (None, Some(_)) => Ok(false),
+        }
+    }
+
+    fn restore_and_verify_windows_sacl_info(
+        temp_handle: *mut c_void,
+        security_information: u32,
+        existing_sd: &mut [usize],
+    ) -> io::Result<()> {
+        let mut current_sd = read_security_descriptor(temp_handle, security_information)
+            .map_err(ContainedFsError::into_io_error)?;
+        if windows_sacl_matches(existing_sd, current_sd.as_deref_mut())? {
+            return Ok(());
+        }
+        // SAFETY: `temp_handle` is open with the required security access and
+        // `existing_sd` is a valid security descriptor.
+        if unsafe {
+            SetKernelObjectSecurity(
+                temp_handle,
+                security_information,
+                existing_sd.as_mut_ptr().cast::<c_void>(),
+            )
+        } == 0
+        {
+            let error = io::Error::last_os_error();
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "cannot preserve original Windows security label/SACL on replacement: {error}"
+                ),
+            ));
+        }
+        let mut verified_sd = read_security_descriptor(temp_handle, security_information)
+            .map_err(ContainedFsError::into_io_error)?;
+        if !windows_sacl_matches(existing_sd, verified_sd.as_deref_mut())? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "cannot verify exact Windows security label/SACL preservation on replacement",
+            ));
+        }
+        Ok(())
+    }
+
+    fn restore_and_verify_windows_attributes(
+        temp_handle: *mut c_void,
+        existing_attributes: u32,
+    ) -> io::Result<()> {
+        let mut temp_info =
+            file_information(temp_handle).map_err(ContainedFsError::into_io_error)?;
+        if (existing_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES)
+            != (temp_info.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement",
+            ));
+        }
+
+        let desired_compressed = (existing_attributes & FILE_ATTRIBUTE_COMPRESSED) != 0;
+        let current_compressed = (temp_info.file_attributes & FILE_ATTRIBUTE_COMPRESSED) != 0;
+        if desired_compressed != current_compressed {
+            let mut format = if desired_compressed {
+                COMPRESSION_FORMAT_DEFAULT
+            } else {
+                COMPRESSION_FORMAT_NONE
+            };
+            let mut returned: u32 = 0;
+            // SAFETY: `temp_handle` is open with read/write access and `format` is a valid u16.
+            let ok = unsafe {
+                DeviceIoControl(
+                    temp_handle,
+                    FSCTL_SET_COMPRESSION,
+                    (&mut format as *mut u16).cast::<c_void>(),
+                    u32::try_from(std::mem::size_of::<u16>()).unwrap_or(2),
+                    std::ptr::null_mut(),
+                    0,
+                    &mut returned,
+                    std::ptr::null_mut(),
+                )
+            };
+            if ok == 0 {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!(
+                        "cannot safely preserve Windows NTFS compression state on replacement: {error}"
+                    ),
+                ));
+            }
+            temp_info = file_information(temp_handle).map_err(ContainedFsError::into_io_error)?;
+            if ((temp_info.file_attributes & FILE_ATTRIBUTE_COMPRESSED) != 0) != desired_compressed
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "cannot verify Windows NTFS compression state preservation on replacement",
+                ));
+            }
+        }
+
+        let desired_basic = existing_attributes & PRESERVED_BASIC_ATTRIBUTES;
+        let current_basic = temp_info.file_attributes & PRESERVED_BASIC_ATTRIBUTES;
+        if desired_basic != current_basic {
+            let mut basic = FileBasicInformation {
+                creation_time: 0,
+                last_access_time: 0,
+                last_write_time: 0,
+                change_time: 0,
+                file_attributes: if desired_basic == 0 {
+                    FILE_ATTRIBUTE_NORMAL
+                } else {
+                    desired_basic
+                },
+                _padding: 0,
+            };
+            let mut iosb = IoStatusBlock {
+                status_or_pointer: 0,
+                information: 0,
+            };
+            // SAFETY: `temp_handle` is open with `FILE_WRITE_ATTRIBUTES` and `basic` is valid.
+            let status = unsafe {
+                NtSetInformationFile(
+                    temp_handle,
+                    &mut iosb,
+                    (&mut basic as *mut FileBasicInformation).cast::<c_void>(),
+                    u32::try_from(std::mem::size_of::<FileBasicInformation>()).unwrap_or(40),
+                    FILE_BASIC_INFORMATION_CLASS,
+                )
+            };
+            if status < 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!(
+                        "cannot safely preserve per-file Windows attributes on replacement: {}",
+                        nt_status_to_io_error(status)
+                    ),
+                ));
+            }
+            temp_info = file_information(temp_handle).map_err(ContainedFsError::into_io_error)?;
+            if (temp_info.file_attributes & PRESERVED_BASIC_ATTRIBUTES) != desired_basic {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "cannot verify per-file Windows attribute preservation on replacement",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn windows_security_matches(
         expected: Option<&mut ExistingWindowsSecurity>,
         actual: Option<&mut ExistingWindowsSecurity>,
@@ -6655,6 +7236,7 @@ mod platform {
             (Some(exp), Some(act)) => {
                 if exp.is_encrypted != act.is_encrypted
                     || exp.has_named_streams != act.has_named_streams
+                    || exp.file_attributes != act.file_attributes
                 {
                     return Ok(false);
                 }
@@ -6667,11 +7249,29 @@ mod platform {
                 if !owners_equal {
                     return Ok(false);
                 }
-                match (exp.dacl_sd.as_deref_mut(), act.dacl_sd.as_deref_mut()) {
-                    (None, None) => Ok(true),
-                    (Some(exp_dacl), act_dacl) => windows_dacl_matches(exp_dacl, act_dacl),
-                    (None, Some(_)) => Ok(false),
+                let dacl_equal = match (exp.dacl_sd.as_deref_mut(), act.dacl_sd.as_deref_mut()) {
+                    (None, None) => true,
+                    (Some(exp_dacl), act_dacl) => windows_dacl_matches(exp_dacl, act_dacl)?,
+                    (None, Some(_)) => false,
+                };
+                if !dacl_equal {
+                    return Ok(false);
                 }
+                if !optional_sacl_matches(exp.label_sd.as_deref_mut(), act.label_sd.as_deref_mut())?
+                {
+                    return Ok(false);
+                }
+                if !optional_sacl_matches(
+                    exp.attribute_sd.as_deref_mut(),
+                    act.attribute_sd.as_deref_mut(),
+                )? {
+                    return Ok(false);
+                }
+                if !optional_sacl_matches(exp.scope_sd.as_deref_mut(), act.scope_sd.as_deref_mut())?
+                {
+                    return Ok(false);
+                }
+                optional_sacl_matches(exp.sacl_sd.as_deref_mut(), act.sacl_sd.as_deref_mut())
             }
             _ => Ok(false),
         }
@@ -8267,8 +8867,61 @@ mod tests {
             d_claim_name.to_str().expect("utf8"),
             format!(".pmds-claim-{}-1", lock_id.ino)
         );
+        assert!(
+            crashed_claim.exists(),
+            "earlier generation-0 claim must stay in place while HeldViaClaim holds generation 1"
+        );
+        // Verify a concurrent distinct-UID writer E blocks behind writer D's
+        // generation-1 claim rather than claiming a vacant generation 0.
+        let (e_ready_tx, e_ready_rx) = std::sync::mpsc::channel();
+        let (e_done_tx, e_done_rx) = std::sync::mpsc::channel();
+        let dir_path_e = root.path().to_path_buf();
+        let lock_path_e = lock_path;
+        let writer_e = std::thread::spawn(move || {
+            let e_dir = ContainedDir::open_root(&dir_path_e).expect("open root for E");
+            let e_fd = OwnedFd::from(fs::File::open(&lock_path_e).expect("E open lock"));
+            e_ready_tx.send(()).expect("signal E ready");
+            let e_outcome = super::platform::wait_for_readonly_lock_release_with_unlink(
+                &e_dir,
+                e_fd,
+                lock_id,
+                |_dir_raw| Err(io::Error::from_raw_os_error(libc::EPERM)),
+            )
+            .expect("writer E acquires HeldViaClaim after D releases");
+            let super::platform::ReadonlyRecoveryOutcome::HeldViaClaim {
+                claim_name: e_claim_name,
+                claim_fd: e_claim_fd,
+                existing_fd: e_existing_fd,
+                ..
+            } = e_outcome
+            else {
+                panic!("expected HeldViaClaim for writer E");
+            };
+            let e_claim_str = e_claim_name.to_str().expect("utf8").to_owned();
+            let _ = fs::remove_file(dir_path_e.join(&e_claim_str));
+            drop(e_claim_fd);
+            drop(e_existing_fd);
+            e_done_tx.send(e_claim_str).expect("signal E done");
+        });
+        e_ready_rx.recv().expect("E ready");
+        assert!(
+            matches!(
+                e_done_rx.recv_timeout(std::time::Duration::from_millis(60)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ),
+            "writer E must block while writer D holds generation 1"
+        );
         let _ = fs::remove_file(root.path().join(d_claim_name.to_str().expect("utf8")));
         drop(d_claim_fd);
         drop(d_existing_fd);
+        let e_claim_used = e_done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("writer E must wake once writer D releases generation 1");
+        writer_e.join().expect("join E");
+        assert_eq!(
+            e_claim_used,
+            format!(".pmds-claim-{}-1", lock_id.ino),
+            "writer E must serialize at generation 1 instead of sneaking into generation 0"
+        );
     }
 }
