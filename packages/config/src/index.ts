@@ -790,11 +790,72 @@ function getConfigValue(
   return config[canonicalKey] ?? config[legacyKey];
 }
 
+const VALID_LOCALE_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+function isValidLocale(locale: string): boolean {
+  return locale.length > 0 && !locale.includes("..") && VALID_LOCALE_PATTERN.test(locale);
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasWindowsDrivePrefix(value: string): boolean {
+  return /^[A-Za-z]:/.test(value);
+}
+
+function validateCatalogPathPattern(catalogPath: string): string | undefined {
+  if (catalogPath.trim().length === 0) {
+    return "catalog path must be non-empty";
+  }
+  if (hasControlCharacters(catalogPath)) {
+    return "catalog path must not contain control characters";
+  }
+  if (
+    path.isAbsolute(catalogPath) ||
+    catalogPath.startsWith("/") ||
+    catalogPath.startsWith("\\") ||
+    hasWindowsDrivePrefix(catalogPath)
+  ) {
+    return "catalog path must be relative to the config directory";
+  }
+  const segments = catalogPath.replaceAll("\\", "/").split("/");
+  let hasNormal = false;
+  for (const segment of segments) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      return "catalog path must not contain parent-directory ('..') segments";
+    }
+    hasNormal = true;
+  }
+  if (!hasNormal) {
+    return "catalog path must name a file path inside the config directory";
+  }
+  return undefined;
+}
+
 export function resolveCatalogPath(
   config: Pick<LoadedPalamedesConfig, "rootDir">,
   catalogPath: string,
   locale: string,
 ): string {
+  if (!isValidLocale(locale)) {
+    throw new Error(
+      `Invalid locale "${locale}". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators.`,
+    );
+  }
+  const pathReason = validateCatalogPathPattern(catalogPath);
+  if (pathReason !== undefined) {
+    throw new Error(`Invalid catalog path "${catalogPath}": ${pathReason}.`);
+  }
   // Every placeholder occurrence, matching the Rust resolver's `str::replace`
   // and the Next loader; a path may name the locale in a directory and a file.
   return path.resolve(config.rootDir, catalogPath.replaceAll("{locale}", locale));
@@ -1133,9 +1194,23 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
     );
   }
 
+  for (const locale of record.locales as string[]) {
+    if (!isValidLocale(locale)) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: "locales" entry "${locale}" is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators.`,
+      );
+    }
+  }
+
   if (typeof record.sourceLocale !== "string" || record.sourceLocale.length === 0) {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "sourceLocale" must be a non-empty string.`,
+    );
+  }
+
+  if (!isValidLocale(record.sourceLocale)) {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "sourceLocale" ("${record.sourceLocale}") is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators.`,
     );
   }
 
@@ -1152,6 +1227,12 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   if (record.pseudoLocale !== undefined && typeof record.pseudoLocale !== "string") {
     throw new TypeError(
       `Invalid Palamedes config in ${configPath}: "pseudoLocale" must be a string when provided.`,
+    );
+  }
+
+  if (typeof record.pseudoLocale === "string" && !isValidLocale(record.pseudoLocale)) {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "pseudoLocale" ("${record.pseudoLocale}") is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators.`,
     );
   }
 
@@ -1364,6 +1445,13 @@ function validateCatalog(catalog: unknown, configPath: string, index: number): v
   if (typeof record.path !== "string" || record.path.length === 0) {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "catalogs[${index}].path" must be a non-empty string.`,
+    );
+  }
+
+  const catalogPathReason = validateCatalogPathPattern(record.path);
+  if (catalogPathReason !== undefined) {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].path" ("${record.path}") is invalid: ${catalogPathReason}.`,
     );
   }
 

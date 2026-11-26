@@ -19,6 +19,10 @@ const sharedConfigKeyFixture = new URL(
   "../../../test-fixtures/config-key-parity.yaml",
   import.meta.url,
 );
+const sharedPathSafetyParityFixture = new URL(
+  "../../../test-fixtures/config-path-safety-parity.json",
+  import.meta.url,
+);
 
 afterEach(async () => {
   await Promise.all(
@@ -985,6 +989,79 @@ describe("loadPalamedesConfig", () => {
     await expect(loadPalamedesConfig({ projectRoot: fixtureDir })).rejects.toThrow(
       /"plugins\[0\]" must be a non-empty package specifier or \[specifier, options\]/,
     );
+  });
+
+  it("matches the native loader on the shared locale and catalog path safety parity fixture", async () => {
+    const parity = JSON.parse(await readFile(sharedPathSafetyParityFixture, "utf8")) as {
+      validLocales: string[];
+      invalidLocales: string[];
+      validCatalogPaths: string[];
+      invalidCatalogPaths: string[];
+    };
+
+    const validLocalesDir = await createTempDir();
+    await writeFile(
+      path.join(validLocalesDir, "palamedes.json"),
+      JSON.stringify({
+        locales: parity.validLocales,
+        "source-locale": "en",
+        catalogs: [{ path: "locales/{locale}", include: ["src"] }],
+      }),
+    );
+    await expect(loadPalamedesConfig({ projectRoot: validLocalesDir })).resolves.toMatchObject({
+      locales: parity.validLocales,
+    });
+
+    for (const invalidLocale of parity.invalidLocales) {
+      const dataDir = await createTempDir();
+      await writeFile(
+        path.join(dataDir, "palamedes.json"),
+        JSON.stringify({
+          locales: ["en", invalidLocale],
+          "source-locale": "en",
+          catalogs: [{ path: "locales/{locale}", include: ["src"] }],
+        }),
+      );
+      await expect(loadPalamedesConfig({ projectRoot: dataDir })).rejects.toThrow(
+        /not a valid locale identifier/,
+      );
+      expect(() =>
+        resolveCatalogPath({ rootDir: "/repo" }, "locales/{locale}", invalidLocale),
+      ).toThrow(/Invalid locale/);
+    }
+
+    for (const validPath of parity.validCatalogPaths) {
+      const dataDir = await createTempDir();
+      await writeFile(
+        path.join(dataDir, "palamedes.json"),
+        JSON.stringify({
+          locales: ["en"],
+          "source-locale": "en",
+          catalogs: [{ path: validPath, include: ["src"] }],
+        }),
+      );
+      await expect(loadPalamedesConfig({ projectRoot: dataDir })).resolves.toMatchObject({
+        catalogs: [{ path: validPath, include: ["src"] }],
+      });
+    }
+
+    for (const invalidPath of parity.invalidCatalogPaths) {
+      const dataDir = await createTempDir();
+      await writeFile(
+        path.join(dataDir, "palamedes.json"),
+        JSON.stringify({
+          locales: ["en"],
+          "source-locale": "en",
+          catalogs: [{ path: invalidPath, include: ["src"] }],
+        }),
+      );
+      await expect(loadPalamedesConfig({ projectRoot: dataDir })).rejects.toThrow(
+        /catalogs\[0\]\.path/,
+      );
+      expect(() => resolveCatalogPath({ rootDir: "/repo" }, invalidPath, "en")).toThrow(
+        /Invalid catalog path/,
+      );
+    }
   });
 });
 

@@ -7,6 +7,8 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+use std::fs;
+use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use ferrocat::{
@@ -157,6 +159,105 @@ pub fn try_resolve_catalog_file_path(
             ),
         });
     }
+    Ok(resolved)
+}
+
+/// Verifies on-disk symlink containment of `target` inside `root_dir`.
+///
+/// Walks each path component relative to `root_dir` and ensures no existing or
+/// dangling symlink redirects the path outside `root_dir`. When `root_dir`
+/// itself does not exist on disk yet, returns `Ok(())` so callers see normal
+/// missing-file errors instead of a spurious containment error.
+///
+/// # Errors
+///
+/// Returns [`PalamedesError::UnsafeCatalogPath`] when `target` is outside
+/// `root_dir`, contains traversal components, traverses a dangling symlink, or
+/// resolves via a symlink outside the canonical `root_dir`.
+pub fn ensure_catalog_path_contained(root_dir: &Path, target: &Path) -> PalamedesResult<()> {
+    let relative =
+        target
+            .strip_prefix(root_dir)
+            .map_err(|_| PalamedesError::UnsafeCatalogPath {
+                path: target.to_string_lossy().into_owned(),
+                reason: format!("escapes root directory {}", root_dir.display()),
+            })?;
+    let canonical_root = match fs::canonicalize(root_dir) {
+        Ok(path) => path,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(PalamedesError::UnsafeCatalogPath {
+                path: target.to_string_lossy().into_owned(),
+                reason: format!(
+                    "could not resolve root directory {}: {error}",
+                    root_dir.display()
+                ),
+            });
+        }
+    };
+    let mut current = canonical_root.clone();
+    for component in relative.components() {
+        match component {
+            Component::CurDir => continue,
+            Component::Normal(part) => current.push(part),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(PalamedesError::UnsafeCatalogPath {
+                    path: target.to_string_lossy().into_owned(),
+                    reason: format!("escapes root directory {}", root_dir.display()),
+                });
+            }
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(_) => {
+                let canonical = fs::canonicalize(&current).map_err(|error| {
+                    PalamedesError::UnsafeCatalogPath {
+                        path: target.to_string_lossy().into_owned(),
+                        reason: format!(
+                            "resolves through an invalid or dangling symlink at {}: {error}",
+                            current.display()
+                        ),
+                    }
+                })?;
+                if !canonical.starts_with(&canonical_root) {
+                    return Err(PalamedesError::UnsafeCatalogPath {
+                        path: target.to_string_lossy().into_owned(),
+                        reason: format!(
+                            "escapes root directory {} via symlink {}",
+                            canonical_root.display(),
+                            current.display()
+                        ),
+                    });
+                }
+                current = canonical;
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+            Err(error) => {
+                return Err(PalamedesError::UnsafeCatalogPath {
+                    path: target.to_string_lossy().into_owned(),
+                    reason: format!("could not inspect {}: {error}", current.display()),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolves a configured catalog pattern to its concrete storage file and
+/// enforces both lexical and on-disk symlink containment inside `root_dir`.
+///
+/// # Errors
+///
+/// Returns an error when `locale` is invalid, `catalog_path` is absolute or
+/// contains `..`, or any existing path component escapes `root_dir` via a
+/// symlink.
+pub fn resolve_contained_catalog_file_path(
+    root_dir: &Path,
+    catalog_path: &str,
+    locale: &str,
+    format: PalamedesCatalogFormat,
+) -> PalamedesResult<PathBuf> {
+    let resolved = try_resolve_catalog_file_path(root_dir, catalog_path, locale, format)?;
+    ensure_catalog_path_contained(root_dir, &resolved)?;
     Ok(resolved)
 }
 

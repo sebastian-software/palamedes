@@ -7,8 +7,9 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
 use clap::{Args, ValueEnum};
@@ -582,22 +583,22 @@ fn compile_js(
             .into_iter()
             .map(|(id, message)| (id, message.code))
             .collect::<BTreeMap<_, _>>();
-        let module_path = resolve_compiled_js_module_path(output, locale)?;
+        let (file_name, module_path) = resolve_compiled_js_module_path(output, locale)?;
         let code = render_catalog_module(&messages, locale, &module_path.to_string_lossy())
             .map_err(|error| error.to_string())?;
-        modules.push((module_path, code));
+        modules.push((file_name, module_path, code));
     }
 
     if diagnostics.is_empty() {
         fs::create_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
         let canonical_output =
             fs::canonicalize(output).map_err(|error| format!("{}: {error}", output.display()))?;
-        for (module_path, _) in &modules {
-            ensure_direct_child_within_output(&canonical_output, module_path)?;
+        for (file_name, _, _) in &modules {
+            ensure_direct_child_within_output(&canonical_output, file_name)?;
         }
-        for (module_path, code) in modules {
-            fs::write(&module_path, format!("{code}\n"))
-                .map_err(|error| format!("{}: {error}", module_path.display()))?;
+        for (file_name, module_path, code) in modules {
+            let destination = canonical_output.join(&file_name);
+            write_compiled_module_atomically(&canonical_output, &destination, &code)?;
             update.catalogs.push(module_path);
         }
     }
@@ -607,7 +608,10 @@ fn compile_js(
     })
 }
 
-fn resolve_compiled_js_module_path(output: &Path, locale: &str) -> Result<PathBuf, String> {
+fn resolve_compiled_js_module_path(
+    output: &Path,
+    locale: &str,
+) -> Result<(OsString, PathBuf), String> {
     if !is_valid_locale(locale) {
         return Err(format!(
             "Invalid locale \"{locale}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
@@ -630,20 +634,13 @@ fn resolve_compiled_js_module_path(output: &Path, locale: &str) -> Result<PathBu
             output.display()
         ));
     }
-    Ok(module_path)
+    Ok((OsString::from(file_name), module_path))
 }
 
 fn ensure_direct_child_within_output(
     canonical_output: &Path,
-    module_path: &Path,
+    file_name: &OsStr,
 ) -> Result<(), String> {
-    let Some(file_name) = module_path.file_name() else {
-        return Err(format!(
-            "Compiled module path {} must name a file inside {}.",
-            module_path.display(),
-            canonical_output.display()
-        ));
-    };
     let expected = canonical_output.join(file_name);
     match fs::symlink_metadata(&expected) {
         Ok(metadata) => {
@@ -668,6 +665,27 @@ fn ensure_direct_child_within_output(
             return Err(format!("{}: {error}", expected.display()));
         }
     }
+    Ok(())
+}
+
+/// Writes a compiled module to a fresh temporary file inside `canonical_output`
+/// and atomically replaces `destination`, preventing both symlink TOCTOU writes
+/// and truncation of pre-existing hard-linked targets outside `canonical_output`.
+fn write_compiled_module_atomically(
+    canonical_output: &Path,
+    destination: &Path,
+    code: &str,
+) -> Result<(), String> {
+    let mut temporary = tempfile::NamedTempFile::new_in(canonical_output)
+        .map_err(|error| format!("{}: {error}", canonical_output.display()))?;
+    temporary
+        .write_all(code.as_bytes())
+        .and_then(|()| temporary.write_all(b"\n"))
+        .and_then(|()| temporary.flush())
+        .map_err(|error| format!("{}: {error}", destination.display()))?;
+    temporary
+        .persist(destination)
+        .map_err(|error| format!("{}: {}", destination.display(), error.error))?;
     Ok(())
 }
 
@@ -726,7 +744,9 @@ mod tests {
     fn compiled_js_module_paths_stay_direct_children_of_output() {
         let output = Path::new("/tmp/out");
         assert_eq!(
-            resolve_compiled_js_module_path(output, "de-AT").expect("valid locale"),
+            resolve_compiled_js_module_path(output, "de-AT")
+                .expect("valid locale")
+                .1,
             output.join("de-AT.mjs")
         );
         for invalid in [
@@ -814,5 +834,42 @@ mod tests {
             .expect_err("dangling output symlink must be rejected");
         assert!(error.contains("dangling symlink"), "got: {error}");
         assert!(!dangling_target.exists());
+    }
+
+    #[test]
+    fn compile_js_replaces_hard_linked_output_without_modifying_outside_target() {
+        let outside = temp_dir("compile-js-hardlink-outside");
+        let app = temp_dir("compile-js-hardlink-app");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+        fs::create_dir_all(&output).expect("create output dir");
+
+        let outside_file = outside.join("victim.mjs");
+        fs::write(&outside_file, "do-not-overwrite").expect("seed outside file");
+        fs::hard_link(&outside_file, output.join("en.mjs")).expect("create hard link");
+
+        compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("atomic replacement succeeds");
+
+        assert_eq!(
+            fs::read_to_string(&outside_file).expect("read outside file"),
+            "do-not-overwrite"
+        );
+        assert!(
+            fs::read_to_string(output.join("en.mjs"))
+                .expect("read compiled output")
+                .contains("Hello")
+        );
     }
 }

@@ -223,6 +223,101 @@ fn compile_catalog_artifact_rejects_escaping_catalog_paths() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn compile_catalog_artifact_rejects_symlinked_source_and_fallback_catalogs() {
+    use std::os::unix::fs::symlink;
+
+    let outside = create_fixture_dir("catalog-artifact-fallback-outside");
+    fs::write(
+        outside.join("fr.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: fr\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Bonjour\"\n",
+    )
+    .expect("write outside fallback");
+
+    let fixture = create_fixture_dir("catalog-artifact-fallback-escape");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "")]);
+    symlink(outside.join("fr.po"), locale_dir.join("fr.po")).expect("symlink fallback outside");
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned(), "fr".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: Some(FallbackLocales::Shared(vec!["fr".to_owned()])),
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+
+    let error = compile_catalog_artifact(&request).expect_err("escaping fallback must be rejected");
+    assert!(
+        error.to_string().contains("escapes root directory"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn compile_catalog_artifact_requires_repeated_locale_placeholders_to_match() {
+    let fixture = create_fixture_dir("catalog-artifact-repeated-locale");
+    let en_dir = fixture.join("locales/en");
+    fs::create_dir_all(&en_dir).expect("en dir");
+    fs::write(
+        en_dir.join("en.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+    )
+    .expect("write matching en catalog");
+    fs::write(
+        en_dir.join("de.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Wrong\"\n",
+    )
+    .expect("write mismatched catalog");
+
+    let config = || CatalogArtifactConfig {
+        root_dir: fixture.to_string_lossy().into_owned(),
+        locales: vec!["en".to_owned(), "de".to_owned()],
+        source_locale: "en".to_owned(),
+        fallback_locales: None,
+        pseudo_locale: None,
+        catalogs: vec![CatalogConfig {
+            path: "locales/{locale}/{locale}".to_owned(),
+            format: PalamedesCatalogFormat::Po,
+        }],
+    };
+
+    let matched = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: config(),
+        resource_path: en_dir.join("en.po").to_string_lossy().into_owned(),
+    })
+    .expect("matching repeated placeholders succeed");
+    assert_eq!(
+        matched
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hello")
+    );
+
+    let mismatched = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: config(),
+        resource_path: en_dir.join("de.po").to_string_lossy().into_owned(),
+    })
+    .expect_err("mismatched repeated placeholders must be rejected");
+    assert!(
+        mismatched
+            .to_string()
+            .contains("not matched to any configured catalog path"),
+        "unexpected error: {mismatched}"
+    );
+}
+
 #[test]
 fn compiles_a_dotted_catalog_name_for_a_dotted_locale() {
     let fixture = create_fixture_dir("catalog-artifact-dotted-path");

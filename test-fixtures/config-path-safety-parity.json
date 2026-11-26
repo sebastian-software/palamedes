@@ -1,0 +1,41 @@
+{
+  "validLocales": ["en", "de-DE", "zh-Hans", "pt.BR", "en_US", "en-US-x-twain", "pseudo"],
+  "invalidLocales": [
+    "",
+    ".",
+    "..",
+    "../en",
+    "..\\en",
+    "../../../tmp/out",
+    "en/de",
+    "en\\de",
+    ".hidden",
+    "en.",
+    "en..de",
+    "-en",
+    "en-",
+    "en\u0000",
+    "en de",
+    "C:en"
+  ],
+  "validCatalogPaths": [
+    "locales/{locale}",
+    "src/locales/{locale}/messages.v2",
+    "./locales/{locale}",
+    "locales\\{locale}\\messages.v2"
+  ],
+  "invalidCatalogPaths": [
+    "",
+    "   ",
+    ".",
+    "./",
+    "/etc/locales/{locale}",
+    "\\windows\\locales\\{locale}",
+    "C:/locales/{locale}",
+    "C:\\locales\\{locale}",
+    "../outside/{locale}",
+    "locales/../../outside/{locale}",
+    "locales\\..\\..\\outside\\{locale}",
+    "locales/\u0000/{locale}"
+  ]
+}

@@ -547,14 +547,11 @@ impl LoadedConfig {
         locale: &str,
         format: palamedes::PalamedesCatalogFormat,
     ) -> Result<PathBuf, ConfigError> {
-        let resolved =
-            palamedes::try_resolve_catalog_file_path(&self.root_dir, catalog_path, locale, format)
-                .map_err(|error| ConfigError::Invalid {
-                    path: self.config_path.clone(),
-                    message: error.to_string(),
-                })?;
-        ensure_contained_within_root(&self.config_path, &self.root_dir, &resolved)?;
-        Ok(resolved)
+        palamedes::resolve_contained_catalog_file_path(&self.root_dir, catalog_path, locale, format)
+            .map_err(|error| ConfigError::Invalid {
+                path: self.config_path.clone(),
+                message: error.to_string(),
+            })
     }
 
     /// Finds the configured catalog a file belongs to.
@@ -861,84 +858,6 @@ fn invalid<T>(path: &Path, message: &str) -> Result<T, ConfigError> {
         path: path.to_path_buf(),
         message: message.to_owned(),
     })
-}
-
-fn ensure_contained_within_root(
-    config_path: &Path,
-    root_dir: &Path,
-    target: &Path,
-) -> Result<(), ConfigError> {
-    let relative = target
-        .strip_prefix(root_dir)
-        .map_err(|_| ConfigError::Invalid {
-            path: config_path.to_path_buf(),
-            message: format!(
-                "Catalog path {} escapes root directory {}.",
-                target.display(),
-                root_dir.display()
-            ),
-        })?;
-    let canonical_root = std::fs::canonicalize(root_dir).map_err(|error| ConfigError::Invalid {
-        path: config_path.to_path_buf(),
-        message: format!(
-            "Could not resolve config root directory {}: {error}",
-            root_dir.display()
-        ),
-    })?;
-    let mut current = canonical_root.clone();
-    for component in relative.components() {
-        match component {
-            Component::CurDir => continue,
-            Component::Normal(part) => current.push(part),
-            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                return invalid(
-                    config_path,
-                    &format!(
-                        "Catalog path {} escapes root directory {}.",
-                        target.display(),
-                        root_dir.display()
-                    ),
-                );
-            }
-        }
-        match std::fs::symlink_metadata(&current) {
-            Ok(_) => {
-                let canonical = std::fs::canonicalize(&current).map_err(|error| {
-                    ConfigError::Invalid {
-                        path: config_path.to_path_buf(),
-                        message: format!(
-                            "Catalog path {} resolves through an invalid or dangling symlink at {}: {error}",
-                            target.display(),
-                            current.display()
-                        ),
-                    }
-                })?;
-                if !canonical.starts_with(&canonical_root) {
-                    return invalid(
-                        config_path,
-                        &format!(
-                            "Catalog path {} escapes root directory {} via symlink {}.",
-                            target.display(),
-                            canonical_root.display(),
-                            current.display()
-                        ),
-                    );
-                }
-                current = canonical;
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
-            Err(error) => {
-                return invalid(
-                    config_path,
-                    &format!(
-                        "Could not inspect catalog path {}: {error}",
-                        current.display()
-                    ),
-                );
-            }
-        }
-    }
-    Ok(())
 }
 
 fn resolve_source_reference_root(value: Option<&str>, root_dir: &Path) -> PathBuf {
@@ -2058,6 +1977,80 @@ catalogs:
             error.to_string().contains("dangling symlink"),
             "got: {error}"
         );
+    }
+
+    #[test]
+    fn shared_path_safety_parity_fixture_matches_native_config_validation() {
+        const FIXTURE: &str = include_str!("../../../test-fixtures/config-path-safety-parity.json");
+        let cases: serde_json::Value =
+            serde_json::from_str(FIXTURE).expect("parse path-safety parity fixture");
+        let string_list = |key: &str| {
+            cases[key]
+                .as_array()
+                .expect("parity fixture array")
+                .iter()
+                .map(|entry| entry.as_str().expect("parity fixture string").to_owned())
+                .collect::<Vec<_>>()
+        };
+
+        let valid_locales = string_list("validLocales");
+        let app = temp_dir("parity-valid-locales");
+        fs::write(
+            app.join("palamedes.json"),
+            serde_json::json!({
+                "locales": valid_locales,
+                "source-locale": "en",
+                "catalogs": [{ "path": "locales/{locale}", "include": ["src"] }],
+            })
+            .to_string(),
+        )
+        .expect("write valid locales config");
+        load_config(&app, None).expect("parity valid locales must load");
+
+        for invalid_locale in string_list("invalidLocales") {
+            let app = temp_dir("parity-invalid-locale");
+            fs::write(
+                app.join("palamedes.json"),
+                serde_json::json!({
+                    "locales": ["en", invalid_locale],
+                    "source-locale": "en",
+                    "catalogs": [{ "path": "locales/{locale}", "include": ["src"] }],
+                })
+                .to_string(),
+            )
+            .expect("write invalid locale config");
+            load_config(&app, None).expect_err("parity invalid locale must be rejected");
+        }
+
+        for valid_path in string_list("validCatalogPaths") {
+            let app = temp_dir("parity-valid-path");
+            fs::write(
+                app.join("palamedes.json"),
+                serde_json::json!({
+                    "locales": ["en"],
+                    "source-locale": "en",
+                    "catalogs": [{ "path": valid_path, "include": ["src"] }],
+                })
+                .to_string(),
+            )
+            .expect("write valid path config");
+            load_config(&app, None).expect("parity valid catalog path must load");
+        }
+
+        for invalid_path in string_list("invalidCatalogPaths") {
+            let app = temp_dir("parity-invalid-path");
+            fs::write(
+                app.join("palamedes.json"),
+                serde_json::json!({
+                    "locales": ["en"],
+                    "source-locale": "en",
+                    "catalogs": [{ "path": invalid_path, "include": ["src"] }],
+                })
+                .to_string(),
+            )
+            .expect("write invalid path config");
+            load_config(&app, None).expect_err("parity invalid catalog path must be rejected");
+        }
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

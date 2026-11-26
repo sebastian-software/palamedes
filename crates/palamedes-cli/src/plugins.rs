@@ -1050,7 +1050,15 @@ fn terminate_plugin_tree(child: &mut Child) {
 }
 
 #[cfg(any(windows, test))]
-fn resolve_windows_taskkill(system_root: Option<&OsStr>) -> Option<PathBuf> {
+fn resolve_windows_taskkill(
+    system_dir: Option<&Path>,
+    system_root: Option<&OsStr>,
+) -> Option<PathBuf> {
+    if let Some(dir) = system_dir
+        && dir.to_str().is_some_and(is_local_windows_drive_root)
+    {
+        return Some(dir.join("taskkill.exe"));
+    }
     let root = system_root.and_then(OsStr::to_str)?;
     if !is_local_windows_drive_root(root) {
         return None;
@@ -1072,9 +1080,38 @@ fn is_local_windows_drive_root(path: &str) -> bool {
 }
 
 #[cfg(windows)]
+fn windows_system_directory() -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetSystemDirectoryW(buffer: *mut u16, size: u32) -> u32;
+    }
+
+    let mut buffer = vec![0_u16; 260];
+    loop {
+        // SAFETY: `buffer` has `buffer.len()` writable UTF-16 code units.
+        let written =
+            unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), u32::try_from(buffer.len()).ok()?) };
+        if written == 0 {
+            return None;
+        }
+        let written_usize = usize::try_from(written).ok()?;
+        if written_usize < buffer.len() {
+            buffer.truncate(written_usize);
+            return Some(PathBuf::from(OsString::from_wide(&buffer)));
+        }
+        buffer.resize(written_usize + 1, 0);
+    }
+}
+
+#[cfg(windows)]
 fn terminate_plugin_tree(child: &mut Child) {
+    let system_dir = windows_system_directory();
     if let Some(taskkill) =
-        resolve_windows_taskkill(env::var_os("SystemRoot").as_deref()).filter(|path| path.is_file())
+        resolve_windows_taskkill(system_dir.as_deref(), env::var_os("SystemRoot").as_deref())
+            .filter(|path| path.is_file())
     {
         let _ = Command::new(taskkill)
             .args(["/PID", &child.id().to_string(), "/T", "/F"])
@@ -1379,23 +1416,27 @@ fn validate_plugin_binary_relative_path(
     };
     if binary.trim().is_empty()
         || binary.chars().any(char::is_control)
-        || binary.contains('\\')
+        || binary.starts_with('/')
+        || binary.starts_with('\\')
         || has_windows_drive_prefix(binary)
     {
         return Err(invalid());
     }
-    let relative = binary.strip_prefix("./").unwrap_or(binary);
-    if relative.is_empty()
-        || relative
-            .split('/')
-            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
-    {
+    let relative = binary
+        .strip_prefix("./")
+        .or_else(|| binary.strip_prefix(r".\"))
+        .unwrap_or(binary);
+    if relative.is_empty() {
         return Err(invalid());
     }
     let mut normalized = PathBuf::new();
-    for component in Path::new(relative).components() {
-        match component {
-            Component::Normal(part) => normalized.push(part),
+    for segment in relative.split(['/', '\\']) {
+        if segment.is_empty() || segment == "." || segment == ".." {
+            return Err(invalid());
+        }
+        let mut components = Path::new(segment).components();
+        match (components.next(), components.next()) {
+            (Some(Component::Normal(part)), None) => normalized.push(part),
             _ => return Err(invalid()),
         }
     }
@@ -1479,20 +1520,21 @@ fn package_segments(specifier: &str) -> Option<Vec<&str>> {
     match (specifier.starts_with('@'), segments.as_slice()) {
         (true, [scope, package]) => {
             let scope_name = scope.strip_prefix('@')?;
-            (is_valid_npm_package_segment(scope_name) && is_valid_npm_package_segment(package))
-                .then_some(segments)
+            (is_valid_npm_package_segment(scope_name, true)
+                && is_valid_npm_package_segment(package, true))
+            .then_some(segments)
         }
-        (false, [package]) => is_valid_npm_package_segment(package).then_some(segments),
+        (false, [package]) => is_valid_npm_package_segment(package, false).then_some(segments),
         _ => None,
     }
 }
 
-fn is_valid_npm_package_segment(segment: &str) -> bool {
+fn is_valid_npm_package_segment(segment: &str, allow_leading_underscore: bool) -> bool {
     if segment.is_empty()
         || segment == "."
         || segment == ".."
         || segment.starts_with('.')
-        || segment.starts_with('_')
+        || (!allow_leading_underscore && segment.starts_with('_'))
         || segment.ends_with('.')
     {
         return false;
@@ -2321,20 +2363,26 @@ mod tests {
     fn rejects_invalid_and_traversing_package_specifiers() {
         use super::package_segments;
 
-        for valid in ["@acme/plugin", "@acme/plugin-native", "acme.plugin_2"] {
+        for valid in [
+            "@acme/plugin",
+            "@acme/plugin-native",
+            "@acme/_catalog",
+            "@_scope/catalog",
+            "acme.plugin_2",
+        ] {
             assert!(package_segments(valid).is_some(), "expected valid: {valid}");
         }
         for invalid in [
             "",
             ".",
             "..",
+            "_unscoped",
+            ".hidden",
             "@a/..",
             "@../..",
             "@./pkg",
             "@a/.",
             "@a/.hidden",
-            "@_scope/pkg",
-            "@a/_pkg",
             "@a/pkg.",
             r"..\..\evil",
             r"@a\..\evil",
@@ -2430,6 +2478,23 @@ mod tests {
         let error = resolve_binary_plugin("./plugin", &config)
             .expect_err("uppercase script pluginBinary rejected");
         assert_eq!(error.code, "PLUGIN_BINARY_REQUIRED");
+
+        // Contained Windows-relative pluginBinary paths resolve cleanly inside the package.
+        fs::write(plugin.join("bin/plugin.exe"), "fixture").expect("windows binary fixture");
+        for relative_windows in [r"bin\plugin.exe", r".\bin\plugin.exe"] {
+            fs::write(
+                plugin.join("package.json"),
+                json!({ "palamedes": { "pluginBinary": relative_windows } }).to_string(),
+            )
+            .expect("windows relative manifest");
+            let resolved = resolve_binary_plugin("./plugin", &config)
+                .expect("contained Windows-relative pluginBinary should resolve");
+            assert_eq!(
+                resolved.binary_path,
+                fs::canonicalize(plugin.join("bin/plugin.exe")).expect("canonical windows binary"),
+                "for {relative_windows}"
+            );
+        }
     }
 
     #[cfg(unix)]
@@ -2514,8 +2579,13 @@ mod tests {
 
         use super::resolve_windows_taskkill;
 
+        // OS-reported System32 directory works even when SystemRoot is unset.
         assert_eq!(
-            resolve_windows_taskkill(Some(OsStr::new(r"C:\Windows"))),
+            resolve_windows_taskkill(Some(Path::new(r"C:\Windows\System32")), None),
+            Some(PathBuf::from(r"C:\Windows\System32").join("taskkill.exe"))
+        );
+        assert_eq!(
+            resolve_windows_taskkill(None, Some(OsStr::new(r"C:\Windows"))),
             Some(
                 PathBuf::from(r"C:\Windows")
                     .join("System32")
@@ -2523,7 +2593,7 @@ mod tests {
             )
         );
         assert_eq!(
-            resolve_windows_taskkill(Some(OsStr::new("D:/Windows"))),
+            resolve_windows_taskkill(None, Some(OsStr::new("D:/Windows"))),
             Some(
                 PathBuf::from("D:/Windows")
                     .join("System32")
@@ -2541,7 +2611,7 @@ mod tests {
             Some(OsStr::new("C:\\Windows\0")),
         ] {
             assert_eq!(
-                resolve_windows_taskkill(invalid),
+                resolve_windows_taskkill(None, invalid),
                 None,
                 "expected invalid SystemRoot to be rejected: {invalid:?}"
             );

@@ -9,6 +9,7 @@ use ferrocat::{
 };
 use sha2::{Digest, Sha256};
 
+use super::ensure_catalog_path_contained;
 use super::resolve::{catalog_locale_matcher, normalize_path};
 use super::types::{CatalogArtifactConfig, CatalogConfig};
 use crate::error::{PalamedesError, PalamedesResult};
@@ -43,7 +44,9 @@ pub(super) fn read_catalog_sources(
 ) -> PalamedesResult<CatalogSources> {
     let mut sources = Vec::new();
 
+    let root_dir = Path::new(&config.root_dir);
     for (index, file) in files.iter().enumerate() {
+        ensure_catalog_path_contained(root_dir, file)?;
         let locale = infer_locale_from_path(file, config)?
             .ok_or_else(|| PalamedesError::CouldNotInferLocale { path: file.clone() })?;
         let content = match fs::read_to_string(file) {

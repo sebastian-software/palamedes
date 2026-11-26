@@ -9,8 +9,8 @@ use super::load::{
 };
 use super::types::{CatalogArtifactConfig, FallbackLocales};
 use super::{
-    PreparedCompilation, is_valid_locale, resolve_catalog_file_path, try_resolve_catalog_file_path,
-    validate_catalog_path_pattern,
+    PreparedCompilation, ensure_catalog_path_contained, is_valid_locale, resolve_catalog_file_path,
+    resolve_contained_catalog_file_path, validate_catalog_path_pattern,
 };
 
 #[derive(Debug, Clone)]
@@ -166,9 +166,21 @@ fn resolve_catalog_request(
                     resource_path: resource_path.to_path_buf(),
                 });
             }
+            let expected_primary = resolve_contained_catalog_file_path(
+                Path::new(&config.root_dir),
+                &catalog.path,
+                &locale,
+                catalog.format,
+            )?;
+            // A pattern with multiple `{locale}` placeholders captures each
+            // occurrence independently; require every placeholder to resolve to
+            // the same validated locale.
+            if normalize_path(&expected_primary) != normalized_resource {
+                continue;
+            }
             return Ok(ResolvedCatalogRequest {
                 locale,
-                primary_file: resource_path.to_path_buf(),
+                primary_file: expected_primary,
             });
         }
     }
@@ -184,6 +196,7 @@ fn collect_watch_files(
     config: &CatalogArtifactConfig,
     locale_chain: &[String],
 ) -> PalamedesResult<Vec<PathBuf>> {
+    ensure_catalog_path_contained(root_dir, primary_file)?;
     let mut files = vec![primary_file.to_path_buf()];
 
     for catalog in &config.catalogs {
@@ -192,8 +205,12 @@ fn collect_watch_files(
 
         if matcher.is_match(&primary_pattern) {
             for locale in locale_chain {
-                let candidate =
-                    try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
+                let candidate = resolve_contained_catalog_file_path(
+                    root_dir,
+                    &catalog.path,
+                    locale,
+                    catalog.format,
+                )?;
                 if !files.contains(&candidate) {
                     files.push(candidate);
                 }
