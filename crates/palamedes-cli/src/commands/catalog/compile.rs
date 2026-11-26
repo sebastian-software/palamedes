@@ -14,8 +14,8 @@ use std::path::{Component, Path, PathBuf};
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
-    ContainedDir, ContainedNewFileMode, ContainedWriteDurability, FallbackLocales,
-    compile_catalog_artifact_with_source_keys, is_valid_locale, render_catalog_module,
+    ContainedDir, FallbackLocales, compile_catalog_artifact_with_source_keys, is_valid_locale,
+    render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
@@ -657,12 +657,7 @@ fn compile_js(
         for (file_name, module_path, code) in modules {
             let contents = format!("{code}\n");
             output_dir
-                .write_file_atomically(
-                    &file_name,
-                    contents.as_bytes(),
-                    ContainedNewFileMode::RespectUmask,
-                    ContainedWriteDurability::Rename,
-                )
+                .write_file_in_place(&file_name, contents.as_bytes())
                 .map_err(|error| format!("{}: {error}", module_path.display()))?;
             update.catalogs.push(module_path);
         }
@@ -915,7 +910,7 @@ mod tests {
     }
 
     #[test]
-    fn compile_js_replaces_hard_linked_output_without_modifying_outside_target() {
+    fn compile_js_refuses_to_overwrite_hard_linked_output_target() {
         let outside = temp_dir("compile-js-hardlink-outside");
         let app = temp_dir("compile-js-hardlink-app");
         fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
@@ -937,17 +932,15 @@ mod tests {
         fs::write(&outside_file, "do-not-overwrite").expect("seed outside file");
         fs::hard_link(&outside_file, output.join("en.mjs")).expect("create hard link");
 
-        compile_js(&config, &["en".to_owned()], &[], false, &output)
-            .expect("atomic replacement succeeds");
-
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("hard-linked output target must be rejected");
+        assert!(
+            error.contains("hard-linked"),
+            "expected hard-link containment error, got: {error}"
+        );
         assert_eq!(
             fs::read_to_string(&outside_file).expect("read outside file"),
             "do-not-overwrite"
-        );
-        assert!(
-            fs::read_to_string(output.join("en.mjs"))
-                .expect("read compiled output")
-                .contains("Hello")
         );
     }
 

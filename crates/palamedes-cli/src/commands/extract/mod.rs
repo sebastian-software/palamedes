@@ -601,10 +601,75 @@ fn process_catalogs(
     Ok(drift)
 }
 
+fn is_case_insensitive_directory(root_dir: &Path) -> bool {
+    if let Ok(entries) = fs::read_dir(root_dir) {
+        let Ok(root_handle) = ContainedDir::open_root(root_dir) else {
+            return cfg!(any(target_os = "macos", target_os = "windows"));
+        };
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let Some(name_str) = file_name.to_str() else {
+                continue;
+            };
+            let Some((idx, ch)) = name_str
+                .char_indices()
+                .find(|(_, ch)| ch.is_ascii_alphabetic())
+            else {
+                continue;
+            };
+            let flipped = if ch.is_ascii_lowercase() {
+                ch.to_ascii_uppercase()
+            } else {
+                ch.to_ascii_lowercase()
+            };
+            let mut variant = String::with_capacity(name_str.len());
+            variant.push_str(&name_str[..idx]);
+            variant.push(flipped);
+            variant.push_str(&name_str[idx + ch.len_utf8()..]);
+            let original_id = root_handle.file_identity(&file_name).ok().flatten();
+            let variant_id = root_handle
+                .file_identity(std::ffi::OsStr::new(&variant))
+                .ok()
+                .flatten();
+            if original_id.is_some() {
+                return original_id == variant_id;
+            }
+        }
+    }
+    cfg!(any(target_os = "macos", target_os = "windows"))
+}
+
+fn normalized_extract_target_key(
+    relative_parent: &Path,
+    file_name: &std::ffi::OsStr,
+    case_insensitive: bool,
+) -> (PathBuf, OsString) {
+    if !case_insensitive {
+        return (relative_parent.to_path_buf(), file_name.to_os_string());
+    }
+    let folded_parent = relative_parent
+        .components()
+        .fold(PathBuf::new(), |mut acc, component| {
+            let part = component.as_os_str();
+            if let Some(text) = part.to_str() {
+                acc.push(text.to_lowercase());
+            } else {
+                acc.push(part);
+            }
+            acc
+        });
+    let folded_name = file_name.to_str().map_or_else(
+        || file_name.to_os_string(),
+        |text| OsString::from(text.to_lowercase()),
+    );
+    (folded_parent, folded_name)
+}
+
 fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
 ) -> Result<(), CliError> {
+    let case_insensitive = is_case_insensitive_directory(&config.root_dir);
     let mut seen_paths: HashMap<(PathBuf, OsString), &str> = HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
 
@@ -618,10 +683,8 @@ fn reject_colliding_extract_targets(
                     source: error.into_io_error(),
                 }
             })?;
-        if let Some(first_scope) = seen_paths.insert(
-            (relative_parent.clone(), file_name.clone()),
-            catalog.path.as_str(),
-        ) {
+        let key = normalized_extract_target_key(&relative_parent, &file_name, case_insensitive);
+        if let Some(first_scope) = seen_paths.insert(key, catalog.path.as_str()) {
             return Err(CliError::Io {
                 path: catalog_path,
                 source: std::io::Error::new(
@@ -1329,5 +1392,59 @@ catalogs:
             "unexpected error: {error}"
         );
         assert!(!outside.join("en/messages.po").exists());
+    }
+
+    #[test]
+    fn extract_rejects_colliding_normalized_and_case_aliased_targets_before_writing() {
+        let app = temp_dir("extract-colliding-scopes");
+        fs::create_dir_all(app.join("app/a")).expect("create app/a");
+        fs::create_dir_all(app.join("app/b")).expect("create app/b");
+        fs::write(
+            app.join("app/a/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function a() { return t`Alpha`; }\n",
+        )
+        .expect("write a");
+        fs::write(
+            app.join("app/b/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function b() { return t`Beta`; }\n",
+        )
+        .expect("write b");
+
+        // Portable separator collision on clean checkout (no existing catalogs).
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [app/a]\n  - path: locales\\{locale}\\messages\n    include: [app/b]\n",
+        )
+        .expect("write config");
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let error = run_extraction(&config, &extract_options())
+            .expect_err("colliding separator-normalized extract scopes must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("resolve to the same target file"),
+            "unexpected error: {error}"
+        );
+        assert!(!app.join("locales/en/messages.po").exists());
+
+        // Case-insensitive collision on clean checkout (when running on a case-insensitive volume).
+        if super::is_case_insensitive_directory(&app) {
+            fs::write(
+                app.join("palamedes.yaml"),
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/Messages\n    include: [app/a]\n  - path: locales/{locale}/messages\n    include: [app/b]\n",
+            )
+            .expect("write case-aliased config");
+            let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+            let error = run_extraction(&config, &extract_options())
+                .expect_err("case-aliased extract scopes on case-insensitive volume must fail");
+            assert!(
+                error
+                    .to_string()
+                    .contains("resolve to the same target file"),
+                "unexpected error: {error}"
+            );
+            assert!(!app.join("locales/en/messages.po").exists());
+            assert!(!app.join("locales/en/Messages.po").exists());
+        }
     }
 }
