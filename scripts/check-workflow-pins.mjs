@@ -3987,6 +3987,9 @@ function inspectShellText(
   buildFileContext = null,
 ) {
   if (depth > MAX_SHELL_NESTING_DEPTH) {
+    problems.push(
+      `${filePath}:${startLine}: nested shell inspection exceeds maximum depth (${MAX_SHELL_NESTING_DEPTH}) and cannot be verified`,
+    );
     return;
   }
 
@@ -7738,6 +7741,117 @@ function substituteInputsInAstNode(node, inputValues, memo = new Map()) {
   return node;
 }
 
+function collectReferencedInputNames(node, found = new Set(), seen = new Set()) {
+  if (!node || seen.has(node)) {
+    return found;
+  }
+  seen.add(node);
+  if (node.kind === "scalar") {
+    const pattern = new RegExp(INPUTS_EXPRESSION_PATTERN.source, "giu");
+    for (const match of String(node.value).matchAll(pattern)) {
+      const name = (match.groups.dot ?? match.groups.sq ?? match.groups.dq).toLowerCase();
+      found.add(name);
+    }
+    return found;
+  }
+  if (node.kind === "seq") {
+    for (const item of node.value) {
+      collectReferencedInputNames(item, found, seen);
+    }
+    return found;
+  }
+  if (node.kind === "map") {
+    for (const val of node.value.values()) {
+      collectReferencedInputNames(val, found, seen);
+    }
+  }
+  return found;
+}
+
+function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
+  const onNode = getMapField(doc, "on");
+  if (onNode?.kind !== "map") {
+    return [];
+  }
+  const dispatchNode = getMapField(onNode, "workflow_dispatch");
+  if (dispatchNode?.kind !== "map") {
+    return [];
+  }
+  const inputsNode = getMapField(dispatchNode, "inputs");
+  if (inputsNode?.kind !== "map") {
+    return [];
+  }
+
+  const referenced = new Set();
+  for (const fieldName of ["env", "container", "services", "image", "steps", "jobs"]) {
+    collectReferencedInputNames(getMapField(doc, fieldName), referenced);
+  }
+
+  const inputValueLists = [];
+  for (const [inputName, defNode] of inputsNode.value) {
+    if (defNode?.kind !== "map") {
+      continue;
+    }
+    const lowerName = inputName.toLowerCase();
+    if (!referenced.has(lowerName)) {
+      continue;
+    }
+    const values = [];
+    const seenValues = new Set();
+    const pushValue = (valueNode) => {
+      if (valueNode?.kind !== "scalar") {
+        return;
+      }
+      const text = String(valueNode.value);
+      if (!seenValues.has(text)) {
+        seenValues.add(text);
+        values.push({ value: text, line: valueNode.line });
+      }
+    };
+    pushValue(getMapField(defNode, "default"));
+    const optionsNode = getMapField(defNode, "options");
+    if (optionsNode?.kind === "seq") {
+      for (const optionItem of optionsNode.value) {
+        pushValue(optionItem);
+      }
+    }
+    if (values.length > 0) {
+      inputValueLists.push([lowerName, values]);
+    }
+  }
+
+  if (inputValueLists.length === 0) {
+    return [];
+  }
+
+  let combinations = [new Map()];
+  let truncated = false;
+  for (const [inputName, values] of inputValueLists) {
+    const nextCombos = [];
+    for (const combo of combinations) {
+      for (const entry of values) {
+        if (nextCombos.length >= MAX_MATRIX_ROWS) {
+          truncated = true;
+          break;
+        }
+        const clone = new Map(combo);
+        clone.set(inputName, entry);
+        nextCombos.push(clone);
+      }
+      if (truncated) {
+        break;
+      }
+    }
+    combinations = nextCombos;
+  }
+  if (truncated) {
+    problems.push(
+      `${filePath}:${inputsNode.line}: workflow_dispatch input combinations exceed ${MAX_MATRIX_ROWS} combinations and cannot be verified exhaustively`,
+    );
+  }
+  return combinations;
+}
+
 function extractTriggerInputDefaults(doc, triggerName) {
   const defaults = new Map();
   const onNode = getMapField(doc, "on");
@@ -7917,12 +8031,12 @@ export function unpinnedWorkflowContainerReferences(
     const hasWorkflowCallTrigger =
       onNode?.kind === "map" && getMapField(onNode, "workflow_call") !== null;
     const wfCallDefaults = extractTriggerInputDefaults(doc, "workflow_call");
-    const wfDispatchDefaults = extractTriggerInputDefaults(doc, "workflow_dispatch");
+    const wfDispatchContexts = extractWorkflowDispatchInputContexts(doc, filePath, problems);
     if (wfCallDefaults.size > 0 || hasWorkflowCallTrigger) {
       workflowInputContexts.push({ inputs: wfCallDefaults, deferUnresolvedInputs: true });
     }
-    if (wfDispatchDefaults.size > 0) {
-      workflowInputContexts.push({ inputs: wfDispatchDefaults, deferUnresolvedInputs: false });
+    for (const dispatchInputs of wfDispatchContexts) {
+      workflowInputContexts.push({ inputs: dispatchInputs, deferUnresolvedInputs: false });
     }
     if (workflowInputContexts.length === 0) {
       workflowInputContexts.push({ inputs: new Map(), deferUnresolvedInputs: false });
@@ -8018,7 +8132,22 @@ export function unpinnedWorkflowContainerReferences(
         const rawImage = String(runsImageNode.value).trim();
         if (isLocalDockerActionImage(rawImage)) {
           const actionDir = path.dirname(path.resolve(root, filePath));
-          recordExplicitBuildFile(rawImage, actionDir, root, buildFileContext.explicitBuildFiles);
+          const resolvedPath = resolveContainedPath(rawImage, actionDir, root);
+          if (!resolvedPath || resolvedPath === path.resolve(root)) {
+            ctxProblems.push(
+              `${filePath}:${runsImageNode.line}: build file ${rawImage} cannot be verified statically`,
+            );
+          } else {
+            const targetProblems = [];
+            const safeFile = resolveSafeContainerFile(resolvedPath, root, targetProblems);
+            if (safeFile || targetProblems.length > 0) {
+              buildFileContext.explicitBuildFiles.add(resolvedPath);
+            } else {
+              ctxProblems.push(
+                `${filePath}:${runsImageNode.line}: build file ${rawImage} cannot be verified statically`,
+              );
+            }
+          }
         }
       }
       let actionBuildContext = buildFileContext;

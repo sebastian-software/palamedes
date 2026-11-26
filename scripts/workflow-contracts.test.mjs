@@ -2912,6 +2912,49 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r34Fixture, { recursive: true, force: true });
     }
+    // `workflow_dispatch` choice options beyond the default, missing Docker
+    // action Dockerfiles (`runs.image`), and nested shell depth limits all fail closed.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      image:",
+          "        type: choice",
+          `        default: node:24@${digest}`,
+          "        options:",
+          `          - node:24@${digest}`,
+          "          - alpine:3.20",
+          "jobs:",
+          "  run:",
+          "    runs-on: ubuntu-24.04",
+          "    container: ${{ inputs.image }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:13: alpine:3.20 is not pinned to a sha256 digest"]);
+    const deepNestedShell = Array.from({ length: 10 }).reduce(
+      (inner) => `sh -c '${inner.replaceAll("'", "'\"'\"'")}'`,
+      "docker pull alpine:3.20",
+    );
+    expect(unpinnedWorkflowContainerReferences(`steps:\n  - run: ${deepNestedShell}\n`)).toEqual([
+      "<memory>:2: nested shell inspection exceeds maximum depth (8) and cannot be verified",
+    ]);
+    const r35Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r35-"));
+    try {
+      await mkdir(join(r35Fixture, ".github", "actions", "missing-docker"), { recursive: true });
+      await writeFile(
+        join(r35Fixture, ".github", "actions", "missing-docker", "action.yml"),
+        "name: Missing Docker\nruns:\n  using: docker\n  image: ./deleted.Dockerfile\n",
+      );
+      const r35Result = checkWorkflowPins(r35Fixture);
+      expect(r35Result.problems).toEqual([
+        ".github/actions/missing-docker/action.yml:4: build file ./deleted.Dockerfile cannot be verified statically",
+      ]);
+    } finally {
+      await rm(r35Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
