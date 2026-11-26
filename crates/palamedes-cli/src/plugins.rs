@@ -2020,7 +2020,12 @@ mod unix_pinned_plugin {
             dir_stack: &mut Vec<(OsString, OwnedFd)>,
             queue: &mut VecDeque<WalkStep>,
         ) -> Result<(), WalkError> {
-            let trailing_slash = target_os.as_bytes().ends_with(b"/");
+            let target_bytes = target_os.as_bytes();
+            let requires_directory = target_bytes == b"."
+                || target_bytes == b".."
+                || target_bytes.ends_with(b"/")
+                || target_bytes.ends_with(b"/.")
+                || target_bytes.ends_with(b"/..");
             let target_path = PathBuf::from(target_os);
             let stripped: PathBuf = if target_path.is_absolute() {
                 let inside = target_path
@@ -2046,7 +2051,7 @@ mod unix_pinned_plugin {
                     Component::RootDir | Component::Prefix(_) => return Err(WalkError::Escapes),
                 }
             }
-            if trailing_slash && queue.is_empty() {
+            if requires_directory && queue.is_empty() {
                 return Err(WalkError::NotRegularFile);
             }
             for step in steps.into_iter().rev() {
@@ -5776,5 +5781,32 @@ catalogs:
         let error = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
             .expect_err("macOS deny-execute ACL must prevent pinned shell plugin execution");
         assert_eq!(error.code, "PLUGIN_BINARY_SPAWN_FAILED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn packaged_plugin_symlink_with_trailing_slash_or_dot_is_rejected() {
+        for (suffix, target) in [("slash", "engine/"), ("dot", "engine/.")] {
+            let root = temp_dir(&format!("plugin-symlink-trailing-{suffix}"));
+            let pkg_dir = root.join("node_modules/acme-trail");
+            let bin_dir = pkg_dir.join("bin");
+            fs::create_dir_all(&bin_dir).expect("create bin dir");
+            fs::write(
+                pkg_dir.join("package.json"),
+                r#"{"name":"acme-trail","palamedes":{"pluginBinary":"bin/acme-plugin"}}"#,
+            )
+            .expect("write package.json");
+            write_executable_fixture(
+                &bin_dir.join("engine"),
+                "#!/bin/sh\necho '{\"event\":\"manifest\",\"name\":\"trail\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}'\n",
+            );
+            std::os::unix::fs::symlink(target, bin_dir.join("acme-plugin"))
+                .expect("create symlink");
+            let config_path = root.join("palamedes.yaml");
+            fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+            let error = super::resolve_binary_plugin("acme-trail", &config_path)
+                .expect_err("symlink target requiring a directory must not execute a regular file");
+            assert_eq!(error.code, "PLUGIN_INVALID");
+        }
     }
 }

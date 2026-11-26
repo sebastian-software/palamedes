@@ -802,6 +802,127 @@ mod platform {
             detect_unix_dir_filename_equivalence(self)
         }
 
+        /// Probes whether two single-segment filenames resolve to the same
+        /// entry on this directory's mounted filesystem by creating a private
+        /// `0700` temporary subdirectory inside `self` (inheriting volume
+        /// encoding and Linux `FS_CASEFOLD_FL`) and testing `O_CREAT | O_EXCL`
+        /// for `left` then `right`.
+        ///
+        /// Returns `Some(true)` when the filesystem treats both names as
+        /// equivalent, `Some(false)` when both coexist as distinct files, or
+        /// `None` when the directory is read-only or cannot be probed safely.
+        #[must_use]
+        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
+            }
+            if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
+            {
+                return None;
+            }
+            let c_left = CString::new(left.as_bytes()).ok()?;
+            let c_right = CString::new(right.as_bytes()).ok()?;
+            let dir_raw = self.fd.as_raw_fd();
+            let pid = std::process::id();
+            let mut probe_dir_name = None;
+            for _ in 0..8 {
+                let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+                let name = CString::new(format!(".pmds-eq-{pid}-{nonce}")).ok()?;
+                // SAFETY: `dir_raw` is open and `name` is NUL-terminated.
+                if unsafe { libc::mkdirat(dir_raw, name.as_ptr(), 0o700) } == 0 {
+                    probe_dir_name = Some(name);
+                    break;
+                }
+                if io::Error::last_os_error().raw_os_error() != Some(libc::EEXIST) {
+                    return None;
+                }
+            }
+            let probe_dir_name = probe_dir_name?;
+            struct ProbeDirCleanup<'a> {
+                parent_raw: std::os::fd::RawFd,
+                name: &'a CString,
+            }
+            impl Drop for ProbeDirCleanup<'_> {
+                fn drop(&mut self) {
+                    // SAFETY: `parent_raw` is open and `self.name` is our private probe dir.
+                    unsafe {
+                        let _ =
+                            libc::unlinkat(self.parent_raw, self.name.as_ptr(), libc::AT_REMOVEDIR);
+                    }
+                }
+            }
+            let _cleanup = ProbeDirCleanup {
+                parent_raw: dir_raw,
+                name: &probe_dir_name,
+            };
+            // SAFETY: `dir_raw` is open and `probe_dir_name` was just created with 0700.
+            let probe_raw = unsafe {
+                libc::openat(
+                    dir_raw,
+                    probe_dir_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if probe_raw < 0 {
+                return None;
+            }
+            // SAFETY: `probe_raw` is a newly opened valid directory descriptor.
+            let probe_fd = unsafe { OwnedFd::from_raw_fd(probe_raw) };
+            let probe_dir_raw = probe_fd.as_raw_fd();
+
+            // SAFETY: `probe_dir_raw` is open and `c_left` is a validated single segment.
+            let left_raw = unsafe {
+                libc::openat(
+                    probe_dir_raw,
+                    c_left.as_ptr(),
+                    libc::O_WRONLY
+                        | libc::O_CREAT
+                        | libc::O_EXCL
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC,
+                    0o600 as libc::c_uint,
+                )
+            };
+            if left_raw < 0 {
+                return None;
+            }
+            // SAFETY: `left_raw` is a newly opened valid file descriptor.
+            drop(unsafe { OwnedFd::from_raw_fd(left_raw) });
+
+            // SAFETY: `probe_dir_raw` is open and `c_right` is a validated single segment.
+            let right_raw = unsafe {
+                libc::openat(
+                    probe_dir_raw,
+                    c_right.as_ptr(),
+                    libc::O_WRONLY
+                        | libc::O_CREAT
+                        | libc::O_EXCL
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC,
+                    0o600 as libc::c_uint,
+                )
+            };
+            let result = if right_raw >= 0 {
+                // SAFETY: `right_raw` is a newly opened valid file descriptor.
+                drop(unsafe { OwnedFd::from_raw_fd(right_raw) });
+                // SAFETY: `probe_dir_raw` is open and `c_right` was just created.
+                unsafe {
+                    let _ = libc::unlinkat(probe_dir_raw, c_right.as_ptr(), 0);
+                }
+                Some(false)
+            } else if io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST) {
+                Some(true)
+            } else {
+                None
+            };
+            // SAFETY: `probe_dir_raw` is open and `c_left` was just created.
+            unsafe {
+                let _ = libc::unlinkat(probe_dir_raw, c_left.as_ptr(), 0);
+            }
+            drop(probe_fd);
+            result
+        }
+
         /// Detects whether filenames in this specific directory are compared
         /// case-insensitively without mutating the filesystem.
         ///
@@ -2185,13 +2306,19 @@ mod platform {
     /// if `.pmds-lock` is already gone or replaced, the live writer released it
     /// cleanly; if `.pmds-lock` still names `existing_id`, the previous owner
     /// died without unlinking it and we coordinate atomic single-winner unlink
-    /// via a per-inode `.pmds-claim-<dev>-<ino>` lock file so concurrent
-    /// waiters can never unlink a newly created replacement lock.
+    /// via a generation-indexed claim chain `.pmds-claim-<ino>-<gen>` (using
+    /// only the cross-client `st_ino` fileid, never client-local `st_dev`).
+    /// Waiters never unlink a stale claim directly; instead, if a claimant dies
+    /// mid-recovery, surviving waiters advance to `gen + 1` and only the single
+    /// atomic winner of the highest generation unlinks `.pmds-lock` and cleans
+    /// up `.pmds-claim-<ino>-0..=gen`.
     pub(super) fn wait_for_readonly_lock_release(
         dir: &ContainedDir,
         existing_fd: OwnedFd,
         existing_id: FileIdentity,
     ) -> Result<(), ContainedFsError> {
+        const MAX_RECOVERY_GENERATIONS: u32 = 64;
+
         let dir_raw = dir.fd.as_raw_fd();
         flock_shared(existing_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
 
@@ -2208,15 +2335,11 @@ mod platform {
 
         // Keep `existing_fd` locked with `LOCK_SH` across recovery so no writer
         // can simultaneously hold `LOCK_EX` on `existing_id`.
-        let claim_name = CString::new(format!(
-            ".pmds-claim-{}-{}",
-            existing_id.dev, existing_id.ino
-        ))
-        .expect("ASCII recovery claim name has no NUL bytes");
         let dir_group_writable = fstat_fd(dir_raw)
             .map(|stat| (stat.st_mode & 0o020) != 0)
             .unwrap_or(false);
         let pid = std::process::id();
+        let mut generation: u32 = 0;
 
         loop {
             match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
@@ -2226,9 +2349,20 @@ mod platform {
                 Err(error) => return Err(ContainedFsError::Io(error)),
             }
 
+            if generation >= MAX_RECOVERY_GENERATIONS {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "exceeded maximum recovery generations for abandoned catalog lock \".pmds-lock\"",
+                )));
+            }
+
+            // Use `existing_id.ino` (shared NFS fileid) without client-local `st_dev`.
+            let claim_name = CString::new(format!(".pmds-claim-{}-{generation}", existing_id.ino))
+                .expect("ASCII recovery claim name has no NUL bytes");
+
             // Create, stamp, and lock the recovery claim file BEFORE publishing
-            // it at `.pmds-claim-<dev>-<ino>`, so no concurrent waiter can ever
-            // observe an unlocked claim file and prematurely remove it as stale.
+            // it at `.pmds-claim-<ino>-<gen>`, so no concurrent waiter can ever
+            // observe an unlocked claim file.
             let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
             let temp_claim_name = CString::new(format!(".pmds-ctmp-{pid}-{nonce}"))
                 .expect("ASCII temp claim name has no NUL bytes");
@@ -2298,8 +2432,19 @@ mod platform {
                                 result = Err(ContainedFsError::Io(error));
                             }
                         }
-                        // Only remove `.pmds-claim-<dev>-<ino>` if our locked
-                        // inode still owns the directory entry.
+                        // Clean up any dead prior-generation claims, then our own
+                        // verified claim entry.
+                        for prior_gen in 0..generation {
+                            let prior_name = CString::new(format!(
+                                ".pmds-claim-{}-{prior_gen}",
+                                existing_id.ino
+                            ))
+                            .expect("ASCII recovery claim name has no NUL bytes");
+                            // SAFETY: `dir_raw` is open and `prior_name` is a dead prior claim.
+                            unsafe {
+                                let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
+                            }
+                        }
                         if let Ok(stat) = fstatat_nofollow(dir_raw, &claim_name)
                             && stat_identity(&stat) == claim_id
                         {
@@ -2323,9 +2468,11 @@ mod platform {
                 }
             }
 
-            // Another waiter already published `.pmds-claim-<dev>-<ino>`: wait
-            // on it via `LOCK_SH`, and if that claimant died before unlinking
-            // `existing_id`, remove the stale claim and retry.
+            // Another waiter already published `.pmds-claim-<ino>-<gen>`: wait
+            // on it via `LOCK_SH`. Never unlink a stale claim directly (which
+            // could race with another waiter); instead, if that claimant died
+            // without unlinking `existing_id`, advance to `generation + 1` so
+            // recovery stays single-winner across all clients.
             // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
             let other_raw = unsafe {
                 libc::openat(
@@ -2352,7 +2499,6 @@ mod platform {
                     "refusing to overwrite or remove pre-existing non-lock recovery claim file",
                 )));
             }
-            let other_id = stat_identity(&other_stat);
             flock_shared(other_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
             let still_abandoned = match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                 Ok(stat) => stat_identity(&stat) == existing_id,
@@ -2362,17 +2508,51 @@ mod platform {
             if !still_abandoned {
                 return Ok(());
             }
-            if let Ok(claim_stat) = fstatat_nofollow(dir_raw, &claim_name)
-                && stat_identity(&claim_stat) == other_id
-            {
-                // SAFETY: `dir_raw` is open and `claim_name` is a verified stale claim file.
-                if unsafe { libc::unlinkat(dir_raw, claim_name.as_ptr(), 0) } != 0 {
-                    let unlink_err = io::Error::last_os_error();
-                    if unlink_err.raw_os_error() != Some(libc::ENOENT) {
-                        return Err(ContainedFsError::Io(unlink_err));
-                    }
+            generation += 1;
+        }
+    }
+
+    fn wait_for_mandatory_lock_acquisition(
+        dir: &ContainedDir,
+        existing_fd: &OwnedFd,
+        existing_id: FileIdentity,
+        opened_read_only: bool,
+    ) -> Result<bool, ContainedFsError> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut backoff_ms: u64 = 2;
+        loop {
+            match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
+                Ok(stat) if stat_identity(&stat) == existing_id => {}
+                Ok(_) => return Ok(false),
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(false),
+                Err(error) => return Err(ContainedFsError::Io(error)),
+            }
+
+            if !opened_read_only {
+                // SAFETY: `existing_fd` is an open file descriptor.
+                if unsafe { libc::flock(existing_fd.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }
+                    == 0
+                {
+                    return Ok(true);
+                }
+                let err = io::Error::last_os_error();
+                let raw = err.raw_os_error();
+                if raw != Some(libc::EWOULDBLOCK)
+                    && raw != Some(libc::EAGAIN)
+                    && raw != Some(libc::EINTR)
+                {
+                    return Err(ContainedFsError::Io(err));
                 }
             }
+
+            if std::time::Instant::now() >= deadline {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "timed out waiting for mandatory lock on \".pmds-lock\" to release",
+                )));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+            backoff_ms = (backoff_ms * 2).min(50);
         }
     }
 
@@ -2658,13 +2838,37 @@ mod platform {
             // Palamedes always stamps `UNIX_DIR_LOCK_MAGIC` before publishing
             // `.pmds-lock`, so reject foreign files immediately instead of
             // blocking indefinitely if another process holds a lock on one.
-            if !verify_lock_file_magic(existing_fd.as_raw_fd(), &pre_stat)? {
-                return Err(ContainedFsError::Io(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
-                )));
-            }
-            if let Err(lock_err) = flock_exclusive(existing_fd.as_raw_fd()) {
+            // On Linux CIFS mounts with mandatory SMB byte-range locks, `pread`
+            // can return `EACCES`/`EAGAIN` while another writer owns the lock;
+            // serialize with a bounded wait and revalidate magic + identity
+            // after acquisition.
+            let already_locked = match verify_lock_file_magic(existing_fd.as_raw_fd(), &pre_stat) {
+                Ok(true) => false,
+                Ok(false) => {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
+                    )));
+                }
+                Err(read_err)
+                    if read_err.raw_os_error() == Some(libc::EACCES)
+                        || read_err.raw_os_error() == Some(libc::EAGAIN)
+                        || read_err.raw_os_error() == Some(libc::EWOULDBLOCK) =>
+                {
+                    let existing_id = stat_identity(&pre_stat);
+                    if !wait_for_mandatory_lock_acquisition(
+                        dir,
+                        &existing_fd,
+                        existing_id,
+                        opened_read_only,
+                    )? {
+                        continue;
+                    }
+                    true
+                }
+                Err(read_err) => return Err(ContainedFsError::Io(read_err)),
+            };
+            if !already_locked && let Err(lock_err) = flock_exclusive(existing_fd.as_raw_fd()) {
                 if opened_read_only
                     && matches!(
                         lock_err.raw_os_error(),
@@ -4507,6 +4711,16 @@ mod platform {
             }
         }
 
+        /// Windows uses the OS's live `RtlUpcaseUnicodeChar` `$UpCase` table
+        /// directly, so no on-disk filename equivalence probe is needed.
+        #[must_use]
+        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
+            }
+            None
+        }
+
         /// Detects whether filenames in this directory are compared
         /// case-insensitively, respecting NTFS per-directory case sensitivity.
         #[must_use]
@@ -5609,6 +5823,15 @@ mod platform {
             None
         }
 
+        /// Unsupported directory filename-equivalence probe fallback.
+        #[must_use]
+        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
+            }
+            None
+        }
+
         /// Unsupported directory case-sensitivity lookup fallback.
         #[must_use]
         pub fn is_case_insensitive(&self) -> Option<bool> {
@@ -6558,5 +6781,43 @@ mod tests {
             "expected AlreadyExists for foreign locked file, got {error:?}"
         );
         drop(foreign_file);
+
+        // 4. Stale generation-0 recovery claim left by a crashed claimant must
+        //    be superseded cleanly by generation-1 without racing unlinks, and
+        //    both `.pmds-lock` and all `.pmds-claim-*` files must be removed.
+        let _ = fs::remove_file(&lock_path);
+        fs::write(&lock_path, super::platform::UNIX_DIR_LOCK_MAGIC).expect("write abandoned lock");
+        fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o444)).expect("chmod 0444");
+        let gen_fd = OwnedFd::from(fs::File::open(&lock_path).expect("open read-only lock"));
+        let gen_stat = super::platform::fstat_fd(gen_fd.as_raw_fd()).expect("fstat lock");
+        let gen_id = super::platform::stat_identity(&gen_stat);
+        let stale_gen0 = root.path().join(format!(".pmds-claim-{}-0", gen_id.ino));
+        fs::write(&stale_gen0, super::platform::UNIX_DIR_LOCK_MAGIC)
+            .expect("write stale gen0 claim");
+        super::platform::wait_for_readonly_lock_release(&dir, gen_fd, gen_id)
+            .expect("generation-1 must recover past dead generation-0 claim");
+        assert!(!lock_path.exists());
+        assert!(!stale_gen0.exists());
+        let leftover_claims: Vec<_> = fs::read_dir(root.path())
+            .expect("read dir")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".pmds-claim-")
+            })
+            .collect();
+        assert!(leftover_claims.is_empty());
+
+        // 5. `probe_names_equivalent` confirms live filesystem equivalence.
+        assert_eq!(
+            dir.probe_names_equivalent(OsStr::new("alpha.po"), OsStr::new("beta.po")),
+            Some(false)
+        );
+        assert_eq!(
+            dir.probe_names_equivalent(OsStr::new("same.po"), OsStr::new("same.po")),
+            Some(true)
+        );
     }
 }

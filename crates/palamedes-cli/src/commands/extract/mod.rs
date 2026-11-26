@@ -13,7 +13,7 @@ mod test_support;
 mod watch;
 
 use std::collections::{BTreeMap, HashMap};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -1341,12 +1341,66 @@ fn resolve_directory_equivalence(
     equivalence
 }
 
+fn segments_collide_on_dir(
+    anchor_dir: &ContainedDir,
+    equivalence: DirFilenameEquivalence,
+    left_remaining: &[OsString],
+    left_file: &OsStr,
+    right_remaining: &[OsString],
+    right_file: &OsStr,
+) -> bool {
+    if left_remaining.len() != right_remaining.len() {
+        return false;
+    }
+    let is_ascii_ci = matches!(
+        equivalence,
+        DirFilenameEquivalence::CaseInsensitiveNtfs
+            | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+            | DirFilenameEquivalence::CaseInsensitiveHfsPlus
+            | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+    );
+    let pairs = left_remaining
+        .iter()
+        .map(OsString::as_os_str)
+        .chain(std::iter::once(left_file))
+        .zip(
+            right_remaining
+                .iter()
+                .map(OsString::as_os_str)
+                .chain(std::iter::once(right_file)),
+        );
+    for (left, right) in pairs {
+        if left == right {
+            continue;
+        }
+        if is_ascii_ci
+            && let (Some(l_str), Some(r_str)) = (left.to_str(), right.to_str())
+            && l_str.is_ascii()
+            && r_str.is_ascii()
+            && l_str.eq_ignore_ascii_case(r_str)
+        {
+            continue;
+        }
+        // Non-ASCII equivalence depends on the mounted volume's Unicode
+        // version (for example Linux ext4 `utf8-12.1` vs Unicode 16 in Rust).
+        // Ask the mounted filesystem before rejecting as a collision; fall back
+        // to the folded decision when the directory cannot be probed (e.g.
+        // read-only directory or Windows where `RtlUpcaseUnicodeChar` is exact).
+        if anchor_dir.probe_names_equivalent(left, right) == Some(false) {
+            return false;
+        }
+    }
+    true
+}
+
 fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
 ) -> Result<(), CliError> {
+    type SeenBucket<'a> = Vec<(&'a str, Vec<OsString>, OsString)>;
+
     let mut dir_eq_cache: HashMap<FileIdentity, DirFilenameEquivalence> = HashMap::new();
-    let mut seen_paths: HashMap<(ExtractTargetAnchor, Vec<OsString>, OsString), &str> =
+    let mut seen_paths: HashMap<(ExtractTargetAnchor, Vec<OsString>, OsString), SeenBucket<'_>> =
         HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
 
@@ -1374,6 +1428,7 @@ fn reject_colliding_extract_targets(
             resolve_directory_equivalence(&current, current_id, None, &mut dir_eq_cache);
         let mut existing_prefix = PathBuf::new();
         let mut remaining_segments: Vec<OsString> = Vec::new();
+        let mut raw_remaining_segments: Vec<OsString> = Vec::new();
         let mut hit_missing = false;
 
         for component in relative_parent.components() {
@@ -1381,6 +1436,7 @@ fn reject_colliding_extract_targets(
                 continue;
             };
             if hit_missing {
+                raw_remaining_segments.push(segment.to_os_string());
                 remaining_segments.push(fold_os_segment(segment, current_eq));
                 continue;
             }
@@ -1408,6 +1464,7 @@ fn reject_colliding_extract_targets(
                 }
                 None => {
                     hit_missing = true;
+                    raw_remaining_segments.push(segment.to_os_string());
                     remaining_segments.push(fold_os_segment(segment, current_eq));
                 }
             }
@@ -1419,7 +1476,21 @@ fn reject_colliding_extract_targets(
         );
         let normalized_name = fold_os_segment(&file_name, current_eq);
         let key = (anchor, remaining_segments, normalized_name);
-        if let Some(first_scope) = seen_paths.insert(key, catalog.path.as_str()) {
+        let bucket = seen_paths.entry(key).or_default();
+        if let Some((first_scope, _, _)) =
+            bucket
+                .iter()
+                .find(|(_, prev_raw_remaining, prev_raw_file)| {
+                    segments_collide_on_dir(
+                        &current,
+                        current_eq,
+                        prev_raw_remaining,
+                        prev_raw_file,
+                        &raw_remaining_segments,
+                        &file_name,
+                    )
+                })
+        {
             return Err(CliError::Io {
                 path: catalog_path,
                 source: std::io::Error::new(
@@ -1431,6 +1502,11 @@ fn reject_colliding_extract_targets(
                 ),
             });
         }
+        bucket.push((
+            catalog.path.as_str(),
+            raw_remaining_segments,
+            file_name.clone(),
+        ));
         if !hit_missing
             && let Some(identity) =
                 current
@@ -2230,11 +2306,21 @@ catalogs:
             assert!(!app.join("locales/en/Messages.po").exists());
         }
 
-        // Unicode NFC vs NFD collision on clean checkout (for example APFS/HFS+).
-        let is_unicode_norm = super::ContainedDir::open_root(&app)
+        use palamedes::DirFilenameEquivalence;
+
+        let equivalence = super::ContainedDir::open_root(&app)
             .expect("open root")
-            .is_unicode_normalizing()
-            .unwrap_or(cfg!(target_os = "macos"));
+            .filename_equivalence()
+            .unwrap_or_else(super::default_platform_equivalence);
+        let is_unicode_norm = matches!(
+            equivalence,
+            DirFilenameEquivalence::UnicodeNfd
+                | DirFilenameEquivalence::UnicodeHfsPlus
+                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                | DirFilenameEquivalence::CaseInsensitiveHfsPlus
+                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+        );
+        // Unicode NFC vs NFD collision on clean checkout (for example APFS/HFS+).
         if is_unicode_norm {
             fs::write(
                 app.join("palamedes.yaml"),
@@ -2255,9 +2341,14 @@ catalogs:
             assert!(!app.join("locales/en/cafe\u{0301}.po").exists());
         }
 
-        // Full Unicode case folding collision (`straße` vs `strasse`) on
-        // case-insensitive normalizing filesystems (for example default APFS).
-        if is_ci && is_unicode_norm {
+        // Full Unicode multi-character case folding collision (`straße` vs
+        // `strasse`) on filesystems that fold `ß` to `ss` (APFS and Linux
+        // `FS_CASEFOLD_FL`, NOT HFS+ or NTFS).
+        if matches!(
+            equivalence,
+            DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+        ) {
             fs::write(
                 app.join("palamedes.yaml"),
                 "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/stra\u{00df}e\n    include: [app/a]\n  - path: locales/{locale}/strasse\n    include: [app/b]\n",
@@ -2277,9 +2368,15 @@ catalogs:
             assert!(!app.join("locales/en/strasse.po").exists());
         }
 
-        // Greek sigma/final-sigma collision (`σ` vs `ς`) on case-insensitive
-        // filesystems (both NTFS `$UpCase` and APFS full case folding).
-        if is_ci {
+        // Greek sigma/final-sigma collision (`σ` vs `ς`) on filesystems that
+        // equate both forms (NTFS `$UpCase`, APFS, and Linux `FS_CASEFOLD_FL`,
+        // NOT HFS+ Unicode 3.2 1-to-1 lowercase).
+        if matches!(
+            equivalence,
+            DirFilenameEquivalence::CaseInsensitiveNtfs
+                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+        ) {
             fs::write(
                 app.join("palamedes.yaml"),
                 "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/\u{03c3}\n    include: [app/a]\n  - path: locales/{locale}/\u{03c2}\n    include: [app/b]\n",
