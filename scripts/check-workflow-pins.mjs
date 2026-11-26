@@ -56,6 +56,7 @@ const SHELL_COMMAND_PREFIXES = new Set([
   "nohup",
   "sudo",
   "env",
+  "timeout",
   "{",
   "(",
 ]);
@@ -676,63 +677,82 @@ function candidatesToVarEntries({ candidates, truncated }, assignLine) {
 }
 
 function expandPatternCandidates(candidates, pattern, lookup, initialTruncated = false) {
+  const globalFlags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
   let results = candidates;
   let truncated = initialTruncated;
-  let guard = 0;
 
-  while (guard < 16) {
-    guard += 1;
+  for (let depth = 0; depth < 8; depth += 1) {
     let expandedAny = false;
     const nextResults = [];
     const seen = new Set();
 
+    const pushFinal = (text, line) => {
+      const key = `${line}:${text}`;
+      if (seen.has(key)) {
+        return;
+      }
+      if (nextResults.length >= MAX_TOKEN_EXPANSIONS) {
+        truncated = true;
+        return;
+      }
+      seen.add(key);
+      nextResults.push({ text, line });
+    };
+
     for (const candidate of results) {
-      pattern.lastIndex = 0;
-      const match = pattern.exec(candidate.text);
-      if (!match) {
-        const key = `${candidate.line}:${candidate.text}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          nextResults.push(candidate);
+      const matcher = new RegExp(pattern.source, globalFlags);
+      let builders = [{ text: "", line: candidate.line }];
+      let cursor = 0;
+      let match;
+
+      while ((match = matcher.exec(candidate.text)) !== null) {
+        const literal = candidate.text.slice(cursor, match.index);
+        cursor = match.index + match[0].length;
+        const entries = lookup(match);
+
+        if (!entries || entries.length === 0) {
+          for (const builder of builders) {
+            builder.text += literal + match[0];
+          }
+          continue;
         }
-        continue;
+
+        expandedAny = true;
+        const isWholeToken = match.index === 0 && match[0].length === candidate.text.length;
+        const nextBuilders = [];
+        const seenBuilder = new Set();
+        for (const builder of builders) {
+          for (const entry of entries) {
+            if (entry.truncated) {
+              truncated = true;
+              continue;
+            }
+            if (entry.unset) {
+              continue;
+            }
+            const nextText = `${builder.text}${literal}${entry.value}`;
+            const nextLine = isWholeToken ? entry.line : builder.line;
+            const bKey = `${nextLine}:${nextText}`;
+            if (seenBuilder.has(bKey)) {
+              continue;
+            }
+            if (nextBuilders.length >= MAX_TOKEN_EXPANSIONS) {
+              truncated = true;
+              continue;
+            }
+            seenBuilder.add(bKey);
+            nextBuilders.push({ text: nextText, line: nextLine });
+          }
+        }
+        builders = nextBuilders;
+        if (builders.length === 0) {
+          break;
+        }
       }
 
-      const entries = lookup(match);
-      if (!entries || entries.length === 0) {
-        const key = `${candidate.line}:${candidate.text}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          nextResults.push(candidate);
-        }
-        continue;
-      }
-
-      expandedAny = true;
-      const isWholeToken = match.index === 0 && match[0].length === candidate.text.length;
-      const prefix = candidate.text.slice(0, match.index);
-      const suffix = candidate.text.slice(match.index + match[0].length);
-
-      for (const entry of entries) {
-        if (entry.truncated) {
-          truncated = true;
-          continue;
-        }
-        if (entry.unset) {
-          continue;
-        }
-        const nextText = `${prefix}${entry.value}${suffix}`;
-        const nextLine = isWholeToken ? entry.line : candidate.line;
-        const key = `${nextLine}:${nextText}`;
-        if (seen.has(key)) {
-          continue;
-        }
-        if (nextResults.length >= MAX_TOKEN_EXPANSIONS) {
-          truncated = true;
-          continue;
-        }
-        seen.add(key);
-        nextResults.push({ text: nextText, line: nextLine });
+      const tail = candidate.text.slice(cursor);
+      for (const builder of builders) {
+        pushFinal(`${builder.text}${tail}`, builder.line);
       }
     }
 
@@ -740,8 +760,21 @@ function expandPatternCandidates(candidates, pattern, lookup, initialTruncated =
     if (!expandedAny) {
       break;
     }
-    if (guard === 16) {
-      truncated = true;
+    if (depth === 7) {
+      for (const candidate of results) {
+        const checkMatcher = new RegExp(pattern.source, globalFlags);
+        let remaining;
+        while ((remaining = checkMatcher.exec(candidate.text)) !== null) {
+          const entries = lookup(remaining);
+          if (entries && entries.length > 0) {
+            truncated = true;
+            break;
+          }
+        }
+        if (truncated) {
+          break;
+        }
+      }
     }
   }
 
@@ -759,8 +792,8 @@ function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
   );
 }
 
-function findNextShellParamExpansion(text) {
-  for (let index = 0; index < text.length; index += 1) {
+function findNextShellParamExpansion(text, startIndex = 0) {
+  for (let index = startIndex; index < text.length; index += 1) {
     if (text[index] !== "$") {
       continue;
     }
@@ -809,10 +842,8 @@ function findNextShellParamExpansion(text) {
 function expandShellParamCandidates(candidates, shellVars, caseInsensitive, initialTruncated) {
   let results = candidates;
   let truncated = initialTruncated;
-  let guard = 0;
 
-  while (guard < 16) {
-    guard += 1;
+  for (let depth = 0; depth < 8; depth += 1) {
     let expandedAny = false;
     const nextResults = [];
     const seen = new Set();
@@ -831,111 +862,141 @@ function expandShellParamCandidates(candidates, shellVars, caseInsensitive, init
     };
 
     for (const candidate of results) {
-      const expr = findNextShellParamExpansion(candidate.text);
-      if (!expr) {
-        pushCandidate(candidate.text, candidate.line);
-        continue;
-      }
+      let builders = [{ text: "", line: candidate.line }];
+      let cursor = 0;
+      let expr;
 
-      const entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
-      const isWholeToken = expr.start === 0 && expr.end === candidate.text.length;
-      const prefix = candidate.text.slice(0, expr.start);
-      const suffix = candidate.text.slice(expr.end);
+      while ((expr = findNextShellParamExpansion(candidate.text, cursor)) !== null) {
+        const literal = candidate.text.slice(cursor, expr.start);
+        const rawMatch = candidate.text.slice(expr.start, expr.end);
+        cursor = expr.end;
+        const entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
+        const isWholeToken = expr.start === 0 && expr.end === candidate.text.length;
 
-      if (!expr.op) {
-        if (!entries || entries.length === 0) {
-          pushCandidate(candidate.text, candidate.line);
+        const appendToBuilders = (alternatives) => {
+          const nextBuilders = [];
+          const seenBuilder = new Set();
+          for (const builder of builders) {
+            for (const alt of alternatives) {
+              const nextText = `${builder.text}${literal}${alt.text}`;
+              const nextLine = alt.line ?? builder.line;
+              const bKey = `${nextLine}:${nextText}`;
+              if (seenBuilder.has(bKey)) {
+                continue;
+              }
+              if (nextBuilders.length >= MAX_TOKEN_EXPANSIONS) {
+                truncated = true;
+                continue;
+              }
+              seenBuilder.add(bKey);
+              nextBuilders.push({ text: nextText, line: nextLine });
+            }
+          }
+          builders = nextBuilders;
+        };
+
+        if (!expr.op) {
+          if (!entries || entries.length === 0) {
+            appendToBuilders([{ text: rawMatch, line: null }]);
+            continue;
+          }
+          expandedAny = true;
+          const alts = [];
+          for (const entry of entries) {
+            if (entry.truncated) {
+              truncated = true;
+              continue;
+            }
+            if (entry.unset) {
+              alts.push({ text: "", line: null });
+              continue;
+            }
+            alts.push({
+              text: entry.value,
+              line: isWholeToken ? entry.line : null,
+            });
+          }
+          appendToBuilders(alts);
+          if (builders.length === 0) {
+            break;
+          }
           continue;
         }
+
+        // Parameter expansion with default/alternate operator (`:-`, `-`, `:=`, `=`, `:+`, `+`).
         expandedAny = true;
-        for (const entry of entries) {
-          if (entry.truncated) {
-            truncated = true;
-            continue;
-          }
-          if (entry.unset) {
-            continue;
-          }
-          pushCandidate(
-            `${prefix}${entry.value}${suffix}`,
-            isWholeToken ? entry.line : candidate.line,
-          );
-        }
-        continue;
-      }
+        const isDefaultOp =
+          expr.op === ":-" || expr.op === "-" || expr.op === ":=" || expr.op === "=";
+        const checksEmpty = expr.op.startsWith(":");
+        const alts = [];
 
-      // Parameter expansion with default/alternate operator (`:-`, `-`, `:=`, `=`, `:+`, `+`).
-      expandedAny = true;
-      const isDefaultOp =
-        expr.op === ":-" || expr.op === "-" || expr.op === ":=" || expr.op === "=";
-      const checksEmpty = expr.op.startsWith(":");
-
-      if (isDefaultOp) {
-        if (!entries || entries.length === 0) {
-          pushCandidate(`${prefix}${expr.word}${suffix}`, candidate.line);
-          continue;
-        }
-        let needsFallback = false;
-        for (const entry of entries) {
-          if (entry.truncated) {
-            truncated = true;
-            continue;
-          }
-          if (entry.unset) {
-            needsFallback = true;
-            continue;
-          }
-          if (isDynamicReference(entry.value)) {
-            needsFallback = true;
-            pushCandidate(
-              `${prefix}${entry.value}${suffix}`,
-              isWholeToken ? entry.line : candidate.line,
-            );
-          } else if (checksEmpty && entry.value.length === 0) {
-            needsFallback = true;
+        if (isDefaultOp) {
+          if (!entries || entries.length === 0) {
+            alts.push({ text: expr.word, line: null });
           } else {
-            pushCandidate(
-              `${prefix}${entry.value}${suffix}`,
-              isWholeToken ? entry.line : candidate.line,
-            );
+            let needsFallback = false;
+            for (const entry of entries) {
+              if (entry.truncated) {
+                truncated = true;
+                continue;
+              }
+              if (entry.unset) {
+                needsFallback = true;
+                continue;
+              }
+              if (isDynamicReference(entry.value)) {
+                needsFallback = true;
+                alts.push({ text: entry.value, line: isWholeToken ? entry.line : null });
+              } else if (checksEmpty && entry.value.length === 0) {
+                needsFallback = true;
+              } else {
+                alts.push({ text: entry.value, line: isWholeToken ? entry.line : null });
+              }
+            }
+            if (needsFallback) {
+              alts.push({ text: expr.word, line: null });
+            }
+          }
+        } else if (!entries || entries.length === 0) {
+          // Alternate value (`:+` / `+`): use `word` when set (and non-empty for `:+`).
+          alts.push({ text: "", line: null });
+        } else {
+          let sawSet = false;
+          let sawUnsetOrEmpty = false;
+          for (const entry of entries) {
+            if (entry.truncated) {
+              truncated = true;
+              continue;
+            }
+            if (entry.unset) {
+              sawUnsetOrEmpty = true;
+              continue;
+            }
+            if (isDynamicReference(entry.value)) {
+              sawSet = true;
+              sawUnsetOrEmpty = true;
+            } else if (checksEmpty && entry.value.length === 0) {
+              sawUnsetOrEmpty = true;
+            } else {
+              sawSet = true;
+            }
+          }
+          if (sawSet) {
+            alts.push({ text: expr.word, line: null });
+          }
+          if (sawUnsetOrEmpty) {
+            alts.push({ text: "", line: null });
           }
         }
-        if (needsFallback) {
-          pushCandidate(`${prefix}${expr.word}${suffix}`, candidate.line);
+        appendToBuilders(alts);
+        if (builders.length === 0) {
+          break;
         }
-        continue;
       }
 
-      // Alternate value (`:+` / `+`): use `word` when set (and non-empty for `:+`).
-      if (!entries || entries.length === 0) {
-        pushCandidate(`${prefix}${suffix}`, candidate.line);
-        continue;
-      }
-      let sawSet = false;
-      let sawUnsetOrEmpty = false;
-      for (const entry of entries) {
-        if (entry.truncated) {
-          truncated = true;
-          continue;
-        }
-        if (entry.unset) {
-          sawUnsetOrEmpty = true;
-          continue;
-        }
-        if (isDynamicReference(entry.value)) {
-          sawSet = true;
-          sawUnsetOrEmpty = true;
-        } else if (checksEmpty && entry.value.length === 0) {
-          sawUnsetOrEmpty = true;
-        } else {
-          sawSet = true;
-        }
-      }
-      if (sawSet) {
-        pushCandidate(`${prefix}${expr.word}${suffix}`, candidate.line);
-      }
-      if (sawUnsetOrEmpty) {
-        pushCandidate(`${prefix}${suffix}`, candidate.line);
+      const tail = candidate.text.slice(cursor);
+      for (const builder of builders) {
+        pushCandidate(`${builder.text}${tail}`, builder.line);
       }
     }
 
@@ -943,8 +1004,22 @@ function expandShellParamCandidates(candidates, shellVars, caseInsensitive, init
     if (!expandedAny) {
       break;
     }
-    if (guard === 16) {
-      truncated = true;
+    if (depth === 7) {
+      for (const candidate of results) {
+        let scanCursor = 0;
+        let remaining;
+        while ((remaining = findNextShellParamExpansion(candidate.text, scanCursor)) !== null) {
+          scanCursor = remaining.end;
+          const entries = lookupVarEntries(shellVars, remaining.name, caseInsensitive);
+          if (remaining.op || (entries && entries.length > 0)) {
+            truncated = true;
+            break;
+          }
+        }
+        if (truncated) {
+          break;
+        }
+      }
     }
   }
 
@@ -1601,6 +1676,14 @@ const ENV_VALUE_FLAGS = new Set([
   "--ignore-signal",
 ]);
 const EXEC_VALUE_FLAGS = new Set(["-a"]);
+const TIMEOUT_VALUE_FLAGS = new Set(["-k", "--kill-after", "-s", "--signal"]);
+
+function isRemoteBuildContext(ctxText) {
+  return (
+    /^(?:https?|git|ssh|docker-image|container-image):\/\//iu.test(ctxText) ||
+    /^(?:git@|github\.com\/|target:|\{\{defaultContext\}\}#)/iu.test(ctxText)
+  );
+}
 
 function extractDriverOptImages(rawText) {
   const parts = [];
@@ -1640,7 +1723,13 @@ function extractDriverOptImages(rawText) {
   return images;
 }
 
-function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null, wrapperChdirs = null) {
+function advanceWrapperPrefix(
+  tokens,
+  cursor,
+  stdinRedirectTargets = null,
+  wrapperChdirs = null,
+  wrapperEnvChanges = null,
+) {
   const token = tokens[cursor];
   if (!SHELL_COMMAND_PREFIXES.has(token)) {
     return null;
@@ -1673,6 +1762,30 @@ function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null, wrapp
     return inspectIndex;
   }
 
+  if (normalized === "timeout") {
+    while (next < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, next, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        next += redirConsumed;
+        continue;
+      }
+      const flag = tokens[next];
+      if (flag === "--") {
+        next += 1;
+        break;
+      }
+      if (!flag.startsWith("-") || flag === "-") {
+        break;
+      }
+      next += flagConsumesNextArg(flag, TIMEOUT_VALUE_FLAGS) ? 2 : 1;
+    }
+    // Skip the mandatory DURATION operand (e.g. `30s`, `5m`, `10`).
+    if (next < tokens.length) {
+      next += 1;
+    }
+    return next;
+  }
+
   let valueFlags = null;
   let chdirShortFlag = null;
   if (normalized === "sudo") {
@@ -1700,27 +1813,53 @@ function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null, wrapp
         break;
       }
       if (normalized === "env" && flag === "-") {
+        if (wrapperEnvChanges) {
+          wrapperEnvChanges.clear = true;
+        }
         next += 1;
         continue;
       }
       if (!flag.startsWith("-") || flag === "-") {
         break;
       }
-      if (chdirShortFlag && wrapperChdirs) {
-        if (flag === `-${chdirShortFlag}` || flag === "--chdir") {
+      if (normalized === "env" && wrapperEnvChanges) {
+        if (flag === "-i" || flag === "--ignore-environment") {
+          wrapperEnvChanges.clear = true;
+          next += 1;
+          continue;
+        }
+        if (flag === "-u" || flag === "--unset") {
           if (tokens[next + 1] !== undefined) {
+            wrapperEnvChanges.unset.add(tokens[next + 1]);
+          }
+          next += 2;
+          continue;
+        }
+        if (flag.startsWith("--unset=")) {
+          wrapperEnvChanges.unset.add(flag.slice("--unset=".length));
+          next += 1;
+          continue;
+        }
+      }
+      if (chdirShortFlag && (wrapperChdirs || (normalized === "env" && wrapperEnvChanges))) {
+        if (flag === `-${chdirShortFlag}` || flag === "--chdir") {
+          if (wrapperChdirs && tokens[next + 1] !== undefined) {
             wrapperChdirs.push(tokens[next + 1]);
           }
           next += 2;
           continue;
         }
         if (flag.startsWith("--chdir=")) {
-          wrapperChdirs.push(flag.slice("--chdir=".length));
+          if (wrapperChdirs) {
+            wrapperChdirs.push(flag.slice("--chdir=".length));
+          }
           next += 1;
           continue;
         }
         if (flag.startsWith(`-${chdirShortFlag}=`)) {
-          wrapperChdirs.push(flag.slice(3));
+          if (wrapperChdirs) {
+            wrapperChdirs.push(flag.slice(3));
+          }
           next += 1;
           continue;
         }
@@ -1728,13 +1867,29 @@ function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null, wrapp
           let consumedNext = false;
           for (let idx = 1; idx < flag.length; idx += 1) {
             const ch = flag[idx];
-            if (ch === chdirShortFlag) {
+            if (normalized === "env" && wrapperEnvChanges && ch === "i") {
+              wrapperEnvChanges.clear = true;
+              continue;
+            }
+            if (normalized === "env" && wrapperEnvChanges && ch === "u") {
               if (idx === flag.length - 1) {
                 if (tokens[next + 1] !== undefined) {
-                  wrapperChdirs.push(tokens[next + 1]);
+                  wrapperEnvChanges.unset.add(tokens[next + 1]);
                 }
                 consumedNext = true;
               } else {
+                const rest = flag.slice(idx + 1);
+                wrapperEnvChanges.unset.add(rest.startsWith("=") ? rest.slice(1) : rest);
+              }
+              break;
+            }
+            if (ch === chdirShortFlag) {
+              if (idx === flag.length - 1) {
+                if (wrapperChdirs && tokens[next + 1] !== undefined) {
+                  wrapperChdirs.push(tokens[next + 1]);
+                }
+                consumedNext = true;
+              } else if (wrapperChdirs) {
                 const rest = flag.slice(idx + 1);
                 wrapperChdirs.push(rest.startsWith("=") ? rest.slice(1) : rest);
               }
@@ -1911,6 +2066,8 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let escaping = false;
   let arithDepth = 0;
   let arrayParenDepth = 0;
+  let arrayQuote = null;
+  let arrayEscaping = false;
   let line = startLine;
   const pendingHeredocs = [];
   const isPwsh = shellMode === "pwsh";
@@ -2045,6 +2202,46 @@ function lexShellScript(text, startLine, shellMode = "posix") {
 
   for (let index = 0; index < text.length; index += 1) {
     const ch = text[index];
+
+    if (arrayParenDepth > 0) {
+      if (ch === "\n") {
+        line += 1;
+      }
+      if (arrayEscaping) {
+        arrayEscaping = false;
+        current += ch;
+        continue;
+      }
+      if (!isPwsh && !isCmd && ch === "\\" && arrayQuote !== "'") {
+        arrayEscaping = true;
+        current += ch;
+        continue;
+      }
+      if (arrayQuote) {
+        if (ch === arrayQuote) {
+          arrayQuote = null;
+        }
+        current += ch;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        arrayQuote = ch;
+        current += ch;
+        continue;
+      }
+      if (ch === "(") {
+        arrayParenDepth += 1;
+        current += ch;
+        continue;
+      }
+      if (ch === ")") {
+        arrayParenDepth -= 1;
+        current += ch;
+        continue;
+      }
+      current += ch;
+      continue;
+    }
 
     if (escaping) {
       escaping = false;
@@ -2412,7 +2609,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     if (ch === "(") {
       if (current.endsWith("=")) {
         markTokenStart();
-        arrayParenDepth += 1;
+        arrayParenDepth = 1;
+        arrayQuote = null;
+        arrayEscaping = false;
         current += ch;
         continue;
       }
@@ -3409,7 +3608,7 @@ function expandBuildArgSpec(
       envLookupName,
       shellMode === "pwsh" || shellMode === "cmd",
     );
-    if (!exportedEntries || exportedEntries.length === 0) {
+    if (!exportedEntries || exportedEntries.every((entry) => entry.unset)) {
       return null;
     }
   }
@@ -3506,9 +3705,20 @@ function inspectShellText(
   const initialExportedVars = new Set(
     shellMode === "pwsh" ? [...stepEnv.keys()].map((key) => `env:${key}`) : stepEnv.keys(),
   );
+  const cloneArrayMap = (arrayMap) => {
+    const copy = new Map();
+    for (const [key, variants] of arrayMap) {
+      copy.set(
+        key,
+        variants.map((list) => list.map((item) => ({ ...item }))),
+      );
+    }
+    return copy;
+  };
   const scopeStack = [
     {
       vars: cloneVarMap(shellVars),
+      arrays: new Map(),
       exportedVars: initialExportedVars,
       branches: [],
       rowCwds: initialRowCwds,
@@ -3525,6 +3735,7 @@ function inspectShellText(
       const parent = scopeStack.at(-1);
       scopeStack.push({
         vars: cloneVarMap(parent.vars),
+        arrays: cloneArrayMap(parent.arrays),
         exportedVars: new Set(parent.exportedVars),
         branches: [],
         rowCwds: cloneRowCwds(parent.rowCwds),
@@ -3685,15 +3896,14 @@ function inspectShellText(
       if (!unsetFunctions) {
         for (const name of unsetNames) {
           if (conditional) {
-            if (frame.vars.has(name)) {
-              frame.vars.set(
-                name,
-                mergeVarEntries(frame.vars.get(name), [{ value: "", line: 0, unset: true }]),
-              );
-            }
+            const existing = frame.vars.has(name)
+              ? frame.vars.get(name)
+              : [{ value: "", line: 0, unset: true }];
+            frame.vars.set(name, mergeVarEntries(existing, [{ value: "", line: 0, unset: true }]));
           } else {
-            frame.vars.delete(name);
+            frame.vars.set(name, [{ value: "", line: 0, unset: true }]);
             frame.exportedVars.delete(name);
+            frame.arrays.delete(name);
           }
         }
       }
@@ -3806,6 +4016,94 @@ function inspectShellText(
       }
     }
 
+    // Bash array assignment (`args=(--rm alpine:3.20)`, `args+=(...)`,
+    // `declare -a args=(...)`, `local args=(...)`).
+    const BASH_ARRAY_ASSIGN_PATTERN =
+      /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?<op>\+?=)\((?<body>[\s\S]*)\)$/u;
+    const arrayAssignStart =
+      tokens[0] === "declare" || tokens[0] === "local" || tokens[0] === "typeset"
+        ? tokens.findIndex((tok, idx) => idx > 0 && !tok.startsWith("-"))
+        : 0;
+    if (
+      shellMode === "posix" &&
+      arrayAssignStart !== -1 &&
+      arrayAssignStart < tokens.length &&
+      tokens.slice(arrayAssignStart).every((token) => BASH_ARRAY_ASSIGN_PATTERN.test(token))
+    ) {
+      for (const token of tokens.slice(arrayAssignStart)) {
+        const arrayMatch = BASH_ARRAY_ASSIGN_PATTERN.exec(token);
+        if (!arrayMatch) {
+          continue;
+        }
+        const { name, op, body } = arrayMatch.groups;
+        const bodyEvents = lexShellScript(body, lineNumber, "posix");
+        const rawElements = [];
+        for (const bodyEvent of bodyEvents) {
+          if (bodyEvent.kind !== "command") {
+            continue;
+          }
+          for (let elemIdx = 0; elemIdx < bodyEvent.tokens.length; elemIdx += 1) {
+            rawElements.push({
+              text: bodyEvent.tokens[elemIdx],
+              singleQuoted: Boolean(bodyEvent.tokenSingleQuoted?.[elemIdx]),
+              line: bodyEvent.lineNumber,
+            });
+          }
+        }
+        let expandedVariants = [[]];
+        for (const elem of rawElements) {
+          const elemCandidates = elem.singleQuoted
+            ? [{ text: elem.text, line: elem.line }]
+            : resolveImageTokenCandidates(elem.text, stepEnv, frame.vars, elem.line, shellMode)
+                .candidates;
+          const nextVariants = [];
+          for (const variant of expandedVariants) {
+            for (const candidate of elemCandidates) {
+              if (nextVariants.length >= MAX_VAR_VALUES) {
+                break;
+              }
+              nextVariants.push([
+                ...variant,
+                { text: candidate.text, line: candidate.line, preExpanded: true },
+              ]);
+            }
+          }
+          expandedVariants = nextVariants;
+        }
+        const existingVariants =
+          op === "+="
+            ? (frame.arrays.get(name) ?? [[]])
+            : conditional || frame.branches.length > 0
+              ? (frame.arrays.get(name) ?? [[]])
+              : [];
+        if (op === "+=") {
+          const combined = [];
+          for (const base of existingVariants) {
+            for (const added of expandedVariants) {
+              if (combined.length >= MAX_VAR_VALUES) {
+                break;
+              }
+              combined.push([...base, ...added]);
+            }
+          }
+          if (conditional || frame.branches.length > 0) {
+            frame.arrays.set(name, [...existingVariants, ...combined].slice(0, MAX_VAR_VALUES));
+          } else {
+            frame.arrays.set(name, combined);
+          }
+        } else {
+          frame.arrays.set(
+            name,
+            (conditional || frame.branches.length > 0
+              ? [...existingVariants, ...expandedVariants]
+              : expandedVariants
+            ).slice(0, MAX_VAR_VALUES),
+          );
+        }
+      }
+      continue;
+    }
+
     // Pure shell-local variable assignment (`image=rust:1.96-alpine`).
     if (tokens.every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))) {
       for (const token of tokens) {
@@ -3828,6 +4126,7 @@ function inspectShellText(
             frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
           } else {
             frame.vars.set(match.groups.name, resolved);
+            frame.arrays.delete(match.groups.name);
           }
         }
       }
@@ -3845,6 +4144,7 @@ function inspectShellText(
         exportedCommandVars.set(key, [...entries]);
       }
     }
+    let childStepEnv = stepEnv;
     const stdinRedirectTargets = [];
     const wrapperChdirs = [];
     let cursor = 0;
@@ -3854,13 +4154,31 @@ function inspectShellText(
         cursor += redirConsumed;
         continue;
       }
+      const wrapperEnvChanges = { clear: false, unset: new Set() };
       const afterWrapper = advanceWrapperPrefix(
         tokens,
         cursor,
         stdinRedirectTargets,
         wrapperChdirs,
+        wrapperEnvChanges,
       );
       if (afterWrapper !== null) {
+        if (wrapperEnvChanges.clear) {
+          for (const key of exportedCommandVars.keys()) {
+            exportedCommandVars.set(key, [{ value: "", line: 0, unset: true }]);
+          }
+          for (const key of stepEnv.keys()) {
+            exportedCommandVars.set(key, [{ value: "", line: 0, unset: true }]);
+          }
+          childStepEnv = new Map();
+        }
+        for (const unsetKey of wrapperEnvChanges.unset) {
+          exportedCommandVars.set(unsetKey, [{ value: "", line: 0, unset: true }]);
+          if (childStepEnv === stepEnv) {
+            childStepEnv = cloneVarMap(stepEnv);
+          }
+          childStepEnv.delete(unsetKey);
+        }
         cursor = afterWrapper;
         continue;
       }
@@ -4160,7 +4478,7 @@ function inspectShellText(
           dashCInfo.script,
           lineNumber,
           sourceLines,
-          stepEnv,
+          dashCInfo.singleQuoted ? childStepEnv : stepEnv,
           childVars,
           matrixRows,
           filePath,
@@ -4620,6 +4938,32 @@ function inspectShellText(
           continue;
         }
 
+        if (rawFiles.length === 0 && contextArg) {
+          const expandedRemoteCheck = resolveImageTokenCandidates(
+            contextArg,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          for (const varCandidate of expandedRemoteCheck.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              const ctxText = candidate.text.trim();
+              if (isRemoteBuildContext(ctxText)) {
+                const remoteMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                if (!seenContextProblems.has(remoteMsg)) {
+                  seenContextProblems.add(remoteMsg);
+                  problems.push(remoteMsg);
+                }
+              }
+            }
+          }
+        }
+
         if (!buildFileContext || activeWorkingDirs.length === 0) {
           continue;
         }
@@ -4673,6 +5017,7 @@ function inspectShellText(
           if (dirResolvedFiles.length === 0) {
             const contextDirs = [];
             const seenContextDirs = new Set();
+            let hadRemoteContext = false;
             if (contextArg) {
               const expandedCtx = resolveImageTokenCandidates(
                 contextArg,
@@ -4687,8 +5032,13 @@ function inspectShellText(
                   rowList,
                   varCandidate.line,
                 )) {
+                  const ctxText = candidate.text.trim();
+                  if (isRemoteBuildContext(ctxText)) {
+                    hadRemoteContext = true;
+                    continue;
+                  }
                   const resolvedCtx = resolveContainedPath(
-                    candidate.text,
+                    ctxText,
                     activeWorkingDir,
                     buildFileContext.root,
                     { windowsPath: isWindowsShell },
@@ -4700,7 +5050,7 @@ function inspectShellText(
                 }
               }
             }
-            if (contextDirs.length === 0) {
+            if (!hadRemoteContext && contextDirs.length === 0) {
               contextDirs.push(activeWorkingDir);
             }
             const defaultNames =
@@ -4781,16 +5131,21 @@ function inspectShellText(
     const seenProblems = new Set();
 
     // Expand statically known shell option variables (e.g. `opts="--rm"` or
-    // `opts="--platform linux/amd64"`) before scanning flags so option tokens
-    // are consumed rather than misclassified as the image operand.
+    // `opts="--platform linux/amd64"`) and Bash arrays (`"${args[@]}"`) before
+    // scanning flags so option tokens are consumed and array-supplied images
+    // are validated rather than skipped.
     let argTokenVariants = [[]];
     let argExpansionTruncated = false;
+    const unknownArrayTokens = [];
+    const BASH_ARRAY_EXPANSION_PATTERN = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
     for (let index = argIndex; index < tokens.length; index += 1) {
       const token = tokens[index];
       const isSingleQuoted = Boolean(peeledSingleQuoted[index]);
       const isAnyQuoted = Boolean(peeledQuoted[index]);
+      const arrayExpMatch = !isSingleQuoted ? BASH_ARRAY_EXPANSION_PATTERN.exec(token) : null;
       const isArrayExpansion =
-        token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"));
+        Boolean(arrayExpMatch) ||
+        (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
       const fallbackLine = sourceLines
         ? (sourceLines.find((entry) => entry.text.includes(token))?.lineNumber ?? lineNumber)
         : lineNumber;
@@ -4801,7 +5156,14 @@ function inspectShellText(
       CMD_VAR_PATTERN.lastIndex = 0;
 
       let expandedSlices = null;
-      if (mayContainVar) {
+      if (arrayExpMatch) {
+        const knownArrayVariants = frame.arrays.get(arrayExpMatch.groups.name);
+        if (knownArrayVariants && knownArrayVariants.length > 0) {
+          expandedSlices = knownArrayVariants;
+        } else {
+          unknownArrayTokens.push(token);
+        }
+      } else if (mayContainVar) {
         const varExpanded = resolveImageTokenCandidates(
           token,
           stepEnv,
@@ -4938,6 +5300,11 @@ function inspectShellText(
     }
 
     if (imageEntries.length === 0) {
+      if (unknownArrayTokens.length > 0) {
+        problems.push(
+          `${filePath}:${lineNumber}: container image operand in ${unknownArrayTokens[0]} cannot be verified statically`,
+        );
+      }
       continue;
     }
 
@@ -4962,7 +5329,7 @@ function inspectShellText(
           matrixRows,
           varCandidate.line,
         )) {
-          if (isDynamicReference(candidate.text, shellMode)) {
+          if (!candidate.text || isDynamicReference(candidate.text, shellMode)) {
             continue;
           }
           if (allowScratchOperand && candidate.text.toLowerCase() === "scratch") {
@@ -5563,10 +5930,7 @@ function checkStepsList(
                   const defaultCtxMatch = /^\{\{defaultContext\}\}(?::(?<subdir>.*))?$/iu.exec(
                     ctxText,
                   );
-                  const isRemoteContext =
-                    !defaultCtxMatch &&
-                    (/^(?:https?|git|ssh|docker-image|container-image):\/\//iu.test(ctxText) ||
-                      /^(?:git@|github\.com\/|target:|\{\{defaultContext\}\}#)/iu.test(ctxText));
+                  const isRemoteContext = !defaultCtxMatch && isRemoteBuildContext(ctxText);
                   const localPath = defaultCtxMatch
                     ? defaultCtxMatch.groups.subdir?.trim() || "."
                     : ctxText;
