@@ -37,7 +37,7 @@ const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
 const PLUGIN_PATH_ENV: &str = palamedes_plugin::PLUGIN_PATH_ENV;
 const PLUGIN_DIR_ENV: &str = palamedes_plugin::PLUGIN_DIR_ENV;
-const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 3;
+const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 4;
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
@@ -298,12 +298,34 @@ fn load_registry_with_binary_hasher(
             }
         };
         let binary_path = fs::canonicalize(&resolved.binary_path).ok();
+        let cache_key = binary_path
+            .as_deref()
+            .map(|path| plugin_cache_key(path, &resolved.invocation_path));
         let cached_stamp = if reuse_cached_manifests {
-            binary_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned())
-                .and_then(|key| cache.entries.get(&key))
+            cache_key
+                .as_deref()
+                .and_then(|key| cache.entries.get(key))
                 .map(|entry| &entry.stamp)
+                .or_else(|| {
+                    // Reuse an already-verified binary digest from another alias
+                    // of the same canonical executable when available.
+                    let canonical_key = binary_path
+                        .as_deref()
+                        .map(|path| path.to_string_lossy().into_owned())?;
+                    cache
+                        .entries
+                        .get(&canonical_key)
+                        .map(|entry| &entry.stamp)
+                        .or_else(|| {
+                            cache
+                                .entries
+                                .iter()
+                                .find(|(entry_key, _)| {
+                                    cache_key_matches_binary(entry_key, &canonical_key)
+                                })
+                                .map(|(_, entry)| &entry.stamp)
+                        })
+                })
         } else {
             None
         };
@@ -478,6 +500,23 @@ fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+fn plugin_cache_key(binary_path: &Path, invocation_path: &Path) -> String {
+    let canonical = binary_path.to_string_lossy();
+    let declared = invocation_path.to_string_lossy();
+    if declared == canonical {
+        canonical.into_owned()
+    } else {
+        serde_json::to_string(&(canonical.as_ref(), declared.as_ref()))
+            .expect("plugin cache key JSON serialization")
+    }
+}
+
+fn cache_key_matches_binary(entry_key: &str, canonical_binary: &str) -> bool {
+    entry_key == canonical_binary
+        || serde_json::from_str::<(String, String)>(entry_key)
+            .is_ok_and(|(binary, _)| binary == canonical_binary)
+}
+
 fn plugin_cache_identity_for_resolved(
     resolved: &ResolvedPlugin,
     binary_path: &Path,
@@ -489,11 +528,14 @@ fn plugin_cache_identity_for_resolved(
     if !resolved.pinned_matches_path(binary_path, &binary_metadata) {
         return None;
     }
-    let identity = plugin_cache_identity(binary_path, cached, hash_binary)?;
-    if !resolved.pinned_matches_path(binary_path, &identity.1.metadata) {
+    let (_, stamp) = plugin_cache_identity(binary_path, cached, hash_binary)?;
+    if !resolved.pinned_matches_path(binary_path, &stamp.metadata) {
         return None;
     }
-    Some(identity)
+    Some((
+        plugin_cache_key(binary_path, &resolved.invocation_path),
+        stamp,
+    ))
 }
 
 fn plugin_cache_identity(
@@ -5808,5 +5850,73 @@ catalogs:
                 .expect_err("symlink target requiring a directory must not execute a regular file");
             assert_eq!(error.code, "PLUGIN_INVALID");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn manifest_cache_distinguishes_distinct_aliases_of_same_executable() {
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        use super::{hash_plugin_binary, load_registry_with_binary_hasher};
+
+        let root = temp_dir("plugin-alias-cache");
+        let pkg = root.join("node_modules/acme-multicall");
+        let bin_dir = pkg.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let shared = bin_dir.join("shared-wrapper");
+        write_executable_fixture(
+            &shared,
+            concat!(
+                "#!/bin/sh\n",
+                "read _request\n",
+                "name=\"$(basename \"${PALAMEDES_PLUGIN_PATH}\")\"\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"%s\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n' \"$name\"\n",
+            ),
+        );
+        let alias_alpha = root.join("alpha");
+        let alias_beta = root.join("beta");
+        std::os::unix::fs::symlink(&shared, &alias_alpha).expect("symlink alpha");
+        std::os::unix::fs::symlink(&shared, &alias_beta).expect("symlink beta");
+
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\nplugins:\n  - './alpha'\n  - './beta'\n",
+        )
+        .expect("write config");
+        let config = load_config(&root, None).expect("load config");
+        let hash_count = AtomicUsize::new(0);
+        let counting_hasher = |path: &Path| {
+            hash_count.fetch_add(1, Ordering::SeqCst);
+            hash_plugin_binary(path)
+        };
+
+        let first = load_registry_with_binary_hasher(
+            &config,
+            &root,
+            Path::new("pmds"),
+            true,
+            &counting_hasher,
+        )
+        .expect("two aliases of the same executable must not collide in manifest cache");
+        assert!(first.plugins.contains_key("alpha"));
+        assert!(first.plugins.contains_key("beta"));
+        assert_eq!(
+            hash_count.load(Ordering::SeqCst),
+            1,
+            "second alias should reuse the binary fingerprint computed for the first alias"
+        );
+
+        let warm = load_registry_with_binary_hasher(
+            &config,
+            &root,
+            Path::new("pmds"),
+            true,
+            &counting_hasher,
+        )
+        .expect("warm cached load for both aliases must succeed");
+        assert!(warm.plugins.contains_key("alpha"));
+        assert!(warm.plugins.contains_key("beta"));
+        assert_eq!(hash_count.load(Ordering::SeqCst), 1);
     }
 }

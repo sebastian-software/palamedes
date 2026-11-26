@@ -2326,6 +2326,13 @@ mod platform {
             Ok(stat) if stat_identity(&stat) == existing_id => {
                 if stat.st_nlink > 1 {
                     reclaim_interrupted_lock_temp_links(dir, existing_id);
+                    let rechecked = fstat_fd(existing_fd.as_raw_fd())?;
+                    if rechecked.st_nlink > 1 {
+                        return Err(ContainedFsError::Containment(
+                            "refusing to use hard-linked file as catalog lock \".pmds-lock\""
+                                .to_owned(),
+                        ));
+                    }
                 }
             }
             Ok(_) => return Ok(()),
@@ -2512,19 +2519,27 @@ mod platform {
         }
     }
 
+    enum MandatoryLockOutcome {
+        RetryOuter,
+        AcquiredExclusive,
+        ReadyForReadonlyRecovery,
+    }
+
     fn wait_for_mandatory_lock_acquisition(
         dir: &ContainedDir,
         existing_fd: &OwnedFd,
         existing_id: FileIdentity,
         opened_read_only: bool,
-    ) -> Result<bool, ContainedFsError> {
+    ) -> Result<MandatoryLockOutcome, ContainedFsError> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         let mut backoff_ms: u64 = 2;
         loop {
             match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
                 Ok(stat) if stat_identity(&stat) == existing_id => {}
-                Ok(_) => return Ok(false),
-                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(false),
+                Ok(_) => return Ok(MandatoryLockOutcome::RetryOuter),
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                    return Ok(MandatoryLockOutcome::RetryOuter);
+                }
                 Err(error) => return Err(ContainedFsError::Io(error)),
             }
 
@@ -2533,7 +2548,7 @@ mod platform {
                 if unsafe { libc::flock(existing_fd.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }
                     == 0
                 {
-                    return Ok(true);
+                    return Ok(MandatoryLockOutcome::AcquiredExclusive);
                 }
                 let err = io::Error::last_os_error();
                 let raw = err.raw_os_error();
@@ -2542,6 +2557,26 @@ mod platform {
                     && raw != Some(libc::EINTR)
                 {
                     return Err(ContainedFsError::Io(err));
+                }
+            } else {
+                // Retry reading the lock signature so a read-only SMB waiter
+                // detects as soon as the holder exits or crashes and lifts its
+                // mandatory lock, then transitions directly into read-only
+                // recovery instead of timing out.
+                let cur_stat = fstat_fd(existing_fd.as_raw_fd())?;
+                match verify_lock_file_magic(existing_fd.as_raw_fd(), &cur_stat) {
+                    Ok(true) => return Ok(MandatoryLockOutcome::ReadyForReadonlyRecovery),
+                    Ok(false) => {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
+                        )));
+                    }
+                    Err(read_err)
+                        if read_err.raw_os_error() == Some(libc::EACCES)
+                            || read_err.raw_os_error() == Some(libc::EAGAIN)
+                            || read_err.raw_os_error() == Some(libc::EWOULDBLOCK) => {}
+                    Err(read_err) => return Err(ContainedFsError::Io(read_err)),
                 }
             }
 
@@ -2856,15 +2891,19 @@ mod platform {
                         || read_err.raw_os_error() == Some(libc::EWOULDBLOCK) =>
                 {
                     let existing_id = stat_identity(&pre_stat);
-                    if !wait_for_mandatory_lock_acquisition(
+                    match wait_for_mandatory_lock_acquisition(
                         dir,
                         &existing_fd,
                         existing_id,
                         opened_read_only,
                     )? {
-                        continue;
+                        MandatoryLockOutcome::RetryOuter => continue,
+                        MandatoryLockOutcome::AcquiredExclusive => true,
+                        MandatoryLockOutcome::ReadyForReadonlyRecovery => {
+                            wait_for_readonly_lock_release(dir, existing_fd, existing_id)?;
+                            continue;
+                        }
                     }
-                    true
                 }
                 Err(read_err) => return Err(ContainedFsError::Io(read_err)),
             };
@@ -6810,7 +6849,27 @@ mod tests {
             .collect();
         assert!(leftover_claims.is_empty());
 
-        // 5. `probe_names_equivalent` confirms live filesystem equivalence.
+        // 5. Read-only recovery must refuse to unlink `.pmds-lock` if an
+        //    unrelated hard link remains after temporary-link cleanup.
+        fs::write(&lock_path, super::platform::UNIX_DIR_LOCK_MAGIC).expect("write linked lock");
+        let external_link = root.path().join("user-hardlink");
+        fs::hard_link(&lock_path, &external_link).expect("hard link");
+        fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o444)).expect("chmod 0444");
+        let linked_fd = OwnedFd::from(fs::File::open(&lock_path).expect("open linked lock"));
+        let linked_stat = super::platform::fstat_fd(linked_fd.as_raw_fd()).expect("fstat linked");
+        let linked_id = super::platform::stat_identity(&linked_stat);
+        let linked_err =
+            super::platform::wait_for_readonly_lock_release(&dir, linked_fd, linked_id)
+                .expect_err("unrelated hard link must block read-only lock recovery");
+        assert!(matches!(linked_err, ContainedFsError::Containment(_)));
+        assert!(
+            lock_path.exists(),
+            "hard-linked .pmds-lock must not be unlinked"
+        );
+        let _ = fs::remove_file(&external_link);
+        let _ = fs::remove_file(&lock_path);
+
+        // 6. `probe_names_equivalent` confirms live filesystem equivalence.
         assert_eq!(
             dir.probe_names_equivalent(OsStr::new("alpha.po"), OsStr::new("beta.po")),
             Some(false)

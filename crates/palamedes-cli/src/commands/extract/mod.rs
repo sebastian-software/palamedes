@@ -1314,6 +1314,19 @@ fn default_platform_equivalence() -> DirFilenameEquivalence {
     }
 }
 
+fn probe_unknown_dir_equivalence(dir: &ContainedDir) -> Option<DirFilenameEquivalence> {
+    let case_insensitive = dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A"))?;
+    let unicode_normalizing = dir
+        .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
+        .unwrap_or(false);
+    Some(match (case_insensitive, unicode_normalizing) {
+        (false, false) => DirFilenameEquivalence::Exact,
+        (false, true) => DirFilenameEquivalence::UnicodeNfd,
+        (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
+        (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
+    })
+}
+
 fn resolve_directory_equivalence(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
@@ -1334,6 +1347,7 @@ fn resolve_directory_equivalence(
     let equivalence = dir
         .filename_equivalence()
         .or(same_vol_parent)
+        .or_else(|| probe_unknown_dir_equivalence(dir))
         .unwrap_or_else(default_platform_equivalence);
     if let Some(id) = identity {
         cache.insert(id, equivalence);

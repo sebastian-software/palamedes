@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-21T11:57:31.940Z",
-  "sourceCommit": "f7dd625d1c1966e31becb7ed2fb74ed2f1bd74d7",
+  "measuredAt": "2026-11-26T21:09:40.436Z",
+  "sourceCommit": "1348df915abf504bbec77ddb9305bfe4d8a65a5a",
   "worktreeDirty": true,
-  "sourceSha256": "34789073025ad0041f9190bd299dfa8d1f52fefb7b1a0be21e9824f535ed50f9",
+  "sourceSha256": "d9bd7721210454ab63d5450dbf089c64418b8aa9a9172137af55ebcf96286341",
   "environment": {
     "node": "v24.22.3",
     "vite": "8.2.4",
