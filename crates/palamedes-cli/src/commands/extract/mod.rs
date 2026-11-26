@@ -21,12 +21,13 @@ use clap::Args;
 use palamedes::{
     CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
     SourceFileAnalysisRequest, collect_runtime_macro_manifest, extract_catalog_messages_cached,
-    preview_catalog_file_update, update_catalog_file,
+    preview_catalog_update_from_content,
 };
 use serde::Serialize;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
+use crate::contained_fs::{ContainedDir, split_relative_catalog_path};
 use crate::error::CliError;
 use cache::{load_extract_cache, persist_extract_cache};
 use sources::{collect_source_files, sort_and_dedupe_paths};
@@ -606,6 +607,11 @@ fn process_catalog(
 ) -> Result<CatalogJobOutcome, CliError> {
     let catalog_path =
         config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
+    let (relative_parent, file_name) = split_relative_catalog_path(&config.root_dir, &catalog_path)
+        .map_err(|source| CliError::Io {
+            path: catalog_path.clone(),
+            source,
+        })?;
     let request = CatalogUpdateRequest {
         target_path: catalog_path.to_string_lossy().into_owned(),
         locale: locale.to_owned(),
@@ -620,13 +626,27 @@ fn process_catalog(
     let mut lines = Vec::new();
     let drift = match operation {
         CatalogOperation::Write => {
-            if let Some(parent) = catalog_path.parent() {
-                fs::create_dir_all(parent).map_err(|source| CliError::Io {
-                    path: parent.to_path_buf(),
+            let parent_dir = ContainedDir::open_subpath(&config.root_dir, &relative_parent, true)
+                .map_err(|source| CliError::Io {
+                    path: catalog_path.clone(),
+                    source,
+                })?
+                .expect("create_missing always opens the destination directory");
+            let existing = parent_dir
+                .read_optional_file(&file_name)
+                .map_err(|source| CliError::Io {
+                    path: catalog_path.clone(),
                     source,
                 })?;
+            let result = preview_catalog_update_from_content(request, existing.as_deref())?;
+            if result.created || result.updated {
+                parent_dir
+                    .write_file_atomically(&file_name, result.content.as_bytes())
+                    .map_err(|source| CliError::Io {
+                        path: catalog_path.clone(),
+                        source,
+                    })?;
             }
-            let result = update_catalog_file(request)?;
             if options.verbose {
                 lines.push(format!("  -> {}", catalog_path.display()));
                 for diagnostic in result.diagnostics {
@@ -640,7 +660,23 @@ fn process_catalog(
             None
         }
         CatalogOperation::Preview => {
-            let result = preview_catalog_file_update(request)?;
+            let existing =
+                match ContainedDir::open_subpath(&config.root_dir, &relative_parent, false)
+                    .map_err(|source| CliError::Io {
+                        path: catalog_path.clone(),
+                        source,
+                    })? {
+                    Some(parent_dir) => {
+                        parent_dir
+                            .read_optional_file(&file_name)
+                            .map_err(|source| CliError::Io {
+                                path: catalog_path.clone(),
+                                source,
+                            })?
+                    }
+                    None => None,
+                };
+            let result = preview_catalog_update_from_content(request, existing.as_deref())?;
             if options.verbose {
                 lines.push(tr!("  -> checked {path}", path = catalog_path.display()));
                 for diagnostic in result.diagnostics {

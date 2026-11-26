@@ -319,6 +319,72 @@ fn compile_catalog_artifact_requires_repeated_locale_placeholders_to_match() {
 }
 
 #[test]
+fn ensure_catalog_path_contained_rejects_traversal_behind_missing_directories() {
+    use super::ensure_catalog_path_contained;
+
+    let fixture = create_fixture_dir("catalog-containment-missing-parent");
+    assert!(
+        ensure_catalog_path_contained(&fixture, &fixture.join("missing/../../outside/en.po"))
+            .is_err()
+    );
+    let missing_root = fixture.join("does-not-exist");
+    assert!(
+        ensure_catalog_path_contained(&missing_root, &missing_root.join("a/../../outside/en.po"))
+            .is_err()
+    );
+}
+
+#[test]
+fn compile_catalog_artifact_reuses_selected_catalog_for_fallbacks_and_portable_separators() {
+    let fixture = create_fixture_dir("catalog-artifact-selected-catalog-and-separators");
+    let en_dir = fixture.join("locales/en");
+    fs::create_dir_all(&en_dir).expect("en dir");
+    fs::write(
+        en_dir.join("en.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello from second\"\n",
+    )
+    .expect("write en fallback");
+    fs::write(
+        en_dir.join("de.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Hello\"\nmsgstr \"\"\n",
+    )
+    .expect("write de target");
+
+    let result = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "locales/{locale}/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: r"locales\en\{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        },
+        resource_path: en_dir.join("de.po").to_string_lossy().into_owned(),
+    })
+    .expect("second catalog with portable separators should compile");
+
+    assert_eq!(
+        result
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hello from second")
+    );
+    assert_eq!(result.missing.len(), 1);
+    assert_eq!(result.missing[0].requested_locale, "de");
+    assert_eq!(result.missing[0].resolved_locale.as_deref(), Some("en"));
+}
+
+#[test]
 fn compiles_a_dotted_catalog_name_for_a_dotted_locale() {
     let fixture = create_fixture_dir("catalog-artifact-dotted-path");
     let source_dir = fixture.join("src/locales/en");

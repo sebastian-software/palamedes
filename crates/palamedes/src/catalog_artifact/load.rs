@@ -10,16 +10,21 @@ use ferrocat::{
 use sha2::{Digest, Sha256};
 
 use super::ensure_catalog_path_contained;
-use super::resolve::{catalog_locale_matcher, normalize_path};
-use super::types::{CatalogArtifactConfig, CatalogConfig};
+use super::types::{CatalogArtifactConfig, PalamedesCatalogFormat};
 use crate::error::{PalamedesError, PalamedesResult};
 
 pub(super) type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
 
+pub(super) struct ResolvedCatalogFile {
+    pub(super) path: std::path::PathBuf,
+    pub(super) locale: String,
+    pub(super) format: PalamedesCatalogFormat,
+}
+
 pub(super) struct CatalogSource {
     pub(super) path: std::path::PathBuf,
     pub(super) locale: String,
-    pub(super) format: super::types::PalamedesCatalogFormat,
+    pub(super) format: PalamedesCatalogFormat,
     pub(super) content: String,
     pub(super) digest: [u8; 32],
 }
@@ -27,7 +32,7 @@ pub(super) struct CatalogSource {
 pub(super) type CatalogSources = Vec<CatalogSource>;
 
 pub(super) fn load_catalogs(
-    files: &[std::path::PathBuf],
+    files: &[ResolvedCatalogFile],
     config: &CatalogArtifactConfig,
 ) -> PalamedesResult<LocaleCatalogs> {
     let sources = read_catalog_sources(files, config)?;
@@ -39,36 +44,34 @@ pub(super) fn load_catalogs(
 /// atomically replacing a catalog, and serving that older snapshot would make
 /// dev rebuilds observably stale.
 pub(super) fn read_catalog_sources(
-    files: &[std::path::PathBuf],
+    files: &[ResolvedCatalogFile],
     config: &CatalogArtifactConfig,
 ) -> PalamedesResult<CatalogSources> {
     let mut sources = Vec::new();
-
     let root_dir = Path::new(&config.root_dir);
+
     for (index, file) in files.iter().enumerate() {
-        ensure_catalog_path_contained(root_dir, file)?;
-        let locale = infer_locale_from_path(file, config)?
-            .ok_or_else(|| PalamedesError::CouldNotInferLocale { path: file.clone() })?;
-        let content = match fs::read_to_string(file) {
+        ensure_catalog_path_contained(root_dir, &file.path)?;
+        let content = match fs::read_to_string(&file.path) {
             Ok(content) => content,
             Err(source) if source.kind() == std::io::ErrorKind::NotFound && index == 0 => {
-                return Err(PalamedesError::CatalogFileNotFound { path: file.clone() });
+                return Err(PalamedesError::CatalogFileNotFound {
+                    path: file.path.clone(),
+                });
             }
             Err(source) if source.kind() == std::io::ErrorKind::NotFound => continue,
             Err(source) => {
                 return Err(PalamedesError::ReadFile {
-                    path: file.clone(),
+                    path: file.path.clone(),
                     source,
                 });
             }
         };
-        let catalog = catalog_for_path(file, config)?
-            .ok_or_else(|| PalamedesError::CouldNotInferLocale { path: file.clone() })?;
         let digest = Sha256::digest(content.as_bytes()).into();
         sources.push(CatalogSource {
-            path: file.clone(),
-            locale,
-            format: catalog.format,
+            path: file.path.clone(),
+            locale: file.locale.clone(),
+            format: file.format,
             content,
             digest,
         });
@@ -178,32 +181,4 @@ fn fuzzy_message_keys(
         .filter_map(|diagnostic| diagnostic.source_key)
         .map(|key| CatalogMessageKey::new(key.msgid, key.msgctxt))
         .collect())
-}
-
-fn infer_locale_from_path(
-    path: &Path,
-    config: &CatalogArtifactConfig,
-) -> PalamedesResult<Option<String>> {
-    let normalized_resource = normalize_path(path);
-    for catalog in &config.catalogs {
-        let matcher = catalog_locale_matcher(Path::new(&config.root_dir), catalog)?;
-        if let Some(captures) = matcher.captures(&normalized_resource) {
-            return Ok(captures.get(1).map(|value| value.as_str().to_owned()));
-        }
-    }
-    Ok(None)
-}
-
-fn catalog_for_path<'a>(
-    path: &Path,
-    config: &'a CatalogArtifactConfig,
-) -> PalamedesResult<Option<&'a CatalogConfig>> {
-    let normalized_resource = normalize_path(path);
-    for catalog in &config.catalogs {
-        let matcher = catalog_locale_matcher(Path::new(&config.root_dir), catalog)?;
-        if matcher.is_match(&normalized_resource) {
-            return Ok(Some(catalog));
-        }
-    }
-    Ok(None)
 }

@@ -73,6 +73,7 @@ pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static 
         || catalog_path.starts_with('/')
         || catalog_path.starts_with('\\')
         || has_windows_drive_prefix(catalog_path)
+        || has_windows_drive_prefix(&catalog_path.replace("{locale}", "a"))
     {
         return Err("catalog path must be relative to the config directory");
     }
@@ -146,7 +147,17 @@ pub fn try_resolve_catalog_file_path(
             reason: reason.to_owned(),
         }
     })?;
-    let resolved = resolve_catalog_file_path(root_dir, catalog_path, locale, format);
+    let expanded_pattern = catalog_path.replace("{locale}", locale);
+    validate_catalog_path_pattern(&expanded_pattern).map_err(|reason| {
+        PalamedesError::UnsafeCatalogPath {
+            path: catalog_path.to_owned(),
+            reason: reason.to_owned(),
+        }
+    })?;
+    // Normalize portable separators before building the concrete path so
+    // matching, containment checks, and filesystem I/O all open the same file.
+    let portable_catalog_path = catalog_path.replace('\\', "/");
+    let resolved = resolve_catalog_file_path(root_dir, &portable_catalog_path, locale, format);
     let normalized_root = normalize_lexical_path(root_dir);
     let normalized_resolved = normalize_lexical_path(&resolved);
     if normalized_resolved == normalized_root || !normalized_resolved.starts_with(&normalized_root)
@@ -162,12 +173,12 @@ pub fn try_resolve_catalog_file_path(
     Ok(resolved)
 }
 
-/// Verifies on-disk symlink containment of `target` inside `root_dir`.
+/// Verifies lexical and on-disk symlink containment of `target` inside `root_dir`.
 ///
-/// Walks each path component relative to `root_dir` and ensures no existing or
-/// dangling symlink redirects the path outside `root_dir`. When `root_dir`
-/// itself does not exist on disk yet, returns `Ok(())` so callers see normal
-/// missing-file errors instead of a spurious containment error.
+/// Validates every lexical path component relative to `root_dir` first (even
+/// when `root_dir` or intermediate directories do not exist yet), then walks
+/// existing on-disk components to ensure no symlink redirects the path outside
+/// `root_dir`.
 ///
 /// # Errors
 ///
@@ -182,6 +193,32 @@ pub fn ensure_catalog_path_contained(root_dir: &Path, target: &Path) -> Palamede
                 path: target.to_string_lossy().into_owned(),
                 reason: format!("escapes root directory {}", root_dir.display()),
             })?;
+
+    // Validate every lexical component before inspecting the filesystem so a
+    // missing root or intermediate directory never hides a later `..` segment.
+    let mut normal_segments = Vec::new();
+    for component in relative.components() {
+        match component {
+            Component::CurDir => continue,
+            Component::Normal(part) => normal_segments.push(part),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(PalamedesError::UnsafeCatalogPath {
+                    path: target.to_string_lossy().into_owned(),
+                    reason: format!("escapes root directory {}", root_dir.display()),
+                });
+            }
+        }
+    }
+    if normal_segments.is_empty() {
+        return Err(PalamedesError::UnsafeCatalogPath {
+            path: target.to_string_lossy().into_owned(),
+            reason: format!(
+                "must name a file inside root directory {}",
+                root_dir.display()
+            ),
+        });
+    }
+
     let canonical_root = match fs::canonicalize(root_dir) {
         Ok(path) => path,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -196,17 +233,8 @@ pub fn ensure_catalog_path_contained(root_dir: &Path, target: &Path) -> Palamede
         }
     };
     let mut current = canonical_root.clone();
-    for component in relative.components() {
-        match component {
-            Component::CurDir => continue,
-            Component::Normal(part) => current.push(part),
-            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(PalamedesError::UnsafeCatalogPath {
-                    path: target.to_string_lossy().into_owned(),
-                    reason: format!("escapes root directory {}", root_dir.display()),
-                });
-            }
-        }
+    for segment in normal_segments {
+        current.push(segment);
         match fs::symlink_metadata(&current) {
             Ok(_) => {
                 let canonical = fs::canonicalize(&current).map_err(|error| {

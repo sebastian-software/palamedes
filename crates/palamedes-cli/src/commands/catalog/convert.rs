@@ -4,9 +4,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
-use palamedes::{CatalogFileConvertRequest, PalamedesCatalogFormat, convert_catalog_file};
+use palamedes::{
+    CatalogFileConvertRequest, PalamedesCatalogFormat, convert_catalog_content,
+    convert_catalog_file,
+};
 
 use crate::command::{Command, Context};
+use crate::contained_fs::{ContainedDir, split_relative_catalog_path};
 use crate::error::CliError;
 
 #[derive(Debug, Args)]
@@ -92,22 +96,69 @@ impl Command for ConvertOptions {
                             locale,
                             catalog.format,
                         )?;
-                        if !input.exists() {
+                        let (input_parent, input_file) =
+                            split_relative_catalog_path(&config.root_dir, &input).map_err(
+                                |source| CliError::Io {
+                                    path: input.clone(),
+                                    source,
+                                },
+                            )?;
+                        let Some(input_dir) =
+                            ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
+                                .map_err(|source| CliError::Io {
+                                    path: input.clone(),
+                                    source,
+                                })?
+                        else {
                             skipped += 1;
                             continue;
-                        }
+                        };
+                        let Some(source) =
+                            input_dir
+                                .read_optional_file(&input_file)
+                                .map_err(|source| CliError::Io {
+                                    path: input.clone(),
+                                    source,
+                                })?
+                        else {
+                            skipped += 1;
+                            continue;
+                        };
                         let output = config.resolve_contained_catalog_path(
                             &catalog.path,
                             locale,
                             target_catalog_format(self.to),
                         )?;
-                        convert_one_catalog(
-                            &input,
-                            &output,
+                        if input == output {
+                            return Err(CliError::ConvertOutputIsInput);
+                        }
+                        let converted_content = convert_catalog_content(
+                            &source,
+                            PalamedesCatalogFormat::Po,
+                            target_catalog_format(self.to),
                             &config.source_locale,
                             Some(locale),
-                            self.to,
                         )?;
+                        let (output_parent, output_file) =
+                            split_relative_catalog_path(&config.root_dir, &output).map_err(
+                                |source| CliError::Io {
+                                    path: output.clone(),
+                                    source,
+                                },
+                            )?;
+                        let output_dir =
+                            ContainedDir::open_subpath(&config.root_dir, &output_parent, true)
+                                .map_err(|source| CliError::Io {
+                                    path: output.clone(),
+                                    source,
+                                })?
+                                .expect("create_missing always opens destination directory");
+                        output_dir
+                            .write_file_atomically(&output_file, converted_content.as_bytes())
+                            .map_err(|source| CliError::Io {
+                                path: output.clone(),
+                                source,
+                            })?;
                         converted += 1;
                     }
                 }

@@ -33,6 +33,7 @@
     "\\windows\\locales\\{locale}",
     "C:/locales/{locale}",
     "C:\\locales\\{locale}",
+    "{locale}:/evil",
     "../outside/{locale}",
     "locales/../../outside/{locale}",
     "locales\\..\\..\\outside\\{locale}",

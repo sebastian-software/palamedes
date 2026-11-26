@@ -11,6 +11,7 @@ mod cli;
 mod command;
 mod commands;
 mod config;
+mod contained_fs;
 mod error;
 mod plugin_protocol;
 mod plugins;

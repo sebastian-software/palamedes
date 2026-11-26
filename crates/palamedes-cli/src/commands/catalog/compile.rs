@@ -9,7 +9,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
 use clap::{Args, ValueEnum};
@@ -23,6 +22,7 @@ use serde::Serialize;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
+use crate::contained_fs::ContainedDir;
 use crate::error::CliError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -416,9 +416,30 @@ fn compile_js(
     for locale in &locales {
         let mut messages = BTreeMap::<String, MergedMessage>::new();
         for catalog in &config.catalogs {
-            let resource = config
-                .resolve_contained_catalog_path(&catalog.path, locale, catalog.format)
-                .map_err(|error| error.to_string())?;
+            let resource = match config.resolve_contained_catalog_path(
+                &catalog.path,
+                locale,
+                catalog.format,
+            ) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    let catalog_path = config
+                        .resolve_catalog_path(&catalog.path, locale, catalog.format)
+                        .to_string_lossy()
+                        .into_owned();
+                    diagnostics.push(CompileDiagnostic {
+                        severity: CatalogArtifactDiagnosticSeverity::Error,
+                        code: INVALID_CATALOG.to_owned(),
+                        message: error.to_string(),
+                        catalog_path: Some(catalog_path),
+                        locale: Some(locale.clone()),
+                        requested_locale: Some(locale.clone()),
+                        source_key: None,
+                        conflicting_catalog_path: None,
+                    });
+                    continue;
+                }
+            };
             let resource_path = resource.to_string_lossy().into_owned();
             let mut artifact_config = config.artifact_config();
             if !fallback_locales.is_empty() {
@@ -591,14 +612,18 @@ fn compile_js(
 
     if diagnostics.is_empty() {
         fs::create_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
-        let canonical_output =
-            fs::canonicalize(output).map_err(|error| format!("{}: {error}", output.display()))?;
-        for (file_name, _, _) in &modules {
-            ensure_direct_child_within_output(&canonical_output, file_name)?;
+        let output_dir = ContainedDir::open_root(output)
+            .map_err(|error| format!("{}: {error}", output.display()))?;
+        for (file_name, module_path, _) in &modules {
+            output_dir
+                .reject_symlink(file_name)
+                .map_err(|error| format!("{}: {error}", module_path.display()))?;
         }
         for (file_name, module_path, code) in modules {
-            let destination = canonical_output.join(&file_name);
-            write_compiled_module_atomically(&canonical_output, &destination, &code)?;
+            let contents = format!("{code}\n");
+            output_dir
+                .write_file_atomically(&file_name, contents.as_bytes())
+                .map_err(|error| format!("{}: {error}", module_path.display()))?;
             update.catalogs.push(module_path);
         }
     }
@@ -635,58 +660,6 @@ fn resolve_compiled_js_module_path(
         ));
     }
     Ok((OsString::from(file_name), module_path))
-}
-
-fn ensure_direct_child_within_output(
-    canonical_output: &Path,
-    file_name: &OsStr,
-) -> Result<(), String> {
-    let expected = canonical_output.join(file_name);
-    match fs::symlink_metadata(&expected) {
-        Ok(metadata) => {
-            if metadata.file_type().is_symlink() {
-                let resolved = fs::canonicalize(&expected).map_err(|error| {
-                    format!(
-                        "Refusing to write through invalid or dangling symlink {}: {error}",
-                        expected.display()
-                    )
-                })?;
-                if resolved.parent() != Some(canonical_output) {
-                    return Err(format!(
-                        "Refusing to write compiled catalog {} outside output directory {}.",
-                        expected.display(),
-                        canonical_output.display()
-                    ));
-                }
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(format!("{}: {error}", expected.display()));
-        }
-    }
-    Ok(())
-}
-
-/// Writes a compiled module to a fresh temporary file inside `canonical_output`
-/// and atomically replaces `destination`, preventing both symlink TOCTOU writes
-/// and truncation of pre-existing hard-linked targets outside `canonical_output`.
-fn write_compiled_module_atomically(
-    canonical_output: &Path,
-    destination: &Path,
-    code: &str,
-) -> Result<(), String> {
-    let mut temporary = tempfile::NamedTempFile::new_in(canonical_output)
-        .map_err(|error| format!("{}: {error}", canonical_output.display()))?;
-    temporary
-        .write_all(code.as_bytes())
-        .and_then(|()| temporary.write_all(b"\n"))
-        .and_then(|()| temporary.flush())
-        .map_err(|error| format!("{}: {error}", destination.display()))?;
-    temporary
-        .persist(destination)
-        .map_err(|error| format!("{}: {}", destination.display(), error.error))?;
-    Ok(())
 }
 
 fn clone_source_key(source_key: &CatalogArtifactSourceKey) -> CatalogArtifactSourceKey {
@@ -819,7 +792,10 @@ mod tests {
 
         let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
             .expect_err("escaping output symlink must be rejected");
-        assert!(error.contains("outside output directory"), "got: {error}");
+        assert!(
+            error.contains("refusing to write through symlink"),
+            "got: {error}"
+        );
         assert_eq!(
             fs::read_to_string(&escaped_target).expect("read outside file"),
             "original"
@@ -832,8 +808,92 @@ mod tests {
 
         let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
             .expect_err("dangling output symlink must be rejected");
-        assert!(error.contains("dangling symlink"), "got: {error}");
+        assert!(
+            error.contains("refusing to write through symlink"),
+            "got: {error}"
+        );
         assert!(!dangling_target.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_preserves_umask_and_existing_permissions_on_modules() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let app = temp_dir("compile-js-permissions");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+
+        // Compare newly created module permissions with a sibling file created via `fs::write`.
+        fs::create_dir_all(&output).expect("create output dir");
+        let baseline = output.join("baseline.txt");
+        fs::write(&baseline, "baseline").expect("write baseline");
+        let baseline_mode = fs::metadata(&baseline)
+            .expect("baseline metadata")
+            .permissions()
+            .mode()
+            & 0o7777;
+
+        compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("initial compile succeeds");
+        let created_mode = fs::metadata(output.join("en.mjs"))
+            .expect("created metadata")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(created_mode, baseline_mode);
+
+        // Existing custom permissions must survive atomic replacement.
+        fs::set_permissions(output.join("en.mjs"), fs::Permissions::from_mode(0o640))
+            .expect("chmod existing module");
+        compile_js(&config, &["en".to_owned()], &[], false, &output).expect("recompile succeeds");
+        let preserved_mode = fs::metadata(output.join("en.mjs"))
+            .expect("preserved metadata")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(preserved_mode, 0o640);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_reports_primary_catalog_containment_failures_as_diagnostics() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("compile-js-primary-diag-outside");
+        let app = temp_dir("compile-js-primary-diag-app");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        symlink(
+            outside.join("dangling.po"),
+            app.join("locales/en/messages.po"),
+        )
+        .expect("create dangling primary catalog symlink");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+
+        let report = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("primary containment error must be reported in CompileReport");
+        assert!(report.update.catalogs.is_empty());
+        assert_eq!(report.diagnostics.len(), 1);
+        assert_eq!(report.diagnostics[0].code, "compile.invalid_catalog");
+        assert_eq!(report.diagnostics[0].locale.as_deref(), Some("en"));
+        assert!(!output.exists());
     }
 
     #[test]

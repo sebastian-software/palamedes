@@ -821,7 +821,8 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
     path.isAbsolute(catalogPath) ||
     catalogPath.startsWith("/") ||
     catalogPath.startsWith("\\") ||
-    hasWindowsDrivePrefix(catalogPath)
+    hasWindowsDrivePrefix(catalogPath) ||
+    hasWindowsDrivePrefix(catalogPath.replaceAll("{locale}", "a"))
   ) {
     return "catalog path must be relative to the config directory";
   }
@@ -856,9 +857,27 @@ export function resolveCatalogPath(
   if (pathReason !== undefined) {
     throw new Error(`Invalid catalog path "${catalogPath}": ${pathReason}.`);
   }
+  const expanded = catalogPath.replaceAll("{locale}", locale);
+  const expandedReason = validateCatalogPathPattern(expanded);
+  if (expandedReason !== undefined) {
+    throw new Error(`Invalid catalog path "${catalogPath}": ${expandedReason}.`);
+  }
   // Every placeholder occurrence, matching the Rust resolver's `str::replace`
   // and the Next loader; a path may name the locale in a directory and a file.
-  return path.resolve(config.rootDir, catalogPath.replaceAll("{locale}", locale));
+  const rootDir = path.resolve(config.rootDir);
+  const resolved = path.resolve(rootDir, expanded.replaceAll("\\", "/"));
+  const relative = path.relative(rootDir, resolved);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(
+      `Invalid catalog path "${catalogPath}": resolved catalog path escapes root directory ${config.rootDir}.`,
+    );
+  }
+  return resolved;
 }
 
 export function resolveConfigPattern(

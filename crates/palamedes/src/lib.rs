@@ -80,7 +80,8 @@ pub use catalog_combine::{
 };
 #[doc(hidden)]
 pub use catalog_convert::{
-    CatalogFileConvertRequest, CatalogFileConvertResult, convert_catalog_file,
+    CatalogFileConvertRequest, CatalogFileConvertResult, convert_catalog_content,
+    convert_catalog_file,
 };
 #[doc(hidden)]
 pub use catalog_coverage::{
@@ -104,7 +105,8 @@ pub use catalog_update::{
     AiProvenance, CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult,
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest,
     CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
-    PoOutputOptions, parse_catalog, preview_catalog_file_update, update_catalog_file,
+    PoOutputOptions, parse_catalog, preview_catalog_file_update,
+    preview_catalog_update_from_content, update_catalog_file,
 };
 #[doc(hidden)]
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};

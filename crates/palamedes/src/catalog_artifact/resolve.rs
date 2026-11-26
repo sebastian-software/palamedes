@@ -5,9 +5,10 @@ use regex::Regex;
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::load::{
-    CatalogSources, load_catalogs, parse_catalog_sources_with_observer, read_catalog_sources,
+    CatalogSources, ResolvedCatalogFile, load_catalogs, parse_catalog_sources_with_observer,
+    read_catalog_sources,
 };
-use super::types::{CatalogArtifactConfig, FallbackLocales};
+use super::types::{CatalogArtifactConfig, CatalogConfig, FallbackLocales};
 use super::{
     PreparedCompilation, ensure_catalog_path_contained, is_valid_locale, resolve_catalog_file_path,
     resolve_contained_catalog_file_path, validate_catalog_path_pattern,
@@ -16,6 +17,7 @@ use super::{
 #[derive(Debug, Clone)]
 struct ResolvedCatalogRequest {
     locale: String,
+    catalog_index: usize,
     primary_file: PathBuf,
 }
 
@@ -28,9 +30,13 @@ pub(super) fn prepare_compilation(
     let resolved = resolve_catalog_request(config, &resource_path)?;
 
     let fallback_chain = resolve_locale_chain(config, &resolved.locale);
-    let watch_files =
-        collect_watch_files(&root_dir, &resolved.primary_file, config, &fallback_chain)?;
-    let loaded = load_catalogs(&watch_files, config)?;
+    let catalog = &config.catalogs[resolved.catalog_index];
+    let resolved_files = collect_watch_files(&root_dir, &resolved, catalog, &fallback_chain)?;
+    let watch_files = resolved_files
+        .iter()
+        .map(|file| file.path.clone())
+        .collect();
+    let loaded = load_catalogs(&resolved_files, config)?;
 
     Ok(PreparedCompilation {
         locale: resolved.locale,
@@ -75,9 +81,13 @@ pub(super) fn prepare_compilation_snapshot(
     let root_dir = PathBuf::from(&config.root_dir);
     let resolved = resolve_catalog_request(config, &resource_path)?;
     let fallback_chain = resolve_locale_chain(config, &resolved.locale);
-    let watch_files =
-        collect_watch_files(&root_dir, &resolved.primary_file, config, &fallback_chain)?;
-    let sources = read_catalog_sources(&watch_files, config)?;
+    let catalog = &config.catalogs[resolved.catalog_index];
+    let resolved_files = collect_watch_files(&root_dir, &resolved, catalog, &fallback_chain)?;
+    let watch_files = resolved_files
+        .iter()
+        .map(|file| file.path.clone())
+        .collect();
+    let sources = read_catalog_sources(&resolved_files, config)?;
     Ok(CompilationSnapshot {
         locale: resolved.locale,
         fallback_chain,
@@ -142,9 +152,9 @@ fn resolve_catalog_request(
     config: &CatalogArtifactConfig,
     resource_path: &Path,
 ) -> PalamedesResult<ResolvedCatalogRequest> {
-    for catalog in &config.catalogs {
+    let normalized_resource = normalize_path(resource_path);
+    for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
         let matcher = catalog_locale_matcher(Path::new(&config.root_dir), catalog)?;
-        let normalized_resource = normalize_path(resource_path);
 
         if let Some(captures) = matcher.captures(&normalized_resource) {
             let locale = captures
@@ -180,6 +190,7 @@ fn resolve_catalog_request(
             }
             return Ok(ResolvedCatalogRequest {
                 locale,
+                catalog_index,
                 primary_file: expected_primary,
             });
         }
@@ -192,30 +203,26 @@ fn resolve_catalog_request(
 
 fn collect_watch_files(
     root_dir: &Path,
-    primary_file: &Path,
-    config: &CatalogArtifactConfig,
+    resolved: &ResolvedCatalogRequest,
+    catalog: &CatalogConfig,
     locale_chain: &[String],
-) -> PalamedesResult<Vec<PathBuf>> {
-    ensure_catalog_path_contained(root_dir, primary_file)?;
-    let mut files = vec![primary_file.to_path_buf()];
+) -> PalamedesResult<Vec<ResolvedCatalogFile>> {
+    ensure_catalog_path_contained(root_dir, &resolved.primary_file)?;
+    let mut files = vec![ResolvedCatalogFile {
+        path: resolved.primary_file.clone(),
+        locale: resolved.locale.clone(),
+        format: catalog.format,
+    }];
 
-    for catalog in &config.catalogs {
-        let matcher = catalog_locale_matcher(root_dir, catalog)?;
-        let primary_pattern = normalize_path(primary_file);
-
-        if matcher.is_match(&primary_pattern) {
-            for locale in locale_chain {
-                let candidate = resolve_contained_catalog_file_path(
-                    root_dir,
-                    &catalog.path,
-                    locale,
-                    catalog.format,
-                )?;
-                if !files.contains(&candidate) {
-                    files.push(candidate);
-                }
-            }
-            break;
+    for locale in locale_chain {
+        let candidate =
+            resolve_contained_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
+        if !files.iter().any(|existing| existing.path == candidate) {
+            files.push(ResolvedCatalogFile {
+                path: candidate,
+                locale: locale.clone(),
+                format: catalog.format,
+            });
         }
     }
 
@@ -226,7 +233,7 @@ fn collect_watch_files(
 /// its fallback watch files. Invalid patterns must fail both paths equally.
 pub(super) fn catalog_locale_matcher(
     root_dir: &Path,
-    catalog: &super::types::CatalogConfig,
+    catalog: &CatalogConfig,
 ) -> PalamedesResult<Regex> {
     validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
         PalamedesError::UnsafeCatalogPath {
@@ -234,8 +241,9 @@ pub(super) fn catalog_locale_matcher(
             reason: reason.to_owned(),
         }
     })?;
+    let portable_catalog_path = catalog.path.replace('\\', "/");
     let absolute_catalog_path =
-        resolve_catalog_file_path(root_dir, &catalog.path, "{locale}", catalog.format);
+        resolve_catalog_file_path(root_dir, &portable_catalog_path, "{locale}", catalog.format);
     let pattern = normalize_path(&absolute_catalog_path);
     let regex_pattern = regex::escape(&pattern).replace("\\{locale\\}", "([^/]+)");
     Regex::new(&format!("^{regex_pattern}$")).map_err(|source| {
