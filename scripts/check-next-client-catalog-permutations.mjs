@@ -299,8 +299,14 @@ async function verifyOptionalRootLocaleOwnership() {
   assert.ok(existsSync(nextBin), `Missing Next CLI at ${nextBin}`);
 
   for (const scenario of [
-    { name: "layout-inside-optional", layoutAbove: false, expectedLocale: "en" },
-    { name: "layout-above-optional", layoutAbove: true, expectedLocale: "de" },
+    { name: "layout-inside-optional", layoutAbove: false, expectedLocale: "en", nextConfig: {} },
+    { name: "layout-above-optional", layoutAbove: true, expectedLocale: "de", nextConfig: {} },
+    {
+      name: "layout-above-optional-unminified-taint",
+      layoutAbove: true,
+      expectedLocale: "de",
+      nextConfig: { experimental: { turbopackMinify: false, taint: true } },
+    },
   ]) {
     // Create the fixture directly under `repoRoot` (outside `examples/nextjs-route`)
     // so Turbopack keeps `distDir` inside `outputFileTracingRoot` without
@@ -351,7 +357,7 @@ async function verifyOptionalRootLocaleOwnership() {
         path.join(fixtureDir, "next.config.mjs"),
         `import { withPalamedes } from "@palamedes/next-plugin";
 export default withPalamedes(
-  { outputFileTracingRoot: ${JSON.stringify(repoRoot)} },
+  ${JSON.stringify({ outputFileTracingRoot: repoRoot, ...scenario.nextConfig })},
   {
     experimentalClientCatalogPermutations: true,
     projectRoot: ${JSON.stringify(fixtureDir)},

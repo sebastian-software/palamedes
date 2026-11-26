@@ -1050,9 +1050,11 @@ function findEnclosingModuleContext(
     fnHeaderMatch.index +
     (fnHeaderMatch[0].startsWith("(") || /^[A-Za-z_$]/u.test(fnHeaderMatch[0]) ? 0 : 1);
   // Turbopack registers one or more consecutive module IDs before each factory
-  // (for example `[3042, 77420, (a, b) => { ... }]`). Collect the full group.
+  // (for example `[3042, 77420, (a, b) => { ... }]`, or parenthesized in
+  // unminified builds: `[82713, ((__turbopack_context__) => { ... })]`).
+  // Unwrap any leading grouping parens and collect the full ID group.
   const moduleIds: string[] = [];
-  let cursorText = source.slice(0, fnStart);
+  let cursorText = source.slice(0, fnStart).replace(/(?:\s|\()+$/u, "");
   while (true) {
     const idMatch = /(?:^|[[,])\s*(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*$/u.exec(
       cursorText,
@@ -1327,9 +1329,10 @@ const NEXT_APP_PAGE_RUNTIME_SPECIFIER =
   /^(?:\.\/app-page-runtime(?:\.js)?|next\/dist\/(?:esm\/)?build\/templates\/app-page-runtime(?:\.js)?)$/u;
 
 const NEXT_APP_PAGE_EXTERNAL_SPECIFIER =
-  /^next\/dist\/(?:compiled\/next-server\/app-page(?:-turbo)?\.runtime\.(?:prod|dev)\.js|server\/route-modules\/app-page\/module\.compiled(?:\.js)?)$/u;
+  /^next\/dist\/(?:compiled\/next-server\/app-page(?:-turbo)?(?:-experimental)?\.runtime\.(?:prod|dev)\.js|server\/route-modules\/app-page\/module\.compiled(?:\.js)?)$/u;
 
 type TurbopackModuleResolver = (moduleId: string) => string | undefined;
+type TurbopackChunkModuleCache = Map<string, Map<string, string | null> | null>;
 
 const TURBOPACK_MODULE_ID_LITERAL = /^(?:\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')$/u;
 
@@ -1442,12 +1445,13 @@ function extractTurbopackModulesFromSource(source: string): Map<string, string |
 function createTurbopackModuleResolver(
   inlineSources: readonly string[],
   chunkPaths: readonly string[] = [],
+  chunkCache?: TurbopackChunkModuleCache,
 ): TurbopackModuleResolver {
   const combined = new Map<string, string | null>();
   let loadedChunks = false;
 
-  const mergeSource = (source: string) => {
-    for (const [id, factory] of extractTurbopackModulesFromSource(source)) {
+  const mergeModules = (extracted: Map<string, string | null>) => {
+    for (const [id, factory] of extracted) {
       const existing = combined.get(id);
       if (existing === undefined) {
         combined.set(id, factory);
@@ -1457,17 +1461,23 @@ function createTurbopackModuleResolver(
     }
   };
 
-  for (const source of inlineSources) mergeSource(source);
+  for (const source of inlineSources) mergeModules(extractTurbopackModulesFromSource(source));
 
   return (moduleId: string): string | undefined => {
     if (!loadedChunks && chunkPaths.length > 0) {
       loadedChunks = true;
       for (const chunkPath of chunkPaths) {
-        try {
-          mergeSource(readFileSync(chunkPath, "utf8"));
-        } catch {
-          // Ignore unreadable chunks; missing provenance fails closed.
+        let extracted = chunkCache?.get(chunkPath);
+        if (extracted === undefined) {
+          try {
+            extracted = extractTurbopackModulesFromSource(readFileSync(chunkPath, "utf8"));
+          } catch {
+            // Ignore unreadable chunks; missing provenance fails closed.
+            extracted = null;
+          }
+          chunkCache?.set(chunkPath, extracted);
         }
+        if (extracted) mergeModules(extracted);
       }
     }
     const found = combined.get(moduleId);
@@ -1979,7 +1989,11 @@ function isImportedDirectCreateAppPageEntrypoint(scopeSource: string): boolean {
 }
 
 function parseTurbopackFactory(factorySource: string): { param: string; body: string } | undefined {
-  const trimmed = factorySource.trim();
+  let trimmed = factorySource.trim();
+  // Unminified Turbopack wraps factories in outer parens: `((__turbopack_context__) => { ... })`.
+  while (trimmed.startsWith("(") && scanBalancedEnd(trimmed, 0) === trimmed.length) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
   const arrowMatch =
     /^(?:\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*[A-Za-z_$][\w$]*)*\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*\{/u.exec(
       trimmed,
@@ -1997,6 +2011,55 @@ function parseTurbopackFactory(factorySource: string): { param: string; body: st
   return { param, body: trimmed.slice(openBrace + 1, closeEnd - 1) };
 }
 
+function stripLeadingCommentsAndUseStrict(source: string): string {
+  let index = skipWhitespaceAndComments(source, 0);
+  const strictMatch = /^["']use strict["']\s*;?/u.exec(source.slice(index));
+  if (strictMatch) {
+    index = skipWhitespaceAndComments(source, index + strictMatch[0].length);
+  }
+  return source.slice(index).trim();
+}
+
+function unwrapTurbopackCompileTimeBranches(source: string): string {
+  let body = stripLeadingCommentsAndUseStrict(source);
+  for (let steps = 0; steps < 16; steps += 1) {
+    if (body.startsWith("{") && scanBalancedEnd(body, 0) === body.length) {
+      body = stripLeadingCommentsAndUseStrict(body.slice(1, -1));
+      continue;
+    }
+    // Unminified Turbopack leaves compile-time constant branches in place:
+    // `if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable\n; else { ... }`
+    const falsyMatch =
+      /^if\s*\(\s*"TURBOPACK compile-time falsy"\s*,\s*0\s*\)\s*(?:\/\/[^\n\r]*[\n\r]+\s*)?;\s*else\s*/u.exec(
+        body,
+      );
+    if (falsyMatch) {
+      const rest = body.slice(falsyMatch[0].length).trim();
+      if (rest.startsWith("{") && scanBalancedEnd(rest, 0) === rest.length) {
+        body = stripLeadingCommentsAndUseStrict(rest.slice(1, -1));
+        continue;
+      }
+      body = stripLeadingCommentsAndUseStrict(rest);
+      continue;
+    }
+    // `if ("TURBOPACK compile-time truthy", 1) { ... } else //TURBOPACK unreachable\n;`
+    const truthyMatch = /^if\s*\(\s*"TURBOPACK compile-time truthy"\s*,\s*1\s*\)\s*\{/u.exec(body);
+    if (truthyMatch) {
+      const openBrace = truthyMatch[0].length - 1;
+      const closeEnd = scanBalancedEnd(body, openBrace);
+      if (closeEnd !== -1) {
+        const trailing = body.slice(closeEnd).trim();
+        if (trailing === "" || /^else\s*(?:\/\/[^\n\r]*[\n\r]+\s*)?;$/u.test(trailing)) {
+          body = stripLeadingCommentsAndUseStrict(body.slice(openBrace + 1, closeEnd - 1));
+          continue;
+        }
+      }
+    }
+    break;
+  }
+  return body;
+}
+
 function isNextAppPageExternalModule(
   moduleId: string,
   resolveModule: TurbopackModuleResolver,
@@ -2007,17 +2070,29 @@ function isNextAppPageExternalModule(
   if (!factory) return false;
   const parsed = parseTurbopackFactory(factory);
   if (!parsed) return false;
-  const body = parsed.body.replace(/^\s*["']use strict["']\s*;?\s*/u, "").trim();
+  const body = unwrapTurbopackCompileTimeBranches(parsed.body);
   const p = escapeRegExpLiteral(parsed.param);
 
-  // Direct external wrapper: `b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("..."))`
-  const externalMatch = new RegExp(
-    `^[A-Za-z_$][\\w$]*\\.exports\\s*=\\s*${p}\\.x\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*,\\s*\\(\\s*\\)\\s*=>\\s*require\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)\\s*\\)\\s*;?$`,
+  // Direct external wrapper — minified single statement or unminified two-statement form:
+  // `b.exports = a.x("next/dist/...", () => require("next/dist/..."))`
+  // `var mod = __turbopack_context__.x("next/dist/...", () => require("next/dist/...")); module.exports = mod;`
+  const xCall = `${p}\\.x\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*,\\s*(?:\\(\\s*\\)\\s*=>\\s*require\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)|function\\s*\\(\\s*\\)\\s*\\{\\s*return\\s+require\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)\\s*;?\\s*\\})\\s*\\)`;
+  const externalDirect = new RegExp(
+    `^[A-Za-z_$][\\w$]*\\.exports\\s*=\\s*${xCall}\\s*;?$`,
     "u",
   ).exec(body);
-  if (externalMatch) {
-    const specA = parseJsStringLiteral(externalMatch[1]!);
-    const specB = parseJsStringLiteral(externalMatch[2]!);
+  const externalViaVar = new RegExp(
+    `^(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${xCall}\\s*;\\s*[A-Za-z_$][\\w$]*\\.exports\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*;?$`,
+    "u",
+  ).exec(body);
+  if (externalDirect) {
+    const specA = parseJsStringLiteral(externalDirect[1]!);
+    const specB = parseJsStringLiteral(externalDirect[2] ?? externalDirect[3] ?? "");
+    return specA !== undefined && specA === specB && NEXT_APP_PAGE_EXTERNAL_SPECIFIER.test(specA);
+  }
+  if (externalViaVar && externalViaVar[1] === externalViaVar[5]) {
+    const specA = parseJsStringLiteral(externalViaVar[2]!);
+    const specB = parseJsStringLiteral(externalViaVar[3] ?? externalViaVar[4] ?? "");
     return specA !== undefined && specA === specB && NEXT_APP_PAGE_EXTERNAL_SPECIFIER.test(specA);
   }
 
@@ -2074,11 +2149,14 @@ function extractTurbopackExportedFunction(
   }
   if (!foundExpr) return;
   if (/^function\b/u.test(foundExpr)) return foundExpr;
-  // Unminified getter export: `() => createAppPageEntrypoint`
-  const getterTarget = unwrapExportGetter(foundExpr);
-  if (getterTarget && /^[A-Za-z_$][\w$]*$/u.test(getterTarget)) {
+  // Unminified value (`["f", 0, createAppPageEntrypoint]`) or getter export
+  // (`["f", () => createAppPageEntrypoint]`): look up the top-level function declaration.
+  const targetIdent = /^[A-Za-z_$][\w$]*$/u.test(foundExpr)
+    ? foundExpr
+    : unwrapExportGetter(foundExpr);
+  if (targetIdent && /^[A-Za-z_$][\w$]*$/u.test(targetIdent)) {
     const fnDecl = new RegExp(
-      `(?:^|[;}\\n\\r])\\s*(?:export\\s+)?function\\s+${escapeRegExpLiteral(getterTarget)}\\s*\\(`,
+      `(?:^|[;}\\n\\r])\\s*(?:export\\s+)?function\\s+${escapeRegExpLiteral(targetIdent)}\\s*\\(`,
       "gu",
     );
     const fnMatch = fnDecl.exec(body);
@@ -2256,9 +2334,10 @@ function verifyTurbopackAppPageRuntimeExport(
 
   // Verify the straight-line prefix at function entry constructs Next's
   // `AppPageRouteModule` directly from the unmodified `tree`, `page`, and
-  // `pathname` parameters.
+  // `pathname` parameters (supporting both minified dot-member and unminified
+  // bracket-member forms: `new ns.AppPageRouteModule(` and `new ns["AppPageRouteModule"](`).
   const prefixMatch = new RegExp(
-    `^\\s*(?:["']use strict["']\\s*;?\\s*)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\{\\s*require\\s*:\\s*${escapeRegExpLiteral(reqParam)}\\s*,\\s*loadChunk\\s*:\\s*${escapeRegExpLiteral(loadChunkParam)}\\s*,?\\s*\\}\\s*(?:,\\s*|;\\s*(?:const|let|var)\\s+)([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+([A-Za-z_$][\\w$]*)\\s*\\.\\s*AppPageRouteModule\\s*\\(`,
+    `^\\s*(?:["']use strict["']\\s*;?\\s*)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\{\\s*require\\s*:\\s*${escapeRegExpLiteral(reqParam)}\\s*,\\s*loadChunk\\s*:\\s*${escapeRegExpLiteral(loadChunkParam)}\\s*,?\\s*\\}\\s*(?:,\\s*|;\\s*(?:const|let|var)\\s+)([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+([A-Za-z_$][\\w$]*)\\s*(?:\\.\\s*AppPageRouteModule|\\[\\s*["']AppPageRouteModule["']\\s*\\])\\s*\\(`,
     "u",
   ).exec(fnBody);
   if (!prefixMatch) return false;
@@ -2276,7 +2355,9 @@ function verifyTurbopackAppPageRuntimeExport(
   if (defProps.get("page")?.trim() !== pageParam) return false;
   if (defProps.get("pathname")?.trim() !== pathnameParam) return false;
   if (
-    !/^(?:[A-Za-z_$][\w$]*\s*\.\s*)?RouteKind\s*\.\s*APP_PAGE$/u.test(defProps.get("kind") ?? "")
+    !/^(?:[A-Za-z_$][\w$]*\s*(?:\.\s*RouteKind|\[\s*["']RouteKind["']\s*\])|RouteKind)\s*(?:\.\s*APP_PAGE|\[\s*["']APP_PAGE["']\s*\])$/u.test(
+      defProps.get("kind") ?? "",
+    )
   ) {
     return false;
   }
@@ -2308,25 +2389,40 @@ function verifyTurbopackAppPageRuntimeExport(
   return isNextAppPageExternalModule(appPageModId, resolveModule);
 }
 
+function parseCalleeMemberAccess(calleeText: string): { ns: string; prop: string } | undefined {
+  let inner = calleeText.trim();
+  const indirect = /^\(\s*0\s*,\s*([\s\S]+?)\s*\)$/u.exec(inner);
+  if (indirect) inner = indirect[1]!.trim();
+
+  const dotMatch = /^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)$/u.exec(inner);
+  if (dotMatch) return { ns: dotMatch[1]!, prop: dotMatch[2]! };
+
+  const bracketMatch =
+    /^([A-Za-z_$][\w$]*)\s*\[\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\]$/u.exec(inner);
+  if (bracketMatch) {
+    const prop = parseJsStringLiteral(bracketMatch[2]!);
+    if (prop) return { ns: bracketMatch[1]!, prop };
+  }
+  return;
+}
+
 function verifyCalleeIsNextEntrypoint(
   scopeSource: string,
   calleeText: string,
   moduleParam: string | undefined,
   resolveTurbopackModule: TurbopackModuleResolver,
 ): boolean {
-  const indirectMatch = /^\(\s*0\s*,\s*([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\)$/u.exec(
-    calleeText,
-  );
-  const memberMatch =
-    indirectMatch ?? /^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)$/u.exec(calleeText);
-  if (memberMatch) {
-    const [, ns, prop] = memberMatch;
-    const importSource = resolveUniqueTopLevelImportSource(scopeSource, ns!, moduleParam);
+  const member = parseCalleeMemberAccess(calleeText);
+  if (member) {
+    const importSource = resolveUniqueTopLevelImportSource(scopeSource, member.ns, moduleParam);
     if (!importSource) return false;
     if (moduleParam !== undefined) {
-      return verifyTurbopackAppPageRuntimeExport(importSource, prop!, resolveTurbopackModule);
+      return verifyTurbopackAppPageRuntimeExport(importSource, member.prop, resolveTurbopackModule);
     }
-    return prop === "createAppPageEntrypoint" && NEXT_APP_PAGE_RUNTIME_SPECIFIER.test(importSource);
+    return (
+      member.prop === "createAppPageEntrypoint" &&
+      NEXT_APP_PAGE_RUNTIME_SPECIFIER.test(importSource)
+    );
   }
   if (moduleParam === undefined && calleeText === "createAppPageEntrypoint") {
     return isImportedDirectCreateAppPageEntrypoint(scopeSource);
@@ -3072,6 +3168,7 @@ const NEXT_APP_PAGE_TEMPLATE_CHUNK_PATTERN = /(?:^|_)next_dist_(?:esm_)?build_te
 export function compiledRouteHasOptionalRootLocale(
   distDir: string,
   manifestFile: string,
+  chunkCache?: TurbopackChunkModuleCache,
 ): boolean | undefined {
   const serverAppDir = path.join(distDir, "server", "app");
   const manifestRelativePath = path.relative(serverAppDir, manifestFile).split(path.sep).join("/");
@@ -3120,6 +3217,7 @@ export function compiledRouteHasOptionalRootLocale(
     const resolveModule = createTurbopackModuleResolver(
       [chunkSource],
       loadedChunks.filter((chunkPath) => chunkPath !== templateChunks[0]),
+      chunkCache,
     );
     return compiledLoaderTreeHasOptionalRootLocale(
       chunkSource,
@@ -3128,7 +3226,7 @@ export function compiledRouteHasOptionalRootLocale(
       resolveModule,
     );
   }
-  const resolveEntryModule = createTurbopackModuleResolver([entrySource], loadedChunks);
+  const resolveEntryModule = createTurbopackModuleResolver([entrySource], loadedChunks, chunkCache);
   return compiledLoaderTreeHasOptionalRootLocale(
     entrySource,
     expectedPage,
@@ -3370,6 +3468,7 @@ export async function emitClientCatalogPermutations(
     variants,
     { optionalRootLocale: true },
   );
+  const turbopackChunkCache: TurbopackChunkModuleCache = new Map();
   for (const file of manifests) {
     const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
     const hasOptionalLocaleSegment = manifestRelativePath
@@ -3381,7 +3480,7 @@ export async function emitClientCatalogPermutations(
     // closed (`true`) when an optional `[[...locale]]` route cannot be verified
     // as having a compiled root layout above `[[...locale]]`.
     const optionalRootLocale = hasOptionalLocaleSegment
-      ? (compiledRouteHasOptionalRootLocale(distDir, file) ?? true)
+      ? (compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache) ?? true)
       : false;
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;

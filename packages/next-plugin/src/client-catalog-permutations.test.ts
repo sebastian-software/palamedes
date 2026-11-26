@@ -1182,6 +1182,118 @@ const handler = entrypoint.handler;`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
 
+      // Unminified Turbopack (`experimental.turbopackMinify: false`) + experimental
+      // React runtime (`experimental.taint: true`): parenthesized arrow factories,
+      // bracket-member calls `(0, ns["f"])(...)`, `new ns["AppPageRouteModule"](...)`,
+      // `ns["RouteKind"].APP_PAGE`, and `app-page-turbo-experimental.runtime.prod.js`.
+      const unminifiedRuntimeChunk = path.join(
+        distDir,
+        "server/chunks/ssr/next_app_page_runtime_unmin.js",
+      );
+      writeFileSync(
+        unminifiedRuntimeChunk,
+        `module.exports = [
+59745, ((__turbopack_context__) => {
+"use strict";
+var __TURBOPACK__imported__module__19317__ = __turbopack_context__.i(19317);
+var __TURBOPACK__imported__module__38525__ = __turbopack_context__.i(38525);
+function createAppPageEntrypoint({ tree, page, pathname, require: __next_app_require__, loadChunk: __next_app_load_chunk__, interopDefault }) {
+  const __next_app__ = {
+    require: __next_app_require__,
+    loadChunk: __next_app_load_chunk__
+  };
+  const routeModule = new __TURBOPACK__imported__module__19317__["AppPageRouteModule"]({
+    definition: {
+      kind: __TURBOPACK__imported__module__38525__["RouteKind"].APP_PAGE,
+      page,
+      pathname,
+      bundlePath: '',
+      filename: '',
+      appPaths: []
+    },
+    userland: {
+      loaderTree: tree
+    }
+  });
+  async function handler() { return null; }
+  return {
+    __next_app__,
+    routeModule,
+    handler
+  };
+}
+__turbopack_context__.s(["f", 0, createAppPageEntrypoint]);
+}),
+19317, ((__turbopack_context__, module) => {
+  if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+  ;
+  else {
+    if ("TURBOPACK compile-time truthy", 1) {
+      module.exports = __turbopack_context__.r(18622);
+    } else //TURBOPACK unreachable
+    ;
+  }
+}),
+18622, ((__turbopack_context__, module) => {
+  var mod = __turbopack_context__.x("next/dist/compiled/next-server/app-page-turbo-experimental.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo-experimental.runtime.prod.js"));
+  module.exports = mod;
+})
+];\n`,
+      );
+      writeFileSync(
+        templateChunk,
+        `module.exports = [
+1, ((__turbopack_context__) => {
+"use strict";
+var __TURBOPACK__imported__module__59745__ = __turbopack_context__.i(59745);
+var __TURBOPACK__imported__module__39207__ = __turbopack_context__.i(39207);
+const tree = [
+  "",
+  { "children": ["[[...locale]]", { "children": ["__PAGE__", {}, { "page": [p, "[project]/app/[[...locale]]/page.page.tsx"] }, []] }, {}, []] },
+  { "layout": [l, "[project]/app/layout.page.tsx"] },
+  []
+];
+const __next_app_require__ = __turbopack_context__.r.bind(__turbopack_context__);
+const __next_app_load_chunk__ = __turbopack_context__.l.bind(__turbopack_context__);
+const entrypoint = (0, __TURBOPACK__imported__module__59745__["f"])({
+  tree,
+  page: "/[[...locale]]/page",
+  pathname: "/[[...locale]]",
+  require: __next_app_require__,
+  loadChunk: __next_app_load_chunk__,
+  interopDefault: __TURBOPACK__imported__module__39207__["interopDefault"]
+});
+const __next_app__ = entrypoint.__next_app__;
+const routeModule = entrypoint.routeModule;
+const handler = entrypoint.handler;
+__turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler, "routeModule", 0, routeModule], 1);
+}),
+];\n`,
+      );
+      const savedEntryForUnmin = readFileSync(
+        path.join(distDir, "server/app/[[...locale]]/page.js"),
+        "utf8",
+      );
+      try {
+        writeFileSync(
+          path.join(distDir, "server/app/[[...locale]]/page.js"),
+          `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime_unmin.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(1).exports\n`,
+        );
+        const sharedChunkCache = new Map<string, Map<string, string | null> | null>();
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath, sharedChunkCache)).toBe(
+          false,
+        );
+        expect(sharedChunkCache.has(unminifiedRuntimeChunk)).toBe(true);
+        // Deleting the shared runtime chunk on disk proves a second page reuses
+        // the cached module table without rereading or reparsing the file.
+        rmSync(unminifiedRuntimeChunk);
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath, sharedChunkCache)).toBe(
+          false,
+        );
+      } finally {
+        writeFileSync(path.join(distDir, "server/app/[[...locale]]/page.js"), savedEntryForUnmin);
+      }
+
       // End-to-end fail-closed check: when compiled-tree inspection is
       // inconclusive (for example a missing page entry or nonliteral children),
       // emitClientCatalogPermutations() always sets optionalRootLocale=true so
