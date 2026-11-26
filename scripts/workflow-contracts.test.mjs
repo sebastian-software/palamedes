@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -1667,7 +1667,8 @@ describe("workflow contracts", () => {
       ),
     ).toEqual(["<memory>:4: node:24 is not pinned to a sha256 digest"]);
     // Podman pulls check every image operand, local sha256 image IDs are accepted
-    // for `run`/`create` (not `pull`), and Windows runners default to PowerShell.
+    // for `run`/`create` (not `pull`), and Windows runners default to PowerShell
+    // (including Windows-only steps in mixed-OS matrices).
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -1689,6 +1690,74 @@ describe("workflow contracts", () => {
       `<memory>:10: ${digest} is not pinned to a sha256 digest`,
       "<memory>:11: alpine:3.20 is not pinned to a sha256 digest",
     ]);
+    // Mixed-OS matrix narrows default shell per applicable runner (`if: runner.os == 'Windows'`),
+    // `cmd` resolves `%IMAGE%` / `set IMAGE=...`, PowerShell tracks `$image = ...`,
+    // and `printf 'IMAGE=%s\n' "$image" >> "$GITHUB_ENV"` expands format arguments.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  mixed-os-and-shells:",
+          "    strategy:",
+          "      matrix:",
+          "        os: [ubuntu-latest, windows-latest]",
+          "    runs-on: ${{ matrix.os }}",
+          "    steps:",
+          "      - if: runner.os == 'Windows'",
+          "        run: |",
+          "          docker run --rm `",
+          `            node:24@${digest} \``,
+          "            node -v",
+          `          $pinned = "node:24@${digest}"`,
+          "          docker pull $pinned",
+          '          $unpinned = "alpine:3.20"',
+          "          docker pull $unpinned",
+          "      - shell: cmd",
+          "        env:",
+          `          PINNED: node:24@${digest}`,
+          "          UNPINNED: busybox:1.37",
+          "        run: |",
+          "          docker pull %PINNED%",
+          "          docker pull %UNPINNED%",
+          "      - shell: bash",
+          "        run: |",
+          `          pinned="node:24@${digest}"`,
+          '          printf \'PINNED_ENV=%s\\n\' "$pinned" >> "$GITHUB_ENV"',
+          '          printf \'UNPINNED_ENV=%s\\n\' "redis:7" >> "$GITHUB_ENV"',
+          "          printf 'IGNORED=%d\\n' 42 >> \"$GITHUB_ENV\"",
+          "      - shell: bash",
+          "        run: |",
+          '          docker pull "$PINNED_ENV"',
+          '          docker pull "$UNPINNED_ENV"',
+          '          docker pull "$IGNORED"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:15: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:20: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:28: redis:7 is not pinned to a sha256 digest",
+    ]);
+    // Lowercase `dockerfile` referenced by a local Docker action is discovered and checked.
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "palamedes-pins-lowercase-"));
+    try {
+      await mkdir(join(fixtureRoot, ".github", "actions", "local-docker"), { recursive: true });
+      await writeFile(
+        join(fixtureRoot, ".github", "actions", "local-docker", "action.yml"),
+        "name: Local\nruns:\n  using: docker\n  image: ./dockerfile\n",
+      );
+      await writeFile(
+        join(fixtureRoot, ".github", "actions", "local-docker", "dockerfile"),
+        "FROM node:24\n",
+      );
+      const fixtureResult = checkWorkflowPins(fixtureRoot);
+      expect(fixtureResult.containerFilesChecked).toBe(1);
+      expect(fixtureResult.problems).toEqual([
+        ".github/actions/local-docker/dockerfile:1: node:24 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
