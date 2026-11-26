@@ -49,16 +49,19 @@ export function signClientCatalogLocaleHeader(locale: string, secret: string): s
   return `${locale}.${mac}`;
 }
 
-function parseLocaleHeader(raw: string | null, secret?: string): string | undefined {
+function parseLocaleHeader(
+  raw: string | null,
+  options: { requireSignature: boolean; secret?: string },
+): string | undefined {
   if (!raw) return;
-  if (secret === undefined) return raw;
-  if (!secret) return;
+  if (!options.requireSignature) return raw;
+  if (typeof options.secret !== "string" || options.secret.length === 0) return;
   const separator = raw.lastIndexOf(".");
   if (separator <= 0) return;
   const locale = raw.slice(0, separator);
   const providedMac = raw.slice(separator + 1);
   if (!locale || !providedMac) return;
-  const expectedMac = createHmac("sha256", secret).update(locale).digest("base64url");
+  const expectedMac = createHmac("sha256", options.secret).update(locale).digest("base64url");
   const providedBytes = Buffer.from(providedMac, "utf8");
   const expectedBytes = Buffer.from(expectedMac, "utf8");
   if (providedBytes.length !== expectedBytes.length) return;
@@ -114,14 +117,21 @@ export function resolveRenderLocale(
   if (memoized) return memoized;
 
   const localeSource = options.localeSource ?? "route-first";
-  const rootLocale =
-    unit && "rootParams" in unit && unit.rootParams ? unit.rootParams.locale : undefined;
-  const hasRootLocale = typeof rootLocale === "string" && rootLocale.length > 0;
+  const rootParams =
+    unit && "rootParams" in unit && unit.rootParams && typeof unit.rootParams === "object"
+      ? unit.rootParams
+      : undefined;
+  const hasRootLocale = rootParams !== undefined && Object.hasOwn(rootParams, "locale");
+  const rootLocale = hasRootLocale ? rootParams.locale : undefined;
+  const requireSignature = Object.hasOwn(options, "headerSecret");
   const headerLocale =
     localeSource === "route"
       ? undefined
       : unit && "headers" in unit && unit.headers
-        ? parseLocaleHeader(unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER), options.headerSecret)
+        ? parseLocaleHeader(unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER), {
+            requireSignature,
+            secret: options.headerSecret,
+          })
         : undefined;
 
   let candidate: unknown;
@@ -160,7 +170,11 @@ export function bindClientCatalogPermutationsAt(
   distDir: string,
   options: ResolveRenderLocaleOptions = {},
 ): string[] {
-  if (options.headerSecret !== undefined && options.headerSecret.length === 0) {
+  const hasHeaderSecret = Object.hasOwn(options, "headerSecret");
+  if (
+    hasHeaderSecret &&
+    (typeof options.headerSecret !== "string" || options.headerSecret.length === 0)
+  ) {
     throw new Error(
       "Palamedes client catalog permutations: headerSecret must be a non-empty string when provided.",
     );
@@ -190,7 +204,7 @@ export function bindClientCatalogPermutationsAt(
   }
   const resolveOptions: ResolveRenderLocaleOptions = {
     ...(options.localeSource ? { localeSource: options.localeSource } : {}),
-    ...(options.headerSecret !== undefined ? { headerSecret: options.headerSecret } : {}),
+    ...(hasHeaderSecret ? { headerSecret: options.headerSecret } : {}),
   };
   const resolve: LocaleResolver = (locales, fallback) => {
     const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();

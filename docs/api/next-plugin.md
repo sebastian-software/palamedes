@@ -353,24 +353,37 @@ locale-neutral chunks.
 The server picks the locale before any layout runs, in this order by default
 (`localeSource: "route-first"`):
 
-1. the root route param named `locale`, so an app under `app/[locale]/` needs
-   no Proxy and an untrusted incoming `x-palamedes-locale` request header cannot
-   override a route-segment locale or poison route-keyed caches;
+1. the root route param named `locale` (when `[locale]` is at or above the root
+   layout, such as `app/[locale]/layout.tsx`), so an app with a root `[locale]`
+   layout needs no Proxy and an untrusted incoming `x-palamedes-locale` request
+   header cannot override that route-segment locale or poison route-keyed
+   caches;
 2. otherwise the `x-palamedes-locale` request header, which the app's Proxy sets
    from its own strategy (cookie, subdomain, domain, or anything else);
 3. otherwise the source locale from `palamedes.yaml`.
 
-Other param names are not guessed at: name the segment `[locale]` or set the
-header. Apps that only use `[locale]` routes can pass
+Next.js populates `rootParams` only up to the root layout: if your app places
+`app/[locale]/page.tsx` beneath a top-level `app/layout.tsx`, `rootParams.locale`
+is absent, so default `route-first` mode still consults `x-palamedes-locale` and
+`localeSource: "route"` always falls back to the source locale. Other param
+names are not guessed at: put `[locale]` at or above the root layout, or set the
+header from `proxy.ts`.
+
+Apps whose routes all live under a root `[locale]` layout can pass
 `bindClientCatalogPermutations({ localeSource: "route" })` to ignore
 `x-palamedes-locale` on every route (including routes outside `[locale]`). Apps
 whose Proxy should take precedence over route params can opt in with
 `bindClientCatalogPermutations({ localeSource: "header" })`.
 
-Whenever an app reads `x-palamedes-locale`, ensure the Proxy overwrites or
-strips any client-supplied `x-palamedes-locale` header across all matched routes
-(or sign it with `signClientCatalogLocaleHeader()` and verify it with
-`headerSecret`):
+If your app can consult an unsigned `x-palamedes-locale` header — either in
+`localeSource: "header"` mode, or in `route-first` mode on any route without a
+`locale` root param — your Proxy matcher must cover **every** route that can
+render and strip or overwrite any client-supplied `x-palamedes-locale` value.
+Otherwise, disable header reading with `localeSource: "route"` or require
+HMAC-SHA256 verification by signing the header in `proxy.ts` with
+`signClientCatalogLocaleHeader()` and passing `headerSecret` to
+`bindClientCatalogPermutations()` (passing an explicitly `undefined` or empty
+`headerSecret` throws at binding time instead of disabling verification):
 
 ```ts
 // proxy.ts
@@ -380,12 +393,15 @@ import {
   signClientCatalogLocaleHeader,
 } from "@palamedes/next-plugin/server";
 
+const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
+
 export function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   headers.delete(CLIENT_CATALOG_LOCALE_HEADER);
   headers.set(
     CLIENT_CATALOG_LOCALE_HEADER,
-    signClientCatalogLocaleHeader(resolveLocale(request), process.env.PALAMEDES_LOCALE_SECRET!),
+    signClientCatalogLocaleHeader(resolveLocale(request), localeSecret),
   );
   return NextResponse.next({ request: { headers } });
 }
@@ -394,9 +410,12 @@ export function proxy(request: NextRequest) {
 And pass the matching secret in `instrumentation.ts`:
 
 ```ts
+const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
+
 bindClientCatalogPermutations({
   localeSource: "header",
-  headerSecret: process.env.PALAMEDES_LOCALE_SECRET!,
+  headerSecret: localeSecret,
 });
 ```
 

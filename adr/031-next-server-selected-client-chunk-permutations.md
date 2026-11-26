@@ -54,25 +54,29 @@ keep the in-graph fragments.
   wrote the manifests, appends a Node preload to `NODE_OPTIONS`; the workers
   start afterwards and inherit it. Evaluating the config has no such side
   effect, so `next start` and the app's own child processes never see it.
-- **Locale source.** By default (`localeSource: "route-first"`), the root route
-  param named `locale` decides first so an untrusted incoming
-  `x-palamedes-locale` header cannot override `app/[locale]/` routes or poison
-  route-keyed ISR/CDN caches. Without a `locale` root param, the
-  `x-palamedes-locale` request header set by the app's Proxy decides (unless
+- **Locale source.** By default (`localeSource: "route-first"`), a present root
+  route param named `locale` (populated by Next when `[locale]` is at or above
+  the root layout, such as `app/[locale]/layout.tsx`) decides first so an
+  untrusted incoming `x-palamedes-locale` header cannot override that route's
+  locale or poison route-keyed ISR/CDN caches. Without a `locale` root param,
+  the `x-palamedes-locale` request header set by the app's Proxy decides (unless
   `localeSource: "route"` disables headers). Applications whose Proxy should
   take precedence can opt into `localeSource: "header"` in
-  `bindClientCatalogPermutations()`, and any header-reading mode can require an
-  HMAC-SHA256 signature via `headerSecret` and
-  `signClientCatalogLocaleHeader()`. Other param names and locale-looking
-  values are not guessed at, because a `[slug]` route with a cookie locale
-  would otherwise get the cookie's HTML with the slug's chunks. Anything else,
-  including an unknown locale, renders with the source locale's copies, so a
-  layout's `notFound()`, the `_not-found` route, and `global-error.tsx` work
-  without Proxy validation. The result is memoized per render in a `WeakMap`
-  keyed by Next's render store, because segment prefetch files and ISR output
-  are serialized after the request store is gone. A header-only route has to
-  render dynamically, since selection runs before the layout and prerendering
-  has no headers.
+  `bindClientCatalogPermutations()`. Any app that consults an unsigned
+  `x-palamedes-locale` header must ensure its Proxy matcher covers every render
+  that can read it and strips or overwrites client-supplied values; otherwise
+  require HMAC-SHA256 verification via `headerSecret` and
+  `signClientCatalogLocaleHeader()` (an explicitly `undefined` or empty
+  `headerSecret` fails binding instead of disabling verification). Other param
+  names and locale-looking values are not guessed at, because a `[slug]` route
+  with a cookie locale would otherwise get the cookie's HTML with the slug's
+  chunks. Anything else, including an unknown locale, renders with the source
+  locale's copies, so a layout's `notFound()`, the `_not-found` route, and
+  `global-error.tsx` work without Proxy validation. The result is memoized per
+  render in a `WeakMap` keyed by Next's render store, because segment prefetch
+  files and ISR output are serialized after the request store is gone. A
+  header-only route has to render dynamically, since selection runs before the
+  layout and prerendering has no headers.
 - **Rejected at build time.** A webpack build, translated code reachable from
   `build-manifest.json` (the bootstrap scripts, including
   `instrumentation-client`), a cyclic affected chunk graph, and an affected

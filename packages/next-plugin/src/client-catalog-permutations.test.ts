@@ -256,6 +256,24 @@ describe("locale resolution", () => {
         unit({ rootParams: { locale: "zz" }, headers: header("de") }),
       ),
     ).toBe("en");
+    // Catch-all and optional catch-all `locale` root params are still present
+    // route params and must not fall through to an untrusted header.
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: ["de"] }, headers: header("de") }),
+      ),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: undefined }, headers: header("de") }),
+      ),
+    ).toBe("en");
     expect(
       resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { locale: "de" } })),
     ).toBe("de");
@@ -338,9 +356,17 @@ describe("locale resolution", () => {
     expect(() => bindClientCatalogPermutationsAt("/nonexistent", { headerSecret: "" })).toThrow(
       /non-empty string/u,
     );
+    expect(() =>
+      bindClientCatalogPermutationsAt("/nonexistent", { headerSecret: undefined }),
+    ).toThrow(/non-empty string/u);
     expect(
       resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }), {
         headerSecret: "",
+      }),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }), {
+        headerSecret: undefined,
       }),
     ).toBe("en");
   });
