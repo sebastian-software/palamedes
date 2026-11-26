@@ -347,6 +347,7 @@ function splitTopLevelArrayElements(source: string, arrayStart: number): string[
   if (source[arrayStart] !== "[") return;
   const arrayEnd = scanBalancedEnd(source, arrayStart);
   if (arrayEnd === -1) return;
+  if (skipWhitespaceAndComments(source, arrayEnd) !== source.length) return;
   const elements: string[] = [];
   let index = arrayStart + 1;
   let elemStart = index;
@@ -595,6 +596,7 @@ function resolveIdentifierArrayInScope(
   ];
   const identWord = new RegExp(`(?<![\\w$.])${escapeRegExpLiteral(ident)}(?![\\w$])`, "u");
   let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let prevNonWsChar = "";
   let regexAllowed = true;
   let index = 0;
 
@@ -613,6 +615,7 @@ function resolveIdentifierArrayInScope(
       if (end === -1) return;
       index = end;
       prevTokenKind = "other";
+      prevNonWsChar = ch;
       regexAllowed = false;
       continue;
     }
@@ -621,6 +624,7 @@ function resolveIdentifierArrayInScope(
       if (end === -1) return;
       index = end;
       prevTokenKind = "other";
+      prevNonWsChar = "`";
       regexAllowed = false;
       continue;
     }
@@ -629,6 +633,7 @@ function resolveIdentifierArrayInScope(
       if (end !== -1) {
         index = end;
         prevTokenKind = "other";
+        prevNonWsChar = "/";
         regexAllowed = false;
         continue;
       }
@@ -650,6 +655,7 @@ function resolveIdentifierArrayInScope(
         }
         index = end;
         prevTokenKind = "other";
+        prevNonWsChar = "}";
         regexAllowed = false;
         continue;
       }
@@ -665,6 +671,7 @@ function resolveIdentifierArrayInScope(
       });
       index += 1;
       prevTokenKind = "other";
+      prevNonWsChar = "{";
       regexAllowed = true;
       continue;
     }
@@ -676,6 +683,7 @@ function resolveIdentifierArrayInScope(
       }
       index += 1;
       prevTokenKind = "other";
+      prevNonWsChar = "}";
       regexAllowed = true;
       continue;
     }
@@ -695,12 +703,14 @@ function resolveIdentifierArrayInScope(
         }
         index = end;
         prevTokenKind = "other";
+        prevNonWsChar = "]";
         regexAllowed = false;
         continue;
       }
       top.exprDepth += 1;
       index += 1;
       prevTokenKind = "other";
+      prevNonWsChar = ch;
       regexAllowed = true;
       continue;
     }
@@ -712,6 +722,7 @@ function resolveIdentifierArrayInScope(
       }
       index += 1;
       prevTokenKind = "other";
+      prevNonWsChar = ch;
       regexAllowed = false;
       continue;
     }
@@ -723,18 +734,21 @@ function resolveIdentifierArrayInScope(
       }
       index += 1;
       prevTokenKind = "other";
+      prevNonWsChar = ";";
       regexAllowed = true;
       continue;
     }
     if (ch === ",") {
       index += 1;
       prevTokenKind = "comma";
+      prevNonWsChar = ",";
       regexAllowed = true;
       continue;
     }
     if (ch === ".") {
       index += 1;
       prevTokenKind = "dot";
+      prevNonWsChar = ".";
       regexAllowed = false;
       continue;
     }
@@ -748,18 +762,21 @@ function resolveIdentifierArrayInScope(
         if (top.exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
           top.declKind = word;
           prevTokenKind = "decl";
+          prevNonWsChar = word.at(-1) ?? "";
           regexAllowed = false;
           continue;
         }
         if (top.exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
           top.pendingCondition = true;
           prevTokenKind = "other";
+          prevNonWsChar = word.at(-1) ?? "";
           regexAllowed = false;
           continue;
         }
         if (top.exprDepth === 0 && (word === "else" || word === "do")) {
           top.conditionalStmt = true;
           prevTokenKind = "other";
+          prevNonWsChar = word.at(-1) ?? "";
           regexAllowed = true;
           continue;
         }
@@ -814,10 +831,27 @@ function resolveIdentifierArrayInScope(
               value: null,
               blockScoped: top.declKind === "let" || top.declKind === "const",
             };
+          } else {
+            const isObjectPropertyKey =
+              (prevNonWsChar === "{" || prevNonWsChar === ",") &&
+              afterWord < objectStart &&
+              source[afterWord] === ":";
+            if (!isObjectPropertyKey) {
+              // Any intervening reference to `ident` (member write like `t[2] = {}`,
+              // mutating method call, aliasing, or function call) can mutate the
+              // array in place; treat it as inconclusive unless confined to this
+              // block's own `let`/`const` binding.
+              if (top.binding?.blockScoped) {
+                top.binding = { value: null, blockScoped: true };
+              } else {
+                top.tainted = true;
+              }
+            }
           }
         }
       }
       prevTokenKind = "other";
+      prevNonWsChar = word.at(-1) ?? "";
       regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
       continue;
     }
@@ -826,12 +860,14 @@ function resolveIdentifierArrayInScope(
       index += 1;
       while (index < objectStart && /[\w.]/u.test(source[index] ?? "")) index += 1;
       prevTokenKind = "other";
+      prevNonWsChar = "0";
       regexAllowed = false;
       continue;
     }
 
     index += 1;
     prevTokenKind = "other";
+    prevNonWsChar = ch ?? "";
     regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
 
@@ -1155,9 +1191,7 @@ export function routeHasOptionalRootLocale(
   projectRoot: string,
   manifestRelativePath: string,
   pageExtensions: readonly string[] = DEFAULT_PAGE_EXTENSIONS,
-): boolean {
-  const appDir = resolveAppDirectory(projectRoot);
-  if (!appDir) return false;
+): boolean | undefined {
   const normalized = manifestRelativePath.replaceAll("\\", "/");
   const routeDir = path.posix.dirname(normalized);
   if (routeDir === "." || routeDir === "") return false;
@@ -1171,12 +1205,15 @@ export function routeHasOptionalRootLocale(
     if (segments[index]!.startsWith("@")) return false;
   }
 
+  const appDir = resolveAppDirectory(projectRoot);
+  if (!appDir) return;
+
   // If `app/` itself defines a layout, that layout is the root layout and
   // `[[...locale]]` is strictly below it.
   if (directoryHasLayout(appDir, pageExtensions)) return false;
 
   const allChains = collectRouteDirectoryChains(appDir, segments);
-  if (allChains.length === 0) return false;
+  if (allChains.length === 0) return;
 
   const entryStem = path.posix.basename(normalized).replace(/_client-reference-manifest\.js$/u, "");
   const entryChains = entryStem
@@ -1442,9 +1479,13 @@ export async function emitClientCatalogPermutations(
       .split("/")
       .slice(0, -1)
       .includes("[[...locale]]");
+    // Fail closed (`true`) when a route contains `[[...locale]]` and neither
+    // the compiled loader tree nor the source directory tree can confirm a
+    // layout above `[[...locale]]`, so an omitted segment ignores headers.
     const optionalRootLocale = hasOptionalLocaleSegment
       ? (compiledRouteHasOptionalRootLocale(distDir, file) ??
-        routeHasOptionalRootLocale(options.projectRoot, manifestRelativePath, pageExtensions))
+        routeHasOptionalRootLocale(options.projectRoot, manifestRelativePath, pageExtensions) ??
+        true)
       : false;
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;

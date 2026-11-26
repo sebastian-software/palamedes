@@ -855,10 +855,37 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       ).toBe(true);
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["[[...locale]]",{},{layout:root}]; if (t) { start({tree:t,page:"/[[...locale]]/page"}); }`,
+          `let t=["[[...locale]]",{},{layout:root}]; if (ready) { start({tree:t,page:"/[[...locale]]/page"}); }`,
           "/[[...locale]]/page",
         ),
       ).toBe(true);
+      // In-place mutations (member writes, method calls, aliasing) or inline
+      // chained array expressions (`tree: [...].with(...)`, `children: [...].with(...)`)
+      // invalidate the static tree inference and return undefined.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["",{children:["[[...locale]]",{},{layout:inner}]},{layout:root}]; t[2]={}; start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["",{children:["[[...locale]]",{},{layout:inner}]},{layout:root}]; mutate(t); start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `start({tree:["",{children:["[[...locale]]",{},{layout:inner}]},{layout:root}].with(2,{}),page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `start({tree:["",{children:["[[...locale]]",{},{layout:inner}].with(2,{})},{}],page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `let t=["[[...locale]]",{},{layout:root}]; function mutate(){t=["",{},{layout:otherRoot}];} start({tree:t,page:"/[[...locale]]/page"});`,
@@ -958,8 +985,95 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
             "shop_front/[[...locale]]/page_client-reference-manifest.js",
           ),
         ).toBe(true);
+        // When a route's source directory chain cannot be located on disk,
+        // routeHasOptionalRootLocale() returns undefined (unknown boundary)
+        // rather than false so emitClientCatalogPermutations() fails closed.
+        expect(
+          routeHasOptionalRootLocale(
+            escapedProject,
+            "generated/[[...locale]]/page_client-reference-manifest.js",
+          ),
+        ).toBeUndefined();
       } finally {
         rmSync(escapedProject, { recursive: true, force: true });
+      }
+      // End-to-end fail-closed check: when compiled-tree inspection is
+      // inconclusive AND the optional route's source directory is missing,
+      // emitClientCatalogPermutations() still sets optionalRootLocale=true so
+      // an omitted segment ignores x-palamedes-locale.
+      const missingSourceRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-missing-src-root-"));
+      try {
+        mkdirSync(path.join(missingSourceRoot, "locales"), { recursive: true });
+        writeFileSync(
+          path.join(missingSourceRoot, "palamedes.yaml"),
+          "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+        );
+        writeFileSync(
+          path.join(missingSourceRoot, "locales/en.po"),
+          'msgid "Hello"\nmsgstr "Hello"\n',
+        );
+        writeFileSync(
+          path.join(missingSourceRoot, "locales/de.po"),
+          'msgid "Hello"\nmsgstr "Hallo"\n',
+        );
+        const missingDist = path.join(missingSourceRoot, ".next");
+        mkdirSync(path.join(missingDist, "static/chunks"), { recursive: true });
+        mkdirSync(path.join(missingDist, "server/app/generated/[[...locale]]"), {
+          recursive: true,
+        });
+        writeFileSync(
+          path.join(missingDist, "static/chunks/page.js"),
+          `export const msgs = clientCatalogMessages("pmds-next:aaaaaaaaaaaa:${payload}");\n`,
+        );
+        writeFileSync(
+          path.join(missingDist, "build-manifest.json"),
+          JSON.stringify({ rootMainFiles: [] }),
+        );
+        const missingManifest = path.join(
+          missingDist,
+          "server/app/generated/[[...locale]]/page_client-reference-manifest.js",
+        );
+        writeFileSync(
+          missingManifest,
+          `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/generated/[[...locale]]/page"] = ${JSON.stringify({
+            entryCSSFiles: {},
+            entryJSFiles: {
+              "[project]/app/generated/[[...locale]]/page": ["static/chunks/page.js"],
+            },
+          })};`,
+        );
+        await emitClientCatalogPermutations({
+          distDir: missingDist,
+          projectRoot: missingSourceRoot,
+          failOnMissing: false,
+        });
+        const ctx: Record<string, unknown> = { process: { env: {} } };
+        vm.runInNewContext(readFileSync(missingManifest, "utf8"), ctx);
+        const bindFn = ctx.__PALAMEDES_CLIENT_CATALOG_BIND as (
+          fn: (
+            locales: readonly string[],
+            fallback: string,
+            optionalRootLocale?: boolean,
+          ) => string,
+        ) => void;
+        bindFn((availableLocales, fallbackLocale, optionalRootLocale) =>
+          resolveRenderLocale(
+            availableLocales,
+            fallbackLocale,
+            render("/generated/[[...locale]]"),
+            unit({ rootParams: {}, headers: header("de") }),
+            typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+          ),
+        );
+        const entry = (
+          ctx.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+        )["/generated/[[...locale]]/page"]!.entryJSFiles[
+          "[project]/app/generated/[[...locale]]/page"
+        ]![0]!;
+        expect(entry).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      } finally {
+        rmSync(missingSourceRoot, { recursive: true, force: true });
       }
       // When the Next app-page template chunk is inconclusive, unrelated user
       // chunks — even ones whose filename contains `app-page` — must not supply
