@@ -945,7 +945,22 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
             if (treeExpr.startsWith("[")) {
               matches.push(treeExpr);
             } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
-              matches.push(resolveIdentifierArrayInScope(source, objectStart, objectEnd, treeExpr));
+              const identWord = new RegExp(
+                `(?<![\\w$.])${escapeRegExpLiteral(treeExpr)}(?![\\w$])`,
+                "u",
+              );
+              const referencedInSiblingProp = [...props.entries()].some(
+                ([propKey, propValue]) =>
+                  propKey !== "tree" &&
+                  propKey !== "page" &&
+                  propKey !== "pathname" &&
+                  identWord.test(propValue),
+              );
+              matches.push(
+                referencedInSiblingProp
+                  ? undefined
+                  : resolveIdentifierArrayInScope(source, objectStart, objectEnd, treeExpr),
+              );
             } else {
               matches.push(undefined);
             }

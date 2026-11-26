@@ -979,6 +979,14 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // Sibling entrypoint argument properties that reference `t` (for example
+      // `require: makeRequire(t)`) can mutate the tree before the callee runs.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:makeRequire(t),loadChunk:lc,interopDefault:id});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const note = \`\${(t[2] = {}, "")}\`; ${ep("tree:t")};`,
