@@ -241,7 +241,12 @@ pub fn ensure_catalog_path_contained(root_dir: &Path, target: &Path) -> Palamede
         });
     }
 
-    let canonical_root = match fs::canonicalize(root_dir) {
+    let anchor_root = if root_dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        root_dir
+    };
+    let canonical_root = match fs::canonicalize(anchor_root) {
         Ok(path) => path,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => {

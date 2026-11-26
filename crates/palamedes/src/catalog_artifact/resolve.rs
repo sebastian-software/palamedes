@@ -154,14 +154,15 @@ fn resolve_catalog_request(
 ) -> PalamedesResult<ResolvedCatalogRequest> {
     let normalized_resource = normalize_path(resource_path);
     let root_dir = Path::new(&config.root_dir);
+    let mut deferred_error: Option<PalamedesError> = None;
 
-    // Pass 1: validate every catalog pattern and compare against exact
-    // expansions for every configured locale. Expanding configured locales
-    // handles adjacent repeated placeholders (such as `{locale}/{locale}{locale}`)
-    // without relying on greedy regex splitting, and prevents an earlier
-    // nonmatching catalog from masking a later valid catalog. Fixed catalog
-    // paths without `{locale}` or ambiguous multi-locale expansions fail with
-    // `CouldNotResolveLocale` instead of picking an arbitrary locale order.
+    // Pass 1: validate every catalog pattern and resolve matches.
+    // - Single-placeholder patterns (`locales/{locale}`) capture the locale
+    //   directly in O(1) without expanding every configured locale.
+    // - Repeated-placeholder patterns (`{locale}/{locale}{locale}`) expand
+    //   configured locales so adjacent placeholders match unambiguously.
+    // - Fixed patterns without `{locale}` or ambiguous multi-locale expansions
+    //   fail with `CouldNotResolveLocale`.
     for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
         validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
             PalamedesError::UnsafeCatalogPath {
@@ -169,47 +170,104 @@ fn resolve_catalog_request(
                 reason: reason.to_owned(),
             }
         })?;
-        if !catalog.path.contains("{locale}") {
-            let expected =
-                try_resolve_catalog_file_path(root_dir, &catalog.path, "a", catalog.format)?;
-            if normalize_path(&expected) == normalized_resource {
-                return Err(PalamedesError::CouldNotResolveLocale {
-                    resource_path: resource_path.to_path_buf(),
-                });
+        match catalog.path.matches("{locale}").count() {
+            0 => {
+                let expected =
+                    try_resolve_catalog_file_path(root_dir, &catalog.path, "a", catalog.format)?;
+                if normalize_path(&expected) == normalized_resource {
+                    return Err(PalamedesError::CouldNotResolveLocale {
+                        resource_path: resource_path.to_path_buf(),
+                    });
+                }
             }
-            continue;
-        }
-        let mut matched: Option<(String, PathBuf)> = None;
-        for locale in &config.locales {
-            if !is_valid_locale(locale) {
-                continue;
-            }
-            let expected_primary =
-                try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
-            if normalize_path(&expected_primary) == normalized_resource {
-                match &matched {
-                    None => matched = Some((locale.clone(), expected_primary)),
-                    Some((existing_locale, _)) if existing_locale == locale => {}
-                    Some(_) => {
-                        return Err(PalamedesError::CouldNotResolveLocale {
+            1 => {
+                let matcher = catalog_locale_matcher(root_dir, catalog)?;
+                if let Some(captures) = matcher.captures(&normalized_resource) {
+                    let locale = captures
+                        .get(1)
+                        .map(|value| value.as_str().to_owned())
+                        .ok_or_else(|| PalamedesError::CouldNotResolveLocale {
+                            resource_path: resource_path.to_path_buf(),
+                        })?;
+                    if !is_valid_locale(&locale) {
+                        if deferred_error.is_none() {
+                            deferred_error = Some(PalamedesError::InvalidCatalogLocale { locale });
+                        }
+                        continue;
+                    }
+                    let expected_primary = try_resolve_catalog_file_path(
+                        root_dir,
+                        &catalog.path,
+                        &locale,
+                        catalog.format,
+                    )?;
+                    if normalize_path(&expected_primary) != normalized_resource {
+                        continue;
+                    }
+                    if config
+                        .locales
+                        .iter()
+                        .any(|configured| configured == &locale)
+                    {
+                        return Ok(ResolvedCatalogRequest {
+                            locale,
+                            catalog_index,
+                            primary_file: expected_primary,
+                        });
+                    }
+                    if deferred_error.is_none() {
+                        deferred_error = Some(PalamedesError::ResolvedLocaleNotConfigured {
+                            locale,
                             resource_path: resource_path.to_path_buf(),
                         });
                     }
                 }
             }
-        }
-        if let Some((locale, primary_file)) = matched {
-            return Ok(ResolvedCatalogRequest {
-                locale,
-                catalog_index,
-                primary_file,
-            });
+            _ => {
+                let mut matched: Option<(String, PathBuf)> = None;
+                for locale in &config.locales {
+                    if !is_valid_locale(locale) {
+                        continue;
+                    }
+                    let expected_primary = try_resolve_catalog_file_path(
+                        root_dir,
+                        &catalog.path,
+                        locale,
+                        catalog.format,
+                    )?;
+                    if normalize_path(&expected_primary) == normalized_resource {
+                        match &matched {
+                            None => matched = Some((locale.clone(), expected_primary)),
+                            Some((existing_locale, _)) if existing_locale == locale => {}
+                            Some(_) => {
+                                return Err(PalamedesError::CouldNotResolveLocale {
+                                    resource_path: resource_path.to_path_buf(),
+                                });
+                            }
+                        }
+                    }
+                }
+                if let Some((locale, primary_file)) = matched {
+                    return Ok(ResolvedCatalogRequest {
+                        locale,
+                        catalog_index,
+                        primary_file,
+                    });
+                }
+            }
         }
     }
 
-    // Pass 2: no configured locale matched; use the pattern matcher to report
-    // whether the request targeted an invalid or unconfigured locale.
+    if let Some(error) = deferred_error {
+        return Err(error);
+    }
+
+    // Pass 2: no configured locale matched; check repeated-placeholder
+    // patterns to report invalid or unconfigured locales.
     for catalog in &config.catalogs {
+        if catalog.path.matches("{locale}").count() < 2 {
+            continue;
+        }
         let matcher = catalog_locale_matcher(root_dir, catalog)?;
         if let Some(captures) = matcher.captures(&normalized_resource) {
             let locale = captures

@@ -120,11 +120,23 @@ pub enum DirFilenameEquivalence {
     /// (Windows NTFS, FAT/exFAT, SMB/CIFS).
     CaseInsensitiveNtfs,
     /// Case-insensitive full Unicode casefold + NFD preserving default-ignorable
-    /// code points (default macOS/iOS APFS and HFS+).
+    /// code points (default macOS/iOS APFS).
     CaseInsensitiveUnicodeNfd,
+    /// Case-insensitive HFS+: Unicode NFD + 1-to-1 BMP code-unit lowercase fold
+    /// with HFS+ ignorable stripping (`straße` != `strasse`,
+    /// `café` == `cafe\u{0301}`, `foo\u{200c}bar` == `foobar`).
+    CaseInsensitiveHfsPlus,
     /// Linux `FS_CASEFOLD_FL` NFDICF: full Unicode casefold + NFD with
     /// `Default_Ignorable_Code_Point` removal (ext4/f2fs/tmpfs casefold).
     CaseInsensitiveUnicodeNfdicf,
+}
+
+fn normalize_anchor_root(root_dir: &Path) -> &Path {
+    if root_dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        root_dir
+    }
 }
 
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
@@ -639,6 +651,7 @@ mod platform {
         ///
         /// Returns an error when `root_dir` cannot be opened as a directory.
         pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
+            let root_dir = super::normalize_anchor_root(root_dir);
             let c_path = os_str_to_cstring(root_dir.as_os_str())?;
             // SAFETY: `c_path` is a valid NUL-terminated path string.
             let raw = unsafe { libc::open(c_path.as_ptr(), DIR_TRAVERSAL_FLAGS) };
@@ -796,6 +809,7 @@ mod platform {
                     eq,
                     DirFilenameEquivalence::CaseInsensitiveNtfs
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                        | DirFilenameEquivalence::CaseInsensitiveHfsPlus
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
                 )
             })
@@ -810,6 +824,7 @@ mod platform {
                     eq,
                     DirFilenameEquivalence::UnicodeNfd
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                        | DirFilenameEquivalence::CaseInsensitiveHfsPlus
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
                 )
             })
@@ -2295,7 +2310,7 @@ mod platform {
                         | libc::O_EXCL
                         | libc::O_NOFOLLOW
                         | libc::O_CLOEXEC,
-                    0o600 as libc::c_uint,
+                    0o664 as libc::c_uint,
                 )
             };
             if temp_raw < 0 {
@@ -2308,6 +2323,16 @@ mod platform {
             // SAFETY: `temp_raw` is a newly opened valid file descriptor.
             let temp_fd = unsafe { OwnedFd::from_raw_fd(temp_raw) };
             let mut temp_guard = UnixTempFileGuard::new(dir, temp_name.clone());
+            // Ensure the lock file is at least 0644 (never world-writable) so
+            // other authorized users in a shared sticky directory can open it
+            // `O_RDONLY` and wait on `flock(LOCK_EX)` even under a 0077 umask.
+            if let Ok(temp_stat) = fstat_fd(temp_fd.as_raw_fd()) {
+                let target_mode = (temp_stat.st_mode & 0o664) | 0o644;
+                if (temp_stat.st_mode & 0o777) != target_mode {
+                    // SAFETY: `temp_fd` is an open file descriptor we just created.
+                    let _ = unsafe { libc::fchmod(temp_fd.as_raw_fd(), target_mode) };
+                }
+            }
             write_all_fd(temp_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
             flock_exclusive(temp_fd.as_raw_fd())?;
 
@@ -2356,17 +2381,28 @@ mod platform {
                 }
             }
 
-            // `.pmds-lock` already exists: open without `O_CREAT`/`O_TRUNC`,
-            // wait for the current holder's `flock`, then verify it is still
-            // the live single-link Palamedes lock file.
+            // `.pmds-lock` already exists: try `O_RDWR` first (needed for Linux
+            // NFS remote `flock`), falling back to `O_RDONLY` on `EACCES` so
+            // another authorized user in a shared sticky directory can still
+            // wait on `flock(LOCK_EX)` against the owner's `0644` lock file.
             // SAFETY: `dir.fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
-            let existing_raw = unsafe {
+            let mut existing_raw = unsafe {
                 libc::openat(
                     dir.fd.as_raw_fd(),
                     UNIX_DIR_LOCK_NAME.as_ptr(),
                     libc::O_RDWR | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
                 )
             };
+            if existing_raw < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EACCES) {
+                // SAFETY: `dir.fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
+                existing_raw = unsafe {
+                    libc::openat(
+                        dir.fd.as_raw_fd(),
+                        UNIX_DIR_LOCK_NAME.as_ptr(),
+                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
+            }
             if existing_raw < 0 {
                 let error = io::Error::last_os_error();
                 match error.raw_os_error() {
@@ -2525,20 +2561,34 @@ mod platform {
                     rc = unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) };
                 }
             }
-            let is_apple_normalizing = if rc == 0 {
+            enum AppleFsKind {
+                Apfs,
+                HfsPlus,
+                Other,
+            }
+            let fs_kind = if rc == 0 {
                 // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
                 let fs_stat = unsafe { fs_stat.assume_init() };
                 // SAFETY: `f_fstypename` is a NUL-terminated ASCII C string in `statfs`.
                 let fs_type = unsafe { std::ffi::CStr::from_ptr(fs_stat.f_fstypename.as_ptr()) };
-                fs_type == c"apfs" || fs_type == c"hfs"
+                if fs_type == c"apfs" {
+                    AppleFsKind::Apfs
+                } else if fs_type == c"hfs" {
+                    AppleFsKind::HfsPlus
+                } else {
+                    AppleFsKind::Other
+                }
             } else {
-                true
+                AppleFsKind::Apfs
             };
-            Some(match (case_insensitive, is_apple_normalizing) {
-                (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfd,
-                (false, true) => DirFilenameEquivalence::UnicodeNfd,
-                (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
-                (false, false) => DirFilenameEquivalence::Exact,
+            Some(match (case_insensitive, fs_kind) {
+                (true, AppleFsKind::Apfs) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfd,
+                (true, AppleFsKind::HfsPlus) => DirFilenameEquivalence::CaseInsensitiveHfsPlus,
+                (false, AppleFsKind::Apfs | AppleFsKind::HfsPlus) => {
+                    DirFilenameEquivalence::UnicodeNfd
+                }
+                (true, AppleFsKind::Other) => DirFilenameEquivalence::CaseInsensitiveNtfs,
+                (false, AppleFsKind::Other) => DirFilenameEquivalence::Exact,
             })
         }
         #[cfg(target_os = "linux")]
@@ -4018,6 +4068,7 @@ mod platform {
         ///
         /// Returns an error when `root_dir` cannot be opened as a directory.
         pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
+            let root_dir = super::normalize_anchor_root(root_dir);
             let file = OpenOptions::new()
                 .access_mode(FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE)
                 .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
@@ -5175,6 +5226,7 @@ mod platform {
     impl ContainedDir {
         /// Opens `root_dir` as the anchor directory.
         pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
+            let root_dir = super::normalize_anchor_root(root_dir);
             Ok(Self {
                 dir: fs::canonicalize(root_dir)?,
             })
@@ -5186,6 +5238,7 @@ mod platform {
             relative_dir: &Path,
             create_missing: bool,
         ) -> Result<Option<Self>, ContainedFsError> {
+            let root_dir = super::normalize_anchor_root(root_dir);
             let segments = validate_relative_dir_segments(relative_dir)?;
             let canonical_root = fs::canonicalize(root_dir)?;
             let mut current = canonical_root.clone();
@@ -6023,6 +6076,35 @@ mod tests {
         assert!(
             unrelated.exists(),
             "unrelated hard-linked user file must never be deleted"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_target_lock_waits_on_read_only_valid_lock_file_and_empty_root_opens_cwd() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let lock_path = root.path().join(".pmds-lock");
+        fs::write(&lock_path, b"palamedes-dir-lock-v1\n").expect("seed valid lock");
+        fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o444))
+            .expect("chmod 0444 lock");
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        {
+            let _guard = dir
+                .lock_target(OsStr::new("en.po"))
+                .expect("read-only valid lock file must be acquirable via O_RDONLY flock fallback");
+        }
+        assert!(
+            !lock_path.exists(),
+            "valid lock file should be unlinked on drop when directory permits"
+        );
+
+        let cwd_anchor =
+            ContainedDir::open_root(Path::new("")).expect("empty root must normalize to '.'");
+        let dot_anchor = ContainedDir::open_root(Path::new(".")).expect("open '.'");
+        assert_eq!(
+            cwd_anchor.self_identity().expect("cwd identity"),
+            dot_anchor.self_identity().expect("dot identity")
         );
     }
 }

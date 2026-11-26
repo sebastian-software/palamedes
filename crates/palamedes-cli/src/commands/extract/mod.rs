@@ -735,6 +735,39 @@ fn ntfs_casefold(text: &str) -> String {
     folded
 }
 
+fn is_hfs_plus_ignorable(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{200C}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}'
+    )
+}
+
+fn hfs_plus_casefold_nfd(text: &str) -> String {
+    // HFS+ case-insensitive comparison decomposes to NFD, strips its Unicode
+    // 3.2 ignorable code points, and applies a 1-to-1 BMP code-unit lowercase
+    // fold (so `straße` and `strasse` remain distinct, unlike APFS).
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.nfd() {
+        if is_hfs_plus_ignorable(ch) {
+            continue;
+        }
+        if (ch as u32) > 0xFFFF {
+            folded.push(ch);
+            continue;
+        }
+        let mut lower = ch.to_lowercase();
+        if let Some(first) = lower.next()
+            && lower.next().is_none()
+            && (first as u32) <= 0xFFFF
+        {
+            folded.push(first);
+        } else {
+            folded.push(ch);
+        }
+    }
+    folded
+}
+
 fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalence) -> OsString {
     if equivalence == DirFilenameEquivalence::Exact {
         return segment.to_os_string();
@@ -749,6 +782,7 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalenc
                 DirFilenameEquivalence::CaseInsensitiveUnicodeNfd => {
                     unicode_full_casefold_nfd(text, false)
                 }
+                DirFilenameEquivalence::CaseInsensitiveHfsPlus => hfs_plus_casefold_nfd(text),
                 DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf => {
                     unicode_full_casefold_nfd(text, true)
                 }
@@ -1801,6 +1835,28 @@ catalogs:
             super::fold_os_segment(OsStr::new("foo\u{00ad}bar.po"), apfs),
             super::fold_os_segment(OsStr::new("foobar.po"), apfs),
             "APFS keeps default-ignorable soft hyphens distinct"
+        );
+
+        let hfs_plus = DirFilenameEquivalence::CaseInsensitiveHfsPlus;
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), hfs_plus),
+            super::fold_os_segment(OsStr::new("strasse.po"), hfs_plus),
+            "HFS+ per-code-unit folding keeps ß and ss distinct"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), hfs_plus),
+            super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), hfs_plus),
+            "HFS+ normalization equates NFC and NFD"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("foo\u{200c}bar.po"), hfs_plus),
+            super::fold_os_segment(OsStr::new("foobar.po"), hfs_plus),
+            "HFS+ ignores zero-width non-joiner U+200C"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("Messages.po"), hfs_plus),
+            super::fold_os_segment(OsStr::new("messages.po"), hfs_plus),
+            "HFS+ equates ASCII case variants"
         );
 
         let linux_casefold = DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf;
