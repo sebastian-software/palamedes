@@ -311,8 +311,18 @@ struct PreparedCatalog {
     path: PathBuf,
     parent_dir: Arc<ContainedDir>,
     file_name: OsString,
+    content: String,
+}
+
+#[derive(Debug)]
+struct PreparedCatalogPlan {
+    catalog_index: usize,
+    path: PathBuf,
+    relative_parent: PathBuf,
+    file_name: OsString,
     locale: String,
     patch_indexes: Vec<usize>,
+    original: String,
     content: String,
     changed: bool,
 }
@@ -592,83 +602,23 @@ where
         ));
     }
 
-    let mut pinned_dirs: HashMap<PathBuf, Arc<ContainedDir>> = HashMap::new();
-    let mut lock_plan: BTreeMap<
-        crate::contained_fs::TargetLockKey,
-        (Arc<ContainedDir>, OsString, PathBuf),
-    > = BTreeMap::new();
     let root_dir = Path::new(&request.config.root_dir);
-    for (relative_parent, file_name) in target_batches.keys() {
-        let full_path = root_dir.join(relative_parent).join(file_name);
-        let parent_dir = if let Some(cached) = pinned_dirs.get(relative_parent) {
-            Arc::clone(cached)
-        } else {
-            let opened = match ContainedDir::open_subpath(root_dir, relative_parent, false) {
-                Ok(Some(dir)) => Arc::new(dir),
-                Ok(None) => {
-                    return Err(PalamedesError::ReadFile {
-                        path: full_path,
-                        source: std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            "catalog file does not exist",
-                        ),
-                    });
-                }
-                Err(ContainedFsError::Containment(reason)) => {
-                    return Err(PalamedesError::UnsafeCatalogPath {
-                        path: full_path.to_string_lossy().into_owned(),
-                        reason,
-                    });
-                }
-                Err(ContainedFsError::Io(source)) => {
-                    return Err(PalamedesError::ReadFile {
-                        path: full_path,
-                        source,
-                    });
-                }
-            };
-            pinned_dirs.insert(relative_parent.clone(), Arc::clone(&opened));
-            opened
-        };
-        let lock_key = parent_dir
-            .target_lock_key(file_name)
-            .map_err(|error| match error {
-                ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
-                    path: full_path.to_string_lossy().into_owned(),
-                    reason,
-                },
-                ContainedFsError::Io(source) => PalamedesError::WriteFile {
-                    path: full_path.clone(),
-                    source,
-                },
-            })?;
-        lock_plan
-            .entry(lock_key)
-            .or_insert_with(|| (parent_dir, file_name.clone(), full_path));
-    }
-    let mut target_locks = Vec::with_capacity(lock_plan.len());
-    for (_, (parent_dir, file_name, full_path)) in lock_plan {
-        let lock = parent_dir
-            .lock_target(&file_name)
-            .map_err(|error| match error {
-                ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
-                    path: full_path.to_string_lossy().into_owned(),
-                    reason,
-                },
-                ContainedFsError::Io(source) => PalamedesError::WriteFile {
-                    path: full_path,
-                    source,
-                },
-            })?;
-        target_locks.push(lock);
-    }
-    let _target_locks = target_locks;
+    // Phase 1: validate the entire batch opening at most one catalog directory
+    // descriptor at a time so large multi-locale batches stay within low
+    // `RLIMIT_NOFILE` budgets while still rejecting invalid patches before any
+    // write occurs.
     let mut seen_identities: HashMap<FileIdentity, Vec<usize>> = HashMap::new();
-    let mut prepared = Vec::new();
+    let mut prepared_plans = Vec::new();
     for (batch, patch_indexes) in groups {
         let catalog = &request.config.catalogs[batch.catalog_index];
-        let mut loaded =
-            load_catalog_with_dir_cache(&request.config, catalog, &batch.locale, &mut pinned_dirs)?;
+        let mut loaded = load_catalog(&request.config, catalog, &batch.locale)?;
+        let (relative_parent, _) =
+            split_relative_catalog_path(root_dir, &loaded.path).map_err(|error| {
+                PalamedesError::UnsafeCatalogPath {
+                    path: loaded.path.to_string_lossy().into_owned(),
+                    reason: error.to_string(),
+                }
+            })?;
         let identity = loaded
             .parent_dir
             .file_identity(&loaded.file_name)
@@ -811,16 +761,21 @@ where
                 loaded.format,
                 request.po.as_ref(),
             )?;
-            prepared.push(PreparedCatalog {
+            let changed = content != loaded.original;
+            prepared_plans.push(PreparedCatalogPlan {
+                catalog_index: batch.catalog_index,
                 path: loaded.path,
-                parent_dir: loaded.parent_dir,
+                relative_parent,
                 file_name: loaded.file_name,
                 locale: batch.locale,
                 patch_indexes,
-                changed: content != loaded.original,
+                original: loaded.original,
                 content,
+                changed,
             });
         }
+        // `loaded` (and its `ContainedDir` descriptor) drops at the end of each
+        // iteration, keeping open descriptors bounded to O(1).
     }
 
     if !rejected.is_empty() {
@@ -832,40 +787,203 @@ where
         ));
     }
 
+    // Phase 2: commit each changed catalog one at a time under its pinned
+    // directory handle and exclusive cross-process target lock (at most 3 open
+    // descriptors at any point, regardless of how many locales are patched).
     let mut completed_patches = BTreeSet::new();
     let mut catalogs_updated = 0;
     let mut replacement_diagnostics = Vec::new();
-    for catalog in &prepared {
-        if catalog.changed {
-            match replace_catalog(catalog, &request.config.source_locale, request.po.as_ref()) {
-                Ok(CatalogReplacement::Durable) => {}
-                Ok(CatalogReplacement::CommittedWithDurabilityWarning(source)) => {
-                    replacement_diagnostics.push(TranslationWorkflowDiagnostic {
-                        code: "translation.catalog_durability".to_owned(),
-                        message: format!(
-                            "Catalog replacement committed, but synchronizing its directory failed: {source}"
-                        ),
-                        id: None,
-                        catalog_path: Some(catalog.path.to_string_lossy().into_owned()),
-                        locale: Some(catalog.locale.clone()),
-                    });
-                }
-                Err(source) => {
-                    return Err(PalamedesError::TranslationPatchWrite {
-                        result: completed_translation_patch_result(
-                            &request.patches,
-                            &changed_patches,
-                            &completed_patches,
-                            catalogs_updated,
-                            replacement_diagnostics,
-                        ),
-                        source: Box::new(source),
-                    });
-                }
-            }
-            catalogs_updated += 1;
+    for plan in prepared_plans {
+        if !plan.changed {
+            completed_patches.extend(&plan.patch_indexes);
+            continue;
         }
-        completed_patches.extend(&catalog.patch_indexes);
+        let commit_result: PalamedesResult<Option<CatalogReplacement>> = (|| {
+            let parent_dir =
+                match ContainedDir::open_subpath(root_dir, &plan.relative_parent, false) {
+                    Ok(Some(dir)) => Arc::new(dir),
+                    Ok(None) => {
+                        return Err(PalamedesError::ReadFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                "catalog file does not exist",
+                            ),
+                        });
+                    }
+                    Err(ContainedFsError::Containment(reason)) => {
+                        return Err(PalamedesError::UnsafeCatalogPath {
+                            path: plan.path.to_string_lossy().into_owned(),
+                            reason,
+                        });
+                    }
+                    Err(ContainedFsError::Io(source)) => {
+                        return Err(PalamedesError::ReadFile {
+                            path: plan.path.clone(),
+                            source,
+                        });
+                    }
+                };
+            let _target_lock =
+                parent_dir
+                    .lock_target(&plan.file_name)
+                    .map_err(|error| match error {
+                        ContainedFsError::Containment(reason) => {
+                            PalamedesError::UnsafeCatalogPath {
+                                path: plan.path.to_string_lossy().into_owned(),
+                                reason,
+                            }
+                        }
+                        ContainedFsError::Io(source) => PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source,
+                        },
+                    })?;
+            let current_original = match parent_dir.read_optional_file(&plan.file_name) {
+                Ok(Some(content)) => content,
+                Ok(None) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: plan.path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "catalog file does not exist",
+                        ),
+                    });
+                }
+                Err(ContainedFsError::Containment(reason)) => {
+                    return Err(PalamedesError::UnsafeCatalogPath {
+                        path: plan.path.to_string_lossy().into_owned(),
+                        reason,
+                    });
+                }
+                Err(ContainedFsError::Io(source)) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: plan.path.clone(),
+                        source,
+                    });
+                }
+            };
+            let (changed, content) = if current_original == plan.original {
+                (true, plan.content)
+            } else {
+                // Another writer modified this catalog after Phase 1 validation.
+                // Re-parse under the exclusive lock, re-verify every patch
+                // fingerprint against the live file, and re-render so unrelated
+                // concurrent edits are preserved and conflicting edits fail
+                // cleanly instead of being overwritten.
+                let catalog_cfg = &request.config.catalogs[plan.catalog_index];
+                let mut reloaded = build_loaded_catalog_from_content(
+                    &request.config,
+                    catalog_cfg,
+                    &plan.locale,
+                    plan.path.clone(),
+                    Arc::clone(&parent_dir),
+                    plan.file_name.clone(),
+                    current_original,
+                )?;
+                for &patch_index in &plan.patch_indexes {
+                    let patch = &request.patches[patch_index];
+                    let key =
+                        CatalogMessageKey::new(patch.id.message.clone(), patch.id.context.clone());
+                    let item_index = reloaded.messages.get(&key).copied().ok_or_else(|| {
+                        PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "catalog changed concurrently and patch target no longer exists",
+                            ),
+                        }
+                    })?;
+                    if reloaded.ambiguous_messages.contains(&key) {
+                        return Err(PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "catalog changed concurrently and patch target became ambiguous",
+                            ),
+                        });
+                    }
+                    let current = build_candidate(
+                        &reloaded,
+                        &key,
+                        &reloaded.po.items[item_index],
+                        usize::MAX,
+                    )?;
+                    if current.fingerprint != patch.fingerprint {
+                        return Err(PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "catalog changed concurrently and patch fingerprint is now stale",
+                            ),
+                        });
+                    }
+                }
+                for &patch_index in &plan.patch_indexes {
+                    apply_patch_to_po(
+                        &mut reloaded.po,
+                        &reloaded.po_item_indexes,
+                        &request.patches[patch_index],
+                    )?;
+                }
+                let po = ferrocat::stringify_po(&reloaded.po, &SerializeOptions::default());
+                let rendered = render_target_catalog(
+                    &po,
+                    &request.config.source_locale,
+                    &plan.locale,
+                    reloaded.format,
+                    request.po.as_ref(),
+                )?;
+                (rendered != reloaded.original, rendered)
+            };
+            if !changed {
+                return Ok(None);
+            }
+            let prepared_catalog = PreparedCatalog {
+                path: plan.path.clone(),
+                parent_dir: Arc::clone(&parent_dir),
+                file_name: plan.file_name.clone(),
+                content,
+            };
+            replace_catalog(
+                &prepared_catalog,
+                &request.config.source_locale,
+                request.po.as_ref(),
+            )
+            .map(Some)
+        })();
+
+        match commit_result {
+            Ok(Some(CatalogReplacement::Durable)) => {
+                catalogs_updated += 1;
+            }
+            Ok(Some(CatalogReplacement::CommittedWithDurabilityWarning(source))) => {
+                catalogs_updated += 1;
+                replacement_diagnostics.push(TranslationWorkflowDiagnostic {
+                    code: "translation.catalog_durability".to_owned(),
+                    message: format!(
+                        "Catalog replacement committed, but synchronizing its directory failed: {source}"
+                    ),
+                    id: None,
+                    catalog_path: Some(plan.path.to_string_lossy().into_owned()),
+                    locale: Some(plan.locale),
+                });
+            }
+            Ok(None) => {}
+            Err(source) => {
+                return Err(PalamedesError::TranslationPatchWrite {
+                    result: completed_translation_patch_result(
+                        &request.patches,
+                        &changed_patches,
+                        &completed_patches,
+                        catalogs_updated,
+                        replacement_diagnostics,
+                    ),
+                    source: Box::new(source),
+                });
+            }
+        }
+        completed_patches.extend(&plan.patch_indexes);
     }
 
     Ok(completed_translation_patch_result(
@@ -1009,6 +1127,20 @@ fn load_catalog_with_dir_cache(
         }
         Err(ContainedFsError::Io(source)) => return Err(PalamedesError::ReadFile { path, source }),
     };
+    build_loaded_catalog_from_content(
+        config, catalog, locale, path, parent_dir, file_name, original,
+    )
+}
+
+fn build_loaded_catalog_from_content(
+    config: &CatalogArtifactConfig,
+    catalog: &CatalogConfig,
+    locale: &str,
+    path: PathBuf,
+    parent_dir: Arc<ContainedDir>,
+    file_name: OsString,
+    original: String,
+) -> PalamedesResult<LoadedCatalog> {
     let po = parse_catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
     let mut messages = BTreeMap::new();
     let mut ambiguous_messages = BTreeSet::new();
@@ -3799,10 +3931,7 @@ mod tests {
             path: path.clone(),
             parent_dir,
             file_name: OsString::from("messages.po"),
-            locale: "de".to_owned(),
-            patch_indexes: Vec::new(),
             content: "msgid \"Hello\"\nmsgstr \"Hallo\"\n".to_owned(),
-            changed: true,
         };
 
         atomic_replace_catalog(&prepared, "en", None).expect("create new catalog atomically");
@@ -4262,6 +4391,91 @@ mod tests {
                 value: value.to_owned(),
             },
             machine: None,
+        }
+    }
+
+    #[cfg(unix)]
+    fn count_open_fds() -> Option<usize> {
+        for dir in ["/dev/fd", "/proc/self/fd"] {
+            if let Ok(entries) = fs::read_dir(dir) {
+                return Some(entries.count());
+            }
+        }
+        None
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn multi_locale_patch_batch_bounds_open_file_descriptors() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let locale_count = 100usize;
+        let mut locales = Vec::with_capacity(locale_count + 1);
+        locales.push("en".to_owned());
+        write_po_fixture(&fixture.path().join("locales/en/messages.po"), "en");
+        for idx in 0..locale_count {
+            let locale = format!("loc-{idx:03}");
+            write_po_fixture(
+                &fixture.path().join(format!("locales/{locale}/messages.po")),
+                &locale,
+            );
+            locales.push(locale);
+        }
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: locales.clone(),
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: locales[1..].to_vec(),
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list candidates across 100 locale directories");
+
+        let mut patches = Vec::with_capacity(locale_count);
+        for locale in &locales[1..] {
+            let entry = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.locale == *locale && c.id.message == "Hello")
+                .expect("Hello candidate");
+            patches.push(singular_patch(entry, &format!("Hello-{locale}")));
+        }
+
+        let baseline_fds = count_open_fds();
+        let mut peak_fd_delta = 0usize;
+        let result = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: make_config(),
+                po: None,
+                patches,
+            },
+            |catalog, source_locale, po| {
+                if let (Some(base), Some(current)) = (baseline_fds, count_open_fds()) {
+                    peak_fd_delta = peak_fd_delta.max(current.saturating_sub(base));
+                }
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect("100-locale batch must succeed with bounded open descriptors");
+
+        assert!(result.updated);
+        assert_eq!(result.stats.catalogs_updated, locale_count);
+        assert_eq!(result.stats.applied, locale_count);
+        if baseline_fds.is_some() {
+            assert!(
+                peak_fd_delta <= 32,
+                "expected O(1) open descriptors across {locale_count} locale directories, observed peak delta {peak_fd_delta}"
+            );
         }
     }
 }

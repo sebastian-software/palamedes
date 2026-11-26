@@ -1992,8 +1992,13 @@ mod platform {
             }
             return None;
         }
-        let mut entries = Vec::new();
-        let mut all_names: HashSet<Vec<u8>> = HashSet::new();
+
+        // Stream directory entries one at a time so normal directories settle
+        // in O(1) time and memory on the first ASCII-named entry. Only retain
+        // flipped variants for multi-link non-directory entries (which could be
+        // hard-linked `Readme`/`readme` pairs on a case-sensitive filesystem).
+        let mut ambiguous_variants: Vec<Vec<u8>> = Vec::new();
+        let mut result: Option<bool> = None;
         loop {
             // SAFETY: `dir_ptr` is a valid `DIR*`.
             let entry = unsafe { libc::readdir(dir_ptr) };
@@ -2005,17 +2010,7 @@ mod platform {
             if name == c"." || name == c".." {
                 continue;
             }
-            let bytes = name.to_bytes().to_vec();
-            all_names.insert(bytes.clone());
-            entries.push(bytes);
-        }
-        // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
-        unsafe {
-            libc::closedir(dir_ptr);
-        }
-
-        for bytes in &entries {
-            let Ok(name_str) = std::str::from_utf8(bytes) else {
+            let Ok(name_str) = std::str::from_utf8(name.to_bytes()) else {
                 continue;
             };
             let Some((idx, ch)) = name_str
@@ -2033,30 +2028,66 @@ mod platform {
             variant.push_str(&name_str[..idx]);
             variant.push(flipped);
             variant.push_str(&name_str[idx + ch.len_utf8()..]);
-            let Ok(original_c) = CString::new(bytes.as_slice()) else {
-                continue;
-            };
             let Ok(variant_c) = CString::new(variant.as_bytes()) else {
                 continue;
             };
-            let original_id = dir.entry_identity(&original_c);
-            let variant_id = dir.entry_identity(&variant_c);
-            if original_id.is_none() {
+            let Ok(original_stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name) else {
                 continue;
+            };
+            let original_id = stat_identity(&original_stat);
+            let variant_id = fstatat_nofollow(dir.fd.as_raw_fd(), &variant_c)
+                .ok()
+                .map(|stat| stat_identity(&stat));
+            if variant_id != Some(original_id) {
+                // Either the flipped spelling does not exist or it resolves to
+                // a distinct inode: either way, the directory is case-sensitive.
+                result = Some(false);
+                break;
             }
-            if all_names.contains(variant.as_bytes()) {
-                // Both spellings exist as separate listing entries: distinct
-                // inodes prove case sensitivity, while equal inodes may be a
-                // hard-linked pair on a case-sensitive filesystem, so treat
-                // that entry as inconclusive and keep checking other entries.
-                if original_id != variant_id {
-                    return Some(false);
-                }
-                continue;
+            let is_dir = (original_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+            if is_dir || original_stat.st_nlink <= 1 {
+                // Directories cannot be hard-linked on POSIX, and a single-link
+                // entry cannot have two distinct names in the directory: equal
+                // inodes immediately prove case-insensitivity.
+                result = Some(true);
+                break;
             }
-            return Some(original_id == variant_id);
+            ambiguous_variants.push(variant.into_bytes());
         }
-        None
+
+        // Only when every ASCII entry was a multi-link hard-linked file do we
+        // rewind once to check whether any flipped variant is absent from the
+        // directory listing (proving case-insensitivity rather than a pair of
+        // hard links).
+        if result.is_none() && !ambiguous_variants.is_empty() {
+            let mut remaining: HashSet<Vec<u8>> = ambiguous_variants.into_iter().collect();
+            // SAFETY: `dir_ptr` is a valid `DIR*`.
+            unsafe {
+                libc::rewinddir(dir_ptr);
+            }
+            loop {
+                // SAFETY: `dir_ptr` is a valid `DIR*`.
+                let entry = unsafe { libc::readdir(dir_ptr) };
+                if entry.is_null() {
+                    break;
+                }
+                // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
+                let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+                remaining.remove(name.to_bytes());
+                if remaining.is_empty() {
+                    break;
+                }
+            }
+            if !remaining.is_empty() {
+                result = Some(true);
+            }
+        }
+
+        // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
+        unsafe {
+            libc::closedir(dir_ptr);
+        }
+        result
     }
 
     fn stat_identity(stat: &libc::stat) -> FileIdentity {
@@ -2175,6 +2206,61 @@ mod platform {
         Ok(total == expected_len && &buf[..expected_len] == UNIX_DIR_LOCK_MAGIC)
     }
 
+    const UNIX_DIR_LOCK_TEMP_PREFIX: &[u8] = b".pmds-ltmp-";
+
+    /// Removes stale `.pmds-ltmp-*` hard links left behind if a previous writer
+    /// crashed between `linkat` and `unlinkat` on platforms without atomic
+    /// no-replace rename. Only unlinks entries whose name starts with
+    /// `.pmds-ltmp-` and whose `(dev, ino)` matches our locked, magic-verified
+    /// `.pmds-lock` inode, so unrelated user files are never touched.
+    fn reclaim_interrupted_lock_temp_links(dir: &ContainedDir, lock_id: FileIdentity) {
+        let Some(readable) = open_readable_self(dir) else {
+            return;
+        };
+        // SAFETY: `readable` is an open readable directory descriptor.
+        let dup_fd = unsafe { libc::fcntl(readable.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+        if dup_fd < 0 {
+            return;
+        }
+        // SAFETY: `dup_fd` is valid; `fdopendir` takes ownership on success.
+        let dir_ptr = unsafe { libc::fdopendir(dup_fd) };
+        if dir_ptr.is_null() {
+            // SAFETY: `fdopendir` failed, so we still own `dup_fd`.
+            unsafe {
+                libc::close(dup_fd);
+            }
+            return;
+        }
+        let mut stale_names: Vec<CString> = Vec::new();
+        loop {
+            // SAFETY: `dir_ptr` is a valid `DIR*`.
+            let entry = unsafe { libc::readdir(dir_ptr) };
+            if entry.is_null() {
+                break;
+            }
+            // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
+            let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+            if !name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX) {
+                continue;
+            }
+            if let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name)
+                && stat_identity(&stat) == lock_id
+            {
+                stale_names.push(name.to_owned());
+            }
+        }
+        // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
+        unsafe {
+            libc::closedir(dir_ptr);
+        }
+        for stale in stale_names {
+            // SAFETY: `dir.fd` is open and `stale` is a verified `.pmds-ltmp-*` C string.
+            unsafe {
+                let _ = libc::unlinkat(dir.fd.as_raw_fd(), stale.as_ptr(), 0);
+            }
+        }
+    }
+
     fn acquire_unix_dir_lock(
         dir: &ContainedDir,
         key: FileIdentity,
@@ -2195,9 +2281,10 @@ mod platform {
             let temp_name = CString::new(format!(".pmds-ltmp-{pid}-{nonce}"))
                 .expect("ASCII temp lock name has no NUL bytes");
             // Create a private temporary file, stamp our signature, and lock it
-            // BEFORE publishing at `.pmds-lock` via `linkat`, so no waiter can
-            // ever observe an empty or unlocked Palamedes lock file and no
-            // pre-existing file is ever overwritten.
+            // BEFORE publishing at `.pmds-lock` via atomic no-replace rename
+            // (or `linkat`+`unlinkat` fallback), so no waiter can ever observe
+            // an empty or unlocked Palamedes lock file and no pre-existing file
+            // is ever overwritten.
             // SAFETY: `dir.fd` is open and `temp_name` is a valid C string.
             let temp_raw = unsafe {
                 libc::openat(
@@ -2220,29 +2307,19 @@ mod platform {
             }
             // SAFETY: `temp_raw` is a newly opened valid file descriptor.
             let temp_fd = unsafe { OwnedFd::from_raw_fd(temp_raw) };
-            let temp_guard = UnixTempFileGuard::new(dir, temp_name.clone());
+            let mut temp_guard = UnixTempFileGuard::new(dir, temp_name.clone());
             write_all_fd(temp_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
             flock_exclusive(temp_fd.as_raw_fd())?;
 
-            // SAFETY: `dir.fd` is open and both C strings are valid.
-            let link_rc = unsafe {
-                libc::linkat(
-                    dir.fd.as_raw_fd(),
-                    temp_name.as_ptr(),
-                    dir.fd.as_raw_fd(),
-                    UNIX_DIR_LOCK_NAME.as_ptr(),
-                    0,
-                )
-            };
-            let link_err = if link_rc == 0 {
-                None
-            } else {
-                Some(io::Error::last_os_error())
-            };
-            drop(temp_guard);
-
-            match link_err {
-                None => {
+            let published = publish_file_noreplace(
+                dir.fd.as_raw_fd(),
+                &temp_name,
+                dir.fd.as_raw_fd(),
+                UNIX_DIR_LOCK_NAME,
+            );
+            match published {
+                Ok(true) => {
+                    temp_guard.disarm();
                     let stat = fstat_fd(temp_fd.as_raw_fd())?;
                     return Ok(UnixDirLock {
                         key,
@@ -2250,18 +2327,20 @@ mod platform {
                         _fd: temp_fd,
                     });
                 }
-                Some(error) if error.raw_os_error() == Some(libc::EEXIST) => {
+                Ok(false) => {
+                    drop(temp_guard);
                     drop(temp_fd);
                 }
-                Some(error)
+                Err(error)
                     if matches!(
                         error.raw_os_error(),
                         Some(libc::EPERM | libc::EOPNOTSUPP | libc::ENOSYS | libc::EXDEV)
                     ) =>
                 {
-                    // Filesystems without hard links (e.g. FAT32/exFAT/VFAT)
-                    // cannot atomically link a lock file; fall back to locking
-                    // the directory handle directly.
+                    // Filesystems without atomic no-replace rename or hard
+                    // links (e.g. FAT32/exFAT/VFAT) fall back to locking the
+                    // directory handle directly.
+                    drop(temp_guard);
                     drop(temp_fd);
                     let fallback_fd = open_unix_lock_fd(dir)?;
                     flock_exclusive(fallback_fd.as_raw_fd())?;
@@ -2271,7 +2350,10 @@ mod platform {
                         _fd: fallback_fd,
                     });
                 }
-                Some(error) => return Err(ContainedFsError::Io(error)),
+                Err(error) => {
+                    drop(temp_guard);
+                    return Err(ContainedFsError::Io(error));
+                }
             }
 
             // `.pmds-lock` already exists: open without `O_CREAT`/`O_TRUNC`,
@@ -2313,7 +2395,7 @@ mod platform {
             }
             flock_exclusive(existing_fd.as_raw_fd())?;
 
-            let post_stat = fstat_fd(existing_fd.as_raw_fd())?;
+            let mut post_stat = fstat_fd(existing_fd.as_raw_fd())?;
             let fd_id = stat_identity(&post_stat);
             match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
                 Ok(dir_stat) if stat_identity(&dir_stat) == fd_id => {}
@@ -2321,16 +2403,21 @@ mod platform {
                 Err(error) if error.raw_os_error() == Some(libc::ENOENT) => continue,
                 Err(error) => return Err(ContainedFsError::Io(error)),
             }
-            if post_stat.st_nlink > 1 {
-                return Err(ContainedFsError::Containment(
-                    "refusing to use hard-linked file as catalog lock \".pmds-lock\"".to_owned(),
-                ));
-            }
             if !verify_lock_file_magic(existing_fd.as_raw_fd(), &post_stat)? {
                 return Err(ContainedFsError::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
                 )));
+            }
+            if post_stat.st_nlink > 1 {
+                reclaim_interrupted_lock_temp_links(dir, fd_id);
+                post_stat = fstat_fd(existing_fd.as_raw_fd())?;
+                if post_stat.st_nlink > 1 {
+                    return Err(ContainedFsError::Containment(
+                        "refusing to use hard-linked file as catalog lock \".pmds-lock\""
+                            .to_owned(),
+                    ));
+                }
             }
             return Ok(UnixDirLock {
                 key,
@@ -2527,7 +2614,7 @@ mod platform {
         stage_fd: std::os::fd::RawFd,
         temp_name: &CString,
         target_dir_fd: std::os::fd::RawFd,
-        c_target: &CString,
+        c_target: &std::ffi::CStr,
     ) -> io::Result<bool> {
         #[cfg(target_os = "linux")]
         {
@@ -5896,6 +5983,46 @@ mod tests {
         assert!(
             matches!(error, ContainedFsError::Containment(_)),
             "expected containment error for FIFO, got {error:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_target_lock_recovers_interrupted_temp_link_but_rejects_unrelated_hard_link() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let lock_path = root.path().join(".pmds-lock");
+        let stale_temp = root.path().join(".pmds-ltmp-999999-0");
+        fs::write(&lock_path, b"palamedes-dir-lock-v1\n").expect("seed lock");
+        fs::hard_link(&lock_path, &stale_temp).expect("simulate interrupted linkat");
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        {
+            let _guard = dir
+                .lock_target(OsStr::new("en.po"))
+                .expect("stale .pmds-ltmp-* hard link must be recovered automatically");
+            assert!(
+                !stale_temp.exists(),
+                "stale interrupted .pmds-ltmp-* link must be removed"
+            );
+        }
+        assert!(
+            !lock_path.exists(),
+            ".pmds-lock must be removed when recovered lock drops"
+        );
+
+        let unrelated = root.path().join("unrelated-user-file.txt");
+        fs::write(&lock_path, b"palamedes-dir-lock-v1\n").expect("seed lock");
+        fs::hard_link(&lock_path, &unrelated).expect("create unrelated hard link");
+        let error = dir
+            .lock_target(OsStr::new("en.po"))
+            .expect_err("unrelated hard link on .pmds-lock must still be rejected");
+        assert!(
+            matches!(error, ContainedFsError::Containment(_)),
+            "expected containment error for unrelated hard link, got {error:?}"
+        );
+        assert!(
+            unrelated.exists(),
+            "unrelated hard-linked user file must never be deleted"
         );
     }
 }

@@ -947,8 +947,10 @@ fn process_catalog(
         CatalogOperation::Write => {
             // Preview an existing catalog before acquiring a write lock so an
             // already up-to-date catalog in a read-only directory succeeds
-            // without attempting to create a lock file.
-            let mut result = None;
+            // without attempting to create a lock file, and reuse that preview
+            // when the locked re-read confirms no concurrent writer changed it.
+            let mut unchanged_result = None;
+            let mut unlocked_preview = None;
             if let Some(existing_dir) =
                 ContainedDir::open_subpath(&config.root_dir, &relative_parent, false).map_err(
                     |error| CliError::Io {
@@ -966,10 +968,12 @@ fn process_catalog(
                 let preview =
                     preview_catalog_update_from_content(make_request(), existing.as_deref())?;
                 if !preview.created && !preview.updated {
-                    result = Some(preview);
+                    unchanged_result = Some(preview);
+                } else {
+                    unlocked_preview = Some((existing, preview));
                 }
             }
-            let result = match result {
+            let result = match unchanged_result {
                 Some(unchanged) => unchanged,
                 None => {
                     let parent_dir =
@@ -986,16 +990,22 @@ fn process_catalog(
                                 path: catalog_path.clone(),
                                 source: error.into_io_error(),
                             })?;
-                    // Re-read under the exclusive lock so concurrent updates
-                    // made after the unlocked preview are preserved.
+                    // Re-read under the exclusive lock; reuse the unlocked
+                    // preview when the bytes match, and re-render only if a
+                    // concurrent writer changed the file in the meantime.
                     let existing = parent_dir.read_optional_file(&file_name).map_err(|error| {
                         CliError::Io {
                             path: catalog_path.clone(),
                             source: error.into_io_error(),
                         }
                     })?;
-                    let locked_result =
-                        preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+                    let locked_result = match unlocked_preview {
+                        Some((prior_bytes, preview)) if prior_bytes == existing => preview,
+                        _ => preview_catalog_update_from_content(
+                            make_request(),
+                            existing.as_deref(),
+                        )?,
+                    };
                     if locked_result.created || locked_result.updated {
                         parent_dir
                             .write_file_atomically(

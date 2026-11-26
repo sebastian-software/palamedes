@@ -1498,12 +1498,19 @@ mod windows_alias_spawn {
                 &mut proc_info,
             )
         };
+        // Capture the Win32 error immediately before handle/attribute-list
+        // cleanup can overwrite the thread's last-error value.
+        let spawn_error = if created == 0 {
+            Some(io::Error::last_os_error())
+        } else {
+            None
+        };
         drop(attr_list);
         drop(stdin_read);
         drop(stdout_write);
         drop(stderr_dup);
-        if created == 0 {
-            return Err(io::Error::last_os_error());
+        if let Some(error) = spawn_error {
+            return Err(error);
         }
         // SAFETY: `CreateProcessW` succeeded and returned owned process and thread handles.
         let process = unsafe { OwnedHandle::from_raw_handle(proc_info.h_process) };

@@ -2290,3 +2290,34 @@ fn compile_catalog_artifact_handles_adjacent_repeated_locales_and_dot_resource_p
 
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn compile_catalog_artifact_rejects_fixed_catalog_path_without_locale_placeholder() {
+    let root = create_fixture_dir("fixed-catalog-no-locale");
+    fs::write(
+        root.join("messages.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+    )
+    .expect("write messages.po");
+
+    let error = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: root.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: root.join("messages.po").to_string_lossy().into_owned(),
+    })
+    .expect_err("fixed catalog path without {locale} must not pick an arbitrary locale");
+    assert!(
+        matches!(error, crate::PalamedesError::CouldNotResolveLocale { .. }),
+        "expected CouldNotResolveLocale, got {error:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

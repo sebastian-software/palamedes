@@ -159,7 +159,9 @@ fn resolve_catalog_request(
     // expansions for every configured locale. Expanding configured locales
     // handles adjacent repeated placeholders (such as `{locale}/{locale}{locale}`)
     // without relying on greedy regex splitting, and prevents an earlier
-    // nonmatching catalog from masking a later valid catalog.
+    // nonmatching catalog from masking a later valid catalog. Fixed catalog
+    // paths without `{locale}` or ambiguous multi-locale expansions fail with
+    // `CouldNotResolveLocale` instead of picking an arbitrary locale order.
     for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
         validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
             PalamedesError::UnsafeCatalogPath {
@@ -167,6 +169,17 @@ fn resolve_catalog_request(
                 reason: reason.to_owned(),
             }
         })?;
+        if !catalog.path.contains("{locale}") {
+            let expected =
+                try_resolve_catalog_file_path(root_dir, &catalog.path, "a", catalog.format)?;
+            if normalize_path(&expected) == normalized_resource {
+                return Err(PalamedesError::CouldNotResolveLocale {
+                    resource_path: resource_path.to_path_buf(),
+                });
+            }
+            continue;
+        }
+        let mut matched: Option<(String, PathBuf)> = None;
         for locale in &config.locales {
             if !is_valid_locale(locale) {
                 continue;
@@ -174,12 +187,23 @@ fn resolve_catalog_request(
             let expected_primary =
                 try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
             if normalize_path(&expected_primary) == normalized_resource {
-                return Ok(ResolvedCatalogRequest {
-                    locale: locale.clone(),
-                    catalog_index,
-                    primary_file: expected_primary,
-                });
+                match &matched {
+                    None => matched = Some((locale.clone(), expected_primary)),
+                    Some((existing_locale, _)) if existing_locale == locale => {}
+                    Some(_) => {
+                        return Err(PalamedesError::CouldNotResolveLocale {
+                            resource_path: resource_path.to_path_buf(),
+                        });
+                    }
+                }
             }
+        }
+        if let Some((locale, primary_file)) = matched {
+            return Ok(ResolvedCatalogRequest {
+                locale,
+                catalog_index,
+                primary_file,
+            });
         }
     }
 
