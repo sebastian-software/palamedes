@@ -455,7 +455,13 @@ export function Greeting() {
         `import { Greeting } from "./greeting";
 export const dynamic = "force-dynamic";
 export default function Page() {
-  return <Greeting />;
+  let counter = 1;
+  const half = counter++ / 2;
+  return (
+    <a href={"/shop/" + half}>
+      <Greeting />
+    </a>
+  );
 }
 `,
       );

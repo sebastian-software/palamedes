@@ -1537,7 +1537,7 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           );
           writeFileSync(
             collidingFilenameChunk,
-            `module.exports = [92e3, a => { a.s([]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
+            `module.exports = [92e3, a => { let counter = 1; const half = counter++ / 2; const ratio = obj.return / 2; const link = { href: "/shop/" + half + ratio }; a.s(["default", 0, link]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
           );
           writeFileSync(
             templateChunk,
@@ -1825,6 +1825,17 @@ globalThis.__RSC_MANIFEST["/generated/[[...locale]]/page"] = ${JSON.stringify({
     expect(() =>
       bindClientCatalogPermutationsAt("/nonexistent", new InheritedSecretOptions(undefined)),
     ).toThrow(/non-empty string/u);
+    // Proxy header signing must stay isolated from filesystem manifest binding
+    // so importing it from `proxy.ts` does not trigger whole-project NFT tracing.
+    const headerModuleSource = readFileSync(
+      path.join(import.meta.dirname, "client-catalog-header.ts"),
+      "utf8",
+    );
+    expect(headerModuleSource).not.toMatch(/node:fs|node:path|client-catalog-binding/u);
+    const serverModuleSource = readFileSync(path.join(import.meta.dirname, "server.ts"), "utf8");
+    expect(serverModuleSource).toMatch(
+      /signClientCatalogLocaleHeader[\s\S]*from "\.\/client-catalog-header"/u,
+    );
   });
 
   it("does not guess from other params and falls back for unknown or missing locales", () => {

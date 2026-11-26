@@ -189,6 +189,7 @@ function scanBalancedEnd(source: string, start: number): number {
   const close = open === "[" ? "]" : open === "{" ? "}" : ")";
   let depth = 0;
   let regexAllowed = true;
+  let prevWasDot = false;
   let prevWord = "";
   const parenConditionStack: boolean[] = [];
   let index = start;
@@ -207,6 +208,7 @@ function scanBalancedEnd(source: string, start: number): number {
       if (end === -1) return -1;
       index = end;
       prevWord = "";
+      prevWasDot = false;
       regexAllowed = false;
       continue;
     }
@@ -215,6 +217,7 @@ function scanBalancedEnd(source: string, start: number): number {
       if (end === -1) return -1;
       index = end;
       prevWord = "";
+      prevWasDot = false;
       regexAllowed = false;
       continue;
     }
@@ -223,27 +226,49 @@ function scanBalancedEnd(source: string, start: number): number {
       if (end !== -1) {
         index = end;
         prevWord = "";
+        prevWasDot = false;
         regexAllowed = false;
         continue;
       }
+    }
+    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+      // Preserve `regexAllowed` across `++`/`--`: after an expression
+      // (`counter++ / 2`), `/` is division; in prefix position (`++x`), `/`
+      // remains allowed.
+      index += 2;
+      prevWord = "";
+      prevWasDot = false;
+      continue;
+    }
+    if (ch === ".") {
+      const isSpread = source[index + 1] === "." && source[index + 2] === ".";
+      index += isSpread ? 3 : 1;
+      prevWord = "";
+      prevWasDot = !isSpread;
+      regexAllowed = isSpread;
+      continue;
     }
     if (/[A-Za-z_$]/u.test(ch ?? "")) {
       const wordStart = index;
       index += 1;
       while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
       prevWord = source.slice(wordStart, index);
-      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(prevWord);
+      regexAllowed = !prevWasDot && REGEX_PRECEDING_KEYWORDS.has(prevWord);
+      prevWasDot = false;
       continue;
     }
     if (/[0-9]/u.test(ch ?? "")) {
       index += 1;
       while (index < source.length && /[\w.]/u.test(source[index] ?? "")) index += 1;
       prevWord = "";
+      prevWasDot = false;
       regexAllowed = false;
       continue;
     }
     if (ch === "(") {
-      parenConditionStack.push(CONTROL_FLOW_KEYWORDS.has(prevWord) || prevWord === "for");
+      parenConditionStack.push(
+        !prevWasDot && (CONTROL_FLOW_KEYWORDS.has(prevWord) || prevWord === "for"),
+      );
     } else if (ch === ")") {
       const wasCondition = parenConditionStack.pop() ?? false;
       if (ch === close) {
@@ -252,6 +277,7 @@ function scanBalancedEnd(source: string, start: number): number {
       }
       index += 1;
       prevWord = "";
+      prevWasDot = false;
       regexAllowed = wasCondition;
       continue;
     }
@@ -262,7 +288,8 @@ function scanBalancedEnd(source: string, start: number): number {
     }
     index += 1;
     prevWord = "";
-    regexAllowed = "([{=,:;!?&|^~+-*%<>}".includes(ch ?? "");
+    prevWasDot = false;
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>}".includes(ch ?? "");
   }
   return -1;
 }
@@ -397,8 +424,12 @@ function splitTopLevelArrayElements(source: string, arrayStart: number): string[
       regexAllowed = false;
       continue;
     }
+    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+      index += 2;
+      continue;
+    }
     index += 1;
-    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
   const trailing = source.slice(elemStart, arrayEnd - 1).trim();
   if (trailing.length > 0) elements.push(trailing);
@@ -491,8 +522,15 @@ function parseTopLevelObjectProperties(expr: string): Map<string, string> | unde
         regexAllowed = false;
         continue;
       }
+      if (
+        (ch === "+" && trimmed[index + 1] === "+") ||
+        (ch === "-" && trimmed[index + 1] === "-")
+      ) {
+        index += 2;
+        continue;
+      }
       index += 1;
-      regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+      regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
     }
     properties.set(key, trimmed.slice(valueStart, index).trim());
     if (trimmed[index] === ",") index += 1;
@@ -968,10 +1006,16 @@ function resolveIdentifierArrayInScope(
         continue;
       }
 
+      if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+        index += 2;
+        prevTokenKind = "other";
+        prevNonWsChar = ch;
+        continue;
+      }
       index += 1;
       prevTokenKind = "other";
       prevNonWsChar = ch ?? "";
-      regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+      regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
     }
     return true;
   };
@@ -1105,9 +1149,14 @@ function findEnclosingModuleContext(
       regexAllowed = false;
       continue;
     }
+    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+      index += 2;
+      prevNonWsChar = ch;
+      continue;
+    }
     index += 1;
     prevNonWsChar = ch ?? "";
-    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   if (braceStack.length === 0) {
@@ -1399,9 +1448,17 @@ function extractEntrypointCallBinding(
       regexAllowed = false;
       continue;
     }
+    if (
+      (ch === "+" && scopeSource[index + 1] === "+") ||
+      (ch === "-" && scopeSource[index + 1] === "-")
+    ) {
+      index += 2;
+      prevTokenKind = "other";
+      continue;
+    }
     index += 1;
     prevTokenKind = "other";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
   return;
 }
@@ -1643,9 +1700,14 @@ function extractTurbopackModulesFromSource(
       regexAllowed = false;
       continue;
     }
+    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+      index += 2;
+      prevToken = "other";
+      continue;
+    }
     index += 1;
     prevToken = "other";
-    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
   if (options.requireTable && !foundFactoryTable) return null;
   return { groups };
@@ -2066,11 +2128,21 @@ function resolveUniqueTopLevelImportSource(
       regexAllowed = false;
       continue;
     }
+    if (
+      (ch === "+" && scopeSource[index + 1] === "+") ||
+      (ch === "-" && scopeSource[index + 1] === "-")
+    ) {
+      index += 2;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      continue;
+    }
     index += 1;
     prevTokenKind = "other";
     prevWord = "";
     prevNonWsChar = ch ?? "";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   return resolvedSource;
@@ -2247,11 +2319,21 @@ function isImportedDirectCreateAppPageEntrypoint(scopeSource: string): boolean {
       regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
       continue;
     }
+    if (
+      (ch === "+" && scopeSource[index + 1] === "+") ||
+      (ch === "-" && scopeSource[index + 1] === "-")
+    ) {
+      index += 2;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      continue;
+    }
     index += 1;
     prevTokenKind = "other";
     prevWord = "";
     prevNonWsChar = ch ?? "";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   return hasVerifiedImport;
@@ -2536,11 +2618,18 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
       regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
       continue;
     }
+    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+      index += 2;
+      prevToken = "other";
+      prevWord = "";
+      prevChar = ch;
+      continue;
+    }
     index += 1;
     prevToken = "other";
     prevWord = "";
     prevChar = ch ?? "";
-    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
   return false;
 }
@@ -3012,10 +3101,16 @@ function resolveUniqueRouteModuleLocal(
       regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
       continue;
     }
+    if ((ch === "+" && body[index + 1] === "+") || (ch === "-" && body[index + 1] === "-")) {
+      index += 2;
+      prevTokenKind = "other";
+      prevWord = "";
+      continue;
+    }
     index += 1;
     prevTokenKind = "other";
     prevWord = "";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   if (!found) return;
@@ -3335,9 +3430,17 @@ function inspectTurbopackExportHop(
       regexAllowed = false;
       continue;
     }
+    if (
+      (ch === "+" && unwrappedBody[index + 1] === "+") ||
+      (ch === "-" && unwrappedBody[index + 1] === "-")
+    ) {
+      index += 2;
+      prevTokenKind = "other";
+      continue;
+    }
     index += 1;
     prevTokenKind = "other";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   if (forwarded === undefined) return { status: "terminal" };
@@ -3811,11 +3914,21 @@ function verifyEntrypointExportsInScope(
       regexAllowed = false;
       continue;
     }
+    if (
+      (ch === "+" && scopeSource[index + 1] === "+") ||
+      (ch === "-" && scopeSource[index + 1] === "-")
+    ) {
+      index += 2;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      continue;
+    }
     index += 1;
     prevTokenKind = "other";
     prevWord = "";
     prevNonWsChar = ch ?? "";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   // Verify the compiled `routeModule` export (or the entrypoint object whose
@@ -4012,11 +4125,21 @@ function verifyEntrypointExportsInScope(
       scanRegexAllowed = false;
       continue;
     }
+    if (
+      (ch === "+" && scopeSource[scanIdx + 1] === "+") ||
+      (ch === "-" && scopeSource[scanIdx + 1] === "-")
+    ) {
+      scanIdx += 2;
+      scanPrevToken = "other";
+      scanPrevWord = "";
+      scanPrevChar = ch;
+      continue;
+    }
     scanIdx += 1;
     scanPrevToken = "other";
     scanPrevWord = "";
     scanPrevChar = ch ?? "";
-    scanRegexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    scanRegexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   return true;
@@ -4187,9 +4310,14 @@ function findTreeExpressionsInSource(
       regexAllowed = false;
       continue;
     }
+    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
+      index += 2;
+      prevNonWsChar = ch;
+      continue;
+    }
     index += 1;
     prevNonWsChar = ch ?? "";
-    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
 
   return matches;

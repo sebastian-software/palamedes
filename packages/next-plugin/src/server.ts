@@ -14,10 +14,12 @@ import { createElement, type ReactElement } from "react";
 import { clientCatalogMapName } from "./client-catalog-map";
 
 export {
-  bindClientCatalogPermutations,
   CLIENT_CATALOG_LOCALE_HEADER,
   signClientCatalogLocaleHeader,
   verifyClientCatalogLocaleHeader,
+} from "./client-catalog-header";
+export {
+  bindClientCatalogPermutations,
   type BindClientCatalogPermutationsOptions,
   type ClientCatalogLocaleSource,
 } from "./client-catalog-binding";
