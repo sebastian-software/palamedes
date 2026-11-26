@@ -2216,6 +2216,7 @@ mod platform {
         let dir_group_writable = fstat_fd(dir_raw)
             .map(|stat| (stat.st_mode & 0o020) != 0)
             .unwrap_or(false);
+        let pid = std::process::id();
 
         loop {
             match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
@@ -2225,11 +2226,17 @@ mod platform {
                 Err(error) => return Err(ContainedFsError::Io(error)),
             }
 
-            // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
+            // Create, stamp, and lock the recovery claim file BEFORE publishing
+            // it at `.pmds-claim-<dev>-<ino>`, so no concurrent waiter can ever
+            // observe an unlocked claim file and prematurely remove it as stale.
+            let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+            let temp_claim_name = CString::new(format!(".pmds-ctmp-{pid}-{nonce}"))
+                .expect("ASCII temp claim name has no NUL bytes");
+            // SAFETY: `dir_raw` is open and `temp_claim_name` is a valid C string.
             let claim_raw = unsafe {
                 libc::openat(
                     dir_raw,
-                    claim_name.as_ptr(),
+                    temp_claim_name.as_ptr(),
                     libc::O_RDWR
                         | libc::O_CREAT
                         | libc::O_EXCL
@@ -2238,54 +2245,86 @@ mod platform {
                     0o664 as libc::c_uint,
                 )
             };
-            if claim_raw >= 0 {
-                // SAFETY: `claim_raw` is a newly opened valid file descriptor.
-                let claim_fd = unsafe { OwnedFd::from_raw_fd(claim_raw) };
-                let claim_guard = UnixTempFileGuard::new(dir, claim_name);
-                if let Ok(claim_stat) = fstat_fd(claim_fd.as_raw_fd()) {
-                    let mut target_mode = (claim_stat.st_mode & 0o664) | 0o644;
-                    if dir_group_writable {
-                        target_mode |= 0o020;
-                    }
-                    if (claim_stat.st_mode & 0o777) != target_mode {
-                        // SAFETY: `claim_fd` is an open file we just created.
-                        let _ = unsafe { libc::fchmod(claim_fd.as_raw_fd(), target_mode) };
-                    }
+            if claim_raw < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EEXIST) {
+                    continue;
                 }
-                flock_exclusive(claim_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
+                return Err(ContainedFsError::Io(error));
+            }
+            // SAFETY: `claim_raw` is a newly opened valid file descriptor.
+            let claim_fd = unsafe { OwnedFd::from_raw_fd(claim_raw) };
+            let mut temp_claim_guard = UnixTempFileGuard::new(dir, temp_claim_name.clone());
+            if let Ok(claim_stat) = fstat_fd(claim_fd.as_raw_fd()) {
+                let mut target_mode = (claim_stat.st_mode & 0o664) | 0o644;
+                if dir_group_writable {
+                    target_mode |= 0o020;
+                }
+                if (claim_stat.st_mode & 0o777) != target_mode {
+                    // SAFETY: `claim_fd` is an open file we just created.
+                    let _ = unsafe { libc::fchmod(claim_fd.as_raw_fd(), target_mode) };
+                }
+            }
+            write_all_fd(claim_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
+            flock_exclusive(claim_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
+            let claim_id = stat_identity(&fstat_fd(claim_fd.as_raw_fd())?);
 
-                match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
-                    Ok(stat) if stat_identity(&stat) == existing_id => {
-                        // SAFETY: `dir_raw` is open and `UNIX_DIR_LOCK_NAME` is valid.
-                        if unsafe { libc::unlinkat(dir_raw, UNIX_DIR_LOCK_NAME.as_ptr(), 0) } != 0 {
-                            let error = io::Error::last_os_error();
-                            if error.raw_os_error() != Some(libc::ENOENT) {
-                                drop(claim_guard);
-                                drop(claim_fd);
-                                return Err(ContainedFsError::Io(error));
+            let published = publish_file_noreplace(dir_raw, &temp_claim_name, dir_raw, &claim_name);
+            match published {
+                Ok(true) => {
+                    temp_claim_guard.disarm();
+                    let owns_claim = matches!(
+                        fstatat_nofollow(dir_raw, &claim_name),
+                        Ok(stat) if stat_identity(&stat) == claim_id
+                    );
+                    let mut result = Ok(());
+                    if owns_claim {
+                        match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                            Ok(stat) if stat_identity(&stat) == existing_id => {
+                                // SAFETY: `dir_raw` is open and `UNIX_DIR_LOCK_NAME` is valid.
+                                if unsafe {
+                                    libc::unlinkat(dir_raw, UNIX_DIR_LOCK_NAME.as_ptr(), 0)
+                                } != 0
+                                {
+                                    let error = io::Error::last_os_error();
+                                    if error.raw_os_error() != Some(libc::ENOENT) {
+                                        result = Err(ContainedFsError::Io(error));
+                                    }
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {}
+                            Err(error) => {
+                                result = Err(ContainedFsError::Io(error));
+                            }
+                        }
+                        // Only remove `.pmds-claim-<dev>-<ino>` if our locked
+                        // inode still owns the directory entry.
+                        if let Ok(stat) = fstatat_nofollow(dir_raw, &claim_name)
+                            && stat_identity(&stat) == claim_id
+                        {
+                            // SAFETY: `dir_raw` is open and `claim_name` is verified.
+                            unsafe {
+                                let _ = libc::unlinkat(dir_raw, claim_name.as_ptr(), 0);
                             }
                         }
                     }
-                    Ok(_) => {}
-                    Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {}
-                    Err(error) => {
-                        drop(claim_guard);
-                        drop(claim_fd);
-                        return Err(ContainedFsError::Io(error));
-                    }
+                    drop(claim_fd);
+                    return result;
                 }
-                drop(claim_guard);
-                drop(claim_fd);
-                return Ok(());
+                Ok(false) => {
+                    drop(temp_claim_guard);
+                    drop(claim_fd);
+                }
+                Err(error) => {
+                    drop(temp_claim_guard);
+                    drop(claim_fd);
+                    return Err(ContainedFsError::Io(error));
+                }
             }
 
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::EEXIST) {
-                return Err(ContainedFsError::Io(error));
-            }
-
-            // Another waiter already created `.pmds-claim-<dev>-<ino>`: wait on
-            // it via `LOCK_SH`, and if that claimant also died before unlinking
+            // Another waiter already published `.pmds-claim-<dev>-<ino>`: wait
+            // on it via `LOCK_SH`, and if that claimant died before unlinking
             // `existing_id`, remove the stale claim and retry.
             // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
             let other_raw = unsafe {
@@ -2304,8 +2343,17 @@ mod platform {
             }
             // SAFETY: `other_raw` is a newly opened valid file descriptor.
             let other_fd = unsafe { OwnedFd::from_raw_fd(other_raw) };
-            let other_id = stat_identity(&fstat_fd(other_fd.as_raw_fd())?);
-            let _ = flock_shared(other_fd.as_raw_fd());
+            let other_stat = fstat_fd(other_fd.as_raw_fd())?;
+            if (other_stat.st_mode & libc::S_IFMT) != libc::S_IFREG
+                || !verify_lock_file_magic(other_fd.as_raw_fd(), &other_stat)?
+            {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "refusing to overwrite or remove pre-existing non-lock recovery claim file",
+                )));
+            }
+            let other_id = stat_identity(&other_stat);
+            flock_shared(other_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
             let still_abandoned = match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                 Ok(stat) => stat_identity(&stat) == existing_id,
                 Err(err) if err.raw_os_error() == Some(libc::ENOENT) => false,
@@ -2607,6 +2655,15 @@ mod platform {
                     "refusing to use non-regular file as catalog lock \".pmds-lock\"".to_owned(),
                 ));
             }
+            // Palamedes always stamps `UNIX_DIR_LOCK_MAGIC` before publishing
+            // `.pmds-lock`, so reject foreign files immediately instead of
+            // blocking indefinitely if another process holds a lock on one.
+            if !verify_lock_file_magic(existing_fd.as_raw_fd(), &pre_stat)? {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
+                )));
+            }
             if let Err(lock_err) = flock_exclusive(existing_fd.as_raw_fd()) {
                 if opened_read_only
                     && matches!(
@@ -2614,17 +2671,6 @@ mod platform {
                         Some(libc::EBADF | libc::EACCES | libc::EINVAL)
                     )
                 {
-                    // Linux NFS remote locking rejects `LOCK_EX` on a read-only
-                    // descriptor. Confirm this is a Palamedes lock file (so
-                    // foreign user files fail immediately), then wait via
-                    // `LOCK_SH` / bounded polling until the holder unlinks it
-                    // and retry acquiring our own writable lock.
-                    if !verify_lock_file_magic(existing_fd.as_raw_fd(), &pre_stat)? {
-                        return Err(ContainedFsError::Io(io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
-                        )));
-                    }
                     let existing_id = stat_identity(&pre_stat);
                     wait_for_readonly_lock_release(dir, existing_fd, existing_id)?;
                     continue;
@@ -6483,5 +6529,34 @@ mod tests {
             "waiter should block until active holder releases lock (waited {waited:?})"
         );
         assert!(!lock_path.exists());
+
+        // 3. Foreign locked `.pmds-lock` file must fail immediately with
+        //    AlreadyExists rather than blocking on flock.
+        fs::write(&lock_path, b"foreign-user-data").expect("write foreign file");
+        let foreign_file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .expect("open foreign file");
+        assert_eq!(
+            unsafe { libc::flock(foreign_file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
+        let conflict_started = std::time::Instant::now();
+        let error = dir
+            .lock_target(OsStr::new("en.po"))
+            .expect_err("locked foreign .pmds-lock must fail immediately");
+        assert!(
+            conflict_started.elapsed() < std::time::Duration::from_secs(2),
+            "foreign locked file must not block"
+        );
+        assert!(
+            matches!(
+                &error,
+                ContainedFsError::Io(io_err) if io_err.kind() == io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists for foreign locked file, got {error:?}"
+        );
+        drop(foreign_file);
     }
 }

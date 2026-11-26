@@ -7,7 +7,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-#[cfg(any(windows, test))]
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, BufReader, IsTerminal, Read, Write};
@@ -36,6 +35,8 @@ use crate::plugin_protocol::{parse_event, read_protocol_line};
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
+const PLUGIN_PATH_ENV: &str = palamedes_plugin::PLUGIN_PATH_ENV;
+const PLUGIN_DIR_ENV: &str = palamedes_plugin::PLUGIN_DIR_ENV;
 const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 3;
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
@@ -1118,18 +1119,21 @@ fn encode_windows_argv0_command_line(invocation_units: &[u16]) -> io::Result<Vec
 #[cfg(any(windows, test))]
 fn build_windows_environment_block_units(
     entries: Vec<(Vec<u16>, Vec<u16>)>,
-    override_key: &str,
-    override_value: &[u16],
+    overrides: &[(&str, &[u16])],
 ) -> io::Result<Vec<u16>> {
-    if override_value.contains(&0) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Windows environment override contains interior NUL",
-        ));
+    let mut override_entries = Vec::with_capacity(overrides.len());
+    for &(key, value) in overrides {
+        if value.contains(&0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Windows environment override contains interior NUL",
+            ));
+        }
+        let key_units: Vec<u16> = key.encode_utf16().collect();
+        let key_upper: Vec<u16> = key.to_ascii_uppercase().encode_utf16().collect();
+        override_entries.push((key_upper, key_units, value.to_vec()));
     }
-    let override_key_units: Vec<u16> = override_key.encode_utf16().collect();
-    let override_key_upper: Vec<u16> = override_key.to_ascii_uppercase().encode_utf16().collect();
-    let mut filtered = Vec::with_capacity(entries.len() + 1);
+    let mut filtered = Vec::with_capacity(entries.len() + override_entries.len());
     for (key, value) in entries {
         if key.is_empty()
             || key.contains(&0)
@@ -1144,16 +1148,15 @@ fn build_windows_environment_block_units(
                 u8::try_from(unit).map_or(unit, |byte| u16::from(byte.to_ascii_uppercase()))
             })
             .collect();
-        if key_upper == override_key_upper {
+        if override_entries
+            .iter()
+            .any(|(override_upper, _, _)| *override_upper == key_upper)
+        {
             continue;
         }
         filtered.push((key_upper, key, value));
     }
-    filtered.push((
-        override_key_upper,
-        override_key_units,
-        override_value.to_vec(),
-    ));
+    filtered.extend(override_entries);
     filtered.sort_by(|left, right| left.0.cmp(&right.0));
 
     let mut block = Vec::new();
@@ -1183,8 +1186,7 @@ mod windows_alias_spawn {
     use std::process::ExitStatus;
 
     use super::{
-        NATIVE_EXECUTABLE_ENV, WindowsAliasChild, build_windows_environment_block_units,
-        encode_windows_argv0_command_line,
+        WindowsAliasChild, build_windows_environment_block_units, encode_windows_argv0_command_line,
     };
 
     pub(super) const INFINITE: u32 = 0xFFFF_FFFF;
@@ -1441,21 +1443,24 @@ mod windows_alias_spawn {
         binary_path: &Path,
         invocation_path: &Path,
         cwd: &Path,
-        native_executable: &Path,
+        env_overrides: &[(&str, &OsStr)],
     ) -> io::Result<WindowsAliasChild> {
         let app_name = to_wide_nul(binary_path.as_os_str())?;
         let invocation_units: Vec<u16> = invocation_path.as_os_str().encode_wide().collect();
         let mut cmd_line = encode_windows_argv0_command_line(&invocation_units)?;
         let cwd_wide = to_wide_nul(cwd.as_os_str())?;
-        let native_exe_units: Vec<u16> = native_executable.as_os_str().encode_wide().collect();
+        let override_values: Vec<(&str, Vec<u16>)> = env_overrides
+            .iter()
+            .map(|&(key, value)| (key, value.encode_wide().collect()))
+            .collect();
+        let override_refs: Vec<(&str, &[u16])> = override_values
+            .iter()
+            .map(|(key, value)| (*key, value.as_slice()))
+            .collect();
         let env_entries: Vec<(Vec<u16>, Vec<u16>)> = env::vars_os()
             .map(|(k, v)| (k.encode_wide().collect(), v.encode_wide().collect()))
             .collect();
-        let env_block = build_windows_environment_block_units(
-            env_entries,
-            NATIVE_EXECUTABLE_ENV,
-            &native_exe_units,
-        )?;
+        let env_block = build_windows_environment_block_units(env_entries, &override_refs)?;
 
         let (stdin_read, stdin_write) = create_inheritable_pipe()?;
         mark_not_inheritable(&stdin_write)?;
@@ -2276,8 +2281,7 @@ mod unix_pinned_plugin {
     impl PrebuiltExecArrays {
         pub(super) fn build(
             invocation_path: &Path,
-            native_executable_env: &str,
-            native_executable: &Path,
+            env_overrides: &[(&str, &OsStr)],
         ) -> io::Result<Self> {
             let arg0 = CString::new(invocation_path.as_os_str().as_bytes()).map_err(|_| {
                 io::Error::new(
@@ -2288,10 +2292,12 @@ mod unix_pinned_plugin {
             let argv_storage = vec![arg0];
             let argv_ptrs = vec![argv_storage[0].as_ptr(), std::ptr::null()];
 
-            let override_key = native_executable_env.as_bytes();
             let mut envp_storage = Vec::new();
             for (key, value) in std::env::vars_os() {
-                if key.as_bytes() == override_key {
+                if env_overrides
+                    .iter()
+                    .any(|&(override_key, _)| key.as_bytes() == override_key.as_bytes())
+                {
                     continue;
                 }
                 let mut entry = Vec::with_capacity(key.len() + 1 + value.len());
@@ -2302,18 +2308,19 @@ mod unix_pinned_plugin {
                     envp_storage.push(cstr);
                 }
             }
-            let mut native_entry =
-                Vec::with_capacity(override_key.len() + 1 + native_executable.as_os_str().len());
-            native_entry.extend_from_slice(override_key);
-            native_entry.push(b'=');
-            native_entry.extend_from_slice(native_executable.as_os_str().as_bytes());
-            let native_cstr = CString::new(native_entry).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "native executable path contains interior NUL",
-                )
-            })?;
-            envp_storage.push(native_cstr);
+            for &(override_key, override_value) in env_overrides {
+                let mut entry = Vec::with_capacity(override_key.len() + 1 + override_value.len());
+                entry.extend_from_slice(override_key.as_bytes());
+                entry.push(b'=');
+                entry.extend_from_slice(override_value.as_bytes());
+                let entry_cstr = CString::new(entry).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("environment override {override_key} contains interior NUL"),
+                    )
+                })?;
+                envp_storage.push(entry_cstr);
+            }
 
             let mut envp_ptrs = Vec::with_capacity(envp_storage.len() + 1);
             for item in &envp_storage {
@@ -2806,6 +2813,22 @@ impl PinnedPackageDir {
     }
 }
 
+fn plugin_host_env<'a>(
+    resolved: &'a ResolvedPlugin,
+    native_executable: &'a Path,
+) -> [(&'static str, &'a OsStr); 3] {
+    let plugin_dir = resolved
+        .invocation_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    [
+        (NATIVE_EXECUTABLE_ENV, native_executable.as_os_str()),
+        (PLUGIN_PATH_ENV, resolved.invocation_path.as_os_str()),
+        (PLUGIN_DIR_ENV, plugin_dir.as_os_str()),
+    ]
+}
+
 fn spawn_resolved_binary(
     resolved: &ResolvedPlugin,
     cwd: &Path,
@@ -2813,13 +2836,14 @@ fn spawn_resolved_binary(
 ) -> io::Result<PluginChild> {
     // Keep the verified handle pinned across every platform's spawn call.
     let _pinned_guard = resolved.pinned_binary.as_ref();
+    let env_overrides = plugin_host_env(resolved, native_executable);
     #[cfg(windows)]
     if resolved.invocation_path != resolved.binary_path {
         return windows_alias_spawn::spawn_alias_binary(
             &resolved.binary_path,
             &resolved.invocation_path,
             cwd,
-            native_executable,
+            &env_overrides,
         )
         .map(PluginChild::WinAlias);
     }
@@ -2834,8 +2858,7 @@ fn spawn_resolved_binary(
             let is_shebang = pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
             let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
                 &resolved.invocation_path,
-                NATIVE_EXECUTABLE_ENV,
-                native_executable,
+                &env_overrides,
             )?;
             let mut cmd = Command::new(&resolved.binary_path);
             // SAFETY: runs in the forked child after Rust configures stdio
@@ -2869,8 +2892,7 @@ fn spawn_resolved_binary(
             let is_shebang = pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
             let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
                 &resolved.invocation_path,
-                NATIVE_EXECUTABLE_ENV,
-                native_executable,
+                &env_overrides,
             )?;
             let mut cmd = Command::new(&resolved.binary_path);
             // SAFETY: runs in the forked child after stdio/cwd/pgid setup
@@ -2925,9 +2947,11 @@ fn spawn_resolved_binary(
         let _ = (&resolved.invocation_path, &resolved.pinned_binary);
         Command::new(&resolved.binary_path)
     };
+    command.current_dir(cwd);
+    for (key, value) in env_overrides {
+        command.env(key, value);
+    }
     command
-        .current_dir(cwd)
-        .env(NATIVE_EXECUTABLE_ENV, native_executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
@@ -4916,22 +4940,15 @@ plugins:
         .expect("plugin manifest");
         let script = plugin.join("describe");
         let implementation = plugin.join("implementation");
-        let counter = plugin.join("counter");
         write_executable_fixture(
             &script,
-            format!(
-                "#!/bin/sh\n# variant-a\n. \"{}\"\n",
-                implementation.display()
-            ),
+            "#!/bin/sh\n# variant-a\n. \"${PALAMEDES_PLUGIN_DIR}/implementation\"\n",
         );
         fs::write(
             &implementation,
-            format!(
-                "read _request\nprintf x >> \"{}\"\n\
-                 printf '{{\"event\":\"manifest\",\"name\":\"alpha\",\
-                 \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n",
-                counter.display()
-            ),
+            "read _request\nprintf x >> \"${PALAMEDES_PLUGIN_DIR}/counter\"\n\
+             printf '{\"event\":\"manifest\",\"name\":\"alpha\",\
+             \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
         )
         .expect("plugin implementation");
         fs::write(
@@ -5054,15 +5071,11 @@ plugins:
             )
             .expect("plugin manifest");
             let script = plugin.join("describe");
-            let counter = plugin.join("counter");
             write_executable_fixture(
                 &script,
-                format!(
-                    "#!/bin/sh\nread _request\nprintf x >> \"{}\"\n\
-                     printf '{{\"event\":\"manifest\",\"name\":\"shared\",\
-                     \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n",
-                    counter.display()
-                ),
+                "#!/bin/sh\nread _request\nprintf x >> \"${PALAMEDES_PLUGIN_DIR}/counter\"\n\
+                 printf '{\"event\":\"manifest\",\"name\":\"shared\",\
+                 \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
             );
         }
         fs::write(
@@ -5584,6 +5597,7 @@ catalogs:
         );
 
         let override_val: Vec<u16> = r"C:\bin\pmds.exe".encode_utf16().collect();
+        let plugin_dir_val: Vec<u16> = r"C:\repo\node_modules\acme\bin".encode_utf16().collect();
         let block = super::build_windows_environment_block_units(
             vec![
                 (
@@ -5602,8 +5616,10 @@ catalogs:
                     "1".encode_utf16().collect(),
                 ),
             ],
-            super::NATIVE_EXECUTABLE_ENV,
-            &override_val,
+            &[
+                (super::NATIVE_EXECUTABLE_ENV, &override_val),
+                (super::PLUGIN_DIR_ENV, &plugin_dir_val),
+            ],
         )
         .expect("Windows environment block");
         let rendered = String::from_utf16(&block).expect("UTF-16 env block");
@@ -5617,6 +5633,10 @@ catalogs:
             vec![
                 "ALPHA=1",
                 &format!("{}=C:\\bin\\pmds.exe", super::NATIVE_EXECUTABLE_ENV),
+                &format!(
+                    "{}=C:\\repo\\node_modules\\acme\\bin",
+                    super::PLUGIN_DIR_ENV
+                ),
                 "path=C:\\Windows",
             ]
         );
@@ -5655,7 +5675,7 @@ catalogs:
 
     #[cfg(unix)]
     #[test]
-    fn private_env_bash_package_plugin_runs_via_kernel_without_argv_leak() {
+    fn private_env_bash_package_plugin_runs_via_kernel_and_invokes_sibling_executable() {
         use std::os::unix::fs::PermissionsExt;
 
         let root = temp_dir("plugin-private-env-bash");
@@ -5667,6 +5687,14 @@ catalogs:
             r#"{"name":"acme-env-wrapper","palamedes":{"pluginBinary":"bin/acme-wrapper"}}"#,
         )
         .expect("write package.json");
+        let sibling = bin_dir.join("real-plugin");
+        write_executable_fixture(
+            &sibling,
+            concat!(
+                "#!/bin/sh\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"env-wrapper-sibling\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n'\n",
+            ),
+        );
         let wrapper = bin_dir.join("acme-wrapper");
         write_executable_fixture(
             &wrapper,
@@ -5674,7 +5702,8 @@ catalogs:
                 "#!/usr/bin/env bash\n",
                 "# PRIVATE_TOKEN_MUST_NOT_APPEAR_IN_ARGV\n",
                 "if [ \"$#\" -ne 0 ]; then exit 99; fi\n",
-                "printf '{\"event\":\"manifest\",\"name\":\"env-wrapper\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n'\n",
+                "if [ \"${PALAMEDES_PLUGIN_PATH}\" != \"${PALAMEDES_PLUGIN_DIR}/acme-wrapper\" ]; then exit 98; fi\n",
+                "exec \"${PALAMEDES_PLUGIN_DIR}/real-plugin\"\n",
             ),
         );
         fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o700)).expect("chmod 0700");
@@ -5683,17 +5712,28 @@ catalogs:
         fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
         let resolved =
             super::resolve_binary_plugin("acme-env-wrapper", &config_path).expect("resolve plugin");
-        let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
-            .expect("private env bash wrapper must execute directly through the kernel");
-        assert_eq!(manifest.name, "env-wrapper");
+        let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds")).expect(
+            "private env bash wrapper must launch sibling executable via PALAMEDES_PLUGIN_DIR",
+        );
+        assert_eq!(manifest.name, "env-wrapper-sibling");
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_acl_deny_execute_blocks_shell_plugin_wrapper() {
-        let Ok(user) = std::env::var("USER") else {
+        let Ok(whoami) = std::process::Command::new("/usr/bin/id")
+            .arg("-un")
+            .output()
+        else {
             return;
         };
+        if !whoami.status.success() {
+            return;
+        }
+        let user = String::from_utf8_lossy(&whoami.stdout).trim().to_owned();
+        if user.is_empty() {
+            return;
+        }
         let root = temp_dir("plugin-macos-acl-deny-exec");
         let pkg_dir = root.join("node_modules/acme-denied");
         let bin_dir = pkg_dir.join("bin");
@@ -5717,12 +5757,24 @@ catalogs:
         if !acl_applied {
             return;
         }
+        // Confirm the kernel/filesystem actually enforces the deny-execute ACL
+        // for a direct launch before asserting pinned launch behavior.
+        let direct_denied = std::process::Command::new(&script)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_err_and(|err| err.kind() == std::io::ErrorKind::PermissionDenied);
+        if !direct_denied {
+            return;
+        }
+
         let config_path = root.join("palamedes.yaml");
         fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
         let resolved =
             super::resolve_binary_plugin("acme-denied", &config_path).expect("resolve plugin");
         let error = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
-            .expect_err("macOS deny-execute ACL must prevent shell plugin execution");
+            .expect_err("macOS deny-execute ACL must prevent pinned shell plugin execution");
         assert_eq!(error.code, "PLUGIN_BINARY_SPAWN_FAILED");
     }
 }

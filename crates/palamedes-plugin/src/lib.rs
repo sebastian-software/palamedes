@@ -51,6 +51,17 @@ pub use protocol::{
 /// executable, set by the host for every plugin invocation.
 pub const NATIVE_EXECUTABLE_ENV: &str = "PALAMEDES_NATIVE";
 
+/// Environment variable carrying the declared executable path of the running
+/// plugin, set by the host for every plugin invocation so pinned script
+/// wrappers can resolve their package even when the kernel passes a descriptor
+/// or volfs path as `$0`.
+pub const PLUGIN_PATH_ENV: &str = "PALAMEDES_PLUGIN_PATH";
+
+/// Environment variable carrying the directory containing the declared plugin
+/// executable, set by the host for every plugin invocation so pinned script
+/// wrappers can launch sibling executables without relying on `dirname "$0"`.
+pub const PLUGIN_DIR_ENV: &str = "PALAMEDES_PLUGIN_DIR";
+
 type Handler = Box<dyn Fn(&mut CommandContext) -> CommandResult>;
 
 struct Command {
