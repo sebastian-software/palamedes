@@ -622,6 +622,19 @@ function resolveIdentifierArrayInScope(
     if (ch === "`") {
       const end = scanTemplateLiteralEnd(source, index);
       if (end === -1) return;
+      const literal = source.slice(index, end);
+      // Executable `${...}` substitutions inside a template literal can mutate
+      // `ident` in place (e.g. `${(t[2] = {}, "")}`). Treat any interpolation
+      // mentioning `ident` as inconclusive unless confined to this block's own
+      // `let`/`const` binding.
+      if (literal.includes("${") && identWord.test(literal)) {
+        const currentFrame = scopeStack.at(-1)!;
+        if (currentFrame.binding?.blockScoped) {
+          currentFrame.binding = { value: null, blockScoped: true };
+        } else {
+          currentFrame.tainted = true;
+        }
+      }
       index = end;
       prevTokenKind = "other";
       prevNonWsChar = "`";
@@ -1073,7 +1086,8 @@ function resolveSourceSegmentDirectories(parentDir: string, emittedSegment: stri
   }
   for (const entry of entries) {
     if (entry.name.startsWith("_") || entry.name === emittedSegment) continue;
-    if (entry.name.replace(/%5F/giu, "_") !== emittedSegment) continue;
+    // Match Next.js's case-sensitive `%5F` -> `_` decoding (lowercase `%5f` is not decoded).
+    if (entry.name.replaceAll("%5F", "_") !== emittedSegment) continue;
     const candidate = path.join(parentDir, entry.name);
     if (entry.isDirectory() || (entry.isSymbolicLink() && isDirectoryTarget(candidate))) {
       candidates.push(candidate);
@@ -1221,7 +1235,7 @@ export function routeHasOptionalRootLocale(
     : [];
   const chains = entryChains.length > 0 ? entryChains : allChains;
 
-  return chains.some((chain) => {
+  const chainResults = chains.map((chain): boolean | undefined => {
     for (let index = 0; index < localeIndex; index += 1) {
       if (directoryHasLayout(chain[index + 1]!, pageExtensions)) return false;
     }
@@ -1230,8 +1244,14 @@ export function routeHasOptionalRootLocale(
       if (segments[index]!.startsWith("@")) return false;
       if (directoryHasLayout(chain[index + 1]!, pageExtensions)) return true;
     }
-    return false;
+    // No recognized layout file exists along this route chain, so the root
+    // layout boundary is unknown rather than confirmed non-root.
+    return;
   });
+
+  if (chainResults.every((result) => result === false)) return false;
+  if (chainResults.some((result) => result === true)) return true;
+  return;
 }
 
 /*

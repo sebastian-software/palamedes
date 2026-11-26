@@ -398,7 +398,7 @@ describe("locale resolution", () => {
           "(marketing)/[[...locale]]/page_client-reference-manifest.js",
           ["tsx"],
         ),
-      ).toBe(false);
+      ).toBeUndefined();
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
@@ -876,6 +876,12 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
+          'let t=["",{children:["[[...locale]]",{},{layout:inner}]},{layout:root}]; const note = `${(t[2] = {}, "")}`; start({tree:t,page:"/[[...locale]]/page"});',
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
           `start({tree:["",{children:["[[...locale]]",{},{layout:inner}]},{layout:root}].with(2,{}),page:"/[[...locale]]/page"});`,
           "/[[...locale]]/page",
         ),
@@ -994,6 +1000,37 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
             "generated/[[...locale]]/page_client-reference-manifest.js",
           ),
         ).toBeUndefined();
+        // Lowercase `%5f` is NOT decoded by Next.js, so `app/shop%5ffront` must
+        // not participate when resolving `shop_front`.
+        const caseProject = mkdtempSync(path.join(os.tmpdir(), "palamedes-case-escape-"));
+        try {
+          mkdirSync(path.join(caseProject, "app/shop_front/[[...locale]]"), { recursive: true });
+          mkdirSync(path.join(caseProject, "app/shop%5ffront/[[...locale]]"), { recursive: true });
+          writeFileSync(
+            path.join(caseProject, "app/shop_front/layout.tsx"),
+            "export default function RootLayout({ children }) { return children; }\n",
+          );
+          writeFileSync(
+            path.join(caseProject, "app/shop_front/[[...locale]]/page.tsx"),
+            "export default function Page() { return null; }\n",
+          );
+          writeFileSync(
+            path.join(caseProject, "app/shop%5ffront/[[...locale]]/layout.tsx"),
+            "export default function OtherLayout({ children }) { return children; }\n",
+          );
+          writeFileSync(
+            path.join(caseProject, "app/shop%5ffront/[[...locale]]/page.tsx"),
+            "export default function OtherPage() { return null; }\n",
+          );
+          expect(
+            routeHasOptionalRootLocale(
+              caseProject,
+              "shop_front/[[...locale]]/page_client-reference-manifest.js",
+            ),
+          ).toBe(false);
+        } finally {
+          rmSync(caseProject, { recursive: true, force: true });
+        }
       } finally {
         rmSync(escapedProject, { recursive: true, force: true });
       }
@@ -1158,8 +1195,57 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         });
         expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
 
-        // An unrelated NextBuildContext.distDir must not leak its pageExtensions.
-        NextBuildContext.distDir = path.join(projectRoot, ".other-next");
+        // Placing a top-level `app/layout.page.tsx` above `[[...locale]]` proves
+        // Next's effective pageExtensions actually govern the fallback:
+        // - With matching NextBuildContext.distDir (`page.tsx`), `app/layout.page.tsx`
+        //   is recognized as a root layout above `[[...locale]]` -> header allowed (`de`).
+        // - With an unrelated NextBuildContext.distDir, `app/layout.page.tsx` is not
+        //   recognized, the layout boundary is unknown, and the fallback fails closed (`en`).
+        const topCustomLayout = path.join(projectRoot, "app/layout.page.tsx");
+        writeFileSync(
+          topCustomLayout,
+          "export default function TopLayout({ children }) { return children; }\n",
+        );
+        try {
+          resetManifest();
+          await emitClientCatalogPermutations({
+            distDir,
+            projectRoot,
+            pageExtensions: ["tsx", "jsx"],
+            failOnMissing: false,
+          });
+          expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+
+          NextBuildContext.distDir = path.join(projectRoot, ".other-next");
+          resetManifest();
+          await emitClientCatalogPermutations({
+            distDir,
+            projectRoot,
+            failOnMissing: false,
+          });
+          expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+        } finally {
+          rmSync(topCustomLayout, { force: true });
+        }
+      } finally {
+        NextBuildContext.dir = prevDir;
+        NextBuildContext.distDir = prevDistDir;
+        NextBuildContext.config = prevConfig;
+      }
+
+      // Post-build fallback: when NextBuildContext is absent, required-server-files.json
+      // provides Next's effective pageExtensions (confirmed by recognizing
+      // `app/layout.page.tsx` above `[[...locale]]`).
+      const postBuildTopLayout = path.join(projectRoot, "app/layout.page.tsx");
+      writeFileSync(
+        postBuildTopLayout,
+        "export default function TopLayout({ children }) { return children; }\n",
+      );
+      writeFileSync(
+        path.join(distDir, "required-server-files.json"),
+        JSON.stringify({ config: { pageExtensions: ["page.tsx", "page.jsx"] } }),
+      );
+      try {
         resetManifest();
         await emitClientCatalogPermutations({
           distDir,
@@ -1168,24 +1254,8 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         });
         expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
       } finally {
-        NextBuildContext.dir = prevDir;
-        NextBuildContext.distDir = prevDistDir;
-        NextBuildContext.config = prevConfig;
+        rmSync(postBuildTopLayout, { force: true });
       }
-
-      // Post-build fallback: when NextBuildContext is absent, required-server-files.json
-      // provides Next's effective pageExtensions.
-      writeFileSync(
-        path.join(distDir, "required-server-files.json"),
-        JSON.stringify({ config: { pageExtensions: ["page.tsx", "page.jsx"] } }),
-      );
-      resetManifest();
-      await emitClientCatalogPermutations({
-        distDir,
-        projectRoot,
-        failOnMissing: false,
-      });
-      expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
 
       // If no entrypoint binds `tree` for this page, return undefined so the
       // source-tree fallback runs instead of trusting an unrelated array.
