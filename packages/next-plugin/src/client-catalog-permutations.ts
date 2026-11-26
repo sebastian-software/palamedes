@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
@@ -147,6 +147,33 @@ function directoryHasLayout(directory: string, extensions: readonly string[]): b
   });
 }
 
+function resolveSourceSegmentDirectory(
+  parentDir: string,
+  emittedSegment: string,
+): string | undefined {
+  // Next.js treats folders starting with `_` as private non-route folders and
+  // decodes `%5F` back to `_` in emitted manifest paths. Never match a private
+  // `_` folder when resolving an emitted route segment.
+  if (!emittedSegment.startsWith("_")) {
+    const direct = path.join(parentDir, emittedSegment);
+    if (existsSync(direct)) return direct;
+  }
+  if (!emittedSegment.includes("_")) return;
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(parentDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const match = entries.find(
+    (entry) =>
+      entry.isDirectory() &&
+      !entry.name.startsWith("_") &&
+      entry.name.replace(/%5F/giu, "_") === emittedSegment,
+  );
+  return match ? path.join(parentDir, match.name) : undefined;
+}
+
 /**
  * Determines from the App Router directory tree whether `manifestRelativePath`
  * (relative to `<distDir>/server/app`) has an optional catch-all
@@ -177,18 +204,24 @@ export function routeHasOptionalRootLocale(
   let current = appDir;
   if (directoryHasLayout(current, pageExtensions)) return false;
   for (let index = 0; index < localeIndex; index += 1) {
-    current = path.join(current, segments[index]!);
+    const nextDir = resolveSourceSegmentDirectory(current, segments[index]!);
+    if (!nextDir) return false;
+    current = nextDir;
     if (directoryHasLayout(current, pageExtensions)) return false;
   }
 
   // At least one layout must exist at `[[...locale]]` or a descendant along the
   // route; otherwise Next injects its built-in root layout above the route.
-  current = path.join(current, segments[localeIndex]!);
+  const localeDir = resolveSourceSegmentDirectory(current, segments[localeIndex]!);
+  if (!localeDir) return false;
+  current = localeDir;
   if (directoryHasLayout(current, pageExtensions)) return true;
   for (let index = localeIndex + 1; index < segments.length; index += 1) {
     const segment = segments[index]!;
     if (segment.startsWith("@")) return false;
-    current = path.join(current, segment);
+    const nextDir = resolveSourceSegmentDirectory(current, segment);
+    if (!nextDir) return false;
+    current = nextDir;
     if (directoryHasLayout(current, pageExtensions)) return true;
   }
   return false;

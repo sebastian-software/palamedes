@@ -358,6 +358,17 @@ describe("locale resolution", () => {
         ),
       ).toBe(false);
 
+      // Escaped underscore segment (`%5Fshop` emitted as `_shop`), ignoring any
+      // sibling private `_shop` folder that Next.js excludes from routing.
+      writeLayout("escaped-underscore", "app/_shop/layout.jsx");
+      writeLayout("escaped-underscore", "app/%5Fshop/[[...locale]]/layout.tsx");
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "escaped-underscore"),
+          "_shop/[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(true);
+
       // src/app/(marketing)/[[...locale]]/layout.page.tsx with custom pageExtensions.
       writeLayout("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
       expect(
@@ -504,6 +515,79 @@ globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
         nestedContext.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
       )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
       expect(nestedEntryFiles[0]).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("embeds optional-root-locale detection for escaped %5F underscore route segments", async () => {
+    const projectRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-built-escaped-locale-"));
+    try {
+      mkdirSync(path.join(projectRoot, "app/%5Fshop/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(projectRoot, "locales"), { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+      );
+      writeFileSync(path.join(projectRoot, "locales/en.po"), 'msgid "Hello"\nmsgstr "Hello"\n');
+      writeFileSync(path.join(projectRoot, "locales/de.po"), 'msgid "Hello"\nmsgstr "Hallo"\n');
+      writeFileSync(
+        path.join(projectRoot, "app/%5Fshop/[[...locale]]/layout.tsx"),
+        "export default function Layout({ children }) { return children; }\n",
+      );
+
+      const distDir = path.join(projectRoot, ".next");
+      mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
+      mkdirSync(path.join(distDir, "server/app/_shop/[[...locale]]"), { recursive: true });
+      const payload = Buffer.from(
+        JSON.stringify({ source: "app/%5Fshop/[[...locale]]/page.tsx", ids: ["Hello"] }),
+      ).toString("base64url");
+      writeFileSync(
+        path.join(distDir, "static/chunks/page.js"),
+        `export const msgs = clientCatalogMessages("pmds-next:aaaaaaaaaaaa:${payload}");\n`,
+      );
+      writeFileSync(
+        path.join(distDir, "build-manifest.json"),
+        JSON.stringify({ rootMainFiles: [] }),
+      );
+      const manifestPath = path.join(
+        distDir,
+        "server/app/_shop/[[...locale]]/page_client-reference-manifest.js",
+      );
+      writeFileSync(
+        manifestPath,
+        `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/_shop/[[...locale]]/page"] = ${JSON.stringify({
+          entryCSSFiles: { "[project]/app/%5Fshop/[[...locale]]/page": [] },
+          entryJSFiles: { "[project]/app/%5Fshop/[[...locale]]/page": ["static/chunks/page.js"] },
+        })};`,
+      );
+
+      await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+
+      const manifestSource = readFileSync(manifestPath, "utf8");
+      const context: Record<string, unknown> = { process: { env: {} } };
+      vm.runInNewContext(manifestSource, context);
+      const bind = context.__PALAMEDES_CLIENT_CATALOG_BIND as (
+        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
+      ) => void;
+      bind((availableLocales, fallbackLocale, optionalRootLocale) =>
+        resolveRenderLocale(
+          availableLocales,
+          fallbackLocale,
+          render("/_shop/[[...locale]]"),
+          unit({ rootParams: {}, headers: header("de") }),
+          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+        ),
+      );
+      const entryFiles = (
+        context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+      )["/_shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/%5Fshop/[[...locale]]/page"]!;
+      expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
