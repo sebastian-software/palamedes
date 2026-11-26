@@ -1350,6 +1350,79 @@ function isGithubEnvTarget(token) {
   );
 }
 
+function isStdinContainerBuildCommand(tokens) {
+  let cursor = 0;
+  while (cursor < tokens.length) {
+    const token = tokens[cursor];
+    if (SHELL_COMMAND_PREFIXES.has(token) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(token)) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  const normalizedCli = normalizeExecutableName(tokens[cursor]);
+  if (normalizedCli !== "docker" && normalizedCli !== "podman" && normalizedCli !== "buildah") {
+    return false;
+  }
+  const globalValueFlags =
+    normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
+  let argIndex = cursor + 1;
+  while (argIndex < tokens.length) {
+    const flag = tokens[argIndex];
+    if (flag === ">" || flag === ">>" || flag === ">&" || flag === "<") {
+      argIndex += 2;
+      continue;
+    }
+    if (!flag.startsWith("-")) {
+      break;
+    }
+    argIndex += flagConsumesNextArg(flag, globalValueFlags) ? 2 : 1;
+  }
+  const subcommand = tokens[argIndex];
+  const isBuild =
+    (normalizedCli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
+    (normalizedCli !== "buildah" &&
+      (subcommand === "build" ||
+        ((subcommand === "buildx" || subcommand === "image") && tokens[argIndex + 1] === "build")));
+  if (!isBuild) {
+    return false;
+  }
+  const buildArgStart =
+    subcommand === "buildx" || subcommand === "image" ? argIndex + 2 : argIndex + 1;
+  let contextArg = null;
+  for (let index = buildArgStart; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "--") {
+      contextArg = tokens[index + 1] ?? contextArg;
+      break;
+    }
+    if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+      index += 1;
+      continue;
+    }
+    if (token === "-f" || token === "--file") {
+      if (tokens[index + 1] === "-") {
+        return true;
+      }
+      index += 1;
+      continue;
+    }
+    if (token === "--file=-" || token === "-f-") {
+      return true;
+    }
+    if (token.startsWith("-")) {
+      if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
+        index += 1;
+      }
+      continue;
+    }
+    if (contextArg === null) {
+      contextArg = token;
+    }
+  }
+  return contextArg === "-";
+}
+
 function redirectsToGithubEnv(tokens) {
   for (let index = 0; index < tokens.length; index += 1) {
     if ((tokens[index] === ">" || tokens[index] === ">>") && isGithubEnvTarget(tokens[index + 1])) {
@@ -1468,6 +1541,15 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         if (redirectsToGithubEnv(spec.ownerTokens)) {
           events.push({
             kind: "github-env-heredoc",
+            lines: bodyLines,
+            startLine: bodyStartLine,
+            quoted: spec.quoted,
+            conditional: spec.conditional,
+          });
+        }
+        if (isStdinContainerBuildCommand(spec.ownerTokens)) {
+          events.push({
+            kind: "stdin-containerfile-heredoc",
             lines: bodyLines,
             startLine: bodyStartLine,
             quoted: spec.quoted,
@@ -2650,14 +2732,39 @@ function inspectBuildContextSpec(
   }
 }
 
-function expandBuildArgSpec(rawSpec, stepEnv, varMap, matrixRows, lineNumber, shellMode) {
+function expandBuildArgSpec(
+  rawSpec,
+  stepEnv,
+  varMap,
+  commandVars,
+  matrixRows,
+  lineNumber,
+  shellMode,
+) {
   const eqIndex = rawSpec.indexOf("=");
   const name = eqIndex === -1 ? rawSpec.trim() : rawSpec.slice(0, eqIndex).trim();
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) {
     return null;
   }
-  const rawValue = eqIndex === -1 ? `$${name}` : rawSpec.slice(eqIndex + 1);
-  const expanded = resolveImageTokenCandidates(rawValue, stepEnv, varMap, lineNumber, shellMode);
+  // Name-only `--build-arg BASE` reads `BASE` from Docker's child process
+  // environment (`commandVars`), whereas explicit `--build-arg BASE=$value`
+  // expands `$value` in the outer shell (`varMap`).
+  const isNameOnly = eqIndex === -1;
+  const lookupVars = isNameOnly ? commandVars : varMap;
+  const rawValue = isNameOnly
+    ? shellMode === "pwsh"
+      ? `$env:${name}`
+      : shellMode === "cmd"
+        ? `%${name}%`
+        : `$${name}`
+    : rawSpec.slice(eqIndex + 1);
+  const expanded = resolveImageTokenCandidates(
+    rawValue,
+    stepEnv,
+    lookupVars,
+    lineNumber,
+    shellMode,
+  );
   const values = [];
   const seen = new Set();
   for (const varCandidate of expanded.candidates) {
@@ -2697,14 +2804,26 @@ function inspectShellText(
     return;
   }
 
+  const initialRowCwds = new Map();
+  if (buildFileContext?.workingDir) {
+    const rowsForCwd = matrixRows.length > 0 ? matrixRows : [null];
+    for (const row of rowsForCwd) {
+      initialRowCwds.set(row, buildFileContext.workingDir);
+    }
+  }
   const scopeStack = [
-    { vars: cloneVarMap(shellVars), branches: [], cwd: buildFileContext?.workingDir ?? null },
+    { vars: cloneVarMap(shellVars), branches: [], rowCwds: initialRowCwds, pendingStdinBuilds: [] },
   ];
 
   for (const event of lexShellScript(scriptText, startLine, shellMode)) {
     if (event.kind === "enter-subshell") {
       const parent = scopeStack.at(-1);
-      scopeStack.push({ vars: cloneVarMap(parent.vars), branches: [], cwd: parent.cwd });
+      scopeStack.push({
+        vars: cloneVarMap(parent.vars),
+        branches: [],
+        rowCwds: new Map(parent.rowCwds),
+        pendingStdinBuilds: [],
+      });
       continue;
     }
     if (event.kind === "exit-subshell") {
@@ -2721,6 +2840,53 @@ function inspectShellText(
       if (top?.kind === "case") {
         top.branchEndVars.push(cloneVarMap(frame.vars));
         frame.vars = cloneVarMap(top.entryVars);
+      }
+      continue;
+    }
+
+    if (event.kind === "stdin-containerfile-heredoc") {
+      const stdinBuild = frame.pendingStdinBuilds.shift() ?? null;
+      const rawBody = event.lines.join("\n");
+      const seenStdinProblems = new Set();
+      const invocationList =
+        stdinBuild?.invocations && stdinBuild.invocations.length > 0
+          ? stdinBuild.invocations
+          : [{ buildArgs: null, namedContexts: null, rowList: matrixRows }];
+
+      for (const inv of invocationList) {
+        let resolvedBody = rawBody;
+        if (!event.quoted) {
+          const envExpanded = resolveImageTokenCandidates(
+            rawBody,
+            stepEnv,
+            frame.vars,
+            event.startLine,
+            shellMode,
+          );
+          resolvedBody = envExpanded.candidates[0]?.text ?? rawBody;
+        } else {
+          const actionsEnvExpanded = resolveEnvExpressionCandidates(
+            rawBody,
+            stepEnv,
+            event.startLine,
+          );
+          resolvedBody = actionsEnvExpanded.candidates[0]?.text ?? rawBody;
+        }
+        const matrixExpanded = expandMatrixReferences(resolvedBody, inv.rowList, event.startLine);
+        for (const bodyCandidate of matrixExpanded) {
+          for (const message of unpinnedContainerfileReferences(bodyCandidate.text, filePath, {
+            argOverrides: inv.buildArgs,
+            namedContexts: inv.namedContexts,
+            sourceFile: filePath,
+            sourceLine: stdinBuild?.lineNumber ?? event.startLine,
+            startLineOffset: event.startLine - 1,
+          })) {
+            if (!seenStdinProblems.has(message)) {
+              seenStdinProblems.add(message);
+              problems.push(message);
+            }
+          }
+        }
       }
       continue;
     }
@@ -2961,14 +3127,28 @@ function inspectShellText(
           lineNumber,
           shellMode,
         );
-        const baseDir = frame.cwd ?? buildFileContext.workingDir;
-        const resolved = resolveContainedPath(
-          expandedDir.candidates[0]?.text ?? dirArg,
-          baseDir,
-          buildFileContext.root,
-        );
-        if (resolved) {
-          frame.cwd = resolved;
+        const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
+        for (const row of rowsForCd) {
+          const rowList = row ? [row] : [];
+          const baseDir = frame.rowCwds.get(row) ?? buildFileContext.workingDir;
+          for (const varCandidate of expandedDir.candidates) {
+            let updated = false;
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              const resolved = resolveContainedPath(candidate.text, baseDir, buildFileContext.root);
+              if (resolved) {
+                frame.rowCwds.set(row, resolved);
+                updated = true;
+                break;
+              }
+            }
+            if (updated) {
+              break;
+            }
+          }
         }
       }
       continue;
@@ -2977,6 +3157,7 @@ function inspectShellText(
     if (SHELL_INTERPRETERS.has(normalizedCli)) {
       const dashCScript = extractShellDashCScript(tokens, cursor);
       if (dashCScript) {
+        const firstCwd = frame.rowCwds.values().next().value ?? buildFileContext?.workingDir;
         inspectShellText(
           dashCScript,
           lineNumber,
@@ -2989,9 +3170,7 @@ function inspectShellText(
           emittedGithubEnv,
           "posix",
           depth + 1,
-          buildFileContext
-            ? { ...buildFileContext, workingDir: frame.cwd ?? buildFileContext.workingDir }
-            : null,
+          buildFileContext ? { ...buildFileContext, workingDir: firstCwd } : null,
         );
       }
       continue;
@@ -3103,9 +3282,10 @@ function inspectShellText(
         }
       }
 
-      const activeWorkingDir = frame.cwd ?? buildFileContext?.workingDir ?? null;
       const buildRows = matrixRows.length > 0 ? matrixRows : [null];
       const seenContextProblems = new Set();
+      const usesStdinDockerfile = rawFiles.includes("-") || contextArg === "-";
+      const stdinInvocations = [];
 
       for (const row of buildRows) {
         const rowList = row ? [row] : [];
@@ -3137,6 +3317,7 @@ function inspectShellText(
             rawBuildArg,
             stepEnv,
             frame.vars,
+            commandVars,
             rowList,
             lineNumber,
             shellMode,
@@ -3149,6 +3330,12 @@ function inspectShellText(
           }
         }
 
+        if (usesStdinDockerfile) {
+          stdinInvocations.push({ buildArgs: buildArgsMap, namedContexts, rowList });
+          continue;
+        }
+
+        const activeWorkingDir = frame.rowCwds.get(row) ?? buildFileContext?.workingDir ?? null;
         if (!buildFileContext || !activeWorkingDir) {
           continue;
         }
@@ -3234,6 +3421,9 @@ function inspectShellText(
             buildFileContext.buildInvocations,
           );
         }
+      }
+      if (usesStdinDockerfile) {
+        frame.pendingStdinBuilds.push({ lineNumber, invocations: stdinInvocations });
       }
       continue;
     }
@@ -3683,6 +3873,7 @@ function checkStepsList(
               trimmedLine,
               stepEnv,
               stepEnv,
+              stepEnv,
               rowList,
               buildArgsNode.line,
               "posix",
@@ -3834,39 +4025,36 @@ export function collectWorkflowFiles(directory) {
 }
 
 function resolveSafeContainerFile(candidatePath, root, problems = null) {
-  let stats;
   try {
-    stats = lstatSync(candidatePath);
+    lstatSync(candidatePath);
   } catch {
     return null;
   }
 
-  if (stats.isSymbolicLink()) {
-    let realRoot;
-    let realTarget;
-    try {
-      realRoot = realpathSync(root);
-      realTarget = realpathSync(candidatePath);
-    } catch {
-      return null;
-    }
-    const relative = path.relative(realRoot, realTarget);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      if (problems) {
-        problems.push(
-          `${formatPortableRelativePath(root, candidatePath)}:1: symlink target escapes repository root and cannot be verified`,
-        );
-      }
-      return null;
-    }
-    try {
-      return statSync(realTarget).isFile() ? path.resolve(root, relative) : null;
-    } catch {
-      return null;
-    }
+  let realRoot;
+  let realTarget;
+  try {
+    realRoot = realpathSync(root);
+    realTarget = realpathSync(candidatePath);
+  } catch {
+    return null;
   }
 
-  return stats.isFile() ? path.resolve(candidatePath) : null;
+  const relative = path.relative(realRoot, realTarget);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    if (problems) {
+      problems.push(
+        `${formatPortableRelativePath(root, candidatePath)}:1: symlink target escapes repository root and cannot be verified`,
+      );
+    }
+    return null;
+  }
+
+  try {
+    return statSync(realTarget).isFile() ? path.resolve(root, relative) : null;
+  } catch {
+    return null;
+  }
 }
 
 function collectContainerFilesFromFilesystem(directory, root = directory, problems = null) {
@@ -4394,7 +4582,13 @@ function extractReferencedBuildArgNames(token, names = new Set(), depth = 0) {
 export function unpinnedContainerfileReferences(
   source,
   filePath = "<memory>",
-  { argOverrides = null, namedContexts = null, sourceFile = null, sourceLine = null } = {},
+  {
+    argOverrides = null,
+    namedContexts = null,
+    sourceFile = null,
+    sourceLine = null,
+    startLineOffset = 0,
+  } = {},
 ) {
   const problems = [];
   const rawLines = source.split(/\r?\n/u);
@@ -4437,7 +4631,7 @@ export function unpinnedContainerfileReferences(
               const frontend = stripQuotes(directiveValue.split(/\s+/u)[0] ?? "");
               if (frontend && !isDynamicReference(frontend) && !isPinnedDigest(frontend)) {
                 problems.push(
-                  `${filePath}:${index + 1}: ${frontend} is not pinned to a sha256 digest`,
+                  `${filePath}:${index + 1 + startLineOffset}: ${frontend} is not pinned to a sha256 digest`,
                 );
               }
             } else if (
@@ -4454,7 +4648,7 @@ export function unpinnedContainerfileReferences(
       continue;
     }
     inHeaderDirectives = false;
-    const startLine = index + 1;
+    const startLine = index + 1 + startLineOffset;
     let combined = trimmed;
     while (combined.endsWith(escapeChar) && index + 1 < rawLines.length) {
       index += 1;
@@ -4730,11 +4924,20 @@ export function checkWorkflowPins(root = process.cwd()) {
     }
   }
 
+  const seenContainerProblems = new Set();
+  const pushContainerProblem = (problem) => {
+    if (!seenContainerProblems.has(problem)) {
+      seenContainerProblems.add(problem);
+      problems.push(problem);
+    }
+  };
+  const symlinkProblems = [];
+
   const containerFileSet = new Set(
-    collectContainerFiles(root, problems).map((file) => path.resolve(file)),
+    collectContainerFiles(root, symlinkProblems).map((file) => path.resolve(file)),
   );
   for (const candidatePath of explicitBuildFiles) {
-    const resolved = resolveSafeContainerFile(candidatePath, root, problems);
+    const resolved = resolveSafeContainerFile(candidatePath, root, symlinkProblems);
     if (resolved) {
       containerFileSet.add(path.resolve(resolved));
     }
@@ -4746,7 +4949,7 @@ export function checkWorkflowPins(root = process.cwd()) {
   const universalNamedContexts = new Map();
   const resolvedInvocations = [];
   for (const invocation of buildInvocations) {
-    const resolvedFile = resolveSafeContainerFile(invocation.filePath, root, problems);
+    const resolvedFile = resolveSafeContainerFile(invocation.filePath, root, symlinkProblems);
     if (!resolvedFile) {
       continue;
     }
@@ -4765,18 +4968,18 @@ export function checkWorkflowPins(root = process.cwd()) {
     }
   }
 
+  for (const problem of symlinkProblems) {
+    pushContainerProblem(problem);
+  }
+
   const containerFiles = [...containerFileSet].sort();
-  const seenContainerProblems = new Set();
   for (const filePath of containerFiles) {
     const source = readFileSync(filePath, "utf8");
     const relativePath = formatPortableRelativePath(root, filePath);
     for (const problem of unpinnedContainerfileReferences(source, relativePath, {
       namedContexts: universalNamedContexts.get(filePath) ?? null,
     })) {
-      if (!seenContainerProblems.has(problem)) {
-        seenContainerProblems.add(problem);
-        problems.push(problem);
-      }
+      pushContainerProblem(problem);
     }
   }
 
@@ -4792,10 +4995,7 @@ export function checkWorkflowPins(root = process.cwd()) {
       sourceFile: invocation.sourceFile,
       sourceLine: invocation.sourceLine,
     })) {
-      if (!seenContainerProblems.has(problem)) {
-        seenContainerProblems.add(problem);
-        problems.push(problem);
-      }
+      pushContainerProblem(problem);
     }
   }
 

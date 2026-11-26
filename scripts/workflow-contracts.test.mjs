@@ -1940,35 +1940,74 @@ describe("workflow contracts", () => {
       "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:5: busybox:1.37 is not pinned to a sha256 digest",
     ]);
+    // Stdin Dockerfiles (`docker build -f - . <<'EOF'`), matrix `cd`, name-only
+    // `--build-arg BASE` from command-local env, and parent-dir symlink escapes.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  stdin-build:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - run: |",
+          "          docker build -f - . <<'EOF'",
+          "          FROM alpine:3.20",
+          "          EOF",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:7: alpine:3.20 is not pinned to a sha256 digest"]);
     const symlinkFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-symlink-"));
+    const outsideDir = await mkdtemp(join(tmpdir(), "palamedes-pins-outside-"));
     try {
       await mkdir(join(symlinkFixture, ".github", "workflows"), { recursive: true });
-      await mkdir(join(symlinkFixture, "ci", "nested"), { recursive: true });
+      await mkdir(join(symlinkFixture, "ci", "nested-a"), { recursive: true });
+      await mkdir(join(symlinkFixture, "ci", "nested-b"), { recursive: true });
+      await writeFile(join(outsideDir, "escaped.recipe"), "FROM alpine:3.20\n");
+      await symlink(outsideDir, join(symlinkFixture, "ci", "escaped-link"));
       await writeFile(join(symlinkFixture, "ci", "target.recipe"), "FROM alpine:3.20\n");
       await symlink("ci/target.recipe", join(symlinkFixture, "Dockerfile"));
-      await writeFile(join(symlinkFixture, "ci", "nested", "cd.recipe"), "FROM busybox:1.37\n");
-      await writeFile(join(symlinkFixture, "ci", "shared.recipe"), `FROM maybectx\n`);
+      await writeFile(
+        join(symlinkFixture, "ci", "nested-a", "cd.recipe"),
+        `FROM node:24@${digest}\n`,
+      );
+      await writeFile(join(symlinkFixture, "ci", "nested-b", "cd.recipe"), "FROM busybox:1.37\n");
+      await writeFile(
+        join(symlinkFixture, "ci", "arg-env.recipe"),
+        `ARG BASE=node:24@${digest}\nFROM \${BASE}\n`,
+      );
+      await writeFile(join(symlinkFixture, "ci", "shared.recipe"), "FROM maybectx\n");
       await writeFile(
         join(symlinkFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
           "jobs:",
           "  build:",
+          "    strategy:",
+          "      matrix:",
+          "        dir: [ci/nested-a, ci/nested-b]",
           "    runs-on: ubuntu-24.04",
           "    steps:",
-          "      - run: cd ci/nested && docker build -f cd.recipe .",
+          '      - run: cd "${{ matrix.dir }}" && docker build -f cd.recipe .',
+          `      - run: |`,
+          `          BASE=node:24@${digest}`,
+          "          BASE=redis:7 docker build --build-arg BASE -f ci/arg-env.recipe .",
           `      - run: docker build --build-context maybectx=docker-image://node:24@${digest} -f ci/shared.recipe .`,
           "      - run: docker build -f ci/shared.recipe .",
+          "      - run: docker build -f ci/escaped-link/escaped.recipe .",
           "",
         ].join("\n"),
       );
       const symlinkResult = checkWorkflowPins(symlinkFixture);
       expect(symlinkResult.problems).toEqual([
-        "ci/nested/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
+        "ci/escaped-link/escaped.recipe:1: symlink target escapes repository root and cannot be verified",
+        "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
         "ci/target.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
+        "ci/arg-env.recipe:2: redis:7 is not pinned to a sha256 digest",
       ]);
     } finally {
       await rm(symlinkFixture, { recursive: true, force: true });
+      await rm(outsideDir, { recursive: true, force: true });
     }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
