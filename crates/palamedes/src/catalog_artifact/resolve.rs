@@ -8,7 +8,10 @@ use super::load::{
     CatalogSources, load_catalogs, parse_catalog_sources_with_observer, read_catalog_sources,
 };
 use super::types::{CatalogArtifactConfig, FallbackLocales};
-use super::{PreparedCompilation, resolve_catalog_file_path, resolve_catalog_path};
+use super::{
+    PreparedCompilation, is_valid_locale, resolve_catalog_file_path, try_resolve_catalog_file_path,
+    validate_catalog_path_pattern,
+};
 
 #[derive(Debug, Clone)]
 struct ResolvedCatalogRequest {
@@ -150,6 +153,9 @@ fn resolve_catalog_request(
                 .ok_or_else(|| PalamedesError::CouldNotResolveLocale {
                     resource_path: resource_path.to_path_buf(),
                 })?;
+            if !is_valid_locale(&locale) {
+                return Err(PalamedesError::InvalidCatalogLocale { locale });
+            }
             if !config
                 .locales
                 .iter()
@@ -186,7 +192,8 @@ fn collect_watch_files(
 
         if matcher.is_match(&primary_pattern) {
             for locale in locale_chain {
-                let candidate = resolve_catalog_path(config, catalog, locale);
+                let candidate =
+                    try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
                 if !files.contains(&candidate) {
                     files.push(candidate);
                 }
@@ -204,6 +211,12 @@ pub(super) fn catalog_locale_matcher(
     root_dir: &Path,
     catalog: &super::types::CatalogConfig,
 ) -> PalamedesResult<Regex> {
+    validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
+        PalamedesError::UnsafeCatalogPath {
+            path: catalog.path.clone(),
+            reason: reason.to_owned(),
+        }
+    })?;
     let absolute_catalog_path =
         resolve_catalog_file_path(root_dir, &catalog.path, "{locale}", catalog.format);
     let pattern = normalize_path(&absolute_catalog_path);

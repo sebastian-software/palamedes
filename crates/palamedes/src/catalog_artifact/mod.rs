@@ -7,7 +7,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use ferrocat::{
     CompileCatalogArtifactOptions, CompileSelectedCatalogArtifactOptions, CompiledCatalogIdIndex,
@@ -29,6 +29,136 @@ pub use self::types::{
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogConfig, FallbackLocales,
     PalamedesCatalogFormat,
 };
+
+/// Returns whether `locale` is a safe locale identifier for catalog file paths
+/// and compiled module filenames.
+///
+/// Allows ASCII letters, digits, `-`, `_`, and interior single `.` (such as
+/// `en`, `de-DE`, `zh-Hans`, `en_US`, `pt.BR`) while rejecting empty values,
+/// `.` / `..`, leading or trailing non-alphanumeric characters, consecutive
+/// dots, NUL/control characters, and path separators.
+#[must_use]
+pub fn is_valid_locale(locale: &str) -> bool {
+    let bytes = locale.as_bytes();
+    if bytes.is_empty()
+        || !bytes[0].is_ascii_alphanumeric()
+        || !bytes[bytes.len() - 1].is_ascii_alphanumeric()
+        || locale.contains("..")
+    {
+        return false;
+    }
+    bytes
+        .iter()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+/// Validates that a configured catalog path pattern is a relative path that
+/// cannot escape its root directory.
+///
+/// # Errors
+///
+/// Returns a human-readable reason when the pattern is empty, contains control
+/// characters, is absolute (POSIX root, UNC/backslash root, or Windows drive
+/// prefix), contains `..` traversal segments, or names no path segment.
+pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static str> {
+    if catalog_path.trim().is_empty() {
+        return Err("catalog path must be non-empty");
+    }
+    if catalog_path.chars().any(char::is_control) {
+        return Err("catalog path must not contain control characters");
+    }
+    if Path::new(catalog_path).is_absolute()
+        || catalog_path.starts_with('/')
+        || catalog_path.starts_with('\\')
+        || has_windows_drive_prefix(catalog_path)
+    {
+        return Err("catalog path must be relative to the config directory");
+    }
+    let portable = catalog_path.replace('\\', "/");
+    let mut has_normal = false;
+    for component in Path::new(&portable).components() {
+        match component {
+            Component::Normal(_) => has_normal = true,
+            Component::CurDir => {}
+            Component::ParentDir => {
+                return Err("catalog path must not contain parent-directory ('..') segments");
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                return Err("catalog path must be relative to the config directory");
+            }
+        }
+    }
+    if !has_normal {
+        return Err("catalog path must name a file path inside the config directory");
+    }
+    Ok(())
+}
+
+fn has_windows_drive_prefix(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
+
+fn normalize_lexical_path(path: &Path) -> PathBuf {
+    let portable = path.to_string_lossy().replace('\\', "/");
+    let portable_path = Path::new(&portable);
+    let is_absolute = portable_path.is_absolute();
+    let mut normalized = PathBuf::new();
+    for component in portable_path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(Path::new(std::path::MAIN_SEPARATOR_STR)),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() && !is_absolute {
+                    normalized.push("..");
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+        }
+    }
+    normalized
+}
+
+/// Resolves a configured catalog pattern to its concrete storage file after
+/// validating both `catalog_path` and `locale` against path traversal.
+///
+/// # Errors
+///
+/// Returns an error when `locale` is invalid, `catalog_path` is absolute or
+/// contains `..`, or the normalized result escapes `root_dir`.
+pub fn try_resolve_catalog_file_path(
+    root_dir: &Path,
+    catalog_path: &str,
+    locale: &str,
+    format: PalamedesCatalogFormat,
+) -> PalamedesResult<PathBuf> {
+    if !is_valid_locale(locale) {
+        return Err(PalamedesError::InvalidCatalogLocale {
+            locale: locale.to_owned(),
+        });
+    }
+    validate_catalog_path_pattern(catalog_path).map_err(|reason| {
+        PalamedesError::UnsafeCatalogPath {
+            path: catalog_path.to_owned(),
+            reason: reason.to_owned(),
+        }
+    })?;
+    let resolved = resolve_catalog_file_path(root_dir, catalog_path, locale, format);
+    let normalized_root = normalize_lexical_path(root_dir);
+    let normalized_resolved = normalize_lexical_path(&resolved);
+    if normalized_resolved == normalized_root || !normalized_resolved.starts_with(&normalized_root)
+    {
+        return Err(PalamedesError::UnsafeCatalogPath {
+            path: catalog_path.to_owned(),
+            reason: format!(
+                "resolved catalog path escapes root directory {}",
+                root_dir.display()
+            ),
+        });
+    }
+    Ok(resolved)
+}
 
 /// Resolves a configured catalog pattern to its concrete storage file.
 ///

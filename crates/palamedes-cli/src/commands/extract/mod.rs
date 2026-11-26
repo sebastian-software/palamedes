@@ -604,7 +604,8 @@ fn process_catalog(
     options: &ExtractOptions,
     operation: CatalogOperation,
 ) -> Result<CatalogJobOutcome, CliError> {
-    let catalog_path = config.resolve_catalog_path(&catalog.path, locale, catalog.format);
+    let catalog_path =
+        config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
     let request = CatalogUpdateRequest {
         target_path: catalog_path.to_string_lossy().into_owned(),
         locale: locale.to_owned(),
@@ -1191,5 +1192,32 @@ catalogs:
         assert!(mixed.contains("msgid \"Reports overview\""));
         assert!(mixed.contains("msgid \"Dashboard\""));
         assert!(extract_cache_path(&config).exists() || cache.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_refuses_to_write_through_symlink_escaping_root_dir() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("extract-symlink-outside");
+        let app = temp_dir("extract-symlink-app");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, Some("config"));
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
+        )
+        .expect("write source");
+        symlink(&outside, app.join("locales")).expect("symlink locales outside root");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let error = run_extraction(&config, &extract_options())
+            .expect_err("extraction through escaping symlink must fail");
+
+        assert!(
+            error.to_string().contains("escapes root directory"),
+            "unexpected error: {error}"
+        );
+        assert!(!outside.join("en/messages.po").exists());
     }
 }

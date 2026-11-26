@@ -539,6 +539,24 @@ impl LoadedConfig {
         palamedes::resolve_catalog_file_path(&self.root_dir, catalog_path, locale, format)
     }
 
+    /// Resolves a catalog path while enforcing both lexical and on-disk symlink
+    /// containment inside `self.root_dir`.
+    pub fn resolve_contained_catalog_path(
+        &self,
+        catalog_path: &str,
+        locale: &str,
+        format: palamedes::PalamedesCatalogFormat,
+    ) -> Result<PathBuf, ConfigError> {
+        let resolved =
+            palamedes::try_resolve_catalog_file_path(&self.root_dir, catalog_path, locale, format)
+                .map_err(|error| ConfigError::Invalid {
+                    path: self.config_path.clone(),
+                    message: error.to_string(),
+                })?;
+        ensure_contained_within_root(&self.config_path, &self.root_dir, &resolved)?;
+        Ok(resolved)
+    }
+
     /// Finds the configured catalog a file belongs to.
     ///
     /// Commands that receive a catalog by path rather than by config entry —
@@ -682,8 +700,27 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
     if raw.locales.iter().any(|locale| locale.trim().is_empty()) {
         return invalid(path, "\"locales\" must contain only non-empty strings.");
     }
+    for locale in &raw.locales {
+        if !palamedes::is_valid_locale(locale) {
+            return invalid(
+                path,
+                &format!(
+                    "\"locales\" entry \"{locale}\" is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+                ),
+            );
+        }
+    }
     if raw.source_locale.trim().is_empty() {
         return invalid(path, "\"source-locale\" must be a non-empty string.");
+    }
+    if !palamedes::is_valid_locale(&raw.source_locale) {
+        return invalid(
+            path,
+            &format!(
+                "\"source-locale\" (\"{}\") is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators.",
+                raw.source_locale
+            ),
+        );
     }
     if !raw
         .locales
@@ -716,6 +753,14 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
         }
     }
     if let Some(pseudo_locale) = &raw.pseudo_locale {
+        if !palamedes::is_valid_locale(pseudo_locale) {
+            return invalid(
+                path,
+                &format!(
+                    "\"pseudo-locale\" (\"{pseudo_locale}\") is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+                ),
+            );
+        }
         // Documented behavior: a pseudo-locale outside `locales` is ignored.
         // Make the ignore visible instead of silent.
         if !raw.locales.iter().any(|locale| locale == pseudo_locale) {
@@ -769,6 +814,15 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
                 &format!("\"catalogs[{index}].path\" must be non-empty."),
             );
         }
+        if let Err(reason) = palamedes::validate_catalog_path_pattern(&catalog.path) {
+            return invalid(
+                path,
+                &format!(
+                    "\"catalogs[{index}].path\" (\"{}\") is invalid: {reason}.",
+                    catalog.path
+                ),
+            );
+        }
         if catalog.include.is_empty() {
             return invalid(
                 path,
@@ -807,6 +861,84 @@ fn invalid<T>(path: &Path, message: &str) -> Result<T, ConfigError> {
         path: path.to_path_buf(),
         message: message.to_owned(),
     })
+}
+
+fn ensure_contained_within_root(
+    config_path: &Path,
+    root_dir: &Path,
+    target: &Path,
+) -> Result<(), ConfigError> {
+    let relative = target
+        .strip_prefix(root_dir)
+        .map_err(|_| ConfigError::Invalid {
+            path: config_path.to_path_buf(),
+            message: format!(
+                "Catalog path {} escapes root directory {}.",
+                target.display(),
+                root_dir.display()
+            ),
+        })?;
+    let canonical_root = std::fs::canonicalize(root_dir).map_err(|error| ConfigError::Invalid {
+        path: config_path.to_path_buf(),
+        message: format!(
+            "Could not resolve config root directory {}: {error}",
+            root_dir.display()
+        ),
+    })?;
+    let mut current = canonical_root.clone();
+    for component in relative.components() {
+        match component {
+            Component::CurDir => continue,
+            Component::Normal(part) => current.push(part),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return invalid(
+                    config_path,
+                    &format!(
+                        "Catalog path {} escapes root directory {}.",
+                        target.display(),
+                        root_dir.display()
+                    ),
+                );
+            }
+        }
+        match std::fs::symlink_metadata(&current) {
+            Ok(_) => {
+                let canonical = std::fs::canonicalize(&current).map_err(|error| {
+                    ConfigError::Invalid {
+                        path: config_path.to_path_buf(),
+                        message: format!(
+                            "Catalog path {} resolves through an invalid or dangling symlink at {}: {error}",
+                            target.display(),
+                            current.display()
+                        ),
+                    }
+                })?;
+                if !canonical.starts_with(&canonical_root) {
+                    return invalid(
+                        config_path,
+                        &format!(
+                            "Catalog path {} escapes root directory {} via symlink {}.",
+                            target.display(),
+                            canonical_root.display(),
+                            current.display()
+                        ),
+                    );
+                }
+                current = canonical;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => {
+                return invalid(
+                    config_path,
+                    &format!(
+                        "Could not inspect catalog path {}: {error}",
+                        current.display()
+                    ),
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn resolve_source_reference_root(value: Option<&str>, root_dir: &Path) -> PathBuf {
@@ -1223,8 +1355,8 @@ catalogs:
     include: [src]
     po:
       line-breaks: "off"
-  - path: ../api/locales/{locale}
-    include: [../api/src]
+  - path: admin/locales/{locale}
+    include: [admin/src]
 "#,
         )
         .expect("write config");
@@ -1778,6 +1910,154 @@ catalogs:
 
         let error = load_config(&app, None).expect_err("unknown fallback locale must be rejected");
         assert!(error.to_string().contains("\"fr\""), "got: {error}");
+    }
+
+    #[test]
+    fn accepts_bcp47_dotted_and_underscored_locales() {
+        let app = temp_dir("valid-locales");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de-DE, zh-Hans, pt.BR, en_US]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("valid locales should load");
+        assert_eq!(config.locales, ["en", "de-DE", "zh-Hans", "pt.BR", "en_US"]);
+    }
+
+    #[test]
+    fn rejects_invalid_or_traversing_locales_in_config() {
+        for bad_locale in [
+            "..",
+            ".",
+            "../../../tmp/out",
+            "en/de",
+            r"en\de",
+            ".hidden",
+            "en.",
+            "en..de",
+            "-en",
+            "en de",
+        ] {
+            let app = temp_dir("bad-locale");
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    "locales: [en, {bad_locale:?}]\nsource-locale: en\ncatalogs:\n  - path: src/locales/{{locale}}\n    include: [src]\n"
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("invalid locale must be rejected");
+            assert!(
+                error.to_string().contains("not a valid locale identifier"),
+                "for {bad_locale:?}, got: {error}"
+            );
+        }
+
+        let app = temp_dir("bad-pseudo-locale");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+pseudo-locale: "../escape"
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let error = load_config(&app, None).expect_err("invalid pseudo-locale must be rejected");
+        assert!(error.to_string().contains("pseudo-locale"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_absolute_and_parent_escaping_catalog_paths() {
+        for bad_path in [
+            "/tmp/evil/{locale}",
+            r"\tmp\evil\{locale}",
+            "C:/evil/{locale}",
+            "../outside/{locale}",
+            "locales/../../outside/{locale}",
+            r"locales\..\..\outside\{locale}",
+            ".",
+            "./",
+        ] {
+            let app = temp_dir("bad-catalog-path");
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: {bad_path:?}\n    include: [src]\n"
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("unsafe catalog path must be rejected");
+            assert!(
+                error.to_string().contains("catalogs[0].path"),
+                "for {bad_path:?}, got: {error}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_contained_catalog_path_rejects_escaping_and_dangling_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("catalog-symlink-outside");
+        let app = temp_dir("catalog-symlink-app");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let config = load_config(&app, None).expect("load config");
+
+        symlink(&outside, app.join("locales")).expect("symlink locales outside root");
+        let error = config
+            .resolve_contained_catalog_path(
+                &config.catalogs[0].path,
+                "en",
+                config.catalogs[0].format,
+            )
+            .expect_err("escaping symlink must be rejected");
+        assert!(
+            error.to_string().contains("escapes root directory"),
+            "got: {error}"
+        );
+
+        fs::remove_file(app.join("locales")).expect("remove escaping symlink");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        symlink(
+            outside.join("does-not-exist.po"),
+            app.join("locales/en/messages.po"),
+        )
+        .expect("create dangling symlink");
+        let error = config
+            .resolve_contained_catalog_path(
+                &config.catalogs[0].path,
+                "en",
+                config.catalogs[0].format,
+            )
+            .expect_err("dangling symlink must be rejected");
+        assert!(
+            error.to_string().contains("dangling symlink"),
+            "got: {error}"
+        );
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

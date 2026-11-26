@@ -87,17 +87,20 @@ impl Command for ConvertOptions {
                         continue;
                     }
                     for locale in &config.locales {
-                        let input =
-                            config.resolve_catalog_path(&catalog.path, locale, catalog.format);
+                        let input = config.resolve_contained_catalog_path(
+                            &catalog.path,
+                            locale,
+                            catalog.format,
+                        )?;
                         if !input.exists() {
                             skipped += 1;
                             continue;
                         }
-                        let output = config.resolve_catalog_path(
+                        let output = config.resolve_contained_catalog_path(
                             &catalog.path,
                             locale,
                             target_catalog_format(self.to),
-                        );
+                        )?;
                         convert_one_catalog(
                             &input,
                             &output,

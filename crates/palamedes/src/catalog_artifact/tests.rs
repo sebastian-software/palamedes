@@ -3,7 +3,8 @@ use super::{
     CatalogArtifactSelectedRequest, CatalogCompilationCache, CatalogConfig, FallbackLocales,
     PalamedesCatalogFormat, compile_catalog_artifact, compile_catalog_artifact_selected,
     compile_catalog_artifact_selected_cached,
-    compile_catalog_artifact_selected_cached_without_waiting, resolve_catalog_file_path,
+    compile_catalog_artifact_selected_cached_without_waiting, is_valid_locale,
+    resolve_catalog_file_path, try_resolve_catalog_file_path, validate_catalog_path_pattern,
 };
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
@@ -84,6 +85,142 @@ fn catalog_file_paths_preserve_logical_dots_and_canonicalize_storage_extensions(
             "pattern {pattern} for locale {locale}",
         );
     }
+}
+
+#[test]
+fn locale_and_catalog_path_validators_reject_traversal_and_accept_valid_inputs() {
+    for valid in [
+        "en",
+        "de-DE",
+        "zh-Hans",
+        "pt.BR",
+        "en_US",
+        "en-US-x-twain",
+        "pseudo",
+    ] {
+        assert!(is_valid_locale(valid), "expected valid locale: {valid}");
+    }
+    for invalid in [
+        "",
+        ".",
+        "..",
+        "../en",
+        "..\\en",
+        "../../../tmp/out",
+        "en/de",
+        "en\\de",
+        ".en",
+        "en.",
+        "en..de",
+        "-en",
+        "en-",
+        "en\0",
+        "en de",
+        "C:en",
+    ] {
+        assert!(
+            !is_valid_locale(invalid),
+            "expected invalid locale: {invalid:?}"
+        );
+    }
+
+    for valid in [
+        "locales/{locale}",
+        "src/locales/{locale}/messages.v2",
+        "./locales/{locale}",
+        r"locales\{locale}\messages.v2",
+    ] {
+        assert!(
+            validate_catalog_path_pattern(valid).is_ok(),
+            "expected valid catalog path: {valid}"
+        );
+    }
+    for invalid in [
+        "",
+        "   ",
+        ".",
+        "./",
+        "/etc/locales/{locale}",
+        r"\windows\locales\{locale}",
+        "C:/locales/{locale}",
+        r"C:\locales\{locale}",
+        "../outside/{locale}",
+        "locales/../../outside/{locale}",
+        r"locales\..\..\outside\{locale}",
+        "locales/\0/{locale}",
+    ] {
+        assert!(
+            validate_catalog_path_pattern(invalid).is_err(),
+            "expected invalid catalog path: {invalid:?}"
+        );
+    }
+
+    let root = Path::new("workspace");
+    assert_eq!(
+        try_resolve_catalog_file_path(
+            root,
+            "locales/{locale}",
+            "pt.BR",
+            PalamedesCatalogFormat::Po
+        )
+        .expect("safe catalog path"),
+        root.join("locales/pt.BR.po")
+    );
+    assert!(
+        try_resolve_catalog_file_path(
+            root,
+            "locales/{locale}",
+            "../../../tmp/out",
+            PalamedesCatalogFormat::Po
+        )
+        .is_err()
+    );
+    assert!(
+        try_resolve_catalog_file_path(
+            root,
+            "../outside/{locale}",
+            "en",
+            PalamedesCatalogFormat::Po
+        )
+        .is_err()
+    );
+    assert!(
+        try_resolve_catalog_file_path(
+            root,
+            "/tmp/outside/{locale}",
+            "en",
+            PalamedesCatalogFormat::Po
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn compile_catalog_artifact_rejects_escaping_catalog_paths() {
+    let fixture = create_fixture_dir("catalog-artifact-unsafe-path");
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "../outside/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: fixture
+            .join("../outside/en.po")
+            .to_string_lossy()
+            .into_owned(),
+    };
+
+    let error = compile_catalog_artifact(&request).expect_err("escaping catalog path rejected");
+    assert!(
+        error.to_string().contains("Unsafe catalog path"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]

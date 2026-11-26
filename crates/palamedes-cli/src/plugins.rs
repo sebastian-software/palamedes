@@ -7,11 +7,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+#[cfg(any(windows, test))]
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, BufReader, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Once;
 #[cfg(unix)]
@@ -1047,14 +1049,40 @@ fn terminate_plugin_tree(child: &mut Child) {
     }
 }
 
+#[cfg(any(windows, test))]
+fn resolve_windows_taskkill(system_root: Option<&OsStr>) -> Option<PathBuf> {
+    let root = system_root.and_then(OsStr::to_str)?;
+    if !is_local_windows_drive_root(root) {
+        return None;
+    }
+    Some(Path::new(root).join("System32").join("taskkill.exe"))
+}
+
+#[cfg(any(windows, test))]
+fn is_local_windows_drive_root(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    if bytes.len() < 3
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':'
+        || !matches!(bytes[2], b'\\' | b'/')
+    {
+        return false;
+    }
+    !path.chars().any(char::is_control) && !path.split(['\\', '/']).any(|segment| segment == "..")
+}
+
 #[cfg(windows)]
 fn terminate_plugin_tree(child: &mut Child) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    if let Some(taskkill) =
+        resolve_windows_taskkill(env::var_os("SystemRoot").as_deref()).filter(|path| path.is_file())
+    {
+        let _ = Command::new(taskkill)
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
     let _ = child.kill();
 }
 
@@ -1188,6 +1216,15 @@ fn resolve_binary_plugin(
         ));
     }
 
+    if package_segments(specifier).is_none() {
+        return Err(PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Configured Palamedes binary plugin specifier \"{specifier}\" is not a valid package or path specifier."
+            ),
+        ));
+    }
+
     let package_dir = locate_package_dir(specifier, config_dir).ok_or_else(|| {
         PluginFailure::new(
             "PLUGIN_MISSING",
@@ -1218,7 +1255,8 @@ fn resolve_package_plugin(
         .as_ref()
         .and_then(|palamedes| palamedes.plugin_binary.as_deref())
     {
-        return resolved_executable(specifier, package_dir.join(binary));
+        let binary_path = resolve_contained_package_binary(specifier, &package_dir, binary)?;
+        return resolved_executable(specifier, binary_path);
     }
 
     let canonical_dir = fs::canonicalize(&package_dir).unwrap_or(package_dir);
@@ -1240,7 +1278,11 @@ fn resolve_package_plugin(
         else {
             continue;
         };
-        candidates.push(dependency_dir.join(binary));
+        candidates.push(resolve_contained_package_binary(
+            specifier,
+            &dependency_dir,
+            binary,
+        )?);
     }
 
     match candidates.as_slice() {
@@ -1260,23 +1302,143 @@ fn resolve_package_plugin(
     }
 }
 
+fn resolve_contained_package_binary(
+    specifier: &str,
+    package_dir: &Path,
+    binary: &str,
+) -> Result<PathBuf, PluginFailure> {
+    let relative = validate_plugin_binary_relative_path(specifier, binary)?;
+    let candidate = package_dir.join(&relative);
+    if is_blocked_script_extension(&candidate) {
+        return Err(script_plugin_failure(specifier, &candidate));
+    }
+    let canonical_dir = fs::canonicalize(package_dir).map_err(|error| {
+        PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Could not resolve binary plugin package directory \"{specifier}\" at {}: {error}",
+                package_dir.display()
+            ),
+        )
+    })?;
+    let canonical_binary = match fs::canonicalize(&candidate) {
+        Ok(path) => path,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if fs::symlink_metadata(&candidate)
+                .ok()
+                .is_some_and(|metadata| metadata.file_type().is_symlink())
+            {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which resolves to an invalid or dangling symlink."
+                    ),
+                ));
+            }
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_MISSING",
+                format!(
+                    "Configured plugin \"{specifier}\" has no executable at {}.",
+                    candidate.display()
+                ),
+            ));
+        }
+        Err(error) => {
+            return Err(PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not resolve binary plugin \"{specifier}\" executable at {}: {error}",
+                    candidate.display()
+                ),
+            ));
+        }
+    };
+    if canonical_binary == canonical_dir || !canonical_binary.starts_with(&canonical_dir) {
+        return Err(PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which escapes package directory {}.",
+                canonical_dir.display()
+            ),
+        ));
+    }
+    Ok(canonical_binary)
+}
+
+fn validate_plugin_binary_relative_path(
+    specifier: &str,
+    binary: &str,
+) -> Result<PathBuf, PluginFailure> {
+    let invalid = || {
+        PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Binary plugin package \"{specifier}\" declares invalid palamedes.pluginBinary \"{binary}\". It must be a relative path within the package directory."
+            ),
+        )
+    };
+    if binary.trim().is_empty()
+        || binary.chars().any(char::is_control)
+        || binary.contains('\\')
+        || has_windows_drive_prefix(binary)
+    {
+        return Err(invalid());
+    }
+    let relative = binary.strip_prefix("./").unwrap_or(binary);
+    if relative.is_empty()
+        || relative
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err(invalid());
+    }
+    let mut normalized = PathBuf::new();
+    for component in Path::new(relative).components() {
+        match component {
+            Component::Normal(part) => normalized.push(part),
+            _ => return Err(invalid()),
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return Err(invalid());
+    }
+    Ok(normalized)
+}
+
+fn has_windows_drive_prefix(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
+
+fn is_blocked_script_extension(path: &Path) -> bool {
+    const BLOCKED_SCRIPT_EXTENSIONS: &[&str] =
+        &["js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts"];
+
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            BLOCKED_SCRIPT_EXTENSIONS
+                .iter()
+                .any(|blocked| extension.eq_ignore_ascii_case(blocked))
+        })
+}
+
+fn script_plugin_failure(specifier: &str, binary_path: &Path) -> PluginFailure {
+    PluginFailure::new(
+        "PLUGIN_BINARY_REQUIRED",
+        format!(
+            "Configured plugin \"{specifier}\" points to {}. Palamedes CLI plugins must be native executables.",
+            binary_path.display()
+        ),
+    )
+}
+
 fn resolved_executable(
     specifier: &str,
     binary_path: PathBuf,
 ) -> Result<ResolvedPlugin, PluginFailure> {
-    if matches!(
-        binary_path
-            .extension()
-            .and_then(|extension| extension.to_str()),
-        Some("js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" | "mts" | "cts")
-    ) {
-        return Err(PluginFailure::new(
-            "PLUGIN_BINARY_REQUIRED",
-            format!(
-                "Configured plugin \"{specifier}\" points to {}. Palamedes CLI plugins must be native executables.",
-                binary_path.display()
-            ),
-        ));
+    if is_blocked_script_extension(&binary_path) {
+        return Err(script_plugin_failure(specifier, &binary_path));
     }
     if !binary_path.is_file() {
         return Err(PluginFailure::new(
@@ -1286,6 +1448,11 @@ fn resolved_executable(
                 binary_path.display()
             ),
         ));
+    }
+    if let Ok(canonical) = fs::canonicalize(&binary_path)
+        && is_blocked_script_extension(&canonical)
+    {
+        return Err(script_plugin_failure(specifier, &canonical));
     }
     Ok(ResolvedPlugin {
         specifier: specifier.to_owned(),
@@ -1310,10 +1477,34 @@ fn locate_package_dir(specifier: &str, start: &Path) -> Option<PathBuf> {
 fn package_segments(specifier: &str) -> Option<Vec<&str>> {
     let segments = specifier.split('/').collect::<Vec<_>>();
     match (specifier.starts_with('@'), segments.as_slice()) {
-        (true, [scope, package]) if scope.len() > 1 && !package.is_empty() => Some(segments),
-        (false, [package]) if !package.is_empty() => Some(segments),
+        (true, [scope, package]) => {
+            let scope_name = scope.strip_prefix('@')?;
+            (is_valid_npm_package_segment(scope_name) && is_valid_npm_package_segment(package))
+                .then_some(segments)
+        }
+        (false, [package]) => is_valid_npm_package_segment(package).then_some(segments),
         _ => None,
     }
+}
+
+fn is_valid_npm_package_segment(segment: &str) -> bool {
+    if segment.is_empty()
+        || segment == "."
+        || segment == ".."
+        || segment.starts_with('.')
+        || segment.starts_with('_')
+        || segment.ends_with('.')
+    {
+        return false;
+    }
+    if !segment
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return false;
+    }
+    let mut components = Path::new(segment).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
 fn read_package_manifest(package_dir: &Path) -> Result<PackageManifest, io::Error> {
@@ -2065,7 +2256,10 @@ mod tests {
 
         let resolved =
             resolve_binary_plugin("./plugin", &config).expect("resolved plugin executable");
-        assert_eq!(resolved.binary_path, plugin.join("bin/acme"));
+        assert_eq!(
+            fs::canonicalize(resolved.binary_path).expect("canonical resolved binary"),
+            fs::canonicalize(plugin.join("bin/acme")).expect("canonical expected binary")
+        );
     }
 
     #[test]
@@ -2110,11 +2304,247 @@ mod tests {
             "plugin.mts",
             "plugin.cts",
             "plugin.tsx",
+            "plugin.JS",
+            "plugin.MJS",
+            "plugin.CJS",
+            "plugin.TS",
+            "plugin.Tsx",
         ] {
             fs::write(root.join(name), "export {};").expect("script fixture");
             let error =
                 resolve_binary_plugin(&format!("./{name}"), &config).expect_err("script rejected");
             assert_eq!(error.code, "PLUGIN_BINARY_REQUIRED", "for {name}");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_and_traversing_package_specifiers() {
+        use super::package_segments;
+
+        for valid in ["@acme/plugin", "@acme/plugin-native", "acme.plugin_2"] {
+            assert!(package_segments(valid).is_some(), "expected valid: {valid}");
+        }
+        for invalid in [
+            "",
+            ".",
+            "..",
+            "@a/..",
+            "@../..",
+            "@./pkg",
+            "@a/.",
+            "@a/.hidden",
+            "@_scope/pkg",
+            "@a/_pkg",
+            "@a/pkg.",
+            r"..\..\evil",
+            r"@a\..\evil",
+            r"@a/..\evil",
+            "C:evil",
+            r"C:\evil",
+            "pkg\0evil",
+            "pkg\nevil",
+            "@@a/b",
+            "@a/b/c",
+            "@a/",
+            "@",
+        ] {
+            assert!(
+                package_segments(invalid).is_none(),
+                "expected invalid package specifier: {invalid:?}"
+            );
+        }
+
+        let root = temp_dir("invalid-package-specifier");
+        let config = root.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+        for specifier in ["..", "@a/..", "@../..", r"..\..\evil"] {
+            let error = resolve_binary_plugin(specifier, &config)
+                .expect_err("traversing package specifier rejected");
+            assert_eq!(error.code, "PLUGIN_INVALID", "for {specifier}");
+        }
+    }
+
+    #[test]
+    fn optional_dependencies_cannot_traverse_outside_node_modules() {
+        let root = temp_dir("optional-dep-traversal");
+        let app = root.join("project");
+        let plugin = app.join("node_modules/@acme/plugin");
+        fs::create_dir_all(&plugin).expect("plugin dir");
+        // Place an attacker package above node_modules that `..` / `@a/..` would reach.
+        fs::write(
+            app.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./evil"}}"#,
+        )
+        .expect("outer manifest");
+        fs::write(app.join("evil"), "fixture").expect("outer binary");
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"optionalDependencies":{"..":"1.0.0","@a/..":"1.0.0","..\\..\\evil":"1.0.0"}}"#,
+        )
+        .expect("plugin manifest");
+        let config = app.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+
+        let error = resolve_binary_plugin("@acme/plugin", &config)
+            .expect_err("traversal optionalDependencies must not resolve");
+        assert_eq!(error.code, "PLUGIN_BINARY_MISSING");
+    }
+
+    #[test]
+    fn rejects_absolute_and_traversing_plugin_binary_paths() {
+        let root = temp_dir("plugin-binary-escape");
+        let outside = root.join("outside-bin");
+        fs::write(&outside, "fixture").expect("outside binary");
+        let plugin = root.join("plugin");
+        fs::create_dir_all(plugin.join("bin")).expect("plugin bin dir");
+        let config = root.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+
+        let absolute_outside = outside.to_string_lossy().replace('\\', "/");
+        for binary in [
+            absolute_outside.as_str(),
+            "../outside-bin",
+            "./../outside-bin",
+            "bin/../../outside-bin",
+            "bin/./acme",
+            ".",
+            "./",
+            r"..\outside-bin",
+            "C:/Windows/System32/cmd.exe",
+            "bin/acme\0",
+        ] {
+            let manifest = json!({ "palamedes": { "pluginBinary": binary } });
+            fs::write(plugin.join("package.json"), manifest.to_string()).expect("plugin manifest");
+            let error = resolve_binary_plugin("./plugin", &config)
+                .expect_err("unsafe pluginBinary rejected");
+            assert_eq!(error.code, "PLUGIN_INVALID", "for {binary:?}");
+        }
+
+        // Case-insensitive script extensions inside palamedes.pluginBinary must also be rejected.
+        fs::write(plugin.join("bin/script.JS"), "export {};").expect("uppercase script");
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/script.JS"}}"#,
+        )
+        .expect("script manifest");
+        let error = resolve_binary_plugin("./plugin", &config)
+            .expect_err("uppercase script pluginBinary rejected");
+        assert_eq!(error.code, "PLUGIN_BINARY_REQUIRED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlink_escaping_package_directory_for_plugin_binary() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_dir("plugin-binary-symlink-escape");
+        let outside = root.join("outside-bin");
+        fs::write(&outside, "fixture").expect("outside binary");
+        let plugin = root.join("plugin");
+        fs::create_dir_all(plugin.join("bin")).expect("plugin bin dir");
+        symlink(&outside, plugin.join("bin/escaped")).expect("create escaping symlink");
+        symlink(root.join("missing-outside"), plugin.join("bin/dangling"))
+            .expect("create dangling symlink");
+        fs::write(plugin.join("bin/real.MJS"), "export {};").expect("script target");
+        symlink(plugin.join("bin/real.MJS"), plugin.join("bin/script-link"))
+            .expect("create script symlink");
+        fs::write(plugin.join("bin/real-bin"), "fixture").expect("internal binary");
+        symlink(
+            plugin.join("bin/real-bin"),
+            plugin.join("bin/internal-link"),
+        )
+        .expect("create internal symlink");
+        let config = root.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+
+        for (binary, expected_code) in [
+            ("./bin/escaped", "PLUGIN_INVALID"),
+            ("./bin/dangling", "PLUGIN_INVALID"),
+            ("./bin/script-link", "PLUGIN_BINARY_REQUIRED"),
+        ] {
+            fs::write(
+                plugin.join("package.json"),
+                json!({ "palamedes": { "pluginBinary": binary } }).to_string(),
+            )
+            .expect("plugin manifest");
+            let error = resolve_binary_plugin("./plugin", &config)
+                .expect_err("symlink escape/script must be rejected");
+            assert_eq!(error.code, expected_code, "for {binary}");
+        }
+
+        // An internal symlink within the same package directory remains allowed.
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/internal-link"}}"#,
+        )
+        .expect("internal symlink manifest");
+        let resolved =
+            resolve_binary_plugin("./plugin", &config).expect("internal symlink allowed");
+        assert_eq!(
+            resolved.binary_path,
+            fs::canonicalize(plugin.join("bin/real-bin")).expect("canonical internal binary")
+        );
+
+        // Also enforce containment when resolved via optionalDependencies.
+        let modules = root.join("node_modules/@acme");
+        let meta = modules.join("meta");
+        let platform = modules.join("meta-platform");
+        fs::create_dir_all(&meta).expect("meta dir");
+        fs::create_dir_all(platform.join("bin")).expect("platform bin dir");
+        symlink(&outside, platform.join("bin/escaped")).expect("platform escaping symlink");
+        fs::write(
+            meta.join("package.json"),
+            r#"{"optionalDependencies":{"@acme/meta-platform":"1.0.0"}}"#,
+        )
+        .expect("meta manifest");
+        fs::write(
+            platform.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/escaped"}}"#,
+        )
+        .expect("platform manifest");
+        let error = resolve_binary_plugin("@acme/meta", &config)
+            .expect_err("optionalDependency symlink escape rejected");
+        assert_eq!(error.code, "PLUGIN_INVALID");
+    }
+
+    #[test]
+    fn resolves_windows_taskkill_only_from_valid_local_system_root() {
+        use std::ffi::OsStr;
+        use std::path::PathBuf;
+
+        use super::resolve_windows_taskkill;
+
+        assert_eq!(
+            resolve_windows_taskkill(Some(OsStr::new(r"C:\Windows"))),
+            Some(
+                PathBuf::from(r"C:\Windows")
+                    .join("System32")
+                    .join("taskkill.exe")
+            )
+        );
+        assert_eq!(
+            resolve_windows_taskkill(Some(OsStr::new("D:/Windows"))),
+            Some(
+                PathBuf::from("D:/Windows")
+                    .join("System32")
+                    .join("taskkill.exe")
+            )
+        );
+        for invalid in [
+            None,
+            Some(OsStr::new("")),
+            Some(OsStr::new(".")),
+            Some(OsStr::new("Windows")),
+            Some(OsStr::new(r"..\Windows")),
+            Some(OsStr::new(r"\\attacker\share")),
+            Some(OsStr::new(r"C:\Windows\..\evil")),
+            Some(OsStr::new("C:\\Windows\0")),
+        ] {
+            assert_eq!(
+                resolve_windows_taskkill(invalid),
+                None,
+                "expected invalid SystemRoot to be rejected: {invalid:?}"
+            );
         }
     }
 

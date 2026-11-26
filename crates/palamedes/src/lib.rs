@@ -62,8 +62,9 @@ pub use catalog_artifact::{
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogCompilationCache,
     CatalogConfig, FallbackLocales, PalamedesCatalogFormat, compile_catalog_artifact,
     compile_catalog_artifact_selected, compile_catalog_artifact_selected_cached,
-    compile_catalog_artifact_selected_cached_without_waiting, parse_catalog_for_compile,
-    resolve_catalog_file_path,
+    compile_catalog_artifact_selected_cached_without_waiting, is_valid_locale,
+    parse_catalog_for_compile, resolve_catalog_file_path, try_resolve_catalog_file_path,
+    validate_catalog_path_pattern,
 };
 #[doc(hidden)]
 pub use catalog_audit::{

@@ -7,14 +7,15 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
     CatalogParseRequest, FallbackLocales, compile_catalog_artifact, compiled_message_key,
-    parse_catalog, render_catalog_module,
+    is_valid_locale, parse_catalog, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
@@ -373,6 +374,11 @@ fn compile_js(
     } else {
         locales.to_vec()
     };
+    if let Some(invalid) = locales.iter().find(|locale| !is_valid_locale(locale)) {
+        return Err(format!(
+            "Invalid locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+        ));
+    }
     let mut requested = BTreeSet::new();
     if let Some(repeated) = locales
         .iter()
@@ -380,6 +386,14 @@ fn compile_js(
     {
         return Err(format!(
             "--locale {repeated} is given more than once; each locale compiles to one module."
+        ));
+    }
+    if let Some(invalid) = fallback_locales
+        .iter()
+        .find(|fallback| !is_valid_locale(fallback))
+    {
+        return Err(format!(
+            "Invalid --fallback-locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
         ));
     }
     if let Some(unknown) = fallback_locales
@@ -401,7 +415,9 @@ fn compile_js(
     for locale in &locales {
         let mut messages = BTreeMap::<String, MergedMessage>::new();
         for catalog in &config.catalogs {
-            let resource = config.resolve_catalog_path(&catalog.path, locale, catalog.format);
+            let resource = config
+                .resolve_contained_catalog_path(&catalog.path, locale, catalog.format)
+                .map_err(|error| error.to_string())?;
             let resource_path = resource.to_string_lossy().into_owned();
             let mut artifact_config = config.artifact_config();
             if !fallback_locales.is_empty() {
@@ -566,7 +582,7 @@ fn compile_js(
             .into_iter()
             .map(|(id, message)| (id, message.code))
             .collect::<BTreeMap<_, _>>();
-        let module_path = output.join(format!("{locale}.mjs"));
+        let module_path = resolve_compiled_js_module_path(output, locale)?;
         let code = render_catalog_module(&messages, locale, &module_path.to_string_lossy())
             .map_err(|error| error.to_string())?;
         modules.push((module_path, code));
@@ -574,6 +590,11 @@ fn compile_js(
 
     if diagnostics.is_empty() {
         fs::create_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
+        let canonical_output =
+            fs::canonicalize(output).map_err(|error| format!("{}: {error}", output.display()))?;
+        for (module_path, _) in &modules {
+            ensure_direct_child_within_output(&canonical_output, module_path)?;
+        }
         for (module_path, code) in modules {
             fs::write(&module_path, format!("{code}\n"))
                 .map_err(|error| format!("{}: {error}", module_path.display()))?;
@@ -584,6 +605,70 @@ fn compile_js(
         update,
         diagnostics,
     })
+}
+
+fn resolve_compiled_js_module_path(output: &Path, locale: &str) -> Result<PathBuf, String> {
+    if !is_valid_locale(locale) {
+        return Err(format!(
+            "Invalid locale \"{locale}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+        ));
+    }
+    let file_name = format!("{locale}.mjs");
+    let mut components = Path::new(&file_name).components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        return Err(format!(
+            "Compiled module filename \"{file_name}\" for locale \"{locale}\" must be a single path segment."
+        ));
+    }
+    let module_path = output.join(&file_name);
+    if module_path.parent() != Some(output)
+        || module_path.file_name() != Some(OsStr::new(&file_name))
+    {
+        return Err(format!(
+            "Compiled module path {} must be a direct child of {}.",
+            module_path.display(),
+            output.display()
+        ));
+    }
+    Ok(module_path)
+}
+
+fn ensure_direct_child_within_output(
+    canonical_output: &Path,
+    module_path: &Path,
+) -> Result<(), String> {
+    let Some(file_name) = module_path.file_name() else {
+        return Err(format!(
+            "Compiled module path {} must name a file inside {}.",
+            module_path.display(),
+            canonical_output.display()
+        ));
+    };
+    let expected = canonical_output.join(file_name);
+    match fs::symlink_metadata(&expected) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                let resolved = fs::canonicalize(&expected).map_err(|error| {
+                    format!(
+                        "Refusing to write through invalid or dangling symlink {}: {error}",
+                        expected.display()
+                    )
+                })?;
+                if resolved.parent() != Some(canonical_output) {
+                    return Err(format!(
+                        "Refusing to write compiled catalog {} outside output directory {}.",
+                        expected.display(),
+                        canonical_output.display()
+                    ));
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!("{}: {error}", expected.display()));
+        }
+    }
+    Ok(())
 }
 
 fn clone_source_key(source_key: &CatalogArtifactSourceKey) -> CatalogArtifactSourceKey {
@@ -625,5 +710,109 @@ fn find_source_key(
 impl CompileOptions {
     pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
         self.config.as_deref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use super::{compile_js, resolve_compiled_js_module_path};
+    use crate::commands::test_support::temp_dir;
+    use crate::config::load_config;
+
+    #[test]
+    fn compiled_js_module_paths_stay_direct_children_of_output() {
+        let output = Path::new("/tmp/out");
+        assert_eq!(
+            resolve_compiled_js_module_path(output, "de-AT").expect("valid locale"),
+            output.join("de-AT.mjs")
+        );
+        for invalid in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "../../../tmp/pwned",
+            "nested/de",
+            r"nested\de",
+            ".hidden",
+            "de.",
+        ] {
+            assert!(
+                resolve_compiled_js_module_path(output, invalid).is_err(),
+                "expected invalid compiled locale to be rejected: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compile_js_rejects_traversal_locales_before_writing() {
+        let app = temp_dir("compile-js-traversal-locale");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+
+        let error = compile_js(&config, &["../escaped".to_owned()], &[], false, &output)
+            .expect_err("traversal locale must be rejected");
+        assert!(error.contains("Invalid locale"), "got: {error}");
+        assert!(!app.join("escaped.mjs").exists());
+        assert!(!output.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_rejects_symlink_output_escaping_output_dir() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("compile-js-symlink-outside");
+        let app = temp_dir("compile-js-symlink-app");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+        fs::create_dir_all(&output).expect("create output dir");
+
+        let escaped_target = outside.join("pwned.mjs");
+        fs::write(&escaped_target, "original").expect("seed outside file");
+        symlink(&escaped_target, output.join("en.mjs")).expect("create escaping symlink");
+
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("escaping output symlink must be rejected");
+        assert!(error.contains("outside output directory"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&escaped_target).expect("read outside file"),
+            "original"
+        );
+
+        // Dangling symlink pointing outside must also be rejected.
+        fs::remove_file(output.join("en.mjs")).expect("remove symlink");
+        let dangling_target = outside.join("new.mjs");
+        symlink(&dangling_target, output.join("en.mjs")).expect("create dangling symlink");
+
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("dangling output symlink must be rejected");
+        assert!(error.contains("dangling symlink"), "got: {error}");
+        assert!(!dangling_target.exists());
     }
 }
