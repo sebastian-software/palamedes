@@ -2955,6 +2955,90 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r35Fixture, { recursive: true, force: true });
     }
+    // Unresolved `working-directory` stays unknown instead of falling back to
+    // the repo root; non-dispatch triggers (`schedule` + `workflow_dispatch`)
+    // evaluate absent inputs; `github.event.inputs.*` resolves dispatch choices;
+    // BuildKit SBOM generator images (`--sbom`, `--attest`, `sbom:`, `attests:`)
+    // are validated; and shell `${VAR:=default}` / `${VAR=default}` propagate
+    // assignments to subsequent commands.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  schedule:",
+          '    - cron: "0 0 * * *"',
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      image:",
+          "        type: choice",
+          `        default: node:24@${digest}`,
+          "        options:",
+          `          - node:24@${digest}`,
+          "          - alpine:3.20",
+          "jobs:",
+          "  dispatch-and-schedule:",
+          "    runs-on: ubuntu-24.04",
+          "    container: ${{ github.event.inputs.image }}",
+          "    steps:",
+          "      - env:",
+          "          IMAGE: ${{ inputs.image }}",
+          '        run: docker pull "${IMAGE:-busybox:1.37}"',
+          "      - run: |",
+          '          : "${ASSIGNED_IMG:=redis:7}"',
+          '          docker pull "$ASSIGNED_IMG"',
+          '          EMPTY_IMG=""',
+          '          : "${EMPTY_IMG=nginx:1.27}"',
+          '          docker pull "$EMPTY_IMG"',
+          '          : "${UNSET_EQ=postgres:17}"',
+          '          docker pull "$UNSET_EQ"',
+          "          docker buildx build --sbom=generator=docker/scout-sbom-indexer:latest .",
+          "          docker buildx build --attest type=sbom,generator=my/scanner:1.0 .",
+          `          docker buildx build --attest type=sbom,generator=my/scanner:1.0@${digest} .`,
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          sbom: generator=action/scanner:2.0",
+          "          attests: |",
+          "            type=provenance,mode=max",
+          "            type=sbom,generator=action/attest-scanner:3.0",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:21: redis:7 is not pinned to a sha256 digest",
+      "<memory>:26: postgres:17 is not pinned to a sha256 digest",
+      "<memory>:28: docker/scout-sbom-indexer:latest is not pinned to a sha256 digest",
+      "<memory>:29: my/scanner:1.0 is not pinned to a sha256 digest",
+      "<memory>:33: action/scanner:2.0 is not pinned to a sha256 digest",
+      "<memory>:35: action/attest-scanner:3.0 is not pinned to a sha256 digest",
+      "<memory>:15: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:18: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:19: busybox:1.37 is not pinned to a sha256 digest",
+    ]);
+    const r36Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r36-"));
+    try {
+      await mkdir(join(r36Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(join(r36Fixture, "release.recipe"), `FROM node:24@${digest}\n`);
+      await writeFile(
+        join(r36Fixture, ".github", "workflows", "unknown-wd.yml"),
+        [
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - working-directory: ${{ needs.prepare.outputs.directory }}",
+          "        run: docker build -f release.recipe .",
+          "      - working-directory: ${{ needs.prepare.outputs.directory }}",
+          "        run: docker build -f ${{ github.workspace }}/release.recipe ${{ github.workspace }}",
+          "",
+        ].join("\n"),
+      );
+      const r36Result = checkWorkflowPins(r36Fixture);
+      expect(r36Result.problems).toEqual([
+        ".github/workflows/unknown-wd.yml:6: build file release.recipe cannot be verified statically",
+      ]);
+    } finally {
+      await rm(r36Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

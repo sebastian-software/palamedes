@@ -35,6 +35,9 @@ const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/giu;
 const INPUTS_EXPRESSION_PATTERN =
   /\$\{\{\s*inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
+const EVENT_INPUTS_EXPRESSION_PATTERN =
+  /\$\{\{\s*github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
+const UNKNOWN_WORKING_DIR = "\0unknown-working-dir";
 const MATRIX_EXPRESSION_PATTERN =
   /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/giu;
 const BUILDKIT_TARGET_PLATFORM_ARGS = new Set([
@@ -3515,6 +3518,9 @@ function resolveWorkspaceRelativePath(
       trimmed = actionMatch.groups.rest ?? ".";
       effectiveBase = actionWsRelDir;
     } else {
+      if (effectiveBase === UNKNOWN_WORKING_DIR) {
+        return null;
+      }
       const pwdMatch = PWD_PREFIX_PATTERN.exec(trimmed);
       if (pwdMatch) {
         trimmed = pwdMatch.groups.rest ?? ".";
@@ -3543,7 +3549,7 @@ function resolveWorkspaceRelativePath(
 }
 
 function mapWorkspacePathToRepo(wsRelPath, root, checkoutPrefix = "") {
-  if (wsRelPath === null || wsRelPath === undefined || !root) {
+  if (wsRelPath === null || wsRelPath === undefined || wsRelPath === UNKNOWN_WORKING_DIR || !root) {
     return null;
   }
   const resolvedRoot = path.resolve(root);
@@ -3641,6 +3647,32 @@ function extractRunMountImageSources(rawMountSpec) {
   }
   if (mountType === "image" && source) {
     return [source];
+  }
+  return [];
+}
+
+function extractAttestGeneratorImages(rawSpec, { requireSbomType = false } = {}) {
+  const trimmed = String(rawSpec ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "true" || trimmed.toLowerCase() === "false") {
+    return [];
+  }
+  let attestType = "";
+  let generator = "";
+  for (const field of parseCsvMountFields(trimmed)) {
+    const eqIndex = field.indexOf("=");
+    if (eqIndex === -1) {
+      continue;
+    }
+    const key = stripQuotes(field.slice(0, eqIndex)).toLowerCase();
+    const value = stripQuotes(field.slice(eqIndex + 1));
+    if (key === "type") {
+      attestType = value.toLowerCase();
+    } else if (key === "generator") {
+      generator = value;
+    }
+  }
+  if (generator && (!requireSbomType || attestType === "sbom")) {
+    return [generator];
   }
   return [];
 }
@@ -3972,6 +4004,92 @@ function expandBuildArgSpec(
   };
 }
 
+function applyAssignDefaultParamExpansions(
+  tokens,
+  singleQuotedFlags,
+  frame,
+  stepEnv,
+  lineNumber,
+  conditional,
+  shellMode,
+) {
+  if (shellMode !== "posix") {
+    return;
+  }
+  const isBranching = conditional || frame.branches.length > 0;
+  const visitText = (text, depth = 0) => {
+    if (depth > 8 || !text.includes("${")) {
+      return;
+    }
+    let cursor = 0;
+    while (cursor < text.length) {
+      const expr = findNextShellParamExpansion(text, cursor);
+      if (!expr) {
+        break;
+      }
+      cursor = expr.end;
+      if (expr.op !== ":=" && expr.op !== "=") {
+        if (expr.word) {
+          visitText(expr.word, depth + 1);
+        }
+        continue;
+      }
+      const existing = frame.vars.get(expr.name);
+      const checksEmpty = expr.op === ":=";
+      let canAssign = false;
+      const keptExisting = [];
+      if (!existing || existing.length === 0) {
+        canAssign = true;
+      } else {
+        for (const entry of existing) {
+          if (entry.truncated) {
+            keptExisting.push(entry);
+            continue;
+          }
+          if (entry.unset) {
+            canAssign = true;
+            continue;
+          }
+          if (isDynamicReference(entry.value)) {
+            canAssign = true;
+            keptExisting.push(entry);
+          } else if (checksEmpty && entry.value.length === 0) {
+            canAssign = true;
+          } else {
+            keptExisting.push(entry);
+          }
+        }
+      }
+      if (!canAssign) {
+        continue;
+      }
+      if (expr.word) {
+        visitText(expr.word, depth + 1);
+      }
+      const assignedEntries = candidatesToVarEntries(
+        resolveImageTokenCandidates(expr.word, stepEnv, frame.vars, lineNumber, shellMode),
+        lineNumber,
+      );
+      if (isBranching) {
+        const base = existing ?? [{ value: "", line: 0, unset: true }];
+        frame.vars.set(expr.name, mergeVarEntries(base, assignedEntries));
+      } else {
+        const nextEntries =
+          keptExisting.length > 0
+            ? mergeVarEntries(keptExisting, assignedEntries)
+            : assignedEntries;
+        frame.vars.set(expr.name, nextEntries);
+      }
+    }
+  };
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (singleQuotedFlags[index]) {
+      continue;
+    }
+    visitText(tokens[index]);
+  }
+}
+
 function inspectShellText(
   scriptText,
   startLine,
@@ -4206,6 +4324,16 @@ function inspectShellText(
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
+
+    applyAssignDefaultParamExpansions(
+      tokens,
+      peeledSingleQuoted,
+      frame,
+      stepEnv,
+      lineNumber,
+      conditional,
+      shellMode,
+    );
 
     // `unset VAR ...` clears tracked shell variables (or marks them possibly unset
     // when executed conditionally).
@@ -4794,15 +4922,22 @@ function inspectShellText(
                   windowsPath: isWindowsShell,
                   actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
                 });
-                if (resolved === null || seenDirs.has(resolved)) {
+                const targetDir =
+                  resolved !== null
+                    ? resolved
+                    : buildFileContext.deferUnresolvedInputs &&
+                        referencesUnresolvedInput(candidate.text)
+                      ? null
+                      : UNKNOWN_WORKING_DIR;
+                if (targetDir === null || seenDirs.has(targetDir)) {
                   continue;
                 }
                 if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
                   frame.rowCwdsTruncated.add(row);
                   continue;
                 }
-                seenDirs.add(resolved);
-                nextDirs.push(resolved);
+                seenDirs.add(targetDir);
+                nextDirs.push(targetDir);
               }
             }
           }
@@ -4857,15 +4992,22 @@ function inspectShellText(
                 windowsPath: isWindowsShell,
                 actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
               });
-              if (resolved === null || seenDirs.has(resolved)) {
+              const targetDir =
+                resolved !== null
+                  ? resolved
+                  : buildFileContext.deferUnresolvedInputs &&
+                      referencesUnresolvedInput(candidate.text)
+                    ? null
+                    : UNKNOWN_WORKING_DIR;
+              if (targetDir === null || seenDirs.has(targetDir)) {
                 continue;
               }
               if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
                 truncated = true;
                 continue;
               }
-              seenDirs.add(resolved);
-              nextDirs.push(resolved);
+              seenDirs.add(targetDir);
+              nextDirs.push(targetDir);
             }
           }
         }
@@ -5131,6 +5273,7 @@ function inspectShellText(
       const rawBuildArgs = [];
       const rawPlatforms = [];
       const rawBuildImageOverrides = [];
+      const rawAttestSpecs = [];
       let contextArg = null;
       for (let index = buildArgStart; index < tokens.length; index += 1) {
         const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
@@ -5204,6 +5347,28 @@ function inspectShellText(
         }
         if (token.startsWith("--platform=")) {
           rawPlatforms.push(token.slice("--platform=".length));
+          continue;
+        }
+        if (token === "--sbom") {
+          if (tokens[index + 1] !== undefined) {
+            rawAttestSpecs.push({ requireSbomType: false, rawValue: tokens[index + 1] });
+          }
+          index += 1;
+          continue;
+        }
+        if (token.startsWith("--sbom=")) {
+          rawAttestSpecs.push({ requireSbomType: false, rawValue: token.slice("--sbom=".length) });
+          continue;
+        }
+        if (token === "--attest") {
+          if (tokens[index + 1] !== undefined) {
+            rawAttestSpecs.push({ requireSbomType: true, rawValue: tokens[index + 1] });
+          }
+          index += 1;
+          continue;
+        }
+        if (token.startsWith("--attest=")) {
+          rawAttestSpecs.push({ requireSbomType: true, rawValue: token.slice("--attest=".length) });
           continue;
         }
         if (normalizedCli === "podman" || normalizedCli === "buildah") {
@@ -5326,6 +5491,45 @@ function inspectShellText(
                 if (!seenContextProblems.has(msg)) {
                   seenContextProblems.add(msg);
                   problems.push(msg);
+                }
+              }
+            }
+          }
+        }
+
+        for (const { requireSbomType, rawValue } of rawAttestSpecs) {
+          const expandedAttest = resolveImageTokenCandidates(
+            rawValue,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          if (expandedAttest.truncated) {
+            const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenContextProblems.has(limitMsg)) {
+              seenContextProblems.add(limitMsg);
+              problems.push(limitMsg);
+            }
+          }
+          for (const varCandidate of expandedAttest.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              for (const generatorImage of extractAttestGeneratorImages(candidate.text, {
+                requireSbomType,
+              })) {
+                if (!generatorImage || isDynamicReference(generatorImage, shellMode)) {
+                  continue;
+                }
+                if (!isPinnedDigest(generatorImage)) {
+                  const msg = `${filePath}:${candidate.line}: ${generatorImage} is not pinned to a sha256 digest`;
+                  if (!seenContextProblems.has(msg)) {
+                    seenContextProblems.add(msg);
+                    problems.push(msg);
+                  }
                 }
               }
             }
@@ -6313,6 +6517,7 @@ function resolveWorkingDirsForRow(
   root,
   windowsPath = false,
   actionWsRelDir = null,
+  deferUnresolvedInputs = false,
 ) {
   if (!root) {
     return [null];
@@ -6334,13 +6539,19 @@ function resolveWorkingDirsForRow(
         windowsPath,
         actionWsRelDir,
       });
-      if (resolved !== null && !seen.has(resolved)) {
-        seen.add(resolved);
-        dirs.push(resolved);
+      const targetDir =
+        resolved !== null
+          ? resolved
+          : deferUnresolvedInputs && referencesUnresolvedInput(candidate.text)
+            ? null
+            : UNKNOWN_WORKING_DIR;
+      if (targetDir !== null && !seen.has(targetDir)) {
+        seen.add(targetDir);
+        dirs.push(targetDir);
       }
     }
   }
-  return dirs.length > 0 ? dirs : [""];
+  return dirs.length > 0 ? dirs : [deferUnresolvedInputs ? "" : UNKNOWN_WORKING_DIR];
 }
 
 function resolveStepExecutionGroups(
@@ -6353,6 +6564,7 @@ function resolveStepExecutionGroups(
   matrixRows,
   root,
   actionWsRelDir = null,
+  deferUnresolvedInputs = false,
 ) {
   const expandShellTemplate = (template, fallbackLine, row, rowStepEnv) => {
     const rowList = row ? [row] : [];
@@ -6401,6 +6613,7 @@ function resolveStepExecutionGroups(
       root,
       ctx.runnerOs === "Windows",
       actionWsRelDir,
+      deferUnresolvedInputs,
     );
     for (const mode of modes) {
       for (const workingDir of workingDirs) {
@@ -6729,6 +6942,8 @@ function checkStepsList(
       const buildArgsNode = getMapField(withNode, "build-args");
       const buildContextsNode = getMapField(withNode, "build-contexts");
       const platformsNode = getMapField(withNode, "platforms");
+      const sbomNode = getMapField(withNode, "sbom");
+      const attestsNode = getMapField(withNode, "attests");
       const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
       const seenActionContextProblems = new Set();
       const seenActionSyntaxProblems = new Set();
@@ -6826,6 +7041,53 @@ function checkStepsList(
             }
           }
         }
+        const checkActionAttestLines = (node, requireSbomType) => {
+          if (node?.kind !== "scalar") {
+            return;
+          }
+          for (const rawLine of String(node.value).split(/\r?\n/u)) {
+            const trimmedLine = rawLine.trim();
+            if (!trimmedLine || trimmedLine.startsWith("#")) {
+              continue;
+            }
+            const expandedAttest = resolveEnvExpressionCandidates(
+              trimmedLine,
+              rowStepEnv,
+              node.line,
+            );
+            if (expandedAttest.truncated) {
+              const limitMsg = `${filePath}:${node.line}: ${trimmedLine} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenActionContextProblems.has(limitMsg)) {
+                seenActionContextProblems.add(limitMsg);
+                problems.push(limitMsg);
+              }
+            }
+            for (const envCandidate of expandedAttest.candidates) {
+              for (const candidate of expandMatrixReferences(
+                envCandidate.text,
+                rowList,
+                envCandidate.line,
+              )) {
+                for (const generatorImage of extractAttestGeneratorImages(candidate.text, {
+                  requireSbomType,
+                })) {
+                  if (!generatorImage || isDynamicReference(generatorImage)) {
+                    continue;
+                  }
+                  if (!isPinnedDigest(generatorImage)) {
+                    const msg = `${filePath}:${candidate.line}: ${generatorImage} is not pinned to a sha256 digest`;
+                    if (!seenActionContextProblems.has(msg)) {
+                      seenActionContextProblems.add(msg);
+                      problems.push(msg);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        };
+        checkActionAttestLines(sbomNode, false);
+        checkActionAttestLines(attestsNode, true);
         if (!buildFileContext) {
           continue;
         }
@@ -7350,6 +7612,7 @@ function checkStepsList(
       applicableMatrixRows,
       buildFileContext?.root ?? null,
       buildFileContext?.actionWsRelDir ?? null,
+      Boolean(buildFileContext?.deferUnresolvedInputs),
     );
 
     const runNode = getMapField(stepNode, "run");
@@ -7692,17 +7955,32 @@ function extractActionInputDefaults(doc) {
   return defaults;
 }
 
-function substituteInputsInText(text, inputValues) {
-  return String(text).replace(
+function substituteInputsInText(text, inputValues, { includeEventInputs = false } = {}) {
+  let replaced = String(text).replace(
     INPUTS_EXPRESSION_PATTERN,
     (match, _p1, _p2, _p3, _offset, _str, groups) => {
       const name = (groups.dot ?? groups.sq ?? groups.dq).toLowerCase();
       return inputValues.has(name) ? inputValues.get(name).value : match;
     },
   );
+  if (includeEventInputs) {
+    replaced = replaced.replace(
+      EVENT_INPUTS_EXPRESSION_PATTERN,
+      (match, _p1, _p2, _p3, _offset, _str, groups) => {
+        const name = (groups.dot ?? groups.sq ?? groups.dq).toLowerCase();
+        return inputValues.has(name) ? inputValues.get(name).value : match;
+      },
+    );
+  }
+  return replaced;
 }
 
-function substituteInputsInAstNode(node, inputValues, memo = new Map()) {
+function substituteInputsInAstNode(
+  node,
+  inputValues,
+  memo = new Map(),
+  options = { includeEventInputs: false },
+) {
   if (!node || inputValues.size === 0) {
     return node;
   }
@@ -7710,11 +7988,11 @@ function substituteInputsInAstNode(node, inputValues, memo = new Map()) {
     return memo.get(node);
   }
   if (node.kind === "scalar") {
-    const nextValue = substituteInputsInText(node.value, inputValues);
+    const nextValue = substituteInputsInText(node.value, inputValues, options);
     const nextLines = Array.isArray(node.lines)
       ? node.lines.map((entry) => ({
           ...entry,
-          text: substituteInputsInText(entry.text, inputValues),
+          text: substituteInputsInText(entry.text, inputValues, options),
         }))
       : node.lines;
     const result = { ...node, value: nextValue, lines: nextLines };
@@ -7725,7 +8003,7 @@ function substituteInputsInAstNode(node, inputValues, memo = new Map()) {
     const result = { ...node, value: [] };
     memo.set(node, result);
     for (const item of node.value) {
-      result.value.push(substituteInputsInAstNode(item, inputValues, memo));
+      result.value.push(substituteInputsInAstNode(item, inputValues, memo, options));
     }
     return result;
   }
@@ -7734,14 +8012,19 @@ function substituteInputsInAstNode(node, inputValues, memo = new Map()) {
     const result = { ...node, value: nextMap };
     memo.set(node, result);
     for (const [key, val] of node.value) {
-      nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo));
+      nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo, options));
     }
     return result;
   }
   return node;
 }
 
-function collectReferencedInputNames(node, found = new Set(), seen = new Set()) {
+function collectReferencedInputNames(
+  node,
+  found = new Set(),
+  seen = new Set(),
+  { includeEventInputs = false } = {},
+) {
   if (!node || seen.has(node)) {
     return found;
   }
@@ -7752,17 +8035,24 @@ function collectReferencedInputNames(node, found = new Set(), seen = new Set()) 
       const name = (match.groups.dot ?? match.groups.sq ?? match.groups.dq).toLowerCase();
       found.add(name);
     }
+    if (includeEventInputs) {
+      const eventPattern = new RegExp(EVENT_INPUTS_EXPRESSION_PATTERN.source, "giu");
+      for (const match of String(node.value).matchAll(eventPattern)) {
+        const name = (match.groups.dot ?? match.groups.sq ?? match.groups.dq).toLowerCase();
+        found.add(name);
+      }
+    }
     return found;
   }
   if (node.kind === "seq") {
     for (const item of node.value) {
-      collectReferencedInputNames(item, found, seen);
+      collectReferencedInputNames(item, found, seen, { includeEventInputs });
     }
     return found;
   }
   if (node.kind === "map") {
     for (const val of node.value.values()) {
-      collectReferencedInputNames(val, found, seen);
+      collectReferencedInputNames(val, found, seen, { includeEventInputs });
     }
   }
   return found;
@@ -7784,7 +8074,9 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
 
   const referenced = new Set();
   for (const fieldName of ["env", "container", "services", "image", "steps", "jobs"]) {
-    collectReferencedInputNames(getMapField(doc, fieldName), referenced);
+    collectReferencedInputNames(getMapField(doc, fieldName), referenced, new Set(), {
+      includeEventInputs: true,
+    });
   }
 
   const inputValueLists = [];
@@ -8025,21 +8317,90 @@ export function unpinnedWorkflowContainerReferences(
     for (const [key, entry] of inputOverrides) {
       mergedCallInputs.set(key.toLowerCase(), entry);
     }
-    workflowInputContexts.push({ inputs: mergedCallInputs, deferUnresolvedInputs: false });
+    workflowInputContexts.push({
+      inputs: mergedCallInputs,
+      deferUnresolvedInputs: false,
+      includeEventInputs: false,
+    });
   } else {
     const onNode = getMapField(doc, "on");
     const hasWorkflowCallTrigger =
       onNode?.kind === "map" && getMapField(onNode, "workflow_call") !== null;
+    const hasNonInputTrigger = (() => {
+      if (!onNode) {
+        return false;
+      }
+      if (onNode.kind === "scalar") {
+        const trigger = String(onNode.value).trim().toLowerCase();
+        return trigger !== "workflow_call" && trigger !== "workflow_dispatch";
+      }
+      if (onNode.kind === "seq") {
+        return onNode.value.some((item) => {
+          if (item?.kind !== "scalar") {
+            return false;
+          }
+          const trigger = String(item.value).trim().toLowerCase();
+          return trigger !== "workflow_call" && trigger !== "workflow_dispatch";
+        });
+      }
+      if (onNode.kind === "map") {
+        for (const triggerKey of onNode.value.keys()) {
+          const lower = triggerKey.toLowerCase();
+          if (lower !== "workflow_call" && lower !== "workflow_dispatch") {
+            return true;
+          }
+        }
+      }
+      return false;
+    })();
     const wfCallDefaults = extractTriggerInputDefaults(doc, "workflow_call");
     const wfDispatchContexts = extractWorkflowDispatchInputContexts(doc, filePath, problems);
     if (wfCallDefaults.size > 0 || hasWorkflowCallTrigger) {
-      workflowInputContexts.push({ inputs: wfCallDefaults, deferUnresolvedInputs: true });
+      workflowInputContexts.push({
+        inputs: wfCallDefaults,
+        deferUnresolvedInputs: true,
+        includeEventInputs: false,
+      });
     }
     for (const dispatchInputs of wfDispatchContexts) {
-      workflowInputContexts.push({ inputs: dispatchInputs, deferUnresolvedInputs: false });
+      workflowInputContexts.push({
+        inputs: dispatchInputs,
+        deferUnresolvedInputs: false,
+        includeEventInputs: true,
+      });
+    }
+    if (hasNonInputTrigger && workflowInputContexts.length > 0) {
+      // On non-input triggers (e.g. `schedule`, `push`, `pull_request`), GitHub
+      // does not populate `workflow_dispatch` or `workflow_call` defaults; both
+      // `inputs.*` and `github.event.inputs.*` evaluate to empty strings.
+      const absentInputs = new Map();
+      const registerAbsent = (triggerName) => {
+        if (onNode?.kind !== "map") {
+          return;
+        }
+        const triggerNode = getMapField(onNode, triggerName);
+        const inputsNode = triggerNode?.kind === "map" ? getMapField(triggerNode, "inputs") : null;
+        if (inputsNode?.kind !== "map") {
+          return;
+        }
+        for (const inputName of inputsNode.value.keys()) {
+          absentInputs.set(inputName.toLowerCase(), { value: "", line: inputsNode.line });
+        }
+      };
+      registerAbsent("workflow_dispatch");
+      registerAbsent("workflow_call");
+      workflowInputContexts.push({
+        inputs: absentInputs,
+        deferUnresolvedInputs: false,
+        includeEventInputs: true,
+      });
     }
     if (workflowInputContexts.length === 0) {
-      workflowInputContexts.push({ inputs: new Map(), deferUnresolvedInputs: false });
+      workflowInputContexts.push({
+        inputs: new Map(),
+        deferUnresolvedInputs: false,
+        includeEventInputs: false,
+      });
     }
   }
 
@@ -8050,15 +8411,20 @@ export function unpinnedWorkflowContainerReferences(
   const seenDocProblems = new Set(problems);
 
   for (let ctxIndex = 0; ctxIndex < workflowInputContexts.length; ctxIndex += 1) {
-    const { inputs: effectiveWorkflowInputs, deferUnresolvedInputs } =
-      workflowInputContexts[ctxIndex];
+    const {
+      inputs: effectiveWorkflowInputs,
+      deferUnresolvedInputs,
+      includeEventInputs,
+    } = workflowInputContexts[ctxIndex];
     const ctxBuildFileContext = buildFileContext
       ? { ...buildFileContext, deferUnresolvedInputs }
       : null;
     const substitutionMemo = new Map();
     const applyWorkflowInputs = (node) =>
       effectiveWorkflowInputs.size > 0
-        ? substituteInputsInAstNode(node, effectiveWorkflowInputs, substitutionMemo)
+        ? substituteInputsInAstNode(node, effectiveWorkflowInputs, substitutionMemo, {
+            includeEventInputs,
+          })
         : node;
 
     const ctxProblems = [];
