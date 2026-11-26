@@ -683,11 +683,12 @@ function resolveIdentifierArrayInScope(
       if (isDestructuringDecl) {
         const end = scanBalancedEnd(source, index);
         if (end === -1 || end > objectStart) return;
+        // Destructuring patterns like `const { t: label } = meta` mention `t`
+        // as a property key rather than binding a local `t`. Taint instead of
+        // assuming a block-scoped shadow so later writes to outer `t` are never
+        // discarded.
         if (identWord.test(source.slice(index + 1, end - 1))) {
-          top.binding = {
-            value: null,
-            blockScoped: top.declKind === "let" || top.declKind === "const",
-          };
+          top.tainted = true;
         }
         index = end;
         prevTokenKind = "other";
@@ -732,10 +733,7 @@ function resolveIdentifierArrayInScope(
         const end = scanBalancedEnd(source, index);
         if (end === -1 || end > objectStart) return;
         if (identWord.test(source.slice(index + 1, end - 1))) {
-          top.binding = {
-            value: null,
-            blockScoped: top.declKind === "let" || top.declKind === "const",
-          };
+          top.tainted = true;
         }
         index = end;
         prevTokenKind = "other";
@@ -907,12 +905,12 @@ function resolveIdentifierArrayInScope(
     regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
 
-  for (let frameIndex = scopeStack.length - 1; frameIndex >= 0; frameIndex -= 1) {
-    const frame = scopeStack[frameIndex]!;
-    if (frame.tainted) return;
-    if (frame.binding !== undefined) return frame.binding.value ?? undefined;
-  }
-  return;
+  // Only accept an initializer declared in the same straight-line scope as the
+  // entrypoint call; captured outer bindings inside a nested function/block can
+  // be mutated after the declaration and before deferred execution.
+  const finalFrame = scopeStack.at(-1)!;
+  if (finalFrame.tainted) return;
+  return finalFrame.binding?.value ?? undefined;
 }
 
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {

@@ -890,12 +890,22 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBe(true);
+      // Deferred entrypoint calls inside a nested function/block capturing an
+      // outer tree (which code after the function can mutate before calling it)
+      // and destructured property aliases (`const { t: label } = meta`) followed
+      // by outer mutation are treated as inconclusive.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; if (ready) { start({tree:t,page:"/[[...locale]]/page"}); }`,
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; function run(){ return start({tree:t,page:"/[[...locale]]/page"}); } t[2]={}; run();`,
           "/[[...locale]]/page",
         ),
-      ).toBe(true);
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; { const { t: label } = meta; t[2]={}; } start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
       // In-place mutations (member writes, method calls, aliasing) or inline
       // chained array expressions (`tree: [...].with(...)`, `children: [...].with(...)`)
       // invalidate the static tree inference and return undefined.
