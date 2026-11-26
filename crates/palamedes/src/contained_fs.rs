@@ -128,7 +128,7 @@ pub enum DirFilenameEquivalence {
 }
 
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileIdentity {
     #[cfg(unix)]
     dev: u64,
@@ -142,6 +142,14 @@ pub struct FileIdentity {
     file_index_low: u32,
     #[cfg(not(any(unix, windows)))]
     _unsupported: (),
+}
+
+/// Canonical filesystem-identity key used to deduplicate and order
+/// cross-process catalog locks independently of path spelling or case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TargetLockKey {
+    dir_id: FileIdentity,
+    target_hash: u64,
 }
 
 impl FileIdentity {
@@ -305,41 +313,48 @@ mod platform {
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
     use std::os::unix::ffi::OsStrExt;
     use std::path::Path;
+    use std::rc::{Rc, Weak};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        DirFilenameEquivalence, FileIdentity, validate_relative_dir_segments,
+        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_relative_dir_segments,
         validate_single_file_name,
     };
 
+    #[derive(Debug)]
+    struct UnixDirLock {
+        key: FileIdentity,
+        _fd: OwnedFd,
+    }
+
+    impl Drop for UnixDirLock {
+        fn drop(&mut self) {
+            HELD_UNIX_DIR_LOCKS.with(|held| {
+                let mut map = held.borrow_mut();
+                if map
+                    .get(&self.key)
+                    .is_some_and(|weak| weak.strong_count() == 0)
+                {
+                    map.remove(&self.key);
+                }
+            });
+        }
+    }
+
     thread_local! {
-        static HELD_UNIX_DIR_LOCKS: RefCell<HashMap<FileIdentity, usize>> =
+        static HELD_UNIX_DIR_LOCKS: RefCell<HashMap<FileIdentity, Weak<UnixDirLock>>> =
             RefCell::new(HashMap::new());
     }
 
     /// Exclusive cross-process and cross-thread guard serializing catalog
     /// read-modify-write operations targeting a [`ContainedDir`].
+    ///
+    /// Deliberately `!Send` and `!Sync` (via [`Rc`]) so the OS lock is always
+    /// released on the acquiring thread when the last reentrant guard drops.
     #[derive(Debug)]
     pub struct ContainedTargetLock {
-        key: Option<FileIdentity>,
-        _fd: Option<OwnedFd>,
-    }
-
-    impl Drop for ContainedTargetLock {
-        fn drop(&mut self) {
-            if let Some(key) = self.key {
-                HELD_UNIX_DIR_LOCKS.with(|held| {
-                    let mut map = held.borrow_mut();
-                    if let Some(count) = map.get_mut(&key) {
-                        *count = count.saturating_sub(1);
-                        if *count == 0 {
-                            map.remove(&key);
-                        }
-                    }
-                });
-            }
-        }
+        _lock: Rc<UnixDirLock>,
     }
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
@@ -784,11 +799,32 @@ mod platform {
             })
         }
 
+        /// Returns the canonical filesystem-identity lock key for `file_name`
+        /// in this directory, used to deduplicate and order multi-target locks.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
+        /// or [`ContainedFsError::Io`] if directory identity lookup fails.
+        pub fn target_lock_key(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<TargetLockKey, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let dir_id = self.self_identity()?.ok_or_else(|| {
+                ContainedFsError::Io(io::Error::other("missing Unix directory identity"))
+            })?;
+            Ok(TargetLockKey {
+                dir_id,
+                target_hash: 0,
+            })
+        }
+
         /// Acquires an exclusive cross-process and cross-thread lock covering
         /// read-modify-write operations on `file_name` in this directory.
         ///
-        /// Re-entrant on the same thread so callers may hold the lock across
-        /// read, merge, and [`Self::write_file_atomically`] without deadlocking.
+        /// Re-entrant on the same thread; the underlying OS lock stays held
+        /// until the last live guard for this directory drops.
         ///
         /// # Errors
         ///
@@ -798,67 +834,14 @@ mod platform {
             &self,
             file_name: &OsStr,
         ) -> Result<ContainedTargetLock, ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            let dir_id = self.self_identity()?;
-            if let Some(key) = dir_id {
-                let already_held = HELD_UNIX_DIR_LOCKS.with(|held| {
-                    let mut map = held.borrow_mut();
-                    if let Some(count) = map.get_mut(&key) {
-                        *count += 1;
-                        true
-                    } else {
-                        false
-                    }
-                });
-                if already_held {
-                    return Ok(ContainedTargetLock {
-                        key: Some(key),
-                        _fd: None,
-                    });
-                }
+            let key = self.target_lock_key(file_name)?.dir_id;
+            if let Some(existing) =
+                HELD_UNIX_DIR_LOCKS.with(|held| held.borrow().get(&key).and_then(Weak::upgrade))
+            {
+                return Ok(ContainedTargetLock { _lock: existing });
             }
 
-            let dot = c".";
-            // Open a fresh open file description for this directory so `flock`
-            // serializes both distinct processes and distinct threads sharing
-            // one `ContainedDir`.
-            // SAFETY: `self.fd` is an open directory descriptor and `dot` is valid.
-            let mut raw = unsafe {
-                libc::openat(
-                    self.fd.as_raw_fd(),
-                    dot.as_ptr(),
-                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-                )
-            };
-            if raw < 0 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::EACCES) && USES_SEARCH_ONLY_DIR_HANDLE {
-                    #[cfg(not(target_os = "linux"))]
-                    {
-                        // On BSD/macOS, `O_SEARCH` allows locking execute-only
-                        // (`0311`) directories without read permission.
-                        // SAFETY: `self.fd` is open and `dot` is valid.
-                        raw = unsafe {
-                            libc::openat(self.fd.as_raw_fd(), dot.as_ptr(), DIR_TRAVERSAL_FLAGS)
-                        };
-                    }
-                    #[cfg(target_os = "linux")]
-                    {
-                        // Linux `O_PATH` handles do not support `flock`; allow
-                        // `0311` unreadable directories to proceed using
-                        // no-replace / snapshot checks.
-                        return Ok(ContainedTargetLock {
-                            key: None,
-                            _fd: None,
-                        });
-                    }
-                }
-                if raw < 0 {
-                    return Err(ContainedFsError::Io(io::Error::last_os_error()));
-                }
-            }
-            // SAFETY: `raw` is a newly opened valid directory descriptor.
-            let lock_fd = unsafe { OwnedFd::from_raw_fd(raw) };
+            let lock_fd = open_unix_lock_fd(self)?;
             loop {
                 // SAFETY: `lock_fd` is an open directory descriptor.
                 let rc = unsafe { libc::flock(lock_fd.as_raw_fd(), libc::LOCK_EX) };
@@ -869,26 +852,13 @@ mod platform {
                 if error.raw_os_error() == Some(libc::EINTR) {
                     continue;
                 }
-                if matches!(
-                    error.raw_os_error(),
-                    Some(libc::EOPNOTSUPP | libc::ENOTSUP | libc::ENOSYS)
-                ) {
-                    return Ok(ContainedTargetLock {
-                        key: None,
-                        _fd: None,
-                    });
-                }
                 return Err(ContainedFsError::Io(error));
             }
-            if let Some(key) = dir_id {
-                HELD_UNIX_DIR_LOCKS.with(|held| {
-                    held.borrow_mut().insert(key, 1);
-                });
-            }
-            Ok(ContainedTargetLock {
-                key: dir_id,
-                _fd: Some(lock_fd),
-            })
+            let lock = Rc::new(UnixDirLock { key, _fd: lock_fd });
+            HELD_UNIX_DIR_LOCKS.with(|held| {
+                held.borrow_mut().insert(key, Rc::downgrade(&lock));
+            });
+            Ok(ContainedTargetLock { _lock: lock })
         }
 
         /// Rejects `file_name` if it already exists in this directory as a symlink.
@@ -2060,6 +2030,45 @@ mod platform {
         None
     }
 
+    fn open_unix_lock_fd(dir: &ContainedDir) -> Result<OwnedFd, ContainedFsError> {
+        let dot = c".";
+        // Open a fresh open file description for this directory so `flock`
+        // serializes both distinct processes and distinct threads sharing one
+        // `ContainedDir`.
+        // SAFETY: `dir.fd` is an open directory descriptor and `dot` is valid.
+        let raw = unsafe {
+            libc::openat(
+                dir.fd.as_raw_fd(),
+                dot.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+            )
+        };
+        if raw >= 0 {
+            // SAFETY: `raw` is a newly opened valid directory descriptor.
+            return Ok(unsafe { OwnedFd::from_raw_fd(raw) });
+        }
+        let error = io::Error::last_os_error();
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd",
+            target_os = "netbsd"
+        ))]
+        if error.raw_os_error() == Some(libc::EACCES) {
+            // On BSD/macOS, `O_SEARCH` allows locking execute-only (`0311`)
+            // directories without directory-listing permission.
+            // SAFETY: `dir.fd` is open and `dot` is valid.
+            let search_raw =
+                unsafe { libc::openat(dir.fd.as_raw_fd(), dot.as_ptr(), DIR_TRAVERSAL_FLAGS) };
+            if search_raw >= 0 {
+                // SAFETY: `search_raw` is a newly opened valid directory descriptor.
+                return Ok(unsafe { OwnedFd::from_raw_fd(search_raw) });
+            }
+            return Err(ContainedFsError::Io(io::Error::last_os_error()));
+        }
+        Err(ContainedFsError::Io(error))
+    }
+
     fn open_readable_self(dir: &ContainedDir) -> Option<OwnedFd> {
         let dot = c".";
         // SAFETY: `dir.fd` is an open directory descriptor and `dot` is valid.
@@ -2150,13 +2159,9 @@ mod platform {
                     return Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf);
                 }
             }
-            if let Some(probed) = probe_directory_case_insensitivity(dir, readable.as_raw_fd()) {
-                return Some(if probed {
-                    DirFilenameEquivalence::CaseInsensitiveNtfs
-                } else {
-                    DirFilenameEquivalence::Exact
-                });
-            }
+            // Check known Linux filesystem types in O(1) before enumerating
+            // directory entries, so large ext4/tmpfs/xfs/btrfs directories do
+            // not pay O(N) enumeration overhead on every extraction.
             let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
             // SAFETY: `readable` is open and `fs_stat` is writable.
             if unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) } == 0 {
@@ -2198,7 +2203,13 @@ mod platform {
                     return Some(DirFilenameEquivalence::Exact);
                 }
             }
-            None
+            probe_directory_case_insensitivity(dir, readable.as_raw_fd()).map(|probed| {
+                if probed {
+                    DirFilenameEquivalence::CaseInsensitiveNtfs
+                } else {
+                    DirFilenameEquivalence::Exact
+                }
+            })
         }
         #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
@@ -3482,9 +3493,11 @@ mod platform {
         file_name: [u16; 1],
     }
 
-    const INFINITE: u32 = 0xFFFF_FFFF;
-    const WAIT_OBJECT_0: u32 = 0x0000_0000;
-    const WAIT_ABANDONED: u32 = 0x0000_0080;
+    const STATUS_SHARING_VIOLATION: NtStatus = 0xC000_0043_u32 as i32;
+    const STATUS_DELETE_PENDING: NtStatus = 0xC000_0056_u32 as i32;
+    const FILE_READ_DATA: u32 = 0x0000_0001;
+    const FILE_ATTRIBUTE_HIDDEN: u32 = 0x0000_0002;
+    const FILE_ATTRIBUTE_TEMPORARY: u32 = 0x0000_0100;
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -3492,13 +3505,6 @@ mod platform {
             file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
         ) -> i32;
-        fn CreateMutexW(
-            mutex_attributes: *mut c_void,
-            initial_owner: i32,
-            name: *const u16,
-        ) -> *mut c_void;
-        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
-        fn ReleaseMutex(mutex: *mut c_void) -> i32;
     }
 
     #[link(name = "advapi32")]
@@ -3575,43 +3581,42 @@ mod platform {
         fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
     }
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-    struct WindowsLockKey {
-        dir_id: FileIdentity,
-        name_hash: u64,
-    }
-
-    thread_local! {
-        static HELD_WINDOWS_LOCKS: std::cell::RefCell<std::collections::HashMap<WindowsLockKey, usize>> =
-            std::cell::RefCell::new(std::collections::HashMap::new());
-    }
-
-    /// Exclusive cross-process and cross-thread guard serializing catalog
-    /// read-modify-write operations on Windows via a per-target named mutex.
     #[derive(Debug)]
-    pub struct ContainedTargetLock {
-        key: WindowsLockKey,
-        mutex: Option<OwnedHandle>,
+    struct WindowsDirTargetLock {
+        key: super::TargetLockKey,
+        _handle: OwnedHandle,
     }
 
-    impl Drop for ContainedTargetLock {
+    impl Drop for WindowsDirTargetLock {
         fn drop(&mut self) {
-            if let Some(ref mutex) = self.mutex {
-                // SAFETY: this thread acquired ownership via `WaitForSingleObject`.
-                unsafe {
-                    let _ = ReleaseMutex(mutex.as_raw_handle());
-                }
-            }
             HELD_WINDOWS_LOCKS.with(|held| {
                 let mut map = held.borrow_mut();
-                if let Some(count) = map.get_mut(&self.key) {
-                    *count = count.saturating_sub(1);
-                    if *count == 0 {
-                        map.remove(&self.key);
-                    }
+                if map
+                    .get(&self.key)
+                    .is_some_and(|weak| weak.strong_count() == 0)
+                {
+                    map.remove(&self.key);
                 }
             });
         }
+    }
+
+    thread_local! {
+        static HELD_WINDOWS_LOCKS: std::cell::RefCell<
+            std::collections::HashMap<super::TargetLockKey, std::rc::Weak<WindowsDirTargetLock>>,
+        > = std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+
+    /// Exclusive cross-process, cross-session, and cross-thread guard
+    /// serializing catalog read-modify-write operations on Windows via a
+    /// handle-pinned, delete-on-close exclusive lock file in the destination
+    /// directory.
+    ///
+    /// Deliberately `!Send` and `!Sync` (via [`std::rc::Rc`]) so the OS lock is
+    /// always released on the acquiring thread when the last reentrant guard drops.
+    #[derive(Debug)]
+    pub struct ContainedTargetLock {
+        _lock: std::rc::Rc<WindowsDirTargetLock>,
     }
 
     fn windows_target_name_hash(file_name: &OsStr) -> u64 {
@@ -3812,63 +3817,111 @@ mod platform {
             Some(false)
         }
 
-        /// Acquires an exclusive cross-process and cross-thread named mutex
-        /// covering read-modify-write operations on `file_name` in this directory.
+        /// Returns the canonical filesystem-identity lock key for `file_name`
+        /// in this directory, used to deduplicate and order multi-target locks.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
-        /// or [`ContainedFsError::Io`] on OS lock failures.
-        pub fn lock_target(
+        /// or [`ContainedFsError::Io`] on OS errors.
+        pub fn target_lock_key(
             &self,
             file_name: &OsStr,
-        ) -> Result<ContainedTargetLock, ContainedFsError> {
+        ) -> Result<super::TargetLockKey, ContainedFsError> {
             validate_single_file_name(file_name)?;
             let dir_id = self.self_identity()?.ok_or_else(|| {
                 ContainedFsError::Io(io::Error::other("missing Windows directory identity"))
             })?;
-            let key = WindowsLockKey {
+            Ok(super::TargetLockKey {
                 dir_id,
-                name_hash: windows_target_name_hash(file_name),
-            };
-            let already_held = HELD_WINDOWS_LOCKS.with(|held| {
-                let mut map = held.borrow_mut();
-                if let Some(count) = map.get_mut(&key) {
-                    *count += 1;
-                    true
-                } else {
-                    false
-                }
-            });
-            if already_held {
-                return Ok(ContainedTargetLock { key, mutex: None });
-            }
-            let mut wide_name: Vec<u16> = format!(
-                "Local\\PalamedesCatalogLock-{:08x}-{:08x}-{:08x}-{:016x}",
-                dir_id.volume_serial, dir_id.file_index_high, dir_id.file_index_low, key.name_hash
-            )
-            .encode_utf16()
-            .collect();
-            wide_name.push(0);
-            // SAFETY: `wide_name` is a valid NUL-terminated UTF-16 string.
-            let raw = unsafe { CreateMutexW(std::ptr::null_mut(), 0, wide_name.as_ptr()) };
-            if raw.is_null() {
-                return Err(ContainedFsError::Io(io::Error::last_os_error()));
-            }
-            // SAFETY: `raw` is a newly created valid Windows kernel handle.
-            let mutex = unsafe { OwnedHandle::from_raw_handle(raw) };
-            // SAFETY: `mutex` is a valid mutex handle.
-            let wait = unsafe { WaitForSingleObject(mutex.as_raw_handle(), INFINITE) };
-            if wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED {
-                return Err(ContainedFsError::Io(io::Error::last_os_error()));
-            }
-            HELD_WINDOWS_LOCKS.with(|held| {
-                held.borrow_mut().insert(key, 1);
-            });
-            Ok(ContainedTargetLock {
-                key,
-                mutex: Some(mutex),
+                target_hash: windows_target_name_hash(file_name),
             })
+        }
+
+        /// Acquires an exclusive cross-process, cross-session, and cross-thread
+        /// lock covering read-modify-write operations on `file_name` in this
+        /// directory.
+        ///
+        /// Uses a handle-pinned `share_access = 0` file inside this directory
+        /// marked delete-on-close after verifying it is not a reparse point, so
+        /// writers across all logon sessions (interactive, RDP, Windows
+        /// services, SMB shares) coordinate cleanly without leaving lock files
+        /// behind. Re-entrant on the same thread; the OS lock remains held
+        /// until the last live guard drops.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
+        /// or the lock entry is a reparse point, or [`ContainedFsError::Io`] on
+        /// OS lock failures.
+        pub fn lock_target(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<ContainedTargetLock, ContainedFsError> {
+            let key = self.target_lock_key(file_name)?;
+            if let Some(existing) = HELD_WINDOWS_LOCKS
+                .with(|held| held.borrow().get(&key).and_then(std::rc::Weak::upgrade))
+            {
+                return Ok(ContainedTargetLock { _lock: existing });
+            }
+
+            let lock_name = OsString::from(format!(".pmds-lock-{:016x}", key.target_hash));
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let mut backoff_ms: u64 = 2;
+            let handle = loop {
+                match nt_create_relative(
+                    self.handle.as_raw_handle(),
+                    &lock_name,
+                    FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
+                    FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY,
+                    0,
+                    FILE_OPEN_IF,
+                    FILE_NON_DIRECTORY_FILE
+                        | FILE_OPEN_REPARSE_POINT
+                        | FILE_SYNCHRONOUS_IO_NONALERT,
+                    std::ptr::null_mut(),
+                ) {
+                    Ok(handle) => break handle,
+                    Err(STATUS_SHARING_VIOLATION | STATUS_DELETE_PENDING) => {
+                        if std::time::Instant::now() >= deadline {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::TimedOut,
+                                format!(
+                                    "timed out waiting for exclusive catalog lock for \"{}\"",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                        backoff_ms = (backoff_ms * 2).min(50);
+                    }
+                    Err(status) => {
+                        return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                    }
+                }
+            };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to use symlink or reparse point as catalog lock \"{}\"",
+                    lock_name.to_string_lossy()
+                )));
+            }
+            if info.number_of_links > 1 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to use hard-linked file as catalog lock \"{}\"",
+                    lock_name.to_string_lossy()
+                )));
+            }
+            nt_mark_delete_on_close(handle.as_raw_handle())?;
+            let lock = std::rc::Rc::new(WindowsDirTargetLock {
+                key,
+                _handle: handle,
+            });
+            HELD_WINDOWS_LOCKS.with(|held| {
+                held.borrow_mut().insert(key, std::rc::Rc::downgrade(&lock));
+            });
+            Ok(ContainedTargetLock { _lock: lock })
         }
 
         /// Rejects `file_name` if it exists as a symlink or reparse point.
@@ -4695,15 +4748,20 @@ mod platform {
     use std::io::{self, Write};
     use std::path::{Path, PathBuf};
 
+    use std::marker::PhantomData;
+    use std::rc::Rc;
+
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        DirFilenameEquivalence, FileIdentity, validate_relative_dir_segments,
+        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_relative_dir_segments,
         validate_single_file_name,
     };
 
     /// Target lock guard fallback for platforms without Unix/Windows locking.
     #[derive(Debug)]
-    pub struct ContainedTargetLock;
+    pub struct ContainedTargetLock {
+        _not_send: PhantomData<Rc<()>>,
+    }
 
     /// Verified directory handle fallback for platforms without Unix/Windows APIs.
     #[derive(Debug)]
@@ -4822,13 +4880,27 @@ mod platform {
             None
         }
 
+        /// Fallback lock key for platforms without Unix/Windows identities.
+        pub fn target_lock_key(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<TargetLockKey, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            Ok(TargetLockKey {
+                dir_id: FileIdentity { _unsupported: () },
+                target_hash: 0,
+            })
+        }
+
         /// No-op target lock fallback for platforms without Unix/Windows locking.
         pub fn lock_target(
             &self,
             file_name: &OsStr,
         ) -> Result<ContainedTargetLock, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            Ok(ContainedTargetLock)
+            Ok(ContainedTargetLock {
+                _not_send: PhantomData,
+            })
         }
 
         /// Rejects `file_name` if it exists as a symlink.
@@ -5016,7 +5088,6 @@ mod tests {
     }
 
     #[cfg(any(
-        target_os = "linux",
         target_os = "macos",
         target_os = "ios",
         target_os = "freebsd",
@@ -5417,5 +5488,43 @@ mod tests {
             "20",
             "cross-thread/process target lock must prevent lost catalog updates"
         );
+    }
+
+    #[test]
+    fn reentrant_target_lock_keeps_os_lock_until_last_guard_drops() {
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Duration;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let first = dir
+            .lock_target(OsStr::new("en.po"))
+            .expect("acquire first guard");
+        let second = dir
+            .lock_target(OsStr::new("en.po"))
+            .expect("acquire reentrant second guard");
+
+        // Drop the FIRST guard while the SECOND guard is still alive.
+        drop(first);
+
+        let root_path = root.path().to_path_buf();
+        let (tx, rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            let other_dir = ContainedDir::open_root(&root_path).expect("open root on worker");
+            let _lock = other_dir
+                .lock_target(OsStr::new("en.po"))
+                .expect("worker acquires lock after release");
+            tx.send(()).expect("signal acquisition");
+        });
+
+        assert!(
+            rx.recv_timeout(Duration::from_millis(80)).is_err(),
+            "OS lock must remain held while the second reentrant guard is still live"
+        );
+        drop(second);
+        rx.recv_timeout(Duration::from_secs(5))
+            .expect("worker must acquire lock once the last reentrant guard drops");
+        handle.join().expect("worker joined");
     }
 }

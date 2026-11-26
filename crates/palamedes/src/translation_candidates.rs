@@ -593,7 +593,10 @@ where
     }
 
     let mut pinned_dirs: HashMap<PathBuf, Arc<ContainedDir>> = HashMap::new();
-    let mut target_locks = Vec::with_capacity(target_batches.len());
+    let mut lock_plan: BTreeMap<
+        crate::contained_fs::TargetLockKey,
+        (Arc<ContainedDir>, OsString, PathBuf),
+    > = BTreeMap::new();
     let root_dir = Path::new(&request.config.root_dir);
     for (relative_parent, file_name) in target_batches.keys() {
         let full_path = root_dir.join(relative_parent).join(file_name);
@@ -627,8 +630,26 @@ where
             pinned_dirs.insert(relative_parent.clone(), Arc::clone(&opened));
             opened
         };
+        let lock_key = parent_dir
+            .target_lock_key(file_name)
+            .map_err(|error| match error {
+                ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+                    path: full_path.to_string_lossy().into_owned(),
+                    reason,
+                },
+                ContainedFsError::Io(source) => PalamedesError::WriteFile {
+                    path: full_path.clone(),
+                    source,
+                },
+            })?;
+        lock_plan
+            .entry(lock_key)
+            .or_insert_with(|| (parent_dir, file_name.clone(), full_path));
+    }
+    let mut target_locks = Vec::with_capacity(lock_plan.len());
+    for (_, (parent_dir, file_name, full_path)) in lock_plan {
         let lock = parent_dir
-            .lock_target(file_name)
+            .lock_target(&file_name)
             .map_err(|error| match error {
                 ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
                     path: full_path.to_string_lossy().into_owned(),

@@ -113,7 +113,7 @@ pub use catalog_update::{
 pub use contained_fs::{
     ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedTargetLock,
     ContainedWriteDurability, ContainedWriteOutcome, DirFilenameEquivalence, FileIdentity,
-    split_relative_catalog_path,
+    TargetLockKey, split_relative_catalog_path,
 };
 #[doc(hidden)]
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};

@@ -712,18 +712,20 @@ fn ntfs_casefold(text: &str) -> String {
 
 #[cfg(not(windows))]
 fn ntfs_casefold(text: &str) -> String {
-    // NTFS `$UpCase` is a 1-to-1 code-unit uppercase mapping (`σ` and `ς` both
-    // map to `Σ`, while multi-character expansions such as `ß` -> `SS` stay
-    // distinct, and dotless `ı` does not fold to `I`).
+    // NTFS `$UpCase` is a 65,536-entry UTF-16 code-unit table: supplementary
+    // plane characters (> U+FFFF, encoded as surrogate pairs) are untouched,
+    // multi-character expansions such as `ß` -> `SS` stay distinct, `σ` and `ς`
+    // both map to `Σ`, and dotless `ı` (U+0131) does not fold to `I`.
     let mut folded = String::with_capacity(text.len());
     for ch in text.chars() {
-        if ch == '\u{0131}' {
+        if (ch as u32) > 0xFFFF || ch == '\u{0131}' {
             folded.push(ch);
             continue;
         }
         let mut upper = ch.to_uppercase();
         if let Some(first) = upper.next()
             && upper.next().is_none()
+            && (first as u32) <= 0xFFFF
         {
             folded.push(first);
         } else {
@@ -1729,6 +1731,11 @@ catalogs:
             super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), ntfs),
             super::fold_os_segment(OsStr::new("strasse.po"), ntfs),
             "NTFS 1-to-1 uppercase folding keeps ß and ss distinct"
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("\u{10400}.po"), ntfs),
+            super::fold_os_segment(OsStr::new("\u{10428}.po"), ntfs),
+            "NTFS UTF-16 code-unit folding keeps supplementary Deseret pairs distinct"
         );
 
         let apfs = DirFilenameEquivalence::CaseInsensitiveUnicodeNfd;
