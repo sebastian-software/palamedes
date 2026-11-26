@@ -2726,6 +2726,111 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r32Fixture, { recursive: true, force: true });
     }
+    // `workflow_dispatch` input defaults (including dual-trigger workflows),
+    // memoized YAML alias sharing during input substitution, dead-step skipping
+    // when no runner matches `if:`, commit-only checkout identity (`github.head_ref`
+    // fails closed), unverifiable local action reporting, and fail-closed
+    // reusable-workflow nesting depth limits.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_call:",
+          "    inputs:",
+          "      image:",
+          `        default: node:24@${digest}`,
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      image:",
+          "        default: busybox:1.37",
+          "jobs:",
+          "  run:",
+          "    runs-on: ubuntu-24.04",
+          "    container: ${{ inputs.image }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:13: busybox:1.37 is not pinned to a sha256 digest"]);
+    const aliasChainLines = [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      image:",
+      "        default: alpine:3.20",
+      "x-a0: &a0",
+      "  img: ${{ inputs.image }}",
+      ...Array.from(
+        { length: 12 },
+        (_, idx) => `x-a${idx + 1}: &a${idx + 1}\n  l: *a${idx}\n  r: *a${idx}`,
+      ),
+      "jobs:",
+      "  shared:",
+      "    runs-on: ubuntu-24.04",
+      "    container: ${{ inputs.image }}",
+      "    steps:",
+      "      - if: runner.os == 'Windows'",
+      "        run: docker pull redis:7",
+      "",
+    ].join("\n");
+    expect(unpinnedWorkflowContainerReferences(aliasChainLines)).toEqual([
+      "<memory>:47: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
+    const r33Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r33-"));
+    try {
+      await mkdir(join(r33Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(join(r33Fixture, "Containerfile"), `FROM node:24@${digest}\n`);
+      for (let level = 0; level <= 10; level += 1) {
+        const content =
+          level < 10
+            ? [
+                "on:",
+                "  workflow_call:",
+                "jobs:",
+                "  next:",
+                `    uses: ./.github/workflows/depth-${level + 1}.yml`,
+                "",
+              ].join("\n")
+            : [
+                "on:",
+                "  workflow_call:",
+                "jobs:",
+                "  leaf:",
+                "    runs-on: ubuntu-24.04",
+                "    steps:",
+                "      - run: echo ok",
+                "",
+              ].join("\n");
+        await writeFile(join(r33Fixture, ".github", "workflows", `depth-${level}.yml`), content);
+      }
+      await writeFile(
+        join(r33Fixture, ".github", "workflows", "checkout-and-runner.yml"),
+        [
+          "jobs:",
+          "  head-ref-checkout:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
+          "        with:",
+          "          ref: ${{ github.head_ref }}",
+          "      - run: docker build -f Containerfile .",
+          "      - uses: ./unverifiable-action",
+          "  linux-only:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - if: runner.os == 'Windows'",
+          "        run: docker build -f windows-only.Dockerfile .",
+          "",
+        ].join("\n"),
+      );
+      const r33Result = checkWorkflowPins(r33Fixture);
+      expect(r33Result.problems).toEqual([
+        ".github/workflows/checkout-and-runner.yml:8: build file Containerfile cannot be verified statically",
+        ".github/workflows/checkout-and-runner.yml:9: local action ./unverifiable-action cannot be verified statically",
+        ".github/workflows/depth-9.yml:5: local reusable workflow ./.github/workflows/depth-10.yml exceeds maximum nesting depth (10) and cannot be verified",
+      ]);
+    } finally {
+      await rm(r33Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

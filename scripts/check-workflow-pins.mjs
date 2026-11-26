@@ -95,6 +95,7 @@ const MAX_MATRIX_WORK = 10_000;
 const MAX_VAR_VALUES = 32;
 const MAX_TOKEN_EXPANSIONS = 64;
 const MAX_WORKING_DIRS_PER_ROW = 32;
+const MAX_LOCAL_CALL_DEPTH = 10;
 
 const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--config",
@@ -549,13 +550,12 @@ function filterRunnerContextsForStep(stepIfNode, runnerContexts) {
     return runnerContexts;
   }
   const clauses = rawIf.split("&&");
-  const filtered = runnerContexts.filter((context) =>
+  return runnerContexts.filter((context) =>
     clauses.every((clause) => {
       const verdict = evaluateStepIfClause(clause, context);
       return verdict === null ? true : verdict;
     }),
   );
-  return filtered.length > 0 ? filtered : runnerContexts;
 }
 
 function lookupVarEntries(varMap, name, caseInsensitive = false) {
@@ -6344,6 +6344,9 @@ function checkStepsList(
     const stepShellNode = getMapField(stepNode, "shell");
     const stepWorkingDirNode = getMapField(stepNode, "working-directory");
     const applicableContexts = filterRunnerContextsForStep(stepIfNode, runnerContexts);
+    if (runnerContexts.length > 0 && applicableContexts.length === 0) {
+      continue;
+    }
     const applicableMatrixRows =
       applicableContexts.length > 0 && applicableContexts.every((ctx) => ctx.row !== null)
         ? applicableContexts.map((ctx) => ctx.row)
@@ -6395,9 +6398,7 @@ function checkStepsList(
             checksOutCurrentRef =
               expandedRefs.length > 0 &&
               expandedRefs.every((candidate) =>
-                /^\$\{\{\s*(?:github\.sha|github\.ref|github\.ref_name|github\.head_ref)\s*\}\}$/iu.test(
-                  candidate.text.trim(),
-                ),
+                /^\$\{\{\s*github\.sha\s*\}\}$/iu.test(candidate.text.trim()),
               );
           }
         }
@@ -6984,6 +6985,13 @@ function checkStepsList(
             rowCheckoutPrefixes,
             rowForeignPrefixes,
           );
+          if (actionDirs.length === 0) {
+            pushCompositeProblem(
+              `${filePath}:${usesNode.line}: local action ${localRef} cannot be verified statically`,
+            );
+            continue;
+          }
+          let foundManifestOrError = false;
           for (const actionDir of actionDirs) {
             for (const manifestName of ["action.yml", "action.yaml"]) {
               const manifestPath = path.join(actionDir, manifestName);
@@ -6994,6 +7002,7 @@ function checkStepsList(
                 targetProblems,
               );
               if (safeActionFile) {
+                foundManifestOrError = true;
                 if (!seenActionFiles.has(safeActionFile)) {
                   seenActionFiles.add(safeActionFile);
                   resolvedActionFiles.push(safeActionFile);
@@ -7001,12 +7010,18 @@ function checkStepsList(
                 break;
               }
               if (targetProblems.length > 0) {
+                foundManifestOrError = true;
                 for (const problem of targetProblems) {
                   pushCompositeProblem(problem);
                 }
                 break;
               }
             }
+          }
+          if (!foundManifestOrError) {
+            pushCompositeProblem(
+              `${filePath}:${usesNode.line}: local action ${localRef} cannot be verified statically`,
+            );
           }
         }
 
@@ -7081,7 +7096,13 @@ function checkStepsList(
         const checkedLocalActionPins = buildFileContext.checkedLocalActionPins ?? new Set();
         const rowActionEmits = [];
         for (const resolvedActionFile of resolvedActionFiles) {
-          if (activeCallStack.has(resolvedActionFile) || activeCallStack.size >= 8) {
+          if (activeCallStack.has(resolvedActionFile)) {
+            continue;
+          }
+          if (activeCallStack.size >= MAX_LOCAL_CALL_DEPTH) {
+            pushCompositeProblem(
+              `${filePath}:${usesNode.line}: local action ${rawLocalUses} exceeds maximum nesting depth (${MAX_LOCAL_CALL_DEPTH}) and cannot be verified`,
+            );
             continue;
           }
           const nextCallStack = new Set(activeCallStack);
@@ -7499,9 +7520,12 @@ function substituteInputsInText(text, inputValues) {
   );
 }
 
-function substituteInputsInAstNode(node, inputValues) {
+function substituteInputsInAstNode(node, inputValues, memo = new Map()) {
   if (!node || inputValues.size === 0) {
     return node;
+  }
+  if (memo.has(node)) {
+    return memo.get(node);
   }
   if (node.kind === "scalar") {
     const nextValue = substituteInputsInText(node.value, inputValues);
@@ -7511,35 +7535,41 @@ function substituteInputsInAstNode(node, inputValues) {
           text: substituteInputsInText(entry.text, inputValues),
         }))
       : node.lines;
-    return { ...node, value: nextValue, lines: nextLines };
+    const result = { ...node, value: nextValue, lines: nextLines };
+    memo.set(node, result);
+    return result;
   }
   if (node.kind === "seq") {
-    return {
-      ...node,
-      value: node.value.map((item) => substituteInputsInAstNode(item, inputValues)),
-    };
+    const result = { ...node, value: [] };
+    memo.set(node, result);
+    for (const item of node.value) {
+      result.value.push(substituteInputsInAstNode(item, inputValues, memo));
+    }
+    return result;
   }
   if (node.kind === "map") {
     const nextMap = new Map();
+    const result = { ...node, value: nextMap };
+    memo.set(node, result);
     for (const [key, val] of node.value) {
-      nextMap.set(key, substituteInputsInAstNode(val, inputValues));
+      nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo));
     }
-    return { ...node, value: nextMap };
+    return result;
   }
   return node;
 }
 
-function extractWorkflowCallInputDefaults(doc) {
+function extractTriggerInputDefaults(doc, triggerName) {
   const defaults = new Map();
   const onNode = getMapField(doc, "on");
   if (onNode?.kind !== "map") {
     return defaults;
   }
-  const wfCallNode = getMapField(onNode, "workflow_call");
-  if (wfCallNode?.kind !== "map") {
+  const triggerNode = getMapField(onNode, triggerName);
+  if (triggerNode?.kind !== "map") {
     return defaults;
   }
-  const inputsNode = getMapField(wfCallNode, "inputs");
+  const inputsNode = getMapField(triggerNode, "inputs");
   if (inputsNode?.kind !== "map") {
     return defaults;
   }
@@ -7696,129 +7726,164 @@ export function unpinnedWorkflowContainerReferences(
     return problems;
   }
 
-  const effectiveWorkflowInputs = extractWorkflowCallInputDefaults(doc);
+  const workflowInputContexts = [];
   if (inputOverrides) {
+    const mergedCallInputs = extractTriggerInputDefaults(doc, "workflow_call");
     for (const [key, entry] of inputOverrides) {
-      effectiveWorkflowInputs.set(key.toLowerCase(), entry);
+      mergedCallInputs.set(key.toLowerCase(), entry);
+    }
+    workflowInputContexts.push(mergedCallInputs);
+  } else {
+    const wfCallDefaults = extractTriggerInputDefaults(doc, "workflow_call");
+    const wfDispatchDefaults = extractTriggerInputDefaults(doc, "workflow_dispatch");
+    if (wfCallDefaults.size > 0) {
+      workflowInputContexts.push(wfCallDefaults);
+    }
+    if (wfDispatchDefaults.size > 0) {
+      workflowInputContexts.push(wfDispatchDefaults);
+    }
+    if (workflowInputContexts.length === 0) {
+      workflowInputContexts.push(new Map());
     }
   }
-  const applyWorkflowInputs = (node) =>
-    effectiveWorkflowInputs.size > 0
-      ? substituteInputsInAstNode(node, effectiveWorkflowInputs)
-      : node;
 
   const baseEnv = callerEnv ? cloneVarMap(callerEnv) : new Map();
-  const workflowEnv = extractEnvMap(applyWorkflowInputs(getMapField(doc, "env")), baseEnv);
   const workflowDefaultShell = extractDefaultShell(doc);
   const workflowDefaultWorkingDir = extractDefaultWorkingDirectory(doc);
-
-  const checkContainerNode = (containerNode, envMap, matrixRows) => {
-    if (!containerNode) {
-      return;
-    }
-    if (containerNode.kind === "scalar") {
-      checkImageField(containerNode, envMap, matrixRows, filePath, problems);
-    } else if (containerNode.kind === "map") {
-      checkImageField(getMapField(containerNode, "image"), envMap, matrixRows, filePath, problems);
-    }
-  };
-
-  const checkServicesNode = (servicesNode, envMap, matrixRows) => {
-    if (servicesNode?.kind !== "map") {
-      return;
-    }
-    for (const serviceNode of servicesNode.value.values()) {
-      checkContainerNode(serviceNode, envMap, matrixRows);
-    }
-  };
-
-  checkContainerNode(applyWorkflowInputs(getMapField(doc, "container")), workflowEnv, []);
-  checkServicesNode(applyWorkflowInputs(getMapField(doc, "services")), workflowEnv, []);
-  checkImageField(
-    applyWorkflowInputs(getMapField(doc, "image")),
-    workflowEnv,
-    [],
-    filePath,
-    problems,
-  );
-  checkStepsList(
-    applyWorkflowInputs(getMapField(doc, "steps")),
-    workflowEnv,
-    [],
-    filePath,
-    problems,
-    workflowDefaultShell,
-    [],
-    buildFileContext,
-    workflowDefaultWorkingDir,
-    emittedGithubEnv,
-  );
-
   const runsNode = getMapField(doc, "runs");
-  if (runsNode?.kind === "map") {
-    const effectiveInputs = extractActionInputDefaults(doc);
-    if (inputOverrides) {
-      for (const [key, entry] of inputOverrides) {
-        effectiveInputs.set(key.toLowerCase(), entry);
+  const seenDocProblems = new Set(problems);
+
+  for (let ctxIndex = 0; ctxIndex < workflowInputContexts.length; ctxIndex += 1) {
+    const effectiveWorkflowInputs = workflowInputContexts[ctxIndex];
+    const substitutionMemo = new Map();
+    const applyWorkflowInputs = (node) =>
+      effectiveWorkflowInputs.size > 0
+        ? substituteInputsInAstNode(node, effectiveWorkflowInputs, substitutionMemo)
+        : node;
+
+    const ctxProblems = [];
+    const workflowEnv = extractEnvMap(applyWorkflowInputs(getMapField(doc, "env")), baseEnv);
+
+    const checkContainerNode = (containerNode, envMap, matrixRows) => {
+      if (!containerNode) {
+        return;
       }
-    }
-    const effectiveRunsNode =
-      effectiveInputs.size > 0 ? substituteInputsInAstNode(runsNode, effectiveInputs) : runsNode;
-    const runsImageNode = getMapField(effectiveRunsNode, "image");
-    checkImageField(runsImageNode, workflowEnv, [], filePath, problems, {
-      allowLocalDockerAction: true,
-    });
-    if (buildFileContext && runsImageNode?.kind === "scalar") {
-      const rawImage = String(runsImageNode.value).trim();
-      if (isLocalDockerActionImage(rawImage)) {
-        const actionDir = path.dirname(path.resolve(root, filePath));
-        recordExplicitBuildFile(rawImage, actionDir, root, buildFileContext.explicitBuildFiles);
+      if (containerNode.kind === "scalar") {
+        checkImageField(containerNode, envMap, matrixRows, filePath, ctxProblems);
+      } else if (containerNode.kind === "map") {
+        checkImageField(
+          getMapField(containerNode, "image"),
+          envMap,
+          matrixRows,
+          filePath,
+          ctxProblems,
+        );
       }
-    }
-    checkStepsList(
-      getMapField(effectiveRunsNode, "steps"),
+    };
+
+    const checkServicesNode = (servicesNode, envMap, matrixRows) => {
+      if (servicesNode?.kind !== "map") {
+        return;
+      }
+      for (const serviceNode of servicesNode.value.values()) {
+        checkContainerNode(serviceNode, envMap, matrixRows);
+      }
+    };
+
+    checkContainerNode(applyWorkflowInputs(getMapField(doc, "container")), workflowEnv, []);
+    checkServicesNode(applyWorkflowInputs(getMapField(doc, "services")), workflowEnv, []);
+    checkImageField(
+      applyWorkflowInputs(getMapField(doc, "image")),
       workflowEnv,
       [],
       filePath,
-      problems,
+      ctxProblems,
+    );
+    checkStepsList(
+      applyWorkflowInputs(getMapField(doc, "steps")),
+      workflowEnv,
+      [],
+      filePath,
+      ctxProblems,
       workflowDefaultShell,
       [],
       buildFileContext,
       workflowDefaultWorkingDir,
       emittedGithubEnv,
     );
-  }
 
-  const jobsNode = applyWorkflowInputs(getMapField(doc, "jobs"));
-  if (jobsNode?.kind === "map") {
-    for (const jobNode of jobsNode.value.values()) {
-      if (jobNode?.kind !== "map") {
-        continue;
+    if (ctxIndex === 0 && runsNode?.kind === "map") {
+      const effectiveInputs = extractActionInputDefaults(doc);
+      if (inputOverrides) {
+        for (const [key, entry] of inputOverrides) {
+          effectiveInputs.set(key.toLowerCase(), entry);
+        }
       }
-      const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
-      const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, problems);
-      const jobUsesNode = getMapField(jobNode, "uses");
-      if (
-        jobUsesNode?.kind === "scalar" &&
-        String(jobUsesNode.value).trim().startsWith("./") &&
-        buildFileContext?.root
-      ) {
-        const rawJobUses = String(jobUsesNode.value).trim();
-        const jobWithNode = getMapField(jobNode, "with");
-        const callRows = jobMatrixRows.length > 0 ? jobMatrixRows : [null];
-        const seenCalleeProblems = new Set();
-        const pushCalleeProblem = (message) => {
-          if (!seenCalleeProblems.has(message)) {
-            seenCalleeProblems.add(message);
-            problems.push(message);
+      const actionMemo = new Map();
+      const effectiveRunsNode =
+        effectiveInputs.size > 0
+          ? substituteInputsInAstNode(runsNode, effectiveInputs, actionMemo)
+          : runsNode;
+      const runsImageNode = getMapField(effectiveRunsNode, "image");
+      checkImageField(runsImageNode, workflowEnv, [], filePath, ctxProblems, {
+        allowLocalDockerAction: true,
+      });
+      if (buildFileContext && runsImageNode?.kind === "scalar") {
+        const rawImage = String(runsImageNode.value).trim();
+        if (isLocalDockerActionImage(rawImage)) {
+          const actionDir = path.dirname(path.resolve(root, filePath));
+          recordExplicitBuildFile(rawImage, actionDir, root, buildFileContext.explicitBuildFiles);
+        }
+      }
+      checkStepsList(
+        getMapField(effectiveRunsNode, "steps"),
+        workflowEnv,
+        [],
+        filePath,
+        ctxProblems,
+        workflowDefaultShell,
+        [],
+        buildFileContext,
+        workflowDefaultWorkingDir,
+        emittedGithubEnv,
+      );
+    }
+
+    const jobsNode = applyWorkflowInputs(getMapField(doc, "jobs"));
+    if (jobsNode?.kind === "map") {
+      for (const jobNode of jobsNode.value.values()) {
+        if (jobNode?.kind !== "map") {
+          continue;
+        }
+        const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
+        const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, ctxProblems);
+        const jobUsesNode = getMapField(jobNode, "uses");
+        if (
+          jobUsesNode?.kind === "scalar" &&
+          String(jobUsesNode.value).trim().startsWith("./") &&
+          buildFileContext?.root
+        ) {
+          const rawJobUses = String(jobUsesNode.value).trim();
+          const jobWithNode = getMapField(jobNode, "with");
+          const callRows = jobMatrixRows.length > 0 ? jobMatrixRows : [null];
+          const seenCalleeProblems = new Set();
+          const pushCalleeProblem = (message) => {
+            if (!seenCalleeProblems.has(message)) {
+              seenCalleeProblems.add(message);
+              ctxProblems.push(message);
+            }
+          };
+          const resolvedWorkflowPath = resolveContainedPath(
+            rawJobUses,
+            buildFileContext.root,
+            buildFileContext.root,
+          );
+          if (!resolvedWorkflowPath) {
+            pushCalleeProblem(
+              `${filePath}:${jobUsesNode.line}: local reusable workflow ${rawJobUses} cannot be verified statically`,
+            );
+            continue;
           }
-        };
-        const resolvedWorkflowPath = resolveContainedPath(
-          rawJobUses,
-          buildFileContext.root,
-          buildFileContext.root,
-        );
-        if (resolvedWorkflowPath) {
           const targetProblems = [];
           const safeWorkflowFile = resolveSafeContainerFile(
             resolvedWorkflowPath,
@@ -7828,74 +7893,91 @@ export function unpinnedWorkflowContainerReferences(
           for (const targetProblem of targetProblems) {
             pushCalleeProblem(targetProblem);
           }
-          const activeCallStack = buildFileContext.actionCallStack ?? new Set();
-          if (
-            safeWorkflowFile &&
-            !activeCallStack.has(safeWorkflowFile) &&
-            activeCallStack.size < 8
-          ) {
-            const nextCallStack = new Set(activeCallStack);
-            nextCallStack.add(safeWorkflowFile);
-            const calleeSource = readFileSync(safeWorkflowFile, "utf8");
-            const calleeRelPath = formatPortableRelativePath(
-              buildFileContext.root,
-              safeWorkflowFile,
-            );
-            const checkedLocalActionPins = buildFileContext.checkedLocalActionPins ?? new Set();
-            if (!checkedLocalActionPins.has(safeWorkflowFile)) {
-              checkedLocalActionPins.add(safeWorkflowFile);
-              for (const pinProblem of unpinnedActionReferences(calleeSource, calleeRelPath)) {
-                pushCalleeProblem(pinProblem);
-              }
-            }
-            for (const row of callRows) {
-              const rowList = row ? [row] : [];
-              const calleeInputCombos = expandWithInputCombinations(
-                jobWithNode,
-                jobEnv,
-                rowList,
-                filePath,
-                jobUsesNode.line,
-                pushCalleeProblem,
+          if (!safeWorkflowFile) {
+            if (targetProblems.length === 0) {
+              pushCalleeProblem(
+                `${filePath}:${jobUsesNode.line}: local reusable workflow ${rawJobUses} cannot be verified statically`,
               );
-              for (const calleeInputOverrides of calleeInputCombos) {
-                for (const calleeProblem of unpinnedWorkflowContainerReferences(
-                  calleeSource,
-                  calleeRelPath,
-                  {
-                    root: buildFileContext.root,
-                    explicitBuildFiles: buildFileContext.explicitBuildFiles,
-                    buildInvocations: buildFileContext.buildInvocations,
-                    inputOverrides: calleeInputOverrides,
-                    actionCallStack: nextCallStack,
-                    checkedLocalActionPins,
-                  },
-                )) {
-                  pushCalleeProblem(calleeProblem);
-                }
+            }
+            continue;
+          }
+          const activeCallStack = buildFileContext.actionCallStack ?? new Set();
+          if (activeCallStack.has(safeWorkflowFile)) {
+            continue;
+          }
+          if (activeCallStack.size >= MAX_LOCAL_CALL_DEPTH) {
+            pushCalleeProblem(
+              `${filePath}:${jobUsesNode.line}: local reusable workflow ${rawJobUses} exceeds maximum nesting depth (${MAX_LOCAL_CALL_DEPTH}) and cannot be verified`,
+            );
+            continue;
+          }
+          const nextCallStack = new Set(activeCallStack);
+          nextCallStack.add(safeWorkflowFile);
+          const calleeSource = readFileSync(safeWorkflowFile, "utf8");
+          const calleeRelPath = formatPortableRelativePath(buildFileContext.root, safeWorkflowFile);
+          const checkedLocalActionPins = buildFileContext.checkedLocalActionPins ?? new Set();
+          if (!checkedLocalActionPins.has(safeWorkflowFile)) {
+            checkedLocalActionPins.add(safeWorkflowFile);
+            for (const pinProblem of unpinnedActionReferences(calleeSource, calleeRelPath)) {
+              pushCalleeProblem(pinProblem);
+            }
+          }
+          for (const row of callRows) {
+            const rowList = row ? [row] : [];
+            const calleeInputCombos = expandWithInputCombinations(
+              jobWithNode,
+              jobEnv,
+              rowList,
+              filePath,
+              jobUsesNode.line,
+              pushCalleeProblem,
+            );
+            for (const calleeInputOverrides of calleeInputCombos) {
+              for (const calleeProblem of unpinnedWorkflowContainerReferences(
+                calleeSource,
+                calleeRelPath,
+                {
+                  root: buildFileContext.root,
+                  explicitBuildFiles: buildFileContext.explicitBuildFiles,
+                  buildInvocations: buildFileContext.buildInvocations,
+                  inputOverrides: calleeInputOverrides,
+                  actionCallStack: nextCallStack,
+                  checkedLocalActionPins,
+                },
+              )) {
+                pushCalleeProblem(calleeProblem);
               }
             }
           }
+          continue;
         }
-        continue;
+        const jobExplicitShell = extractDefaultShell(jobNode) ?? workflowDefaultShell;
+        const jobDefaultWorkingDir =
+          extractDefaultWorkingDirectory(jobNode) ?? workflowDefaultWorkingDir;
+        const runnerContexts = resolveRunnerShellContexts(jobNode, jobEnv, jobMatrixRows);
+        checkContainerNode(getMapField(jobNode, "container"), jobEnv, jobMatrixRows);
+        checkServicesNode(getMapField(jobNode, "services"), jobEnv, jobMatrixRows);
+        checkStepsList(
+          getMapField(jobNode, "steps"),
+          jobEnv,
+          jobMatrixRows,
+          filePath,
+          ctxProblems,
+          jobExplicitShell,
+          runnerContexts,
+          buildFileContext,
+          jobDefaultWorkingDir,
+        );
       }
-      const jobExplicitShell = extractDefaultShell(jobNode) ?? workflowDefaultShell;
-      const jobDefaultWorkingDir =
-        extractDefaultWorkingDirectory(jobNode) ?? workflowDefaultWorkingDir;
-      const runnerContexts = resolveRunnerShellContexts(jobNode, jobEnv, jobMatrixRows);
-      checkContainerNode(getMapField(jobNode, "container"), jobEnv, jobMatrixRows);
-      checkServicesNode(getMapField(jobNode, "services"), jobEnv, jobMatrixRows);
-      checkStepsList(
-        getMapField(jobNode, "steps"),
-        jobEnv,
-        jobMatrixRows,
-        filePath,
-        problems,
-        jobExplicitShell,
-        runnerContexts,
-        buildFileContext,
-        jobDefaultWorkingDir,
-      );
+    }
+
+    for (const problem of ctxProblems) {
+      if (!seenDocProblems.has(problem)) {
+        problems.push(problem);
+      }
+    }
+    for (const problem of ctxProblems) {
+      seenDocProblems.add(problem);
     }
   }
 
