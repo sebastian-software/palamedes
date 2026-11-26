@@ -619,6 +619,13 @@ describe("workflow contracts", () => {
     expect(verifyMuslNative).toContain("/usr/local/cargo/registry");
     expect(verifyMuslNative).toContain(`rust:${rustVersion}-alpine`);
     expect(verifyMuslNative).toContain("node:24-alpine");
+    expect(verifyMuslNative).toContain("sysroot=\\$(cd / && rustc --print sysroot)");
+    expect(verifyMuslNative).toContain(
+      'test \\"\\$(command -v cargo)\\" = \\"\\$sysroot/bin/cargo\\"',
+    );
+    expect(verifyMuslNative).toContain(
+      'test \\"\\$(command -v rustc)\\" = \\"\\$sysroot/bin/rustc\\"',
+    );
     expect(verifyMuslNative).toContain("node ../core-node/scripts/build-native.mjs");
     expect(verifyMuslNative).toContain("execFileSync('./bin/pmds', ['version']");
   });
@@ -1308,6 +1315,48 @@ describe("workflow contracts", () => {
         `---\nname: Doc Marker Pinned\non: workflow_dispatch\njobs:\n  test:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: |\n          if ! docker pull node:24@${digest}; then exit 1; fi\n`,
       ),
     ).toEqual([]);
+    // YAML anchors/aliases/merge keys and Docker management commands (`image pull`, `container run`).
+    const anchoredPinned = [
+      "jobs:",
+      "  first:",
+      "    runs-on: ubuntu-24.04",
+      "    env: &shared_env",
+      `      IMAGE: node:24@${digest}`,
+      "    steps:",
+      `      - uses: actions/checkout@${"a".repeat(40)} # v7`,
+      '      - run: docker image pull "$IMAGE"',
+      "  second:",
+      "    runs-on: ubuntu-24.04",
+      "    env: *shared_env",
+      "    steps:",
+      '      - run: docker container run --rm "$IMAGE" node -v',
+      "",
+    ].join("\n");
+    expect(unpinnedActionReferences(anchoredPinned)).toEqual([]);
+    expect(unpinnedWorkflowContainerReferences(anchoredPinned)).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  first:",
+          "    runs-on: ubuntu-24.04",
+          "    env: &shared_env",
+          "      IMAGE: node:24",
+          "    steps:",
+          '      - run: docker image pull "$IMAGE"',
+          "  second:",
+          "    runs-on: ubuntu-24.04",
+          "    env:",
+          "      <<: *shared_env",
+          "    steps:",
+          '      - run: docker container run --rm "$IMAGE" node -v',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:5: node:24 is not pinned to a sha256 digest",
+      "<memory>:5: node:24 is not pinned to a sha256 digest",
+    ]);
     expect(
       unpinnedWorkflowContainerReferences(
         "      - name: Multi\n        run: docker version && docker pull node:24\n",

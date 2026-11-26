@@ -46,6 +46,18 @@ const IGNORED_DIRECTORIES = new Set([
   "target",
 ]);
 
+const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
+  "--config",
+  "-c",
+  "--context",
+  "-H",
+  "--host",
+  "-l",
+  "--log-level",
+  "--tlscacert",
+  "--tlscert",
+  "--tlskey",
+]);
 const DOCKER_PULL_VALUE_FLAGS = new Set(["--platform"]);
 const DOCKER_RUN_VALUE_FLAGS = new Set([
   "-a",
@@ -380,8 +392,60 @@ function splitFlowEntries(inner) {
   return parts;
 }
 
-function parseFlowValue(raw, line) {
-  const trimmed = stripInlineComment(raw).trim();
+function stripYamlNodeProperties(raw) {
+  let remaining = raw.trim();
+  let anchor = null;
+
+  for (;;) {
+    const anchorMatch = /^&(?<name>[^\s,[\]{}]+)(?:\s+(?<rest>.*))?$/u.exec(remaining);
+    if (anchorMatch) {
+      anchor = anchorMatch.groups.name;
+      remaining = (anchorMatch.groups.rest ?? "").trim();
+      continue;
+    }
+    const tagMatch = /^![^\s,[\]{}]*(?:\s+(?<rest>.*))?$/u.exec(remaining);
+    if (tagMatch) {
+      remaining = (tagMatch.groups.rest ?? "").trim();
+      continue;
+    }
+    break;
+  }
+
+  return { anchor, rest: remaining };
+}
+
+function mergeYamlMappingEntry(map, key, valueNode) {
+  if (key === "<<") {
+    const sources =
+      valueNode?.kind === "map"
+        ? [valueNode]
+        : valueNode?.kind === "seq"
+          ? valueNode.value.filter((item) => item?.kind === "map")
+          : [];
+    for (const source of sources) {
+      for (const [sourceKey, sourceValue] of source.value) {
+        if (!map.has(sourceKey)) {
+          map.set(sourceKey, sourceValue);
+        }
+      }
+    }
+    return;
+  }
+  map.set(key, valueNode);
+}
+
+function parseFlowValue(raw, line, anchors = new Map()) {
+  const { anchor, rest: trimmed } = stripYamlNodeProperties(stripInlineComment(raw));
+  const aliasMatch = /^\*(?<name>[^\s,[\]{}]+)$/u.exec(trimmed);
+  if (aliasMatch) {
+    const target = anchors.get(aliasMatch.groups.name);
+    if (target) {
+      return target;
+    }
+    return { kind: "scalar", value: "", line };
+  }
+
+  let node;
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     const map = new Map();
     const inner = trimmed.slice(1, -1).trim();
@@ -393,22 +457,27 @@ function parseFlowValue(raw, line) {
         }
         const key = decodeScalar(entry.slice(0, colon));
         const rest = entry.slice(colon + 1).trim();
-        map.set(key, parseFlowValue(rest, line));
+        mergeYamlMappingEntry(map, key, parseFlowValue(rest, line, anchors));
       }
     }
-    return { kind: "map", value: map, line };
-  }
-  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    node = { kind: "map", value: map, line };
+  } else if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
     const items = [];
     const inner = trimmed.slice(1, -1).trim();
     if (inner.length > 0) {
       for (const entry of splitFlowEntries(inner)) {
-        items.push(parseFlowValue(entry, line));
+        items.push(parseFlowValue(entry, line, anchors));
       }
     }
-    return { kind: "seq", value: items, line };
+    node = { kind: "seq", value: items, line };
+  } else {
+    node = { kind: "scalar", value: decodeScalar(trimmed), line };
   }
-  return { kind: "scalar", value: decodeScalar(trimmed), line };
+
+  if (anchor) {
+    anchors.set(anchor, node);
+  }
+  return node;
 }
 
 function parseYaml(source) {
@@ -440,6 +509,8 @@ function parseYaml(source) {
       text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
     };
   });
+
+  const anchors = new Map();
 
   function nextNonEmpty(start) {
     let cursor = start;
@@ -543,7 +614,7 @@ function parseYaml(source) {
       return parseMapping(index, lineIndent);
     }
     return {
-      node: parseFlowValue(content, lines[index].lineNumber),
+      node: parseFlowValue(content, lines[index].lineNumber, anchors),
       nextIndex: index + 1,
     };
   }
@@ -567,21 +638,28 @@ function parseYaml(source) {
       }
       const lineNumber = lines[cursor].lineNumber;
       const afterDash = content.slice(1).trimStart();
+      const { anchor: itemAnchor, rest: itemRest } = stripYamlNodeProperties(
+        stripInlineComment(afterDash),
+      );
 
-      if (afterDash.length === 0 || afterDash.startsWith("#")) {
+      if (itemRest.length === 0) {
         const child = parseNode(cursor + 1, seqIndent + 1);
-        items.push(child.node ?? { kind: "scalar", value: "", line: lineNumber });
+        const childNode = child.node ?? { kind: "scalar", value: "", line: lineNumber };
+        if (itemAnchor) {
+          anchors.set(itemAnchor, childNode);
+        }
+        items.push(childNode);
         cursor = child.nextIndex;
         continue;
       }
 
       const inlineIndent = lineIndent + (content.length - afterDash.length);
       const colon = findMappingColon(afterDash);
-      if (colon !== -1 && !afterDash.startsWith("{") && !afterDash.startsWith("[")) {
+      if (!itemAnchor && colon !== -1 && !afterDash.startsWith("{") && !afterDash.startsWith("[")) {
         // Inline mapping starting on the `- ` line (e.g. `- name: Build\n  run: ...`).
         const map = new Map();
         const parsedFirst = parseMappingEntry(cursor, afterDash, inlineIndent);
-        map.set(parsedFirst.key, parsedFirst.valueNode);
+        mergeYamlMappingEntry(map, parsedFirst.key, parsedFirst.valueNode);
         cursor = parsedFirst.nextIndex;
 
         while (cursor < lines.length) {
@@ -605,21 +683,24 @@ function parseYaml(source) {
             continue;
           }
           const entry = parseMappingEntry(next, nextContent, inlineIndent);
-          map.set(entry.key, entry.valueNode);
+          mergeYamlMappingEntry(map, entry.key, entry.valueNode);
           cursor = entry.nextIndex;
         }
         items.push({ kind: "map", value: map, line: lineNumber });
         continue;
       }
 
-      if (/^[|>][+-]?\d*$/u.test(stripInlineComment(afterDash).trim())) {
-        const block = parseBlockScalar(cursor, seqIndent, stripInlineComment(afterDash).trim());
+      if (/^[|>][+-]?\d*$/u.test(itemRest)) {
+        const block = parseBlockScalar(cursor, seqIndent, itemRest);
+        if (itemAnchor) {
+          anchors.set(itemAnchor, block.node);
+        }
         items.push(block.node);
         cursor = block.nextIndex;
         continue;
       }
 
-      items.push(parseFlowValue(afterDash, lineNumber));
+      items.push(parseFlowValue(afterDash, lineNumber, anchors));
       cursor += 1;
     }
 
@@ -634,11 +715,20 @@ function parseYaml(source) {
     const key = decodeScalar(content.slice(0, colon));
     const lineNumber = lines[lineIndex].lineNumber;
     const rawRest = content.slice(colon + 1).trim();
-    const restWithoutComment = stripInlineComment(rawRest).trim();
+    const { anchor, rest: restWithoutComment } = stripYamlNodeProperties(
+      stripInlineComment(rawRest),
+    );
+
+    const recordAnchor = (node) => {
+      if (anchor) {
+        anchors.set(anchor, node);
+      }
+      return node;
+    };
 
     if (/^[|>][+-]?\d*$/u.test(restWithoutComment)) {
       const block = parseBlockScalar(lineIndex, entryIndent, restWithoutComment);
-      return { key, valueNode: block.node, nextIndex: block.nextIndex };
+      return { key, valueNode: recordAnchor(block.node), nextIndex: block.nextIndex };
     }
 
     if (restWithoutComment.length === 0) {
@@ -654,14 +744,14 @@ function parseYaml(source) {
           const child = parseNode(next, nextIndent);
           return {
             key,
-            valueNode: child.node ?? { kind: "scalar", value: "", line: lineNumber },
+            valueNode: recordAnchor(child.node ?? { kind: "scalar", value: "", line: lineNumber }),
             nextIndex: child.nextIndex,
           };
         }
       }
       return {
         key,
-        valueNode: { kind: "scalar", value: "", line: lineNumber },
+        valueNode: recordAnchor({ kind: "scalar", value: "", line: lineNumber }),
         nextIndex: lineIndex + 1,
       };
     }
@@ -688,7 +778,8 @@ function parseYaml(source) {
       !combined.startsWith('"') &&
       !combined.startsWith("'") &&
       !combined.startsWith("{") &&
-      !combined.startsWith("[")
+      !combined.startsWith("[") &&
+      !combined.startsWith("*")
     ) {
       // Multi-line plain scalar continuation indented deeper than key.
       while (cursor < lines.length) {
@@ -715,7 +806,7 @@ function parseYaml(source) {
 
     return {
       key,
-      valueNode: parseFlowValue(combined, lineNumber),
+      valueNode: recordAnchor(parseFlowValue(combined, lineNumber, anchors)),
       nextIndex: cursor,
     };
   }
@@ -738,7 +829,7 @@ function parseYaml(source) {
         break;
       }
       const entry = parseMappingEntry(cursor, content, mapIndent);
-      map.set(entry.key, entry.valueNode);
+      mergeYamlMappingEntry(map, entry.key, entry.valueNode);
       cursor = entry.nextIndex;
     }
 
@@ -969,15 +1060,33 @@ function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
         continue;
       }
 
-      const subcommand = tokens[cursor + 1];
-      if (subcommand !== "pull" && subcommand !== "run") {
+      let argIndex = cursor + 1;
+      while (argIndex < tokens.length && tokens[argIndex].startsWith("-")) {
+        const flag = tokens[argIndex];
+        argIndex += !flag.includes("=") && DOCKER_GLOBAL_VALUE_FLAGS.has(flag) ? 2 : 1;
+      }
+
+      let subcommand = tokens[argIndex];
+      if (subcommand === "image" && tokens[argIndex + 1] === "pull") {
+        subcommand = "pull";
+        argIndex += 2;
+      } else if (
+        subcommand === "container" &&
+        (tokens[argIndex + 1] === "run" || tokens[argIndex + 1] === "create")
+      ) {
+        subcommand = "run";
+        argIndex += 2;
+      } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
+        subcommand = subcommand === "create" ? "run" : subcommand;
+        argIndex += 1;
+      } else {
         continue;
       }
 
       const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
       let imageToken = null;
 
-      for (let index = cursor + 2; index < tokens.length; index += 1) {
+      for (let index = argIndex; index < tokens.length; index += 1) {
         const token = tokens[index];
         if (token === "--") {
           imageToken = tokens[index + 1] ?? null;

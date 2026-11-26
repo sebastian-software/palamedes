@@ -113,10 +113,21 @@ describe("container publish contract", () => {
   });
 
   it("hardens Containerfile base images, toolchain provisioning, runtime permissions, and health checks", async () => {
-    const containerfile = await readFile(
-      resolve(import.meta.dirname, "../../Containerfile"),
-      "utf8",
-    );
+    const [containerfile, cargoToml, publishContainer, runExamplesDoc] = await Promise.all([
+      readFile(resolve(import.meta.dirname, "../../Containerfile"), "utf8"),
+      readFile(resolve(import.meta.dirname, "../../Cargo.toml"), "utf8"),
+      readFile(
+        resolve(import.meta.dirname, "../../.github/workflows/publish-examples-container.yml"),
+        "utf8",
+      ),
+      readFile(
+        resolve(import.meta.dirname, "../../docs/operations/run-examples-container.md"),
+        "utf8",
+      ),
+    ]);
+
+    const rustVersion = cargoToml.match(/^rust-version\s*=\s*"([^"]+)"/mu)?.[1];
+    expect(rustVersion).toBeTruthy();
 
     const nonCommentLines = containerfile
       .split(/\r?\n/u)
@@ -126,22 +137,27 @@ describe("container publish contract", () => {
     expect(nonCommentLines).not.toContain("sh.rustup.rs");
     expect(nonCommentLines).not.toContain("npm install -g");
     expect(nonCommentLines).not.toContain("/usr/local/rustup");
-    expect(containerfile).toMatch(/^FROM rust:\S+@sha256:[0-9a-f]{64} AS rust-toolchain$/mu);
+    expect(containerfile).toMatch(
+      new RegExp(
+        `^FROM rust:${rustVersion.replaceAll(".", "\\.")}-bookworm@sha256:[0-9a-f]{64} AS rust-toolchain$`,
+        "mu",
+      ),
+    );
     expect(containerfile).toMatch(/^FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$/mu);
     expect(containerfile).toMatch(/^FROM node:24-bookworm-slim@sha256:[0-9a-f]{64} AS runtime$/mu);
     expect(containerfile).toContain("COPY --from=rust-toolchain /usr/local/rust /usr/local/rust");
     expect(containerfile).toContain("pnpm_config_verify_deps_before_run=false");
+    expect(containerfile).toContain(
+      "find /app /usr/local/share/corepack ! -type l -exec chmod go-w",
+    );
     expect(containerfile).toContain("COPY --from=build --chown=root:root /app /app");
     expect(containerfile).not.toContain("--chown=node:node");
     expect(containerfile).toContain("USER node");
     expect(containerfile).toMatch(/^HEALTHCHECK\b.*127\.0\.0\.1:4080\/ready/msu);
     expect(containerfile).toContain("podman build --format docker -f Containerfile");
-
-    const runExamplesDoc = await readFile(
-      resolve(import.meta.dirname, "../../docs/operations/run-examples-container.md"),
-      "utf8",
-    );
     expect(runExamplesDoc).toContain("podman build --format docker -f Containerfile");
+    expect(publishContainer).toContain('test "$(docker exec examples-smoke id -un)" = node');
+    expect(publishContainer).toContain("find /app /usr/local/share/corepack ! -type l -perm /022");
 
     for (const dir of ["crates", "docs", "adr", "tests", "benchmarks", "fuzz", "site", "video"]) {
       expect(containerfile).toMatch(new RegExp(`\\b${dir}\\b`, "u"));

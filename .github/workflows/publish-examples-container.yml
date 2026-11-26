@@ -97,6 +97,9 @@ jobs:
         run: |
           docker run -d --name examples-smoke "$IMAGE"
           trap 'docker logs examples-smoke; docker rm -f examples-smoke' EXIT
+          test "$(docker exec examples-smoke id -un)" = node
+          ! docker exec examples-smoke sh -c 'touch /app/.ro-check 2>/dev/null || touch /app/scripts/container/.ro-check 2>/dev/null'
+          docker exec examples-smoke sh -c 'test -z "$(find /app /usr/local/share/corepack ! -type l -perm /022 -print -quit)"'
           docker exec examples-smoke node scripts/container/verify-all.mjs
           docker exec examples-smoke node -e 'fetch("http://127.0.0.1:4080/ready").then(r => { if (!r.ok) process.exit(1); })'
           docker stats --no-stream examples-smoke
