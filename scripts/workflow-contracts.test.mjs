@@ -3667,6 +3667,78 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r46Fixture, { recursive: true, force: true });
     }
+    // Literal fallback values in Actions expressions (`${{ inputs.image || 'node:24' }}`,
+    // `${{ cond && 'a' || 'b' }}`), upstream job outputs (`needs.<id>.outputs.*`),
+    // and always-true step guards (`if: github.event_name == 'push'` on a push-only
+    // workflow) are evaluated accurately.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  consume:",
+          "    needs: setup",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ needs.setup.outputs.image }}",
+          "    steps:",
+          "      - if: github.event_name == 'push'",
+          `        run: echo "SUFFIX=@${digest}" >> "$GITHUB_ENV"`,
+          "      - run: |",
+          "          docker pull alpine:3.20${{ env.SUFFIX }}",
+          '          docker pull "${{ needs.setup.outputs.from_step }}"',
+          '          docker run --rm "${{ needs.setup.outputs.runtime_id }}" true',
+          "  setup:",
+          "    runs-on: ubuntu-latest",
+          "    outputs:",
+          "      image: alpine:3.20",
+          "      from_step: ${{ steps.pick.outputs.ref }}",
+          "      runtime_id: ${{ steps.build.outputs.id }}",
+          "    steps:",
+          "      - id: pick",
+          '        run: echo "ref=nginx:1.27" >> "$GITHUB_OUTPUT"',
+          "      - id: build",
+          "        run: |",
+          "          ID=$(docker images -q local:test)",
+          '          echo "id=$ID" >> "$GITHUB_OUTPUT"',
+          "  fallback-checks:",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ inputs.image || 'node:24' }}",
+          "    steps:",
+          "      - run: |",
+          `          docker pull "\${{ github.ref == 'refs/heads/main' && 'busybox:1.36' || 'node:24@${digest}' }}"`,
+          `          docker pull "\${{ inputs.pinned || 'node:24@${digest}' }}"`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:17: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:12: nginx:1.27 is not pinned to a sha256 digest",
+      "<memory>:29: node:24 is not pinned to a sha256 digest",
+      "<memory>:32: busybox:1.36 is not pinned to a sha256 digest",
+    ]);
+    // A known non-empty default on `inputs.image` short-circuits `||` before a
+    // fallback branch, while an omitted optional dispatch input reaches it.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      pinned_default:",
+          `        default: node:24@${digest}`,
+          "      optional_img:",
+          "        description: Optional override",
+          "jobs:",
+          "  short-circuit:",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ inputs.pinned_default || 'node:24' }}",
+          "  reaches-fallback:",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ inputs.optional_img || 'alpine:3.20' }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:14: alpine:3.20 is not pinned to a sha256 digest"]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

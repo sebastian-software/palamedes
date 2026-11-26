@@ -36,6 +36,10 @@ const ENV_EXPRESSION_PATTERN =
 const STEP_OUTPUT_KEY_PREFIX = "\0step_output:";
 const STEP_OUTPUT_EXPRESSION_PATTERN =
   /\$\{\{\s*steps(?:\.(?<stepDot>[A-Za-z0-9_-]+)|\[(?:'(?<stepSq>[^']+)'|"(?<stepDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
+const JOB_OUTPUT_KEY_PREFIX = "\0job_output:";
+const NEEDS_OUTPUT_EXPRESSION_PATTERN =
+  /\$\{\{\s*needs(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
+const ACTIONS_EXPRESSION_BLOCK_PATTERN = /\$\{\{(?<expr>(?:'(?:''|[^'])*'|\}(?!\})|[^'}])*)\}\}/gu;
 const INPUTS_EXPRESSION_PATTERN =
   /\$\{\{\s*inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
 const EVENT_INPUTS_EXPRESSION_PATTERN =
@@ -933,6 +937,93 @@ function evaluateEventExprForName(rawExpr, eventName) {
   return null;
 }
 
+function evaluateGuardForEventAndContext(rawExpr, eventName, runnerContext) {
+  const expr = stripBalancedOuterParens(stripOuterExpressionWrapper(rawExpr));
+  if (!expr) {
+    return null;
+  }
+
+  const orParts = splitTopLevelLogicalOp(expr, "||");
+  if (orParts) {
+    let allFalse = true;
+    for (const part of orParts) {
+      const verdict = evaluateGuardForEventAndContext(part, eventName, runnerContext);
+      if (verdict === true) {
+        return true;
+      }
+      if (verdict !== false) {
+        allFalse = false;
+      }
+    }
+    return allFalse ? false : null;
+  }
+
+  const andParts = splitTopLevelLogicalOp(expr, "&&");
+  if (andParts) {
+    let allTrue = true;
+    for (const part of andParts) {
+      const verdict = evaluateGuardForEventAndContext(part, eventName, runnerContext);
+      if (verdict === false) {
+        return false;
+      }
+      if (verdict !== true) {
+        allTrue = false;
+      }
+    }
+    return allTrue ? true : null;
+  }
+
+  if (expr.startsWith("!") && !expr.startsWith("!=")) {
+    const inner = evaluateGuardForEventAndContext(expr.slice(1), eventName, runnerContext);
+    return inner === null ? null : !inner;
+  }
+
+  const lowerExpr = expr.toLowerCase();
+  if (lowerExpr === "true" || lowerExpr === "always()") {
+    return true;
+  }
+  if (lowerExpr === "false") {
+    return false;
+  }
+  if (typeof eventName === "string" && eventName.length > 0) {
+    const eventVerdict = evaluateEventExprForName(expr, eventName);
+    if (eventVerdict !== null) {
+      return eventVerdict;
+    }
+  }
+  if (runnerContext) {
+    const ctxVerdict = evaluateStepIfClause(expr, runnerContext);
+    if (ctxVerdict !== null) {
+      return ctxVerdict;
+    }
+  }
+  return null;
+}
+
+function isStepGuardAlwaysTrue(stepIfNode, eventNames, rowRunnerContexts) {
+  if (!stepIfNode) {
+    return true;
+  }
+  if (stepIfNode.kind !== "scalar") {
+    return false;
+  }
+  const rawIf = String(stepIfNode.value).trim();
+  if (!rawIf) {
+    return true;
+  }
+  const eventsToCheck = Array.isArray(eventNames) && eventNames.length > 0 ? eventNames : [null];
+  const contextsToCheck =
+    Array.isArray(rowRunnerContexts) && rowRunnerContexts.length > 0 ? rowRunnerContexts : [null];
+  for (const eventName of eventsToCheck) {
+    for (const ctx of contextsToCheck) {
+      if (evaluateGuardForEventAndContext(rawIf, eventName, ctx) !== true) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function isEventGuardSatisfiable(ifNode, eventNames) {
   if (
     !ifNode ||
@@ -1186,6 +1277,165 @@ function expandPatternCandidates(candidates, pattern, lookup, initialTruncated =
   return { candidates: results, truncated };
 }
 
+function parseActionsSingleQuotedLiteral(rawExpr) {
+  const trimmed = rawExpr.trim();
+  if (trimmed.length < 2 || !trimmed.startsWith("'") || !trimmed.endsWith("'")) {
+    return null;
+  }
+  let value = "";
+  for (let i = 1; i < trimmed.length - 1; i += 1) {
+    if (trimmed[i] === "'") {
+      if (trimmed[i + 1] === "'") {
+        value += "'";
+        i += 1;
+        continue;
+      }
+      return null;
+    }
+    value += trimmed[i];
+  }
+  return value;
+}
+
+function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
+  const branch = stripBalancedOuterParens(rawBranch.trim());
+  if (!branch) {
+    return { known: false, values: [], mayBeEmpty: true };
+  }
+
+  const literal = parseActionsSingleQuotedLiteral(branch);
+  if (literal !== null) {
+    return { known: true, values: [literal], mayBeEmpty: literal === "" };
+  }
+
+  const envMatch =
+    /^env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])$/iu.exec(
+      branch,
+    );
+  if (envMatch) {
+    const name = envMatch.groups.dot ?? envMatch.groups.sq ?? envMatch.groups.dq;
+    const entries = lookupVarEntries(stepEnv, name, true);
+    if (!entries || entries.length === 0) {
+      return { known: false, values: [], mayBeEmpty: true };
+    }
+    const values = entries.filter((e) => !e.truncated).map((e) => (e.unset ? "" : e.value));
+    return { known: true, values, mayBeEmpty: values.includes("") };
+  }
+
+  const stepOutMatch =
+    /^steps(?:\.(?<stepDot>[A-Za-z0-9_-]+)|\[(?:'(?<stepSq>[^']+)'|"(?<stepDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])$/iu.exec(
+      branch,
+    );
+  if (stepOutMatch) {
+    const stepId = (
+      stepOutMatch.groups.stepDot ??
+      stepOutMatch.groups.stepSq ??
+      stepOutMatch.groups.stepDq
+    ).toLowerCase();
+    const outName = (
+      stepOutMatch.groups.outDot ??
+      stepOutMatch.groups.outSq ??
+      stepOutMatch.groups.outDq
+    ).toLowerCase();
+    const entries = stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`);
+    if (!entries || entries.length === 0) {
+      return { known: false, values: [], mayBeEmpty: true };
+    }
+    const values = entries.filter((e) => !e.truncated).map((e) => (e.unset ? "" : e.value));
+    return { known: true, values, mayBeEmpty: values.includes("") };
+  }
+
+  const needsOutMatch =
+    /^needs(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])$/iu.exec(
+      branch,
+    );
+  if (needsOutMatch) {
+    const jobId = (
+      needsOutMatch.groups.jobDot ??
+      needsOutMatch.groups.jobSq ??
+      needsOutMatch.groups.jobDq
+    ).toLowerCase();
+    const outName = (
+      needsOutMatch.groups.outDot ??
+      needsOutMatch.groups.outSq ??
+      needsOutMatch.groups.outDq
+    ).toLowerCase();
+    const entries = stepEnv.get(`${JOB_OUTPUT_KEY_PREFIX}${jobId}\0${outName}`);
+    if (!entries || entries.length === 0) {
+      return { known: false, values: [], mayBeEmpty: true };
+    }
+    const values = entries.filter((e) => !e.truncated).map((e) => (e.unset ? "" : e.value));
+    return { known: true, values, mayBeEmpty: values.includes("") };
+  }
+
+  const andParts = splitTopLevelLogicalOp(branch, "&&");
+  if (andParts && andParts.length >= 2) {
+    const rhsResult = evaluateActionsFallbackBranch(andParts.at(-1), stepEnv);
+    return {
+      known: false,
+      values: rhsResult.values.filter((v) => v.length > 0),
+      mayBeEmpty: true,
+    };
+  }
+
+  return { known: false, values: [], mayBeEmpty: true };
+}
+
+function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
+  const expr = stripBalancedOuterParens(rawExpr.trim());
+  if (!expr) {
+    return null;
+  }
+
+  const standaloneLiteral = parseActionsSingleQuotedLiteral(expr);
+  if (standaloneLiteral !== null) {
+    return [{ value: standaloneLiteral, line: fallbackLine }];
+  }
+
+  const orParts = splitTopLevelLogicalOp(expr, "||");
+  if (!orParts) {
+    const andParts = splitTopLevelLogicalOp(expr, "&&");
+    if (!andParts) {
+      return null;
+    }
+    const rhsResult = evaluateActionsFallbackBranch(andParts.at(-1), stepEnv);
+    const nonEmpty = rhsResult.values.filter((v) => v.length > 0);
+    if (nonEmpty.length === 0) {
+      return null;
+    }
+    return [...new Set(nonEmpty)].map((value) => ({ value, line: fallbackLine }));
+  }
+
+  const reachable = [];
+  const seen = new Set();
+  const pushVal = (value) => {
+    if (!seen.has(value)) {
+      seen.add(value);
+      reachable.push({ value, line: fallbackLine });
+    }
+  };
+
+  let canReachNext = true;
+  for (const part of orParts) {
+    if (!canReachNext) {
+      break;
+    }
+    const result = evaluateActionsFallbackBranch(part, stepEnv);
+    for (const val of result.values) {
+      if (val.length > 0) {
+        pushVal(val);
+      }
+    }
+    if (result.known && !result.mayBeEmpty) {
+      canReachNext = false;
+    }
+  }
+  if (canReachNext && reachable.length === 0) {
+    return null;
+  }
+  return reachable.length > 0 ? reachable : null;
+}
+
 function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
   const afterEnv = expandPatternCandidates(
     [{ text, line: fallbackLine }],
@@ -1211,11 +1461,28 @@ function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
       ).toLowerCase();
       return stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`) ?? null;
     },
+    afterEnv.truncated,
   );
-  return {
-    candidates: afterStepOutputs.candidates,
-    truncated: afterEnv.truncated || afterStepOutputs.truncated,
-  };
+  const afterNeedsOutputs = expandPatternCandidates(
+    afterStepOutputs.candidates,
+    new RegExp(NEEDS_OUTPUT_EXPRESSION_PATTERN.source, "iu"),
+    (match) => {
+      const jobId = (match.groups.jobDot ?? match.groups.jobSq ?? match.groups.jobDq).toLowerCase();
+      const outName = (
+        match.groups.outDot ??
+        match.groups.outSq ??
+        match.groups.outDq
+      ).toLowerCase();
+      return stepEnv.get(`${JOB_OUTPUT_KEY_PREFIX}${jobId}\0${outName}`) ?? null;
+    },
+    afterStepOutputs.truncated,
+  );
+  return expandPatternCandidates(
+    afterNeedsOutputs.candidates,
+    new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "u"),
+    (match) => evaluateActionsFallbackExpression(match.groups.expr, stepEnv, fallbackLine),
+    afterNeedsOutputs.truncated,
+  );
 }
 
 function findNextShellParamExpansion(text, startIndex = 0) {
@@ -7255,10 +7522,13 @@ function inspectShellRunScript(
   // instead of being mistaken for the image operand.
   const hasMatrixExpr =
     matrixRows.length > 0 && new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(scriptText);
-  const hasEnvExpr =
-    stepEnv.size > 0 &&
-    (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(scriptText) ||
-      new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(scriptText));
+  const hasExpandableActionsExpr = (value) =>
+    (stepEnv.size > 0 &&
+      (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(value) ||
+        new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(value) ||
+        new RegExp(NEEDS_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(value))) ||
+    /\$\{\{[^}]*(?:\|\||&&|')/u.test(value);
+  const hasEnvExpr = hasExpandableActionsExpr(scriptText);
   if (hasMatrixExpr || hasEnvExpr) {
     const seenStepProblems = new Set();
     const perRunEmitted = [];
@@ -7284,11 +7554,7 @@ function inspectShellRunScript(
           : sourceLines;
 
       let scriptVariants = [rowScript];
-      if (
-        hasEnvExpr &&
-        (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(rowScript) ||
-          new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(rowScript))
-      ) {
+      if (hasEnvExpr && hasExpandableActionsExpr(rowScript)) {
         const expandedEnv = resolveEnvExpressionCandidates(rowScript, stepEnv, runNode.line);
         if (expandedEnv.truncated) {
           const limitMessage = `${filePath}:${runNode.line}: run script env expression exceeds expansion limit and cannot be verified exhaustively`;
@@ -7619,13 +7885,18 @@ function checkStepsList(
     if (!isEventGuardSatisfiable(stepIfNode, effectiveEventNames)) {
       continue;
     }
-    const stepConditional = stepIfNode !== null;
     const stepShellNode = getMapField(stepNode, "shell");
     const stepWorkingDirNode = getMapField(stepNode, "working-directory");
     const applicableContexts = filterRunnerContextsForStep(stepIfNode, runnerContexts);
     if (runnerContexts.length > 0 && applicableContexts.length === 0) {
       continue;
     }
+    const isRowStepConditional = (row) => {
+      const rowContexts = row
+        ? applicableContexts.filter((ctx) => ctx.row === row)
+        : applicableContexts;
+      return !isStepGuardAlwaysTrue(stepIfNode, effectiveEventNames, rowContexts);
+    };
     const applicableMatrixRows =
       applicableContexts.length > 0 && applicableContexts.every((ctx) => ctx.row !== null)
         ? applicableContexts.map((ctx) => ctx.row)
@@ -7711,16 +7982,17 @@ function checkStepsList(
         }
         const existingPrefixes = getRowCheckoutPrefixes(row);
         const existingForeign = getRowForeignPrefixes(row);
+        const rowStepConditional = isRowStepConditional(row);
         const isCurrentTreeCheckout = checksOutCurrentRepo && checksOutCurrentRef;
         if (isCurrentTreeCheckout) {
           if (nextPrefixes.length === 0) {
-            if (!stepConditional && !rowHasExplicitCheckout.has(row)) {
+            if (!rowStepConditional && !rowHasExplicitCheckout.has(row)) {
               rowCheckoutPaths.set(row, []);
               rowHasExplicitCheckout.add(row);
             }
             continue;
           }
-          if (!stepConditional && !rowHasExplicitCheckout.has(row)) {
+          if (!rowStepConditional && !rowHasExplicitCheckout.has(row)) {
             rowCheckoutPaths.set(row, nextPrefixes);
             rowHasExplicitCheckout.add(row);
           } else {
@@ -7733,11 +8005,11 @@ function checkStepsList(
               }
             }
             rowCheckoutPaths.set(row, merged);
-            if (!stepConditional) {
+            if (!rowStepConditional) {
               rowHasExplicitCheckout.add(row);
             }
           }
-          if (!stepConditional && existingForeign.length > 0) {
+          if (!rowStepConditional && existingForeign.length > 0) {
             rowForeignCheckoutPaths.set(
               row,
               existingForeign.filter(
@@ -7757,7 +8029,7 @@ function checkStepsList(
             }
           }
           rowForeignCheckoutPaths.set(row, mergedForeign);
-          if (!stepConditional) {
+          if (!rowStepConditional) {
             if (!rowHasExplicitCheckout.has(row)) {
               rowCheckoutPaths.set(row, []);
               rowHasExplicitCheckout.add(row);
@@ -8793,7 +9065,7 @@ function checkStepsList(
         }
         for (const name of allOutputNames) {
           let mergedEntries = [];
-          let conditionalAcrossGroups = stepConditional;
+          let conditionalAcrossGroups = isRowStepConditional(row);
           for (const outputMap of outputMaps) {
             const write = outputMap.get(name);
             if (!write) {
@@ -8832,7 +9104,7 @@ function checkStepsList(
       }
       for (const name of allWrittenNames) {
         let mergedEntries = [];
-        let conditionalAcrossGroups = stepConditional;
+        let conditionalAcrossGroups = isRowStepConditional(row);
         for (const writeMap of writeMaps) {
           const write = writeMap.get(name);
           if (!write) {
@@ -9167,6 +9439,55 @@ function extractActionInputDefaults(doc) {
   return defaults;
 }
 
+function substituteInputsInsideExpression(expr, inputValues, { includeEventInputs = false } = {}) {
+  const quoteActionsString = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  let out = "";
+  let i = 0;
+  while (i < expr.length) {
+    if (expr[i] === "'") {
+      let end = i + 1;
+      while (end < expr.length) {
+        if (expr[end] === "'") {
+          if (expr[end + 1] === "'") {
+            end += 2;
+            continue;
+          }
+          end += 1;
+          break;
+        }
+        end += 1;
+      }
+      out += expr.slice(i, end);
+      i = end;
+      continue;
+    }
+    const rest = expr.slice(i);
+    if (includeEventInputs) {
+      const evMatch =
+        /^github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(
+          rest,
+        );
+      if (evMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
+        const name = (evMatch.groups.dot ?? evMatch.groups.sq ?? evMatch.groups.dq).toLowerCase();
+        out += inputValues.has(name) ? quoteActionsString(inputValues.get(name).value) : evMatch[0];
+        i += evMatch[0].length;
+        continue;
+      }
+    }
+    const inMatch =
+      /^inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(rest);
+    if (inMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
+      const name = (inMatch.groups.dot ?? inMatch.groups.sq ?? inMatch.groups.dq).toLowerCase();
+      out += inputValues.has(name) ? quoteActionsString(inputValues.get(name).value) : inMatch[0];
+      i += inMatch[0].length;
+      continue;
+    }
+    out += expr[i];
+    i += 1;
+  }
+  return out;
+}
+
 function substituteInputsInText(text, inputValues, { includeEventInputs = false } = {}) {
   let replaced = String(text).replace(
     INPUTS_EXPRESSION_PATTERN,
@@ -9181,6 +9502,17 @@ function substituteInputsInText(text, inputValues, { includeEventInputs = false 
       (match, _p1, _p2, _p3, _offset, _str, groups) => {
         const name = (groups.dot ?? groups.sq ?? groups.dq).toLowerCase();
         return inputValues.has(name) ? inputValues.get(name).value : match;
+      },
+    );
+  }
+  if (replaced.includes("${{")) {
+    replaced = replaced.replace(
+      ACTIONS_EXPRESSION_BLOCK_PATTERN,
+      (match, _p1, _offset, _str, groups) => {
+        const nextExpr = substituteInputsInsideExpression(groups.expr, inputValues, {
+          includeEventInputs,
+        });
+        return nextExpr === groups.expr ? match : `\${{ ${nextExpr.trim()} }}`;
       },
     );
   }
@@ -9242,16 +9574,49 @@ function collectReferencedInputNames(
   }
   seen.add(node);
   if (node.kind === "scalar") {
-    const pattern = new RegExp(INPUTS_EXPRESSION_PATTERN.source, "giu");
-    for (const match of String(node.value).matchAll(pattern)) {
-      const name = (match.groups.dot ?? match.groups.sq ?? match.groups.dq).toLowerCase();
-      found.add(name);
-    }
-    if (includeEventInputs) {
-      const eventPattern = new RegExp(EVENT_INPUTS_EXPRESSION_PATTERN.source, "giu");
-      for (const match of String(node.value).matchAll(eventPattern)) {
-        const name = (match.groups.dot ?? match.groups.sq ?? match.groups.dq).toLowerCase();
-        found.add(name);
+    const text = String(node.value);
+    for (const blockMatch of text.matchAll(
+      new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "gu"),
+    )) {
+      const expr = blockMatch.groups.expr;
+      let i = 0;
+      while (i < expr.length) {
+        if (expr[i] === "'") {
+          let end = i + 1;
+          while (end < expr.length) {
+            if (expr[end] === "'") {
+              if (expr[end + 1] === "'") {
+                end += 2;
+                continue;
+              }
+              end += 1;
+              break;
+            }
+            end += 1;
+          }
+          i = end;
+          continue;
+        }
+        const rest = expr.slice(i);
+        if (includeEventInputs) {
+          const evMatch =
+            /^github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(
+              rest,
+            );
+          if (evMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
+            found.add((evMatch.groups.dot ?? evMatch.groups.sq ?? evMatch.groups.dq).toLowerCase());
+            i += evMatch[0].length;
+            continue;
+          }
+        }
+        const inMatch =
+          /^inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(rest);
+        if (inMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
+          found.add((inMatch.groups.dot ?? inMatch.groups.sq ?? inMatch.groups.dq).toLowerCase());
+          i += inMatch[0].length;
+          continue;
+        }
+        i += 1;
       }
     }
     return found;
@@ -10212,14 +10577,73 @@ export function unpinnedWorkflowContainerReferences(
 
     const jobsNode = applyWorkflowInputs(getMapField(doc, "jobs"));
     if (jobsNode?.kind === "map") {
-      for (const jobNode of jobsNode.value.values()) {
+      const extractJobNeeds = (jobNode) => {
+        const needsNode = getMapField(jobNode, "needs");
+        if (!needsNode) {
+          return [];
+        }
+        if (needsNode.kind === "scalar") {
+          const val = String(needsNode.value).trim();
+          return val ? [val.toLowerCase()] : [];
+        }
+        if (needsNode.kind === "seq") {
+          return needsNode.value
+            .filter((item) => item?.kind === "scalar")
+            .map((item) => String(item.value).trim().toLowerCase())
+            .filter(Boolean);
+        }
+        return [];
+      };
+      const jobEntries = [...jobsNode.value.entries()];
+      const jobMapByLower = new Map();
+      for (const [jobId, jobNode] of jobEntries) {
+        jobMapByLower.set(jobId.toLowerCase(), [jobId, jobNode]);
+      }
+      const orderedJobs = [];
+      const visitState = new Map();
+      const visitJob = (lowerId) => {
+        if (visitState.get(lowerId)) {
+          return;
+        }
+        const entry = jobMapByLower.get(lowerId);
+        if (!entry) {
+          return;
+        }
+        visitState.set(lowerId, "visiting");
+        const [, node] = entry;
+        if (node?.kind === "map") {
+          for (const depId of extractJobNeeds(node)) {
+            if (jobMapByLower.has(depId) && !visitState.get(depId)) {
+              visitJob(depId);
+            }
+          }
+        }
+        visitState.set(lowerId, "visited");
+        orderedJobs.push(entry);
+      };
+      for (const [jobId] of jobEntries) {
+        visitJob(jobId.toLowerCase());
+      }
+      const jobOutputsById = new Map();
+
+      for (const [jobId, jobNode] of orderedJobs) {
         if (jobNode?.kind !== "map") {
           continue;
         }
         if (!isEventGuardSatisfiable(getMapField(jobNode, "if"), eventNames)) {
           continue;
         }
-        const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
+        const jobBaseEnv = cloneVarMap(workflowEnv);
+        for (const depId of extractJobNeeds(jobNode)) {
+          const depOutputs = jobOutputsById.get(depId);
+          if (!depOutputs) {
+            continue;
+          }
+          for (const [outNameLower, entries] of depOutputs) {
+            jobBaseEnv.set(`${JOB_OUTPUT_KEY_PREFIX}${depId}\0${outNameLower}`, entries);
+          }
+        }
+        const jobEnv = extractEnvMap(getMapField(jobNode, "env"), jobBaseEnv);
         const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, ctxProblems);
         const jobUsesNode = getMapField(jobNode, "uses");
         if (
@@ -10348,6 +10772,7 @@ export function unpinnedWorkflowContainerReferences(
         const runnerContexts = resolveRunnerShellContexts(jobNode, jobEnv, jobMatrixRows);
         checkContainerNode(getMapField(jobNode, "container"), jobEnv, jobMatrixRows);
         checkServicesNode(getMapField(jobNode, "services"), jobEnv, jobMatrixRows);
+        const jobFinalStepEnv = new Map();
         checkStepsList(
           getMapField(jobNode, "steps"),
           jobEnv,
@@ -10360,7 +10785,36 @@ export function unpinnedWorkflowContainerReferences(
           jobDefaultWorkingDir,
           null,
           eventNames,
+          jobFinalStepEnv,
         );
+        const jobOutputsNode = getMapField(jobNode, "outputs");
+        if (jobOutputsNode?.kind === "map") {
+          const outputEnv = jobFinalStepEnv.size > 0 ? jobFinalStepEnv : jobEnv;
+          const outputsMap = new Map();
+          for (const [outName, outValNode] of jobOutputsNode.value) {
+            if (outValNode?.kind !== "scalar") {
+              continue;
+            }
+            const resolved = resolveEnvExpressionCandidates(
+              String(outValNode.value),
+              outputEnv,
+              outValNode.line,
+            );
+            const rawEntries = [];
+            for (const cand of resolved.candidates) {
+              for (const mCand of expandMatrixReferences(cand.text, jobMatrixRows, cand.line)) {
+                rawEntries.push({ value: mCand.text, line: mCand.line });
+              }
+            }
+            const sanitized = sanitizeGithubOutputEntries(rawEntries, "posix");
+            if (sanitized.length > 0) {
+              outputsMap.set(outName.toLowerCase(), sanitized);
+            }
+          }
+          if (outputsMap.size > 0) {
+            jobOutputsById.set(jobId.toLowerCase(), outputsMap);
+          }
+        }
       }
     }
 
