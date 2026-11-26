@@ -735,6 +735,32 @@ fn ntfs_casefold(text: &str) -> String {
     folded
 }
 
+fn is_hfs_plus_excluded_from_decomposition(ch: char) -> bool {
+    // Apple TN1150: HFS+ does not canonically decompose these three ranges.
+    matches!(
+        ch,
+        '\u{2000}'..='\u{2FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{2F800}'..='\u{2FA1F}'
+    )
+}
+
+fn hfs_plus_nfd(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chunk_start = 0usize;
+    for (idx, ch) in text.char_indices() {
+        if is_hfs_plus_excluded_from_decomposition(ch) {
+            if chunk_start < idx {
+                result.extend(text[chunk_start..idx].nfd());
+            }
+            result.push(ch);
+            chunk_start = idx + ch.len_utf8();
+        }
+    }
+    if chunk_start < text.len() {
+        result.extend(text[chunk_start..].nfd());
+    }
+    result
+}
+
 fn is_hfs_plus_ignorable(ch: char) -> bool {
     matches!(
         ch,
@@ -743,11 +769,13 @@ fn is_hfs_plus_ignorable(ch: char) -> bool {
 }
 
 fn hfs_plus_casefold_nfd(text: &str) -> String {
-    // HFS+ case-insensitive comparison decomposes to NFD, strips its Unicode
-    // 3.2 ignorable code points, and applies a 1-to-1 BMP code-unit lowercase
-    // fold (so `straße` and `strasse` remain distinct, unlike APFS).
-    let mut folded = String::with_capacity(text.len());
-    for ch in text.nfd() {
+    // HFS+ case-insensitive comparison applies HFS+ NFD (with TN1150
+    // exclusions), strips its Unicode 3.2 ignorable code points, and applies a
+    // 1-to-1 BMP code-unit lowercase fold (so `straße` != `strasse` and
+    // `U+F900` != `U+8C48`, unlike APFS).
+    let decomposed = hfs_plus_nfd(text);
+    let mut folded = String::with_capacity(decomposed.len());
+    for ch in decomposed.chars() {
         if is_hfs_plus_ignorable(ch) {
             continue;
         }
@@ -778,6 +806,7 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalenc
             let normalized = match equivalence {
                 DirFilenameEquivalence::Exact => text.to_owned(),
                 DirFilenameEquivalence::UnicodeNfd => text.nfd().collect(),
+                DirFilenameEquivalence::UnicodeHfsPlus => hfs_plus_nfd(text),
                 DirFilenameEquivalence::CaseInsensitiveNtfs => ntfs_casefold(text),
                 DirFilenameEquivalence::CaseInsensitiveUnicodeNfd => {
                     unicode_full_casefold_nfd(text, false)
@@ -1857,6 +1886,27 @@ catalogs:
             super::fold_os_segment(OsStr::new("Messages.po"), hfs_plus),
             super::fold_os_segment(OsStr::new("messages.po"), hfs_plus),
             "HFS+ equates ASCII case variants"
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("\u{f900}.po"), hfs_plus),
+            super::fold_os_segment(OsStr::new("\u{8c48}.po"), hfs_plus),
+            "HFS+ excludes U+F900..=U+FAFF from canonical decomposition"
+        );
+
+        let hfs_plus_cs = DirFilenameEquivalence::UnicodeHfsPlus;
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("\u{f900}.po"), hfs_plus_cs),
+            super::fold_os_segment(OsStr::new("\u{8c48}.po"), hfs_plus_cs),
+            "Case-sensitive HFS+ also excludes U+F900..=U+FAFF from decomposition"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), hfs_plus_cs),
+            super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), hfs_plus_cs),
+            "Case-sensitive HFS+ still normalizes standard Latin NFD"
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("Messages.po"), hfs_plus_cs),
+            super::fold_os_segment(OsStr::new("messages.po"), hfs_plus_cs)
         );
 
         let linux_casefold = DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf;

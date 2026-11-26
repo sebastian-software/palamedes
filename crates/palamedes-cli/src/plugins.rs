@@ -306,9 +306,9 @@ fn load_registry_with_binary_hasher(
         } else {
             None
         };
-        let cache_identity = binary_path
-            .as_deref()
-            .and_then(|binary_path| plugin_cache_identity(binary_path, cached_stamp, hash_binary));
+        let cache_identity = binary_path.as_deref().and_then(|binary_path| {
+            plugin_cache_identity_for_resolved(&resolved, binary_path, cached_stamp, hash_binary)
+        });
         let manifest = match cache_identity.as_ref().and_then(|(key, stamp)| {
             active_cache_keys.insert(key.clone());
             if !reuse_cached_manifests {
@@ -324,7 +324,11 @@ fn load_registry_with_binary_hasher(
             Some(manifest) => manifest,
             None => match describe_resolved_plugin(&resolved, cwd, native_executable) {
                 Ok(manifest) => {
-                    if let Some((key, stamp)) = cache_identity {
+                    if let Some((key, stamp)) = cache_identity
+                        && binary_path
+                            .as_deref()
+                            .is_some_and(|path| resolved.pinned_matches_path(path, &stamp.metadata))
+                    {
                         cache.entries.insert(
                             key,
                             CachedPluginManifest {
@@ -471,6 +475,24 @@ fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
     temporary.flush()?;
     temporary.persist(path).map_err(|error| error.error)?;
     Ok(())
+}
+
+fn plugin_cache_identity_for_resolved(
+    resolved: &ResolvedPlugin,
+    binary_path: &Path,
+    cached: Option<&PluginBinaryStamp>,
+    hash_binary: &dyn Fn(&Path) -> Option<[u8; 32]>,
+) -> Option<(String, PluginBinaryStamp)> {
+    let metadata = fs::metadata(binary_path).ok()?;
+    let binary_metadata = plugin_binary_metadata(&metadata);
+    if !resolved.pinned_matches_path(binary_path, &binary_metadata) {
+        return None;
+    }
+    let identity = plugin_cache_identity(binary_path, cached, hash_binary)?;
+    if !resolved.pinned_matches_path(binary_path, &identity.1.metadata) {
+        return None;
+    }
+    Some(identity)
 }
 
 fn plugin_cache_identity(
@@ -1571,16 +1593,61 @@ mod windows_alias_spawn {
 
 #[derive(Debug)]
 struct PinnedPluginBinary {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    dir_fd: std::os::fd::OwnedFd,
     #[cfg(unix)]
     file_fd: std::os::fd::OwnedFd,
-    #[cfg(all(unix, not(target_os = "linux")))]
+    #[cfg(unix)]
     dev: u64,
-    #[cfg(all(unix, not(target_os = "linux")))]
+    #[cfg(unix)]
     ino: u64,
+    #[cfg(unix)]
+    readable: bool,
     #[cfg(windows)]
     _pinned_handle: std::os::windows::io::OwnedHandle,
+}
+
+impl ResolvedPlugin {
+    fn pinned_matches_path(&self, binary_path: &Path, metadata: &PluginBinaryMetadata) -> bool {
+        #[cfg(unix)]
+        if let Some(ref pinned) = self.pinned_binary {
+            use std::os::fd::AsRawFd;
+            use std::os::unix::fs::MetadataExt;
+
+            let Ok(path_meta) = fs::metadata(binary_path) else {
+                return false;
+            };
+            if path_meta.dev() != pinned.dev || path_meta.ino() != pinned.ino {
+                return false;
+            }
+            let Ok(fd_stat) = unix_pinned_plugin::fstat_fd(pinned.file_fd.as_raw_fd()) else {
+                return false;
+            };
+            #[allow(clippy::unnecessary_cast)]
+            let fd_dev = fd_stat.st_dev as u64;
+            #[allow(clippy::unnecessary_cast)]
+            let fd_ino = fd_stat.st_ino as u64;
+            #[allow(clippy::cast_sign_loss)]
+            let fd_len = fd_stat.st_size as u64;
+            #[allow(clippy::unnecessary_cast)]
+            let fd_mtime = fd_stat.st_mtime as i64;
+            #[allow(clippy::unnecessary_cast)]
+            let fd_mtime_nsec = fd_stat.st_mtime_nsec as i64;
+            #[allow(clippy::unnecessary_cast)]
+            let fd_ctime = fd_stat.st_ctime as i64;
+            #[allow(clippy::unnecessary_cast)]
+            let fd_ctime_nsec = fd_stat.st_ctime_nsec as i64;
+            return fd_dev == pinned.dev
+                && fd_ino == pinned.ino
+                && fd_len == metadata.length
+                && path_meta.len() == metadata.length
+                && fd_mtime == path_meta.mtime()
+                && fd_mtime_nsec == path_meta.mtime_nsec()
+                && fd_ctime == path_meta.ctime()
+                && fd_ctime_nsec == path_meta.ctime_nsec();
+        }
+        #[cfg(not(unix))]
+        let _ = (binary_path, metadata);
+        true
+    }
 }
 
 #[cfg(unix)]
@@ -1589,8 +1656,6 @@ mod unix_pinned_plugin {
     use std::io;
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    use std::path::PathBuf;
     use std::path::{Component, Path};
 
     use super::{PinnedPluginBinary, PluginFailure};
@@ -1632,49 +1697,118 @@ mod unix_pinned_plugin {
         Ok(unsafe { stat.assume_init() })
     }
 
-    #[cfg(not(target_os = "linux"))]
-    pub(super) fn verify_lstat_identity(
-        c_path: &CString,
-        expected_dev: u64,
-        expected_ino: u64,
-    ) -> io::Result<()> {
-        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-        // SAFETY: `c_path` is a valid C string and `stat` is writable.
-        if unsafe { libc::lstat(c_path.as_ptr(), stat.as_mut_ptr()) } != 0 {
-            return Err(io::Error::last_os_error());
+    fn is_executable_by_current_user(stat: &libc::stat) -> bool {
+        let mode = stat.st_mode;
+        // SAFETY: `geteuid` and `getegid` have no preconditions.
+        let euid = unsafe { libc::geteuid() };
+        if euid == 0 {
+            return (mode & 0o111) != 0;
         }
-        // SAFETY: `lstat` succeeded and initialized `stat`.
-        let stat = unsafe { stat.assume_init() };
-        #[allow(clippy::unnecessary_cast)]
-        let dev = stat.st_dev as u64;
-        #[allow(clippy::unnecessary_cast)]
-        let ino = stat.st_ino as u64;
-        if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG
-            || dev != expected_dev
-            || ino != expected_ino
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "pinned plugin executable changed before launch",
-            ));
+        if euid == stat.st_uid {
+            return (mode & 0o100) != 0;
         }
-        Ok(())
+        // SAFETY: `getegid` has no preconditions.
+        let egid = unsafe { libc::getegid() };
+        if egid == stat.st_gid {
+            return (mode & 0o010) != 0;
+        }
+        // Check supplementary groups.
+        // SAFETY: querying group count with `(0, null)`.
+        let count = unsafe { libc::getgroups(0, std::ptr::null_mut()) };
+        if count > 0 {
+            #[allow(clippy::cast_sign_loss)]
+            let mut groups = vec![0 as libc::gid_t; count as usize];
+            // SAFETY: `groups` has space for `count` `gid_t` entries.
+            let filled = unsafe { libc::getgroups(count, groups.as_mut_ptr()) };
+            if filled > 0 {
+                #[allow(clippy::cast_sign_loss)]
+                if groups[..filled as usize].contains(&stat.st_gid) {
+                    return (mode & 0o010) != 0;
+                }
+            }
+        }
+        (mode & 0o001) != 0
     }
 
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub(super) fn fd_live_path(fd: std::os::fd::RawFd) -> io::Result<PathBuf> {
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
-
-        let mut buf = vec![0_u8; libc::PATH_MAX as usize];
-        // SAFETY: `fd` is open and `buf` has `PATH_MAX` writable bytes as
-        // required by macOS `F_GETPATH`.
-        if unsafe { libc::fcntl(fd, libc::F_GETPATH, buf.as_mut_ptr()) } != 0 {
+    /// Reads a pinned POSIX shell `#!` wrapper directly from `pinned.file_fd`
+    /// so we can execute `<shell> -c <body> <invocation_path>` without any
+    /// pathname lookup while keeping `$0` equal to `invocation_path` (which
+    /// `execveat(AT_EMPTY_PATH)` and macOS `/.vol/<dev>/<ino>` cannot preserve
+    /// for `#!` scripts). Returns `Ok(None)` for native binaries or other
+    /// interpreters.
+    pub(super) fn read_pinned_posix_shell_script(
+        pinned: &PinnedPluginBinary,
+    ) -> io::Result<Option<(&'static str, String)>> {
+        const MAX_INLINE_SHELL_BYTES: usize = 64 * 1024;
+        if !pinned.readable {
+            return Ok(None);
+        }
+        let fd = pinned.file_fd.as_raw_fd();
+        let mut prefix = [0_u8; 2];
+        // SAFETY: `fd` is open and `prefix` is 2 writable bytes.
+        let prefix_read = unsafe { libc::pread(fd, prefix.as_mut_ptr().cast(), prefix.len(), 0) };
+        if prefix_read < 0 {
             return Err(io::Error::last_os_error());
         }
-        let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-        buf.truncate(len);
-        Ok(PathBuf::from(OsString::from_vec(buf)))
+        if prefix_read < 2 || prefix != *b"#!" {
+            return Ok(None);
+        }
+        let stat = fstat_fd(fd)?;
+        #[cfg(not(target_os = "linux"))]
+        if stat.st_nlink == 0 {
+            return Err(io::Error::from_raw_os_error(libc::ENOENT));
+        }
+        if !is_executable_by_current_user(&stat) {
+            return Err(io::Error::from_raw_os_error(libc::EACCES));
+        }
+        #[allow(clippy::cast_sign_loss)]
+        let file_len = stat.st_size.max(0) as usize;
+        if file_len > MAX_INLINE_SHELL_BYTES {
+            return Ok(None);
+        }
+        let mut bytes = vec![0_u8; file_len];
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            #[allow(clippy::cast_possible_wrap)]
+            let read = unsafe {
+                libc::pread(
+                    fd,
+                    bytes[offset..].as_mut_ptr().cast(),
+                    bytes.len() - offset,
+                    offset as libc::off_t,
+                )
+            };
+            if read < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(error);
+            }
+            if read == 0 {
+                bytes.truncate(offset);
+                break;
+            }
+            #[allow(clippy::cast_sign_loss)]
+            {
+                offset += read as usize;
+            }
+        }
+        if bytes.contains(&0) {
+            return Ok(None);
+        }
+        let Ok(text) = String::from_utf8(bytes) else {
+            return Ok(None);
+        };
+        let first_line = text.lines().next().unwrap_or_default().trim();
+        let interpreter = match first_line {
+            "#!/bin/sh" => "/bin/sh",
+            "#!/bin/bash" => "/bin/bash",
+            "#!/bin/dash" => "/bin/dash",
+            "#!/bin/zsh" => "/bin/zsh",
+            _ => return Ok(None),
+        };
+        Ok(Some((interpreter, text)))
     }
 
     #[cfg(target_os = "linux")]
@@ -1686,6 +1820,90 @@ mod unix_pinned_plugin {
             return Err(io::Error::last_os_error());
         }
         Ok(read == 2 && magic == *b"#!")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub(super) struct PrebuiltExecArrays {
+        _argv_storage: Vec<CString>,
+        argv_ptrs: Vec<*const libc::c_char>,
+        _envp_storage: Vec<CString>,
+        envp_ptrs: Vec<*const libc::c_char>,
+    }
+
+    // SAFETY: `argv_ptrs` and `envp_ptrs` point exclusively into the owned
+    // heap buffers of `_argv_storage` and `_envp_storage`, which stay pinned at
+    // stable addresses for the lifetime of `PrebuiltExecArrays`.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    unsafe impl Send for PrebuiltExecArrays {}
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    unsafe impl Sync for PrebuiltExecArrays {}
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    impl PrebuiltExecArrays {
+        pub(super) fn build(
+            invocation_path: &Path,
+            native_executable_env: &str,
+            native_executable: &Path,
+        ) -> io::Result<Self> {
+            let arg0 = CString::new(invocation_path.as_os_str().as_bytes()).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "plugin invocation path contains interior NUL",
+                )
+            })?;
+            let argv_storage = vec![arg0];
+            let mut argv_ptrs = Vec::with_capacity(2);
+            argv_ptrs.push(argv_storage[0].as_ptr());
+            argv_ptrs.push(std::ptr::null());
+
+            let override_key = native_executable_env.as_bytes();
+            let mut envp_storage = Vec::new();
+            for (key, value) in std::env::vars_os() {
+                if key.as_bytes() == override_key {
+                    continue;
+                }
+                let mut entry = Vec::with_capacity(key.len() + 1 + value.len());
+                entry.extend_from_slice(key.as_bytes());
+                entry.push(b'=');
+                entry.extend_from_slice(value.as_bytes());
+                if let Ok(cstr) = CString::new(entry) {
+                    envp_storage.push(cstr);
+                }
+            }
+            let mut native_entry =
+                Vec::with_capacity(override_key.len() + 1 + native_executable.as_os_str().len());
+            native_entry.extend_from_slice(override_key);
+            native_entry.push(b'=');
+            native_entry.extend_from_slice(native_executable.as_os_str().as_bytes());
+            let native_cstr = CString::new(native_entry).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "native executable path contains interior NUL",
+                )
+            })?;
+            envp_storage.push(native_cstr);
+
+            let mut envp_ptrs = Vec::with_capacity(envp_storage.len() + 1);
+            for item in &envp_storage {
+                envp_ptrs.push(item.as_ptr());
+            }
+            envp_ptrs.push(std::ptr::null());
+
+            Ok(Self {
+                _argv_storage: argv_storage,
+                argv_ptrs,
+                _envp_storage: envp_storage,
+                envp_ptrs,
+            })
+        }
+
+        pub(super) fn argv_ptr(&self) -> *const *const libc::c_char {
+            self.argv_ptrs.as_ptr()
+        }
+
+        pub(super) fn envp_ptr(&self) -> *const *const libc::c_char {
+            self.envp_ptrs.as_ptr()
+        }
     }
 
     pub(super) fn pin_in_package(
@@ -1770,14 +1988,57 @@ mod unix_pinned_plugin {
             .as_ref()
             .map_or_else(|| root_fd.as_raw_fd(), AsRawFd::as_raw_fd);
         let c_file = cstr_path(file_name, specifier)?;
+        // Try `O_RDONLY` first, then fall back on `EACCES` to an execute-only
+        // handle (`O_PATH` on Linux, `O_EXEC` on macOS/BSD) so `0111` native
+        // plugins stay usable without requiring read permission.
+        let mut readable = true;
         // SAFETY: `leaf_dir_raw` is open and `c_file` is valid.
-        let file_raw = unsafe {
+        let mut file_raw = unsafe {
             libc::openat(
                 leaf_dir_raw,
                 c_file.as_ptr(),
                 libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
             )
         };
+        if file_raw < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EACCES) {
+            readable = false;
+            #[cfg(target_os = "linux")]
+            {
+                // SAFETY: `leaf_dir_raw` is open and `c_file` is valid.
+                file_raw = unsafe {
+                    libc::openat(
+                        leaf_dir_raw,
+                        c_file.as_ptr(),
+                        libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    )
+                };
+            }
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                // Darwin `<sys/fcntl.h>`: `O_EXEC` opens execute-only (`0111`)
+                // files without requiring read permission.
+                const DARWIN_O_EXEC: libc::c_int = 0x4000_0000;
+                // SAFETY: `leaf_dir_raw` is open and `c_file` is valid.
+                file_raw = unsafe {
+                    libc::openat(
+                        leaf_dir_raw,
+                        c_file.as_ptr(),
+                        DARWIN_O_EXEC | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    )
+                };
+            }
+            #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+            {
+                // SAFETY: `leaf_dir_raw` is open and `c_file` is valid.
+                file_raw = unsafe {
+                    libc::openat(
+                        leaf_dir_raw,
+                        c_file.as_ptr(),
+                        libc::O_EXEC | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    )
+                };
+            }
+        }
         if file_raw < 0 {
             return Err(PluginFailure::new(
                 "PLUGIN_INVALID",
@@ -1809,18 +2070,14 @@ mod unix_pinned_plugin {
             ));
         }
 
-        #[cfg(not(target_os = "linux"))]
         #[allow(clippy::unnecessary_cast)]
         let (dev, ino) = (stat.st_dev as u64, stat.st_ino as u64);
 
         Ok(PinnedPluginBinary {
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            dir_fd: root_fd,
             file_fd,
-            #[cfg(not(target_os = "linux"))]
             dev,
-            #[cfg(not(target_os = "linux"))]
             ino,
+            readable,
         })
     }
 }
@@ -1837,6 +2094,7 @@ mod windows_pinned_plugin {
 
     use super::{PinnedPluginBinary, PluginFailure};
 
+    const FILE_EXECUTE: u32 = 0x0000_0020;
     const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
     const SYNCHRONIZE: u32 = 0x0010_0000;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
@@ -1934,11 +2192,12 @@ mod windows_pinned_plugin {
                     ),
                 )
             })?;
-        // Hold the verified executable open with `FILE_SHARE_READ` only (no
-        // write or delete sharing) so Windows prevents overwriting, renaming,
-        // or deleting the binary or any ancestor directory before launch.
+        // Hold the verified executable open with `FILE_EXECUTE | FILE_READ_ATTRIBUTES`
+        // (supporting execute-only ACLs) and `FILE_SHARE_READ` only (no write or
+        // delete sharing) so Windows prevents overwriting, renaming, or deleting
+        // the binary or any ancestor directory before launch.
         let bin_file = OpenOptions::new()
-            .read(true)
+            .access_mode(FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
             .share_mode(FILE_SHARE_READ)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(canonical_binary)
@@ -2045,125 +2304,98 @@ fn spawn_resolved_binary(
         .map(PluginChild::WinAlias);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     let mut command = if let Some(ref pinned) = resolved.pinned_binary {
-        use std::os::fd::AsRawFd;
+        if let Some((interpreter, script_body)) =
+            unix_pinned_plugin::read_pinned_posix_shell_script(pinned)?
+        {
+            let mut cmd = Command::new(interpreter);
+            cmd.arg("-c")
+                .arg(script_body)
+                .arg(&resolved.invocation_path);
+            cmd
+        } else {
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::fd::AsRawFd;
 
-        if !Path::new("/proc/self/fd").is_dir() {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "cannot execute pinned plugin binary without /proc/self/fd",
-            ));
-        }
-        let raw_fd = pinned.file_fd.as_raw_fd();
-        let is_shebang = unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
-        let mut cmd = Command::new(format!("/proc/self/fd/{raw_fd}"));
-        cmd.arg0(&resolved.invocation_path);
-        if is_shebang {
-            // SAFETY: runs in the forked child right before `execve` and clears
-            // `FD_CLOEXEC` solely on the pinned script descriptor so the
-            // kernel's `#!` interpreter can read `/proc/self/fd/{raw_fd}`.
-            unsafe {
-                cmd.pre_exec(move || {
-                    if libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
-                        return Err(io::Error::last_os_error());
-                    }
-                    Ok(())
-                });
+                let raw_fd = pinned.file_fd.as_raw_fd();
+                let is_shebang =
+                    pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
+                let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
+                    &resolved.invocation_path,
+                    NATIVE_EXECUTABLE_ENV,
+                    native_executable,
+                )?;
+                let mut cmd = Command::new(&resolved.binary_path);
+                // SAFETY: runs in the forked child after Rust configures stdio
+                // pipes, `current_dir`, and process group; invokes
+                // `execveat(AT_EMPTY_PATH)` directly on the verified descriptor
+                // without needing `/proc` or any pathname lookup.
+                unsafe {
+                    cmd.pre_exec(move || {
+                        if is_shebang && libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                        libc::syscall(
+                            libc::SYS_execveat,
+                            raw_fd,
+                            c"".as_ptr(),
+                            exec_arrays.argv_ptr(),
+                            exec_arrays.envp_ptr(),
+                            libc::AT_EMPTY_PATH,
+                        );
+                        Err(io::Error::last_os_error())
+                    });
+                }
+                cmd
+            }
+            #[cfg(target_os = "freebsd")]
+            {
+                use std::os::fd::AsRawFd;
+
+                let raw_fd = pinned.file_fd.as_raw_fd();
+                let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
+                    &resolved.invocation_path,
+                    NATIVE_EXECUTABLE_ENV,
+                    native_executable,
+                )?;
+                let mut cmd = Command::new(&resolved.binary_path);
+                // SAFETY: runs in the forked child after stdio/cwd/pgid setup
+                // and replaces the process image directly via `fexecve`.
+                unsafe {
+                    cmd.pre_exec(move || {
+                        libc::fexecve(raw_fd, exec_arrays.argv_ptr(), exec_arrays.envp_ptr());
+                        Err(io::Error::last_os_error())
+                    });
+                }
+                cmd
+            }
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                // Execute via XNU volfs (`/.vol/<dev>/<ino>`) while
+                // `pinned.file_fd` keeps the inode allocated and un-reusable:
+                // the kernel binds execution directly to `(dev, ino)` with zero
+                // directory/symlink lookup and fails closed if unlinked or on a
+                // volume without volfs support.
+                let volfs_path = format!("/.vol/{}/{}", pinned.dev, pinned.ino);
+                let mut cmd = Command::new(&volfs_path);
+                cmd.arg0(&resolved.invocation_path);
+                cmd
+            }
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "macos",
+                target_os = "ios"
+            )))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "pinned descriptor plugin execution is not supported on this Unix target",
+                ));
             }
         }
-        cmd
-    } else {
-        let mut cmd = Command::new(&resolved.binary_path);
-        if resolved.invocation_path != resolved.binary_path {
-            cmd.arg0(&resolved.invocation_path);
-        }
-        cmd
-    };
-
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    let mut command = if let Some(ref pinned) = resolved.pinned_binary {
-        use std::ffi::CString;
-        use std::os::fd::AsRawFd;
-        use std::os::unix::ffi::OsStrExt;
-
-        let live_dir = unix_pinned_plugin::fd_live_path(pinned.dir_fd.as_raw_fd())?;
-        let live_binary = unix_pinned_plugin::fd_live_path(pinned.file_fd.as_raw_fd())?;
-        if live_binary == live_dir || !live_binary.starts_with(&live_dir) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "pinned plugin executable moved outside its package directory before launch",
-            ));
-        }
-        let stat = unix_pinned_plugin::fstat_fd(pinned.file_fd.as_raw_fd())?;
-        if stat.st_nlink == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "pinned plugin executable was unlinked before launch",
-            ));
-        }
-        let c_live = CString::new(live_binary.as_os_str().as_bytes()).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "pinned plugin path contains interior NUL",
-            )
-        })?;
-        unix_pinned_plugin::verify_lstat_identity(&c_live, pinned.dev, pinned.ino)?;
-        let mut cmd = Command::new(&live_binary);
-        cmd.arg0(&resolved.invocation_path);
-        let expected_dev = pinned.dev;
-        let expected_ino = pinned.ino;
-        // SAFETY: async-signal-safe `lstat` check inside the forked child
-        // immediately before `execve` ensures the live path still matches the
-        // pinned regular-file inode.
-        unsafe {
-            cmd.pre_exec(move || {
-                unix_pinned_plugin::verify_lstat_identity(&c_live, expected_dev, expected_ino)
-            });
-        }
-        cmd
-    } else {
-        let mut cmd = Command::new(&resolved.binary_path);
-        if resolved.invocation_path != resolved.binary_path {
-            cmd.arg0(&resolved.invocation_path);
-        }
-        cmd
-    };
-
-    #[cfg(all(
-        unix,
-        not(any(target_os = "linux", target_os = "macos", target_os = "ios"))
-    ))]
-    let mut command = if let Some(ref pinned) = resolved.pinned_binary {
-        use std::ffi::CString;
-        use std::os::fd::AsRawFd;
-        use std::os::unix::ffi::OsStrExt;
-
-        let stat = unix_pinned_plugin::fstat_fd(pinned.file_fd.as_raw_fd())?;
-        if stat.st_nlink == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "pinned plugin executable was unlinked before launch",
-            ));
-        }
-        let c_bin = CString::new(resolved.binary_path.as_os_str().as_bytes()).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "pinned plugin path contains interior NUL",
-            )
-        })?;
-        unix_pinned_plugin::verify_lstat_identity(&c_bin, pinned.dev, pinned.ino)?;
-        let mut cmd = Command::new(&resolved.binary_path);
-        cmd.arg0(&resolved.invocation_path);
-        let expected_dev = pinned.dev;
-        let expected_ino = pinned.ino;
-        // SAFETY: async-signal-safe `lstat` verification before `execve`.
-        unsafe {
-            cmd.pre_exec(move || {
-                unix_pinned_plugin::verify_lstat_identity(&c_bin, expected_dev, expected_ino)
-            });
-        }
-        cmd
     } else {
         let mut cmd = Command::new(&resolved.binary_path);
         if resolved.invocation_path != resolved.binary_path {
@@ -4789,9 +5021,87 @@ catalogs:
         {
             let still_original =
                 super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
-                    .expect("Linux /proc/self/fd executes the original unlinked inode");
+                    .expect("Linux execveat executes the original unlinked inode");
             assert_eq!(still_original.name, "verified-original");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_only_package_plugin_binary_runs_and_cache_fingerprints_pinned_inode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("plugin-exec-only");
+        let pkg_dir = root.join("node_modules/acme-execonly");
+        let bin_dir = pkg_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name":"acme-execonly","palamedes":{"pluginBinary":"bin/acme-exec"}}"#,
+        )
+        .expect("write package.json");
+        let target_bin = bin_dir.join("acme-exec");
+        let source_path = root.join("exec_only.c");
+        fs::write(
+            &source_path,
+            concat!(
+                "#include <stdio.h>\n",
+                "int main(void) {\n",
+                "  puts(\"{\\\"event\\\":\\\"manifest\\\",\\\"name\\\":\\\"execonly\\\",\\\"protocolVersion\\\":1,\\\"commands\\\":{\\\"ping\\\":{}}}\");\n",
+                "  return 0;\n",
+                "}\n",
+            ),
+        )
+        .expect("write C fixture source");
+        let compiled = std::process::Command::new("cc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&target_bin)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !compiled {
+            return;
+        }
+        fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o111))
+            .expect("chmod 0111 binary");
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+
+        let resolved = super::resolve_binary_plugin("acme-execonly", &config_path)
+            .expect("execute-only 0111 native plugin must resolve and pin without read permission");
+        let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+            .expect("execute-only 0111 native plugin must run");
+        assert_eq!(manifest.name, "execonly");
+
+        // Restore read permissions so we can verify replacement-after-pinning
+        // skips manifest caching rather than attributing the old manifest to a new binary.
+        fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755))
+            .expect("restore permissions");
+        let resolved_readable = super::resolve_binary_plugin("acme-execonly", &config_path)
+            .expect("resolve readable plugin");
+        assert!(
+            super::plugin_cache_identity_for_resolved(
+                &resolved_readable,
+                &resolved_readable.binary_path,
+                None,
+                &super::hash_plugin_binary,
+            )
+            .is_some(),
+            "cache identity succeeds while pathname matches pinned inode"
+        );
+        let replacement = bin_dir.join("acme-exec.new");
+        fs::write(&replacement, b"replacement-bytes").expect("write replacement");
+        fs::rename(&replacement, &target_bin).expect("replace binary inode");
+        assert!(
+            super::plugin_cache_identity_for_resolved(
+                &resolved_readable,
+                &resolved_readable.binary_path,
+                None,
+                &super::hash_plugin_binary,
+            )
+            .is_none(),
+            "cache identity must skip caching once pathname no longer names pinned inode"
+        );
     }
 
     #[test]

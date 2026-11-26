@@ -114,17 +114,20 @@ pub enum DirFilenameEquivalence {
     /// Exact byte-for-byte comparison (standard Linux ext4/xfs/btrfs/tmpfs or
     /// Windows NTFS with per-directory case sensitivity enabled).
     Exact,
-    /// Case-sensitive, Unicode NFD normalization-insensitive (APFS/HFS+ Case-Sensitive).
+    /// Case-sensitive, Unicode NFD normalization-insensitive (APFS Case-Sensitive).
     UnicodeNfd,
+    /// Case-sensitive HFS+: Unicode NFD with HFS+ decomposition exclusions
+    /// (`U+2000..=U+2FFF`, `U+F900..=U+FAFF`, `U+2F800..=U+2FA1F` stay distinct).
+    UnicodeHfsPlus,
     /// Case-insensitive 1-to-1 uppercase without Unicode normalization
     /// (Windows NTFS, FAT/exFAT, SMB/CIFS).
     CaseInsensitiveNtfs,
     /// Case-insensitive full Unicode casefold + NFD preserving default-ignorable
     /// code points (default macOS/iOS APFS).
     CaseInsensitiveUnicodeNfd,
-    /// Case-insensitive HFS+: Unicode NFD + 1-to-1 BMP code-unit lowercase fold
-    /// with HFS+ ignorable stripping (`straße` != `strasse`,
-    /// `café` == `cafe\u{0301}`, `foo\u{200c}bar` == `foobar`).
+    /// Case-insensitive HFS+: HFS+ NFD (with TN1150 decomposition exclusions) +
+    /// 1-to-1 BMP code-unit lowercase fold + HFS+ ignorable stripping
+    /// (`straße` != `strasse`, `U+F900` != `U+8C48`, `café` == `cafe\u{0301}`).
     CaseInsensitiveHfsPlus,
     /// Linux `FS_CASEFOLD_FL` NFDICF: full Unicode casefold + NFD with
     /// `Default_Ignorable_Code_Point` removal (ext4/f2fs/tmpfs casefold).
@@ -515,6 +518,8 @@ mod platform {
                 entry_d: *mut libc::c_void,
                 tag_type_p: *mut libc::c_int,
             ) -> libc::c_int;
+            pub(super) fn acl_get_qualifier(entry_d: *mut libc::c_void) -> *mut libc::c_void;
+            pub(super) fn mbr_uid_to_uuid(id: libc::uid_t, uu: *mut u8) -> libc::c_int;
             pub(super) fn acl_get_permset(
                 entry_d: *mut libc::c_void,
                 permset_p: *mut *mut libc::c_void,
@@ -823,6 +828,7 @@ mod platform {
                 matches!(
                     eq,
                     DirFilenameEquivalence::UnicodeNfd
+                        | DirFilenameEquivalence::UnicodeHfsPlus
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
                         | DirFilenameEquivalence::CaseInsensitiveHfsPlus
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
@@ -2583,10 +2589,9 @@ mod platform {
             };
             Some(match (case_insensitive, fs_kind) {
                 (true, AppleFsKind::Apfs) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfd,
+                (false, AppleFsKind::Apfs) => DirFilenameEquivalence::UnicodeNfd,
                 (true, AppleFsKind::HfsPlus) => DirFilenameEquivalence::CaseInsensitiveHfsPlus,
-                (false, AppleFsKind::Apfs | AppleFsKind::HfsPlus) => {
-                    DirFilenameEquivalence::UnicodeNfd
-                }
+                (false, AppleFsKind::HfsPlus) => DirFilenameEquivalence::UnicodeHfsPlus,
                 (true, AppleFsKind::Other) => DirFilenameEquivalence::CaseInsensitiveNtfs,
                 (false, AppleFsKind::Other) => DirFilenameEquivalence::Exact,
             })
@@ -3094,6 +3099,20 @@ mod platform {
             return Err(error);
         }
         let parent_acl = ExistingAcl(raw);
+        // SAFETY: `geteuid` has no preconditions.
+        let euid = unsafe { libc::geteuid() };
+        let resolve_uid_uuid = |uid: libc::uid_t| -> Option<[u8; 16]> {
+            let mut uuid = [0_u8; 16];
+            // SAFETY: `uuid` is 16 writable bytes for `mbr_uid_to_uuid`.
+            if unsafe { macos_acl::mbr_uid_to_uuid(uid, uuid.as_mut_ptr()) } == 0 {
+                Some(uuid)
+            } else {
+                None
+            }
+        };
+        let euid_uuid = resolve_uid_uuid(euid);
+        let root_uuid = resolve_uid_uuid(0);
+
         let mut entry_id = macos_acl::ACL_FIRST_ENTRY;
         let mut entry: *mut libc::c_void = std::ptr::null_mut();
         loop {
@@ -3126,6 +3145,7 @@ mod platform {
             if unsafe { macos_acl::acl_get_permset(entry, &mut permset) } != 0 {
                 return Err(io::Error::last_os_error());
             }
+            let mut grants_write = false;
             for write_perm in [
                 macos_acl::ACL_ADD_FILE,
                 macos_acl::ACL_DELETE,
@@ -3138,9 +3158,33 @@ mod platform {
             ] {
                 // SAFETY: `permset` is a valid `acl_permset_t`.
                 if unsafe { macos_acl::acl_get_perm_np(permset, write_perm) } == 1 {
-                    return Ok(true);
+                    grants_write = true;
+                    break;
                 }
             }
+            if !grants_write {
+                continue;
+            }
+            // Check which principal receives the write grant; caller-only (or
+            // root-only) entries are safe, while any other user/group or
+            // unresolved principal fails closed.
+            // SAFETY: `entry` is a valid `acl_entry_t`.
+            let qual = unsafe { macos_acl::acl_get_qualifier(entry) };
+            if qual.is_null() {
+                return Ok(true);
+            }
+            // SAFETY: macOS extended ACL qualifiers are 16-byte `guid_t` UUIDs.
+            let entry_uuid = unsafe { *qual.cast::<[u8; 16]>() };
+            // SAFETY: `qual` was allocated by `acl_get_qualifier` and must be freed via `acl_free`.
+            unsafe {
+                let _ = macos_acl::acl_free(qual);
+            }
+            if euid_uuid.is_some_and(|uuid| uuid == entry_uuid)
+                || root_uuid.is_some_and(|uuid| uuid == entry_uuid)
+            {
+                continue;
+            }
+            return Ok(true);
         }
     }
 
@@ -6106,5 +6150,71 @@ mod tests {
             cwd_anchor.self_identity().expect("cwd identity"),
             dot_anchor.self_identity().expect("dot identity")
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_owner_only_write_acl_allows_staging_while_foreign_acl_is_rejected() {
+        use std::process::Command;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let dir_path = root.path().join("owner-acl");
+        fs::create_dir_all(&dir_path).expect("create dir");
+        fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o755)).expect("chmod 0755");
+
+        let whoami = Command::new("/usr/bin/id")
+            .arg("-un")
+            .output()
+            .expect("id -un");
+        assert!(whoami.status.success());
+        let user = String::from_utf8_lossy(&whoami.stdout).trim().to_owned();
+
+        // Grant `add_file` ONLY to the current user; staging must succeed.
+        let owner_grant = Command::new("/bin/chmod")
+            .args(["+a", &format!("user:{user} allow add_file")])
+            .arg(&dir_path)
+            .status()
+            .expect("chmod +a owner");
+        if !owner_grant.success() {
+            // Filesystem does not support macOS ACLs.
+            return;
+        }
+        let dir = ContainedDir::open_root(&dir_path).expect("open root");
+        dir.write_file_atomically(
+            OsStr::new("en.po"),
+            b"owner-acl-ok",
+            ContainedNewFileMode::RespectUmask,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("caller-only write ACL must not be treated as foreign write access");
+        assert_eq!(
+            fs::read_to_string(dir_path.join("en.po")).expect("read written catalog"),
+            "owner-acl-ok"
+        );
+
+        // Now add a foreign write grant (`everyone allow add_file`): non-sticky
+        // staging must fail closed.
+        let foreign_grant = Command::new("/bin/chmod")
+            .args(["+a", "everyone allow add_file"])
+            .arg(&dir_path)
+            .status()
+            .expect("chmod +a everyone");
+        if foreign_grant.success() {
+            let error = dir
+                .write_file_atomically(
+                    OsStr::new("de.po"),
+                    b"blocked",
+                    ContainedNewFileMode::RespectUmask,
+                    ContainedWriteDurability::Rename,
+                )
+                .expect_err("foreign write ACL on non-sticky dir must fail closed");
+            assert!(
+                matches!(
+                    &error,
+                    ContainedFsError::Io(io_err) if io_err.kind() == io::ErrorKind::PermissionDenied
+                ),
+                "expected PermissionDenied error for foreign ACL, got {error:?}"
+            );
+        }
     }
 }
