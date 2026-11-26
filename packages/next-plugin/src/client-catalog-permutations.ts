@@ -544,6 +544,7 @@ function scanRegexLiteralEnd(source: string, start: number): number {
 function resolveIdentifierArrayInScope(
   source: string,
   objectStart: number,
+  objectEnd: number,
   ident: string,
 ): string | undefined {
   const scopeStack: ScopeFrame[] = [
@@ -555,301 +556,320 @@ function resolveIdentifierArrayInScope(
   let regexAllowed = true;
   let index = 0;
 
-  while (index < objectStart) {
-    const ch = source[index];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      index += 1;
-      continue;
-    }
-    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
-      index = skipWhitespaceAndComments(source, index);
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const end = scanQuotedStringEnd(source, index);
-      if (end === -1) return;
-      index = end;
-      prevTokenKind = "other";
-      prevNonWsChar = ch;
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "`") {
-      const end = scanTemplateLiteralEnd(source, index);
-      if (end === -1) return;
-      const literal = source.slice(index, end);
-      // Executable `${...}` substitutions inside a template literal can mutate
-      // `ident` in place (e.g. `${(t[2] = {}, "")}`). Treat any interpolation
-      // mentioning `ident` as inconclusive unless confined to this block's own
-      // `let`/`const` binding.
-      if (literal.includes("${") && identWord.test(literal)) {
-        const currentFrame = scopeStack.at(-1)!;
-        if (currentFrame.binding?.blockScoped) {
-          currentFrame.binding = { value: null, blockScoped: true };
-        } else {
-          currentFrame.tainted = true;
-        }
+  const scanRange = (limit: number, stopBelowDepth: number): boolean => {
+    while (index < limit) {
+      if (stopBelowDepth > 0 && scopeStack.length < stopBelowDepth) return true;
+      const ch = source[index];
+      if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+        index += 1;
+        continue;
       }
-      index = end;
-      prevTokenKind = "other";
-      prevNonWsChar = "`";
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "/" && regexAllowed) {
-      const end = scanRegexLiteralEnd(source, index);
-      if (end !== -1) {
+      if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+        index = skipWhitespaceAndComments(source, index);
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        const end = scanQuotedStringEnd(source, index);
+        if (end === -1) return false;
         index = end;
         prevTokenKind = "other";
-        prevNonWsChar = "/";
+        prevNonWsChar = ch;
         regexAllowed = false;
         continue;
       }
-    }
+      if (ch === "`") {
+        const end = scanTemplateLiteralEnd(source, index);
+        if (end === -1) return false;
+        const literal = source.slice(index, end);
+        // Executable `${...}` substitutions inside a template literal can mutate
+        // `ident` in place (e.g. `${(t[2] = {}, "")}`). Treat any interpolation
+        // mentioning `ident` as inconclusive unless confined to this block's own
+        // `let`/`const` binding.
+        if (literal.includes("${") && identWord.test(literal)) {
+          const currentFrame = scopeStack.at(-1)!;
+          if (currentFrame.binding?.blockScoped) {
+            currentFrame.binding = { value: null, blockScoped: true };
+          } else {
+            currentFrame.tainted = true;
+          }
+        }
+        index = end;
+        prevTokenKind = "other";
+        prevNonWsChar = "`";
+        regexAllowed = false;
+        continue;
+      }
+      if (ch === "/" && regexAllowed) {
+        const end = scanRegexLiteralEnd(source, index);
+        if (end !== -1) {
+          index = end;
+          prevTokenKind = "other";
+          prevNonWsChar = "/";
+          regexAllowed = false;
+          continue;
+        }
+      }
 
-    const top = scopeStack.at(-1)!;
-    if (ch === "{") {
-      const isDestructuringDecl =
-        top.exprDepth === 0 &&
-        (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
-      if (isDestructuringDecl) {
-        const end = scanBalancedEnd(source, index);
-        if (end === -1 || end > objectStart) return;
-        // Destructuring patterns like `const { t: label } = meta` mention `t`
-        // as a property key rather than binding a local `t`. Taint instead of
-        // assuming a block-scoped shadow so later writes to outer `t` are never
-        // discarded.
-        if (identWord.test(source.slice(index + 1, end - 1))) {
-          top.tainted = true;
+      const top = scopeStack.at(-1)!;
+      if (ch === "{") {
+        const isDestructuringDecl =
+          top.exprDepth === 0 &&
+          (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
+        if (isDestructuringDecl) {
+          const end = scanBalancedEnd(source, index);
+          if (end === -1 || end > limit) return false;
+          // Destructuring patterns like `const { t: label } = meta` mention `t`
+          // as a property key rather than binding a local `t`. Taint instead of
+          // assuming a block-scoped shadow so later writes to outer `t` are never
+          // discarded.
+          if (identWord.test(source.slice(index + 1, end - 1))) {
+            top.tainted = true;
+          }
+          index = end;
+          prevTokenKind = "other";
+          prevNonWsChar = "}";
+          regexAllowed = false;
+          continue;
         }
-        index = end;
-        prevTokenKind = "other";
-        prevNonWsChar = "}";
-        regexAllowed = false;
-        continue;
-      }
-      top.conditionalStmt = false;
-      top.pendingCondition = false;
-      scopeStack.push({
-        tainted: false,
-        exprDepth: 0,
-        pendingCondition: false,
-        conditionalStmt: false,
-      });
-      index += 1;
-      prevTokenKind = "other";
-      prevNonWsChar = "{";
-      regexAllowed = true;
-      continue;
-    }
-    if (ch === "}") {
-      if (scopeStack.length <= 1) return;
-      const closed = scopeStack.pop()!;
-      if (closed.tainted || (closed.binding !== undefined && !closed.binding.blockScoped)) {
-        scopeStack.at(-1)!.tainted = true;
-      }
-      index += 1;
-      prevTokenKind = "other";
-      prevNonWsChar = "}";
-      regexAllowed = true;
-      continue;
-    }
-    if (ch === "(" || ch === "[") {
-      const isArrayDestructuringDecl =
-        ch === "[" &&
-        top.exprDepth === 0 &&
-        (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
-      if (isArrayDestructuringDecl) {
-        const end = scanBalancedEnd(source, index);
-        if (end === -1 || end > objectStart) return;
-        if (identWord.test(source.slice(index + 1, end - 1))) {
-          top.tainted = true;
-        }
-        index = end;
-        prevTokenKind = "other";
-        prevNonWsChar = "]";
-        regexAllowed = false;
-        continue;
-      }
-      top.exprDepth += 1;
-      index += 1;
-      prevTokenKind = "other";
-      prevNonWsChar = ch;
-      regexAllowed = true;
-      continue;
-    }
-    if (ch === ")" || ch === "]") {
-      if (top.exprDepth > 0) top.exprDepth -= 1;
-      if (ch === ")" && top.exprDepth === 0 && top.pendingCondition) {
-        top.pendingCondition = false;
-        top.conditionalStmt = true;
-      }
-      index += 1;
-      prevTokenKind = "other";
-      prevNonWsChar = ch;
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === ";") {
-      if (top.exprDepth === 0) {
-        top.declKind = undefined;
         top.conditionalStmt = false;
         top.pendingCondition = false;
-      }
-      index += 1;
-      prevTokenKind = "other";
-      prevNonWsChar = ";";
-      regexAllowed = true;
-      continue;
-    }
-    if (ch === ",") {
-      index += 1;
-      prevTokenKind = "comma";
-      prevNonWsChar = ",";
-      regexAllowed = true;
-      continue;
-    }
-    if (ch === ".") {
-      // Spread/rest (`...ident`) references the identifier rather than a
-      // property access, so it must not set `prevTokenKind = "dot"`.
-      if (source[index + 1] === "." && source[index + 2] === ".") {
-        index += 3;
+        scopeStack.push({
+          tainted: false,
+          exprDepth: 0,
+          pendingCondition: false,
+          conditionalStmt: false,
+        });
+        index += 1;
         prevTokenKind = "other";
-        prevNonWsChar = ".";
+        prevNonWsChar = "{";
         regexAllowed = true;
         continue;
       }
-      index += 1;
-      prevTokenKind = "dot";
-      prevNonWsChar = ".";
-      regexAllowed = false;
-      continue;
-    }
-
-    if (/[A-Za-z_$]/u.test(ch ?? "")) {
-      const wordStart = index;
-      index += 1;
-      while (index < objectStart && /[\w$]/u.test(source[index] ?? "")) index += 1;
-      const word = source.slice(wordStart, index);
-      if (prevTokenKind !== "dot") {
-        if (top.exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
-          top.declKind = word;
-          prevTokenKind = "decl";
-          prevNonWsChar = word.at(-1) ?? "";
-          regexAllowed = false;
-          continue;
+      if (ch === "}") {
+        if (scopeStack.length <= 1) return false;
+        const closed = scopeStack.pop()!;
+        if (closed.tainted || (closed.binding !== undefined && !closed.binding.blockScoped)) {
+          scopeStack.at(-1)!.tainted = true;
         }
-        if (top.exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
-          top.pendingCondition = true;
+        index += 1;
+        prevTokenKind = "other";
+        prevNonWsChar = "}";
+        regexAllowed = true;
+        continue;
+      }
+      if (ch === "(" || ch === "[") {
+        const isArrayDestructuringDecl =
+          ch === "[" &&
+          top.exprDepth === 0 &&
+          (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
+        if (isArrayDestructuringDecl) {
+          const end = scanBalancedEnd(source, index);
+          if (end === -1 || end > limit) return false;
+          if (identWord.test(source.slice(index + 1, end - 1))) {
+            top.tainted = true;
+          }
+          index = end;
           prevTokenKind = "other";
-          prevNonWsChar = word.at(-1) ?? "";
+          prevNonWsChar = "]";
           regexAllowed = false;
           continue;
         }
-        if (top.exprDepth === 0 && (word === "else" || word === "do")) {
+        top.exprDepth += 1;
+        index += 1;
+        prevTokenKind = "other";
+        prevNonWsChar = ch;
+        regexAllowed = true;
+        continue;
+      }
+      if (ch === ")" || ch === "]") {
+        if (top.exprDepth > 0) top.exprDepth -= 1;
+        if (ch === ")" && top.exprDepth === 0 && top.pendingCondition) {
+          top.pendingCondition = false;
           top.conditionalStmt = true;
+        }
+        index += 1;
+        prevTokenKind = "other";
+        prevNonWsChar = ch;
+        regexAllowed = false;
+        continue;
+      }
+      if (ch === ";") {
+        if (top.exprDepth === 0) {
+          top.declKind = undefined;
+          top.conditionalStmt = false;
+          top.pendingCondition = false;
+        }
+        index += 1;
+        prevTokenKind = "other";
+        prevNonWsChar = ";";
+        regexAllowed = true;
+        continue;
+      }
+      if (ch === ",") {
+        index += 1;
+        prevTokenKind = "comma";
+        prevNonWsChar = ",";
+        regexAllowed = true;
+        continue;
+      }
+      if (ch === ".") {
+        // Spread/rest (`...ident`) references the identifier rather than a
+        // property access, so it must not set `prevTokenKind = "dot"`.
+        if (source[index + 1] === "." && source[index + 2] === ".") {
+          index += 3;
           prevTokenKind = "other";
-          prevNonWsChar = word.at(-1) ?? "";
+          prevNonWsChar = ".";
           regexAllowed = true;
           continue;
         }
-        if (word === ident) {
-          const isDeclarator =
-            top.exprDepth === 0 &&
-            (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
-          const afterWord = skipWhitespaceAndComments(source, index);
-          if (
-            afterWord < objectStart &&
-            source[afterWord] === "=" &&
-            source[afterWord + 1] !== "=" &&
-            source[afterWord + 1] !== ">"
-          ) {
-            const blockScoped =
-              isDeclarator && (top.declKind === "let" || top.declKind === "const");
-            const rhsStart = skipWhitespaceAndComments(source, afterWord + 1);
-            // Accept only a single, unconditional declaration initializer whose
-            // entire right-hand side is an array literal (not chained or
-            // computed like `[...].with(...)`) with no prior or later writes.
-            let value: string | null = null;
+        index += 1;
+        prevTokenKind = "dot";
+        prevNonWsChar = ".";
+        regexAllowed = false;
+        continue;
+      }
+
+      if (/[A-Za-z_$]/u.test(ch ?? "")) {
+        const wordStart = index;
+        index += 1;
+        while (index < limit && /[\w$]/u.test(source[index] ?? "")) index += 1;
+        const word = source.slice(wordStart, index);
+        if (prevTokenKind !== "dot") {
+          if (top.exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
+            top.declKind = word;
+            prevTokenKind = "decl";
+            prevNonWsChar = word.at(-1) ?? "";
+            regexAllowed = false;
+            continue;
+          }
+          if (top.exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
+            top.pendingCondition = true;
+            prevTokenKind = "other";
+            prevNonWsChar = word.at(-1) ?? "";
+            regexAllowed = false;
+            continue;
+          }
+          if (top.exprDepth === 0 && (word === "else" || word === "do")) {
+            top.conditionalStmt = true;
+            prevTokenKind = "other";
+            prevNonWsChar = word.at(-1) ?? "";
+            regexAllowed = true;
+            continue;
+          }
+          if (word === ident) {
+            const isDeclarator =
+              top.exprDepth === 0 &&
+              (prevTokenKind === "decl" ||
+                (prevTokenKind === "comma" && top.declKind !== undefined));
+            const afterWord = skipWhitespaceAndComments(source, index);
             if (
-              isDeclarator &&
-              !top.conditionalStmt &&
-              top.binding === undefined &&
-              rhsStart < objectStart &&
-              source[rhsStart] === "["
+              afterWord < limit &&
+              source[afterWord] === "=" &&
+              source[afterWord + 1] !== "=" &&
+              source[afterWord + 1] !== ">"
             ) {
-              const arrayEnd = scanBalancedEnd(source, rhsStart);
-              if (arrayEnd !== -1 && arrayEnd <= objectStart) {
-                const afterArray = skipWhitespaceAndComments(source, arrayEnd);
-                const nextChar = afterArray < objectStart ? source[afterArray] : undefined;
-                const hasNewline = /[\r\n]/u.test(source.slice(arrayEnd, afterArray));
-                const endsInitializer =
-                  afterArray >= objectStart ||
-                  nextChar === ";" ||
-                  nextChar === "," ||
-                  nextChar === "}" ||
-                  (hasNewline && !/^[.[(?+\-*/%&|^=<>!:]/u.test(nextChar ?? ""));
-                if (endsInitializer) {
-                  value = source.slice(rhsStart, arrayEnd);
+              const blockScoped =
+                isDeclarator && (top.declKind === "let" || top.declKind === "const");
+              const rhsStart = skipWhitespaceAndComments(source, afterWord + 1);
+              // Accept only a single, unconditional declaration initializer whose
+              // entire right-hand side is an array literal (not chained or
+              // computed like `[...].with(...)`) with no prior or later writes.
+              let value: string | null = null;
+              if (
+                isDeclarator &&
+                !top.conditionalStmt &&
+                top.binding === undefined &&
+                rhsStart < limit &&
+                source[rhsStart] === "["
+              ) {
+                const arrayEnd = scanBalancedEnd(source, rhsStart);
+                if (arrayEnd !== -1 && arrayEnd <= limit) {
+                  const afterArray = skipWhitespaceAndComments(source, arrayEnd);
+                  const nextChar = afterArray < limit ? source[afterArray] : undefined;
+                  const hasNewline = /[\r\n]/u.test(source.slice(arrayEnd, afterArray));
+                  const endsInitializer =
+                    afterArray >= limit ||
+                    nextChar === ";" ||
+                    nextChar === "," ||
+                    nextChar === "}" ||
+                    (hasNewline && !/^[.[(?+\-*/%&|^=<>!:]/u.test(nextChar ?? ""));
+                  if (endsInitializer) {
+                    value = source.slice(rhsStart, arrayEnd);
+                  }
+                  index = arrayEnd;
                 }
-                index = arrayEnd;
               }
-            }
-            top.binding = {
-              value,
-              blockScoped: blockScoped || Boolean(top.binding?.blockScoped),
-            };
-          } else if (isDeclarator) {
-            top.binding = {
-              value: null,
-              blockScoped: top.declKind === "let" || top.declKind === "const",
-            };
-          } else {
-            const isObjectPropertyKey =
-              (prevNonWsChar === "{" || prevNonWsChar === ",") &&
-              afterWord < objectStart &&
-              source[afterWord] === ":";
-            if (!isObjectPropertyKey) {
-              // Any intervening reference to `ident` (member write like `t[2] = {}`,
-              // mutating method call, aliasing, or function call) can mutate the
-              // array in place; treat it as inconclusive unless confined to this
-              // block's own `let`/`const` binding.
-              if (top.binding?.blockScoped) {
-                top.binding = { value: null, blockScoped: true };
-              } else {
-                top.tainted = true;
+              top.binding = {
+                value,
+                blockScoped: blockScoped || Boolean(top.binding?.blockScoped),
+              };
+            } else if (isDeclarator) {
+              top.binding = {
+                value: null,
+                blockScoped: top.declKind === "let" || top.declKind === "const",
+              };
+            } else {
+              const isObjectPropertyKey =
+                (prevNonWsChar === "{" || prevNonWsChar === ",") &&
+                afterWord < limit &&
+                source[afterWord] === ":";
+              if (!isObjectPropertyKey) {
+                // Any intervening or hoisted reference to `ident` (member write,
+                // mutating method call, spread, aliasing, or function call) can
+                // mutate the array in place; treat it as inconclusive unless
+                // confined to this block's own `let`/`const` binding.
+                if (top.binding?.blockScoped) {
+                  top.binding = { value: null, blockScoped: true };
+                } else {
+                  top.tainted = true;
+                }
               }
             }
           }
         }
+        prevTokenKind = "other";
+        prevNonWsChar = word.at(-1) ?? "";
+        regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+        continue;
       }
-      prevTokenKind = "other";
-      prevNonWsChar = word.at(-1) ?? "";
-      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
-      continue;
-    }
 
-    if (/[0-9]/u.test(ch ?? "")) {
+      if (/[0-9]/u.test(ch ?? "")) {
+        index += 1;
+        while (index < limit && /[\w.]/u.test(source[index] ?? "")) index += 1;
+        prevTokenKind = "other";
+        prevNonWsChar = "0";
+        regexAllowed = false;
+        continue;
+      }
+
       index += 1;
-      while (index < objectStart && /[\w.]/u.test(source[index] ?? "")) index += 1;
       prevTokenKind = "other";
-      prevNonWsChar = "0";
-      regexAllowed = false;
-      continue;
+      prevNonWsChar = ch ?? "";
+      regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
     }
+    return true;
+  };
 
-    index += 1;
-    prevTokenKind = "other";
-    prevNonWsChar = ch ?? "";
-    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
-  }
+  if (!scanRange(objectStart, 0)) return;
 
   // Only accept an initializer declared in the same straight-line scope as the
   // entrypoint call; captured outer bindings inside a nested function/block can
   // be mutated after the declaration and before deferred execution.
+  const targetDepth = scopeStack.length;
   const finalFrame = scopeStack.at(-1)!;
-  if (finalFrame.tainted) return;
-  return finalFrame.binding?.value ?? undefined;
+  if (finalFrame.tainted || !finalFrame.binding?.value) return;
+  const candidateValue = finalFrame.binding.value;
+
+  // Also scan the remainder of the enclosing scope after the entrypoint call so
+  // hoisted functions declared later in the same scope (which may have been
+  // called before the entrypoint) cannot mutate `ident` undetected.
+  index = objectEnd;
+  prevTokenKind = "other";
+  prevNonWsChar = "}";
+  regexAllowed = false;
+  if (!scanRange(source.length, targetDepth)) return;
+  if (finalFrame.tainted || finalFrame.binding?.value !== candidateValue) return;
+  return candidateValue;
 }
 
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
@@ -925,7 +945,7 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
             if (treeExpr.startsWith("[")) {
               matches.push(treeExpr);
             } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
-              matches.push(resolveIdentifierArrayInScope(source, objectStart, treeExpr));
+              matches.push(resolveIdentifierArrayInScope(source, objectStart, objectEnd, treeExpr));
             } else {
               matches.push(undefined);
             }
@@ -1202,10 +1222,14 @@ export function routeHasOptionalRootLocale(
   if (allChains.length === 0) return;
 
   const entryStem = path.posix.basename(normalized).replace(/_client-reference-manifest\.js$/u, "");
-  const entryChains = entryStem
-    ? allChains.filter((chain) => directoryHasRouteEntry(chain.at(-1)!, entryStem, pageExtensions))
-    : [];
-  const chains = entryChains.length > 0 ? entryChains : allChains;
+  if (!entryStem) return;
+  // Require at least one candidate directory chain to actually contain the
+  // emitted route entry file (`page.<ext>`, etc.) so a colocated non-route
+  // directory can never supply a layout when the real page is missing.
+  const chains = allChains.filter((chain) =>
+    directoryHasRouteEntry(chain.at(-1)!, entryStem, pageExtensions),
+  );
+  if (chains.length === 0) return;
 
   const chainResults = chains.map((chain): boolean | undefined => {
     for (let index = 0; index < localeIndex; index += 1) {

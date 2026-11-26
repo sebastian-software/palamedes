@@ -328,17 +328,18 @@ describe("locale resolution", () => {
     // layouts regardless of whether the layout has client JS/CSS entries.
     const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-root-layout-tree-"));
     try {
-      const writeLayout = (project: string, relativePath: string) => {
+      const writeRouteFile = (project: string, relativePath: string) => {
         const target = path.join(fixtureRoot, project, relativePath);
         mkdirSync(path.dirname(target), { recursive: true });
         writeFileSync(
           target,
-          "export default function Layout({ children }) { return children; }\n",
+          "export default function Component({ children }: { children?: unknown }) { return children ?? null; }\n",
         );
       };
 
       // Server-only root layout at app/shop/[[...locale]]/layout.jsx (no app/layout.jsx).
-      writeLayout("nested-root", "app/shop/[[...locale]]/layout.jsx");
+      writeRouteFile("nested-root", "app/shop/[[...locale]]/layout.jsx");
+      writeRouteFile("nested-root", "app/shop/[[...locale]]/page.jsx");
       expect(
         routeHasOptionalRootLocale(
           path.join(fixtureRoot, "nested-root"),
@@ -347,8 +348,9 @@ describe("locale resolution", () => {
       ).toBe(true);
 
       // Root layout at app/layout.jsx above app/shop/[[...locale]]/page.jsx.
-      writeLayout("top-layout", "app/layout.jsx");
-      writeLayout("top-layout", "app/shop/[[...locale]]/layout.jsx");
+      writeRouteFile("top-layout", "app/layout.jsx");
+      writeRouteFile("top-layout", "app/shop/[[...locale]]/layout.jsx");
+      writeRouteFile("top-layout", "app/shop/[[...locale]]/page.jsx");
       expect(
         routeHasOptionalRootLocale(
           path.join(fixtureRoot, "top-layout"),
@@ -364,8 +366,9 @@ describe("locale resolution", () => {
 
       // Escaped underscore segment (`%5Fshop` emitted as `_shop`), ignoring any
       // sibling private `_shop` folder that Next.js excludes from routing.
-      writeLayout("escaped-underscore", "app/_shop/layout.jsx");
-      writeLayout("escaped-underscore", "app/%5Fshop/[[...locale]]/layout.tsx");
+      writeRouteFile("escaped-underscore", "app/_shop/layout.jsx");
+      writeRouteFile("escaped-underscore", "app/%5Fshop/[[...locale]]/layout.tsx");
+      writeRouteFile("escaped-underscore", "app/%5Fshop/[[...locale]]/page.tsx");
       expect(
         routeHasOptionalRootLocale(
           path.join(fixtureRoot, "escaped-underscore"),
@@ -376,7 +379,8 @@ describe("locale resolution", () => {
       // A colocated directory named `layout.tsx/` is not a layout file and must
       // not mask the real root layout under `[[...locale]]`.
       mkdirSync(path.join(fixtureRoot, "colocated-dir/app/layout.tsx"), { recursive: true });
-      writeLayout("colocated-dir", "app/[[...locale]]/layout.tsx");
+      writeRouteFile("colocated-dir", "app/[[...locale]]/layout.tsx");
+      writeRouteFile("colocated-dir", "app/[[...locale]]/page.tsx");
       expect(
         routeHasOptionalRootLocale(
           path.join(fixtureRoot, "colocated-dir"),
@@ -387,8 +391,9 @@ describe("locale resolution", () => {
       // Verbatim pageExtensions: Next.js does not strip a leading dot from
       // `.mdx`, so `app/layout.mdx` must not be treated as a layout when
       // `pageExtensions` is `["tsx", ".mdx"]`.
-      writeLayout("verbatim-ext", "app/layout.mdx");
-      writeLayout("verbatim-ext", "app/[[...locale]]/layout.tsx");
+      writeRouteFile("verbatim-ext", "app/layout.mdx");
+      writeRouteFile("verbatim-ext", "app/[[...locale]]/layout.tsx");
+      writeRouteFile("verbatim-ext", "app/[[...locale]]/page.tsx");
       expect(
         routeHasOptionalRootLocale(
           path.join(fixtureRoot, "verbatim-ext"),
@@ -396,7 +401,8 @@ describe("locale resolution", () => {
           ["tsx", ".mdx"],
         ),
       ).toBe(true);
-      writeLayout("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
+      writeRouteFile("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
+      writeRouteFile("src-custom-ext", "src/app/(marketing)/[[...locale]]/page.page.tsx");
       expect(
         routeHasOptionalRootLocale(
           path.join(fixtureRoot, "src-custom-ext"),
@@ -471,6 +477,7 @@ describe("locale resolution", () => {
 
       mkdirSync(path.join(fixtureRoot, "symlink-dir/shared/dir"), { recursive: true });
       writeLayout("symlink-dir", "app/[[...locale]]/layout.tsx");
+      writeLayout("symlink-dir", "app/[[...locale]]/page.tsx");
       symlinkSync(
         path.join(fixtureRoot, "symlink-dir/shared/dir"),
         path.join(fixtureRoot, "symlink-dir/app/layout.tsx"),
@@ -964,6 +971,14 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // Hoisted functions declared AFTER the entrypoint call in the same scope
+      // may already have mutated `t` before the entrypoint runs.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; finalizeTree(); ${ep("tree:t")}; function finalizeTree(){ delete t[2].layout; }`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const note = \`\${(t[2] = {}, "")}\`; ${ep("tree:t")};`,
@@ -1050,6 +1065,10 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/layout.tsx"),
           "export default function Layout({ children }) { return children; }\n",
         );
+        writeFileSync(
+          path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/page.tsx"),
+          "export default function Page() { return null; }\n",
+        );
         expect(
           routeHasOptionalRootLocale(
             escapedProject,
@@ -1071,16 +1090,22 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           path.join(escapedProject, "app/shop_front/layout.tsx"),
           "export default function ShadowLayout({ children }) { return children; }\n",
         );
-        writeFileSync(
-          path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/page.tsx"),
-          "export default function Page() { return null; }\n",
-        );
         expect(
           routeHasOptionalRootLocale(
             escapedProject,
             "shop_front/[[...locale]]/page_client-reference-manifest.js",
           ),
         ).toBe(true);
+        // If `app/shop%5Ffront/[[...locale]]/page.tsx` is removed so NO candidate
+        // directory contains `page.tsx`, a colocated `app/shop_front/layout.tsx`
+        // must NOT produce `false` — return undefined so the caller fails closed.
+        rmSync(path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/page.tsx"));
+        expect(
+          routeHasOptionalRootLocale(
+            escapedProject,
+            "shop_front/[[...locale]]/page_client-reference-manifest.js",
+          ),
+        ).toBeUndefined();
         // When a route's source directory chain cannot be located on disk,
         // routeHasOptionalRootLocale() returns undefined (unknown boundary)
         // rather than false so emitClientCatalogPermutations() fails closed.
