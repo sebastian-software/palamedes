@@ -1517,6 +1517,58 @@ describe("workflow contracts", () => {
       "<memory>:6: node:24 is not pinned to a sha256 digest",
       "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
     ]);
+    // Matrix `include` merges into matching base rows, and `exclude` removes dropped rows.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  matrix-merge:",
+          "    strategy:",
+          "      matrix:",
+          "        repo:",
+          "          - node",
+          "          - dropped",
+          "        exclude:",
+          "          - repo: dropped",
+          "        include:",
+          "          - repo: node",
+          "            tag: 24",
+          "    container: ${{ matrix.repo }}:${{ matrix.tag }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:12: node:24 is not pinned to a sha256 digest"]);
+    // Actions `${{ env.* }}` evaluates before shell reassignment, shell heredocs
+    // are executed while data heredocs and multiline quoted strings are inert,
+    // arithmetic `<<` is not a heredoc, subshell `)` stays out of digests, and
+    // Podman-specific options (`--authfile`) are skipped before the image operand.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  shell-semantics:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - env:",
+          `          IMAGE: node:24@${digest}`,
+          "        run: |",
+          "          IMAGE=node:24",
+          '          docker pull "${{ env.IMAGE }}"',
+          "          printf 'example:\n          docker pull alpine:3.20\n          '",
+          `          (docker pull node:24@${digest})`,
+          `          podman run --rm --authfile ci-auth.json node:24@${digest} node -v`,
+          "          x=$((1 << 4))",
+          "          bash <<'SH'",
+          "          docker pull alpine:3.20",
+          "          SH",
+          "          podman run --rm --authfile ci-auth.json node:24 node -v",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:17: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:19: node:24 is not pinned to a sha256 digest",
+    ]);
     expect(
       unpinnedWorkflowContainerReferences(
         "      - name: Multi\n        run: docker version && docker pull node:24\n",
@@ -1555,7 +1607,7 @@ describe("workflow contracts", () => {
     ]);
     expect(
       unpinnedContainerfileReferences(
-        `# syntax=docker/dockerfile:1@${digest}\nFROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nRUN --mount=type=bind,from=toolchain,source=/usr/local,target=/mnt/rust --mount=type=bind,from=golang:1.24@${digest},source=/bin,target=/mnt/go true\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
+        `# syntax=docker/dockerfile:1@${digest}\nFROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY <<'EOF' /tmp/docs.txt\nFROM ubuntu:latest\nEOF\nRUN --mount=type=bind,from=toolchain,source=/usr/local,target=/mnt/rust --mount=type=bind,from=golang:1.24@${digest},source=/bin,target=/mnt/go true\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
       ),
     ).toEqual([]);
 

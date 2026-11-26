@@ -23,6 +23,7 @@ const SINGLE_MATRIX_EXPRESSION_PATTERN =
   /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}$/u;
 const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)")\]/gu;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
+const SHELL_INTERPRETERS = new Set(["sh", "bash", "ash", "dash", "zsh", "ksh"]);
 const SHELL_COMMAND_PREFIXES = new Set([
   "if",
   "elif",
@@ -56,6 +57,7 @@ const IGNORED_DIRECTORIES = new Set([
   "node_modules",
   "target",
 ]);
+const MAX_YAML_CONVERSION_STEPS = 20_000;
 
 const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--config",
@@ -69,7 +71,45 @@ const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--tlscert",
   "--tlskey",
 ]);
+const PODMAN_GLOBAL_VALUE_FLAGS = new Set([
+  ...DOCKER_GLOBAL_VALUE_FLAGS,
+  "--cdi-spec-dir",
+  "--cgroup-manager",
+  "--conmon",
+  "--connection",
+  "--events-backend",
+  "--hooks-dir",
+  "--identity",
+  "--imagestore",
+  "--module",
+  "--network-cmd-path",
+  "--network-config-dir",
+  "--out",
+  "--root",
+  "--runroot",
+  "--runtime",
+  "--runtime-flag",
+  "--secret",
+  "--storage-driver",
+  "--storage-opt",
+  "--tmpdir",
+  "--url",
+  "--volumepath",
+]);
 const DOCKER_PULL_VALUE_FLAGS = new Set(["--platform"]);
+const PODMAN_PULL_VALUE_FLAGS = new Set([
+  ...DOCKER_PULL_VALUE_FLAGS,
+  "--arch",
+  "--authfile",
+  "--cert-dir",
+  "--creds",
+  "--decryption-key",
+  "--os",
+  "--policy",
+  "--retry",
+  "--retry-delay",
+  "--variant",
+]);
 const DOCKER_RUN_VALUE_FLAGS = new Set([
   "-a",
   "--attach",
@@ -167,6 +207,59 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "-w",
   "--workdir",
 ]);
+const PODMAN_RUN_VALUE_FLAGS = new Set([
+  ...DOCKER_RUN_VALUE_FLAGS,
+  "--arch",
+  "--authfile",
+  "--blkio-weight-device",
+  "--cert-dir",
+  "--cgroup-conf",
+  "--cgroups",
+  "--chrootdirs",
+  "--conmon-pidfile",
+  "--creds",
+  "--decryption-key",
+  "--env-merge",
+  "--gidmap",
+  "--group-entry",
+  "--health-log-destination",
+  "--health-max-log-count",
+  "--health-max-log-size",
+  "--health-on-failure",
+  "--health-startup-cmd",
+  "--health-startup-interval",
+  "--health-startup-retries",
+  "--health-startup-success",
+  "--health-startup-timeout",
+  "--hostuser",
+  "--image-volume",
+  "--init-ctr",
+  "--init-path",
+  "--os",
+  "--passwd-entry",
+  "--personality",
+  "--pod",
+  "--pod-id-file",
+  "--preserve-fd",
+  "--preserve-fds",
+  "--rdt-class",
+  "--requires",
+  "--retry",
+  "--retry-delay",
+  "--sdnotify",
+  "--seccomp-policy",
+  "--secret",
+  "--shm-size-systemd",
+  "--subgidname",
+  "--subuidname",
+  "--systemd",
+  "--timeout",
+  "--tz",
+  "--uidmap",
+  "--umask",
+  "--unsetenv",
+  "--variant",
+]);
 
 function stripQuotes(value) {
   const trimmed = value.trim();
@@ -198,32 +291,34 @@ function isLocalDockerActionImage(imageReference) {
   );
 }
 
-function resolveEnvExpressions(text, envMap) {
+function resolveEnvExpressions(text, stepEnv) {
   return text.replace(ENV_EXPRESSION_PATTERN, (match, _p1, _p2, _p3, _offset, _str, groups) => {
     const name = groups.dot ?? groups.sq ?? groups.dq;
-    return envMap.has(name) ? envMap.get(name).value : match;
+    return stepEnv.has(name) ? stepEnv.get(name).value : match;
   });
 }
 
-function resolveVars(token, vars) {
-  const withEnv = resolveEnvExpressions(token, vars);
-  return withEnv.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
+// GitHub Actions evaluates `${{ env.* }}` against the immutable step `env`
+// before bash runs, whereas `$VAR`/`${VAR}` reflect shell assignments.
+function resolveImageToken(token, stepEnv, shellVars) {
+  const withActionsEnv = resolveEnvExpressions(token, stepEnv);
+  return withActionsEnv.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
     const name = groups.braced ?? groups.bare;
-    return vars.has(name) ? vars.get(name).value : match;
+    return shellVars.has(name) ? shellVars.get(name).value : match;
   });
 }
 
-function lookupSingleVarLine(token, vars, fallbackLine) {
+function lookupSingleVarLine(token, stepEnv, shellVars, fallbackLine) {
   const envExpr = SINGLE_ENV_EXPRESSION_PATTERN.exec(token);
   if (envExpr) {
     const name = envExpr.groups.dot ?? envExpr.groups.sq ?? envExpr.groups.dq;
-    return vars.get(name)?.line ?? fallbackLine;
+    return stepEnv.get(name)?.line ?? fallbackLine;
   }
   const singleVar =
     /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u.exec(token);
   if (singleVar) {
     const name = singleVar.groups.braced ?? singleVar.groups.bare;
-    return vars.get(name)?.line ?? fallbackLine;
+    return shellVars.get(name)?.line ?? fallbackLine;
   }
   return fallbackLine;
 }
@@ -262,7 +357,7 @@ function hasUnquotedComment(line) {
   return false;
 }
 
-// --- YAML AST parsing via `yaml` with 1-based line numbers -------------------
+// --- YAML AST parsing via `yaml` with memoized, bounded alias resolution -----
 
 function dedentYamlSnippet(source) {
   const rawLines = source.split(/\r?\n/u);
@@ -303,25 +398,42 @@ function nodeStartLine(node, lineCounter) {
   return 1;
 }
 
-function convertYamlNode(node, doc, lineCounter, rawLines, seen = new Set()) {
-  if (!node) {
+function convertYamlNode(node, doc, lineCounter, rawLines, state) {
+  if (!node || state.budgetExceeded) {
+    return null;
+  }
+  state.steps += 1;
+  if (state.steps > MAX_YAML_CONVERSION_STEPS) {
+    state.budgetExceeded = true;
+    state.budgetLine = nodeStartLine(node, lineCounter);
     return null;
   }
   if (isAlias(node)) {
     const target = node.resolve(doc);
-    if (!target || seen.has(target)) {
+    if (!target || state.visiting.has(target)) {
       return null;
     }
-    const nextSeen = new Set(seen);
-    nextSeen.add(target);
-    return convertYamlNode(target, doc, lineCounter, rawLines, nextSeen);
+    if (state.memo.has(target)) {
+      return state.memo.get(target);
+    }
+    return convertYamlNode(target, doc, lineCounter, rawLines, state);
   }
+  if (state.memo.has(node)) {
+    return state.memo.get(node);
+  }
+
+  state.visiting.add(node);
+  let converted = null;
+
   if (isMap(node)) {
     const map = new Map();
     const deferredMerges = [];
     for (const pair of node.items) {
+      if (state.budgetExceeded) {
+        break;
+      }
       if (isMergeKey(pair.key)) {
-        const mergedVal = convertYamlNode(pair.value, doc, lineCounter, rawLines, seen);
+        const mergedVal = convertYamlNode(pair.value, doc, lineCounter, rawLines, state);
         if (mergedVal?.kind === "map") {
           deferredMerges.push(mergedVal);
         } else if (mergedVal?.kind === "seq") {
@@ -337,13 +449,12 @@ function convertYamlNode(node, doc, lineCounter, rawLines, seen = new Set()) {
         continue;
       }
       const key = String(pair.key.value);
-      const val = convertYamlNode(pair.value, doc, lineCounter, rawLines, seen);
+      const val = convertYamlNode(pair.value, doc, lineCounter, rawLines, state);
       map.set(
         key,
         val ?? { kind: "scalar", value: "", line: nodeStartLine(pair.key, lineCounter) },
       );
     }
-    // Explicit keys take precedence over merged keys per YAML merge semantics.
     for (const sourceMap of deferredMerges) {
       for (const [key, val] of sourceMap.value) {
         if (!map.has(key)) {
@@ -351,19 +462,20 @@ function convertYamlNode(node, doc, lineCounter, rawLines, seen = new Set()) {
         }
       }
     }
-    return { kind: "map", value: map, line: nodeStartLine(node, lineCounter) };
-  }
-  if (isSeq(node)) {
+    converted = { kind: "map", value: map, line: nodeStartLine(node, lineCounter) };
+  } else if (isSeq(node)) {
     const items = [];
     for (const item of node.items) {
-      const converted = convertYamlNode(item, doc, lineCounter, rawLines, seen);
-      if (converted) {
-        items.push(converted);
+      if (state.budgetExceeded) {
+        break;
+      }
+      const itemNode = convertYamlNode(item, doc, lineCounter, rawLines, state);
+      if (itemNode) {
+        items.push(itemNode);
       }
     }
-    return { kind: "seq", value: items, line: nodeStartLine(node, lineCounter) };
-  }
-  if (isScalar(node)) {
+    converted = { kind: "seq", value: items, line: nodeStartLine(node, lineCounter) };
+  } else if (isScalar(node)) {
     const startLine = nodeStartLine(node, lineCounter);
     const value = node.value === null || node.value === undefined ? "" : String(node.value);
     const scalar = {
@@ -404,9 +516,14 @@ function convertYamlNode(node, doc, lineCounter, rawLines, seen = new Set()) {
       }
     }
 
-    return scalar;
+    converted = scalar;
   }
-  return null;
+
+  state.visiting.delete(node);
+  if (converted) {
+    state.memo.set(node, converted);
+  }
+  return converted;
 }
 
 function parseWorkflowYaml(source) {
@@ -414,142 +531,72 @@ function parseWorkflowYaml(source) {
   const rawLines = normalized.split(/\r?\n/u);
   const lineCounter = new LineCounter();
   const doc = parseDocument(normalized, { lineCounter, merge: true });
+  const state = {
+    steps: 0,
+    budgetExceeded: false,
+    budgetLine: 1,
+    visiting: new Set(),
+    memo: new Map(),
+  };
+  const ast = convertYamlNode(doc.contents, doc, lineCounter, rawLines, state);
 
   if (doc.errors.length > 0) {
     const first = doc.errors[0];
     const line = first.linePos?.[0]?.line ?? 1;
     return {
-      doc: convertYamlNode(doc.contents, doc, lineCounter, rawLines),
+      doc: ast,
       error: { line, message: `failed to parse workflow YAML: ${first.message.split("\n")[0]}` },
     };
   }
 
-  return {
-    doc: convertYamlNode(doc.contents, doc, lineCounter, rawLines),
-    error: null,
-  };
-}
-
-// --- Shell tokenization, heredocs, and command substitutions -----------------
-
-function splitShellCommands(command) {
-  const commands = [];
-  let tokens = [];
-  let current = "";
-  let quote = null;
-  let escaping = false;
-
-  const flushToken = () => {
-    if (current.length > 0) {
-      tokens.push(current);
-      current = "";
-    }
-  };
-
-  const flushCommand = () => {
-    flushToken();
-    if (tokens.length > 0) {
-      commands.push(tokens);
-      tokens = [];
-    }
-  };
-
-  for (let index = 0; index < command.length; index += 1) {
-    const ch = command[index];
-
-    if (escaping) {
-      current += ch;
-      escaping = false;
-      continue;
-    }
-
-    if (ch === "\\" && quote !== "'") {
-      escaping = true;
-      continue;
-    }
-
-    if (quote) {
-      if (ch === quote) {
-        quote = null;
-      } else {
-        current += ch;
-      }
-      continue;
-    }
-
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      continue;
-    }
-
-    // Keep GitHub Actions `${{ ... }}` expressions intact as a single token so
-    // spaces inside `${{ env.IMAGE }}` or `${{ matrix.platform.image }}` do
-    // not split the image argument.
-    if (ch === "$" && command[index + 1] === "{" && command[index + 2] === "{") {
-      const closeIndex = command.indexOf("}}", index + 3);
-      if (closeIndex !== -1) {
-        current += command.slice(index, closeIndex + 2);
-        index = closeIndex + 1;
-        continue;
-      }
-    }
-
-    // POSIX shell comments start with an unquoted `#` at a token boundary.
-    if (ch === "#" && current.length === 0) {
-      flushCommand();
-      while (index < command.length && command[index] !== "\n") {
-        index += 1;
-      }
-      continue;
-    }
-
-    if (ch === "\n" || ch === ";") {
-      flushCommand();
-      continue;
-    }
-
-    if (ch === "(" && (current.length === 0 || current === "$")) {
-      current = "";
-      flushCommand();
-      continue;
-    }
-
-    if (ch === ")" && current.length === 0) {
-      flushCommand();
-      continue;
-    }
-
-    if (ch === "&" || ch === "|") {
-      flushCommand();
-      if (command[index + 1] === ch) {
-        index += 1;
-      }
-      continue;
-    }
-
-    if (/\s/u.test(ch)) {
-      flushToken();
-      continue;
-    }
-
-    current += ch;
+  if (state.budgetExceeded) {
+    return {
+      doc: null,
+      error: {
+        line: state.budgetLine,
+        message: "YAML alias expansion exceeded safety budget; refusing to skip pin checks",
+      },
+    };
   }
 
-  flushCommand();
-  return commands;
+  return { doc: ast, error: null };
+}
+
+// --- Whole-script shell lexer (multiline quotes, heredocs, subshells) --------
+
+function isShellInterpreterCommand(tokens) {
+  let cursor = 0;
+  while (cursor < tokens.length) {
+    const token = tokens[cursor];
+    if (SHELL_COMMAND_PREFIXES.has(token) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(token)) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  const cmd = tokens[cursor];
+  if (!cmd) {
+    return false;
+  }
+  return SHELL_INTERPRETERS.has(path.basename(cmd));
 }
 
 // Extract executable command substitutions `$(...)` and `` `...` `` from a
-// shell line (both unquoted and inside double quotes; never inside single
-// quotes or arithmetic `$((...))`).
-function extractCommandSubstitutions(command) {
+// shell script segment (unquoted and double-quoted; never single-quoted or
+// arithmetic `$((...))`).
+function extractCommandSubstitutions(script, baseLine) {
   const substitutions = [];
   let quote = null;
   let escaping = false;
+  let line = baseLine;
 
-  for (let index = 0; index < command.length; index += 1) {
-    const ch = command[index];
-
+  for (let index = 0; index < script.length; index += 1) {
+    const ch = script[index];
+    if (ch === "\n") {
+      line += 1;
+      escaping = false;
+      continue;
+    }
     if (escaping) {
       escaping = false;
       continue;
@@ -572,18 +619,27 @@ function extractCommandSubstitutions(command) {
       quote = quote === '"' ? null : '"';
       continue;
     }
-    if (quote === null && ch === "#" && (index === 0 || /\s/u.test(command[index - 1]))) {
-      break;
+    if (quote === null && ch === "#" && (index === 0 || /[\s;&|()]/u.test(script[index - 1]))) {
+      while (index < script.length && script[index] !== "\n") {
+        index += 1;
+      }
+      if (script[index] === "\n") {
+        line += 1;
+      }
+      continue;
     }
 
-    // `$(...)` (skipping arithmetic `$((...))`)
-    if (ch === "$" && command[index + 1] === "(" && command[index + 2] !== "(") {
+    if (ch === "$" && script[index + 1] === "(" && script[index + 2] !== "(") {
+      const startLine = line;
       let depth = 1;
       let cursor = index + 2;
       let innerQuote = null;
       let innerEscape = false;
-      while (cursor < command.length && depth > 0) {
-        const ich = command[cursor];
+      while (cursor < script.length && depth > 0) {
+        const ich = script[cursor];
+        if (ich === "\n") {
+          line += 1;
+        }
         if (innerEscape) {
           innerEscape = false;
           cursor += 1;
@@ -614,18 +670,21 @@ function extractCommandSubstitutions(command) {
         cursor += 1;
       }
       if (depth === 0) {
-        substitutions.push(command.slice(index + 2, cursor - 1));
+        substitutions.push({ text: script.slice(index + 2, cursor - 1), lineNumber: startLine });
         index = cursor - 1;
       }
       continue;
     }
 
-    // Backtick substitution `` `...` ``
     if (ch === "`") {
+      const startLine = line;
       let cursor = index + 1;
       let btEscape = false;
-      while (cursor < command.length) {
-        const bch = command[cursor];
+      while (cursor < script.length) {
+        const bch = script[cursor];
+        if (bch === "\n") {
+          line += 1;
+        }
         if (btEscape) {
           btEscape = false;
           cursor += 1;
@@ -641,8 +700,8 @@ function extractCommandSubstitutions(command) {
         }
         cursor += 1;
       }
-      if (cursor < command.length && command[cursor] === "`") {
-        substitutions.push(command.slice(index + 1, cursor));
+      if (cursor < script.length && script[cursor] === "`") {
+        substitutions.push({ text: script.slice(index + 1, cursor), lineNumber: startLine });
         index = cursor;
       }
     }
@@ -651,56 +710,240 @@ function extractCommandSubstitutions(command) {
   return substitutions;
 }
 
-function extractHeredocDelimiters(line) {
-  const delimiters = [];
+// Lex an entire shell script preserving quotes across physical newlines,
+// tracking heredocs (while ignoring `<<<` here-strings and arithmetic `<<`),
+// splitting on unquoted subshell `(` / `)`, and recording 1-based line numbers.
+function lexShellScript(text, startLine) {
+  const commands = [];
+  let tokens = [];
+  let commandLine = startLine;
+  let current = "";
   let quote = null;
   let escaping = false;
+  let arithDepth = 0;
+  let arrayParenDepth = 0;
+  let line = startLine;
+  const pendingHeredocs = [];
 
-  for (let index = 0; index < line.length; index += 1) {
-    const ch = line[index];
+  const flushToken = () => {
+    if (current.length > 0) {
+      if (tokens.length === 0) {
+        commandLine = line;
+      }
+      tokens.push(current);
+      current = "";
+    }
+  };
+
+  const flushCommand = () => {
+    flushToken();
+    if (tokens.length > 0) {
+      commands.push({ tokens, lineNumber: commandLine });
+      tokens = [];
+    }
+  };
+
+  const consumeHeredocBodies = (startIndex) => {
+    let cursor = startIndex;
+    while (pendingHeredocs.length > 0 && cursor < text.length) {
+      const spec = pendingHeredocs.shift();
+      const bodyStartLine = line;
+      const bodyLines = [];
+      while (cursor < text.length) {
+        const nl = text.indexOf("\n", cursor);
+        const rawLine = nl === -1 ? text.slice(cursor) : text.slice(cursor, nl);
+        cursor = nl === -1 ? text.length : nl + 1;
+        if (nl !== -1) {
+          line += 1;
+        }
+        const candidate = spec.stripTabs ? rawLine.replace(/^\t+/u, "") : rawLine;
+        if (candidate === spec.delimiter) {
+          break;
+        }
+        bodyLines.push(rawLine);
+      }
+      if (spec.executable && bodyLines.length > 0) {
+        commands.push(...lexShellScript(bodyLines.join("\n"), bodyStartLine));
+      }
+    }
+    return cursor;
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const ch = text[index];
 
     if (escaping) {
       escaping = false;
+      if (ch === "\n") {
+        line += 1;
+        continue;
+      }
+      current += ch;
       continue;
     }
+
     if (ch === "\\" && quote !== "'") {
       escaping = true;
       continue;
     }
+
     if (quote) {
+      if (ch === "\n") {
+        line += 1;
+      }
       if (ch === quote) {
         quote = null;
+      } else {
+        current += ch;
       }
       continue;
     }
+
+    if (arithDepth > 0) {
+      if (ch === "\n") {
+        line += 1;
+      } else if (ch === "(" && text[index + 1] === "(") {
+        arithDepth += 1;
+        current += "((";
+        index += 1;
+        continue;
+      } else if (ch === ")" && text[index + 1] === ")") {
+        arithDepth -= 1;
+        current += "))";
+        index += 1;
+        continue;
+      }
+      current += ch;
+      continue;
+    }
+
     if (ch === "'" || ch === '"') {
+      if (tokens.length === 0 && current.length === 0) {
+        commandLine = line;
+      }
       quote = ch;
       continue;
     }
-    if (ch === "#" && (index === 0 || /\s/u.test(line[index - 1]))) {
-      break;
+
+    // Keep command substitution `$(...)` opaque in the outer command because
+    // `extractCommandSubstitutions` inspects it separately (avoiding duplicates).
+    if (ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
+      let depth = 1;
+      let cursor = index + 2;
+      let innerQuote = null;
+      let innerEscape = false;
+      while (cursor < text.length && depth > 0) {
+        const ich = text[cursor];
+        if (ich === "\n") {
+          line += 1;
+        }
+        if (innerEscape) {
+          innerEscape = false;
+          cursor += 1;
+          continue;
+        }
+        if (ich === "\\" && innerQuote !== "'") {
+          innerEscape = true;
+          cursor += 1;
+          continue;
+        }
+        if (innerQuote) {
+          if (ich === innerQuote) {
+            innerQuote = null;
+          }
+          cursor += 1;
+          continue;
+        }
+        if (ich === "'" || ich === '"') {
+          innerQuote = ich;
+          cursor += 1;
+          continue;
+        }
+        if (ich === "(") {
+          depth += 1;
+        } else if (ich === ")") {
+          depth -= 1;
+        }
+        cursor += 1;
+      }
+      if (tokens.length === 0 && current.length === 0) {
+        commandLine = line;
+      }
+      current += text.slice(index, cursor);
+      index = cursor - 1;
+      continue;
     }
-    if (ch === "<" && line[index + 1] === "<") {
-      // Consume Bash here-string `<<<` as a single operator so it is never
-      // misread as a heredoc `<<` with no closing delimiter.
-      if (line[index + 2] === "<") {
+
+    // Arithmetic expansion `$((...))` or arithmetic command `((...))`.
+    if (ch === "$" && text[index + 1] === "(" && text[index + 2] === "(") {
+      arithDepth += 1;
+      current += "$((";
+      index += 2;
+      continue;
+    }
+    if (ch === "(" && text[index + 1] === "(" && current.length === 0) {
+      arithDepth += 1;
+      current += "((";
+      index += 1;
+      continue;
+    }
+
+    // Keep GitHub Actions `${{ ... }}` expressions intact as a single token.
+    if (ch === "$" && text[index + 1] === "{" && text[index + 2] === "{") {
+      const closeIndex = text.indexOf("}}", index + 3);
+      if (closeIndex !== -1) {
+        if (tokens.length === 0 && current.length === 0) {
+          commandLine = line;
+        }
+        const expr = text.slice(index, closeIndex + 2);
+        for (const ec of expr) {
+          if (ec === "\n") {
+            line += 1;
+          }
+        }
+        current += expr;
+        index = closeIndex + 1;
+        continue;
+      }
+    }
+
+    // POSIX shell comments start with an unquoted `#` at a token boundary.
+    if (ch === "#" && current.length === 0) {
+      flushCommand();
+      while (index < text.length && text[index] !== "\n") {
+        index += 1;
+      }
+      if (text[index] === "\n") {
+        line += 1;
+        if (pendingHeredocs.length > 0) {
+          index = consumeHeredocBodies(index + 1) - 1;
+        }
+      }
+      continue;
+    }
+
+    // Heredoc redirect `<<` / `<<-` (never `<<<` here-string, never inside arithmetic).
+    if (ch === "<" && text[index + 1] === "<") {
+      if (text[index + 2] === "<") {
+        flushToken();
         index += 2;
         continue;
       }
+      flushToken();
       let cursor = index + 2;
       let stripTabs = false;
-      if (line[cursor] === "-") {
+      if (text[cursor] === "-") {
         stripTabs = true;
         cursor += 1;
       }
-      while (cursor < line.length && /[ \t]/u.test(line[cursor])) {
+      while (cursor < text.length && /[ \t]/u.test(text[cursor])) {
         cursor += 1;
       }
       let delimiter = "";
       let delimQuote = null;
       let delimEscaping = false;
-      while (cursor < line.length) {
-        const dch = line[cursor];
+      while (cursor < text.length) {
+        const dch = text[cursor];
         if (delimEscaping) {
           delimiter += dch;
           delimEscaping = false;
@@ -733,51 +976,81 @@ function extractHeredocDelimiters(line) {
         cursor += 1;
       }
       if (delimiter.length > 0) {
-        delimiters.push({ delimiter, stripTabs });
+        pendingHeredocs.push({
+          delimiter,
+          stripTabs,
+          executable: isShellInterpreterCommand(tokens),
+        });
       }
       index = cursor - 1;
+      continue;
     }
-  }
 
-  return delimiters;
-}
-
-function collectExecutableShellLines(entries) {
-  const logicalLines = [];
-  const pendingHeredocs = [];
-
-  for (let index = 0; index < entries.length; index += 1) {
-    const { text, lineNumber } = entries[index];
-
-    if (pendingHeredocs.length > 0) {
-      const current = pendingHeredocs[0];
-      const candidate = current.stripTabs ? text.replace(/^\t+/u, "") : text;
-      if (candidate === current.delimiter) {
-        pendingHeredocs.shift();
+    if (ch === "\n") {
+      flushCommand();
+      line += 1;
+      if (pendingHeredocs.length > 0) {
+        index = consumeHeredocBodies(index + 1) - 1;
       }
       continue;
     }
 
-    const trimmed = text.trim();
-    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+    if (ch === ";") {
+      flushCommand();
       continue;
     }
 
-    const startLine = lineNumber;
-    let combined = trimmed;
-    while (combined.endsWith("\\") && index + 1 < entries.length) {
-      combined = `${combined.slice(0, -1)} ${entries[index + 1].text.trim()}`;
-      index += 1;
+    if (ch === "(") {
+      if (current.endsWith("=")) {
+        arrayParenDepth += 1;
+        current += ch;
+        continue;
+      }
+      if (current === "$") {
+        current = "";
+        flushCommand();
+        continue;
+      }
+      flushCommand();
+      continue;
     }
 
-    pendingHeredocs.push(...extractHeredocDelimiters(combined));
-    logicalLines.push({ text: combined, lineNumber: startLine, sourceLines: null });
+    if (ch === ")") {
+      if (arrayParenDepth > 0) {
+        arrayParenDepth -= 1;
+        current += ch;
+        continue;
+      }
+      // Treat an unquoted `)` as a subshell delimiter even when it immediately
+      // follows a word (e.g. `(docker pull node:24@sha256:...)`).
+      flushCommand();
+      continue;
+    }
+
+    if (ch === "&" || ch === "|") {
+      flushCommand();
+      if (text[index + 1] === ch) {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (/[ \t\r]/u.test(ch)) {
+      flushToken();
+      continue;
+    }
+
+    if (tokens.length === 0 && current.length === 0) {
+      commandLine = line;
+    }
+    current += ch;
   }
 
-  return logicalLines;
+  flushCommand();
+  return commands;
 }
 
-// --- Matrix row expansion (including nested object-valued axes & include) ----
+// --- Matrix row expansion with Actions `exclude` and `include` semantics -----
 
 function parseMatrixPathSegments(pathSuffix) {
   const segments = [];
@@ -801,6 +1074,33 @@ function resolveMatrixPath(rowMap, segments) {
   return null;
 }
 
+function matrixNodesEqual(left, right) {
+  if (!left || !right || left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "scalar") {
+    return String(left.value) === String(right.value);
+  }
+  if (left.kind === "seq") {
+    return (
+      left.value.length === right.value.length &&
+      left.value.every((item, idx) => matrixNodesEqual(item, right.value[idx]))
+    );
+  }
+  if (left.kind === "map") {
+    if (left.value.size !== right.value.size) {
+      return false;
+    }
+    for (const [k, v] of left.value) {
+      if (!right.value.has(k) || !matrixNodesEqual(v, right.value.get(k))) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 function extractJobMatrixRows(jobNode) {
   const strategyNode = jobNode?.value?.get("strategy");
   const matrixNode = strategyNode?.kind === "map" ? strategyNode.value.get("matrix") : null;
@@ -809,10 +1109,19 @@ function extractJobMatrixRows(jobNode) {
   }
 
   const axes = [];
+  const axisNames = new Set();
   const includeRows = [];
+  const excludeRows = [];
 
   for (const [key, entryNode] of matrixNode.value) {
     if (key === "exclude") {
+      if (entryNode?.kind === "seq") {
+        for (const rowNode of entryNode.value) {
+          if (rowNode?.kind === "map") {
+            excludeRows.push(rowNode.value);
+          }
+        }
+      }
       continue;
     }
     if (key === "include") {
@@ -827,6 +1136,7 @@ function extractJobMatrixRows(jobNode) {
     }
     if (entryNode?.kind === "seq" && entryNode.value.length > 0) {
       axes.push([key, entryNode.value]);
+      axisNames.add(key);
     }
   }
 
@@ -849,8 +1159,41 @@ function extractJobMatrixRows(jobNode) {
     rows = next;
   }
 
+  // Apply GitHub Actions `exclude`: drop base rows matching every key in an exclude entry.
+  if (excludeRows.length > 0) {
+    rows = rows.filter(
+      (row) =>
+        !excludeRows.some((excludeMap) => {
+          for (const [k, v] of excludeMap) {
+            if (!row.has(k) || !matrixNodesEqual(row.get(k), v)) {
+              return false;
+            }
+          }
+          return excludeMap.size > 0;
+        }),
+    );
+  }
+
+  // Apply GitHub Actions `include`: merge into matching base rows when shared
+  // axis keys match; otherwise append as a new standalone row.
   for (const includeMap of includeRows) {
-    rows.push(includeMap);
+    const sharedAxisKeys = [...includeMap.keys()].filter((k) => axisNames.has(k));
+    let matchedBase = false;
+    if (rows.length > 0 && sharedAxisKeys.length > 0) {
+      for (const row of rows) {
+        if (sharedAxisKeys.every((k) => matrixNodesEqual(row.get(k), includeMap.get(k)))) {
+          matchedBase = true;
+          for (const [k, v] of includeMap) {
+            if (!axisNames.has(k)) {
+              row.set(k, v);
+            }
+          }
+        }
+      }
+    }
+    if (!matchedBase) {
+      rows.push(new Map(includeMap));
+    }
   }
 
   return rows;
@@ -906,30 +1249,30 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
   return candidates.length > 0 ? candidates : [{ text: rawText, line: fallbackLine }];
 }
 
-function inspectShellCommandText(
-  text,
-  lineNumber,
+function inspectShellText(
+  scriptText,
+  startLine,
   sourceLines,
-  vars,
+  stepEnv,
+  shellVars,
   matrixRows,
   filePath,
   problems,
 ) {
-  // Inspect executable command substitutions (`$(...)` and `` `...` ``) even
-  // when nested inside shell variable assignments (`cid=$(docker run -d ...)`).
-  for (const nested of extractCommandSubstitutions(text)) {
-    inspectShellCommandText(
-      nested,
-      lineNumber,
+  for (const nested of extractCommandSubstitutions(scriptText, startLine)) {
+    inspectShellText(
+      nested.text,
+      nested.lineNumber,
       sourceLines,
-      new Map(vars),
+      stepEnv,
+      new Map(shellVars),
       matrixRows,
       filePath,
       problems,
     );
   }
 
-  for (const tokens of splitShellCommands(text)) {
+  for (const { tokens, lineNumber } of lexShellScript(scriptText, startLine)) {
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
@@ -943,8 +1286,8 @@ function inspectShellCommandText(
       for (const token of tokens.slice(assignStart)) {
         const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
         if (match) {
-          vars.set(match.groups.name, {
-            value: resolveVars(match.groups.value, vars),
+          shellVars.set(match.groups.name, {
+            value: resolveImageToken(match.groups.value, stepEnv, shellVars),
             line: lineNumber,
           });
         }
@@ -952,7 +1295,7 @@ function inspectShellCommandText(
       continue;
     }
 
-    const commandVars = new Map(vars);
+    const commandVars = new Map(shellVars);
     let cursor = 0;
     while (cursor < tokens.length) {
       const token = tokens[cursor];
@@ -963,7 +1306,7 @@ function inspectShellCommandText(
       const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
       if (prefixAssign) {
         commandVars.set(prefixAssign.groups.name, {
-          value: resolveVars(prefixAssign.groups.value, commandVars),
+          value: resolveImageToken(prefixAssign.groups.value, stepEnv, commandVars),
           line: lineNumber,
         });
         cursor += 1;
@@ -977,10 +1320,12 @@ function inspectShellCommandText(
       continue;
     }
 
+    const globalValueFlags =
+      cli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
     let argIndex = cursor + 1;
     while (argIndex < tokens.length && tokens[argIndex].startsWith("-")) {
       const flag = tokens[argIndex];
-      argIndex += !flag.includes("=") && DOCKER_GLOBAL_VALUE_FLAGS.has(flag) ? 2 : 1;
+      argIndex += !flag.includes("=") && globalValueFlags.has(flag) ? 2 : 1;
     }
 
     let subcommand = tokens[argIndex];
@@ -1000,7 +1345,14 @@ function inspectShellCommandText(
       continue;
     }
 
-    const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
+    const valueFlags =
+      cli === "podman"
+        ? subcommand === "pull"
+          ? PODMAN_PULL_VALUE_FLAGS
+          : PODMAN_RUN_VALUE_FLAGS
+        : subcommand === "pull"
+          ? DOCKER_PULL_VALUE_FLAGS
+          : DOCKER_RUN_VALUE_FLAGS;
     let imageToken = null;
 
     for (let index = argIndex; index < tokens.length; index += 1) {
@@ -1026,7 +1378,7 @@ function inspectShellCommandText(
       continue;
     }
 
-    const varLine = lookupSingleVarLine(imageToken, commandVars, lineNumber);
+    const varLine = lookupSingleVarLine(imageToken, stepEnv, commandVars, lineNumber);
     const defaultLine =
       varLine !== lineNumber
         ? varLine
@@ -1034,7 +1386,7 @@ function inspectShellCommandText(
           ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
           : lineNumber;
 
-    const resolvedWithVars = resolveVars(imageToken, commandVars);
+    const resolvedWithVars = resolveImageToken(imageToken, stepEnv, commandVars);
     for (const candidate of expandMatrixReferences(resolvedWithVars, matrixRows, defaultLine)) {
       if (isDynamicReference(candidate.text)) {
         continue;
@@ -1048,23 +1400,26 @@ function inspectShellCommandText(
   }
 }
 
-function inspectShellRunScript(runNode, inheritedEnv, matrixRows, filePath, problems) {
-  const vars = new Map(inheritedEnv);
-
-  const logicalLines =
+function inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems) {
+  const shellVars = new Map(stepEnv);
+  const scriptText =
     runNode.folded && Array.isArray(runNode.lines)
-      ? [{ text: runNode.value, lineNumber: runNode.line, sourceLines: runNode.lines }]
+      ? runNode.value
       : Array.isArray(runNode.lines)
-        ? collectExecutableShellLines(runNode.lines)
-        : collectExecutableShellLines(
-            String(runNode.value)
-              .split(/\r?\n/u)
-              .map((text, offset) => ({ text, lineNumber: runNode.line + offset })),
-          );
+        ? runNode.lines.map((entry) => entry.text).join("\n")
+        : String(runNode.value);
+  const sourceLines = runNode.folded && Array.isArray(runNode.lines) ? runNode.lines : null;
 
-  for (const { text, lineNumber, sourceLines } of logicalLines) {
-    inspectShellCommandText(text, lineNumber, sourceLines, vars, matrixRows, filePath, problems);
-  }
+  inspectShellText(
+    scriptText,
+    runNode.line,
+    sourceLines,
+    stepEnv,
+    shellVars,
+    matrixRows,
+    filePath,
+    problems,
+  );
 }
 
 function extractEnvMap(envNode, baseEnv) {
@@ -1093,7 +1448,7 @@ function checkImageField(
   }
   const rawRef = String(node.value).trim();
   const envResolved = resolveEnvExpressions(rawRef, envMap);
-  const envLine = lookupSingleVarLine(rawRef, envMap, node.line);
+  const envLine = lookupSingleVarLine(rawRef, envMap, envMap, node.line);
 
   for (const candidate of expandMatrixReferences(envResolved, matrixRows, envLine)) {
     const imageRef = candidate.text.trim();
@@ -1379,10 +1734,27 @@ function resolveBuildArgs(token, buildArgs) {
   });
 }
 
+function extractDockerfileHeredocDelimiters(instructionText) {
+  const delimiters = [];
+  if (!/^(?:COPY|ADD|RUN)\s+/iu.test(instructionText)) {
+    return delimiters;
+  }
+  for (const match of instructionText.matchAll(
+    /(?<op><<-?)\s*(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)"|(?<bare>[A-Za-z0-9_.-]+))/gu,
+  )) {
+    const delimiter = match.groups.sq ?? match.groups.dq ?? match.groups.bare;
+    if (delimiter) {
+      delimiters.push({ delimiter, stripTabs: match.groups.op === "<<-" });
+    }
+  }
+  return delimiters;
+}
+
 function extractRunMountSources(runText) {
   const sources = [];
   const rest = runText.replace(/^RUN\s+/iu, "");
-  const tokens = splitShellCommands(rest)[0] ?? [];
+  const firstCommand = lexShellScript(rest, 1)[0];
+  const tokens = firstCommand?.tokens ?? [];
   for (const token of tokens) {
     if (!token.startsWith("--")) {
       break;
@@ -1405,10 +1777,21 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
   const problems = [];
   const rawLines = source.split(/\r?\n/u);
   const logicalLines = [];
+  const pendingHeredocs = [];
   let inHeaderDirectives = true;
 
   for (let index = 0; index < rawLines.length; index += 1) {
     const line = rawLines[index];
+
+    if (pendingHeredocs.length > 0) {
+      const current = pendingHeredocs[0];
+      const candidate = current.stripTabs ? line.replace(/^\t+/u, "") : line;
+      if (candidate === current.delimiter) {
+        pendingHeredocs.shift();
+      }
+      continue;
+    }
+
     const trimmed = line.trim();
     if (trimmed.length === 0) {
       continue;
@@ -1432,6 +1815,7 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
       combined = `${combined.slice(0, -1)} ${rawLines[index + 1].trim()}`;
       index += 1;
     }
+    pendingHeredocs.push(...extractDockerfileHeredocDelimiters(combined));
     logicalLines.push({ lineNumber: startLine, text: combined });
   }
 
