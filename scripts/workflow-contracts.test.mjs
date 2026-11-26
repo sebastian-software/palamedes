@@ -1864,6 +1864,21 @@ describe("workflow contracts", () => {
           "          docker buildx bake --print=false",
           "          docker buildx bake --set app.args.FLAG=--print",
           "          docker buildx bake -- --print",
+          "  compose:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          "          docker compose down",
+          "          docker compose logs",
+          "          docker compose up -d",
+          "          docker-compose pull",
+          "          docker compose -f - up <<'EOF'",
+          "          services:",
+          "            db:",
+          "              image: postgres:16",
+          "            cache:",
+          `              image: redis:7@${digest}`,
+          "          EOF",
           "",
         ].join("\n"),
       ),
@@ -1873,6 +1888,9 @@ describe("workflow contracts", () => {
       "<memory>:17: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:18: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:19: docker buildx bake target definitions cannot be verified statically for container image digests",
+      "<memory>:26: docker compose up configuration cannot be verified statically for container image digests",
+      "<memory>:27: docker-compose pull configuration cannot be verified statically for container image digests",
+      "<memory>:31: postgres:16 is not pinned to a sha256 digest",
     ]);
   });
 
@@ -3445,6 +3463,94 @@ describe("workflow contracts", () => {
       "<memory>:22: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:25: node:24@ is not pinned to a sha256 digest",
     ]);
+    // Reusable workflows inherit the caller's `github.event_name` (and treat it
+    // as unknown during standalone checks), resolve implicit type defaults (`""`,
+    // `false`, `0`) for omitted optional `workflow_call` inputs, and repository
+    // Compose files invoked via `docker compose up` are verified end-to-end.
+    const r43Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r43-"));
+    try {
+      await mkdir(join(r43Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(
+        join(r43Fixture, "app.recipe"),
+        [`ARG BASE=alpine:3.20@${digest}`, "FROM ${BASE}", ""].join("\n"),
+      );
+      await writeFile(
+        join(r43Fixture, "compose.yml"),
+        [
+          "services:",
+          "  ok:",
+          `    image: alpine:3.20@${digest}`,
+          "  bad:",
+          "    image: nginx:1.27",
+          "  built:",
+          "    build:",
+          "      context: .",
+          "      dockerfile: app.recipe",
+          "      args:",
+          "        BASE: alpine:3.21",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r43Fixture, ".github", "workflows", "reusable.yml"),
+        [
+          "on:",
+          "  workflow_call:",
+          "    inputs:",
+          "      suffix:",
+          "        type: string",
+          "      port:",
+          "        type: number",
+          "jobs:",
+          "  on-push:",
+          "    if: github.event_name == 'push'",
+          "    runs-on: ubuntu-latest",
+          "    container: alpine${{ inputs.suffix }}",
+          "  on-schedule:",
+          "    if: github.event_name == 'schedule'",
+          "    runs-on: ubuntu-latest",
+          "    container: busybox:${{ inputs.port }}",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r43Fixture, ".github", "workflows", "caller.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  call-reusable:",
+          "    uses: ./.github/workflows/reusable.yml",
+          "  run-compose:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: docker compose up -d",
+          "",
+        ].join("\n"),
+      );
+      const r43Result = checkWorkflowPins(r43Fixture);
+      expect(r43Result.problems).toEqual([
+        ".github/workflows/reusable.yml:12: alpine is not pinned to a sha256 digest",
+        "compose.yml:5: nginx:1.27 is not pinned to a sha256 digest",
+        "app.recipe:2: alpine:3.21 is not pinned to a sha256 digest",
+      ]);
+      // Standalone reusable workflow scan treats caller event_name as unknown,
+      // so guarded jobs with literal unpinned images are still checked.
+      expect(
+        unpinnedWorkflowContainerReferences(
+          [
+            "on: workflow_call",
+            "jobs:",
+            "  push-only:",
+            "    if: github.event_name == 'push'",
+            "    runs-on: ubuntu-latest",
+            "    container: alpine:3.20",
+            "",
+          ].join("\n"),
+        ),
+      ).toEqual(["<memory>:6: alpine:3.20 is not pinned to a sha256 digest"]);
+    } finally {
+      await rm(r43Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
